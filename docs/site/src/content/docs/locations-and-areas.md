@@ -55,6 +55,20 @@ The area shows up as a tile on its location's page. Click the tile to open the a
 
 ![An area detail page listing the items inside it with search, filters, and a grid/list toggle](../../assets/screenshots/area-detail.png)
 
+## Create a place from an item
+
+Owners and administrators don't have to leave an item to add the place it belongs in. The **Location** and **Area** pickers on the item's edit form, in its **All fields** dialog, and in the location quick edit on the **Details** tab end with **New location** and **New area**:
+
+1. Choose **New location** in the **Location** picker, or **New area** in the **Area** picker. The **Add location** or **Add area** dialog described above opens over the item.
+2. Fill it in and click **Add location** or **Add area**. The new location or area is selected in the picker. A new area goes under the location selected in the picker, unless you choose another **Parent location** in the dialog.
+3. Save the item as usual.
+
+To put an item in a new area of a new location, add the location first. It is selected, and **New area** then adds the area under it.
+
+Whatever else you typed in the item stays as it was. If the location or area can't be created, the dialog stays open with what you typed and shows the reason. **Cancel** goes back to the item without adding anything.
+
+Users and viewers don't see these entries, because only owners and administrators can create locations and areas (see [Members and roles](../groups-and-sharing/#members-and-roles)).
+
 ## Print area labels
 
 Open an area and click **Print labels**, then choose:
@@ -76,10 +90,10 @@ the layouts and printing tips, see
 
 ## Assign an item to an area
 
-When you first create an item, Inventario doesn't ask where it lives — you can save it and place it later (see [Items](../items/) for the full add flow). You file an item into an area from its **Edit** form:
+When you first create an item, Inventario doesn't ask where it lives — you can save it and place it later (see [Items](../items/) for the full add flow). You file an item into an area from its **Edit** form, or from the pencil next to **Location** on its **Details** tab:
 
-1. Open the item and click **Edit**.
-2. On the **Basics** step, use the paired **Location** and **Area** pickers:
+1. Open the item and click **Edit**, or click the pencil next to **Location**.
+2. Use the paired **Location** and **Area** pickers:
    - Choose a **Location** first.
    - The **Area** picker stays disabled (showing **Pick a location first**) until you do; once a location is chosen it lists only that location's areas. Choose one.
 3. Save the item. It now appears on that area's page and counts toward the location's stats.

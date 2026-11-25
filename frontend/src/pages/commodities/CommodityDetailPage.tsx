@@ -48,14 +48,14 @@ import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { AssignLocationBanner } from "@/components/items/AssignLocationBanner"
+import { CommodityEditForm } from "@/components/items/CommodityEditForm"
+import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { ListPager } from "@/components/ListPager"
 import {
-  CommodityEditForm,
   LocationAreaFields,
   type AreaOption,
   type LocationOption,
-} from "@/components/items/CommodityEditForm"
-import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
-import { ListPager } from "@/components/ListPager"
+} from "@/components/locations/LocationAreaFields"
 import { TagPalette } from "@/components/tags/TagPalette"
 import { Textarea } from "@/components/ui/textarea"
 import {

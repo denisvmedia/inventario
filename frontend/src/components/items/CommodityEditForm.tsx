@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { Controller, useForm, type FieldErrors } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -7,6 +7,11 @@ import { ArrowLeft, ChevronRight, ListChecks } from "lucide-react"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { ListPager } from "@/components/ListPager"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
+import {
+  LocationAreaFields,
+  type AreaOption,
+  type LocationOption,
+} from "@/components/locations/LocationAreaFields"
 import { TagPalette } from "@/components/tags/TagPalette"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -36,18 +41,6 @@ import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
-import { withId } from "@/lib/with-id"
-
-export interface AreaOption {
-  id?: string
-  name?: string
-  location_id?: string
-}
-
-export interface LocationOption {
-  id?: string
-  name?: string
-}
 
 // The fields this form shows. The rest of the record (links, extra serial
 // numbers, part numbers, status, draft) is edited in the step-by-step dialog
@@ -368,7 +361,10 @@ export function CommodityEditForm({
               areas={areas}
               locations={locations}
               areaId={watch("area_id") ?? ""}
-              onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
+              // Validating drops a server error left on the area by the last save.
+              onAreaChange={(next) =>
+                setValue("area_id", next, { shouldDirty: true, shouldValidate: true })
+              }
               idPrefix="edit"
               areaError={errors.area_id}
             />
@@ -641,116 +637,6 @@ function PriceInput({
         aria-invalid={invalid}
         {...props}
       />
-    </div>
-  )
-}
-
-export interface LocationAreaFieldsProps {
-  areas: AreaOption[]
-  locations: LocationOption[]
-  areaId: string
-  onAreaChange: (areaId: string) => void
-  /** The selects get ids `<prefix>-location` and `<prefix>-area`. */
-  idPrefix: string
-  areaError?: { message?: string }
-}
-
-// The mock's paired Location / Area selects. Only the area is stored; the
-// location follows from it and narrows the areas offered. Picking another
-// location clears the area, and "Clear location" leaves the item unassigned.
-export function LocationAreaFields({
-  areas,
-  locations,
-  areaId,
-  onAreaChange,
-  idPrefix,
-  areaError,
-}: LocationAreaFieldsProps) {
-  const { t } = useTranslation()
-  const locationOfArea = (id: string) => areas.find((a) => a.id === id)?.location_id ?? ""
-  const [locationId, setLocationId] = useState(() => locationOfArea(areaId))
-  // The areas can arrive after the first render; fill the location in once
-  // they do, unless the user has picked one already.
-  useEffect(() => {
-    if (locationId || !areaId) return
-    const found = areas.find((a) => a.id === areaId)?.location_id
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time back-fill once the areas query resolves; a location the user picked is left alone.
-    if (found) setLocationId(found)
-  }, [areas, areaId, locationId])
-  const visibleAreas = locationId ? areas.filter((a) => a.location_id === locationId) : []
-
-  function pickLocation(next: string) {
-    if (next === locationId) return
-    setLocationId(next)
-    onAreaChange("")
-  }
-
-  return (
-    <div className="grid grid-cols-2 gap-3">
-      <div className="flex flex-col gap-1.5">
-        <div className="flex items-center justify-between gap-2">
-          <Label htmlFor={`${idPrefix}-location`} className="text-sm font-medium">
-            {t("commodities:fields.location")}
-          </Label>
-          {locationId ? (
-            <button
-              type="button"
-              onClick={() => pickLocation("")}
-              className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-              data-testid={`${idPrefix}-location-clear`}
-            >
-              {t("commodities:fields.clearLocation")}
-            </button>
-          ) : null}
-        </div>
-        <Select value={locationId || undefined} onValueChange={pickLocation}>
-          <SelectTrigger id={`${idPrefix}-location`} className="w-full">
-            <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
-          </SelectTrigger>
-          <SelectContent>
-            {withId(locations).map((l) => (
-              <SelectItem key={l.id} value={l.id}>
-                {l.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-      <div className="flex flex-col gap-1.5">
-        <Label htmlFor={`${idPrefix}-area`} className="text-sm font-medium">
-          {t("commodities:fields.area")}
-        </Label>
-        <Select
-          // Remount on a location change so the trigger drops the old area's
-          // label and shows the placeholder again.
-          key={locationId || "no-location"}
-          value={areaId || undefined}
-          onValueChange={onAreaChange}
-          disabled={!locationId}
-        >
-          <SelectTrigger id={`${idPrefix}-area`} className="w-full" aria-invalid={!!areaError}>
-            <SelectValue
-              placeholder={
-                locationId
-                  ? t("commodities:fields.areaPlaceholder")
-                  : t("commodities:fields.areaPlaceholderNoLocation")
-              }
-            />
-          </SelectTrigger>
-          <SelectContent>
-            {withId(visibleAreas).map((a) => (
-              <SelectItem key={a.id} value={a.id}>
-                {a.name}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-        {areaError?.message ? (
-          <p className="text-xs text-destructive" role="alert">
-            {t(areaError.message)}
-          </p>
-        ) : null}
-      </div>
     </div>
   )
 }

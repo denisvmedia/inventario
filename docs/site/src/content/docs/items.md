@@ -86,7 +86,7 @@ The form is split across the five steps. Only a handful of fields are required
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
 | **Type** * | **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, or **Other**. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
-| **Location** / **Area** | Where the item lives. Pick a location first, then an area. Both are optional. See [Locations & areas](../locations-and-areas/). |
+| **Location** / **Area** | Only when you edit an item; a new item is placed after it is saved. Where the item lives: pick a location first, then an area. Both are optional. Owners and administrators can also add a new location or area from the pickers. See [Locations & areas](../locations-and-areas/). |
 | **Status** * | Starts as **In Use** (see [Status lifecycle](#status-lifecycle)). |
 
 ### Purchase
@@ -222,7 +222,9 @@ grouped into sections:
 
 - **Identity** — name, short name, quantity, type, and serial number.
 - **Location** — location and area. **Clear location** leaves the item
-  unassigned.
+  unassigned. If the place is not there yet, owners and administrators choose
+  **New location** or **New area** at the end of the list (see
+  [Create a place from an item](../locations-and-areas/#create-a-place-from-an-item)).
 - **Purchase** — purchase date, original price and its currency, and current
   value. For a price in another currency, the converted price in the group
   currency is asked for too.

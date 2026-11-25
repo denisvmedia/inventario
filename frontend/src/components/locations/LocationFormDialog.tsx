@@ -37,6 +37,10 @@ interface LocationFormDialogProps {
   // True while the host's mutation is in flight; disables submit + form
   // controls.
   isPending?: boolean
+  // Moves the focus when the dialog closes. Radix returns it to a
+  // DialogTrigger, so a host that opens the dialog from elsewhere (the item
+  // form's Location picker) says where it goes instead.
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 // LocationFormDialog renders the create / edit form as a modal —
@@ -50,6 +54,7 @@ export function LocationFormDialog({
   location,
   onSubmit,
   isPending = false,
+  onCloseAutoFocus,
 }: LocationFormDialogProps) {
   const { t } = useTranslation()
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
@@ -119,7 +124,11 @@ export function LocationFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-testid="location-form-dialog">
+      <DialogContent
+        className="sm:max-w-lg"
+        onCloseAutoFocus={onCloseAutoFocus}
+        data-testid="location-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t("locations:dialog.editTitle") : t("locations:dialog.createTitle")}
