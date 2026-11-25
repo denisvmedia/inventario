@@ -327,3 +327,61 @@ func TestAccountDeletionService_DeleteAccount_RemovesTheProfilePhoto(t *testing.
 	c.Assert(err, qt.IsNil)
 	c.Assert(exists, qt.IsFalse)
 }
+
+// TestAccountDeletionService_DeleteAccount_RemovesTheMembersItemReminders
+// covers #2805 on the memory backend: a plain member's item reminders in a
+// shared group email only that member, so they go with the account while the
+// group and the other members' data stay.
+func TestAccountDeletionService_DeleteAccount_RemovesTheMembersItemReminders(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "reminder-group-slug-0000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	createReminder := func(user *models.User, title string) *models.CommodityReminder {
+		userCtx := appctx.WithGroup(appctx.WithUser(ctx, user), group)
+		reg, err := fs.CommodityReminderRegistryFactory.CreateUserRegistry(userCtx)
+		c.Assert(err, qt.IsNil)
+		reminder, err := reg.Create(userCtx, models.CommodityReminder{
+			TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: user.ID},
+			CommodityID:              "commodity-1",
+			Title:                    title,
+			DueOn:                    "2026-12-15",
+			RemindDaysBefore:         models.ValuerSlice[int]{7},
+			RepeatUnit:               models.ReminderRepeatNone,
+			RepeatInterval:           1,
+		})
+		c.Assert(err, qt.IsNil)
+		return reminder
+	}
+	mine := createReminder(leaving, "Return window")
+	theirs := createReminder(staying, "Insurance renewal")
+	won, err := fs.CommodityReminderSendRegistry.CreateOnce(ctx, models.CommodityReminderSend{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: leaving.ID},
+		ReminderID:               mine.ID,
+		OccurrenceOn:             "2026-12-15",
+		LeadDays:                 7,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(won, qt.IsTrue)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	reminders := fs.CommodityReminderRegistryFactory.CreateServiceRegistry()
+	_, err = reminders.Get(ctx, mine.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	n, err := fs.CommodityReminderSendRegistry.DeleteByReminder(ctx, mine.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 0)
+	_, err = reminders.Get(ctx, theirs.ID)
+	c.Assert(err, qt.IsNil)
+}

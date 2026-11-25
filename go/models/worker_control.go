@@ -43,6 +43,8 @@ const (
 	WorkerTypeLoanReminder WorkerType = "loan-reminder"
 	// WorkerTypeMaintenanceReminder pauses the maintenance reminder worker.
 	WorkerTypeMaintenanceReminder WorkerType = "maintenance-reminder"
+	// WorkerTypeItemReminder pauses the item reminder worker (#2805).
+	WorkerTypeItemReminder WorkerType = "item-reminder"
 	// WorkerTypeCurrencyMigration pauses the currency migration worker.
 	WorkerTypeCurrencyMigration WorkerType = "currency-migration"
 	// WorkerTypeWeeklyDigest pauses the weekly digest worker (#1391).
@@ -74,6 +76,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeStorageQuotaReminder,
 	WorkerTypeLoanReminder,
 	WorkerTypeMaintenanceReminder,
+	WorkerTypeItemReminder,
 	WorkerTypeCurrencyMigration,
 	WorkerTypeWeeklyDigest,
 	WorkerTypeOrphanFileGC,
@@ -106,6 +109,7 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeStorageQuotaReminder,
 		WorkerTypeLoanReminder,
 		WorkerTypeMaintenanceReminder,
+		WorkerTypeItemReminder,
 		WorkerTypeCurrencyMigration,
 		WorkerTypeWeeklyDigest,
 		WorkerTypeOrphanFileGC:

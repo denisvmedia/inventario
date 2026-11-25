@@ -235,6 +235,10 @@ func (m *mockEmailServiceForAuth) SendMaintenanceReminderEmail(_ context.Context
 	return nil
 }
 
+func (*mockEmailServiceForAuth) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (m *mockEmailServiceForAuth) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

@@ -1,0 +1,11 @@
+Здравствуйте, {{.Name}}!
+
+{{if eq .ReminderDaysLeft 0}}Ваше напоминание для предмета {{.CommodityName}} наступает сегодня.{{else if eq .ReminderDaysLeft 1}}Ваше напоминание для предмета {{.CommodityName}} наступает завтра.{{else}}Ваше напоминание для предмета {{.CommodityName}} наступает через {{.ReminderDaysLeft}} дн.{{end}}
+
+Напоминание: {{.ReminderTitle}}
+Дата: {{.ReminderDueDate}}
+{{if .CommodityURL}}
+Вы можете просмотреть предмет здесь: {{.CommodityURL}}
+{{end}}
+Вы сами создали это напоминание для предмета в Inventario. Изменить или
+удалить его можно на странице предмета.

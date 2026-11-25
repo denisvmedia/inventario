@@ -4210,6 +4210,97 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/reminders": {
+            "get": {
+                "description": "The reminders set on the commodity in the URL, ordered by date. Each carries its next occurrence.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_reminders"
+                ],
+                "summary": "List reminders for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRemindersResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Create a dated reminder with one or more lead times and an optional repeat rule.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_reminders"
+                ],
+                "summary": "Create a reminder for a commodity",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reminder attributes",
+                        "name": "reminder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityReminderRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Reminder created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityReminderResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/{commodityID}/services": {
             "get": {
                 "description": "All service rows (open + completed) for the commodity, most-recent-first.",
@@ -6787,6 +6878,106 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/reminders/{reminderID}": {
+            "delete": {
+                "description": "Delete a reminder and its send history.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_reminders"
+                ],
+                "summary": "Delete a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "reminderID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "404": {
+                        "description": "Reminder not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Patch the title, date, lead times or repeat rule of a reminder.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodity_reminders"
+                ],
+                "summary": "Update a reminder",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Reminder ID",
+                        "name": "reminderID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reminder patch payload",
+                        "name": "reminder",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityReminderUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityReminderResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Reminder not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/search": {
             "get": {
                 "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except ` + "`" + `type` + "`" + ` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.\nLocations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.\nTags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.",
@@ -7610,6 +7801,51 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/upcoming": {
+            "get": {
+                "description": "Item reminders, warranty expiries, loan due dates and maintenance due dates from today up to ` + "`" + `days` + "`" + ` ahead, plus overdue loans and maintenance, ordered by date.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "upcoming"
+                ],
+                "summary": "List upcoming dates in the group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "default": 30,
+                        "description": "Days ahead to cover (1-365)",
+                        "name": "days",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.UpcomingResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Invalid days value",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11353,6 +11589,224 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityReminderRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderRequestData": {
+            "type": "object",
+            "properties": {
+                "due_on": {
+                    "type": "string"
+                },
+                "remind_days_before": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "repeat_interval": {
+                    "type": "integer"
+                },
+                "repeat_unit": {
+                    "enum": [
+                        "none",
+                        "day",
+                        "week",
+                        "month",
+                        "year"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ReminderRepeatUnit"
+                        }
+                    ]
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_reminders"
+                    ],
+                    "example": "commodity_reminders"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "due_on": {
+                    "type": "string"
+                },
+                "remind_days_before": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "repeat_interval": {
+                    "type": "integer"
+                },
+                "repeat_unit": {
+                    "enum": [
+                        "none",
+                        "day",
+                        "week",
+                        "month",
+                        "year"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ReminderRepeatUnit"
+                        }
+                    ]
+                },
+                "title": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityReminderUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityReminderView": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "description": "CommodityID is the item the reminder belongs to. Deleting the item\ndeletes its reminders.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "days_until_next": {
+                    "type": "integer"
+                },
+                "due_on": {
+                    "description": "DueOn is the reminder's date (YYYY-MM-DD) and the anchor of its\nrepeat rule.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "next_occurrence": {
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-12-24"
+                },
+                "remind_days_before": {
+                    "description": "RemindDaysBefore lists the lead times in days, largest first. 0 means\non the day itself.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
+                },
+                "repeat_interval": {
+                    "description": "RepeatInterval is N in \"every N units\". It is 1 for a one-off\nreminder.",
+                    "type": "integer"
+                },
+                "repeat_unit": {
+                    "description": "RepeatUnit is the unit of the repeat rule; \"none\" for a one-off\nreminder.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.ReminderRepeatUnit"
+                        }
+                    ]
+                },
+                "title": {
+                    "description": "Title says what the date is about (\"Return window ends\").",
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CommodityRemindersMeta": {
+            "type": "object",
+            "properties": {
+                "reminders": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.CommodityRemindersResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityReminderView"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityRemindersMeta"
+                }
+            }
+        },
         "jsonapi.CommodityRequest": {
             "type": "object",
             "properties": {
@@ -13800,6 +14254,71 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.UpcomingItem": {
+            "type": "object",
+            "properties": {
+                "commodity": {
+                    "$ref": "#/definitions/jsonapi.MaintenanceCommodityRef"
+                },
+                "date": {
+                    "description": "Date is the entry's date (YYYY-MM-DD).",
+                    "type": "string",
+                    "format": "date",
+                    "example": "2026-12-24"
+                },
+                "days_left": {
+                    "description": "DaysLeft is the whole days from today to Date; negative when the\nentry is overdue.",
+                    "type": "integer",
+                    "example": 12
+                },
+                "kind": {
+                    "description": "Kind is the source of the entry.",
+                    "type": "string",
+                    "enum": [
+                        "reminder",
+                        "warranty",
+                        "loan",
+                        "maintenance"
+                    ],
+                    "example": "reminder"
+                },
+                "source_id": {
+                    "description": "SourceID is the reminder, loan or maintenance schedule id; for a\nwarranty it is the item id.",
+                    "type": "string"
+                },
+                "title": {
+                    "description": "Title is the reminder or maintenance title, or the borrower for a\nloan. Empty for a warranty.",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.UpcomingMeta": {
+            "type": "object",
+            "properties": {
+                "days": {
+                    "type": "integer",
+                    "example": 30
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 7
+                }
+            }
+        },
+        "jsonapi.UpcomingResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.UpcomingItem"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.UpcomingMeta"
+                }
+            }
+        },
         "jsonapi.UpdateProfileRequest": {
             "type": "object",
             "properties": {
@@ -15025,6 +15544,23 @@ const docTemplate = `{
                 }
             }
         },
+        "models.ReminderRepeatUnit": {
+            "type": "string",
+            "enum": [
+                "none",
+                "day",
+                "week",
+                "month",
+                "year"
+            ],
+            "x-enum-varnames": [
+                "ReminderRepeatNone",
+                "ReminderRepeatDay",
+                "ReminderRepeatWeek",
+                "ReminderRepeatMonth",
+                "ReminderRepeatYear"
+            ]
+        },
         "models.RestoreOperation": {
             "type": "object",
             "properties": {
@@ -15200,6 +15736,9 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "notificationsChannelPush": {
+                    "type": "boolean"
+                },
+                "notificationsItemReminder": {
                     "type": "boolean"
                 },
                 "notificationsLoanReminder": {

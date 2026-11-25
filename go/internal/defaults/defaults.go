@@ -40,6 +40,7 @@ type Workers struct {
 	LoanReminderInterval             string // Loan reminder worker interval (e.g., "1h")
 	LoanReminderDueSoonDays          int    // Forward-looking window for the loan due-soon reminder (default 7)
 	MaintenanceReminderInterval      string // Maintenance reminder worker interval (e.g., "1h")
+	ItemReminderInterval             string // Item reminder worker interval (e.g., "1h")
 	CurrencyMigrationInterval        string // Currency migration worker active-poll interval (e.g., "5s")
 	BusinessMetricsInterval          string // Business-metrics collector interval (e.g., "60s")
 	WorkerControlRefreshInterval     string // Worker soft-pause control poll interval (e.g., "10s")
@@ -116,6 +117,7 @@ func New() Config {
 			LoanReminderInterval:             "1h",
 			LoanReminderDueSoonDays:          7,
 			MaintenanceReminderInterval:      "1h",
+			ItemReminderInterval:             "1h",
 			CurrencyMigrationInterval:        "5s",
 			BusinessMetricsInterval:          "60s",
 			WorkerControlRefreshInterval:     "10s",
@@ -299,6 +301,12 @@ func GetLoanReminderDueSoonDays() int {
 // between maintenance reminder sweeps (#1368).
 func GetMaintenanceReminderInterval() string {
 	return defaultConfig.Workers.MaintenanceReminderInterval
+}
+
+// GetItemReminderInterval returns the default interval between item
+// reminder sweeps (#2805).
+func GetItemReminderInterval() string {
+	return defaultConfig.Workers.ItemReminderInterval
 }
 
 // GetCurrencyMigrationInterval returns the default active-poll interval

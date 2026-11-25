@@ -1553,6 +1553,159 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.CommodityLoansMeta'
     type: object
+  jsonapi.CommodityReminderRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityReminderRequestDataWrapper'
+    type: object
+  jsonapi.CommodityReminderRequestData:
+    properties:
+      due_on:
+        type: string
+      remind_days_before:
+        items:
+          type: integer
+        type: array
+      repeat_interval:
+        type: integer
+      repeat_unit:
+        allOf:
+        - $ref: '#/definitions/models.ReminderRepeatUnit'
+        enum:
+        - none
+        - day
+        - week
+        - month
+        - year
+      title:
+        type: string
+    type: object
+  jsonapi.CommodityReminderRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityReminderRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CommodityReminderResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityReminderResponseData'
+    type: object
+  jsonapi.CommodityReminderResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityReminderView'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_reminders
+        example: commodity_reminders
+        type: string
+    type: object
+  jsonapi.CommodityReminderUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityReminderUpdateRequestDataWrapper'
+    type: object
+  jsonapi.CommodityReminderUpdateRequestData:
+    properties:
+      due_on:
+        type: string
+      remind_days_before:
+        items:
+          type: integer
+        type: array
+      repeat_interval:
+        type: integer
+      repeat_unit:
+        allOf:
+        - $ref: '#/definitions/models.ReminderRepeatUnit'
+        enum:
+        - none
+        - day
+        - week
+        - month
+        - year
+      title:
+        type: string
+    type: object
+  jsonapi.CommodityReminderUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityReminderUpdateRequestData'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.CommodityReminderView:
+    properties:
+      commodity_id:
+        description: |-
+          CommodityID is the item the reminder belongs to. Deleting the item
+          deletes its reminders.
+        type: string
+      created_at:
+        type: string
+      days_until_next:
+        type: integer
+      due_on:
+        description: |-
+          DueOn is the reminder's date (YYYY-MM-DD) and the anchor of its
+          repeat rule.
+        type: string
+      id:
+        type: string
+      next_occurrence:
+        example: "2026-12-24"
+        format: date
+        type: string
+      remind_days_before:
+        description: |-
+          RemindDaysBefore lists the lead times in days, largest first. 0 means
+          on the day itself.
+        items:
+          type: integer
+        type: array
+      repeat_interval:
+        description: |-
+          RepeatInterval is N in "every N units". It is 1 for a one-off
+          reminder.
+        type: integer
+      repeat_unit:
+        allOf:
+        - $ref: '#/definitions/models.ReminderRepeatUnit'
+        description: |-
+          RepeatUnit is the unit of the repeat rule; "none" for a one-off
+          reminder.
+      title:
+        description: Title says what the date is about ("Return window ends").
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.CommodityRemindersMeta:
+    properties:
+      reminders:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommodityRemindersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityReminderView'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityRemindersMeta'
+    type: object
   jsonapi.CommodityRequest:
     properties:
       data:
@@ -3307,6 +3460,59 @@ definitions:
         description: signed URL for file access (attachment / download)
         type: string
     type: object
+  jsonapi.UpcomingItem:
+    properties:
+      commodity:
+        $ref: '#/definitions/jsonapi.MaintenanceCommodityRef'
+      date:
+        description: Date is the entry's date (YYYY-MM-DD).
+        example: "2026-12-24"
+        format: date
+        type: string
+      days_left:
+        description: |-
+          DaysLeft is the whole days from today to Date; negative when the
+          entry is overdue.
+        example: 12
+        type: integer
+      kind:
+        description: Kind is the source of the entry.
+        enum:
+        - reminder
+        - warranty
+        - loan
+        - maintenance
+        example: reminder
+        type: string
+      source_id:
+        description: |-
+          SourceID is the reminder, loan or maintenance schedule id; for a
+          warranty it is the item id.
+        type: string
+      title:
+        description: |-
+          Title is the reminder or maintenance title, or the borrower for a
+          loan. Empty for a warranty.
+        type: string
+    type: object
+  jsonapi.UpcomingMeta:
+    properties:
+      days:
+        example: 30
+        type: integer
+      total:
+        example: 7
+        type: integer
+    type: object
+  jsonapi.UpcomingResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.UpcomingItem'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.UpcomingMeta'
+    type: object
   jsonapi.UpdateProfileRequest:
     properties:
       default_group_id:
@@ -4450,6 +4656,20 @@ definitions:
       storage_bytes:
         type: integer
     type: object
+  models.ReminderRepeatUnit:
+    enum:
+    - none
+    - day
+    - week
+    - month
+    - year
+    type: string
+    x-enum-varnames:
+    - ReminderRepeatNone
+    - ReminderRepeatDay
+    - ReminderRepeatWeek
+    - ReminderRepeatMonth
+    - ReminderRepeatYear
   models.RestoreOperation:
     properties:
       area_count:
@@ -4578,6 +4798,8 @@ definitions:
           channel regardless of the per-category toggle.
         type: boolean
       notificationsChannelPush:
+        type: boolean
+      notificationsItemReminder:
         type: boolean
       notificationsLoanReminder:
         type: boolean
@@ -7573,6 +7795,69 @@ paths:
       summary: Create a maintenance schedule
       tags:
       - maintenance_schedules
+  /g/{groupSlug}/commodities/{commodityID}/reminders:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: The reminders set on the commodity in the URL, ordered by date.
+        Each carries its next occurrence.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityRemindersResponse'
+      summary: List reminders for a commodity
+      tags:
+      - commodity_reminders
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Create a dated reminder with one or more lead times and an optional
+        repeat rule.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: Reminder attributes
+        in: body
+        name: reminder
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityReminderRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Reminder created
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityReminderResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a reminder for a commodity
+      tags:
+      - commodity_reminders
   /g/{groupSlug}/commodities/{commodityID}/services:
     get:
       consumes:
@@ -9598,6 +9883,73 @@ paths:
       summary: Get the active plan + per-group usage
       tags:
       - groups
+  /g/{groupSlug}/reminders/{reminderID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Delete a reminder and its send history.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Reminder ID
+        in: path
+        name: reminderID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No Content
+        "404":
+          description: Reminder not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a reminder
+      tags:
+      - commodity_reminders
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Patch the title, date, lead times or repeat rule of a reminder.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Reminder ID
+        in: path
+        name: reminderID
+        required: true
+        type: string
+      - description: Reminder patch payload
+        in: body
+        name: reminder
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityReminderUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityReminderResponse'
+        "404":
+          description: Reminder not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a reminder
+      tags:
+      - commodity_reminders
   /g/{groupSlug}/search:
     get:
       consumes:
@@ -10181,6 +10533,38 @@ paths:
       summary: Tag adoption stats
       tags:
       - tags
+  /g/{groupSlug}/upcoming:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: Item reminders, warranty expiries, loan due dates and maintenance
+        due dates from today up to `days` ahead, plus overdue loans and maintenance,
+        ordered by date.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - default: 30
+        description: Days ahead to cover (1-365)
+        in: query
+        name: days
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.UpcomingResponse'
+        "422":
+          description: Invalid days value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List upcoming dates in the group
+      tags:
+      - upcoming
   /g/{groupSlug}/upload-slots/check:
     get:
       consumes:

@@ -1,0 +1,134 @@
+{
+  "confirm": {
+    "delete": "Smazat tuto připomínku?"
+  },
+  "days": {
+    "ago_few": "Před {{count}} dny",
+    "ago_many": "Před {{count}} dne",
+    "ago_one": "Před {{count}} dnem",
+    "ago_other": "Před {{count}} dny",
+    "left_few": "Za {{count}} dny",
+    "left_many": "Za {{count}} dne",
+    "left_one": "Za {{count}} den",
+    "left_other": "Za {{count}} dní",
+    "overdue_few": "{{count}} dny po termínu",
+    "overdue_many": "{{count}} dne po termínu",
+    "overdue_one": "{{count}} den po termínu",
+    "overdue_other": "{{count}} dní po termínu",
+    "today": "Dnes"
+  },
+  "dialog": {
+    "createTitle": "Přidat připomínku",
+    "dateLabel": "Datum",
+    "description": "Zvolte datum a kdy vám to máme připomenout. Opakovaná připomínka se po každém termínu posune na další.",
+    "editTitle": "Upravit připomínku",
+    "intervalLabel": {
+      "day": "Každých (dní)",
+      "month": "Každých (měsíců)",
+      "week": "Každých (týdnů)",
+      "year": "Každých (let)"
+    },
+    "leadTimesHint": "Počet dní předem oddělený čárkami, např. 30, 7, 1. 0 znamená v den termínu.",
+    "leadTimesLabel": "Připomenout (dní předem)",
+    "repeatLabel": "Opakování",
+    "titleLabel": "Název",
+    "titlePlaceholder": "Konec lhůty pro vrácení"
+  },
+  "every": {
+    "daily": "Každý den",
+    "day_few": "Každé {{count}} dny",
+    "day_many": "Každých {{count}} dne",
+    "day_one": "Každý {{count}} den",
+    "day_other": "Každých {{count}} dní",
+    "month_few": "Každé {{count}} měsíce",
+    "month_many": "Každých {{count}} měsíce",
+    "month_one": "Každý {{count}} měsíc",
+    "month_other": "Každých {{count}} měsíců",
+    "monthly": "Každý měsíc",
+    "none": "Jednorázově",
+    "week_few": "Každé {{count}} týdny",
+    "week_many": "Každých {{count}} týdne",
+    "week_one": "Každý {{count}} týden",
+    "week_other": "Každých {{count}} týdnů",
+    "weekly": "Každý týden",
+    "year_few": "Každé {{count}} roky",
+    "year_many": "Každých {{count}} roku",
+    "year_one": "Každý {{count}} rok",
+    "year_other": "Každých {{count}} let",
+    "yearly": "Každý rok"
+  },
+  "kind": {
+    "loan": "Vrácení zápůjčky",
+    "maintenance": "Údržba",
+    "reminder": "Připomínka",
+    "warranty": "Konec záruky"
+  },
+  "leadTimes": {
+    "beforeList_few": "{{list}} dny předem",
+    "beforeList_many": "{{list}} dne předem",
+    "beforeList_one": "{{list}} den předem",
+    "beforeList_other": "{{list}} dní předem",
+    "before_few": "{{list}} dny předem",
+    "before_many": "{{list}} dne předem",
+    "before_one": "{{list}} den předem",
+    "before_other": "{{list}} dní předem",
+    "onTheDay": "v den termínu",
+    "prefix": "E-mail {{parts}}"
+  },
+  "repeat": {
+    "day": "Denně",
+    "month": "Měsíčně",
+    "none": "Neopakovat",
+    "week": "Týdně",
+    "year": "Ročně"
+  },
+  "row": {
+    "deleteLabel": "Smazat připomínku {{title}}",
+    "editLabel": "Upravit připomínku {{title}}",
+    "passed": "Uplynulo"
+  },
+  "section": {
+    "add": "Přidat připomínku",
+    "description": "Data, na která u této položky nechcete zapomenout, třeba lhůta pro vrácení nebo obnova pojištění. Před každým vám pošleme e-mail.",
+    "empty": "Zatím žádné připomínky.",
+    "loadError": "Připomínky se nepodařilo načíst.",
+    "title": "Připomínky"
+  },
+  "toast": {
+    "created": "Připomínka přidána.",
+    "deleteError": "Připomínku se nepodařilo smazat.",
+    "deleted": "Připomínka smazána.",
+    "saveError": "Připomínku se nepodařilo uložit.",
+    "updated": "Připomínka upravena."
+  },
+  "upcoming": {
+    "empty": "V tomto období nic nenastává.",
+    "subtitle": "Připomínky, konce záruk, zápůjčky a údržba v celé skupině podle data.",
+    "tabAll": "Vše",
+    "tabLoans": "Zápůjčky",
+    "tabMaintenance": "Údržba",
+    "tabReminders": "Připomínky",
+    "tabWarranties": "Záruky",
+    "title": "Nadcházející",
+    "unknownItem": "Neznámá položka",
+    "windowDays_few": "Příští {{count}} dny",
+    "windowDays_many": "Příštích {{count}} dne",
+    "windowDays_one": "Příští {{count}} den",
+    "windowDays_other": "Příštích {{count}} dní",
+    "windowLabel": "Období",
+    "windowYear": "Příštích 12 měsíců"
+  },
+  "validation": {
+    "dateRange": "Vyberte datum mezi lety 1900 a 2200.",
+    "dateRequired": "Zvolte datum.",
+    "intervalRange": "Zadejte celé číslo od 1 do 999.",
+    "leadTimesDuplicate": "Každá hodnota smí být uvedena jen jednou.",
+    "leadTimesExceedRepeat": "Každá hodnota musí být kratší než interval opakování. Měsíc se počítá jako 28 dní a rok jako 365.",
+    "leadTimesInvalid": "Zadejte celá čísla oddělená čárkami.",
+    "leadTimesRange": "Každá hodnota musí být od 0 do 365.",
+    "leadTimesRequired": "Zadejte alespoň jednu hodnotu.",
+    "leadTimesTooMany": "Zadejte nejvýše 5 hodnot.",
+    "titleRequired": "Zadejte název.",
+    "titleTooLong": "Název může mít nejvýše 200 znaků."
+  }
+}
