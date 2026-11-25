@@ -233,6 +233,12 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
   return qs ? `${base}?${qs}` : base
 }
 
+// Link to the items list showing every item of one type, by the type's
+// slug, inactive ones included, so the list matches the type's item count.
+export function commodityTypeHref(slug: string, typeSlug: string): string {
+  return commodityListHref(slug, { includeInactive: true, types: [typeSlug] })
+}
+
 // Link to the items list showing every item that carries one tag, inactive
 // ones included, so the list matches the tag's item count.
 export function commodityTagHref(slug: string, tagSlug: string): string {
@@ -318,6 +324,14 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     sortDesc: query.sortDesc,
     unreadable: apiUnreadable(query.unreadable),
   }
+}
+
+// The query as a bulk request names its items (CommoditySelection): the API
+// query string of the list options, without a page. The server parses it
+// with the same contract as GET /commodities, so it selects the items the
+// list shows.
+export function commodityQueryParam(query: CommodityQuery): string {
+  return listOptionsToParams(commodityQueryToListOptions(query)).toString()
 }
 
 // The unreadable values under their API names, or undefined when there are

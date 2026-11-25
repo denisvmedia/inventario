@@ -38,8 +38,8 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers of the included items come with them. Files attached to a location or area you selected come with it; standalone files are only included in a **Full database** export, since there's no parent to bring them along.
+   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything.
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup. A file attached to several items is stored in the archive once and comes back attached to each of them that the backup includes.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
@@ -104,6 +104,15 @@ name, ignoring case and extra spaces, and creates the sellers the group does
 not have. A seller that already exists keeps its website, contact, and note,
 whichever strategy you pick, and **Full replace** does not remove sellers. A
 dry run creates no sellers.
+
+### Item types
+
+A restore gives each item the group's [item type](../item-types/) with the same
+internal key, so built-in types and types restored before match at once. A type
+the group does not have under that key is matched by name, ignoring case and
+extra spaces, and created when no type has that name either. A type that
+already exists keeps its name and icon, whichever strategy you pick, and
+**Full replace** does not remove item types. A dry run creates no item types.
 
 ### Other options
 

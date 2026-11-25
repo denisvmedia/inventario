@@ -303,6 +303,7 @@ func (b *inbBuilder) writeManifest(plan *inbPlan) error {
 		DraftsFile:     draftsMember,
 		FilesFile:      filesMember,
 		Sellers:        plan.sellers,
+		ItemTypes:      plan.itemTypes,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

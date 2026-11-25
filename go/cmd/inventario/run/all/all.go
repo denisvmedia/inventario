@@ -147,6 +147,9 @@ func (c *Command) run() error {
 	stopAssetNumberBackfill := bootstrap.StartAssetNumberBackfill(ctx, rs, c.cfg)
 	defer stopAssetNumberBackfill()
 
+	stopItemTypeBackfill := bootstrap.StartItemTypeBackfill(ctx, rs, c.cfg)
+	defer stopItemTypeBackfill()
+
 	stopFileChecksumBackfill := bootstrap.StartFileChecksumBackfill(ctx, rs, c.cfg)
 	defer stopFileChecksumBackfill()
 

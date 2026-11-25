@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, Sparkles } from "lucide-react"
 
@@ -69,18 +69,40 @@ export function SellerField({
     .map((c) => c.seller)
   const all = [...listed, ...pending]
 
-  // The selected seller is not in the group's list: another member deleted
-  // it after it was picked, or after the item was loaded.
+  // The selected seller is missing from the list, which can be up to 30
+  // seconds old. The list is fetched once more, and the seller counts as
+  // gone (deleted by another member) only when data from a fetch that
+  // started after the doubt arose still lacks it. A failed fetch proves
+  // nothing.
+  const absent = !!value && sellers.isSuccess && !all.some((s) => s.id === value)
+  const [checked, setChecked] = useState<{ id: string; startedAt: number } | null>(null)
   const gone =
-    !!value && sellers.isSuccess && !sellers.isFetching && !all.some((s) => s.id === value)
+    absent && checked !== null && checked.id === value && sellers.dataUpdatedAt >= checked.startedAt
+  const { refetch } = sellers
+  const checking = useRef("")
+  const check = useCallback(
+    (id: string) => {
+      if (checking.current === id) return
+      checking.current = id
+      const startedAt = Date.now()
+      void refetch().then(() => {
+        checking.current = ""
+        setChecked({ id, startedAt })
+      })
+    },
+    [refetch]
+  )
+  useEffect(() => {
+    if (absent && !gone) check(value)
+  }, [absent, gone, value, check])
 
   // The server refuses a seller the group does not have with a 422 on the
-  // field. The list is fetched again, so the field can say the seller is gone.
+  // field, even when the list here still has it, so that is a reason to
+  // check as well.
   const errorMessage = error?.message
-  const { refetch } = sellers
   useEffect(() => {
-    if (errorMessage) void refetch()
-  }, [errorMessage, refetch])
+    if (errorMessage && value) check(value)
+  }, [errorMessage, value, check])
 
   // The list closes before the dialog opens, or the dialog would open under
   // it; a letter typed on the closed select picks without opening the list,

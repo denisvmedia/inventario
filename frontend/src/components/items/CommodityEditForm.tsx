@@ -14,26 +14,15 @@ import {
   type AreaOption,
   type LocationOption,
 } from "@/components/locations/LocationAreaFields"
+import { ItemTypeField } from "@/components/itemTypes/ItemTypeField"
 import { TagPalette } from "@/components/tags/TagPalette"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
 import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
-import {
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
 import { buildDefaults, toRequest } from "@/features/commodities/draft"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -328,26 +317,13 @@ export function CommodityEditForm({
                 control={control}
                 name="type"
                 render={({ field }) => (
-                  <Select value={field.value || undefined} onValueChange={field.onChange}>
-                    <SelectTrigger
-                      id="edit-category"
-                      className="w-full"
-                      aria-invalid={!!errors.type}
-                    >
-                      <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {COMMODITY_TYPES.map((tp) => {
-                        const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
-                        return (
-                          <SelectItem key={tp} value={tp}>
-                            <Icon aria-hidden="true" />
-                            {t(`commodities:type.${tp}`)}
-                          </SelectItem>
-                        )
-                      })}
-                    </SelectContent>
-                  </Select>
+                  <ItemTypeField
+                    id="edit-category"
+                    value={field.value ?? ""}
+                    onChange={field.onChange}
+                    invalid={!!errors.type}
+                    errorMessage={errors.type?.message}
+                  />
                 )}
               />
             </EditField>

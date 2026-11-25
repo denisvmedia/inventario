@@ -77,6 +77,10 @@ type inbBuilder struct {
 	// first, and draftUUIDByDBID resolves a file link to one of them.
 	drafts          []*models.CommodityDraft
 	draftUUIDByDBID map[string]string
+	// itemTypes are the group's item types in list order; usedItemTypes
+	// collects the slugs the planned items have.
+	itemTypes     []*models.ItemType
+	usedItemTypes map[models.CommodityType]bool
 	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
 	// size-resolved and in list order (orphans already dropped). They are
 	// emitted in the dedicated files member, never nested under a commodity.
@@ -298,6 +302,10 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		return err
 	}
 
+	if err := b.loadItemTypes(); err != nil {
+		return err
+	}
+
 	// Before the files, which link to the drafts.
 	if err := b.loadDrafts(scope); err != nil {
 		return err
@@ -419,6 +427,38 @@ func (b *inbBuilder) manifestSellers(scope *inbScope) []INBSeller {
 			continue
 		}
 		out = append(out, INBSeller{ID: s.UUID, Name: s.Name, Website: s.Website, Contact: s.Contact, Note: s.Note})
+	}
+	return out
+}
+
+// loadItemTypes lists the group's item types once via the RLS-scoped user
+// registry.
+func (b *inbBuilder) loadItemTypes() error {
+	b.usedItemTypes = map[models.CommodityType]bool{}
+	if b.svc.factorySet.ItemTypeRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create item type registry", err)
+	}
+	list, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list item types", err)
+	}
+	b.itemTypes = list
+	return nil
+}
+
+// manifestItemTypes returns the item types the manifest carries: all of them
+// in a whole-group export, otherwise the ones the planned items have.
+func (b *inbBuilder) manifestItemTypes(scope *inbScope) []INBItemType {
+	out := make([]INBItemType, 0, len(b.itemTypes))
+	for _, t := range b.itemTypes {
+		if !scope.wholeClass && !b.usedItemTypes[t.Slug] {
+			continue
+		}
+		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon})
 	}
 	return out
 }
@@ -990,6 +1030,7 @@ func (b *inbBuilder) planLocation(loc *models.Location, scope *inbScope) planned
 // commodities). areaUUID is the parent area's immutable UUID, or "" for an
 // area-less commodity (issue #1986).
 func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodity) (INBCommodity, []pendingFile) {
+	b.usedItemTypes[com.Type] = true
 	inbCom := INBCommodity{
 		ID:                     com.UUID,
 		Name:                   com.Name,
@@ -1148,6 +1189,7 @@ type inbPlan struct {
 	drafts       plannedDrafts
 	files        plannedFiles
 	sellers      []INBSeller
+	itemTypes    []INBItemType
 }
 
 // run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
@@ -1184,6 +1226,8 @@ func (b *inbBuilder) run() (inbPlan, error) {
 		files:        b.planFiles(scope),
 		// After every item is planned, so usedSellers is complete.
 		sellers: b.manifestSellers(scope),
+		// After every item is planned, so usedItemTypes is complete.
+		itemTypes: b.manifestItemTypes(scope),
 	}, nil
 }
 

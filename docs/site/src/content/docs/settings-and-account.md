@@ -70,7 +70,9 @@ A couple of things to know:
   and if you created anything inside a group someone else owns (items, files,
   places, exports, tags or sellers), it needs to be removed first. This
   includes a tag or a seller you added there, even when other members use it on
-  their own items. Item reminders you set in a shared group are deleted
+  their own items. [Item types](../item-types/) you added to a shared group
+  stay with the group and pass to its owner, so they don't block deletion.
+  Item reminders you set in a shared group are deleted
   with your account, since they only ever emailed you. Once deletion succeeds
   you're signed out immediately.
 

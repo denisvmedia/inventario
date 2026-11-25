@@ -172,6 +172,9 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
 	// them are gone.
 	func(t store.TableNames) string { return string(t.Sellers()) },
+	// Item types (#2802). tenant_id + group_id; the commodities whose type
+	// named them are gone.
+	func(t store.TableNames) string { return string(t.ItemTypes()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups NO ACTION; cleared before location_groups.

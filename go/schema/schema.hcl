@@ -668,6 +668,9 @@ table "commodities" {
     unique = true
     columns = [column.group_id, column.asset_number]
   }
+  index "idx_commodities_group_type" {
+    columns = [column.group_id, column.type]
+  }
   index "idx_commodities_seller" {
     columns = [column.seller_id]
   }
@@ -2339,6 +2342,81 @@ table "group_notification_prefs" {
     columns = [column.user_id, column.group_id]
   }
   index "idx_group_notification_prefs_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "item_types" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant item type isolation"
+  }
+  column "slug" {
+    type = TEXT
+  }
+  column "name" {
+    type = TEXT
+    default = ""
+  }
+  column "name_key" {
+    type = TEXT
+  }
+  column "icon" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_item_types_group_name_key" {
+    unique = true
+    columns = [column.group_id, column.name_key]
+  }
+  index "idx_item_types_group_slug" {
+    unique = true
+    columns = [column.group_id, column.slug]
+  }
+  index "idx_item_types_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_item_types_uuid" {
     unique = true
     columns = [column.uuid]
   }
@@ -4715,6 +4793,24 @@ policy "group_notification_prefs_tenant_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
   comment = "Ensures per-group notification prefs are isolated by tenant; user-level filtering happens in application logic"
+}
+
+policy "item_type_background_worker_access" {
+  on = table.item_types
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all item types for processing"
+}
+
+policy "item_type_isolation" {
+  on = table.item_types
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures item types can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "location_group_background_worker_access" {

@@ -162,6 +162,15 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			}
 		}
 
+		// Item types are group configuration, not the author's content: the
+		// ones the user created stay with their groups. Their NOT NULL
+		// created_by_user_id FK -> users(id) NO ACTION moves to another
+		// member, so it neither blocks the final delete nor the account
+		// deletion pre-check (which leaves item types out).
+		if err := r.reattributeItemTypes(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
+
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
 		// every membership row that names the user as the member. It lives here
@@ -371,5 +380,36 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 		)
 	}
 
+	return nil
+}
+
+// reattributeItemTypes gives each item type the user created to another
+// member of its group: the owner first, then an admin, then the member who
+// joined first. It runs before the user's memberships are deleted, though
+// they are left out of the choice anyway. A type whose group has no other
+// member keeps its creator; such a group is private and is purged before the
+// user is.
+func (r *UserPurger) reattributeItemTypes(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	itemTypes := string(r.tableNames.ItemTypes())
+	memberships := string(r.tableNames.GroupMemberships())
+	query := fmt.Sprintf(`
+		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
+		FROM (
+			SELECT DISTINCT ON (group_id) group_id, member_user_id
+			FROM %[2]s
+			WHERE tenant_id = $1 AND member_user_id <> $2
+			ORDER BY group_id,
+				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+				joined_at, member_user_id
+		) heir
+		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id`,
+		itemTypes, memberships)
+	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		return errxtrace.Wrap(
+			"failed to hand over the user's item types",
+			err,
+			errx.Attrs("table", itemTypes, "tenant_id", tenantID, "user_id", userID),
+		)
+	}
 	return nil
 }

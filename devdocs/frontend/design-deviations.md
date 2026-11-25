@@ -48,7 +48,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #2793 / #2839
 - **Mock**: none; the mock has no saved views.
-- **Reality**: `frontend/src/pages/saved-views/SavedViewsPage.tsx` is a `Page width="narrow"` with one `Card` of rows (the row pattern of the dashboard lists): icon tile, the view name as a link, a **Personal** / **Shared** badge, the item count, the conditions as outline badges (`features/saved-views/QueryConditions.tsx`, a condition naming something deleted in the `status-expiring` tone and saying so in its text: "Deleted area", "Deleted seller", or "(deleted)" after a tag; a seller reads "Seller <name>"), ghost icon toggles for Sidebar (`PanelLeft`) and Dashboard (`LayoutDashboard`) that set the member's own placement on every row, shared views of others included, and a `MoreHorizontal` menu with Edit, Move up, Move down and Delete for the views the member may change. Reached from the Views menu and the gear on the sidebar section; it is not in the sidebar's nav lists.
+- **Reality**: `frontend/src/pages/saved-views/SavedViewsPage.tsx` is a `Page width="narrow"` with one `Card` of rows (the row pattern of the dashboard lists): icon tile, the view name as a link, a **Personal** / **Shared** badge, the item count, the conditions as outline badges (`features/saved-views/QueryConditions.tsx`, a condition naming something deleted in the `status-expiring` tone and saying so in its text: "Deleted area", "Deleted seller", or "(deleted)" after a tag or an item type the group no longer has; a seller reads "Seller <name>", an item type by the group's name for it), ghost icon toggles for Sidebar (`PanelLeft`) and Dashboard (`LayoutDashboard`) that set the member's own placement on every row, shared views of others included, and a `MoreHorizontal` menu with Edit, Move up, Move down and Delete for the views the member may change. Reached from the Views menu and the gear on the sidebar section; it is not in the sidebar's nav lists.
 - **Why**: not present in mock. A member needs one place to rename, reorder, unpin and delete views, including views that are on neither the sidebar nor the dashboard; the issue does not name the surface, so the page is agent-suggested.
 - **Approved by**: agent-suggested; listed in the PR for the owner (the feature itself is pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements).
 - **Reversion plan**: Follow the mock once `inventario-design` draws view management, or fold the page into Settings if the owner prefers.
@@ -62,6 +62,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; substring matching, edit-form suggestions, keyboard selection and the short-name fallback agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Add model suggestions if the mock's `ModelInput` is wanted with real data; otherwise permanent. The short-name fallback stays while brand and model are optional.
 
+#### 2026-11-25 — Items bulk bar: Edit menu, select all matching, result dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no bulk selection at all; the shared `BulkActionBar` is itself a recorded deviation (the 2026-06-05 entry below), and this extends it. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (DropdownMenu with a label and separator, Dialog, Select, link Button) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: The Items bar moved out of the list page into `frontend/src/components/items/CommodityBulkActions.tsx` (Print labels with it) and is wider (`max-w-3xl` instead of the shared `max-w-xl`) to fit one more control; the shared bar's action row now wraps, so the four buttons fit a phone. Between Move and Print labels an outline **Edit** `DropdownMenu` trigger (chevron) offers **Tags…**, **Type…**, a separator, a **Set status** label and the statuses In Use, Lost, Disposed and Written Off. **Tags…** opens `BulkTagsDialog` (`frontend/src/components/tags/`, shared with the Files bar): two `TagPalette`s, **Add tags** (with the new-tag input) and **Remove tags** (existing tags only, through a new `allowCreate={false}` prop); picking a tag on one side takes it off the other. **Type…** opens `BulkTypeDialog` with the edit form's `ItemTypeField` (the group's item types and **New type**, #2802); a type the server refuses because another member deleted it is named on the field. Lost, Disposed and Written Off reuse `StatusTransitionDialog` with a new optional `title` / `description` pair that speaks of N items; In Use is a confirm dialog. Once the whole page is selected, a link button next to the count offers **Select all N matching items**; then the count reads "All N matching items selected", a **Clear selection** link button follows it, and Print labels is hidden. Above 500 matching items a muted line says to narrow the filters instead. When some items fail, `BulkResultDialog` shows the counts in its description, a bordered scrolling list of the failed items (the name links to the item) with the reason, and **Close** / **Retry failed items**.
+- **Why**: not present in mock. The issue asks for bulk tags, type and status (with the date and note dialog of a single change), for "Select all N matching" as an action separate from "Select this page", and for a report of completed, skipped and failed items with a retry of the failed subset. The grouping under one Edit menu, the wider bar, the link to each failed item, keeping the failed items selected, and leaving Sold out of the bulk statuses go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the Edit menu grouping, wider bar, failed-item links, kept selection and the Sold omission agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the items list; reconcile with the Files bar through the shared component.
+
 #### 2026-11-25 — Seller on the item: picker with New seller, AI suggestion, items-list filter, Details row
 
 - **Issue/PR**: #2804 / PR #2844
@@ -70,6 +79,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. #2804 asks for a seller per item, created on the fly from the form, a filter on the items list, and the AI scan filling the seller. The suggestion box instead of creating the scanned seller, the "Deleted seller" entry and the Details link are agent-suggested. The **Use {name}** offer and the deleted-seller line come from the #2844 review.
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner; the taken-name offer and the deleted-seller line asked for in the PR review.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller field.
+
+#### 2026-11-25 — Item type picker with New type, the group's types in the Type filter
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has a **Category** `Select` over the fixed `CATEGORIES` list (L1051–L1057), and `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) the same `Select` (L475–L481). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar filter lists `CATEGORIES` as `DropdownMenuCheckboxItem`s with an icon each (L250–L262). There is no way to add a category.
+- **Reality**: `frontend/src/components/itemTypes/ItemTypeField.tsx` keeps the mock's `Select`, filled from the group's item types (`GET /item-types`): each option shows the type's icon and its name, the built-in types by their translated default name until someone renames them. The list ends with a `SelectSeparator` and **New type** (a `Plus` icon), which opens `ItemTypeFormDialog` over the form and selects the type it created, the pattern of the Location and Seller pickers. When the name is taken, the dialog offers **Use {name}** to pick the existing type. A picked type that is missing from the cached list makes the field fetch the list once more, and a destructive line under the picker asks to pick another one only when a list fetched after that still lacks it (deleted by another member); a save the server refuses with 422 `item_type.unknown` shows "This type is not in the group." on the field and runs the same check. Without a group (the item form on the public landing page) the picker offers the six built-in types and no **New type**. The items toolbar's Type filter and the area page's filter list the group's types with their icons; a slug from the URL that the group does not have stays in the menu, by its slug, so it can be cleared. The AI scan review shows the type's name.
+- **Why**: #2802 makes item types a per-group list with a name and an icon, created on the fly from the item form. The deleted-type line, the field error for an unknown type, the built-in types on the landing page and the unknown slug in the filter are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; deleted-type line, unknown-type field error, landing-page fallback and unknown filter slug agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers and a managed category list.
 
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
 
@@ -443,6 +461,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Files & Attachments
 
+#### 2026-11-25 — Files bulk bar: Tags… button and dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no bulk selection; the bar itself is the recorded deviation of 2026-05-16 below. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (outline Button with an icon, Dialog) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: `frontend/src/pages/files/FilesListPage.tsx` adds an outline **Tags…** button (`Tag` icon, `data-testid="files-bulk-tags"`) between **Move to…** and **Delete selected**. It opens the items' bulk tag dialog, now `frontend/src/components/tags/BulkTagsDialog.tsx` with `kind="file"`: **Add tags** (with the new-tag input) and **Remove tags** (existing file tags only). The outcome is a toast; files that failed stay selected instead of opening a result dialog, so **Tags…** retries them. The shared `BulkActionBar` lets its action row wrap, which this third control needs on a phone.
+- **Why**: not present in mock. The issue asks for bulk add and remove of file tags. Reusing the items dialog keeps the two surfaces alike; keeping failed files selected with a toast rather than the items' result dialog is agent-suggested, since a file failure carries no reason the user can act on beyond retrying.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the toast-and-keep-selected outcome agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the file browser.
+
 #### 2026-11-25 — Files page: "More tags" picker for any file tag
 
 - **Issue/PR**: #2792 / PR (pending)
@@ -572,6 +599,17 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. #2804 asks for a page listing the sellers with their item counts, and for a confirmation naming the count before a seller is deleted.
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` adds a sellers view.
+
+### Item types
+
+#### 2026-11-25 — Item types page
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
+- **Reality**: `frontend/src/pages/itemTypes/ItemTypesListPage.tsx` at `/g/:slug/item-types` follows the Sellers page (#2804), which follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New type**, a search box that filters by the shown name on the client (`?q=`), and a card of `ItemTypeRow`s with the type's icon, its name (a link to the items list filtered by the type, inactive items shown), a secondary **Built-in** badge on the six built-in types, "N items · N in Trash", and edit / delete buttons on hover; the delete button is disabled on the group's last type. `ItemTypeFormDialog` takes a name and an icon from `ItemTypeIconPicker`, a grid of 38 Lucide icons as a radio group (`grid-cols-6 sm:grid-cols-8`, each a bordered icon tile, the selected one with a primary border and a `bg-primary/10` fill). A built-in type's name field starts empty with its translated name as the placeholder and a hint that an empty name keeps it. `ItemTypeDeleteDialog` replaces the confirm dialog: for a type no item has it confirms the delete; for a type items have, Trash included, it names the counts and asks, with a `Select` of the other types, where the items move, and its button reads **Move items and delete**. That is also how two types are merged.
+- **Why**: not present in mock. #2802 asks for types managed like tags (rename, merge, delete with an in-use check), each with a name and an icon. The icon set and its picker, the Built-in badge, the separate Trash count and the empty-name rule for built-in types are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; icon picker, Built-in badge, Trash count and empty-name rule agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Forms & Validation
 
@@ -798,6 +836,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. #2793 asks for views in the sidebar with a count that matches the opened list.
 - **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` draws saved views in its sidebar.
+
+#### 2026-11-25 — Item types entry in the sidebar and the command palette
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Item types entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Item types** (`Shapes` icon) after Sellers in the Group section, linking to `/g/:slug/item-types`. `CommandPalette.tsx` lists the same entry after Sellers. Both resolve the label through `lib/nav-labels.ts` (`common:nav.itemTypes`).
+- **Why**: not present in mock. #2802 asks for a page that manages the group's item types.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 #### 2026-11-25 — Sellers entry in the sidebar and the command palette
 
@@ -1200,9 +1247,9 @@ _None yet._
 
 - **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
-- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
-- **Why**: not present in mock. #2804 asks for the seller in the insurance report.
-- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values. When the sellers cannot be loaded, the seller of an item that has one stays empty with a small muted "Could not load the seller." line (`UnavailableNote`, hidden in print), and the rest of the report renders.
+- **Why**: not present in mock. #2804 asks for the seller in the insurance report. A failed sellers request should not take the whole report down (review of #2844).
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; the empty cell with a note asked for in the #2844 review
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller to the report.
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so

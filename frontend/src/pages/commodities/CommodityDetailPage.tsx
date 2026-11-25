@@ -89,7 +89,6 @@ import {
   TERMINAL_COMMODITY_STATUSES,
   warrantyStatus,
   type CommodityStatusValue,
-  type CommodityTypeValue,
   type CommodityWarrantyStatus,
   type TerminalCommodityStatusValue,
 } from "@/features/commodities/constants"
@@ -119,6 +118,7 @@ import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import {
   commodityHref,
@@ -245,6 +245,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const detail = useCommodity(id, { enabled })
   const areas = useAreas({ enabled })
   const locations = useLocations({ enabled })
+  const itemTypes = useItemTypeLookup()
   const update = useUpdateCommodity(id)
   const remove = useDeleteCommodity()
   const undoDelete = useUndoItemDelete()
@@ -478,7 +479,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 
   const status = commodity.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-  const type = commodity.type as CommodityTypeValue | undefined
+  const type = commodity.type
+  const typeLabel = itemTypes.get(type)?.label ?? ""
   // Per the BE, `original_price` is denominated in the purchase
   // currency (`original_price_currency`); `converted_original_price`
   // and `current_price` are denominated in the group currency.
@@ -778,6 +780,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 <CommodityThumb
                   cover={commodity.cover}
                   type={type}
+                  icon={itemTypes.get(type)?.Icon}
                   name={commodity.name}
                   size={isSheet && commodity.cover ? 96 : 48}
                   testId="commodity-detail-thumb"
@@ -819,10 +822,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                         className="hover:text-foreground hover:underline"
                         data-testid="commodity-detail-type-link"
                       >
-                        {t(`commodities:type.${type}`)}
+                        {typeLabel}
                       </Link>
                     ) : (
-                      t(`commodities:type.${type}`)
+                      typeLabel
                     )}
                   </p>
                 ) : null}

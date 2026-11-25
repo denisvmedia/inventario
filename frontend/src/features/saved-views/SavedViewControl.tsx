@@ -32,7 +32,13 @@ import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 import type { SavedView, SavedViewLayout } from "./api"
-import { useCreateSavedView, useSavedViews, useSellerCatalog, useUpdateSavedView } from "./hooks"
+import {
+  useCreateSavedView,
+  useItemTypeCatalog,
+  useSavedViews,
+  useSellerCatalog,
+  useUpdateSavedView,
+} from "./hooks"
 import { SavedViewIcon } from "./SavedViewIcon"
 import { SaveViewDialog, type SaveViewValues } from "./SaveViewDialog"
 import {
@@ -370,18 +376,20 @@ function QueryErrorNotice({ parameter }: { parameter: string | undefined }) {
 // query. A catalogue that failed to load lists no tags, which would mark
 // every tag of the query as deleted, and the previous group's catalogue,
 // kept while a group switch loads the new one, would mark the new group's
-// tags. Sellers are checked only once the group's sellers have loaded.
+// tags. Sellers and item types are checked only once the group's own list
+// of them has loaded.
 export function useStaleReferences(query: CommodityQuery | undefined): StaleReferences | undefined {
   const areas = useAreas({ enabled: !!query })
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellerCatalog()
+  const types = useItemTypeCatalog()
   const tagsUnknown = tagIndex.isLoading || tagIndex.isError || tagIndex.isPlaceholderData
   return useMemo(() => {
     if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))
     const tagSlugs = new Set(tagIndex.tags.map((tag) => tag.slug))
-    return staleReferences(query, areaIds, tagSlugs, sellers.ids)
-  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids])
+    return staleReferences(query, areaIds, tagSlugs, sellers.ids, types.slugs)
+  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids, types.slugs])
 }
 
 // Names what a view's filter still asks for but no longer exists. The list
@@ -408,6 +416,9 @@ export function StaleNotice({ stale }: { stale: StaleReferences }) {
         ) : null}
         {stale.sellers.length > 0 ? (
           <span>{t("commodities:savedViews.stale.sellers", { count: stale.sellers.length })}</span>
+        ) : null}
+        {stale.types.length > 0 ? (
+          <span>{t("commodities:savedViews.stale.types", { count: stale.types.length })}</span>
         ) : null}
       </div>
     </div>

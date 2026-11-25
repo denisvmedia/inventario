@@ -270,10 +270,10 @@ func (p parser) text(q *Query) error {
 	return nil
 }
 
-// types accepts any value: an item type nobody uses matches no item, which
-// is an applied condition rather than a dropped one. The set of types is not
-// checked against models.CommodityType so the contract does not have to
-// change when a group defines its own types (#2802).
+// types accepts any value: an item type slug nobody uses matches no item,
+// which is an applied condition rather than a dropped one. Item types are
+// per group (#2802), so the parser, which knows no group, does not check
+// the slugs against a list.
 func (p parser) types(q *Query) error {
 	for _, v := range p.list(ParamType) {
 		t := models.CommodityType(v)

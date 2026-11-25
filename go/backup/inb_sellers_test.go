@@ -9,6 +9,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/models"
 )
@@ -67,7 +68,7 @@ func TestINBExport_Sellers(t *testing.T) {
 	_, archive := f.runExport(c, signer)
 	manifest, items := manifestAndItems(c, archive)
 
-	c.Check(manifest.Version, qt.Equals, "3.4")
+	c.Check(manifest.Version, qt.Equals, export.INBFormatVersion)
 	// A whole-group export carries every seller, the one without items too.
 	c.Check(manifest.Sellers, qt.DeepEquals, []types.INBSeller{
 		{ID: f.shop.UUID, Name: "Hardware Store", Website: "https://hw.example", Contact: "Ann", Note: "cash only"},

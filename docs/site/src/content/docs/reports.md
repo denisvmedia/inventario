@@ -43,7 +43,7 @@ A single-item report shows:
 - **Two value cards:**
   - **Purchase Price** — what you paid, in the currency you recorded the purchase in. The purchase date appears beneath it if you set one.
   - **Estimated Value** — the item's current value, in your group's currency. When you haven't entered one, the purchase price in your group's currency stands in for it.
-- **Item Details** — **Type**, **Serial Number**, **Purchase Date**, **Seller**, and **Location** (shown as "Location · Area").
+- **Item Details** — **Type**, **Serial Number**, **Purchase Date**, **Seller**, and **Location** (shown as "Location · Area"). If the group's sellers can't be loaded, the **Seller** stays empty with a short note on screen, and the rest of the report still shows; the note isn't printed.
 - **Warranty Status** — a coloured badge reading **Active**, **Expiring Soon**, **Expired**, or **No Warranty**, with the expiry date and any warranty notes you've added.
 - **Photographs** — the image files attached to the item (see [Files & photos](../files-and-photos/)).
 - **Notes** — the item's comments, if it has any.
