@@ -11,6 +11,7 @@ import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-co
 import { __resetHttpForTests } from "@/lib/http"
 import { groupHandlers, maintenanceHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
+import { WhenGroupLoaded } from "@/test/group-loaded"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -42,7 +43,9 @@ function renderTab(commodityCount?: number) {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <MaintenanceTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                <WhenGroupLoaded>
+                  <MaintenanceTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                </WhenGroupLoaded>
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -83,10 +86,12 @@ describe("<MaintenanceTab />", () => {
     expect(screen.getByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
   })
 
-  it("renders the bundle hint instead of the form for count > 1 rows", () => {
+  it("renders the bundle hint instead of the form for count > 1 rows", async () => {
     server.use(...groupHandlers.list(groupFixture))
     renderTab(/* commodityCount */ 5)
-    expect(screen.getByText(/can't be set on a bundle/i, { selector: "*" })).toBeInTheDocument()
+    expect(
+      await screen.findByText(/can't be set on a bundle/i, { selector: "*" })
+    ).toBeInTheDocument()
     expect(screen.queryByTestId("maintenance-add")).toBeNull()
   })
 })

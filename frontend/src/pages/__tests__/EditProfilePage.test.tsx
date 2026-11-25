@@ -251,9 +251,10 @@ describe("<EditProfilePage /> — profile photo (#1382)", () => {
     within(screen.getByTestId("profile-photo-avatar")).queryByTestId("user-avatar-image")
 
   it("uploads a picked photo and shows the stored one", async () => {
-    // The body is read as text: jsdom's File is not the one undici's
-    // multipart parser accepts, so request.formData() throws here, and the
-    // part arrives without its filename or bytes. The field and type do.
+    // The body is read as text: request.formData() cannot parse a file part
+    // in the jsdom environment. The multipart body itself is complete (see
+    // src/test/node-form-data.ts), so the field, file name, type and bytes
+    // can all be checked.
     let sentBody = ""
     server.use(
       ...baseUserHandlers,
@@ -273,8 +274,8 @@ describe("<EditProfilePage /> — profile photo (#1382)", () => {
     )
 
     await waitFor(() => expect(photoImage()).toHaveAttribute("src", photoUrl))
-    expect(sentBody).toContain('name="avatar"')
-    expect(sentBody).toContain("Content-Type: image/jpeg")
+    expect(sentBody).toContain('name="avatar"; filename="me.jpg"')
+    expect(sentBody).toContain("Content-Type: image/jpeg\r\n\r\njpeg\r\n")
     expect(toast.success).toHaveBeenCalledWith("Photo updated.", undefined)
     expect(screen.getByTestId("profile-photo-upload")).toHaveTextContent("Change photo")
     expect(screen.getByTestId("profile-photo-remove")).toBeInTheDocument()

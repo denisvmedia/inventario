@@ -56,7 +56,7 @@ beforeEach(() => {
   // useFeatureFlag (gating the "email me a sign-in link" affordance). Same
   // reasoning as the OAuth stub above: provide a default handler so the
   // mount-time GET /feature-flags doesn't trip MSW's
-  // `onUnhandledRequest: "error"`. Default both flags off — the magic-link
+  // `onUnhandledFrame: "error"`. Default both flags off — the magic-link
   // button stays hidden and the password flow is unchanged. Tests that
   // exercise the magic-link entry point override with `magic_link_login: true`.
   server.use(
