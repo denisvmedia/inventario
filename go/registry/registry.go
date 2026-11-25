@@ -412,9 +412,11 @@ type CommodityRegistry interface {
 	// so it and an Update of the same item run one after the other and
 	// neither undoes the other's change. check, when not nil, receives the
 	// item as it will be stored, under that lock; an error from it is
-	// returned as is and nothing is written. ErrNotFound when the item does
-	// not exist or is in Trash.
-	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (*models.Commodity, error)
+	// returned as is and nothing is written. It returns the item as it was
+	// under the lock and as it is stored after the write, so a caller that
+	// records what changed compares the two and not an earlier read.
+	// ErrNotFound when the item does not exist or is in Trash.
+	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error)
 
 	// PurgeTrashed deletes the row of a trashed item; its loans, service
 	// records, maintenance schedules, supply links and events go with it

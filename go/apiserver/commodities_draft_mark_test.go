@@ -119,6 +119,6 @@ func TestCommodityDraftMark_ItemInTrashIsNotFound(t *testing.T) {
 	rr := patchDraftMark(params, testUser, testGroup, item.ID, draftMarkBody("false"))
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("%s", rr.Body.String()))
 
-	_, err = registrySet.CommodityRegistry.SetDraft(ctx, item.ID, false, nil)
+	_, _, err = registrySet.CommodityRegistry.SetDraft(ctx, item.ID, false, nil)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }

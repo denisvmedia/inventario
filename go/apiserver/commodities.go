@@ -740,7 +740,10 @@ func (api *commoditiesAPI) setCommodityDraftMark(w http.ResponseWriter, r *http.
 		}
 		return err
 	}
-	updated, err := registrySet.CommodityRegistry.SetDraft(ctx, commodity.ID, *input.Data.Attributes.Draft, check)
+	// The event compares the item as the write found it under its lock, so
+	// a change that landed after the middleware's read is not recorded as
+	// part of this one.
+	before, updated, err := registrySet.CommodityRegistry.SetDraft(ctx, commodity.ID, *input.Data.Attributes.Draft, check)
 	if err != nil {
 		if _, ok := errors.AsType[validation.Errors](err); ok {
 			unprocessableEntityError(w, r, err)
@@ -754,7 +757,7 @@ func (api *commoditiesAPI) setCommodityDraftMark(w http.ResponseWriter, r *http.
 		return
 	}
 
-	api.eventService.EmitUpdated(ctx, commodity, updated)
+	api.eventService.EmitUpdated(ctx, before, updated)
 
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
