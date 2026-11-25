@@ -71,6 +71,12 @@ import {
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
+import {
+  COMMODITIES_PAGE_SIZE,
+  commodityHref,
+  commoditiesListOptions,
+  parseCommoditiesListParams,
+} from "@/features/commodities/listContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { labelsPageHref } from "@/features/labels/links"
@@ -81,11 +87,12 @@ import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
+import { listContextFromLocation, type ListContext } from "@/lib/list-context"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
 
-const PER_PAGE = 24
+const PER_PAGE = COMMODITIES_PAGE_SIZE
 const VIEW_MODE_KEY = "commodities:viewMode"
 
 type ViewMode = "grid" | "list"
@@ -118,19 +125,26 @@ export function CommoditiesListPage() {
   const listLocation = useLocation()
 
   // ---- URL → state ------------------------------------------------------
-  const page = Math.max(1, Number(searchParams.get("page") ?? "1"))
-  const search = searchParams.get("q") ?? ""
-  const types = searchParams.getAll("type") as CommodityTypeValue[]
-  const statuses = searchParams.getAll("status") as CommodityStatusValue[]
-  const areaId = searchParams.get("area") ?? ""
-  const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
-  const lentOutOnly = searchParams.get("lent_out") === "1"
-  const unassignedOnly = searchParams.get("unassigned") === "1"
-  const includeInactive = searchParams.get("inactive") === "1"
-  const sortRaw = searchParams.get("sort") ?? "name"
-  const sortDesc = sortRaw.startsWith("-")
-  const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
-  const validSort = COMMODITY_SORT_OPTIONS.includes(sortField) ? sortField : "name"
+  // The item page reads the same URL through the same parser when it walks
+  // this list (features/commodities/listContext.ts), so both share the cache.
+  const listParams = parseCommoditiesListParams(searchParams)
+  const {
+    page,
+    search,
+    types,
+    statuses,
+    areaId,
+    warranty: warrantyFilter,
+    lentOutOnly,
+    unassignedOnly,
+    includeInactive,
+    sortRaw,
+    sort: validSort,
+    sortDesc,
+  } = listParams
+  // Items opened from here carry this list in `?from=`, for Back and for
+  // Previous / Next on the item page.
+  const listContext = listContextFromLocation(listLocation)
   const urlView = searchParams.get("view") as ViewMode | null
   // Local override remembers a toolbar flip per-device. `null` means
   // "this device has never explicitly chosen" — in that case we fall
@@ -177,9 +191,14 @@ export function CommoditiesListPage() {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
   useEffect(() => {
+    const trimmed = searchInput.trim()
+    // Until the user types, the input holds the list's own query and there
+    // is nothing to write. Writing it anyway breaks an item opened within
+    // the 300ms: by then window.location is the item's URL, so the write
+    // navigates back to the list and closes the item's panel.
+    if (trimmed === search) return
     const handle = window.setTimeout(() => {
       const live = new URLSearchParams(window.location.search)
-      const trimmed = searchInput.trim()
       if ((live.get("q") ?? "") === trimmed) return
       if (trimmed) {
         live.set("q", trimmed)
@@ -190,38 +209,10 @@ export function CommoditiesListPage() {
       setSearchParamsRef.current(live, { replace: true })
     }, 300)
     return () => window.clearTimeout(handle)
-  }, [searchInput])
+  }, [searchInput, search])
 
   // ---- Data --------------------------------------------------------------
-  const list = useCommodities(
-    {
-      page,
-      perPage: PER_PAGE,
-      search,
-      types,
-      statuses,
-      areaId: areaId || undefined,
-      // The React list page always opts in to the active-only view
-      // unless the toggle is on. Pass an explicit boolean (not
-      // undefined) so the BE applies the implicit filter; legacy FE
-      // clients send no param and get the unfiltered list.
-      includeInactive: includeInactive,
-      // The chip is single-state (on or off); we only ever send true.
-      // Sending false would also be valid (only NOT-lent items) but the
-      // toolbar deliberately doesn't expose that for now.
-      lentOut: lentOutOnly ? true : undefined,
-      // Single-state chip: only ever send true (area-less items only).
-      unassigned: unassignedOnly ? true : undefined,
-      sort: validSort,
-      sortDesc,
-      // Server-side, not a post-filter over the page: filtering 24 fetched
-      // rows while total and totalPages stayed unfiltered meant a page whose
-      // 24 rows held no match showed "no matches" next to a pager offering
-      // more pages, and matches further in never surfaced (#2128).
-      warrantyStatuses: warrantyFilter.length > 0 ? warrantyFilter : undefined,
-    },
-    { enabled }
-  )
+  const list = useCommodities(commoditiesListOptions(listParams), { enabled })
   const areas = useAreas({ enabled })
   // Locations populate the create-dialog's Location → Area paired
   // selects. The schema only carries area_id; location_id is UI-only.
@@ -340,8 +331,7 @@ export function CommoditiesListPage() {
   // stays unmounted there).
   function openCommodityInSheet(id: string) {
     if (!slug || !id) return
-    const next = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`
-    navigate(next, { state: { background: listLocation } })
+    navigate(commodityHref(slug, id, listContext), { state: { background: listLocation } })
   }
 
   // ---- URL helpers -------------------------------------------------------
@@ -686,6 +676,7 @@ export function CommoditiesListPage() {
           <CommoditiesGrid
             rows={rows}
             slug={slug}
+            listContext={listContext}
             selected={selected}
             onToggleSelected={toggleSelected}
             onPreview={openCommodityInSheet}
@@ -699,6 +690,7 @@ export function CommoditiesListPage() {
           <CommoditiesTable
             rows={rows}
             slug={slug}
+            listContext={listContext}
             selected={selected}
             onToggleSelected={toggleSelected}
             onToggleSelectAll={() => toggleSelectAll(rows)}
@@ -1165,6 +1157,8 @@ function EmptyState({ hasFilters, onClear, onAdd }: EmptyStateProps) {
 interface CommoditiesGridProps {
   rows: Commodity[]
   slug?: string
+  // The list the rows belong to; item links carry it in `?from=`.
+  listContext: ListContext
   selected: Set<string>
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
@@ -1187,6 +1181,7 @@ interface CommoditiesGridProps {
 function CommoditiesGrid({
   rows,
   slug,
+  listContext,
   selected,
   onToggleSelected,
   onPreview,
@@ -1203,6 +1198,7 @@ function CommoditiesGrid({
           key={row.id}
           row={row}
           slug={slug}
+          listContext={listContext}
           selected={selected.has(row.id ?? "")}
           onToggleSelected={onToggleSelected}
           onPreview={onPreview}
@@ -1220,6 +1216,7 @@ function CommoditiesGrid({
 interface CommodityCardProps {
   row: Commodity
   slug?: string
+  listContext: ListContext
   selected: boolean
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
@@ -1233,6 +1230,7 @@ interface CommodityCardProps {
 function CommodityGridCard({
   row,
   slug,
+  listContext,
   selected,
   onToggleSelected,
   onPreview,
@@ -1244,8 +1242,7 @@ function CommodityGridCard({
 }: CommodityCardProps) {
   const { t } = useTranslation()
   const id = row.id ?? ""
-  const detailHref =
-    slug && id ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}` : "#"
+  const detailHref = slug && id ? commodityHref(slug, id, listContext) : "#"
   const status = row.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const draftLabel = t("commodities:list.draftBadge")
@@ -1398,6 +1395,7 @@ interface CommoditiesTableProps extends CommoditiesGridProps {
 function CommoditiesTable({
   rows,
   slug,
+  listContext,
   selected,
   onToggleSelected,
   onToggleSelectAll,
@@ -1430,10 +1428,7 @@ function CommoditiesTable({
       <ul>
         {rows.map((row, i) => {
           const id = row.id ?? ""
-          const detailHref =
-            slug && id
-              ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`
-              : "#"
+          const detailHref = slug && id ? commodityHref(slug, id, listContext) : "#"
           const status = row.status as CommodityStatusValue | undefined
           const tone = status ? COMMODITY_STATUS_TONES[status] : ""
           return (

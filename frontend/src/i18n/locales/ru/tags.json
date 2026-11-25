@@ -118,5 +118,11 @@
     "commodity": "Теги предметов",
     "file": "Теги файлов",
     "label": "Тип тега"
+  },
+  "palette": {
+    "add": "Добавить",
+    "newTagLabel": "Новый тег",
+    "newTagPlaceholder": "Новый тег…",
+    "remove": "Убрать тег {{label}}"
   }
 }

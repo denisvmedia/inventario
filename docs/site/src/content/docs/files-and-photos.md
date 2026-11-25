@@ -236,9 +236,11 @@ go through a batch of uploads one after another:
 - **Back to files**, **Save changes**, and **Cancel** take you back to that list,
   on the page you reached, with the file's details panel open.
 
-If an edit takes a file out of the list, for example because you removed the
-tag the list is filtered by, the page says so. **Save and next** still opens the
-file that came after it.
+**Save and next** opens the file that came after this one when you saved, even
+if your edit takes this file out of the list, for example because you removed
+the tag the list is filtered by. When the file on screen is not in the list's
+current results, such as a file you go back to after removing that tag, the
+page says "This file is not in the list's current results." under the header.
 
 If you try to leave the page with unsaved changes, Inventario asks whether to
 **Save** them, **Discard** them, or **Keep editing**. Reloading or closing the

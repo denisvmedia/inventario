@@ -1,11 +1,12 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ArrowLeft, ChevronLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
+import { ArrowLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
 
 import { FilePreview } from "@/components/files/FilePreview"
+import { ListPager } from "@/components/ListPager"
 import { ImageViewer } from "@/components/files/ImageViewer"
 import { PdfFullViewer } from "@/components/files/PdfFullViewer"
 import { TagsInput } from "@/components/files/TagsInput"
@@ -66,8 +67,8 @@ type ReviewTab = "preview" | "details"
 // returns to where it came from, or to the file's detail panel on the Files
 // page, and hides the list controls.
 //
-// On narrow screens Preview and Details are tabs. Both stay mounted, so
-// switching keeps the entered values and the PDF page and zoom.
+// On narrow screens Preview and Details are tabs. Once shown, both stay
+// mounted, so switching keeps the entered values and the PDF page and zoom.
 export function FileEditPage() {
   const { t } = useTranslation()
   const { id = "", groupSlug = "" } = useParams<{ id: string; groupSlug: string }>()
@@ -159,6 +160,13 @@ interface FileReviewProps {
 
 const FORM_FIELDS = ["title", "description", "path", "category", "tags"] as const
 
+// From lg up the preview sits beside the form instead of in its own tab.
+const WIDE_QUERY = "(min-width: 1024px)"
+
+function isWide(): boolean {
+  return typeof window !== "undefined" && !!window.matchMedia?.(WIDE_QUERY).matches
+}
+
 function FileReview({
   file,
   signedUrl,
@@ -176,6 +184,23 @@ function FileReview({
   const tagLabel = useTagLabel("file")
   const [imageViewerOpen, setImageViewerOpen] = useState(false)
   const [pdfViewerOpen, setPdfViewerOpen] = useState(false)
+  // The preview mounts the first time it is on screen and then stays, so a
+  // metadata edit on a phone does not download the PDF behind the Details
+  // tab, and switching tabs keeps the PDF page and zoom.
+  const [previewShown, setPreviewShown] = useState(() => tab === "preview" || isWide())
+  useEffect(() => {
+    if (!window.matchMedia) return
+    const mql = window.matchMedia(WIDE_QUERY)
+    const onChange = () => {
+      if (mql.matches) setPreviewShown(true)
+    }
+    mql.addEventListener("change", onChange)
+    return () => mql.removeEventListener("change", onChange)
+  }, [])
+  function changeTab(next: ReviewTab) {
+    if (next === "preview") setPreviewShown(true)
+    onTabChange(next)
+  }
   // Touch the validation key once at the source so i18next-cli's
   // static extractor sees it — the schema returns the key as a string
   // literal which the parser can't follow into JSX.
@@ -192,6 +217,9 @@ function FileReview({
     },
   })
   const dirty = form.formState.isDirty
+  // The fields stay locked while a save runs: an edit typed meanwhile would
+  // not be in the request, and the reset after it would drop the edit.
+  const saving = form.formState.isSubmitting || update.isPending
 
   const title = file.title?.trim() || file.path?.trim() || file.id
   const url = signedUrl?.url
@@ -220,7 +248,7 @@ function FileReview({
       if (shouldShowGenericError(result)) {
         toast.error(err instanceof Error ? err.message : String(err))
       }
-      onTabChange("details")
+      changeTab("details")
       return false
     }
   }
@@ -233,7 +261,7 @@ function FileReview({
       async (values) => {
         ok = await persist(values)
       },
-      () => onTabChange("details")
+      () => changeTab("details")
     )()
     return ok
   }
@@ -256,6 +284,7 @@ function FileReview({
     navigate(recordHref(target))
   }
 
+  const titleError = form.formState.errors.title
   const pathError = form.formState.errors.path
 
   return (
@@ -275,7 +304,20 @@ function FileReview({
             {filesList ? t("files:review.backToList") : t("common:actions.back")}
           </Link>
         }
-        actions={nav.active ? <ListPager nav={nav} hrefFor={recordHref} /> : null}
+        actions={
+          nav.active ? (
+            <ListPager
+              nav={nav}
+              hrefFor={recordHref}
+              labels={{
+                pager: t("files:review.pagerLabel"),
+                previous: t("files:review.previous"),
+                next: t("files:review.next"),
+              }}
+              testIdPrefix="file-review"
+            />
+          ) : null
+        }
       />
 
       {nav.active && !nav.loading && !nav.inList ? (
@@ -284,7 +326,7 @@ function FileReview({
         </p>
       ) : null}
 
-      <Tabs value={tab} onValueChange={(next) => onTabChange(next as ReviewTab)} className="gap-4">
+      <Tabs value={tab} onValueChange={(next) => changeTab(next as ReviewTab)} className="gap-4">
         <TabsList className="w-full lg:hidden" data-testid="file-review-tabs">
           <TabsTrigger value="preview" data-testid="file-review-tab-preview">
             {t("files:review.tabPreview")}
@@ -305,14 +347,16 @@ function FileReview({
             className="flex min-w-0 flex-col gap-3 data-[state=inactive]:hidden lg:col-span-3 lg:row-span-2 lg:data-[state=inactive]:flex"
             data-testid="file-review-preview"
           >
-            <FilePreview
-              variant="pane"
-              mime={file.mime_type}
-              url={url}
-              alt={title}
-              onExpandImage={() => setImageViewerOpen(true)}
-              onExpandPdf={() => setPdfViewerOpen(true)}
-            />
+            {previewShown ? (
+              <FilePreview
+                variant="pane"
+                mime={file.mime_type}
+                url={url}
+                alt={title}
+                onExpandImage={() => setImageViewerOpen(true)}
+                onExpandPdf={() => setPdfViewerOpen(true)}
+              />
+            ) : null}
             {url ? (
               <div className="flex flex-wrap gap-2">
                 <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -346,99 +390,107 @@ function FileReview({
               <CardContent className="p-6">
                 <form
                   id="file-review-form"
-                  className="flex flex-col gap-4"
                   onSubmit={(e) => {
                     e.preventDefault()
                     void onSave()
                   }}
                 >
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="file-title">{t("files:edit.fields.title")}</Label>
-                    <Input
-                      id="file-title"
-                      data-testid="file-edit-title"
-                      {...form.register("title")}
-                    />
-                    <p className="text-xs text-muted-foreground">
-                      {t("files:edit.fields.titleHint")}
-                    </p>
-                  </div>
+                  <fieldset disabled={saving} className="flex min-w-0 flex-col gap-4">
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="file-title">{t("files:edit.fields.title")}</Label>
+                      <Input
+                        id="file-title"
+                        data-testid="file-edit-title"
+                        aria-invalid={titleError ? true : undefined}
+                        aria-describedby={titleError ? "file-title-error" : "file-title-hint"}
+                        {...form.register("title")}
+                      />
+                      <p id="file-title-hint" className="text-xs text-muted-foreground">
+                        {t("files:edit.fields.titleHint")}
+                      </p>
+                      {titleError ? (
+                        <p id="file-title-error" className="text-xs text-destructive">
+                          {t(titleError.message ?? "")}
+                        </p>
+                      ) : null}
+                    </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="file-path">{t("files:edit.fields.path")}</Label>
-                    <Input
-                      id="file-path"
-                      data-testid="file-edit-path"
-                      aria-invalid={pathError ? true : undefined}
-                      aria-describedby={pathError ? "file-path-error" : "file-path-hint"}
-                      {...form.register("path")}
-                    />
-                    <p id="file-path-hint" className="text-xs text-muted-foreground">
-                      {t("files:edit.fields.pathHint")}
-                    </p>
-                    {pathError ? (
-                      <p id="file-path-error" className="text-xs text-destructive">
-                        {/* Schema emits the i18n key (see schemas.ts); the
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="file-path">{t("files:edit.fields.path")}</Label>
+                      <Input
+                        id="file-path"
+                        data-testid="file-edit-path"
+                        aria-invalid={pathError ? true : undefined}
+                        aria-describedby={pathError ? "file-path-error" : "file-path-hint"}
+                        {...form.register("path")}
+                      />
+                      <p id="file-path-hint" className="text-xs text-muted-foreground">
+                        {t("files:edit.fields.pathHint")}
+                      </p>
+                      {pathError ? (
+                        <p id="file-path-error" className="text-xs text-destructive">
+                          {/* Schema emits the i18n key (see schemas.ts); the
                             page resolves it via t() at render so cs/ru can
                             translate. */}
-                        {t(pathError.message ?? "")}
-                      </p>
-                    ) : null}
-                  </div>
+                          {t(pathError.message ?? "")}
+                        </p>
+                      ) : null}
+                    </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="file-description">{t("files:edit.fields.description")}</Label>
-                    <Textarea
-                      id="file-description"
-                      data-testid="file-edit-description"
-                      rows={4}
-                      {...form.register("description")}
-                    />
-                  </div>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="file-description">{t("files:edit.fields.description")}</Label>
+                      <Textarea
+                        id="file-description"
+                        data-testid="file-edit-description"
+                        rows={4}
+                        {...form.register("description")}
+                      />
+                    </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <Label htmlFor="file-category">{t("files:edit.fields.category")}</Label>
+                    <div className="flex flex-col gap-1.5">
+                      <Label htmlFor="file-category">{t("files:edit.fields.category")}</Label>
+                      <Controller
+                        control={form.control}
+                        name="category"
+                        render={({ field }) => (
+                          // eslint-disable-next-line no-restricted-syntax -- file-edit category field; native <select> retained (has native-select coverage). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md
+                          <select
+                            id="file-category"
+                            data-testid="file-edit-category"
+                            value={field.value}
+                            onChange={(e) => field.onChange(e.target.value)}
+                            className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
+                          >
+                            <option value="images">
+                              {t("files:categoryImages", { defaultValue: "Images" })}
+                            </option>
+                            <option value="documents">
+                              {t("files:categoryDocuments", { defaultValue: "Documents" })}
+                            </option>
+                            <option value="other">
+                              {t("files:categoryOther", { defaultValue: "Other" })}
+                            </option>
+                          </select>
+                        )}
+                      />
+                    </div>
+
                     <Controller
                       control={form.control}
-                      name="category"
+                      name="tags"
                       render={({ field }) => (
-                        // eslint-disable-next-line no-restricted-syntax -- file-edit category field; native <select> retained (has native-select coverage). shadcn migration tracked as a forms follow-up — see devdocs/frontend/forms.md
-                        <select
-                          id="file-category"
-                          data-testid="file-edit-category"
-                          value={field.value}
-                          onChange={(e) => field.onChange(e.target.value)}
-                          className="h-9 rounded-md border border-input bg-transparent px-3 text-sm"
-                        >
-                          <option value="images">
-                            {t("files:categoryImages", { defaultValue: "Images" })}
-                          </option>
-                          <option value="documents">
-                            {t("files:categoryDocuments", { defaultValue: "Documents" })}
-                          </option>
-                          <option value="other">
-                            {t("files:categoryOther", { defaultValue: "Other" })}
-                          </option>
-                        </select>
+                        <TagsInput
+                          label={t("files:edit.fields.tags")}
+                          values={field.value ?? []}
+                          onChange={field.onChange}
+                          testId="file-edit-tags"
+                          autocomplete
+                          kind="file"
+                          labelOf={tagLabel}
+                        />
                       )}
                     />
-                  </div>
-
-                  <Controller
-                    control={form.control}
-                    name="tags"
-                    render={({ field }) => (
-                      <TagsInput
-                        label={t("files:edit.fields.tags")}
-                        values={field.value ?? []}
-                        onChange={field.onChange}
-                        testId="file-edit-tags"
-                        autocomplete
-                        kind="file"
-                        labelOf={tagLabel}
-                      />
-                    )}
-                  />
+                  </fieldset>
                 </form>
               </CardContent>
             </Card>
@@ -461,7 +513,7 @@ function FileReview({
               type="submit"
               form="file-review-form"
               variant={nav.active ? "outline" : "default"}
-              disabled={update.isPending || !dirty}
+              disabled={saving || !dirty}
               data-testid="file-edit-save"
             >
               {t("files:edit.save")}
@@ -470,7 +522,7 @@ function FileReview({
               <Button
                 type="button"
                 onClick={onSaveAndNext}
-                disabled={update.isPending || !nav.next}
+                disabled={saving || !nav.next}
                 className="gap-1"
                 data-testid="file-review-save-next"
               >
@@ -507,81 +559,5 @@ function FileReview({
         </Dialog>
       ) : null}
     </>
-  )
-}
-
-// Previous / position / Next within the originating list. The buttons are
-// links, so they can open in a new tab; with unsaved edits the guard holds the
-// click and asks first.
-function ListPager({
-  nav,
-  hrefFor,
-}: {
-  nav: ListNavigation
-  hrefFor: (target: ListNeighbor) => string
-}) {
-  const { t } = useTranslation()
-  return (
-    <nav
-      className="flex items-center gap-2"
-      aria-label={t("files:review.pagerLabel")}
-      data-testid="file-review-pager"
-    >
-      <PagerButton
-        target={nav.previous}
-        hrefFor={hrefFor}
-        label={t("files:review.previous")}
-        testId="file-review-previous"
-      >
-        <ChevronLeft className="size-4" aria-hidden="true" />
-      </PagerButton>
-      <span
-        className="min-w-16 text-center text-sm tabular-nums text-muted-foreground"
-        data-testid="file-review-position"
-      >
-        {nav.position !== null && nav.total !== null
-          ? t("files:review.position", { position: nav.position, total: nav.total })
-          : nav.loading
-            ? "…"
-            : "—"}
-      </span>
-      <PagerButton
-        target={nav.next}
-        hrefFor={hrefFor}
-        label={t("files:review.next")}
-        testId="file-review-next"
-      >
-        <ChevronRight className="size-4" aria-hidden="true" />
-      </PagerButton>
-    </nav>
-  )
-}
-
-function PagerButton({
-  target,
-  hrefFor,
-  label,
-  testId,
-  children,
-}: {
-  target: ListNeighbor | null
-  hrefFor: (target: ListNeighbor) => string
-  label: string
-  testId: string
-  children: ReactNode
-}) {
-  if (!target) {
-    return (
-      <Button variant="outline" size="icon-sm" disabled aria-label={label} data-testid={testId}>
-        {children}
-      </Button>
-    )
-  }
-  return (
-    <Button asChild variant="outline" size="icon-sm">
-      <Link to={hrefFor(target)} aria-label={label} data-testid={testId}>
-        {children}
-      </Link>
-    </Button>
   )
 }
