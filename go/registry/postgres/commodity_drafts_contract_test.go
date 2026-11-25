@@ -26,6 +26,7 @@ func newPostgresDraftEnv(t *testing.T) registrytest.DraftEnv {
 		Drafts:      drafts,
 		Commodities: fx.set.CommodityRegistry,
 		Files:       fx.set.FileRegistry,
+		Sellers:     fx.set.SellerRegistry,
 		AreaID:      area.ID,
 	}
 }

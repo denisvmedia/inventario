@@ -33,6 +33,8 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.inService")
     case "common:nav.tags":
       return t("common:nav.tags")
+    case "common:nav.sellers":
+      return t("common:nav.sellers")
     case "common:nav.files":
       return t("common:nav.files")
     case "common:nav.members":

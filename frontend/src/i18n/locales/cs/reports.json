@@ -26,6 +26,7 @@
     "fields": {
       "location": "Umístění",
       "purchaseDate": "Datum pořízení",
+      "seller": "Prodejce",
       "serialNumber": "Sériové číslo",
       "type": "Typ"
     },

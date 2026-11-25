@@ -145,6 +145,13 @@ type Commodity struct {
 	AreaID *string `json:"area_id,omitempty" db:"area_id"`
 	//ptah:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
+	// SellerID is the seller the item was bought from (#2804), or nil.
+	// Deleting the seller leaves the item without one. The seller must be in
+	// the item's group: the postgres registry looks it up under the group's
+	// row-level security before every write, since the foreign key alone
+	// would accept a seller of any group.
+	//ptah:schema:field name="seller_id" type="TEXT" foreign="sellers(id)" foreign_key_name="fk_commodity_seller" on_delete="SET NULL"
+	SellerID *string `json:"seller_id,omitempty" db:"seller_id"`
 	// OriginalPrice is the purchase price in OriginalPriceCurrency, null when
 	// unknown. Each of the three prices can be unknown on its own, and
 	// unknown is not zero: a gift's price is unknown, a free item's is 0. A
@@ -529,6 +536,10 @@ type CommodityIndexes struct {
 	//ptah:schema:index name="idx_commodities_tenant_area" fields="tenant_id,area_id" table="commodities"
 	_ int
 
+	// The seller filter of the items list and the item counts per seller.
+	//ptah:schema:index name="idx_commodities_seller" fields="seller_id" table="commodities"
+	_ int
+
 	// Composite index for tenant + status queries
 	//ptah:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
 	_ int
@@ -596,6 +607,14 @@ type CommodityIndexes struct {
 
 func (*Commodity) Validate() error {
 	return ErrMustUseValidateWithContext
+}
+
+// NormalizeSellerID collapses an explicit empty seller to nil, as
+// NormalizeAreaID does for the area.
+func (a *Commodity) NormalizeSellerID() {
+	if a.SellerID != nil && *a.SellerID == "" {
+		a.SellerID = nil
+	}
 }
 
 // NormalizeAreaID collapses an explicit empty area to nil so "" and a nil

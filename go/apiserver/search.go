@@ -44,6 +44,7 @@ type searchAPI struct {
 // @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Commodities only: filter by exact area ID"
 // @Param unassigned query bool false "Commodities only: only items with no area (ignored when area_id is set)"
+// @Param seller_id query []string false "Commodities only: filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param include_inactive query bool false "Commodities only: include drafts and non-in_use items (default true; false hides them)"
 // @Param warranty_status query []string false "Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Commodities only: restrict to items whose warranty expires strictly before YYYY-MM-DD"

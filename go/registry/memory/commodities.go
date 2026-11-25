@@ -22,6 +22,10 @@ type CommodityRegistryFactory struct {
 	baseCommodityRegistry *Registry[models.Commodity, *models.Commodity]
 	areaRegistry          *AreaRegistryFactory // required dependency for relationship tracking
 	assetNumbers          *sync.Mutex          // shared by every registry the factory creates
+	// sellers is set by NewSellerRegistryFactory. When set, a write that
+	// names a seller fails unless the writer's group can see that seller,
+	// as the postgres registry checks under row-level security.
+	sellers *SellerRegistryFactory
 }
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
@@ -30,6 +34,7 @@ type CommodityRegistry struct {
 
 	userID       string
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
+	sellers      *SellerRegistryFactory
 	// assetNumbers serializes every write of AssetNumber, standing in for
 	// the per-group advisory lock of the postgres registry: Create holds it
 	// from computing the next number until the row is stored.
@@ -84,6 +89,7 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		Registry:     userRegistry,
 		userID:       user.ID,
 		areaRegistry: areaRegistry,
+		sellers:      f.sellers,
 		assetNumbers: f.assetNumbers,
 	}, nil
 }
@@ -109,8 +115,21 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 		Registry:     serviceRegistry,
 		userID:       "", // Clear userID to bypass user filtering
 		areaRegistry: areaRegistry,
+		sellers:      f.sellers,
 		assetNumbers: f.assetNumbers,
 	}
+}
+
+// checkSeller verifies that sellerID, when set, names a seller the
+// registry's group can see.
+func (r *CommodityRegistry) checkSeller(ctx context.Context, sellerID *string) error {
+	if sellerID == nil || r.sellers == nil {
+		return nil
+	}
+	if _, err := r.sellers.newRegistry(r.userID, r.groupID).Get(ctx, *sellerID); err != nil {
+		return errxtrace.Wrap("failed to get seller", err)
+	}
+	return nil
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
@@ -131,6 +150,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986): empty and nil both
 	// mean unassigned, matching the postgres registry and the IS NULL filter.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
+	if err := r.checkSeller(ctx, commodity.SellerID); err != nil {
+		return nil, err
+	}
 
 	// Every row written now tells an unknown price from a zero one.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -332,6 +355,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
 	// stored as nil and the area-tracking below sees a single canonical form.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
+	if err := r.checkSeller(ctx, commodity.SellerID); err != nil {
+		return nil, err
+	}
 
 	// The caller's prices tell unknown from zero, whatever the row held.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -460,6 +487,29 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 // outer loop body stays under the gocognit threshold. `openSet` is the
 // pre-computed map form of OpenLoanCommodityIDs lifted by the caller
 // to keep the LentOut membership check O(1) per row.
+// commodityMatchesDefaultView applies the default view's hiding rules.
+func commodityMatchesDefaultView(c *models.Commodity, opts registry.CommodityListOptions) bool {
+	// Default view hides drafts. The explicit Statuses filter never
+	// overrides this — drafts are orthogonal to status.
+	if !opts.IncludeInactive && c.Draft {
+		return false
+	}
+	// Default view also hides non-in_use commodities, but only when
+	// the caller hasn't explicitly chosen which statuses to show.
+	// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
+	// supported "show drafts-excluded sold items" combination.
+	return opts.IncludeInactive || len(opts.Statuses) > 0 || c.Status == models.CommodityStatusInUse
+}
+
+// commodityMatchesSeller applies the SellerIDs filter (#2804): no IDs keep
+// every item, otherwise the item's seller has to be one of them.
+func commodityMatchesSeller(c *models.Commodity, sellerIDs []string) bool {
+	if len(sellerIDs) == 0 {
+		return true
+	}
+	return c.SellerID != nil && slices.Contains(sellerIDs, *c.SellerID)
+}
+
 // commodityMatchesArea applies the AreaID / Unassigned filter (issue #1986). An
 // explicit AreaID wins over Unassigned; Unassigned alone keeps only area-less
 // rows. No filter set → always matches.
@@ -475,16 +525,7 @@ func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOption
 }
 
 func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, terms []string, now time.Time, openSet map[string]struct{}) bool {
-	// Default view hides drafts. The explicit Statuses filter never
-	// overrides this — drafts are orthogonal to status.
-	if !opts.IncludeInactive && c.Draft {
-		return false
-	}
-	// Default view also hides non-in_use commodities, but only when
-	// the caller hasn't explicitly chosen which statuses to show.
-	// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
-	// supported "show drafts-excluded sold items" combination.
-	if !opts.IncludeInactive && len(opts.Statuses) == 0 && c.Status != models.CommodityStatusInUse {
+	if !commodityMatchesDefaultView(c, opts) {
 		return false
 	}
 	if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
@@ -494,6 +535,9 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 		return false
 	}
 	if !commodityMatchesArea(c, opts) {
+		return false
+	}
+	if !commodityMatchesSeller(c, opts.SellerIDs) {
 		return false
 	}
 	if _, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels); !ok {

@@ -269,6 +269,29 @@ func (api *commodityDraftsAPI) discard(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
+// validateDraftSeller refuses, on the seller_id field, a seller the group
+// does not have, as POST /commodities does. The seller may have been deleted
+// while the draft was open: the draft's values keep its ID, since they have
+// no foreign key. A draft that is already promoted creates nothing, so the
+// retry of a promotion is not checked.
+func validateDraftSeller(r *http.Request, sellerID *string) error {
+	if sellerID == nil || *sellerID == "" {
+		return nil
+	}
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		return errors.New("registry set not found in context")
+	}
+	draft, err := regSet.CommodityDraftRegistry.Get(r.Context(), chi.URLParam(r, "draftID"))
+	if err != nil {
+		return err
+	}
+	if !draft.IsOpen() {
+		return nil
+	}
+	return validateCommoditySeller(r.Context(), regSet.SellerRegistry, sellerID)
+}
+
 // promote turns a draft into an item.
 //
 // @Summary Finish a draft
@@ -326,6 +349,11 @@ func (api *commodityDraftsAPI) promote(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 		commodity.Tags = models.ValuerSlice[string](slugs)
+	}
+
+	if err := validateDraftSeller(r, commodity.SellerID); err != nil {
+		renderDraftError(w, r, err)
+		return
 	}
 
 	item, created, err := api.service.Promote(r.Context(), chi.URLParam(r, "draftID"), input.Meta.Revision, commodity)

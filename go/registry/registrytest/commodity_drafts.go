@@ -18,6 +18,7 @@ type DraftEnv struct {
 	Drafts      registry.CommodityDraftRegistry
 	Commodities registry.CommodityRegistry
 	Files       registry.FileRegistry
+	Sellers     registry.SellerRegistry
 	AreaID      string
 }
 
@@ -188,6 +189,35 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		_, total, err := env.Drafts.ListOpen(env.Ctx, 0, 10)
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 0)
+	})
+
+	t.Run("promote keeps the seller and refuses one the group lacks", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seller, err := env.Sellers.Create(env.Ctx, models.Seller{Name: "Hardware store"})
+		c.Assert(err, qt.IsNil)
+
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		item := contractItem(env, "Drill")
+		item.SellerID = new(seller.ID)
+		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, item)
+		c.Assert(err, qt.IsNil)
+		c.Assert(promotion.Commodity.SellerID, qt.IsNotNil)
+		c.Assert(*promotion.Commodity.SellerID, qt.Equals, seller.ID)
+
+		// A seller deleted while the draft was open: nothing is created and
+		// the draft stays open.
+		stale := createContractDraft(c, env, "key-2", "Saw")
+		item = contractItem(env, "Saw")
+		item.SellerID = new("no-such-seller")
+		_, err = env.Drafts.Promote(env.Ctx, stale.ID, 1, item)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		got, err := env.Drafts.Get(env.Ctx, stale.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.IsOpen(), qt.IsTrue)
+		count, err := env.Commodities.Count(env.Ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(count, qt.Equals, 1)
 	})
 
 	t.Run("promote of an unknown draft", func(t *testing.T) {

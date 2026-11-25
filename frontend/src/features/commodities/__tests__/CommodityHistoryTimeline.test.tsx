@@ -14,7 +14,7 @@ import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistor
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers } from "@/test/handlers"
+import { areaHandlers, commodityHandlers, groupHandlers, sellerHandlers } from "@/test/handlers"
 import type { CommodityEventFixture } from "@/test/handlers/commodities"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -56,6 +56,12 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  server.use(
+    ...sellerHandlers.list(SLUG, [
+      { id: "s1", name: "Hardware Store", item_count: 1 },
+      { id: "s2", name: "Corner Market", item_count: 0 },
+    ])
+  )
 })
 
 afterEach(() => {
@@ -452,6 +458,67 @@ describe("<CommodityHistoryTimeline />", () => {
     expect(screen.getByTestId("history-row-deleted")).toHaveTextContent(
       /Moved this item to the trash/
     )
+  })
+
+  it("names the sellers of an edit that changed only the seller (#2804)", async () => {
+    // The rest of the snapshot is the same before and after.
+    const rest = { name: "Kettle", tags: ["kitchen"], count: 1 }
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, [
+        {
+          id: "u5",
+          kind: "updated",
+          occurred_at: "2026-05-05T10:30:00Z",
+          before: { ...rest, seller_id: "" },
+          after: { ...rest, name: "Electric kettle", seller_id: "s1" },
+          meta: { actor },
+        },
+        {
+          id: "u4",
+          kind: "updated",
+          occurred_at: "2026-05-04T10:30:00Z",
+          before: { ...rest, seller_id: "s9" },
+          after: { ...rest, seller_id: "s2" },
+          meta: { actor },
+        },
+        {
+          id: "u3",
+          kind: "updated",
+          occurred_at: "2026-05-03T10:30:00Z",
+          before: { ...rest, seller_id: "s2" },
+          after: { ...rest, seller_id: "" },
+          meta: { actor },
+        },
+        {
+          id: "u2",
+          kind: "updated",
+          occurred_at: "2026-05-02T10:30:00Z",
+          before: { ...rest, seller_id: "s1" },
+          after: { ...rest, seller_id: "s2" },
+          meta: { actor },
+        },
+        {
+          id: "u1",
+          kind: "updated",
+          occurred_at: "2026-05-01T10:30:00Z",
+          before: { ...rest, seller_id: "" },
+          after: { ...rest, seller_id: "s1" },
+          meta: { actor },
+        },
+      ])
+    )
+    renderTimeline()
+    await waitFor(() => expect(screen.getAllByTestId("history-row-updated")).toHaveLength(5))
+    const rows = screen.getAllByTestId("history-row-updated")
+    await waitFor(() => expect(rows[3]).toHaveTextContent("Seller: Hardware Store → Corner Market"))
+    // An edit that changed more than the seller keeps the generic copy.
+    expect(rows[0]).toHaveTextContent("Edited this item")
+    // A seller deleted since is named as such.
+    expect(rows[1]).toHaveTextContent("Seller: a deleted seller → Corner Market")
+    expect(rows[2]).toHaveTextContent("Removed the seller Corner Market")
+    expect(rows[4]).toHaveTextContent("Seller set to Hardware Store")
   })
 
   it("is axe-clean when populated", async () => {

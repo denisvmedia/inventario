@@ -439,6 +439,10 @@ table "commodities" {
     type = INTEGER
     default = "1"
   }
+  column "seller_id" {
+    type = TEXT
+    null = true
+  }
   column "original_price" {
     type = DECIMAL(15,2)
     null = true
@@ -581,6 +585,11 @@ table "commodities" {
     columns = [column.area_id]
     ref_columns = [table.areas.column.id]
   }
+  foreign_key "fk_commodity_seller" {
+    columns = [column.seller_id]
+    ref_columns = [table.sellers.column.id]
+    on_delete = "SET NULL"
+  }
   foreign_key "fk_commodity_cover_file" {
     columns = [column.cover_file_id]
     ref_columns = [table.files.column.id]
@@ -658,6 +667,9 @@ table "commodities" {
   index "idx_commodities_group_asset_number" {
     unique = true
     columns = [column.group_id, column.asset_number]
+  }
+  index "idx_commodities_seller" {
+    columns = [column.seller_id]
   }
   index "idx_commodities_tenant_area" {
     columns = [column.tenant_id, column.area_id]
@@ -3165,6 +3177,81 @@ table "restore_steps" {
   }
 }
 
+table "sellers" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant seller isolation"
+  }
+  column "name" {
+    type = TEXT
+  }
+  column "name_key" {
+    type = TEXT
+  }
+  column "website" {
+    type = TEXT
+    default = ""
+  }
+  column "contact" {
+    type = TEXT
+    default = ""
+  }
+  column "note" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_sellers_group_name_key" {
+    unique = true
+    columns = [column.group_id, column.name_key]
+  }
+  index "idx_sellers_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_sellers_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "settings" {
   row_security {
     enabled = true
@@ -4620,6 +4707,24 @@ policy "restore_step_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures restore steps can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "seller_background_worker_access" {
+  on = table.sellers
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all sellers for processing"
+}
+
+policy "seller_isolation" {
+  on = table.sellers
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures sellers can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "setting_background_worker_access" {

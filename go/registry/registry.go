@@ -158,6 +158,9 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
+	// SellerIDs, when non-empty, restricts the result to commodities whose
+	// seller is one of the listed IDs (#2804). Empty = unrestricted.
+	SellerIDs []string
 	// Search is the free-text query. SplitSearchTerms splits it into terms
 	// and a commodity matches when every term matches one of its search
 	// fields, its tags or its asset ID — MatchCommoditySearch states the
@@ -1329,6 +1332,23 @@ type DraftPromotion struct {
 	// Commodity is the item this call created. It is nil when the draft
 	// was promoted before the call.
 	Commodity *models.Commodity
+}
+
+// SellerRegistry is the group-scoped registry of sellers (#2804). Create and
+// Update normalize the seller (models.Seller.Normalize) and fail with
+// ErrAlreadyExists when another seller of the group has the same name key.
+// Delete leaves the seller's items without a seller.
+type SellerRegistry interface {
+	Registry[models.Seller]
+
+	// GetByName returns the seller whose name key equals the key of name,
+	// or ErrNotFound.
+	GetByName(ctx context.Context, name string) (*models.Seller, error)
+
+	// ItemCounts returns, per seller ID, how many items of the group point
+	// at that seller, drafts and inactive items included and items in Trash
+	// left out. A seller without items is absent from the map.
+	ItemCounts(ctx context.Context) (map[string]int, error)
 }
 
 // CommodityReminderSendRegistry records which reminder emails the worker
@@ -2839,6 +2859,7 @@ type Set struct {
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
 	CommodityDraftRegistry         CommodityDraftRegistry
+	SellerRegistry                 SellerRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -2934,6 +2955,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
 		validation.Field(&s.CommodityDraftRegistry, validation.Required),
+		validation.Field(&s.SellerRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),
