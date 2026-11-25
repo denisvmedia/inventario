@@ -384,6 +384,7 @@ export function commodityQueryToApiQuery(query: CommodityQuery): string {
 // parameters whose names differ.
 const API_TO_URL_PARAM: Record<string, string> = {
   area_id: URL_PARAM.area,
+  seller_id: URL_PARAM.seller,
   warranty_status: URL_PARAM.warranty,
 }
 

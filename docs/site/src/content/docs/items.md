@@ -537,10 +537,11 @@ matches the view, and the **Views** menu offers **Save changes** (to update the
 view) and **Revert to saved** (to go back to it). **Close view** keeps the
 current filters and leaves the view.
 
-If a view refers to an area or a tag that was deleted, it still opens and still
-applies that condition, so it shows what still matches (often nothing, for a
-deleted area). The **Views** button shows a warning, and the menu says what no
-longer exists; on the **Saved views** page the condition is marked
+If a view refers to an area, a tag or a seller that was deleted, it still opens
+and still applies that condition, so it shows what still matches (often
+nothing, for a deleted area or seller). The **Views** button shows a warning,
+and the menu says what no longer exists; on the **Saved views** page the
+condition reads **Deleted area** or **Deleted seller**, or a tag is marked
 **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 

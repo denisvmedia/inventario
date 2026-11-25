@@ -92,7 +92,7 @@ describe("staleReferences", () => {
       tags: { include: ["red", "gone"], mode: "all" as const, exclude: ["old"], untagged: false },
     }
     const stale = staleReferences(query, new Set(["a1"]), new Set(["red"]))
-    expect(stale).toEqual({ area: true, tags: ["gone", "old"] })
+    expect(stale).toEqual({ area: true, tags: ["gone", "old"], sellers: [] })
     expect(hasStaleReferences(stale)).toBe(true)
   })
 
@@ -100,6 +100,16 @@ describe("staleReferences", () => {
     const query = { ...DEFAULT_COMMODITY_QUERY, areaId: "a1" }
     const stale = staleReferences(query, new Set(["a1"]), new Set())
     expect(hasStaleReferences(stale)).toBe(false)
+  })
+
+  it("names deleted sellers once the sellers are known, and none before", () => {
+    const query = { ...DEFAULT_COMMODITY_QUERY, sellerIds: ["s1", "s9"] }
+    const known = staleReferences(query, new Set(), new Set(), new Set(["s1"]))
+    expect(known.sellers).toEqual(["s9"])
+    expect(hasStaleReferences(known)).toBe(true)
+    const unknown = staleReferences(query, new Set(), new Set())
+    expect(unknown.sellers).toEqual([])
+    expect(hasStaleReferences(unknown)).toBe(false)
   })
 })
 

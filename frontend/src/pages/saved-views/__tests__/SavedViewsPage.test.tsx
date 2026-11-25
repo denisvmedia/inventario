@@ -15,6 +15,7 @@ import {
   areaHandlers,
   groupHandlers,
   savedViewHandlers,
+  sellerHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import type { SavedViewFixture } from "@/test/handlers/savedViews"
@@ -73,7 +74,8 @@ beforeEach(() => {
     ...areaHandlers.list(SLUG, [
       { id: "a1", type: "areas", attributes: { id: "a1", name: "Garage", location_id: "l1" } },
     ]),
-    ...tagHandlers.list(SLUG, [{ id: "t1", slug: "red", label: "Red", color: "red" }])
+    ...tagHandlers.list(SLUG, [{ id: "t1", slug: "red", label: "Red", color: "red" }]),
+    ...sellerHandlers.list(SLUG, [{ id: "s1", name: "Hardware shop" }])
   )
 })
 
@@ -119,6 +121,41 @@ describe("<SavedViewsPage />", () => {
     )
     // A deleted tag says so in words, not only in color.
     expect(within(row).getByText("Not vanished (deleted)")).toHaveAttribute("data-stale", "true")
+  })
+
+  it("names each seller of a view and marks a deleted one in words", async () => {
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv5", name: "Shops", query: "seller_id=s1&seller_id=s9" },
+      ]),
+      ...savedViewHandlers.counts(SLUG)
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() =>
+      expect(within(row).getByText("Deleted seller")).toHaveAttribute("data-stale", "true")
+    )
+    expect(within(row).getByText("Seller Hardware shop")).not.toHaveAttribute("data-stale")
+  })
+
+  it("marks no seller as deleted while the sellers fail to load", async () => {
+    let sellerRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [{ id: "sv5", name: "Shops", query: "seller_id=s9" }]),
+      ...savedViewHandlers.counts(SLUG),
+      msw.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+        sellerRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() => expect(sellerRequests).toBeGreaterThan(0))
+    await waitFor(() => expect(within(row).getByText("Seller")).toBeInTheDocument())
+    expect(within(row).getByText("Seller")).not.toHaveAttribute("data-stale")
+    expect(within(row).queryByText("Deleted seller")).not.toBeInTheDocument()
   })
 
   it("marks no tag as deleted while the tag catalogue fails to load", async () => {

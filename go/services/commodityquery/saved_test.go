@@ -12,7 +12,7 @@ import (
 
 func TestParseSaved_AcceptsTheListFilters(t *testing.T) {
 	c := qt.New(t)
-	raw := "q=drill&type=tools&status=in_use&area_id=area-1&include_inactive=false" +
+	raw := "q=drill&type=tools&status=in_use&area_id=area-1&seller_id=s1&seller_id=s2&include_inactive=false" +
 		"&warranty_status=expiring&lent_out=1&tags=Fragile,red&tag_mode=any&tags_exclude=garage&sort=-purchase_date"
 	q, err := commodityquery.ParseSaved(raw)
 	c.Assert(err, qt.IsNil)
@@ -23,8 +23,9 @@ func TestParseSaved_AcceptsTheListFilters(t *testing.T) {
 	// The canonical form sorts the parameters and normalizes the values, so
 	// it reads back to the same query.
 	encoded := q.Encode()
-	c.Assert(encoded, qt.Equals, "area_id=area-1&include_inactive=false&lent_out=true&q=drill&sort=-purchase_date"+
-		"&status=in_use&tag_mode=any&tags=fragile%2Cred&tags_exclude=garage&type=tools&warranty_status=expiring")
+	c.Assert(encoded, qt.Equals, "area_id=area-1&include_inactive=false&lent_out=true&q=drill&seller_id=s1&seller_id=s2"+
+		"&sort=-purchase_date&status=in_use&tag_mode=any&tags=fragile%2Cred&tags_exclude=garage&type=tools"+
+		"&warranty_status=expiring")
 	again, err := commodityquery.ParseSaved(encoded)
 	c.Assert(err, qt.IsNil)
 	c.Assert(again, qt.DeepEquals, q)
@@ -34,15 +35,15 @@ func TestParseSaved_AcceptsTheListFilters(t *testing.T) {
 // their list values were ordered.
 func TestQuery_EncodeSortsListValues(t *testing.T) {
 	c := qt.New(t)
-	a, err := commodityquery.ParseSaved("type=tools&type=other&status=sold&status=in_use" +
+	a, err := commodityquery.ParseSaved("type=tools&type=other&status=sold&status=in_use&seller_id=s2&seller_id=s1" +
 		"&warranty_status=expiring&warranty_status=active&tags=red,fragile&tags_exclude=shed,garage")
 	c.Assert(err, qt.IsNil)
-	b, err := commodityquery.ParseSaved("type=other&type=tools&status=in_use&status=sold" +
+	b, err := commodityquery.ParseSaved("type=other&type=tools&status=in_use&status=sold&seller_id=s1&seller_id=s2" +
 		"&warranty_status=active&warranty_status=expiring&tags=fragile,red&tags_exclude=garage,shed")
 	c.Assert(err, qt.IsNil)
 	c.Assert(a.Encode(), qt.Equals, b.Encode())
-	c.Assert(a.Encode(), qt.Equals, "status=in_use&status=sold&tags=fragile%2Cred&tags_exclude=garage%2Cshed"+
-		"&type=other&type=tools&warranty_status=active&warranty_status=expiring")
+	c.Assert(a.Encode(), qt.Equals, "seller_id=s1&seller_id=s2&status=in_use&status=sold&tags=fragile%2Cred"+
+		"&tags_exclude=garage%2Cshed&type=other&type=tools&warranty_status=active&warranty_status=expiring")
 	// Encoding leaves the query as it was.
 	c.Assert(a.Tags.Include, qt.DeepEquals, []string{"red", "fragile"})
 }

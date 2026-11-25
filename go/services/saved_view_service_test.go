@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -312,6 +313,48 @@ func TestSavedViewService_CountsMatchTheList(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(page.Total, qt.Equals, want)
 	}
+}
+
+// A view keeps the seller filter of the list in its canonical form, and its
+// count is the total the list reports for it.
+func TestSavedViewService_KeepsAndCountsTheSellerFilter(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	ctx := savedViewCtx("alice")
+	alice := actor("alice", models.GroupRoleUser)
+	sellers := f.factory.SellerRegistryFactory.MustCreateUserRegistry(ctx)
+	shop, err := sellers.Create(ctx, models.Seller{Name: "Hardware shop"})
+	c.Assert(err, qt.IsNil)
+	market, err := sellers.Create(ctx, models.Seller{Name: "Market"})
+	c.Assert(err, qt.IsNil)
+	reg := f.factory.CommodityRegistryFactory.MustCreateUserRegistry(ctx)
+	for name, seller := range map[string]string{"Drill": shop.ID, "Saw": shop.ID, "Lamp": market.ID, "Desk": ""} {
+		item := models.Commodity{Name: name, ShortName: name, Type: models.CommodityTypeOther, Status: models.CommodityStatusInUse, Count: 1}
+		if seller != "" {
+			item.SellerID = new(seller)
+		}
+		_, err := reg.Create(ctx, item)
+		c.Assert(err, qt.IsNil)
+	}
+
+	ids := []string{shop.ID, market.ID}
+	slices.Sort(ids)
+	both, err := f.svc.Create(ctx, alice, viewInput("Both shops", "seller_id="+ids[1]+"&seller_id="+ids[0], false))
+	c.Assert(err, qt.IsNil)
+	c.Assert(both.View.Query, qt.Equals, "seller_id="+ids[0]+"&seller_id="+ids[1])
+	one, err := f.svc.Create(ctx, alice, viewInput("One shop", "seller_id="+shop.ID, false))
+	c.Assert(err, qt.IsNil)
+
+	set, err := f.factory.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	counts, err := f.svc.Counts(ctx, set)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, map[string]int{both.View.ID: 3, one.View.ID: 2})
+	q, err := commodityquery.ParseSaved(one.View.Query)
+	c.Assert(err, qt.IsNil)
+	page, err := commodityquery.List(ctx, set, q, 0, 50)
+	c.Assert(err, qt.IsNil)
+	c.Assert(page.Total, qt.Equals, 2)
 }
 
 // Renaming an item tag's slug carries every view of the group along,

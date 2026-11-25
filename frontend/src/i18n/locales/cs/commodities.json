@@ -527,6 +527,7 @@
       "descending": "sestupně",
       "inactive": "Včetně neaktivních",
       "notTag": "Bez {{tag}}",
+      "seller": "Prodejce {{seller}}",
       "sort": "Řazeno podle: {{field}}, {{direction}}",
       "tag": "Štítek {{tag}}",
       "tagAny": "Kterýkoli z: {{tag}}",
@@ -627,6 +628,10 @@
     "stale": {
       "area": "Oblast tohoto pohledu byla smazána.",
       "hint": "Označené podmínky odkazují na něco, co bylo smazáno. Pohled je stále uplatňuje, takže zobrazuje to, co stále odpovídá.",
+      "sellers_one": "Prodejce tohoto pohledu byl smazán.",
+      "sellers_few": "{{count}} prodejci tohoto pohledu byli smazáni.",
+      "sellers_many": "{{count}} prodejce tohoto pohledu bylo smazáno.",
+      "sellers_other": "{{count}} prodejců tohoto pohledu bylo smazáno.",
       "tags_one": "Štítek {{tags}} už neexistuje.",
       "tags_few": "Štítky {{tags}} už neexistují.",
       "tags_many": "Štítky {{tags}} už neexistují.",

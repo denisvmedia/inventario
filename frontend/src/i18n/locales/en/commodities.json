@@ -521,6 +521,7 @@
       "descending": "descending",
       "inactive": "Inactive included",
       "notTag": "Not {{tag}}",
+      "seller": "Seller {{seller}}",
       "sort": "Sorted by {{field}}, {{direction}}",
       "tag": "Tag {{tag}}",
       "tagAny": "Any of: {{tag}}",
@@ -619,6 +620,8 @@
     "stale": {
       "area": "The area of this view was deleted.",
       "hint": "The marked conditions refer to something that was deleted. The view still applies them, so it shows what still matches.",
+      "sellers_one": "A seller of this view was deleted.",
+      "sellers_other": "{{count}} sellers of this view were deleted.",
       "tags_one": "Tag {{tags}} no longer exists.",
       "tags_other": "Tags {{tags}} no longer exist.",
       "title": "Refers to deleted things"

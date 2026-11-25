@@ -12,15 +12,24 @@ interface QueryConditionsProps {
   areaNames: ReadonlyMap<string, string>
   // Tag labels by slug.
   tagLabel: (slug: string) => string
+  // Seller names by ID, for the seller conditions.
+  sellerNames: ReadonlyMap<string, string>
   stale?: StaleReferences
 }
 
 // QueryConditions spells out a view's filter and sort as small badges, so
 // a list of views says what each one shows. A condition naming something
 // that no longer exists is marked as such.
-export function QueryConditions({ query, areaNames, tagLabel, stale }: QueryConditionsProps) {
+export function QueryConditions({
+  query,
+  areaNames,
+  tagLabel,
+  sellerNames,
+  stale,
+}: QueryConditionsProps) {
   const { t } = useTranslation()
   const staleTags = new Set(stale?.tags ?? [])
+  const staleSellers = new Set(stale?.sellers ?? [])
   const chips: { key: string; label: string; stale?: boolean }[] = []
 
   if (query.text) {
@@ -46,6 +55,19 @@ export function QueryConditions({ query, areaNames, tagLabel, stale }: QueryCond
   }
   if (query.unassigned) {
     chips.push({ key: "unassigned", label: t("commodities:filter.unassigned") })
+  }
+  for (const id of query.sellerIds) {
+    const gone = staleSellers.has(id)
+    const name = sellerNames.get(id)
+    chips.push({
+      key: `seller-${id}`,
+      label: gone
+        ? t("commodities:filter.sellerUnknown")
+        : name
+          ? t("commodities:savedViews.conditions.seller", { seller: name })
+          : t("commodities:filter.seller"),
+      stale: gone,
+    })
   }
   for (const w of query.warrantyStatuses) {
     chips.push({ key: `warranty-${w}`, label: t(`commodities:warrantyStatus.${w}`) })

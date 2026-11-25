@@ -322,6 +322,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     expect(commodityQueryFromApiQuery(commodityQueryToApiQuery(FULL))).toEqual({
       ...FULL,
       types: [...FULL.types].sort(),
+      sellerIds: [...FULL.sellerIds].sort(),
       statuses: [...FULL.statuses].sort(),
       warrantyStatuses: [...FULL.warrantyStatuses].sort(),
       tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },

@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useMemo } from "react"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSellers } from "@/features/sellers/hooks"
 
 import {
   countSavedViews,
@@ -83,4 +85,23 @@ export function useReorderSavedViews() {
     mutationFn: reorderSavedViews,
     onSuccess: () => invalidate(),
   })
+}
+
+export interface SellerCatalog {
+  // Seller names by ID, for the seller conditions.
+  names: ReadonlyMap<string, string>
+  // The group's seller IDs once the sellers have loaded for this group;
+  // undefined while they load, after a failed load, and while the previous
+  // group's list stands in. A list that is not this group's own would mark
+  // the view's sellers as deleted.
+  ids?: ReadonlySet<string>
+}
+
+export function useSellerCatalog(): SellerCatalog {
+  const sellers = useSellers()
+  const known = sellers.isSuccess && !sellers.isPlaceholderData
+  return useMemo(() => {
+    const names = new Map((sellers.data ?? []).map((s) => [s.id, s.name ?? ""]))
+    return { names, ids: known ? new Set(names.keys()) : undefined }
+  }, [sellers.data, known])
 }

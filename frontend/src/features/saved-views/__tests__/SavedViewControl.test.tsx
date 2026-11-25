@@ -15,6 +15,7 @@ import {
   commodityHandlers,
   groupHandlers,
   savedViewHandlers,
+  sellerHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import type { SavedViewFixture } from "@/test/handlers/savedViews"
@@ -69,6 +70,7 @@ beforeEach(() => {
     ...groupHandlers.list([{ id: "g1", slug: SLUG, name: "Household" }]),
     ...areaHandlers.list(SLUG, areaFixture),
     ...tagHandlers.list(SLUG, [{ id: "t1", slug: "garage", label: "Garage", color: "blue" }]),
+    ...sellerHandlers.list(SLUG, [{ id: "s1", name: "Hardware shop" }]),
     ...commodityHandlers.list(SLUG, [])
   )
 })
@@ -260,6 +262,46 @@ describe("<SavedViewControl /> on the items list", () => {
     expect(notice).toHaveTextContent("The area of this view was deleted.")
     expect(notice).toHaveTextContent("Tag gone-tag no longer exists.")
     expect(notice).not.toHaveTextContent("garage")
+  })
+
+  it("names a deleted seller an open view still filters by, and only once the sellers loaded", async () => {
+    const user = userEvent.setup()
+    const shops: SavedViewFixture = {
+      id: "sv6",
+      name: "Shops",
+      query: "include_inactive=false&seller_id=s1&seller_id=s9&sort=name",
+    }
+    server.use(...savedViewHandlers.list(SLUG, [shops]))
+    renderList("?seller=s1&seller=s9&saved_view=sv6")
+
+    await user.click(await screen.findByTestId("saved-views-menu"))
+    const notice = await screen.findByTestId("saved-views-stale")
+    expect(notice).toHaveTextContent("A seller of this view was deleted.")
+    // The view's own filter is not a change.
+    expect(screen.queryByTestId("saved-views-changed")).not.toBeInTheDocument()
+  })
+
+  it("names no deleted seller while the sellers fail to load", async () => {
+    const user = userEvent.setup()
+    let sellerRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv6", name: "Shops", query: "include_inactive=false&seller_id=s9&sort=name" },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+        sellerRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderList("?seller=s9&saved_view=sv6")
+
+    await waitFor(() =>
+      expect(screen.getByTestId("saved-views-menu-label")).toHaveTextContent("Shops")
+    )
+    await waitFor(() => expect(sellerRequests).toBeGreaterThan(0))
+    await user.click(screen.getByTestId("saved-views-menu"))
+    await screen.findByTestId("saved-views-close")
+    expect(screen.queryByTestId("saved-views-stale")).not.toBeInTheDocument()
   })
 
   it("keeps a view with an unsupported filter out of reach", async () => {

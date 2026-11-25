@@ -37,6 +37,7 @@ import {
   useReorderSavedViews,
   useSavedViewCounts,
   useSavedViews,
+  useSellerCatalog,
   useUpdateSavedView,
 } from "@/features/saved-views/hooks"
 import { QueryConditions } from "@/features/saved-views/QueryConditions"
@@ -70,6 +71,7 @@ export function SavedViewsPage() {
   const counts = useSavedViewCounts()
   const areas = useAreas()
   const tagIndex = useTagIndex("commodity")
+  const sellers = useSellerCatalog()
   const update = useUpdateSavedView()
   const remove = useDeleteSavedView()
   const reorder = useReorderSavedViews()
@@ -186,7 +188,7 @@ export function SavedViewsPage() {
               {views.map((view, i) => {
                 const query = savedViewQuery(view)
                 const stale = referencesLoaded
-                  ? staleReferences(query, areaIds, tagSlugs)
+                  ? staleReferences(query, areaIds, tagSlugs, sellers.ids)
                   : undefined
                 const editIndex = editable.findIndex((v) => v.id === view.id)
                 const count = counts.data?.[view.id]
@@ -251,6 +253,7 @@ export function SavedViewsPage() {
                             query={query}
                             areaNames={areaNames}
                             tagLabel={(s) => tagIndex.resolve(s).label}
+                            sellerNames={sellers.names}
                             stale={stale}
                           />
                         )}

@@ -32,7 +32,7 @@ import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 import type { SavedView, SavedViewLayout } from "./api"
-import { useCreateSavedView, useSavedViews, useUpdateSavedView } from "./hooks"
+import { useCreateSavedView, useSavedViews, useSellerCatalog, useUpdateSavedView } from "./hooks"
 import { SavedViewIcon } from "./SavedViewIcon"
 import { SaveViewDialog, type SaveViewValues } from "./SaveViewDialog"
 import {
@@ -332,17 +332,19 @@ function QueryErrorNotice({ parameter }: { parameter: string | undefined }) {
 // What the query names that no longer exists, once areas and tags have
 // loaded; undefined before that, when either failed to load, or without a
 // query. A catalogue that failed to load lists no tags, which would mark
-// every tag of the query as deleted.
+// every tag of the query as deleted. Sellers are checked only once the
+// group's sellers have loaded.
 export function useStaleReferences(query: CommodityQuery | undefined): StaleReferences | undefined {
   const areas = useAreas({ enabled: !!query })
   const tagIndex = useTagIndex("commodity")
+  const sellers = useSellerCatalog()
   const tagsUnknown = tagIndex.isLoading || tagIndex.isError
   return useMemo(() => {
     if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))
     const tagSlugs = new Set(tagIndex.tags.map((tag) => tag.slug))
-    return staleReferences(query, areaIds, tagSlugs)
-  }, [query, areas.data, tagsUnknown, tagIndex.tags])
+    return staleReferences(query, areaIds, tagSlugs, sellers.ids)
+  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids])
 }
 
 // Names what a view's filter still asks for but no longer exists. The list
@@ -366,6 +368,9 @@ export function StaleNotice({ stale }: { stale: StaleReferences }) {
               tags: stale.tags.join(", "),
             })}
           </span>
+        ) : null}
+        {stale.sellers.length > 0 ? (
+          <span>{t("commodities:savedViews.stale.sellers", { count: stale.sellers.length })}</span>
         ) : null}
       </div>
     </div>

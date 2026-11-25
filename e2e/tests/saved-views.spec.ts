@@ -7,6 +7,8 @@
  *   2. An open view tells when the list no longer matches it, saves the
  *      change, and reverts to what it keeps.
  *   3. A view naming a tag that does not exist still opens and says so.
+ *   4. A view filtering by seller keeps the seller through save, the
+ *      sidebar count, the saved views page and opening it again.
  */
 import { expect, type APIRequestContext } from "@playwright/test";
 
@@ -57,6 +59,7 @@ test.describe("Saved views (#2793)", () => {
   let areaId: string;
   let run: string;
   const commodityIds: string[] = [];
+  const sellerIds: string[] = [];
 
   test.beforeEach(async ({ page, request }) => {
     auth = await extractApiAuth(page);
@@ -72,7 +75,26 @@ test.describe("Saved views (#2793)", () => {
     for (const id of commodityIds.splice(0)) {
       await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {});
     }
+    // After the items that name them.
+    for (const id of sellerIds.splice(0)) {
+      await request
+        .delete(`/api/v1/g/${encodeURIComponent(slug)}/sellers/${encodeURIComponent(id)}`, {
+          headers: headers(auth),
+        })
+        .catch(() => {});
+    }
   });
+
+  async function createSeller(request: APIRequestContext, name: string): Promise<string> {
+    const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/sellers`, {
+      headers: headers(auth),
+      data: { data: { type: "sellers", attributes: { name } } },
+    });
+    expect(resp.status(), `POST /sellers → ${resp.status()}`).toBe(201);
+    const body = (await resp.json()) as { data: { id: string } };
+    sellerIds.push(body.data.id);
+    return body.data.id;
+  }
 
   async function create(
     request: APIRequestContext,
@@ -169,6 +191,47 @@ test.describe("Saved views (#2793)", () => {
     await expect(cards).toHaveCount(1);
     await page.getByTestId("saved-views-menu").click();
     await page.getByTestId("saved-views-revert").click();
+    await expect(cards).toHaveCount(2);
+    await expect(page.getByTestId("saved-views-changed")).toHaveCount(0);
+  });
+
+  test("a view filtering by seller keeps the seller from save to reopening", async ({
+    page,
+    request,
+  }) => {
+    const name = `Shop ${run}`;
+    const sellerName = `Hardware ${run}`;
+    const seller = await createSeller(request, sellerName);
+    const other = await createSeller(request, `Market ${run}`);
+    await create(request, { name: `Drill ${run}`, sellerId: seller });
+    await create(request, { name: `Saw ${run}`, sellerId: seller });
+    await create(request, { name: `Lamp ${run}`, sellerId: other });
+
+    await page.goto(list(`q=${run}&seller=${seller}`));
+    const cards = page.getByTestId("commodity-card");
+    await expect(cards).toHaveCount(2);
+
+    await page.getByTestId("saved-views-menu").click();
+    await page.getByTestId("saved-views-save-new").click();
+    const dialog = page.getByTestId("saved-view-dialog");
+    await dialog.getByTestId("saved-view-name").fill(name);
+    await dialog.getByTestId("saved-view-submit").click();
+    await expect(dialog).toBeHidden();
+    await expect(page.getByTestId("saved-views-menu-label")).toHaveText(name);
+    await expect(page.getByTestId("saved-views-changed")).toHaveCount(0);
+
+    const sidebarRow = page
+      .getByTestId("sidebar-saved-views")
+      .getByRole("listitem")
+      .filter({ hasText: name });
+    await expect(sidebarRow.getByTestId("sidebar-saved-view-count")).toHaveText("2");
+
+    await page.goto(`/g/${encodeURIComponent(slug)}/views`);
+    const row = page.getByTestId("saved-view-row").filter({ hasText: name });
+    await expect(row.getByTestId("saved-view-conditions")).toContainText(`Seller ${sellerName}`);
+
+    await page.getByTestId("sidebar-saved-views").getByRole("link", { name }).click();
+    await expect(page).toHaveURL(new RegExp(`[?&]seller=${seller}(&|$)`));
     await expect(cards).toHaveCount(2);
     await expect(page.getByTestId("saved-views-changed")).toHaveCount(0);
   });
