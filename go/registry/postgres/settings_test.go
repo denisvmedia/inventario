@@ -233,6 +233,11 @@ func TestSettingsRegistry_Patch_UnhappyPath(t *testing.T) {
 			settingName:  "",
 			settingValue: "value",
 		},
+		{
+			name:         "value of the wrong type",
+			settingName:  "notifications.warranty_lead_times",
+			settingValue: "soon",
+		},
 	}
 
 	for _, tc := range testCases {
@@ -355,6 +360,31 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
 				c.Assert(settings.Theme, qt.IsNotNil)
 				c.Assert(*settings.Theme, qt.Equals, "")
+			},
+		},
+		{
+			// Lists come back from the JSON column as []any; #2805.
+			name:         "patch with a lead-time list",
+			settingName:  "notifications.warranty_lead_times",
+			settingValue: []any{float64(90), float64(30)},
+			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
+				c.Assert(settings.NotificationsWarrantyLeadTimes, qt.DeepEquals, []int{90, 30})
+			},
+		},
+		{
+			name:         "patch with a number",
+			settingName:  "notifications.loan_lead_time",
+			settingValue: float64(14),
+			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
+				c.Assert(settings.NotificationsLoanLeadTime, qt.DeepEquals, new(14))
+			},
+		},
+		{
+			name:         "patch with null clears the value",
+			settingName:  "notifications.warranty_lead_times",
+			settingValue: nil,
+			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
+				c.Assert(settings.NotificationsWarrantyLeadTimes, qt.IsNil)
 			},
 		},
 		{

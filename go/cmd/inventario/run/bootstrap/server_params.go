@@ -67,6 +67,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 		UploadLocation: filekit.NormalizeFileURL(cfg.UploadLocation),
 		MaxUploadBytes: cfg.MaxUploadBytes,
 		StartTime:      time.Now(),
+		// Reported by /system as the default loan lead time (#2805).
+		LoanReminderDueSoonDays: cfg.LoanReminderDueSoonDays,
 	}
 	params.EntityService = services.NewEntityService(factorySet, params.UploadLocation)
 	params.DebugInfo = debug.NewInfo(dsn, params.UploadLocation)

@@ -10912,6 +10912,10 @@ const docTemplate = `{
                 "go_version": {
                     "type": "string"
                 },
+                "loan_reminder_due_soon_days": {
+                    "description": "LoanReminderDueSoonDays is the server-wide default for how many days\nbefore the due date the loan reminder goes out\n(--loan-reminder-due-soon-days). A user's\nnotifications.loan_lead_time setting replaces it for them.",
+                    "type": "integer"
+                },
                 "memory_usage": {
                     "type": "string"
                 },
@@ -16597,8 +16601,17 @@ const docTemplate = `{
                 "notificationsItemReminder": {
                     "type": "boolean"
                 },
+                "notificationsLoanLeadTime": {
+                    "type": "integer"
+                },
                 "notificationsLoanReminder": {
                     "type": "boolean"
+                },
+                "notificationsMaintenanceLeadTimes": {
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "notificationsMaintenanceReminder": {
                     "type": "boolean"
@@ -16609,6 +16622,13 @@ const docTemplate = `{
                 "notificationsWarrantyExpiry": {
                     "description": "Notification category toggles. Each category controls a class of\noutbound notifications (warranty expiry mailers, weekly digests,\netc.). Transactional senders — password reset, email verification —\nnever consult these and so cannot be opted out.",
                     "type": "boolean"
+                },
+                "notificationsWarrantyLeadTimes": {
+                    "description": "Lead times for the built-in reminders, in days before the date. Nil\nmeans the defaults (see SettingNameNotificationsWarrantyLeadTimes).\nThe maintenance overdue reminder is not a lead time and always\napplies.",
+                    "type": "array",
+                    "items": {
+                        "type": "integer"
+                    }
                 },
                 "notificationsWeeklyDigest": {
                     "type": "boolean"

@@ -1,5 +1,5 @@
 -- Migration rollback
--- Generated on: 2026-11-25T07:21:43+01:00
+-- Generated on: 2026-11-25T09:04:39+01:00
 -- Direction: DOWN
 -- +ptah lock_timeout=3s
 -- +ptah statement_timeout=30s

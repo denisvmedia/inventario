@@ -63,6 +63,7 @@ func TestSetFieldByConfigfieldTag(t *testing.T) {
 		IsActive    bool    `configfield:"active"`
 		Description *string `configfield:"desc"`
 		Count       *int    `configfield:"count"`
+		Days        []int   `configfield:"days"`
 		//revive:disable-next-line:struct-tag
 		unexported string `configfield:"hidden"` //nolint:unused // it's a test
 	}
@@ -146,6 +147,45 @@ func TestSetFieldByConfigfieldTag(t *testing.T) {
 		err = typekit.SetFieldByConfigfieldTag(config, "count", &count)
 		c.Assert(err, qt.IsNil)
 		c.Assert(*config.Count, qt.Equals, 10)
+	})
+
+	// Values decoded from JSON: numbers arrive as float64, lists as []any.
+	c.Run("values decoded from JSON", func(c *qt.C) {
+		config := &TestConfig{}
+		c.Assert(typekit.SetFieldByConfigfieldTag(config, "count", float64(7)), qt.IsNil)
+		c.Assert(*config.Count, qt.Equals, 7)
+
+		c.Assert(typekit.SetFieldByConfigfieldTag(config, "days", []any{float64(30), float64(7)}), qt.IsNil)
+		c.Assert(config.Days, qt.DeepEquals, []int{30, 7})
+
+		c.Assert(typekit.SetFieldByConfigfieldTag(config, "days", []int{1}), qt.IsNil)
+		c.Assert(config.Days, qt.DeepEquals, []int{1})
+	})
+
+	c.Run("nil clears the field", func(c *qt.C) {
+		config := &TestConfig{Days: []int{1}, Count: new(3)}
+		c.Assert(typekit.SetFieldByConfigfieldTag(config, "days", nil), qt.IsNil)
+		c.Assert(config.Days, qt.IsNil)
+		c.Assert(typekit.SetFieldByConfigfieldTag(config, "count", nil), qt.IsNil)
+		c.Assert(config.Count, qt.IsNil)
+	})
+
+	c.Run("a value that does not fit returns an error", func(c *qt.C) {
+		config := &TestConfig{}
+		for _, tc := range []struct {
+			tag   string
+			value any
+		}{
+			{"active", "yes"},
+			{"age", 7.5},
+			{"age", "7"},
+			{"name", 7},
+			{"days", []any{float64(7), "soon"}},
+			{"days", float64(7)},
+		} {
+			err := typekit.SetFieldByConfigfieldTag(config, tc.tag, tc.value)
+			c.Check(err, qt.ErrorIs, typekit.ErrIncompatibleValue, qt.Commentf("%s <- %#v", tc.tag, tc.value))
+		}
 	})
 }
 

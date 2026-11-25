@@ -2,6 +2,8 @@ package models
 
 import (
 	"context"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -28,25 +30,46 @@ const (
 	WarrantyReminder7Days WarrantyReminderThreshold = 7
 )
 
-// WarrantyReminderThresholds is the canonical, ordered (largest →
-// smallest) list of thresholds the worker scans for. Order is preserved
-// so the backfill query can OR the windows in a deterministic shape.
+// WarrantyReminderThresholds is the default lead-time list, largest
+// first. A user's notifications.warranty_lead_times setting replaces it
+// for that user (#2805).
 var WarrantyReminderThresholds = []WarrantyReminderThreshold{
 	WarrantyReminder60Days,
 	WarrantyReminder30Days,
 	WarrantyReminder7Days,
 }
 
-// IsValid reports whether t is one of the canonical thresholds. Used as
-// a guard before persisting a reminder row and when decoding the
-// threshold value back from the database — anything else is a bug
-// upstream.
+// IsValid reports whether t is a lead time the worker can send at: from 1
+// to ReminderMaxLeadDays days. Used as a guard before persisting a
+// reminder row and when decoding the threshold value back from the
+// database.
 func (t WarrantyReminderThreshold) IsValid() bool {
-	switch t {
-	case WarrantyReminder60Days, WarrantyReminder30Days, WarrantyReminder7Days:
-		return true
+	return t >= 1 && int(t) <= ReminderMaxLeadDays
+}
+
+// MetricLabel returns the threshold label for the sent-reminders counter:
+// the number of days for a default lead time and "custom" for any other.
+// Lead times are user-chosen (#2805), and one label value per possible day
+// would give the counter hundreds of series.
+func (t WarrantyReminderThreshold) MetricLabel() string {
+	if slices.Contains(WarrantyReminderThresholds, t) {
+		return strconv.Itoa(int(t))
 	}
-	return false
+	return ReminderMetricLabelCustom
+}
+
+// ReminderMetricLabelCustom is the threshold label for a lead time that is
+// not one of the defaults.
+const ReminderMetricLabelCustom = "custom"
+
+// DefaultWarrantyLeadTimes returns the default warranty lead times as
+// plain ints, largest first.
+func DefaultWarrantyLeadTimes() []int {
+	out := make([]int, len(WarrantyReminderThresholds))
+	for i, t := range WarrantyReminderThresholds {
+		out[i] = int(t)
+	}
+	return out
 }
 
 var (
@@ -97,6 +120,15 @@ type WarrantyReminder struct {
 	// own job log records final delivery.
 	//ptah:schema:field name="sent_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	SentAt time.Time `json:"sent_at" db:"sent_at"`
+
+	// Silent is true when the row was written without an email going out:
+	// no recipient was due this lead time, every recipient had opted out,
+	// there was no recipient, or a closer reminder had already gone out.
+	// A silent row still keeps the threshold from being processed again,
+	// but only a row that is not silent holds back a farther lead time
+	// (HasSentInRange).
+	//ptah:schema:field name="silent" type="BOOLEAN" not_null="true" default="false"
+	Silent bool `json:"silent" db:"silent"`
 }
 
 // WarrantyReminderIndexes defines indexes for warranty_reminders. The

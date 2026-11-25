@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"fmt"
 	"slices"
 	"time"
 
@@ -320,14 +321,24 @@ func (r *CommodityReminder) validateLeadTimesFitRepeat(value any) error {
 	return nil
 }
 
-// ReminderLeadTimesRule checks a lead-time list: between one and
-// ReminderMaxLeadTimes values, each between 0 and ReminderMaxLeadDays, no
-// duplicates. It accepts ValuerSlice[int] and []int.
-var ReminderLeadTimesRule validation.Rule = reminderLeadTimesRule{}
+// ReminderLeadTimesRule checks an item reminder's lead-time list: between
+// one and ReminderMaxLeadTimes values, each between 0 and
+// ReminderMaxLeadDays, no duplicates. It accepts ValuerSlice[int] and
+// []int.
+var ReminderLeadTimesRule validation.Rule = reminderLeadTimesRule{minDays: 0}
 
-type reminderLeadTimesRule struct{}
+// BuiltinReminderLeadTimesRule checks a user's lead times for warranty or
+// maintenance reminders. It is ReminderLeadTimesRule without 0: a warranty
+// reminder on the expiry day has no use, and 0 is the maintenance overdue
+// sentinel. A nil list passes, because nil means "use the defaults".
+var BuiltinReminderLeadTimesRule validation.Rule = reminderLeadTimesRule{minDays: 1, nilIsUnset: true}
 
-func (reminderLeadTimesRule) Validate(value any) error {
+type reminderLeadTimesRule struct {
+	minDays    int
+	nilIsUnset bool
+}
+
+func (r reminderLeadTimesRule) Validate(value any) error {
 	var days []int
 	switch v := value.(type) {
 	case ValuerSlice[int]:
@@ -342,6 +353,9 @@ func (reminderLeadTimesRule) Validate(value any) error {
 	default:
 		return nil
 	}
+	if days == nil && r.nilIsUnset {
+		return nil
+	}
 	if len(days) == 0 {
 		return validation.NewError("validation_reminder_lead_times_required", "at least one lead time is required")
 	}
@@ -350,8 +364,9 @@ func (reminderLeadTimesRule) Validate(value any) error {
 	}
 	seen := make(map[int]struct{}, len(days))
 	for _, d := range days {
-		if d < 0 || d > ReminderMaxLeadDays {
-			return validation.NewError("validation_reminder_lead_time_range", "each lead time must be between 0 and 365 days")
+		if d < r.minDays || d > ReminderMaxLeadDays {
+			return validation.NewError("validation_reminder_lead_time_range",
+				fmt.Sprintf("each lead time must be between %d and %d days", r.minDays, ReminderMaxLeadDays))
 		}
 		if _, dup := seen[d]; dup {
 			return validation.NewError("validation_reminder_lead_times_duplicate", "lead times must not repeat")

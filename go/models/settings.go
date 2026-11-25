@@ -1,6 +1,9 @@
 package models
 
 import (
+	"context"
+	"fmt"
+
 	"github.com/go-extras/go-kit/must"
 	"github.com/jellydator/validation"
 
@@ -93,6 +96,13 @@ const (
 	SettingNameNotificationsItemReminder        SettingName = "notifications.item_reminder"
 	SettingNameNotificationsChannelEmail        SettingName = "notifications.channel.email"
 	SettingNameNotificationsChannelPush         SettingName = "notifications.channel.push"
+	// Per-user lead times for the built-in reminders (#2805). Missing rows
+	// mean the defaults: DefaultWarrantyLeadTimes,
+	// DefaultMaintenanceLeadTimes and the server's
+	// --loan-reminder-due-soon-days.
+	SettingNameNotificationsWarrantyLeadTimes    SettingName = "notifications.warranty_lead_times"
+	SettingNameNotificationsMaintenanceLeadTimes SettingName = "notifications.maintenance_lead_times"
+	SettingNameNotificationsLoanLeadTime         SettingName = "notifications.loan_lead_time"
 
 	// Per-user appearance preferences. `default_items_view` is consumed by
 	// the commodities list page as the initial view mode (grid for photo
@@ -133,6 +143,13 @@ type SettingsObject struct {
 	NotificationsPriceDrop           *bool `json:"notificationsPriceDrop,omitempty" configfield:"notifications.price_drop"`
 	NotificationsLoanReminder        *bool `json:"notificationsLoanReminder,omitempty" configfield:"notifications.loan_reminder"`
 	NotificationsItemReminder        *bool `json:"notificationsItemReminder,omitempty" configfield:"notifications.item_reminder"`
+	// Lead times for the built-in reminders, in days before the date. Nil
+	// means the defaults (see SettingNameNotificationsWarrantyLeadTimes).
+	// The maintenance overdue reminder is not a lead time and always
+	// applies.
+	NotificationsWarrantyLeadTimes    []int `json:"notificationsWarrantyLeadTimes,omitempty" configfield:"notifications.warranty_lead_times"`
+	NotificationsMaintenanceLeadTimes []int `json:"notificationsMaintenanceLeadTimes,omitempty" configfield:"notifications.maintenance_lead_times"`
+	NotificationsLoanLeadTime         *int  `json:"notificationsLoanLeadTime,omitempty" configfield:"notifications.loan_lead_time"`
 	// Channel toggles act as a master switch per delivery channel: when
 	// false, no category-level notification is delivered through that
 	// channel regardless of the per-category toggle.
@@ -158,4 +175,35 @@ func (s *SettingsObject) Get(field string) (any, error) {
 
 func (s *SettingsObject) ToMap() map[string]any {
 	return must.Must(typekit.StructToMap(s))
+}
+
+// LoanReminderMaxLeadDays caps the per-user loan lead time.
+const LoanReminderMaxLeadDays = 60
+
+func (*SettingsObject) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext checks the values that have limits: the reminder
+// lead times. The toggles and appearance strings are free-form.
+func (s *SettingsObject) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, s,
+		validation.Field(&s.NotificationsWarrantyLeadTimes, BuiltinReminderLeadTimesRule),
+		validation.Field(&s.NotificationsMaintenanceLeadTimes, BuiltinReminderLeadTimesRule),
+		validation.Field(&s.NotificationsLoanLeadTime, validation.By(validateLoanLeadTime)),
+	)
+}
+
+// validateLoanLeadTime checks the loan lead time. validation.Min skips a
+// zero value, so the range is checked by hand; nil means "unset".
+func validateLoanLeadTime(value any) error {
+	days, ok := value.(*int)
+	if !ok || days == nil {
+		return nil
+	}
+	if *days < 1 || *days > LoanReminderMaxLeadDays {
+		return validation.NewError("validation_loan_lead_time_range",
+			fmt.Sprintf("the loan lead time must be between 1 and %d days", LoanReminderMaxLeadDays))
+	}
+	return nil
 }
