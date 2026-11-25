@@ -163,6 +163,7 @@ const (
 	draftNumber
 	draftList
 	draftFlag
+	draftObject
 )
 
 // draftValueKinds lists the fields of the item form. A draft can hold other
@@ -193,6 +194,9 @@ var draftValueKinds = map[string]draftValueKind{
 	"tags":                     draftList,
 	"urls":                     draftList,
 	"draft":                    draftFlag,
+	// The custom field values by field id (#2803); each entry is the
+	// form's {value, currency} or a value as an item stores it.
+	"custom_fields": draftObject,
 }
 
 // checkDraftValueTypes returns the known fields whose value has the wrong
@@ -239,6 +243,10 @@ func checkDraftValueKind(kind draftValueKind, value any) error {
 	case draftFlag:
 		if _, ok := value.(bool); !ok {
 			return validation.NewError("validation_draft_value_flag", "must be true or false")
+		}
+	case draftObject:
+		if _, ok := value.(map[string]any); !ok {
+			return validation.NewError("validation_draft_value_object", "must be an object")
 		}
 	}
 	return nil
