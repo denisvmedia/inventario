@@ -2682,7 +2682,8 @@ const docTemplate = `{
                     {
                         "enum": [
                             "small",
-                            "medium"
+                            "medium",
+                            "large"
                         ],
                         "type": "string",
                         "description": "Thumbnail size",
@@ -3227,7 +3228,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/brands": {
             "get": {
-                "description": "The distinct brands of the group's items, drafts and inactive items included and items in Trash left out, with the number of items carrying each, most used first. Brands are compared exactly, so \"Bosch\" and \"bosch\" are two entries.",
+                "description": "The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so \"Bosch\" and \"bosch\" are two entries.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],

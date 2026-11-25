@@ -163,6 +163,35 @@ function gate(): { promise: Promise<void>; release: () => void } {
   return { promise, release }
 }
 
+const coverFixture = {
+  file_id: "f2",
+  thumbnails: {
+    small: "https://files.example.test/f2/small.jpg",
+    medium: "https://files.example.test/f2/medium.jpg",
+    large: "https://files.example.test/f2/large.jpg",
+  },
+  source: "explicit" as const,
+}
+
+// Three photos linked to the item; f2 is the cover.
+function photoFiles() {
+  const photos = ["f1", "f2", "f3"].map((id) => ({
+    id,
+    attributes: {
+      title: `Photo ${id}`,
+      path: `${id}.jpg`,
+      category: "images",
+      type: "image",
+      mime_type: "image/jpeg",
+      links: [{ entity_type: "commodity", entity_id: ID }],
+    },
+  }))
+  const signed = Object.fromEntries(
+    photos.map((p) => [p.id, { url: `https://files.example.test/${p.id}/raw` }])
+  )
+  return fileHandlers.list(SLUG, photos, { signed_urls: signed })
+}
+
 beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
@@ -917,6 +946,48 @@ describe("<CommodityDetailPage />", () => {
     expect(String(capturedBody.value?.status_date ?? "")).toMatch(/^\d{4}-\d{2}-\d{2}$/)
   })
 
+  it("shows the cover photo beside the details and opens the viewer on it (#2797)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture, coverFixture),
+      ...photoFiles()
+    )
+    const { container } = renderDetail()
+    const cover = await screen.findByTestId("commodity-detail-cover")
+    expect(cover).toHaveAccessibleName(/view photos of macbook pro 16/i)
+    const img = within(cover).getByRole("img")
+    expect(img.getAttribute("srcset")).toContain("https://files.example.test/f2/large.jpg 600w")
+    expect(await within(cover).findByTestId("commodity-detail-photo-count")).toHaveTextContent(
+      "3 photos"
+    )
+    expect(await axe(container)).toHaveNoViolations()
+
+    // Enter on the focused cover opens the viewer on the cover photo.
+    cover.focus()
+    await user.keyboard("{Enter}")
+    const viewer = await screen.findByTestId("file-image-viewer")
+    expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("2 / 3")
+    await user.click(within(viewer).getByTestId("image-viewer-next"))
+    expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("3 / 3")
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByTestId("file-image-viewer")).toBeNull())
+  })
+
+  it("keeps the small type tile when the item has no photo (#2797)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    const thumb = await screen.findByTestId("commodity-detail-thumb")
+    expect(thumb).toHaveAttribute("data-state", "fallback")
+    expect(thumb.style.width).toBe("48px")
+    expect(screen.queryByTestId("commodity-detail-cover")).toBeNull()
+  })
+
   it("has no axe violations on a populated detail", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -978,6 +1049,19 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
       ),
     })
   }
+
+  it("shows the cover at 96px in the sheet, without the viewer (#2797)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture, coverFixture)
+    )
+    renderSheet()
+    const thumb = await screen.findByTestId("commodity-detail-thumb")
+    expect(thumb).toHaveAttribute("data-state", "image")
+    expect(thumb.style.width).toBe("96px")
+    expect(screen.queryByTestId("commodity-detail-cover")).toBeNull()
+  })
 
   it("renders the detail surface inside a Sheet panel", async () => {
     server.use(

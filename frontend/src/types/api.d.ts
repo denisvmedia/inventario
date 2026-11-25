@@ -3709,7 +3709,7 @@ export type paths = {
                     /** @description File ID */
                     fileID: string;
                     /** @description Thumbnail size */
-                    size: "small" | "medium";
+                    size: "small" | "medium" | "large";
                 };
                 cookie?: never;
             };
@@ -4176,7 +4176,7 @@ export type paths = {
         };
         /**
          * List commodity brands
-         * @description The distinct brands of the group's items, drafts and inactive items included and items in Trash left out, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
+         * @description The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
          */
         get: {
             parameters: {

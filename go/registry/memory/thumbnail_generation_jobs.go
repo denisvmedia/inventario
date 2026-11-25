@@ -105,20 +105,28 @@ func (r *ThumbnailGenerationJobRegistry) GetPendingJobs(ctx context.Context, lim
 	return pendingJobs, nil
 }
 
-// GetJobByFileID returns the thumbnail generation job for a specific file
+// GetJobByFileID returns the most recent thumbnail generation job for a
+// specific file, as the postgres registry does: a file may own several jobs
+// (a failed or completed job plus a newer one).
 func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error) {
 	jobs, err := r.List(ctx)
 	if err != nil {
 		return nil, err
 	}
 
+	var latest *models.ThumbnailGenerationJob
 	for _, job := range jobs {
-		if job.FileID == fileID {
-			return job, nil
+		if job.FileID != fileID {
+			continue
+		}
+		if latest == nil || job.CreatedAt.After(latest.CreatedAt) {
+			latest = job
 		}
 	}
-
-	return nil, registry.ErrNotFound
+	if latest == nil {
+		return nil, registry.ErrNotFound
+	}
+	return latest, nil
 }
 
 // ListByFileID returns every thumbnail generation job referencing the given

@@ -71,14 +71,6 @@ const (
 	defaultOrphanThumbnailBudgetPerTenant = 5000
 )
 
-// orphanGCThumbnailSizes is the exhaustive set of thumbnail size suffixes the
-// file service ever writes (see FileService.thumbnailSizes). A key whose size
-// segment is not in this set does not round-trip and is KEPT.
-var orphanGCThumbnailSizes = map[string]bool{
-	"small":  true,
-	"medium": true,
-}
-
 // orphanGCLinkAllowlist is the positive allowlist of link entity types the GC
 // understands, re-asserted in Go on every link of every candidate even though
 // the registry query already applied it. It excludes, structurally:
@@ -1552,7 +1544,7 @@ func parseThumbnailBlobKey(tenantID, key string) (fileID, size string, ok bool) 
 		return "", "", false
 	}
 	fileID, size = base[:idx], base[idx+1:]
-	if !orphanGCThumbnailSizes[size] {
+	if !IsThumbnailSize(size) {
 		return "", "", false
 	}
 	if blobkeys.BuildThumbnailBlobKey(tenantID, fileID, size) != key {

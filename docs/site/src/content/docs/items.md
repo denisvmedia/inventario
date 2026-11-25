@@ -84,7 +84,7 @@ The form is split across the five steps. Only a handful of fields are required
 | **Name** * | The full name, e.g. "Bosch SMV6ZCX42E dishwasher". |
 | **Short name** * | A 1–40 character label used in compact lists. |
 | **Brand** | Who made it, e.g. "Bosch". Up to 100 characters. As you type, the brands already used in your group are suggested, most used first; pick one with a click or with the arrow keys and Enter. |
-| **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. |
+| **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Compact cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. Photo cards show "Brand · Model" under the name when the item has either. |
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
 | **Type** * | **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, or **Other**. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
@@ -204,6 +204,13 @@ If you try to close the dialog with unsaved changes, Inventario asks whether to
 
 Opening an item shows its detail page, with the cover photo, key facts, and a
 row of tabs.
+
+When the item has a photo, its [cover photo](#the-cover-photo) sits beside the
+name and key facts (above them on a phone). When the item has more than one
+photo, a badge on the cover says how many. Click the cover, or press Enter on
+it, to open it full screen; use the arrows or the left and right arrow keys to
+go through the item's photos, and Esc to close. An item without a photo shows
+its type icon instead.
 
 ![An item detail page showing the cover photo, key facts, the row of tabs, and the Reminders card below the details](../../assets/screenshots/item-detail.png)
 
@@ -363,10 +370,16 @@ isn't available yet. Use your phone's camera app to open a label.
 
 ## The cover photo
 
-The cover photo is the image shown on cards and at the top of the detail page.
-If you haven't picked one, Inventario uses the first photo you attached. To set
-or change it, open the **Files** tab, find the image you want, and choose to set
-it as the cover. You can also clear the cover to fall back to the first photo.
+The cover photo is the image shown on the item's card on **All Items** and
+beside the details on the item page. If you haven't picked one, Inventario uses
+the first photo you attached. To set or change it, open the **Files** tab, find
+the image you want, and choose to set it as the cover. You can also clear the
+cover to fall back to the first photo.
+
+Inventario keeps smaller copies of each photo for cards and the item page, and
+loads the one that fits your screen. A photo that has no copy at the size a
+card needs yet shows a short "generating" placeholder the first time, while
+Inventario makes the copy.
 
 ## Status lifecycle
 
@@ -411,7 +424,19 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Clear filters** — reset everything back to the default view.
 - **Show inactive / Hide inactive** — include or hide items in an end status.
 
-A **Grid view** / **List view** toggle switches the layout.
+Three buttons at the right of the toolbar switch the layout:
+
+- **Photo cards** (the default) — a card per item with its cover photo on top,
+  then the name, area, status, tags, purchase date, and value. Two cards per row
+  on a phone, up to six on a wide screen.
+- **Compact cards** — the same facts with a small photo beside the name, three
+  cards per row at most.
+- **List** — a table with one row per item.
+
+When there are more than 24 items, **Items per page** under the list shows
+**24**, **48**, or **96** items per page. Inventario remembers the layout and
+the page size on this device; the Default view in [Settings](../settings-and-account/)
+picks the layout until you choose one here.
 
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a

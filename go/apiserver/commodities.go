@@ -164,7 +164,7 @@ const (
 // listCommodityBrands lists the brands the group's items carry, for the
 // brand input's suggestions.
 // @Summary List commodity brands
-// @Description The distinct brands of the group's items, drafts and inactive items included and items in Trash left out, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
+// @Description The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api

@@ -83,6 +83,7 @@ beforeEach(() => {
   // user's `appearance.default_items_view` preference. Wipe the cache
   // before each test so the default-view assertions land deterministically.
   localStorage.removeItem("commodities:viewMode")
+  localStorage.removeItem("commodities:pageSize")
   // Baseline /settings stub for every case. The page reads
   // `appearance.default_items_view` to compute the initial viewMode and
   // would otherwise issue an unhandled request the moment the group
@@ -214,16 +215,29 @@ describe("<CommoditiesListPage />", () => {
       ])
     )
     renderList()
-    const cards = await screen.findAllByTestId("commodity-card")
-    const subtitle = (id: string) =>
-      within(cards.find((c) => c.getAttribute("data-commodity-id") === id)!).getByTestId(
-        "commodity-card-subtitle"
-      )
+    const card = (id: string) =>
+      screen
+        .getAllByTestId("commodity-card")
+        .find((c) => c.getAttribute("data-commodity-id") === id)!
+    await screen.findAllByTestId("commodity-card")
+    // Photo cards show brand · model when the item has either, and nothing
+    // in its place otherwise: the photo and the name carry the card.
+    expect(within(card("c1")).getByTestId("commodity-card-subtitle")).toHaveTextContent(
+      /^Bosch · SMV6ZCX42E$/
+    )
+    expect(within(card("c2")).getByTestId("commodity-card-subtitle")).toHaveTextContent(/^Bosch$/)
+    expect(within(card("c3")).queryByTestId("commodity-card-subtitle")).toBeNull()
+
+    await user.click(screen.getByTestId("commodities-view-compact"))
+    await waitFor(() =>
+      expect(screen.getAllByTestId("commodity-card")[0]).toHaveAttribute("data-variant", "compact")
+    )
+    const subtitle = (id: string) => within(card(id)).getByTestId("commodity-card-subtitle")
     expect(subtitle("c1")).toHaveTextContent(/^Bosch · SMV6ZCX42E$/)
     expect(subtitle("c2")).toHaveTextContent(/^Bosch$/)
     expect(subtitle("c3")).toHaveTextContent(/^Grinder$/)
-    for (const card of cards) {
-      expect(within(card).getByTestId("commodity-card-area")).toBeInTheDocument()
+    for (const id of ["c1", "c2", "c3"]) {
+      expect(within(card(id)).getByTestId("commodity-card-area")).toBeInTheDocument()
     }
 
     await user.click(screen.getByTestId("commodities-view-list"))
@@ -243,6 +257,59 @@ describe("<CommoditiesListPage />", () => {
     await user.click(screen.getByTestId("commodities-view-list"))
     await waitFor(() => expect(screen.getByTestId("commodities-table")).toBeInTheDocument())
     expect(screen.queryByTestId("commodities-grid")).not.toBeInTheDocument()
+  })
+
+  it("shows photo cards by default and switches to compact cards (#2797)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })], {
+        c1: {
+          file_id: "f1",
+          thumbnails: {
+            small: "https://example.test/c1-small.jpg",
+            medium: "https://example.test/c1-medium.jpg",
+            large: "https://example.test/c1-large.jpg",
+          },
+          source: "first_photo",
+        },
+      })
+    )
+    const { container } = renderList()
+    const card = await screen.findByTestId("commodity-card")
+    expect(card).toHaveAttribute("data-variant", "photo")
+    expect(screen.getByTestId("commodities-grid")).toHaveAttribute("data-view", "grid")
+    expect(screen.getByTestId("commodities-view-grid")).toHaveAttribute("aria-pressed", "true")
+    // The photo card offers every thumbnail size; the browser picks one
+    // for the card's width.
+    const img = within(card).getByRole("img")
+    expect(img.getAttribute("srcset")).toContain("https://example.test/c1-large.jpg 600w")
+    expect(img).toHaveAttribute("loading", "lazy")
+    // An item without a known value shows a dash, not a zero.
+    expect(within(card).getByText("—")).toBeInTheDocument()
+    expect(await axe(container)).toHaveNoViolations()
+
+    await user.click(screen.getByTestId("commodities-view-compact"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-card")).toHaveAttribute("data-variant", "compact")
+    )
+    expect(screen.getByTestId("commodities-grid")).toHaveAttribute("data-view", "compact")
+    expect(screen.getByTestId("commodities-view-compact")).toHaveAttribute("aria-pressed", "true")
+    expect(localStorage.getItem("commodities:viewMode")).toBe("compact")
+  })
+
+  it("uses preferences default_items_view='compact' as the initial view mode (#2797)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })]),
+      settingsStub({ appearanceDefaultItemsView: "compact" })
+    )
+    renderList()
+    await waitFor(() =>
+      expect(screen.getByTestId("commodities-grid")).toHaveAttribute("data-view", "compact")
+    )
   })
 
   // #1643 acceptance: with no URL ?view= override and an empty
@@ -1205,6 +1272,68 @@ describe("<CommoditiesListPage />", () => {
 
     await user.click(within(alert).getByRole("button", { name: "Clear filters" }))
     expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+  })
+
+  it("offers 24, 48 or 96 items per page and keeps the first item in view (#2797)", async () => {
+    const user = userEvent.setup()
+    const queries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({
+          data: [commodityRes("c1", { name: "Item" })],
+          meta: { commodities: 120 },
+        })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?page=3`)
+    await screen.findByTestId("commodity-card")
+    expect(queries.at(-1)?.get("per_page")).toBe("24")
+    expect(screen.getByTestId("commodities-page-size")).toHaveTextContent("24")
+
+    await pickRadixSelect(user, /items per page/i, { optionLabel: /^48$/ })
+    // Page 3 of 24 starts at item 49, which is on page 2 of 48.
+    await waitFor(() => {
+      const last = queries.at(-1)
+      expect(last?.get("per_page")).toBe("48")
+      expect(last?.get("page")).toBe("2")
+    })
+    expect(localStorage.getItem("commodities:pageSize")).toBe("48")
+  })
+
+  it("reads the page size from the URL (#2797)", async () => {
+    const queries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({
+          data: [commodityRes("c1", { name: "Item" })],
+          meta: { commodities: 200 },
+        })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?per_page=96`)
+    await screen.findByTestId("commodity-card")
+    expect(queries.at(-1)?.get("per_page")).toBe("96")
+    expect(screen.getByTestId("commodities-page-size")).toHaveTextContent("96")
+    // 200 items at 96 a page is three pages.
+    expect(screen.getByTestId("commodities-pagination")).toBeInTheDocument()
+  })
+
+  it("hides the page size choice when every item fits on the smallest page (#2797)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Item" })])
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    expect(screen.queryByTestId("commodities-page-size")).toBeNull()
+    expect(screen.queryByTestId("commodities-pagination")).toBeNull()
   })
 
   it("has no axe violations on the empty state", async () => {

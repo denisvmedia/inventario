@@ -21,6 +21,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
   them (format 3.2; a 3.1 archive restores with them empty)
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 
+- Item photos large enough to recognize an item by. The items list opens on
+  photo cards: the cover photo on top at 4:3, then the name and key facts,
+  from two cards a row on a phone to six on a wide screen. The previous cards
+  stay as **Compact cards** next to **List**, and Settings → Appearance →
+  Default view offers all three. The list shows 24, 48 or 96 items per page,
+  remembered on the device. On the item page the cover sits beside the details
+  and opens the full-screen viewer, which goes through the item's photos.
+  Thumbnails gain a `large` size (600 px) for these surfaces; a photo uploaded
+  earlier gets it the first time a card shows it
+  ([#2797](https://github.com/denisvmedia/inventario/issues/2797)).
+
 - A search field in the top bar of every page, an icon button on phones,
   opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
   group's matching items, locations, areas, files and tags by kind. An area or

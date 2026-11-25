@@ -41,6 +41,13 @@
     "acquisitionPrice": "Původně zakoupeno za {{price}}",
     "assetId": "Inventární číslo",
     "backToList": "Zpět na položky",
+    "cover": {
+      "open": "Zobrazit fotografie položky {{name}}",
+      "photoCount_one": "{{count}} fotografie",
+      "photoCount_few": "{{count}} fotografie",
+      "photoCount_many": "{{count}} fotografie",
+      "photoCount_other": "{{count}} fotografií"
+    },
     "delete": "Smazat",
     "documentTitle": "Položka",
     "edit": "Upravit",
@@ -465,14 +472,16 @@
     "heading": "Položky",
     "invalidQueryDescription": "Odkaz žádá filtr, který seznam položek neumí použít ({{parameter}}). Vymažte filtry a zobrazte své položky.",
     "invalidQueryTitle": "Tento filtr není podporován",
+    "pageSize": "Položek na stránku",
     "searchPlaceholder": "Hledat podle názvu, značky, modelu, sériového čísla, čísla dílu, štítku, poznámek nebo inventárního čísla…",
     "selectAll": "Vybrat vše viditelné",
     "subtitle_one": "{{count}} položka v této skupině",
     "subtitle_few": "{{count}} položky v této skupině",
     "subtitle_many": "{{count}} položky v této skupině",
     "subtitle_other": "{{count}} položek v této skupině",
-    "viewGrid": "Zobrazení mřížky",
-    "viewList": "Zobrazení seznamu"
+    "viewCompact": "Kompaktní karty",
+    "viewGrid": "Karty s fotografiemi",
+    "viewList": "Seznam"
   },
   "pagination": {
     "label": "Stránkování",

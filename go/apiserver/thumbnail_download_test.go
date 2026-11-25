@@ -106,7 +106,7 @@ func (e *thumbnailDownloadEnv) get(c *qt.C, fileID, size string) *httptest.Respo
 	return w
 }
 
-// Anything outside the two known sizes is refused before the file is even
+// Anything outside the known sizes is refused before the file is even
 // looked up. `size` reaches the storage key, so a value that walks out of the
 // namespace must never get that far.
 func TestDownloadThumbnail_SizeIsAnAllowlist(t *testing.T) {
@@ -114,7 +114,7 @@ func TestDownloadThumbnail_SizeIsAnAllowlist(t *testing.T) {
 		name string
 		size string
 	}{
-		{"a size that does not exist", "large"},
+		{"a size that does not exist", "huge"},
 		{"empty", ""},
 		{"parent traversal", "../../etc/passwd"},
 		{"a nested path", "small/../../secrets"},
@@ -155,7 +155,7 @@ func TestDownloadThumbnail_UnknownFileID(t *testing.T) {
 // The first view of an image has no thumbnail yet. That is the common case,
 // and it must serve the placeholder and enqueue generation rather than fail.
 func TestDownloadThumbnail_NoThumbnailYetServesThePlaceholder(t *testing.T) {
-	for _, size := range []string{"small", "medium"} {
+	for _, size := range []string{"small", "medium", "large"} {
 		t.Run(size, func(t *testing.T) {
 			c := qt.New(t)
 			env := newThumbnailDownloadEnv(c)
@@ -178,11 +178,40 @@ func TestDownloadThumbnail_BadSizeIsRefusedBeforeTheLookup(t *testing.T) {
 	c := qt.New(t)
 	env := newThumbnailDownloadEnv(c)
 
-	w := env.get(c, "00000000-0000-0000-0000-000000000000", "large")
+	w := env.get(c, "00000000-0000-0000-0000-000000000000", "huge")
 	c.Assert(w.Code, qt.Equals, http.StatusNotFound)
 
 	// Nothing was enqueued for a file that does not exist.
 	jobReg := env.api.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 	_, err := jobReg.GetJobByFileID(env.ctx, "00000000-0000-0000-0000-000000000000")
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A completed job with a missing thumbnail rendered fewer sizes than there are
+// now (the large size is newer than most photos), so the view enqueues a new
+// job instead of serving the placeholder for good.
+func TestDownloadThumbnail_MissingSizeAfterACompletedJobEnqueuesAgain(t *testing.T) {
+	c := qt.New(t)
+	env := newThumbnailDownloadEnv(c)
+
+	jobReg := env.api.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
+	user := appctx.UserFromContext(env.ctx)
+	done, err := jobReg.Create(env.ctx, models.ThumbnailGenerationJob{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: user.TenantID, UserID: user.ID},
+		FileID:                  env.fileID,
+		Status:                  models.ThumbnailStatusCompleted,
+		MaxAttempts:             3,
+		CreatedAt:               time.Now().Add(-time.Hour),
+		UpdatedAt:               time.Now().Add(-time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+
+	w := env.get(c, env.fileID, "large")
+	c.Assert(w.Code, qt.Equals, http.StatusOK)
+	c.Check(w.Header().Get("Content-Type"), qt.Equals, "image/gif")
+
+	job, err := jobReg.GetJobByFileID(env.ctx, env.fileID)
+	c.Assert(err, qt.IsNil)
+	c.Check(job.ID, qt.Not(qt.Equals), done.ID)
+	c.Check(job.Status, qt.Equals, models.ThumbnailStatusPending)
 }

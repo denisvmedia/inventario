@@ -882,7 +882,7 @@ func TestFileService_GenerateThumbnails(t *testing.T) {
 			if tt.shouldGenerateThumbnails {
 				// Check that thumbnails were created
 				thumbnailPaths := service.GetThumbnailPaths(fileEntity.TenantID, fileEntity.ID)
-				c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
+				c.Assert(thumbnailPaths, qt.HasLen, 3) // small, medium and large
 
 				for sizeName, thumbnailPath := range thumbnailPaths {
 					exists, err := b.Exists(ctx, thumbnailPath)
@@ -920,6 +920,7 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 			expected: map[string]string{
 				"small":  "t/tenant-a/thumbnails/test-file-123_small.jpg",
 				"medium": "t/tenant-a/thumbnails/test-file-123_medium.jpg",
+				"large":  "t/tenant-a/thumbnails/test-file-123_large.jpg",
 			},
 		},
 		{
@@ -929,6 +930,7 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 			expected: map[string]string{
 				"small":  "t/tenant-a/thumbnails/photo-456_small.jpg",
 				"medium": "t/tenant-a/thumbnails/photo-456_medium.jpg",
+				"large":  "t/tenant-a/thumbnails/photo-456_large.jpg",
 			},
 		},
 		{
@@ -938,6 +940,7 @@ func TestFileService_GetThumbnailPaths(t *testing.T) {
 			expected: map[string]string{
 				"small":  "t/tenant-b/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_small.jpg",
 				"medium": "t/tenant-b/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_medium.jpg",
+				"large":  "t/tenant-b/thumbnails/f47ac10b-58cc-4372-a567-0e02b2c3d479_large.jpg",
 			},
 		},
 	}

@@ -1084,9 +1084,8 @@ func TestOrphanFileGC_NeverSweepsAnythingButThumbnails(t *testing.T) {
 	}
 }
 
-// A live file's thumbnail must survive: RequestThumbnailGeneration returns the
-// EXISTING job and enqueues nothing unless its status is 'failed', so a deleted
-// thumbnail on a live file does NOT self-heal — it would be a visible,
+// A live file's thumbnail must survive: a deleted thumbnail on a live file shows
+// the "generating" placeholder until a worker renders it again, a visible,
 // user-facing regression.
 func TestOrphanFileGC_LiveFileThumbnailIsNeverSwept(t *testing.T) {
 	c := qt.New(t)
@@ -1133,7 +1132,7 @@ func TestOrphanFileGC_UnparseableThumbnailKeyIsNeverSwept(t *testing.T) {
 	keys := []string{
 		prefix + "garbage",                    // no size, no extension
 		prefix + "nested/dir/file_small.jpg",  // nesting is not a legal thumbnail key
-		prefix + "some-file-id_large.jpg",     // 'large' is not a thumbnail size we write
+		prefix + "some-file-id_huge.jpg",      // 'huge' is not a thumbnail size we write
 		prefix + "some-file-id_small.png",     // thumbnails are always JPEG
 		prefix + "_small.jpg",                 // empty file id
 		prefix + "some-file-id_.jpg",          // empty size
@@ -1274,14 +1273,17 @@ func TestOrphanFileGC_SweepsOrphanThumbnails(t *testing.T) {
 
 	small := blobkeys.BuildThumbnailBlobKey(f.tenantID, "a-file-id-with-no-row", "small")
 	medium := blobkeys.BuildThumbnailBlobKey(f.tenantID, "a-file-id-with-no-row", "medium")
+	large := blobkeys.BuildThumbnailBlobKey(f.tenantID, "a-file-id-with-no-row", "large")
 	f.writeBlob(small, []byte("s"))
 	f.writeBlob(medium, []byte("m"))
+	f.writeBlob(large, []byte("l"))
 	f.backdateBlobs(30 * 24 * time.Hour)
 
 	f.sweep()
 
 	c.Assert(f.blobExists(small), qt.IsFalse, qt.Commentf("the orphan thumbnail survived"))
 	c.Assert(f.blobExists(medium), qt.IsFalse)
+	c.Assert(f.blobExists(large), qt.IsFalse)
 }
 
 // Two `run workers` replicas sweep concurrently (no cleanup worker in the tree
@@ -1594,9 +1596,9 @@ func TestOrphanFileGC_LogsDeletedOnlyAfterTheDeleteSucceeded(t *testing.T) {
 
 // The blob-side gates need their own reds: the row-side tests seed no blob, so
 // they cannot tell whether the THUMBNAIL sweep honours the in-flight gate and the
-// tenant-status guard. A deleted thumbnail does not self-heal
-// (RequestThumbnailGeneration returns the existing job unless it is 'failed'), so
-// this is a user-visible regression, not a free re-render.
+// tenant-status guard. A deleted thumbnail shows the "generating" placeholder
+// until a worker renders it again, so this is a user-visible regression, not a
+// free re-render.
 func TestOrphanFileGC_ThumbnailSweepHonoursTenantGuards(t *testing.T) {
 	tests := []struct {
 		name         string
@@ -1807,7 +1809,7 @@ func TestOrphanFileGC_ThumbnailListingResumesOnTheNextTick(t *testing.T) {
 
 	// Two keys that are always KEPT (they do not round-trip), sorting FIRST, and
 	// an orphan thumbnail sorting last. blob.List walks keys lexicographically.
-	kept := []string{prefix + "aaa-1_large.jpg", prefix + "aaa-2_large.jpg"}
+	kept := []string{prefix + "aaa-1_huge.jpg", prefix + "aaa-2_huge.jpg"}
 	for _, k := range kept {
 		f.writeBlob(k, []byte("x"))
 	}

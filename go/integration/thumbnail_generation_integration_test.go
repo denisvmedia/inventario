@@ -136,7 +136,7 @@ func verifyThumbnailsInStorage(c *qt.C, ctx context.Context, uploadLocation, ori
 	testFileID := "test-file-123" // This matches the ID in the fileEntity above
 	thumbnailPaths := fileService.GetThumbnailPaths(tenantID, testFileID)
 
-	c.Assert(thumbnailPaths, qt.HasLen, 2) // small and medium
+	c.Assert(thumbnailPaths, qt.HasLen, 3) // small, medium and large
 
 	for sizeName, thumbnailPath := range thumbnailPaths {
 		exists, err := b.Exists(ctx, thumbnailPath)
@@ -167,9 +167,10 @@ func verifySignedURLGeneration(c *qt.C, fileSigningService *services.FileSigning
 	c.Assert(err, qt.IsNil)
 	c.Assert(originalURL, qt.Not(qt.Equals), "")
 	c.Assert(thumbnails, qt.IsNotNil)
-	c.Assert(thumbnails, qt.HasLen, 2) // small and medium
+	c.Assert(thumbnails, qt.HasLen, 3) // small, medium and large
 	c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 	c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
+	c.Assert(thumbnails["large"], qt.Not(qt.Equals), "")
 
 	// Verify thumbnail URLs contain expected paths - current implementation uses /thumbnails/{fileID}/{size}
 	c.Assert(thumbnails["small"], qt.Contains, "/thumbnails/")

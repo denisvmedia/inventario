@@ -9,12 +9,17 @@ import {
 } from "@/features/commodities/constants"
 import type { CommodityCover } from "@/features/commodities/api"
 
-// Thumbnail variant the BE generates today (`small` = 150px,
-// `medium` = 300px). `auto` picks the smallest variant that fits the
-// requested slot — matches the `<img>` sizing rule of "never serve more
-// pixels than will be drawn". The BE may add a `large` later; that goes
-// here without touching call sites.
-export type CommodityThumbVariant = "small" | "medium" | "auto"
+// The thumbnail sizes the BE renders (services/thumbnail_sizes.go), by the
+// longest side in pixels. The cover carries one signed URL per size.
+const THUMBNAIL_WIDTHS: Record<string, number> = {
+  small: 150,
+  medium: 300,
+  large: 600,
+}
+
+// `auto` lets the browser pick from every size by the slot's width and the
+// screen's pixel density (srcset + sizes). The others force one size.
+export type CommodityThumbVariant = "small" | "medium" | "large" | "auto"
 
 export interface CommodityThumbProps {
   cover?: CommodityCover
@@ -24,28 +29,32 @@ export interface CommodityThumbProps {
   // "Commodity photo" when omitted so screen readers always have
   // something to announce.
   name?: string
-  // `size` sets the actual pixel box. The component clamps `<img>` to
-  // these dimensions to avoid CLS, so the caller controls layout.
-  size: number
-  // `variant` lets the caller force a specific thumbnail size. Default
-  // `auto` picks `small` for boxes ≤ 150px and `medium` otherwise.
+  // `size` sets a fixed square box in pixels. Omit it with `fill`.
+  size?: number
+  // `fill` makes the thumbnail fill its parent instead: the caller sizes
+  // the box (a fixed aspect ratio keeps the layout from shifting) and
+  // passes `sizes`, the width the box is drawn at.
+  fill?: boolean
+  // The `sizes` attribute for the srcset. Defaults to `${size}px`.
+  sizes?: string
   variant?: CommodityThumbVariant
   // Tailwind classes appended to the outer slot. The default rounded
   // muted box mirrors the existing icon-only styling.
   className?: string
   // `imgClassName` is forwarded onto the `<img>` itself when a cover is
-  // rendered. Useful for the detail-page hero which wants
-  // `object-cover` on a wider aspect ratio.
+  // rendered.
   imgClassName?: string
+  // Classes for the fallback icon in `fill` mode, where there is no pixel
+  // size to scale it from. Defaults to `size-10`.
+  iconClassName?: string
   // `data-testid` propagates onto the outer slot so tests can locate
   // the thumbnail without descending into the DOM.
   testId?: string
 }
 
-// pickThumbnailURL chooses a usable URL from the variant map. `variant`
-// "auto" prefers the smallest variant that's at least as large as the
-// requested slot, falling back to the first available URL. Returns
-// undefined when the cover map is empty.
+// pickThumbnailURL chooses the `src`: the forced variant, or for `auto` the
+// smallest size at least as large as the slot, falling back to any URL the
+// BE returned. Returns undefined when the cover map is empty.
 function pickThumbnailURL(
   cover: CommodityCover,
   variant: CommodityThumbVariant,
@@ -53,39 +62,50 @@ function pickThumbnailURL(
 ): string | undefined {
   const map = cover.thumbnails
   if (!map) return undefined
-  if (variant === "small" && map.small) return map.small
-  if (variant === "medium" && map.medium) return map.medium
-  // Auto: pick the smallest variant that meets the requested pixel
-  // size. `small` is 150px today; bump to `medium` (300px) for boxes
-  // that would visibly upscale `small`.
-  if (variant === "auto") {
-    if (size <= 150 && map.small) return map.small
-    if (map.medium) return map.medium
-    if (map.small) return map.small
-  }
-  // Last-resort fallback: any URL the BE returned.
-  const first = Object.values(map).find(Boolean)
-  return first
+  if (variant !== "auto" && map[variant]) return map[variant]
+  const bySize = Object.entries(THUMBNAIL_WIDTHS)
+    .filter(([name]) => map[name])
+    .sort(([, a], [, b]) => a - b)
+  const fit = bySize.find(([, width]) => width >= size) ?? bySize.at(-1)
+  if (fit) return map[fit[0]]
+  return Object.values(map).find(Boolean)
+}
+
+// thumbnailSrcSet lists every known size of the cover with its width, so
+// the browser fetches no more pixels than the slot draws on this screen.
+function thumbnailSrcSet(cover: CommodityCover): string | undefined {
+  const entries = Object.entries(THUMBNAIL_WIDTHS)
+    .filter(([name]) => cover.thumbnails?.[name])
+    .sort(([, a], [, b]) => a - b)
+    .map(([name, width]) => `${cover.thumbnails[name]} ${width}w`)
+  return entries.length > 1 ? entries.join(", ") : undefined
 }
 
 // CommodityThumb renders the cover photo for a commodity, falling back
 // to the type Lucide icon when no cover is available or the image
-// fails to load. Used by the list card / table row, the Sheet preview,
-// and the detail-page hero (issue #1451 option A; icons in #1392).
+// fails to load. Used by the list cards and rows and the item page
+// header (issue #1451 option A; icons in #1392).
 export function CommodityThumb({
   cover,
   type,
   name,
   size,
+  fill = false,
+  sizes,
   variant = "auto",
   className,
   imgClassName,
+  iconClassName,
   testId,
 }: CommodityThumbProps) {
+  // `fill` boxes are drawn at whatever the layout gives them; `medium` is
+  // the `src` for the rare browser without srcset support.
+  const slotPx = size ?? THUMBNAIL_WIDTHS.medium
+  const url = cover ? pickThumbnailURL(cover, variant, slotPx) : undefined
+  const srcSet = cover && variant === "auto" ? thumbnailSrcSet(cover) : undefined
   // Reset the load-failure flag when the cover URL changes — otherwise
   // a once-failed image keeps rendering the fallback icon even after
   // the user re-uploads a new working photo.
-  const url = cover ? pickThumbnailURL(cover, variant, size) : undefined
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     // Reset failure flag when the URL changes (sync external prop → state).
@@ -94,19 +114,19 @@ export function CommodityThumb({
   }, [url])
 
   const Icon = type ? COMMODITY_TYPE_ICONS[type] : COMMODITY_TYPE_FALLBACK_ICON
-  const dim = `${size}px`
   const showImage = Boolean(url) && !failed
   // Icon glyph scales with the slot; cap at ~50% so it reads as a
   // pictogram inside the rounded-lg tile rather than dominating it.
-  const iconPx = Math.max(12, Math.round(size * 0.5))
+  const iconPx = Math.max(12, Math.round(slotPx * 0.5))
 
   return (
     <div
       className={cn(
         "relative flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted",
+        fill && "size-full",
         className
       )}
-      style={{ width: dim, height: dim }}
+      style={fill ? undefined : { width: `${slotPx}px`, height: `${slotPx}px` }}
       data-testid={testId}
       data-state={showImage ? "image" : "fallback"}
       data-commodity-type={type ?? "unknown"}
@@ -114,13 +134,21 @@ export function CommodityThumb({
       {showImage ? (
         <FadeInImage
           src={url}
+          srcSet={srcSet}
+          sizes={srcSet ? (sizes ?? `${slotPx}px`) : undefined}
           alt={name ?? "Commodity photo"}
           loading="lazy"
-          width={size}
-          height={size}
+          width={fill ? undefined : slotPx}
+          height={fill ? undefined : slotPx}
           className={cn("h-full w-full object-cover", imgClassName)}
           onError={() => setFailed(true)}
           data-testid={testId ? `${testId}-img` : undefined}
+        />
+      ) : fill ? (
+        <Icon
+          aria-hidden="true"
+          className={cn("size-10 text-muted-foreground", iconClassName)}
+          data-testid={testId ? `${testId}-icon` : undefined}
         />
       ) : (
         <Icon
