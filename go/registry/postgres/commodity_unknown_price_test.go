@@ -10,6 +10,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/validationctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -172,27 +173,75 @@ func TestCommodityRegistry_BackfillLegacyPrices(t *testing.T) {
 	c.Assert(rewritten, qt.Equals, 0)
 }
 
-func TestCommodityRegistry_UpdateClearsLegacyFlag(t *testing.T) {
+func TestCommodityRegistry_UpdateBeforeBackfill(t *testing.T) {
 	f := newUnknownPricePGFixture(t)
 	c := qt.New(t)
 
-	legacy := f.create(c, models.Commodity{Name: "legacy", OriginalPrice: new(decimal.NewFromInt(50))})
-	_, err := f.db.ExecContext(c.Context(), `UPDATE commodities SET current_price = 0, legacy_zero_prices = true WHERE id = $1`, legacy.ID)
+	echoed := f.create(c, models.Commodity{
+		Name: "echoed", OriginalPrice: new(decimal.NewFromInt(50)), OriginalPriceCurrency: "EUR",
+		ConvertedOriginalPrice: new(decimal.NewFromInt(55)),
+	})
+	changed := f.create(c, models.Commodity{Name: "changed", OriginalPrice: new(decimal.NewFromInt(50))})
+	_, err := f.db.ExecContext(c.Context(),
+		`UPDATE commodities SET current_price = 0, converted_original_price = 0, legacy_zero_prices = true WHERE id = ANY($1)`,
+		[]string{echoed.ID, changed.ID})
 	c.Assert(err, qt.IsNil)
 
-	// The user saves the item with a known zero current value before the
-	// backfill reaches it. The save states what is known, so the backfill
-	// must leave it alone.
-	legacy.CurrentPrice = new(decimal.Zero)
-	_, err = f.set.CommodityRegistry.Update(f.ctx, *legacy)
+	// A full-row write before the backfill reaches the rows: one sends back
+	// the legacy zeros it read (an edit of another field, a status change),
+	// the other enters a current value of its own.
+	staleEcho, err := f.set.CommodityRegistry.Get(f.ctx, echoed.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(staleEcho.CurrentPrice.IsZero(), qt.IsTrue)
+	staleEcho.Comments = "edited"
+	_, err = f.set.CommodityRegistry.Update(f.ctx, *staleEcho)
 	c.Assert(err, qt.IsNil)
 
+	staleChanged, err := f.set.CommodityRegistry.Get(f.ctx, changed.ID)
+	c.Assert(err, qt.IsNil)
+	staleChanged.CurrentPrice = new(decimal.NewFromInt(30))
+	_, err = f.set.CommodityRegistry.Update(f.ctx, *staleChanged)
+	c.Assert(err, qt.IsNil)
+
+	// Both writes cleared the flag, so the backfill has nothing left.
 	rewritten, err := f.service.BackfillLegacyPrices(c.Context())
 	c.Assert(err, qt.IsNil)
 	c.Assert(rewritten, qt.Equals, 0)
 
-	got, err := f.set.CommodityRegistry.Get(f.ctx, legacy.ID)
+	gotEcho, err := f.set.CommodityRegistry.Get(f.ctx, echoed.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(got.CurrentPrice, qt.IsNotNil)
-	c.Assert(got.CurrentPrice.String(), qt.Equals, "0")
+	c.Assert(gotEcho.CurrentPrice, qt.IsNil)
+	c.Assert(gotEcho.ConvertedOriginalPrice, qt.IsNil)
+	c.Assert(gotEcho.Comments, qt.Equals, "edited")
+
+	gotChanged, err := f.set.CommodityRegistry.Get(f.ctx, changed.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(gotChanged.CurrentPrice, qt.IsNotNil)
+	c.Assert(gotChanged.CurrentPrice.String(), qt.Equals, "30")
+}
+
+func TestCommodityRegistry_GroupCurrencyItemDropsConvertedPrice(t *testing.T) {
+	f := newUnknownPricePGFixture(t)
+	c := qt.New(t)
+	ctx := validationctx.WithGroupCurrency(f.ctx, "USD")
+
+	// A client written before #2813 sends a converted zero for "not
+	// entered" and omits the original price.
+	created, err := f.set.CommodityRegistry.Create(ctx, models.Commodity{
+		Name: "gift", ShortName: "gift", Type: models.CommodityTypeOther,
+		Status: models.CommodityStatusInUse, Count: 1, AreaID: new(f.areaID),
+		OriginalPriceCurrency: "USD", ConvertedOriginalPrice: new(decimal.Zero),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created.ConvertedOriginalPrice, qt.IsNil)
+
+	created.ConvertedOriginalPrice = new(decimal.Zero)
+	_, err = f.set.CommodityRegistry.Update(ctx, *created)
+	c.Assert(err, qt.IsNil)
+
+	got, err := f.set.CommodityRegistry.Get(f.ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.ConvertedOriginalPrice, qt.IsNil)
+	_, known := got.Value("USD")
+	c.Assert(known, qt.IsFalse)
 }

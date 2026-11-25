@@ -16,7 +16,7 @@ function commodity(overrides: Record<string, unknown> = {}): Commodity {
 }
 
 describe("aggregateLocationTotals", () => {
-  it("sums the purchase price in the group currency and the current value", () => {
+  it("sums the purchase price in the group currency and each item's value", () => {
     const totals = aggregateLocationTotals(
       [
         // Paid in the group currency: the purchase price itself counts.
@@ -65,6 +65,34 @@ describe("aggregateLocationTotals", () => {
     expect(totals.count).toBe(4)
     expect(totals.purchase).toEqual({ total: 0, included: 1, excluded: 3 })
     expect(totals.value).toEqual({ total: 1200, included: 2, excluded: 2 })
+  })
+
+  it("values an item without a current value at its purchase price, as the dashboard does", () => {
+    const totals = aggregateLocationTotals(
+      [
+        commodity({ original_price: "100", current_price: null }),
+        commodity({
+          original_price: "200",
+          original_price_currency: "EUR",
+          converted_original_price: "250",
+          current_price: null,
+        }),
+        commodity({ original_price: "40", current_price: "30" }),
+      ],
+      "USD"
+    )
+    expect(totals.value).toEqual({ total: 380, included: 3, excluded: 0 })
+  })
+
+  it("ignores a converted zero on an item paid in the group currency", () => {
+    // What clients written before unknown prices existed send for "not
+    // entered": the purchase price stays unknown, not zero.
+    const totals = aggregateLocationTotals(
+      [commodity({ original_price: null, converted_original_price: "0", current_price: null })],
+      "USD"
+    )
+    expect(totals.purchase).toEqual({ total: 0, included: 0, excluded: 1 })
+    expect(totals.value).toEqual({ total: 0, included: 0, excluded: 1 })
   })
 
   it("returns zeroed totals for an empty location", () => {

@@ -13998,7 +13998,7 @@
                     "type": "string"
                 },
                 "converted_original_price": {
-                    "description": "ConvertedOriginalPrice is the purchase price in the group currency. It\nonly applies when OriginalPriceCurrency is a foreign currency.",
+                    "description": "ConvertedOriginalPrice is the purchase price in the group currency, null\nwhen unknown. It applies only when OriginalPriceCurrency is a foreign\ncurrency; for an item bought in the group currency it is always null.",
                     "type": "number",
                     "x-nullable": "true"
                 },
@@ -14010,7 +14010,7 @@
                     "type": "string"
                 },
                 "current_price": {
-                    "description": "CurrentPrice is the current value in the group currency.",
+                    "description": "CurrentPrice is the current value in the group currency, null when\nunknown. When known, 0 included, it is the item's value in every total;\notherwise the purchase price in the group currency stands in.",
                     "type": "number",
                     "x-nullable": "true"
                 },
@@ -14033,7 +14033,7 @@
                     "type": "string"
                 },
                 "original_price": {
-                    "description": "The three prices are nil when unknown, which is distinct from a known\nzero (a gift, a free item). An item may be reviewed with any of them\nunknown; see Value for how they combine into a valuation.\n\nOriginalPrice is the purchase price in OriginalPriceCurrency.",
+                    "description": "OriginalPrice is the purchase price in OriginalPriceCurrency, null when\nunknown. Each of the three prices can be unknown on its own, and\nunknown is not zero: a gift's price is unknown, a free item's is 0. A\nreviewed item may leave any of them unknown.",
                     "type": "number",
                     "x-nullable": "true"
                 },

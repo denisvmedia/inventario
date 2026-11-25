@@ -126,7 +126,9 @@ describe("<DashboardPage />", () => {
     )
     renderDashboard()
     await waitFor(() =>
-      expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("Sum of current prices")
+      expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent(
+        "Sum of current values or purchase prices"
+      )
     )
     expect(screen.getByTestId("dashboard-total-value")).not.toHaveTextContent(/Excludes/)
   })

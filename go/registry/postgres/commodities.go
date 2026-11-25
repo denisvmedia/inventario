@@ -116,6 +116,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeAreaID()
 
 	// Every row written now tells an unknown price from a zero one.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
 	// The asset number is server-managed: whatever the caller sent is
@@ -652,6 +653,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	if existing, err := r.get(ctx, commodity.GetID()); err == nil && existing != nil {
 		commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
+		commodity.UnsetEchoedLegacyZeros(existing)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
@@ -659,6 +661,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeAreaID()
 
 	// The caller's prices tell unknown from zero, whatever the row held.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
 	reg := r.newSQLRegistry()

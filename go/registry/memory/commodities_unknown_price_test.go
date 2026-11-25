@@ -9,6 +9,7 @@ import (
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/validationctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
@@ -101,4 +102,22 @@ func TestCommodityRegistry_BackfillLegacyPrices_NothingToRewrite(t *testing.T) {
 	got := must.Must(set.CommodityRegistry.Get(ctx, created.ID))
 	c.Assert(got.CurrentPrice, qt.IsNotNil)
 	c.Assert(got.CurrentPrice.IsZero(), qt.IsTrue)
+}
+
+func TestCommodityRegistry_GroupCurrencyItemDropsConvertedPrice(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newUnknownPriceSet(c)
+	ctx = validationctx.WithGroupCurrency(ctx, "USD")
+
+	// A client written before #2813 sends a converted zero for "not
+	// entered" and omits the original price.
+	created := createPriced(c, ctx, set, models.Commodity{Name: "gift", ConvertedOriginalPrice: new(decimal.Zero)})
+	c.Assert(created.ConvertedOriginalPrice, qt.IsNil)
+
+	created.ConvertedOriginalPrice = new(decimal.Zero)
+	updated, err := set.CommodityRegistry.Update(ctx, *created)
+	c.Assert(err, qt.IsNil)
+	c.Assert(updated.ConvertedOriginalPrice, qt.IsNil)
+	_, known := updated.Value("USD")
+	c.Assert(known, qt.IsFalse)
 }

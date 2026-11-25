@@ -219,11 +219,34 @@ describe("<InsuranceReportPage /> — location mode", () => {
     expect(purchase).toHaveTextContent("Excludes 1 item without a purchase price")
     const value = within(report).getByTestId("report-location-total-value")
     expect(value).toHaveTextContent("$650.00")
-    expect(value).toHaveTextContent("Excludes 1 item without a current value")
+    expect(value).toHaveTextContent("Excludes 1 item without a value")
 
     const [, giftSection, freeSection] = within(report).getAllByTestId("report-location-item")
     expect(giftSection).not.toHaveTextContent("$0.00")
     expect(freeSection).toHaveTextContent("$0.00")
+  })
+
+  it("values an item without a current value at its purchase price, as the dashboard does", () => {
+    const bookshelf = {
+      id: "c5",
+      name: "Bookshelf",
+      type: "furniture",
+      original_price: "120",
+      original_price_currency: "USD",
+      area_id: "a1",
+    }
+    mockUseAllCommodities.mockReturnValue({
+      data: { commodities: [itemC1, bookshelf], total: 2, covers: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAllCommodities>)
+    renderPage("?mode=location&location=loc1")
+    const report = screen.getByTestId("report-location")
+    const value = within(report).getByTestId("report-location-total-value")
+    expect(value).toHaveTextContent("$770.00")
+    expect(value).not.toHaveTextContent(/Excludes/)
+    const [, bookshelfSection] = within(report).getAllByTestId("report-location-item")
+    expect(within(bookshelfSection).getAllByText("$120.00")).toHaveLength(2)
   })
 
   it("shows the empty state when the location has no items", () => {

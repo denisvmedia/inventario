@@ -73,8 +73,9 @@ var searchSeeds = []searchSeed{
 // RunCommoditySearchContract checks that a backend's CommodityRegistry
 // applies the item search and the tag filter exactly as
 // registry.MatchCommoditySearch and registry.CommodityTagFilter describe,
-// and that its TagRegistry.SlugsByLabel keeps to its own tag kind. newEnv is
-// called once per subtest and must return an empty group.
+// that it sorts unknown dates and prices last, and that its
+// TagRegistry.SlugsByLabel keeps to its own tag kind. newEnv is called once
+// per subtest and must return an empty group.
 func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) CommoditySearchEnv) {
 	t.Run("search and tag filter", func(t *testing.T) {
 		c := qt.New(t)
@@ -164,6 +165,38 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 				items, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, tc.opts)
 				c.Assert(err, qt.IsNil)
 				c.Check(registry.CountCommodityTags(items), qt.DeepEquals, got)
+			})
+		}
+	})
+
+	t.Run("unknown dates and prices sort last", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seedSortGroup(c, env)
+
+		for _, tc := range []struct {
+			field registry.CommoditySortField
+			desc  bool
+			want  []string
+		}{
+			// Bravo's current value is a known zero: it sorts as a value.
+			{field: registry.CommoditySortCurrentPrice, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortCurrentPrice, desc: true, want: []string{"Alpha", "Bravo", "Charlie"}},
+			{field: registry.CommoditySortOriginalPrice, want: []string{"Alpha", "Bravo", "Charlie"}},
+			{field: registry.CommoditySortOriginalPrice, desc: true, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortPurchaseDate, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortPurchaseDate, desc: true, want: []string{"Alpha", "Bravo", "Charlie"}},
+		} {
+			name := string(tc.field)
+			if tc.desc {
+				name = "-" + name
+			}
+			c.Run(name, func(c *qt.C) {
+				got, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{
+					SortField: tc.field, SortDesc: tc.desc,
+				})
+				c.Assert(err, qt.IsNil)
+				c.Check(names(got), qt.DeepEquals, tc.want)
 			})
 		}
 	})
@@ -323,6 +356,36 @@ func seedSearchGroup(c *qt.C, env CommoditySearchEnv) *models.Commodity {
 	}
 	c.Assert(hose.AssetNumber, qt.IsNotNil)
 	return hose
+}
+
+// seedSortGroup creates three items: Alpha and Bravo with known prices and
+// purchase dates (Bravo's current value a known zero), and Charlie with
+// neither.
+func seedSortGroup(c *qt.C, env CommoditySearchEnv) {
+	c.Helper()
+	for _, seed := range []struct {
+		name              string
+		original, current *decimal.Decimal
+		purchased         models.PDate
+	}{
+		{name: "Alpha", original: new(decimal.NewFromInt(5)), current: new(decimal.NewFromInt(5)), purchased: models.ToPDate("2024-01-01")},
+		{name: "Bravo", original: new(decimal.NewFromInt(20)), current: new(decimal.Zero), purchased: models.ToPDate("2023-01-01")},
+		{name: "Charlie"},
+	} {
+		_, err := env.Commodities.Create(env.Ctx, models.Commodity{
+			Name:                  seed.name,
+			ShortName:             seed.name,
+			Type:                  models.CommodityTypeOther,
+			AreaID:                new(env.AreaID),
+			Count:                 1,
+			OriginalPrice:         seed.original,
+			OriginalPriceCurrency: "USD",
+			CurrentPrice:          seed.current,
+			Status:                models.CommodityStatusInUse,
+			PurchaseDate:          seed.purchased,
+		})
+		c.Assert(err, qt.IsNil, qt.Commentf("seeding %s", seed.name))
+	}
 }
 
 // resolveLabels does what services/commodityquery.Resolve does for the

@@ -133,6 +133,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeAreaID()
 
 	// Every row written now tells an unknown price from a zero one.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
 	// The asset number is server-managed, as in the postgres registry: the
@@ -314,6 +315,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		if existingCommodity.AssetNumber != nil {
 			commodity.AssetNumber = new(*existingCommodity.AssetNumber)
 		}
+		commodity.UnsetEchoedLegacyZeros(existingCommodity)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
@@ -321,6 +323,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeAreaID()
 
 	// The caller's prices tell unknown from zero, whatever the row held.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved

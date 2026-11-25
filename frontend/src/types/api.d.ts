@@ -12940,8 +12940,9 @@ export type components = {
             readonly asset_number?: number;
             comments?: string;
             /**
-             * @description ConvertedOriginalPrice is the purchase price in the group currency. It
-             *     only applies when OriginalPriceCurrency is a foreign currency.
+             * @description ConvertedOriginalPrice is the purchase price in the group currency, null
+             *     when unknown. It applies only when OriginalPriceCurrency is a foreign
+             *     currency; for an item bought in the group currency it is always null.
              */
             converted_original_price?: number | null;
             count?: number;
@@ -12953,7 +12954,11 @@ export type components = {
              *     override; the resolver's first-photo path takes over.
              */
             cover_file_id?: string;
-            /** @description CurrentPrice is the current value in the group currency. */
+            /**
+             * @description CurrentPrice is the current value in the group currency, null when
+             *     unknown. When known, 0 included, it is the item's value in every total;
+             *     otherwise the purchase price in the group currency stands in.
+             */
             current_price?: number | null;
             draft?: boolean;
             extra_serial_numbers?: string[];
@@ -12961,11 +12966,10 @@ export type components = {
             last_modified_date?: string;
             name?: string;
             /**
-             * @description The three prices are nil when unknown, which is distinct from a known
-             *     zero (a gift, a free item). An item may be reviewed with any of them
-             *     unknown; see Value for how they combine into a valuation.
-             *
-             *     OriginalPrice is the purchase price in OriginalPriceCurrency.
+             * @description OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+             *     unknown. Each of the three prices can be unknown on its own, and
+             *     unknown is not zero: a gift's price is unknown, a free item's is 0. A
+             *     reviewed item may leave any of them unknown.
              */
             original_price?: number | null;
             original_price_currency?: string;

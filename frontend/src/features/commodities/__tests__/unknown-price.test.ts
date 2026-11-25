@@ -91,6 +91,13 @@ describe("commodityValue", () => {
     const unconverted = item({ original_price: "100", original_price_currency: "EUR" })
     expect(purchasePriceInGroupCurrency(unconverted, "USD")).toBeNull()
   })
+
+  it("ignores a converted price on a group-currency item", () => {
+    // Older clients send a converted 0 for "not entered".
+    const staleZero = item({ original_price: null, converted_original_price: "0" })
+    expect(purchasePriceInGroupCurrency(staleZero, "USD")).toBeNull()
+    expect(commodityValue(staleZero, "USD")).toBeNull()
+  })
 })
 
 describe("formatPrice", () => {

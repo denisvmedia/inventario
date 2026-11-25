@@ -5,7 +5,11 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity, CommodityCover } from "@/features/commodities/api"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
-import { formatPrice, purchasePriceInGroupCurrency } from "@/features/commodities/price"
+import {
+  commodityValue,
+  formatPrice,
+  purchasePriceInGroupCurrency,
+} from "@/features/commodities/price"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -122,12 +126,18 @@ export function LocationReport({
           imageSize,
           item.name ?? ""
         )
-        // The purchase row is in the group currency like the total above
-        // it: the purchase price itself when paid in the group currency,
-        // otherwise its converted amount.
+        // Both rows are in the group currency and use the rules of the
+        // totals above them: the purchase price itself when paid in the
+        // group currency, otherwise its converted amount; the value is the
+        // current value, else that purchase price.
         const purchasePrice = purchasePriceInGroupCurrency(item, groupCurrency)
         const purchase = formatPrice(purchasePrice, groupCurrency, noValue, formatCurrency)
-        const value = formatPrice(item.current_price, groupCurrency, noValue, formatCurrency)
+        const value = formatPrice(
+          commodityValue(item, groupCurrency),
+          groupCurrency,
+          noValue,
+          formatCurrency
+        )
         return (
           <div
             key={item.id}

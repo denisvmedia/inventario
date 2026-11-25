@@ -769,7 +769,11 @@ func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodi
 func (s *ExportService) encodeCommodityPricing(encoder *xml.Encoder, commodity *models.Commodity) error {
 	encodeTextElement := s.createTextElementEncoder(encoder)
 
-	// An unknown price is left out; encodeTextElement skips empty values.
+	// An unknown price is left out; encodeTextElement skips empty values. A
+	// known zero is written as "0", and the XML restore reads a zero current
+	// or converted price as unknown (XMLCommodity.ConvertToCommodity), so
+	// those two known zeros do not survive an XML round trip; a zero purchase
+	// price does. The format cannot tell the two apart; INB can.
 	if err := encodeTextElement("originalPrice", legacyXMLPrice(commodity.OriginalPrice)); err != nil {
 		return err
 	}

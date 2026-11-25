@@ -43,7 +43,7 @@
     "totalValueExcludes_few": "Nezahrnuje {{count}} položky bez hodnoty",
     "totalValueExcludes_many": "Nezahrnuje {{count}} položky bez hodnoty",
     "totalValueExcludes_other": "Nezahrnuje {{count}} položek bez hodnoty",
-    "totalValueSub": "Součet aktuálních cen"
+    "totalValueSub": "Součet aktuálních hodnot nebo nákupních cen"
   },
   "tagline": "Vše, co vlastníte, na jednom místě.",
   "warrantyHealth": {

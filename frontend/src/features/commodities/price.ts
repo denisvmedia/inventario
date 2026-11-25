@@ -29,16 +29,17 @@ function sameCurrency(a: string | undefined, b: string): boolean {
   return !!a && !!b && a.trim().toUpperCase() === b.trim().toUpperCase()
 }
 
-// purchasePriceInGroupCurrency is what the item cost in the group currency:
-// the purchase price when it was paid in the group currency, otherwise its
-// converted amount. Null when that is unknown.
+// purchasePriceInGroupCurrency is what the item cost in the group currency.
+// For an item paid in the group currency that is its purchase price alone: a
+// converted price does not apply, so an unknown purchase price stays unknown
+// even next to a stored converted zero. For an item paid in another currency
+// it is the converted amount. Null when that is unknown.
 export function purchasePriceInGroupCurrency(
   commodity: PricedCommodity,
   groupCurrency: string
 ): number | null {
-  const original = parsePrice(commodity.original_price)
-  if (original !== null && sameCurrency(commodity.original_price_currency, groupCurrency)) {
-    return original
+  if (sameCurrency(commodity.original_price_currency, groupCurrency)) {
+    return parsePrice(commodity.original_price)
   }
   return parsePrice(commodity.converted_original_price)
 }

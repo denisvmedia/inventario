@@ -194,10 +194,12 @@ export interface CreateCommodityParams {
  * POST /commodities with the same JSON:API envelope the
  * CommodityFormDialog submits. Returns the new commodity's id.
  *
- * Defaults: count=1, status=in_use, type=other, originalPrice=0,
- * currency = group currency. The BE enforces
- * converted_original_price=0 when purchase currency matches the
- * group currency, so we pass 0 explicitly.
+ * Defaults: count=1, status=in_use, type=other, originalPrice=0 (a
+ * known zero), currency = group currency. The current value is the
+ * original price when one is given and unknown otherwise, since a
+ * current value of 0 is a known zero that would stand in for the item's
+ * value. The converted price is left out (unknown): it does not apply
+ * when the purchase currency is the group currency.
  */
 export async function createCommodityViaAPI(
   request: APIRequestContext,
@@ -217,8 +219,7 @@ export async function createCommodityViaAPI(
     purchase_date: '2026-01-01',
     original_price: params.originalPrice ?? 0,
     original_price_currency: currency,
-    current_price: params.originalPrice ?? 0,
-    converted_original_price: 0,
+    current_price: params.originalPrice ?? null,
     draft: params.draft ?? false,
   }
   if (params.registeredDate) {

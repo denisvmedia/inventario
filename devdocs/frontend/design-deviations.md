@@ -277,9 +277,9 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Est. Total Value card says how many items it leaves out
 
-- **Issue/PR**: #2813 / PR (pending)
+- **Issue/PR**: #2813 / #2836
 - **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) shows the Est. Total Value card with the fixed caption "current resale value"; every mock item has a value.
-- **Reality**: `frontend/src/pages/Dashboard.tsx` keeps the card and its caption while every in-use item has a value. When some have neither a current value nor a purchase price, the caption reads "Excludes N items without a value" (`dashboard:stats.totalValueExcludes`), from the `unvalued_count` the values endpoint returns.
+- **Reality**: `frontend/src/pages/Dashboard.tsx` keeps the card. While every in-use item has a value, the caption reads "Sum of current values or purchase prices" (`dashboard:stats.totalValueSub`), because an item without a current value counts at its purchase price. When some have neither, the caption reads "Excludes N items without a value" (`dashboard:stats.totalValueExcludes`), from the `unvalued_count` the values endpoint returns.
 - **Why**: A purchase price or value can be unknown, and the total leaves such items out rather than counting them as zero. The issue asks every total to disclose how many items it excludes.
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage on the card.
@@ -343,7 +343,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Area items panel: Est. value says how many items it leaves out
 
-- **Issue/PR**: #2813 / PR (pending)
+- **Issue/PR**: #2813 / #2836
 - **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) shows the Est. value stat as a value and a label only.
 - **Reality**: `frontend/src/pages/areas/AreaItemsPanel.tsx` adds a second muted line under the label, "Excludes N items without a value", when the area total leaves items out (`locations:areaDetail.items.statsValueExcludes`). Item rows show "—" for an unknown current value and a formatted zero for a known zero, as the mock does for a missing value.
 - **Why**: Same reason as the dashboard card: an unknown value is left out of the total, and the total says so.
@@ -493,7 +493,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Item purchase step: purchase date and prices are never required
 
-- **Issue/PR**: #2813 / PR (pending)
+- **Issue/PR**: #2813 / #2836
 - **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1158-L1161 marks Purchase Date required for a non-draft item, with the hint "Required for non-draft items"; the Purchase Price hint reads "Original purchase currency".
 - **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` drops the asterisk and `aria-required` from Purchase date and Original price on every item. Purchase date carries the hint "Leave blank if you don't know it." and Original price "Leave blank if you don't know it; enter 0 if it was free." The in-place edit form (`CommodityEditForm.tsx`) shows the same two hints. A blank field is saved as unknown and "0" as a known zero. The foreign-currency banner and its "converted price or current value" rule apply only when the purchase price is known.
 - **Why**: A reviewed item may have an unknown purchase date or price (a gift, an inherited object), and unknown is distinct from zero. The hints tell the user how to record each case.
@@ -978,9 +978,9 @@ _None yet._
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so
 
-- **Issue/PR**: #2813 / PR (pending)
+- **Issue/PR**: #2813 / #2836
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) L224-L277 sums `purchasePrice ?? 0` and `currentValue ?? 0` into the Total Purchase and Est. Total Value cards, so a missing price counts as zero.
-- **Reality**: `frontend/src/features/reports/components/LocationReport.tsx` sums only the known amounts (`features/reports/aggregate.ts`). Under each total card a muted line reads "Excludes N items without a purchase price" or "… without a current value" when items are left out. The purchase total and each item's purchase row use the purchase price in the group currency: the price itself when it was paid in the group currency, otherwise its converted amount. Item rows and the item report show "—" for an unknown price and a formatted zero for a known zero.
+- **Reality**: `frontend/src/features/reports/components/LocationReport.tsx` sums only the known amounts (`features/reports/aggregate.ts`). Under each total card a muted line reads "Excludes N items without a purchase price" or "… without a value" when items are left out. The purchase total and each item's purchase row use the purchase price in the group currency: the price itself when it was paid in the group currency, otherwise its converted amount. The Est. Total Value card, each item's value row and the item report's Estimated Value use the dashboard's rule (the current value, else that purchase price), so one item has one estimated value everywhere. Item rows and the item report show "—" for an unknown price and a formatted zero for a known zero.
 - **Why**: An unknown price is not a zero, and the issue asks report totals to disclose what they exclude. A price paid in the group currency has no converted amount, so summing the converted column alone dropped it.
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` shows coverage on the report cards.

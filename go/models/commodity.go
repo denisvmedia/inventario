@@ -129,20 +129,22 @@ type Commodity struct {
 	AreaID *string `json:"area_id,omitempty" db:"area_id"`
 	//ptah:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
-	// The three prices are nil when unknown, which is distinct from a known
-	// zero (a gift, a free item). An item may be reviewed with any of them
-	// unknown; see Value for how they combine into a valuation.
-	//
-	// OriginalPrice is the purchase price in OriginalPriceCurrency.
+	// OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+	// unknown. Each of the three prices can be unknown on its own, and
+	// unknown is not zero: a gift's price is unknown, a free item's is 0. A
+	// reviewed item may leave any of them unknown.
 	//ptah:schema:field name="original_price" type="DECIMAL(15,2)"
 	OriginalPrice *decimal.Decimal `json:"original_price" db:"original_price" extensions:"x-nullable=true"`
 	//ptah:schema:field name="original_price_currency" type="TEXT"
 	OriginalPriceCurrency Currency `json:"original_price_currency" db:"original_price_currency"`
-	// ConvertedOriginalPrice is the purchase price in the group currency. It
-	// only applies when OriginalPriceCurrency is a foreign currency.
+	// ConvertedOriginalPrice is the purchase price in the group currency, null
+	// when unknown. It applies only when OriginalPriceCurrency is a foreign
+	// currency; for an item bought in the group currency it is always null.
 	//ptah:schema:field name="converted_original_price" type="DECIMAL(15,2)"
 	ConvertedOriginalPrice *decimal.Decimal `json:"converted_original_price" db:"converted_original_price" extensions:"x-nullable=true"`
-	// CurrentPrice is the current value in the group currency.
+	// CurrentPrice is the current value in the group currency, null when
+	// unknown. When known, 0 included, it is the item's value in every total;
+	// otherwise the purchase price in the group currency stands in.
 	//ptah:schema:field name="current_price" type="DECIMAL(15,2)"
 	CurrentPrice *decimal.Decimal `json:"current_price" db:"current_price" extensions:"x-nullable=true"`
 	//ptah:schema:field name="serial_number" type="TEXT"
@@ -252,16 +254,54 @@ type Commodity struct {
 }
 
 // PurchasePriceInGroupCurrency returns the purchase price in the group
-// currency and whether it is known: the original price when it is in the
-// group currency, otherwise the converted price.
+// currency and whether it is known. For an item bought in the group currency
+// that is the original price alone: a converted price does not apply to it,
+// so an unknown original price stays unknown even when a converted one is
+// stored. For an item bought in another currency it is the converted price.
 func (a *Commodity) PurchasePriceInGroupCurrency(groupCurrency Currency) (decimal.Decimal, bool) {
-	if a.OriginalPrice != nil && a.OriginalPriceCurrency == groupCurrency {
-		return *a.OriginalPrice, true
+	price := a.ConvertedOriginalPrice
+	if a.OriginalPriceCurrency == groupCurrency {
+		price = a.OriginalPrice
 	}
-	if a.ConvertedOriginalPrice != nil {
-		return *a.ConvertedOriginalPrice, true
+	if price == nil {
+		return decimal.Zero, false
 	}
-	return decimal.Zero, false
+	return *price, true
+}
+
+// NormalizePrices drops the converted price of an item bought in the group
+// currency. There is nothing to convert, and clients written before prices
+// could be unknown send a zero there for "not entered"; storing it would
+// leave a zero that means nothing. The registries call it on every write
+// whose context carries the group currency.
+func (a *Commodity) NormalizePrices(groupCurrency Currency) {
+	if groupCurrency != "" && a.OriginalPriceCurrency == groupCurrency {
+		a.ConvertedOriginalPrice = nil
+	}
+}
+
+// UnsetEchoedLegacyZeros keeps a legacy "not entered" zero unknown across a
+// full-row write. While the stored row is still flagged LegacyZeroPrices
+// (the backfill has not reached it), a zero current or converted price in it
+// means "not set", and every reader saw it as 0. A write that sends that same
+// zero back is echoing what it read, so the price is stored as unknown, as
+// the backfill would store it; without this the write would clear the flag
+// and turn the legacy zero into a known one for good. Any other value,
+// unknown included, is the caller's own and is kept.
+func (a *Commodity) UnsetEchoedLegacyZeros(stored *Commodity) {
+	if stored == nil || !stored.LegacyZeroPrices {
+		return
+	}
+	if isZeroPrice(stored.CurrentPrice) && isZeroPrice(a.CurrentPrice) {
+		a.CurrentPrice = nil
+	}
+	if isZeroPrice(stored.ConvertedOriginalPrice) && isZeroPrice(a.ConvertedOriginalPrice) {
+		a.ConvertedOriginalPrice = nil
+	}
+}
+
+func isZeroPrice(p *decimal.Decimal) bool {
+	return p != nil && p.IsZero()
 }
 
 // Value returns the value of the commodity in the group currency and whether

@@ -221,6 +221,19 @@ func TestCommodity_Value(t *testing.T) {
 				OriginalPrice: new(decimal.NewFromInt(100)), OriginalPriceCurrency: "EUR",
 			},
 		},
+		{
+			// What clients written before #2813 send for "not entered".
+			name: "group-currency item ignores a stored converted zero",
+			commodity: models.Commodity{
+				OriginalPriceCurrency: "USD", ConvertedOriginalPrice: new(decimal.Zero),
+			},
+		},
+		{
+			name: "group-currency item ignores a stored converted price",
+			commodity: models.Commodity{
+				OriginalPriceCurrency: "USD", ConvertedOriginalPrice: new(decimal.NewFromInt(5)),
+			},
+		},
 	}
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -232,6 +245,98 @@ func TestCommodity_Value(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCommodity_NormalizePrices(t *testing.T) {
+	c := qt.New(t)
+
+	same := models.Commodity{OriginalPriceCurrency: "USD", ConvertedOriginalPrice: new(decimal.Zero)}
+	same.NormalizePrices("USD")
+	c.Assert(same.ConvertedOriginalPrice, qt.IsNil)
+
+	foreign := models.Commodity{OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: new(decimal.Zero)}
+	foreign.NormalizePrices("USD")
+	c.Assert(foreign.ConvertedOriginalPrice, qt.IsNotNil)
+	c.Assert(foreign.ConvertedOriginalPrice.IsZero(), qt.IsTrue)
+
+	noGroupCurrency := models.Commodity{OriginalPriceCurrency: "USD", ConvertedOriginalPrice: new(decimal.Zero)}
+	noGroupCurrency.NormalizePrices("")
+	c.Assert(noGroupCurrency.ConvertedOriginalPrice, qt.IsNotNil)
+}
+
+func TestCommodity_UnsetEchoedLegacyZeros(t *testing.T) {
+	legacy := models.Commodity{
+		OriginalPriceCurrency:  "EUR",
+		ConvertedOriginalPrice: new(decimal.Zero),
+		CurrentPrice:           new(decimal.Zero),
+		LegacyZeroPrices:       true,
+	}
+	testCases := []struct {
+		name          string
+		stored        *models.Commodity
+		incoming      models.Commodity
+		wantCurrent   string // "" means unknown
+		wantConverted string
+	}{
+		{
+			name:     "echoed zeros on a flagged row become unknown",
+			stored:   new(legacy),
+			incoming: models.Commodity{CurrentPrice: new(decimal.Zero), ConvertedOriginalPrice: new(decimal.Zero)},
+		},
+		{
+			name:          "a price the caller changed is kept",
+			stored:        new(legacy),
+			incoming:      models.Commodity{CurrentPrice: new(decimal.NewFromInt(7)), ConvertedOriginalPrice: new(decimal.NewFromInt(9))},
+			wantCurrent:   "7",
+			wantConverted: "9",
+		},
+		{
+			name: "zeros on a row the backfill already cleared are known zeros",
+			stored: &models.Commodity{
+				ConvertedOriginalPrice: new(decimal.Zero),
+				CurrentPrice:           new(decimal.Zero),
+			},
+			incoming:      models.Commodity{CurrentPrice: new(decimal.Zero), ConvertedOriginalPrice: new(decimal.Zero)},
+			wantCurrent:   "0",
+			wantConverted: "0",
+		},
+		{
+			name: "a zero over a stored non-zero price is the caller's own",
+			stored: &models.Commodity{
+				ConvertedOriginalPrice: new(decimal.NewFromInt(3)),
+				CurrentPrice:           new(decimal.NewFromInt(3)),
+				LegacyZeroPrices:       true,
+			},
+			incoming:      models.Commodity{CurrentPrice: new(decimal.Zero), ConvertedOriginalPrice: new(decimal.Zero)},
+			wantCurrent:   "0",
+			wantConverted: "0",
+		},
+		{
+			name:     "no stored row",
+			incoming: models.Commodity{CurrentPrice: new(decimal.Zero)},
+			// Nothing to compare with: the zero is kept.
+			wantCurrent: "0",
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			got := tc.incoming
+			got.UnsetEchoedLegacyZeros(tc.stored)
+			assertPrice(c, got.CurrentPrice, tc.wantCurrent)
+			assertPrice(c, got.ConvertedOriginalPrice, tc.wantConverted)
+		})
+	}
+}
+
+func assertPrice(c *qt.C, got *decimal.Decimal, want string) {
+	c.Helper()
+	if want == "" {
+		c.Assert(got, qt.IsNil)
+		return
+	}
+	c.Assert(got, qt.IsNotNil)
+	c.Assert(got.String(), qt.Equals, want)
 }
 
 func TestSamePrice(t *testing.T) {
