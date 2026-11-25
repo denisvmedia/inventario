@@ -312,6 +312,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Changed
 
+- The upgrade runs one more database migration. It writes the descriptions of
+  the row-level security policies and of the RLS helper functions into the
+  database as comments (`COMMENT ON POLICY`, `COMMENT ON FUNCTION`). The models
+  always declared them, but earlier migrations never wrote them. It changes no
+  table, index or data. It comes with the move to Ptah 0.36, which compares
+  these comments too
+  ([#2849](https://github.com/denisvmedia/inventario/pull/2849)).
+
 - Item API: `original_price`, `converted_original_price` and `current_price`
   are `null` when unknown, and a request that omits one or sends `null`
   stores it as unknown rather than as zero. A `current_price` of `0` is a

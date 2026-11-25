@@ -226,7 +226,7 @@ table "audit_logs" {
     columns = [column.tenant_id]
   }
   index "audit_logs_timestamp_idx" {
-    columns = [column["\"timestamp\""]]
+    columns = [column.timestamp]
   }
   index "audit_logs_user_id_idx" {
     columns = [column.user_id]
@@ -544,7 +544,7 @@ table "commodities" {
     as {
       expr = "commodity_search_text(name, short_name, serial_number, extra_serial_numbers, part_numbers, tags, comments, warranty_notes, status_note)"
       type = "STORED"
-    }
+  }
   }
   column "legacy_zero_prices" {
     type = BOOLEAN
@@ -4348,7 +4348,6 @@ function "commodity_search_text" {
   arg "status_note" {
     type = text
   }
-  security = "INVOKER"
   volatility = "IMMUTABLE"
   as = "SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')"
   comment = "Builds commodities.search_text, the text the item search matches"
@@ -4357,7 +4356,6 @@ function "commodity_search_text" {
 function "get_current_group_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_group_id', true); END;"
   comment = "Gets the current group ID from session for RLS policies"
@@ -4366,7 +4364,6 @@ function "get_current_group_id" {
 function "get_current_tenant_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_tenant_id', true); END;"
   comment = "Gets the current tenant ID from session for RLS policies"
@@ -4375,7 +4372,6 @@ function "get_current_tenant_id" {
 function "get_current_user_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_user_id', true); END;"
   comment = "Gets the current user ID from session for RLS policies"
@@ -4387,7 +4383,6 @@ function "set_group_context" {
   arg "group_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_group_id', group_id_param, true); END;"
   comment = "Sets the current group context for RLS policies (transaction-local)"
@@ -4399,7 +4394,6 @@ function "set_tenant_context" {
   arg "tenant_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_tenant_id', tenant_id_param, true); END;"
   comment = "Sets the current tenant context for RLS policies (transaction-local)"
@@ -4411,7 +4405,6 @@ function "set_user_context" {
   arg "user_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_user_id', user_id_param, true); END;"
   comment = "Sets the current user context for RLS policies (transaction-local)"

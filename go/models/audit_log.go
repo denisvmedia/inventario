@@ -138,13 +138,13 @@ type AuditLogIndexes struct {
 
 	// Index for timestamp ordering and range queries.
 	//
-	// The column name is quoted because `timestamp` is a keyword: PostgreSQL
-	// reports this index key as `"timestamp"` through pg_get_indexdef, and Ptah
-	// compares the annotation against that string verbatim. Spelled bare, the
-	// drift check plans a DROP/CREATE of an identical index on every run. Ptah
-	// strips the quotes again when it renders CREATE INDEX, so a schema built
-	// from scratch still emits `("timestamp")`.
-	//ptah:schema:index name="audit_logs_timestamp_idx" fields="\"timestamp\"" table="audit_logs"
+	// The column is named bare although `timestamp` is a keyword. Ptah before
+	// 0.36 compared this list with pg_get_indexdef verbatim, which quotes the
+	// key, so the annotation used to spell it `\"timestamp\"`. Ptah 0.36 reads
+	// a quoted entry as an expression and planned a DROP/CREATE of the
+	// identical index; it quotes the column itself when it renders CREATE
+	// INDEX.
+	//ptah:schema:index name="audit_logs_timestamp_idx" fields="timestamp" table="audit_logs"
 	_ int
 
 	// Index for action-type filtering
