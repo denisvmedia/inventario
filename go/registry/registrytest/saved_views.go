@@ -3,6 +3,7 @@ package registrytest
 import (
 	"context"
 	"errors"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -16,9 +17,9 @@ import (
 )
 
 // SavedViewEnv is what RunSavedViewContract needs from a backend: the saved
-// view factory and the tag factory it reads slugs from, two members of one
-// empty group (Ctx for Alice, OtherCtx for Bob), and Alice in a second, empty
-// group (OtherGroupCtx).
+// view factory and the tag factory whose renames rewrite the views, two
+// members of one empty group (Ctx for Alice, OtherCtx for Bob), and Alice in
+// a second, empty group (OtherGroupCtx).
 type SavedViewEnv struct {
 	Views         registry.SavedViewRegistryFactory
 	Tags          registry.TagRegistryFactory
@@ -30,8 +31,13 @@ type SavedViewEnv struct {
 // newTag creates an item tag in the group of ctx.
 func newTag(c *qt.C, env SavedViewEnv, ctx context.Context, slug string) *models.Tag {
 	c.Helper()
+	return newTagOfKind(c, env, ctx, models.TagKindCommodity, slug)
+}
+
+func newTagOfKind(c *qt.C, env SavedViewEnv, ctx context.Context, kind models.TagKind, slug string) *models.Tag {
+	c.Helper()
 	tag, err := env.Tags.MustCreateUserRegistry(ctx).Create(ctx, models.Tag{
-		Kind:  models.TagKindCommodity,
+		Kind:  kind,
 		Slug:  slug,
 		Label: slug,
 		Color: models.TagColorBlue,
@@ -53,6 +59,28 @@ func newView(name, query string, shared bool) models.SavedView {
 	}
 }
 
+// replaceTag is a SavedViewTagRewrite for the plain queries of these tests:
+// it renames from wherever it is a whole value of tags or tags_exclude.
+func replaceTag(view models.SavedView, from, to string) (string, bool) {
+	params := strings.Split(view.Query, "&")
+	changed := false
+	for i, p := range params {
+		key, value, ok := strings.Cut(p, "=")
+		if !ok || (key != "tags" && key != "tags_exclude") {
+			continue
+		}
+		slugs := strings.Split(value, ",")
+		for j, slug := range slugs {
+			if slug == from {
+				slugs[j] = to
+				changed = true
+			}
+		}
+		params[i] = key + "=" + strings.Join(slugs, ",")
+	}
+	return strings.Join(params, "&"), changed
+}
+
 func viewNames(views []*models.SavedView) []string {
 	out := make([]string, 0, len(views))
 	for _, v := range views {
@@ -62,8 +90,9 @@ func viewNames(views []*models.SavedView) []string {
 }
 
 // RunSavedViewContract checks that a backend's SavedViewRegistry keeps the
-// visibility rule, the order, the per-member placements, the checked writes
-// and the group-wide rewrite that registry.SavedViewRegistry describes.
+// visibility rule, the order, the per-member placements and the checked
+// writes that registry.SavedViewRegistry describes, and that a tag rename
+// rewrites the views as registry.TagRegistry.RenameAtomic describes.
 // newEnv is called once per subtest.
 func RunSavedViewContract(t *testing.T, newEnv func(t *testing.T) SavedViewEnv) {
 	setup := func(t *testing.T) savedViewFixture {
@@ -90,7 +119,8 @@ func RunSavedViewContract(t *testing.T, newEnv func(t *testing.T) SavedViewEnv) 
 	runSavedViewBasics(t, setup)
 	runSavedViewCheckedWrites(t, setup)
 	runSavedViewPlacements(t, setup)
-	runSavedViewOrderAndRewrite(t, setup)
+	runSavedViewOrder(t, setup)
+	runSavedViewTagRenames(t, setup)
 }
 
 // savedViewFixture holds Alice's and Bob's registries in one group, Alice's
@@ -266,22 +296,19 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		c.Assert(created.Load(), qt.Equals, int32(1))
 	})
 
-	t.Run("a rewrite waits for an update func and lands on top of it", func(t *testing.T) {
+	t.Run("a tag rename waits for an update func and lands on top of it", func(t *testing.T) {
 		c := qt.New(t)
 		f := setup(t)
 		ctx, bobCtx := f.env.Ctx, f.env.OtherCtx
 		tag := newTag(c, f.env, ctx, "sold-items")
-		done := make(chan struct{})
-		var rewritten atomic.Bool
+		done := make(chan error, 1)
 		_, err := f.alice.UpdateFunc(ctx, f.mine.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			go func() {
-				defer close(done)
-				_, err := f.bob.RewriteForTag(bobCtx, tag.ID, func(v models.SavedView, _ string) (string, bool) {
-					return "status=sold", v.Name == "Renamed under the lock"
-				})
-				if err == nil {
-					rewritten.Store(true)
-				}
+				_, _, err := f.env.Tags.MustCreateUserRegistry(bobCtx).RenameAtomic(bobCtx, tag.ID, "", "sold", "",
+					func(v models.SavedView, _, _ string) (string, bool) {
+						return "status=sold", v.Name == "Renamed under the lock"
+					})
+				done <- err
 			}()
 			// Without the lock the rewrite would land here and the write
 			// below would put the old query back.
@@ -290,8 +317,7 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 			return nil
 		})
 		c.Assert(err, qt.IsNil)
-		<-done
-		c.Assert(rewritten.Load(), qt.IsTrue)
+		c.Assert(<-done, qt.IsNil)
 		got, err := f.alice.Get(ctx, f.mine.ID)
 		c.Assert(err, qt.IsNil)
 		c.Assert(got.Name, qt.Equals, "Renamed under the lock")
@@ -419,9 +445,8 @@ func runSavedViewPlacements(t *testing.T, setup func(*testing.T) savedViewFixtur
 	})
 }
 
-// runSavedViewOrderAndRewrite checks reorder, the group-wide rewrite and
-// delete.
-func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewFixture) {
+// runSavedViewOrder checks reorder and delete.
+func runSavedViewOrder(t *testing.T, setup func(*testing.T) savedViewFixture) {
 	t.Run("reorder permutes the positions of the listed views only", func(t *testing.T) {
 		c := qt.New(t)
 		f := setup(t)
@@ -437,6 +462,48 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		private, err := f.bob.Get(f.env.OtherCtx, f.bobPrivate.ID)
 		c.Assert(err, qt.IsNil)
 		c.Assert(private.SortOrder, qt.Equals, 2)
+	})
+
+	t.Run("a list never sees a reorder half done", func(t *testing.T) {
+		c := qt.New(t)
+		f := setup(t)
+		ctx := f.env.Ctx
+		forward := []string{"Mine", "Bob shared", "Mine later"}
+		backward := []string{"Mine later", "Bob shared", "Mine"}
+		done := make(chan struct{})
+		reordered := make(chan error, 1)
+		go func() {
+			defer close(reordered)
+			ids := [][]string{
+				{f.mineLater.ID, f.bobShared.ID, f.mine.ID},
+				{f.mine.ID, f.bobShared.ID, f.mineLater.ID},
+			}
+			for i := 0; ; i++ {
+				select {
+				case <-done:
+					return
+				default:
+				}
+				if err := f.alice.Reorder(ctx, ids[i%2]); err != nil {
+					reordered <- err
+					return
+				}
+			}
+		}()
+		for range 200 {
+			views, err := f.alice.List(ctx)
+			if err != nil {
+				close(done)
+				c.Fatal(err)
+			}
+			names := viewNames(views)
+			if !slices.Equal(names, forward) && !slices.Equal(names, backward) {
+				close(done)
+				c.Fatalf("list returned %v, neither the order before nor after a reorder", names)
+			}
+		}
+		close(done)
+		c.Assert(<-reordered, qt.IsNil)
 	})
 
 	t.Run("reorder refuses an invisible or repeated view and changes nothing", func(t *testing.T) {
@@ -455,26 +522,38 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		c.Assert(viewNames(views), qt.DeepEquals, []string{"Mine", "Bob shared", "Mine later"})
 	})
 
-	t.Run("rewrite reaches every view of the group", func(t *testing.T) {
+	t.Run("delete removes a visible view", func(t *testing.T) {
+		c := qt.New(t)
+		f := setup(t)
+		ctx := f.env.Ctx
+		c.Assert(f.alice.Delete(ctx, f.mine.ID), qt.IsNil)
+		_, err := f.alice.Get(ctx, f.mine.ID)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		c.Assert(f.alice.Delete(ctx, f.mine.ID), qt.ErrorIs, registry.ErrNotFound)
+	})
+}
+
+// runSavedViewTagRenames checks that a tag rename rewrites the views of its
+// group in the rename itself.
+func runSavedViewTagRenames(t *testing.T, setup func(*testing.T) savedViewFixture) {
+	t.Run("a tag rename rewrites every view of the group", func(t *testing.T) {
 		c := qt.New(t)
 		f := setup(t)
 		ctx := f.env.Ctx
 		other, err := f.aliceOtherGroup.Create(f.env.OtherGroupCtx, newView("Elsewhere", "tags=fragile", false))
 		c.Assert(err, qt.IsNil)
-		tag := newTag(c, f.env, ctx, "delicate")
+		tag := newTag(c, f.env, ctx, "fragile")
 
-		var slugs []string
-		n, err := f.alice.RewriteForTag(ctx, tag.ID, func(v models.SavedView, slug string) (string, bool) {
-			slugs = append(slugs, slug)
-			if !strings.Contains(v.Query, "fragile") {
-				return "", false
-			}
-			return strings.ReplaceAll(v.Query, "fragile", slug), true
-		})
+		var calls []string
+		_, from, err := f.env.Tags.MustCreateUserRegistry(ctx).RenameAtomic(ctx, tag.ID, "", "delicate", "",
+			func(v models.SavedView, from, to string) (string, bool) {
+				calls = append(calls, from+">"+to)
+				return replaceTag(v, from, to)
+			})
 		c.Assert(err, qt.IsNil)
-		c.Assert(n, qt.Equals, 2)
-		// Every view of the group, with the slug the tag has.
-		c.Assert(slugs, qt.DeepEquals, []string{"delicate", "delicate", "delicate", "delicate"})
+		c.Assert(from, qt.Equals, "fragile")
+		// Every view of the group, Bob's personal one included.
+		c.Assert(calls, qt.DeepEquals, []string{"fragile>delicate", "fragile>delicate", "fragile>delicate", "fragile>delicate"})
 
 		private, err := f.bob.Get(f.env.OtherCtx, f.bobPrivate.ID)
 		c.Assert(err, qt.IsNil)
@@ -490,15 +569,37 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		c.Assert(untouched.Query, qt.Equals, "tags=fragile")
 	})
 
-	t.Run("rewrite for a tag that does not exist changes nothing", func(t *testing.T) {
+	t.Run("a rename that keeps the slug, or renames a file tag, leaves the views alone", func(t *testing.T) {
+		c := qt.New(t)
+		f := setup(t)
+		ctx := f.env.Ctx
+		tags := f.env.Tags.MustCreateUserRegistry(ctx)
+		called := false
+		rewrite := func(models.SavedView, string, string) (string, bool) {
+			called = true
+			return "status=sold", true
+		}
+		item := newTag(c, f.env, ctx, "fragile")
+		_, _, err := tags.RenameAtomic(ctx, item.ID, "Fragile things", "", "", rewrite)
+		c.Assert(err, qt.IsNil)
+		_, _, err = tags.RenameAtomic(ctx, item.ID, "", "fragile", "", rewrite)
+		c.Assert(err, qt.IsNil)
+		file := newTagOfKind(c, f.env, ctx, models.TagKindFile, "red")
+		_, _, err = tags.RenameAtomic(ctx, file.ID, "", "crimson", "", rewrite)
+		c.Assert(err, qt.IsNil)
+		c.Assert(called, qt.IsFalse)
+	})
+
+	t.Run("a rename of a tag that does not exist changes nothing", func(t *testing.T) {
 		c := qt.New(t)
 		f := setup(t)
 		ctx := f.env.Ctx
 		called := false
-		_, err := f.alice.RewriteForTag(ctx, "no-such-tag", func(models.SavedView, string) (string, bool) {
-			called = true
-			return "status=sold", true
-		})
+		_, _, err := f.env.Tags.MustCreateUserRegistry(ctx).RenameAtomic(ctx, "no-such-tag", "", "sold", "",
+			func(models.SavedView, string, string) (string, bool) {
+				called = true
+				return "status=sold", true
+			})
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 		c.Assert(called, qt.IsFalse)
 		got, err := f.alice.Get(ctx, f.mine.ID)
@@ -506,13 +607,55 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		c.Assert(got.Query, qt.Equals, "status=in_use")
 	})
 
-	t.Run("delete removes a visible view", func(t *testing.T) {
+	// Tag A goes from red to crimson while tag B goes from scarlet to red.
+	// If B could take red before A's views moved to crimson, A's rewrite
+	// would then also catch B's views and move them to crimson.
+	t.Run("a rename that takes a freed slug waits until the views have followed the first tag", func(t *testing.T) {
 		c := qt.New(t)
 		f := setup(t)
-		ctx := f.env.Ctx
-		c.Assert(f.alice.Delete(ctx, f.mine.ID), qt.IsNil)
-		_, err := f.alice.Get(ctx, f.mine.ID)
-		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
-		c.Assert(f.alice.Delete(ctx, f.mine.ID), qt.ErrorIs, registry.ErrNotFound)
+		ctx, bobCtx := f.env.Ctx, f.env.OtherCtx
+		red := newTag(c, f.env, ctx, "red")
+		scarlet := newTag(c, f.env, ctx, "scarlet")
+		redView, err := f.alice.Create(ctx, newView("Red", "tags=red", false))
+		c.Assert(err, qt.IsNil)
+		scarletView, err := f.bob.Create(bobCtx, newView("Scarlet", "tags=scarlet", true))
+		c.Assert(err, qt.IsNil)
+
+		entered, release := make(chan struct{}), make(chan struct{})
+		var hold sync.Once
+		first := make(chan error, 1)
+		go func() {
+			_, _, err := f.env.Tags.MustCreateUserRegistry(ctx).RenameAtomic(ctx, red.ID, "", "crimson", "",
+				func(v models.SavedView, from, to string) (string, bool) {
+					hold.Do(func() {
+						close(entered)
+						<-release
+					})
+					return replaceTag(v, from, to)
+				})
+			first <- err
+		}()
+		<-entered
+		second := make(chan error, 1)
+		go func() {
+			_, _, err := f.env.Tags.MustCreateUserRegistry(bobCtx).RenameAtomic(bobCtx, scarlet.ID, "", "red", "", replaceTag)
+			second <- err
+		}()
+		// Give the second rename time to take red if nothing stops it.
+		time.Sleep(200 * time.Millisecond)
+		held, heldErr := f.env.Tags.MustCreateUserRegistry(ctx).Get(ctx, scarlet.ID)
+		close(release)
+		c.Assert(<-first, qt.IsNil)
+		c.Assert(<-second, qt.IsNil)
+		c.Assert(heldErr, qt.IsNil)
+		c.Assert(held.Slug, qt.Equals, "scarlet",
+			qt.Commentf("the second rename took red while views still named it for the first tag"))
+
+		got, err := f.alice.Get(ctx, redView.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.Query, qt.Equals, "tags=crimson")
+		got, err = f.bob.Get(bobCtx, scarletView.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.Query, qt.Equals, "tags=red")
 	})
 }

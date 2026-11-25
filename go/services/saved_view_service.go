@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 
 	"github.com/go-extras/errx"
@@ -469,39 +468,21 @@ func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[s
 	return counts, nil
 }
 
-// RenameTag makes every view of the group that names the item tag slug from
-// name the current slug of the tag tagID instead. It is called after a tag
-// slug rename, so the views keep selecting the tag they were saved with. The
-// registry reads the current slug inside its locked rewrite: when two renames
-// of one tag rewrite the views in the other order than they renamed the tag,
-// the views still end on the slug the tag has. A view whose query cannot run
-// is left alone.
-func (s *SavedViewService) RenameTag(ctx context.Context, from, tagID string) (int, error) {
-	reg, err := s.registry(ctx)
+// rewriteSavedViewTag is the registry.SavedViewTagRewrite of an item tag
+// slug rename: a view whose query names from names to instead, so it keeps
+// selecting the tag it was saved with. A view whose query cannot run is left
+// alone.
+func rewriteSavedViewTag(view models.SavedView, from, to string) (string, bool) {
+	if view.QueryVersion != models.SavedViewQueryVersion {
+		return "", false
+	}
+	q, err := commodityquery.ParseSaved(view.Query)
 	if err != nil {
-		return 0, err
+		return "", false
 	}
-	var to string
-	n, err := reg.RewriteForTag(ctx, tagID, func(view models.SavedView, slug string) (string, bool) {
-		to = slug
-		if view.QueryVersion != models.SavedViewQueryVersion {
-			return "", false
-		}
-		q, err := commodityquery.ParseSaved(view.Query)
-		if err != nil {
-			return "", false
-		}
-		renamed, changed := q.RenameTag(from, slug)
-		if !changed {
-			return "", false
-		}
-		return renamed.Encode(), true
-	})
-	if err != nil {
-		return 0, errxtrace.Wrap("failed to rewrite saved view queries", err)
+	renamed, changed := q.RenameTag(from, to)
+	if !changed {
+		return "", false
 	}
-	if n > 0 {
-		slog.DebugContext(ctx, "Saved views follow a tag rename", "from", from, "to", to, "views", n)
-	}
-	return n, nil
+	return renamed.Encode(), true
 }

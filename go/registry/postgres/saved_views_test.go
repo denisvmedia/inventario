@@ -81,8 +81,7 @@ func TestUserPurger_Postgres_PurgesSavedViews(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
-// A tag rename rewrites the saved views of its group in one transaction that
-// holds a pool connection and the group lock; the tag's slug is read in that
+// A tag rename rewrites the saved views of its group in the rename's own
 // transaction, not over a second connection. So renames complete when the
 // pool has no connection to spare: one rename with one connection, and two
 // concurrent renames in two groups with two.

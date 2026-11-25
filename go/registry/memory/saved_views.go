@@ -29,8 +29,6 @@ type SavedViewRegistryFactory struct {
 	// placements holds, per view ID and then per user ID, where that member
 	// shows the view.
 	placements map[string]map[string]models.SavedViewPlacement
-	// tags resolves the slug RewriteForTag renames to.
-	tags registry.TagRegistryFactory
 }
 
 // SavedViewRegistry is the in-memory registry of saved views. A user
@@ -40,7 +38,6 @@ type SavedViewRegistry struct {
 	base       *Registry[models.SavedView, *models.SavedView]
 	writeLock  *sync.Mutex
 	placements map[string]map[string]models.SavedViewPlacement
-	tags       registry.TagRegistryFactory
 	userID     string
 	tenantID   string
 	groupID    string
@@ -51,14 +48,12 @@ var (
 	_ registry.SavedViewRegistryFactory = (*SavedViewRegistryFactory)(nil)
 )
 
-// NewSavedViewRegistryFactory returns an empty factory. tags is where
-// RewriteForTag reads a tag's slug.
-func NewSavedViewRegistryFactory(tags registry.TagRegistryFactory) *SavedViewRegistryFactory {
+// NewSavedViewRegistryFactory returns an empty factory.
+func NewSavedViewRegistryFactory() *SavedViewRegistryFactory {
 	return &SavedViewRegistryFactory{
 		base:       NewRegistry[models.SavedView, *models.SavedView](),
 		writeLock:  &sync.Mutex{},
 		placements: make(map[string]map[string]models.SavedViewPlacement),
-		tags:       tags,
 	}
 }
 
@@ -81,7 +76,6 @@ func (f *SavedViewRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		},
 		writeLock:  f.writeLock,
 		placements: f.placements,
-		tags:       f.tags,
 		userID:     user.ID,
 		tenantID:   user.TenantID,
 		groupID:    groupID,
@@ -96,7 +90,6 @@ func (f *SavedViewRegistryFactory) CreateServiceRegistry() registry.SavedViewReg
 		},
 		writeLock:  f.writeLock,
 		placements: f.placements,
-		tags:       f.tags,
 	}
 }
 
@@ -113,6 +106,36 @@ func (f *SavedViewRegistryFactory) purgeUserPlacements(tenantID, userID string) 
 			delete(f.placements, viewID)
 		}
 	}
+}
+
+// rewriteTag stores, for every view of groupID, the query rewrite returns
+// when it reports a change. TagRegistry.RenameAtomic calls it under the
+// rename mutex.
+func (f *SavedViewRegistryFactory) rewriteTag(
+	ctx context.Context,
+	groupID, from, to string,
+	rewrite registry.SavedViewTagRewrite,
+) error {
+	f.writeLock.Lock()
+	defer f.writeLock.Unlock()
+	group := &Registry[models.SavedView, *models.SavedView]{items: f.base.items, lock: f.base.lock, groupID: groupID}
+	views, err := group.List(ctx)
+	if err != nil {
+		return err
+	}
+	now := time.Now()
+	for _, v := range views {
+		query, changed := rewrite(*v, from, to)
+		if !changed {
+			continue
+		}
+		v.Query = query
+		v.UpdatedAt = now
+		if _, err := group.Update(ctx, *v); err != nil {
+			return errxtrace.Wrap("failed to rewrite saved view query", err, errx.Attrs("saved_view_id", v.ID))
+		}
+	}
+	return nil
 }
 
 func errNeedsUser() error {
@@ -216,8 +239,16 @@ func (r *SavedViewRegistry) Get(ctx context.Context, id string) (*models.SavedVi
 	return v, nil
 }
 
-// List returns the visible views ordered by position, then name.
+// List returns the visible views ordered by position, then name. It holds
+// writeLock, so it never sees a reorder half done.
 func (r *SavedViewRegistry) List(ctx context.Context) ([]*models.SavedView, error) {
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+	return r.list(ctx)
+}
+
+// list is List for a caller that holds writeLock.
+func (r *SavedViewRegistry) list(ctx context.Context) ([]*models.SavedView, error) {
 	all, err := r.groupViews(ctx)
 	if err != nil {
 		return nil, err
@@ -353,12 +384,12 @@ func (r *SavedViewRegistry) Placements(ctx context.Context) (map[string]models.S
 	if r.userID == "" {
 		return nil, errNeedsUser()
 	}
-	views, err := r.List(ctx)
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+	views, err := r.list(ctx)
 	if err != nil {
 		return nil, err
 	}
-	r.writeLock.Lock()
-	defer r.writeLock.Unlock()
 	out := make(map[string]models.SavedViewPlacement)
 	for _, v := range views {
 		if p, ok := r.placements[v.ID][r.userID]; ok {
@@ -432,58 +463,4 @@ func (r *SavedViewRegistry) Reorder(ctx context.Context, ids []string) error {
 		}
 	}
 	return nil
-}
-
-func (r *SavedViewRegistry) RewriteForTag(
-	ctx context.Context,
-	tagID string,
-	rewrite func(view models.SavedView, tagSlug string) (string, bool),
-) (int, error) {
-	r.writeLock.Lock()
-	defer r.writeLock.Unlock()
-
-	slug, err := r.tagSlug(ctx, tagID)
-	if err != nil {
-		return 0, err
-	}
-	all, err := r.groupViews(ctx)
-	if err != nil {
-		return 0, err
-	}
-	changed := 0
-	for _, v := range all {
-		query, ok := rewrite(*v, slug)
-		if !ok {
-			continue
-		}
-		v.Query = query
-		v.UpdatedAt = time.Now()
-		if _, err := r.base.Update(ctx, *v); err != nil {
-			return changed, errxtrace.Wrap("failed to rewrite saved view query", err)
-		}
-		changed++
-	}
-	return changed, nil
-}
-
-// tagSlug reads the slug of the tag tagID as the registry's user (or as the
-// service, for a service registry) sees it.
-func (r *SavedViewRegistry) tagSlug(ctx context.Context, tagID string) (string, error) {
-	if r.tags == nil {
-		return "", errxtrace.Wrap("saved views have no tag registry", registry.ErrNotFound)
-	}
-	var tags registry.TagRegistry
-	if r.userID == "" {
-		tags = r.tags.CreateServiceRegistry()
-	} else {
-		var err error
-		if tags, err = r.tags.CreateUserRegistry(ctx); err != nil {
-			return "", errxtrace.Wrap("failed to create tag registry", err)
-		}
-	}
-	tag, err := tags.Get(ctx, tagID)
-	if err != nil {
-		return "", errxtrace.Wrap("failed to read tag", err)
-	}
-	return tag.Slug, nil
 }

@@ -3,7 +3,6 @@ package services
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"strings"
 	"time"
 	"unicode"
@@ -184,26 +183,17 @@ func (s *TagService) normalizeAndEnsureSlugs(ctx context.Context, kind models.Ta
 // same tag serialize cleanly — the second re-reads the row inside its
 // lock and renames from whatever slug the first one settled on.
 //
-// Saved views name item tags by slug, so after an item tag's slug changes
-// the views of the group that name it are rewritten from the slug the rename
-// started from (read under the rename's lock) to the slug the tag has when
-// the views are rewritten. That rewrite runs after the rename commits; when
-// it fails the rename stands and the views show the old slug as a tag that
-// no longer exists.
+// Saved views name item tags by slug, so the rename rewrites the views of
+// the group that name the tag in the same transaction, under the locks of
+// the old and the new slug (see TagRegistry.RenameAtomic).
 func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create tag registry", err)
 	}
-	renamed, from, err := tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor)
+	renamed, _, err := tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor, rewriteSavedViewTag)
 	if err != nil {
 		return nil, err
-	}
-	if renamed.Kind == models.TagKindCommodity && renamed.Slug != from && s.factorySet.SavedViewRegistryFactory != nil {
-		if _, err := NewSavedViewService(s.factorySet).RenameTag(ctx, from, id); err != nil {
-			slog.WarnContext(ctx, "Saved views kept the old tag slug after a rename",
-				"tag_id", id, "from", from, "to", renamed.Slug, "error", err)
-		}
 	}
 	return renamed, nil
 }

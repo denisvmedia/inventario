@@ -926,9 +926,23 @@ type TagRegistry interface {
 	// Pass newSlug == "" to keep the existing slug. Empty newLabel /
 	// newColor leave the corresponding fields untouched.
 	//
+	// Saved views name item tags by slug. When the slug of an item tag
+	// changes and rewriteViews is not nil, rewriteViews is called for every
+	// saved view of the tag's group, the personal views of every member
+	// included, and the views it changes are stored in the same transaction
+	// under the group's saved view lock. The rename holds the locks of its
+	// old and new slug until it commits, so another tag cannot take the
+	// freed slug while the views still name it: a view keeps following the
+	// tag it was saved with.
+	//
 	// It returns the tag as written and the slug it held when the lock was
 	// taken, which is the slug the references were rewritten from.
-	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (renamed *models.Tag, previousSlug string, err error)
+	RenameAtomic(
+		ctx context.Context,
+		id, newLabel, newSlug string,
+		newColor models.TagColor,
+		rewriteViews SavedViewTagRewrite,
+	) (renamed *models.Tag, previousSlug string, err error)
 
 	// DeleteAtomic re-checks usage, strips JSONB references (when
 	// force=true), and deletes the tags row — all under a single
@@ -1234,21 +1248,12 @@ type SavedViewRegistry interface {
 	// is unknown, invisible or repeated fails with ErrNotFound and nothing
 	// is changed.
 	Reorder(ctx context.Context, ids []string) error
-
-	// RewriteForTag calls rewrite for every view of the group, including
-	// the personal views of other members, with the slug the tag tagID has
-	// now, and stores the query rewrite returns when changed is true. It
-	// returns how many views changed. It runs in one transaction under the
-	// group's write lock and reads the slug in that transaction after taking
-	// the lock, so it needs no second connection, and a rewrite that runs
-	// after a later rename of the tag still lands on the tag's final slug. A
-	// tag the registry cannot see fails with ErrNotFound and changes nothing.
-	RewriteForTag(
-		ctx context.Context,
-		tagID string,
-		rewrite func(view models.SavedView, tagSlug string) (query string, changed bool),
-	) (int, error)
 }
+
+// SavedViewTagRewrite returns the query a saved view gets when the item tag
+// slug from is renamed to to, and whether the view changed. See
+// TagRegistry.RenameAtomic.
+type SavedViewTagRewrite func(view models.SavedView, from, to string) (query string, changed bool)
 
 // MaintenanceListOptions narrows the result of
 // MaintenanceScheduleRegistry.ListPaginated.

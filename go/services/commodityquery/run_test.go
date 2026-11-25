@@ -160,6 +160,49 @@ func TestCountEach_MatchesTheListTotals(t *testing.T) {
 	c.Assert(none, qt.HasLen, 0)
 }
 
+// The live and the Trash count of one batch are read together: while an item
+// goes to Trash and back, every batch counts it exactly once.
+func TestCountEach_CountsLiveAndTrashFromOneRead(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	item := seedItem(c, ctx, set, "Ladder")
+	qs := []commodityquery.Query{{IncludeInactive: true}, {IncludeInactive: true, Trashed: true}}
+
+	done := make(chan struct{})
+	moved := make(chan error, 1)
+	go func() {
+		defer close(moved)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if _, err := set.CommodityRegistry.Trash(ctx, item.ID, "user-1", time.Now()); err != nil {
+				moved <- err
+				return
+			}
+			if _, err := set.CommodityRegistry.Restore(ctx, item.ID); err != nil {
+				moved <- err
+				return
+			}
+		}
+	}()
+	for range 2000 {
+		counts, err := commodityquery.CountEach(ctx, set, qs)
+		if err != nil {
+			close(done)
+			c.Fatal(err)
+		}
+		if counts[0]+counts[1] != 1 {
+			close(done)
+			c.Fatalf("live %d + Trash %d: the item was counted %d times", counts[0], counts[1], counts[0]+counts[1])
+		}
+	}
+	close(done)
+	c.Assert(<-moved, qt.IsNil)
+}
+
 func TestTagCounts_SetsTheTagFilterAside(t *testing.T) {
 	c := qt.New(t)
 	ctx, set := newMemorySet(c)

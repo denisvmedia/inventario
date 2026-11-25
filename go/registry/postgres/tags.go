@@ -663,13 +663,21 @@ func (r *TagRegistry) peekTagSlug(ctx context.Context, tx *sqlx.Tx, id string) (
 	return slug, kind, nil
 }
 
-// renameRewriteSlug runs the JSONB-rewrite half of RenameAtomic — slug
-// clash check + the two table updates — inside the caller's tx.
-// Slug-advisory locks must already be held by the orchestrator (taken
-// before the tag-row FOR UPDATE so the lock acquisition order matches
-// ensureTagRowsInTx). Lifted out of RenameAtomic so the orchestrator
-// stays under gocognit's threshold without losing the rewrite step.
-func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id string, kind models.TagKind, oldSlug, newSlug string) error {
+// renameRewriteSlug runs the rewrite half of RenameAtomic — slug clash
+// check, the JSONB update and, for an item tag, the saved views —
+// inside the caller's tx. Slug-advisory locks must already be held by
+// the orchestrator (taken before the tag-row FOR UPDATE so the lock
+// acquisition order matches ensureTagRowsInTx). Lifted out of
+// RenameAtomic so the orchestrator stays under gocognit's threshold
+// without losing the rewrite step.
+func (r *TagRegistry) renameRewriteSlug(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	current models.Tag,
+	newSlug string,
+	rewriteViews registry.SavedViewTagRewrite,
+) error {
+	id, kind, oldSlug := current.ID, current.Kind, current.Slug
 	// Pre-emptive slug-clash check, inside the lock — scoped to the same
 	// kind, because (group, kind, slug) is the uniqueness tuple: the same
 	// slug may legitimately exist under the other kind. Relying on the
@@ -697,6 +705,41 @@ func (r *TagRegistry) renameRewriteSlug(ctx context.Context, tx *sqlx.Tx, id str
 		r.tableForKind(kind), jsonbReplaceSlugExpr(1, 2))
 	if _, err := tx.ExecContext(ctx, rewriteQuery, oldSlug, newSlug); err != nil {
 		return errxtrace.Wrap("failed to rewrite tag references", err)
+	}
+	if kind == models.TagKindCommodity && rewriteViews != nil {
+		return r.rewriteSavedViews(ctx, tx, current.GroupID, oldSlug, newSlug, rewriteViews)
+	}
+	return nil
+}
+
+// rewriteSavedViews stores, for every saved view of groupID, the query
+// rewrite returns when it reports a change. It runs in the rename's
+// transaction under the saved view group lock, so it needs no second
+// connection and lands before the rename's slug locks are released.
+func (r *TagRegistry) rewriteSavedViews(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	groupID, from, to string,
+	rewrite registry.SavedViewTagRewrite,
+) error {
+	if err := lockSavedViewGroup(ctx, tx, groupID); err != nil {
+		return err
+	}
+	var views []models.SavedView
+	query := fmt.Sprintf(`SELECT * FROM %s WHERE group_id = $1 ORDER BY id`, r.tableNames.SavedViews())
+	if err := tx.SelectContext(ctx, &views, query, groupID); err != nil {
+		return errxtrace.Wrap("failed to list saved views", err)
+	}
+	now := time.Now()
+	updateSQL := fmt.Sprintf(`UPDATE %s SET query = $1, updated_at = $2 WHERE id = $3`, r.tableNames.SavedViews())
+	for _, v := range views {
+		next, changed := rewrite(v, from, to)
+		if !changed {
+			continue
+		}
+		if _, err := tx.ExecContext(ctx, updateSQL, next, now, v.ID); err != nil {
+			return errxtrace.Wrap("failed to rewrite saved view query", err, errx.Attrs("saved_view_id", v.ID))
+		}
 	}
 	return nil
 }
@@ -730,10 +773,17 @@ func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, kind mo
 // from whatever slug the first one settled on.
 //
 // Lock order: id-advisory → peek slug (no row lock) → slug-advisory
-// (old + new, sorted) → tag-row FOR UPDATE → rewrite + update. The
-// peek-then-slug-lock split is what avoids deadlocking against
-// concurrent ensureTagRowsInTx (which takes slug-lock then row-lock).
-func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, string, error) {
+// (old + new, sorted) → tag-row FOR UPDATE → rewrite + update → saved
+// view group lock. The peek-then-slug-lock split is what avoids
+// deadlocking against concurrent ensureTagRowsInTx (which takes
+// slug-lock then row-lock). The saved view writes never take a tag
+// lock, so taking their group lock last cannot deadlock against them.
+func (r *TagRegistry) RenameAtomic(
+	ctx context.Context,
+	id, newLabel, newSlug string,
+	newColor models.TagColor,
+	rewriteViews registry.SavedViewTagRewrite,
+) (*models.Tag, string, error) {
 	var final *models.Tag
 	var previousSlug string
 	reg := r.newSQLRegistry()
@@ -777,7 +827,7 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 
 		if newSlug != "" && newSlug != current.Slug {
 			updated.Slug = newSlug
-			if err := r.renameRewriteSlug(ctx, tx, id, kind, current.Slug, newSlug); err != nil {
+			if err := r.renameRewriteSlug(ctx, tx, current, newSlug, rewriteViews); err != nil {
 				return err
 			}
 		}

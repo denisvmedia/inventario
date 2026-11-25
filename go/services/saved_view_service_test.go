@@ -367,35 +367,6 @@ func TestSavedViewService_Reorder(t *testing.T) {
 	c.Assert(entries[1].View.Name, qt.Equals, "First")
 }
 
-// Two renames of one tag, a to b then b to c, whose view rewrites run in the
-// other order: each rewrite renames to the slug the tag has when it runs, so
-// the views end on c.
-func TestSavedViewService_RenameTag_FollowsTheTagsCurrentSlug(t *testing.T) {
-	c := qt.New(t)
-	f := newSavedViewFixture()
-	ctx := savedViewCtx("alice")
-	view, err := f.svc.Create(ctx, actor("alice", models.GroupRoleUser), viewInput("A", "tags=a", false))
-	c.Assert(err, qt.IsNil)
-	// Both renames have committed: the tag is c.
-	tag, err := f.factory.TagRegistryFactory.MustCreateUserRegistry(ctx).Create(ctx, models.Tag{
-		Kind: models.TagKindCommodity, Slug: "c", Label: "C", Color: models.TagColorBlue,
-	})
-	c.Assert(err, qt.IsNil)
-
-	// The second rename (b to c) rewrites first; no view names b yet.
-	n, err := f.svc.RenameTag(ctx, "b", tag.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 0)
-	// The first rename (a to b) rewrites last, when the tag is already c.
-	n, err = f.svc.RenameTag(ctx, "a", tag.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(n, qt.Equals, 1)
-
-	got, err := f.svc.Get(ctx, actor("alice", models.GroupRoleUser), view.View.ID)
-	c.Assert(err, qt.IsNil)
-	c.Assert(got.View.Query, qt.Equals, "tags=c")
-}
-
 // Concurrent renames of one tag from the same starting slug: the second
 // renames from the slug the first left, read under the rename's lock, so the
 // views follow the tag to its final slug.

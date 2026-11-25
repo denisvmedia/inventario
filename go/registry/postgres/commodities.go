@@ -370,8 +370,14 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 		return counts, nil
 	}
 	table := string(r.tableNames.Commodities())
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its query is built.
+	now := time.Now()
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		for i, o := range opts {
+			if o.WarrantyNow.IsZero() {
+				o.WarrantyNow = now
+			}
 			where := commodityWhere(o, table, string(r.tableNames.CommodityLoans()))
 			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
 			n, err := countRows(ctx, tx, query, args...)

@@ -405,19 +405,24 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
 }
 
-func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+func (r *CommodityRegistry) CountEach(_ context.Context, opts []registry.CommodityListOptions) ([]int, error) {
 	counts := make([]int, len(opts))
-	// The rows each set of options runs over, as ListPaginated reads them:
-	// the live items, or the items in Trash. Each set is read once.
-	candidates := make(map[bool][]*models.Commodity, 2)
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	// The live items and the items in Trash come from one read, so a live
+	// and a Trash count of one batch agree on where every item is.
+	live, trashed := r.liveAndTrashed()
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its turn comes.
+	now := time.Now()
 	for i, o := range opts {
-		all, ok := candidates[o.Trashed]
-		if !ok {
-			var err error
-			if all, err = r.listCandidates(ctx, o); err != nil {
-				return nil, err
-			}
-			candidates[o.Trashed] = all
+		all := live
+		if o.Trashed {
+			all = trashed
+		}
+		if o.WarrantyNow.IsZero() {
+			o.WarrantyNow = now
 		}
 		counts[i] = len(filterCommodities(all, o))
 	}

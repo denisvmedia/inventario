@@ -26,7 +26,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
-	savedViewFactory := NewSavedViewRegistryFactory(tagFactory)
+	savedViewFactory := NewSavedViewRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
@@ -50,6 +50,10 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory.SetCommodityFactory(commodityFactory)
 	commodityServiceFactory.SetCommodityFactory(commodityFactory)
 	maintenanceScheduleFactory.SetCommodityFactory(commodityFactory)
+
+	// A tag rename rewrites the saved views that name the tag under the
+	// rename's mutex.
+	tagFactory.SetSavedViewFactory(savedViewFactory)
 
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory
