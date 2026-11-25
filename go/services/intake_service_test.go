@@ -276,7 +276,7 @@ func TestIntake_OneReceiptThreeProducts(t *testing.T) {
 	c.Check(first.Failed, qt.Equals, 1)
 	c.Check(candidateNamed(first.Detail, "Espresso Cups").ErrorCode, qt.Equals, services.IntakeDraftDiscarded)
 	c.Check(first.Detail.Summary.State(), qt.Equals, models.IntakeSessionReview)
-	c.Check(first.Detail.Summary.NeedsAttention(), qt.IsTrue)
+	c.Check(first.Detail.Summary.Open(), qt.IsTrue)
 
 	// The same call again, as after a lost response: nothing new is made.
 	idsBefore := map[string]bool{}
@@ -420,7 +420,7 @@ func TestIntake_RetryThenFail(t *testing.T) {
 	failed := f.get(c, f.ctx, session.Session.ID)
 	c.Check(failed.Sources[0].Source.Status, qt.Equals, models.IntakeSourceFailed)
 	c.Check(failed.Sources[0].Source.ErrorCode, qt.Equals, services.IntakeErrorProviderUnavailable)
-	c.Check(failed.Summary.NeedsAttention(), qt.IsTrue)
+	c.Check(failed.Summary.Open(), qt.IsTrue)
 	c.Check(failed.Summary.State(), qt.Equals, models.IntakeSessionDone)
 
 	must.Must(f.intake.Resume(f.ctx, session.Session.ID))

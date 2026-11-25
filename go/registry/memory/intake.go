@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"maps"
+	"math"
 	"slices"
 	"sync"
 	"time"
@@ -337,6 +338,33 @@ func (r *IntakeRegistry) ListSessions(ctx context.Context, offset, limit int) ([
 	start := min(max(offset, 0), total)
 	end := min(start+max(limit, 0), total)
 	return all[start:end], total, nil
+}
+
+func (r *IntakeRegistry) ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error) {
+	all, _, err := r.ListSessions(ctx, 0, math.MaxInt)
+	if err != nil {
+		return nil, err
+	}
+	st := r.factory.state
+	st.mu.Lock()
+	defer st.mu.Unlock()
+	summaries := map[string]*models.IntakeSessionSummary{}
+	for _, sess := range all {
+		summaries[sess.ID] = &models.IntakeSessionSummary{}
+	}
+	for _, src := range st.sources {
+		if sum, ok := summaries[src.SessionID]; ok && r.visible(src.GroupID) {
+			sum.AddSource(src, 0)
+		}
+	}
+	for _, cand := range st.candidates {
+		if sum, ok := summaries[cand.SessionID]; ok && r.visible(cand.GroupID) {
+			sum.AddCandidate(cand)
+		}
+	}
+	return slices.DeleteFunc(all, func(sess *models.IntakeSession) bool {
+		return !summaries[sess.ID].Open()
+	}), nil
 }
 
 func (r *IntakeRegistry) ListSources(_ context.Context, sessionIDs ...string) ([]*models.IntakeSource, error) {

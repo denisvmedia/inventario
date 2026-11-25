@@ -56,6 +56,7 @@ func RunIntakeContract(t *testing.T, newEnv func(t *testing.T) IntakeEnv) {
 		{"rescan is refused for a draft the outcome missed", intakeContractRescanUnrecordedDraft},
 		{"delete takes sources, candidates and links but not files", intakeContractDelete},
 		{"sessions list newest first", intakeContractListOrder},
+		{"open sessions are the ones with work left", intakeContractOpenSessions},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -574,11 +575,61 @@ func intakeContractListOrder(t *testing.T, env IntakeEnv) {
 	c.Assert(count, qt.Equals, 3)
 }
 
+func intakeContractOpenSessions(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	pause := func() { time.Sleep(5 * time.Millisecond) }
+
+	// Done: one draft made, the other product left out.
+	_, done := scannedSessionWithKey(c, env, "done", "Kettle", "Toaster")
+	_, err := env.Intake.SetCandidateOutcome(env.Ctx, done[0].ID, models.IntakeCandidateCreated, new("draft-1"), "")
+	c.Assert(err, qt.IsNil)
+	_, err = env.Intake.SetCandidateOutcome(env.Ctx, done[1].ID, models.IntakeCandidateSkipped, nil, "")
+	c.Assert(err, qt.IsNil)
+	pause()
+	// A product without an outcome.
+	scannedSessionWithKey(c, env, "review", "Lamp")
+	pause()
+	// A kept product whose draft could not be made.
+	_, retry := scannedSessionWithKey(c, env, "retry", "Chair")
+	_, err = env.Intake.SetCandidateOutcome(env.Ctx, retry[0].ID, models.IntakeCandidateFailed, nil, "invalid_values")
+	c.Assert(err, qt.IsNil)
+	pause()
+	// The only file could not be scanned.
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "failed"}, []registry.IntakeSourceInput{{}}, 0)
+	c.Assert(err, qt.IsNil)
+	src, err := env.Service.ClaimNextSource(env.Ctx, time.Now().Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(env.Service.FailSource(env.Ctx, src.ID, src.Attempts, "file_unreadable"), qt.IsNil)
+	pause()
+	// Nothing to scan and nothing to decide.
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "empty"}, nil, 0)
+	c.Assert(err, qt.IsNil)
+	pause()
+	// A file waiting for its scan.
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "queued"}, []registry.IntakeSourceInput{{}}, 0)
+	c.Assert(err, qt.IsNil)
+
+	open, err := env.Intake.ListOpenSessions(env.Ctx)
+	c.Assert(err, qt.IsNil)
+	keys := make([]string, 0, len(open))
+	for _, sess := range open {
+		keys = append(keys, sess.ClientKey)
+	}
+	c.Assert(keys, qt.DeepEquals, []string{"queued", "failed", "retry", "review"})
+}
+
 // scannedSession creates a session with one source and stores a scan with
 // one candidate per name.
 func scannedSession(c *qt.C, env IntakeEnv, names ...string) (*models.IntakeSession, []*models.IntakeCandidate) {
 	c.Helper()
-	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "scanned"}, []registry.IntakeSourceInput{{}}, 0)
+	return scannedSessionWithKey(c, env, "scanned", names...)
+}
+
+// scannedSessionWithKey is scannedSession for a session with the client key.
+// No other source of the group may wait for a scan.
+func scannedSessionWithKey(c *qt.C, env IntakeEnv, key string, names ...string) (*models.IntakeSession, []*models.IntakeCandidate) {
+	c.Helper()
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: key}, []registry.IntakeSourceInput{{}}, 0)
 	c.Assert(err, qt.IsNil)
 	now := time.Now()
 	src, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))

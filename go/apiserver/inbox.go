@@ -56,14 +56,18 @@ func inboxEntries(entries []services.InboxEntry) []jsonapi.InboxEntry {
 		for _, r := range e.Reasons {
 			reasons = append(reasons, string(r))
 		}
-		out = append(out, jsonapi.InboxEntry{
+		entry := jsonapi.InboxEntry{
 			Kind:      string(e.Kind),
 			ID:        e.ID,
 			Title:     e.Title,
 			Reasons:   reasons,
 			UpdatedAt: e.UpdatedAt,
 			FileCount: e.FileCount,
-		})
+		}
+		if e.Intake != nil {
+			entry.Intake = &jsonapi.InboxIntake{State: e.Intake.State(), Summary: *e.Intake}
+		}
+		out = append(out, entry)
 	}
 	return out
 }
@@ -73,11 +77,14 @@ func inboxEntries(entries []services.InboxEntry) []jsonapi.InboxEntry {
 // @Summary List the inbox
 // @Description The records of the group that still need attention, one entry per record with
 // @Description every reason it is there for. The default inbox holds unfinished work only: open
-// @Description drafts of new items (reason draft, kind draft) and items marked as draft, whose
-// @Description review is not complete (reason item_draft, kind commodity). Missing information
-// @Description such as no location, no photo or an unknown price does not put an item here.
-// @Description Entries are ordered by their first reason in the order draft, item_draft; drafts
-// @Description most recently saved first, items most recently added first. meta.entries counts
+// @Description drafts of new items (reason draft, kind draft), items marked as draft, whose
+// @Description review is not complete (reason item_draft, kind commodity), and batches of files
+// @Description that are not finished (reason intake, kind intake_session): a file waits for its
+// @Description scan or could not be scanned, or a product waits for a decision or for its draft.
+// @Description A batch carries its progress in intake. Missing information such as no location,
+// @Description no photo or an unknown price does not put an item here. Entries are ordered by
+// @Description their first reason in the order draft, item_draft, intake; drafts most recently
+// @Description saved first, items most recently added first, batches newest first. meta.entries counts
 // @Description the entries the reason filter keeps; meta.counts describes the whole inbox and
 // @Description counts each record once in total, whatever its number of reasons. Every member of
 // @Description the group can read it. When a member who can edit items reads it, the draft
@@ -86,7 +93,7 @@ func inboxEntries(entries []services.InboxEntry) []jsonapi.InboxEntry {
 // @Tags inbox
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
-// @Param reason query string false "Keep the entries with this reason" Enums(draft, item_draft)
+// @Param reason query string false "Keep the entries with this reason" Enums(draft, item_draft, intake)
 // @Param page query int false "Page number"
 // @Param per_page query int false "Entries per page (at most 100)"
 // @Success 200 {object} jsonapi.InboxResponse "OK"

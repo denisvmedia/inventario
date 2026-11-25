@@ -5,24 +5,35 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
+
+	"go.5x5.cz/inventario/models"
 )
 
 // InboxEntry is one record of the inbox (#2794): something in the group that
 // still needs attention, with every reason it does. Kind and id name the
 // record: a draft is opened through /drafts/{id}, an item through
-// /commodities/{id}.
+// /commodities/{id}, a batch of files through /intake/sessions/{id}.
 type InboxEntry struct {
-	Kind  string `json:"kind" example:"draft" enums:"draft,commodity"`
+	Kind  string `json:"kind" example:"draft" enums:"draft,commodity,intake_session"`
 	ID    string `json:"id" example:"5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"`
 	Title string `json:"title" example:"Cordless drill"`
 	// Reasons holds at least one reason, each once, in display order.
-	Reasons []string `json:"reasons" example:"draft" enums:"draft,item_draft"`
+	Reasons []string `json:"reasons" example:"draft" enums:"draft,item_draft,intake"`
 	// UpdatedAt is when the record was last saved; drafts carry it, items
-	// do not.
+	// do not. A batch of files carries when it was added.
 	UpdatedAt *time.Time `json:"updated_at,omitempty" extensions:"x-nullable=true"`
-	// FileCount is the number of live files attached to a draft; 0 for an
-	// item.
+	// FileCount is the number of live files attached to a draft or dropped
+	// in a batch; 0 for an item.
 	FileCount int `json:"file_count" example:"1"`
+	// Intake is the progress of a batch of files, the same as on
+	// /intake/sessions; absent for other kinds.
+	Intake *InboxIntake `json:"intake,omitempty"`
+}
+
+// InboxIntake is the progress of a batch of files in the inbox.
+type InboxIntake struct {
+	State   models.IntakeSessionState   `json:"state" enums:"processing,review,done" example:"review"`
+	Summary models.IntakeSessionSummary `json:"summary"`
 }
 
 // InboxCounts counts the inbox. Total counts each record once; reasons
