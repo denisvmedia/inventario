@@ -5,6 +5,7 @@ import {
   DEFAULT_COMMODITY_QUERY,
   commodityListHref,
   commodityQueryToListOptions,
+  commodityTagHref,
   hasCommodityFilters,
   listOptionsToParams,
   parseCommodityQuery,
@@ -93,6 +94,12 @@ describe("commodityListHref", () => {
       "/g/h/commodities?q=drill&inactive=1"
     )
     expect(commodityListHref("h", {})).toBe("/g/h/commodities")
+  })
+
+  it("links one tag, escaping its slug", () => {
+    expect(commodityTagHref("h", "usb-кабель")).toBe(
+      `/g/h/commodities?tags=${encodeURIComponent("usb-кабель")}`
+    )
   })
 })
 

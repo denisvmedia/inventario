@@ -172,6 +172,36 @@ export async function listCommodities(options: ListCommoditiesOptions = {}): Pro
   }
 }
 
+// Per tag slug, how many items a query selects once its tag filter is set
+// aside, plus how many have no tags (GET /commodities/tag-counts).
+export type CommodityTagCounts = Schema<"registry.CommodityTagCounts">
+
+// The options that reach the tag counts: the query without paging, sort
+// or tag filter, which the endpoint would ignore or set aside.
+export function tagCountsOptions(options: ListCommoditiesOptions): ListCommoditiesOptions {
+  return {
+    ...options,
+    page: undefined,
+    perPage: undefined,
+    sort: undefined,
+    sortDesc: undefined,
+    tags: undefined,
+    tagMode: undefined,
+    tagsExclude: undefined,
+    noTags: undefined,
+    signal: undefined,
+  }
+}
+
+export async function getCommodityTagCounts(
+  options: ListCommoditiesOptions = {}
+): Promise<{ tags: Record<string, number>; untagged: number }> {
+  const qs = listOptionsToParams(tagCountsOptions(options)).toString()
+  const path = qs ? `/commodities/tag-counts?${qs}` : "/commodities/tag-counts"
+  const body = await http.get<{ data?: CommodityTagCounts }>(path, { signal: options.signal })
+  return { tags: body.data?.tags ?? {}, untagged: body.data?.untagged ?? 0 }
+}
+
 // normalizeCover folds a BE `meta.covers[id]` payload into the FE's
 // `CommodityCover` shape. Returns undefined when the payload is missing
 // or doesn't carry the minimum (`file_id` + at least one thumbnail) the

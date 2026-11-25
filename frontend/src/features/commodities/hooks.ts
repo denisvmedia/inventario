@@ -10,9 +10,11 @@ import {
   deleteCommodity,
   getCommoditiesValue,
   getCommodity,
+  getCommodityTagCounts,
   listCommodities,
   listCommodityEvents,
   setCommodityCover,
+  tagCountsOptions,
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
@@ -56,6 +58,21 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),
     enabled,
+    placeholderData: (prev) => prev,
+  })
+}
+
+// useCommodityTagCounts counts the items per tag for the tag picker of the
+// items list: the query of opts with its tag filter set aside. Pass
+// enabled=false until the picker opens.
+export function useCommodityTagCounts(opts: ListCommoditiesOptions, query: QueryOptions = {}) {
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  const keyOpts = tagCountsOptions(opts)
+  return useQuery({
+    queryKey: commodityKeys.tagCounts(slug, keyOpts),
+    queryFn: ({ signal }) => getCommodityTagCounts({ ...keyOpts, signal }),
+    enabled: (query.enabled ?? true) && slug.length > 0,
     placeholderData: (prev) => prev,
   })
 }

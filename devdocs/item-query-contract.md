@@ -4,6 +4,7 @@ One representation of an item filter is shared by every surface that lists, sear
 
 - the items list, `GET /g/{slug}/commodities`, and its `meta.commodities` total;
 - the item search, `GET /g/{slug}/search?type=commodities`, and its `meta.total`;
+- the tag counts, `GET /g/{slug}/commodities/tag-counts`, behind the items list's Tags menu;
 - every frontend link that opens a filtered items list.
 
 Features that select items (saved views, header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
@@ -13,12 +14,12 @@ Features that select items (saved views, header search, bulk "select all N match
 | Part | Go | TypeScript |
 | ---- | -- | ---------- |
 | Parameters, parsing, validation, encoding | `go/services/commodityquery/query.go` (`Query`, `Parse`, `Query.Values`) | `frontend/src/features/commodities/query.ts` (`CommodityQuery`, `parseCommodityQuery`, `writeCommodityQuery`, `listOptionsToParams`) |
-| Running a query, totals, match reasons | `go/services/commodityquery/run.go` (`Resolve`, `List`, `Explain`) | `useCommodities` in `features/commodities/hooks.ts` |
-| What a search term and a tag filter match | `go/registry/commodity_search.go` (`SplitSearchTerms`, `MatchCommoditySearch`, `CommodityTagFilter`) | — |
+| Running a query, totals, match reasons, tag counts | `go/services/commodityquery/run.go` (`Resolve`, `List`, `Explain`, `TagCounts`) | `useCommodities`, `useCommodityTagCounts` in `features/commodities/hooks.ts` |
+| What a search term and a tag filter match, how tags are counted | `go/registry/commodity_search.go` (`SplitSearchTerms`, `MatchCommoditySearch`, `CommodityTagFilter`, `CountCommodityTags`) | — |
 | Backends | `go/registry/postgres/commodities.go` (SQL), `go/registry/memory/commodities.go` (Go) | — |
 | Behavior both backends must share | `go/registry/registrytest/commodity_search.go` (run by the memory and postgres test packages) | `features/commodities/__tests__/query.test.ts` |
 
-Handlers do not read filter parameters themselves. They call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`) and pass the result to `commodityquery.List`.
+Handlers do not read filter parameters themselves. They call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`; none on `/commodities/tag-counts`, which refuses `page`) and pass the result to `commodityquery.List` or `commodityquery.TagCounts`.
 
 ## Parameters
 
@@ -82,6 +83,16 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 
 - `no_tags=true` together with `tags` or `tags_exclude`;
 - one tag both in `tags` and in `tags_exclude`.
+
+### Tag counts
+
+`GET /commodities/tag-counts` takes the same parameters as the list, without pagination, and answers:
+
+```json
+{ "data": { "tags": { "garage": 12, "fragile": 3 }, "untagged": 40 } }
+```
+
+The counts are for the query with its tag filter set aside: `tags[slug]` is the number of items the rest of the query selects that carry the tag, and `untagged` the number with no tags. So the counts do not change while the user picks tags, and a tag's count is the total the list shows when that tag alone is selected. A tag no selected item carries is absent from `tags`. The search, the other filters (`include_inactive` among them) and the group scope apply as on the list. `CountCommodityTags` is the reference: the memory registry calls it, and the shared registry tests check both backends against it applied to the listed items.
 
 ## Errors
 

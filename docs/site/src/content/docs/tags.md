@@ -137,13 +137,15 @@ Each row shows the tag's colour dot, its name, and how many items and/or files u
 
 Tags are most useful when you turn them into a filter.
 
+Click a tag's name on this page to open the list it filters: an item tag opens [All Items](../items/) showing the items with that tag, a file tag opens [Files](../files-and-photos/) showing the files with it.
+
 ### Files
 
-On the [Files](../files-and-photos/) page there's a row of tag-filter pills in the toolbar (such as **invoice**, **warranty**, **manual**, **photo**, **certificate**, and **backup**). Click a pill to show only files carrying that tag; click more than one to combine them. **Clear all** removes the tag filters.
+On the [Files](../files-and-photos/) page there's a row of tag-filter pills in the toolbar (such as **invoice**, **warranty**, **manual**, **photo**, **certificate**, and **backup**). Click a pill to show only files carrying that tag; click more than one to combine them. For any other file tag, click **More tags**, find the tag by name, and click it; it then shows as a pill of its own. **Clear all** removes the tag filters. Only file tags are offered here.
 
 ### Items
 
-On the [Items](../items/) list, each item shows its tags by name as small badges so you can spot them at a glance. The Items list filters by **Type**, **Status**, **area**, and **warranty** rather than by tag, so to gather items by a single tag, look for that tag's badge on the cards.
+On the [Items](../items/) list, each item shows its tags as coloured pills. Click a pill to see every item with that tag. The **Tags** button in the toolbar filters by one or more tags, excludes tags, or shows items without tags, with a count next to each tag; see [Filtering by tag](../items/#filtering-by-tag). Only item tags are offered there.
 
 ## Related
 

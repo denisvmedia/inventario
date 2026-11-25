@@ -105,7 +105,9 @@ import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useTagLabel } from "@/features/tags/hooks"
+import { useTagIndex } from "@/features/tags/hooks"
+import { TagPill } from "@/components/tags/TagPill"
+import { commodityListHref, commodityTagHref } from "@/features/commodities/query"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -570,7 +572,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               ) : null}
               {type ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {t(`commodities:type.${type}`)}
+                  {slug ? (
+                    // The items list with every item of this type.
+                    <Link
+                      to={commodityListHref(slug, { types: [type] })}
+                      className="hover:text-foreground hover:underline"
+                      data-testid="commodity-detail-type-link"
+                    >
+                      {t(`commodities:type.${type}`)}
+                    </Link>
+                  ) : (
+                    t(`commodities:type.${type}`)
+                  )}
                 </p>
               ) : null}
             </div>
@@ -1155,8 +1168,25 @@ function DetailsTab({
   variant = "page",
 }: DetailsTabProps) {
   const { t } = useTranslation()
-  const tagLabel = useTagLabel("commodity")
+  const { currentGroup } = useCurrentGroup()
+  const groupSlug = currentGroup?.slug ?? ""
+  const tagIndex = useTagIndex("commodity")
   const noValue = t("commodities:detail.noValue")
+  const areaText = (isSheetVariant: boolean) => (isSheetVariant ? areaLabel : areaName) || noValue
+  // Tags, the area and the type link to the items list filtered by them.
+  const tagPills = (commodity.tags ?? []).map((slug) => {
+    const tag = tagIndex.resolve(slug)
+    return (
+      <TagPill
+        key={slug}
+        label={tag.label}
+        color={tag.color}
+        size="xs"
+        href={groupSlug ? commodityTagHref(groupSlug, slug) : undefined}
+        data-testid="commodity-detail-tag"
+      />
+    )
+  })
   // Sheet mode shows the breadcrumb-style "Location · Area"
   // value with a "Location" label (mock parity); page mode keeps
   // the bare "Area" / area-name pair to match the existing column
@@ -1168,7 +1198,18 @@ function DetailsTab({
       label: isSheetVariant
         ? t("commodities:detail.fields.location")
         : t("commodities:detail.fields.area"),
-      value: (isSheetVariant ? areaLabel : areaName) || noValue,
+      value:
+        groupSlug && commodity.area_id ? (
+          <Link
+            to={commodityListHref(groupSlug, { areaId: commodity.area_id })}
+            className="hover:underline"
+            data-testid="commodity-detail-area-link"
+          >
+            {areaText(isSheetVariant)}
+          </Link>
+        ) : (
+          areaText(isSheetVariant)
+        ),
     },
     {
       icon: Package,
@@ -1281,28 +1322,14 @@ function DetailsTab({
             <DetailRow
               icon={Tag}
               label={t("commodities:detail.fields.tags")}
-              value={
-                <div className="flex flex-wrap gap-1.5 mt-0.5">
-                  {commodity.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary">
-                      {tagLabel(tag)}
-                    </Badge>
-                  ))}
-                </div>
-              }
+              value={<div className="flex flex-wrap gap-1 mt-0.5">{tagPills}</div>}
               variant={variant}
               withDivider
             />
           ) : (
             <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
               <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
-              <div className="flex flex-wrap gap-1.5">
-                {commodity.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary">
-                    {tagLabel(tag)}
-                  </Badge>
-                ))}
-              </div>
+              <div className="flex flex-wrap gap-1">{tagPills}</div>
             </div>
           )
         ) : null}

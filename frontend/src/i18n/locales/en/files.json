@@ -104,6 +104,7 @@
     "showingRange": "Showing {{from}}–{{to}} of {{total}}",
     "uploadDate": "Uploaded {{date}}"
   },
+  "moreTags": "More tags",
   "review": {
     "backToList": "Back to files",
     "next": "Next file",

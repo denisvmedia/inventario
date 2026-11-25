@@ -1,5 +1,6 @@
 import { Package, Pencil, Trash2 } from "lucide-react"
 import { useTranslation } from "react-i18next"
+import { Link } from "react-router-dom"
 
 import { Button } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
@@ -22,6 +23,8 @@ export interface TagRowProps {
   previewItems?: TagRowPreviewItem[]
   onEdit: () => void
   onDelete: () => void
+  // Where the label links to: the items or files list filtered by the tag.
+  href?: string
   className?: string
 }
 
@@ -33,6 +36,7 @@ export function TagRow({
   previewItems = [],
   onEdit,
   onDelete,
+  href,
   className,
 }: TagRowProps) {
   const { t } = useTranslation(["tags"])
@@ -67,12 +71,25 @@ export function TagRow({
 
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2 min-w-0">
-          <span className="text-sm font-medium truncate">
-            <span aria-hidden="true" className="text-muted-foreground">
-              #{" "}
+          {href ? (
+            <Link
+              to={href}
+              className="text-sm font-medium truncate hover:underline"
+              data-testid={`tag-row-${tag.slug}-link`}
+            >
+              <span aria-hidden="true" className="text-muted-foreground">
+                #{" "}
+              </span>
+              {label}
+            </Link>
+          ) : (
+            <span className="text-sm font-medium truncate">
+              <span aria-hidden="true" className="text-muted-foreground">
+                #{" "}
+              </span>
+              {label}
             </span>
-            {label}
-          </span>
+          )}
         </div>
         <p
           className="text-xs text-muted-foreground mt-0.5"

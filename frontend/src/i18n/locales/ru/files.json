@@ -118,6 +118,7 @@
     "showingRange": "Показаны {{from}}–{{to}} из {{total}}",
     "uploadDate": "Загружен {{date}}"
   },
+  "moreTags": "Ещё теги",
   "review": {
     "backToList": "К файлам",
     "next": "Следующий файл",

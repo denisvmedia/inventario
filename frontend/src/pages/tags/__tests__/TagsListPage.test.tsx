@@ -136,6 +136,23 @@ describe("<TagsListPage />", () => {
     expect(screen.getByTestId("tags-view-file")).toHaveAttribute("aria-pressed", "true")
   })
 
+  it("links each tag to the list it filters, items or files by view", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderPage()
+    expect(await screen.findByTestId("tag-row-kitchen-link")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?tags=kitchen`
+    )
+    await user.click(screen.getByTestId("tags-view-file"))
+    await waitFor(() =>
+      expect(screen.getByTestId("tag-row-kitchen-link")).toHaveAttribute(
+        "href",
+        `/g/${SLUG}/files?tags=kitchen`
+      )
+    )
+  })
+
   it("renders item-preview chips for tags with usage", async () => {
     seed()
     renderPage()

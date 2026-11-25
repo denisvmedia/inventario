@@ -31,6 +31,8 @@ import {
   parseFilesListParams,
 } from "@/features/files/listContext"
 import type { FileCategory, FileCategoryCounts } from "@/features/files/api"
+import { useTagIndex } from "@/features/tags/hooks"
+import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
 import {
   useBulkDeleteFiles,
   useBulkReclassifyFiles,
@@ -64,6 +66,7 @@ export function FilesListPage() {
   const confirm = useConfirm()
   const descriptionOf = useCategoryDescription()
   const tagPillLabelOf = useTagPillLabel()
+  const fileTags = useTagIndex("file")
 
   const [searchParams, setSearchParams] = useSearchParams()
   // Parsed by the same helper the file review page reads its `?from=` list
@@ -175,6 +178,11 @@ export function FilesListPage() {
   function clearTagPills() {
     patchParams({ tags: null })
   }
+
+  // Selected tags outside the curated pills, shown as pills of their own
+  // so every condition in the URL stays visible and removable.
+  const curatedTagIds = new Set<string>(FILE_TAG_PILLS.map((pill) => pill.id))
+  const otherSelectedTags = tags.filter((tag) => !curatedTagIds.has(tag))
 
   function toggleOne(id: string) {
     setSelected((prev) => {
@@ -363,6 +371,32 @@ export function FilesListPage() {
               </button>
             )
           })}
+          {otherSelectedTags.map((slug) => (
+            <button
+              key={slug}
+              type="button"
+              onClick={() => toggleTagPill(slug)}
+              aria-pressed
+              data-testid={`files-tag-pill-${slug}`}
+              className={cn(
+                "flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-all",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+                "border-primary bg-primary text-primary-foreground"
+              )}
+            >
+              {fileTags.resolve(slug).label}
+              <X className="size-3" aria-hidden="true" />
+            </button>
+          ))}
+          <TagFilterMenu
+            label={t("files:moreTags")}
+            testIdPrefix="files-tag-picker"
+            tags={fileTags.tags}
+            value={{ include: tags, exclude: [], mode: "all", untagged: false }}
+            onChange={(next) =>
+              patchParams({ tags: next.include.length ? next.include.join(",") : null })
+            }
+          />
           {tags.length > 0 ? (
             <button
               type="button"

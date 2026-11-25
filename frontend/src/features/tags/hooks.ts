@@ -16,6 +16,7 @@ import {
   type ListTagsOptions,
   type ListedTag,
   type TagAutocompleteEntry,
+  type TagColor,
   type TagEntity,
   type TagKind,
   type TagStats,
@@ -148,18 +149,35 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
   })
 }
 
-// useTagLabel resolves the slugs stored on items and files to the labels
-// the user typed or gave the tag on the Tags page. It falls back to the
-// slug while the catalogue loads, outside a group, and for a slug with no
-// tag row. Uses the optional group hook so a component rendered outside
-// <GroupProvider> (a dialog test harness) just gets the slug back.
+// A tag as a slug stored on an item or file resolves to: the label the user
+// typed or gave it on the Tags page, and its color.
+export interface ResolvedTag {
+  slug: string
+  label: string
+  color: TagColor
+}
+
+export interface TagIndex {
+  // Every tag of the kind in the current group, as listed by the API.
+  tags: ResolvedTag[]
+  // Resolves a slug; a slug without a tag row comes back as itself in
+  // the muted color.
+  resolve: (slug: string) => ResolvedTag
+  isLoading: boolean
+}
+
+// useTagIndex loads the group's tags of one kind once and resolves slugs
+// against them. It falls back to the slug while the catalogue loads,
+// outside a group, and for a slug with no tag row. Uses the optional group
+// hook so a component rendered outside <GroupProvider> (a dialog test
+// harness) just gets the slug back.
 //
 // The key sits under the group's tag namespace, so tag mutations and the
 // commodity / file writes that auto-create tags refresh it.
-export function useTagLabel(kind: TagKind): (slug: string) => string {
+export function useTagIndex(kind: TagKind): TagIndex {
   const ctx = useOptionalCurrentGroup()
   const groupSlug = ctx?.currentGroup?.slug ?? ""
-  const { data } = useQuery({
+  const { data, isLoading } = useQuery({
     queryKey: tagKeys.labels(groupSlug, kind),
     queryFn: ({ signal }) => listAllTags(kind, signal),
     enabled: groupSlug.length > 0,
@@ -167,12 +185,30 @@ export function useTagLabel(kind: TagKind): (slug: string) => string {
   })
   // A Map, not an object literal: a slug such as "constructor" must not
   // resolve to an Object.prototype member.
-  const labels = useMemo(() => {
-    const map = new Map<string, string>()
+  const { tags, bySlug } = useMemo(() => {
+    const list: ResolvedTag[] = []
+    const map = new Map<string, ResolvedTag>()
     for (const tag of data ?? []) {
-      if (tag.slug && tag.label) map.set(tag.slug, tag.label)
+      if (!tag.slug) continue
+      const resolved: ResolvedTag = {
+        slug: tag.slug,
+        label: tag.label || tag.slug,
+        color: (tag.color ?? "muted") as TagColor,
+      }
+      list.push(resolved)
+      map.set(tag.slug, resolved)
     }
-    return map
+    return { tags: list, bySlug: map }
   }, [data])
-  return useCallback((slug: string) => labels.get(slug) ?? slug, [labels])
+  const resolve = useCallback(
+    (slug: string): ResolvedTag => bySlug.get(slug) ?? { slug, label: slug, color: "muted" },
+    [bySlug]
+  )
+  return { tags, resolve, isLoading: isLoading && groupSlug.length > 0 }
+}
+
+// useTagLabel is useTagIndex for callers that only show the label.
+export function useTagLabel(kind: TagKind): (slug: string) => string {
+  const { resolve } = useTagIndex(kind)
+  return useCallback((slug: string) => resolve(slug).label, [resolve])
 }

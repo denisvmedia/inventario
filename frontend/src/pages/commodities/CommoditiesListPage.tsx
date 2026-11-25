@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -48,6 +48,8 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
+import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
+import { TagPill } from "@/components/tags/TagPill"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
@@ -57,6 +59,7 @@ import {
   useBulkDeleteCommodities,
   useBulkMoveCommodities,
   useCommodities,
+  useCommodityTagCounts,
   useCreateCommodity,
 } from "@/features/commodities/hooks"
 import {
@@ -75,12 +78,14 @@ import type { Commodity, CreateCommodityRequest } from "@/features/commodities/a
 import {
   DEFAULT_COMMODITY_QUERY,
   commodityQueryToListOptions,
+  commodityTagHref,
   hasCommodityFilters,
   parseCommodityQuery,
   primarySearchMatch,
   writeCommodityQuery,
   type CommodityQuery,
   type CommoditySearchMatch,
+  type CommodityTagFilter,
 } from "@/features/commodities/query"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -88,7 +93,7 @@ import { labelsPageHref } from "@/features/labels/links"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
-import { useTagLabel } from "@/features/tags/hooks"
+import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -208,10 +213,11 @@ export function CommoditiesListPage() {
   // Every filter is applied by the server, so the page, the total and
   // the pager describe the same set (#2128). includeInactive is always
   // sent, so the server applies the active-only default.
-  const list = useCommodities(
-    { page, perPage: PER_PAGE, ...commodityQueryToListOptions(query) },
-    { enabled }
-  )
+  const listOptions = commodityQueryToListOptions(query)
+  const list = useCommodities({ page, perPage: PER_PAGE, ...listOptions }, { enabled })
+  // Tag counts load when the Tags menu opens, for the rest of the query.
+  const [tagMenuOpen, setTagMenuOpen] = useState(false)
+  const tagCounts = useCommodityTagCounts(listOptions, { enabled: enabled && tagMenuOpen })
   const areas = useAreas({ enabled })
   // Locations populate the create-dialog's Location → Area paired
   // selects. The schema only carries area_id; location_id is UI-only.
@@ -427,7 +433,9 @@ export function CommoditiesListPage() {
     }
     return (id?: string) => (id ? (map.get(id) ?? "") : "")
   }, [areas.data])
-  const tagLabel = useTagLabel("commodity")
+  const tagIndex = useTagIndex("commodity")
+  const resolveTag = tagIndex.resolve
+  const tagLabel = useCallback((slug: string) => resolveTag(slug).label, [resolveTag])
 
   // ---- Handlers ----------------------------------------------------------
   // After a successful create, drop the user on the new commodity's
@@ -536,6 +544,11 @@ export function CommoditiesListPage() {
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
           onToggleUnassigned={toggleUnassigned}
+          tagFilter={query.tags}
+          tagOptions={tagIndex.tags}
+          tagCounts={tagCounts.data}
+          onSetTagFilter={(tags) => updateQuery({ tags })}
+          onTagMenuOpenChange={setTagMenuOpen}
           onSetSort={setSort}
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
@@ -651,6 +664,7 @@ export function CommoditiesListPage() {
             onPreview={openCommodityInSheet}
             areaName={areaName}
             tagLabel={tagLabel}
+            resolveTag={resolveTag}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -666,6 +680,7 @@ export function CommoditiesListPage() {
             onPreview={openCommodityInSheet}
             areaName={areaName}
             tagLabel={tagLabel}
+            resolveTag={resolveTag}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -769,6 +784,11 @@ interface ToolbarProps {
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
   onToggleUnassigned: () => void
+  tagFilter: CommodityTagFilter
+  tagOptions: ResolvedTag[]
+  tagCounts: { tags: Record<string, number>; untagged: number } | undefined
+  onSetTagFilter: (tags: CommodityTagFilter) => void
+  onTagMenuOpenChange: (open: boolean) => void
   onSetSort: (f: CommoditySortOption) => void
   onToggleInactive: () => void
   onClearFilters: () => void
@@ -925,6 +945,20 @@ function Toolbar(props: ToolbarProps) {
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <TagFilterMenu
+        label={t("commodities:filter.tags")}
+        testIdPrefix="commodities-filter-tags"
+        tags={props.tagOptions}
+        value={props.tagFilter}
+        onChange={props.onSetTagFilter}
+        counts={props.tagCounts?.tags}
+        untaggedCount={props.tagCounts?.untagged}
+        allowExclude
+        allowMode
+        allowUntagged
+        onOpenChange={props.onTagMenuOpenChange}
+      />
 
       <Button
         type="button"
@@ -1133,6 +1167,8 @@ interface CommoditiesGridProps {
   areaName: (id?: string) => string
   // Resolves a stored tag slug to the tag's label (slug while unknown).
   tagLabel: (slug: string) => string
+  // Resolves a stored tag slug to its label and color.
+  resolveTag: (slug: string) => ResolvedTag
   currency: string
   // Map of commodity_id → open-loan count (#1452). Rows with count > 0
   // render a "Lent out" pill. Empty / missing keys mean "not lent" so
@@ -1157,6 +1193,7 @@ function CommoditiesGrid({
   onPreview,
   areaName,
   tagLabel,
+  resolveTag,
   currency,
   loanCounts,
   serviceCounts,
@@ -1174,6 +1211,7 @@ function CommoditiesGrid({
           onPreview={onPreview}
           areaName={areaName}
           tagLabel={tagLabel}
+          resolveTag={resolveTag}
           currency={currency}
           lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
           inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
@@ -1192,6 +1230,7 @@ interface CommodityCardProps {
   onPreview: (id: string) => void
   areaName: (id?: string) => string
   tagLabel: (slug: string) => string
+  resolveTag: (slug: string) => ResolvedTag
   currency: string
   lent?: boolean
   inService?: boolean
@@ -1206,6 +1245,7 @@ function CommodityGridCard({
   onPreview,
   areaName,
   tagLabel,
+  resolveTag,
   currency,
   lent,
   inService,
@@ -1349,11 +1389,21 @@ function CommodityGridCard({
         </div>
         {row.tags && row.tags.length > 0 ? (
           <div className="mt-2 flex flex-wrap gap-1">
-            {row.tags.slice(0, 3).map((tag) => (
-              <Badge key={tag} variant="secondary" className="h-4 px-1.5 text-[10px]">
-                {tagLabel(tag)}
-              </Badge>
-            ))}
+            {row.tags.slice(0, 3).map((tagSlug) => {
+              const tag = resolveTag(tagSlug)
+              return (
+                // Above the card-wide link, like the checkbox.
+                <TagPill
+                  key={tagSlug}
+                  label={tag.label}
+                  color={tag.color}
+                  size="xs"
+                  href={slug ? commodityTagHref(slug, tagSlug) : undefined}
+                  className="pointer-events-auto relative z-10"
+                  data-testid="commodity-card-tag"
+                />
+              )
+            })}
           </div>
         ) : null}
       </CardContent>

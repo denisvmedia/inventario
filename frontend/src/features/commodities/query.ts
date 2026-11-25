@@ -169,6 +169,13 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
   return qs ? `${base}?${qs}` : base
 }
 
+// Link to the items list showing the items that carry one tag.
+export function commodityTagHref(slug: string, tagSlug: string): string {
+  return commodityListHref(slug, {
+    tags: { ...DEFAULT_COMMODITY_QUERY.tags, include: [tagSlug] },
+  })
+}
+
 // Whether query narrows the list at all; the sort does not count.
 export function hasCommodityFilters(query: CommodityQuery): boolean {
   return (
