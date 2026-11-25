@@ -38,6 +38,7 @@ func RegisterFlags(cmd *cobra.Command, cfg *Config, dbConfig *shared.DatabaseCon
 	flags.StringVar(&cfg.LoanReminderInterval, "loan-reminder-interval", cfg.LoanReminderInterval, "Interval between loan reminder sweeps (overdue + due-soon emails; e.g., 1h)")
 	flags.IntVar(&cfg.LoanReminderDueSoonDays, "loan-reminder-due-soon-days", cfg.LoanReminderDueSoonDays, "Forward-looking window in days for the due-soon loan reminder (default 7)")
 	flags.StringVar(&cfg.MaintenanceReminderInterval, "maintenance-reminder-interval", cfg.MaintenanceReminderInterval, "Interval between maintenance reminder sweeps (14/7/1-day + overdue maintenance emails; e.g., 1h)")
+	flags.StringVar(&cfg.ItemReminderInterval, "item-reminder-interval", cfg.ItemReminderInterval, "Interval between item reminder sweeps (emails for the reminders users set on items; e.g., 1h)")
 	flags.StringVar(&cfg.CurrencyMigrationInterval, "currency-migration-interval", cfg.CurrencyMigrationInterval, "Currency migration worker active-poll interval (when pending rows exist; idle cadence is fixed at 1m). Values like 5s, 10s.")
 	flags.StringVar(&cfg.BusinessMetricsInterval, "business-metrics-interval", cfg.BusinessMetricsInterval, "Interval between installation-wide business-metrics collection sweeps (#843; e.g., 60s)")
 	flags.StringVar(&cfg.OrphanFileGCInterval, "orphan-file-gc-interval", cfg.OrphanFileGCInterval, "Interval between orphan-file GC sweeps (#2237; e.g., 24h)")

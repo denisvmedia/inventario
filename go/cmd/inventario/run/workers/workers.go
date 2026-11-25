@@ -166,6 +166,7 @@ func (c *Command) run() error {
 			bootstrap.StartStorageQuotaReminderWorker,
 			bootstrap.StartLoanReminderWorker,
 			bootstrap.StartMaintenanceReminderWorker,
+			bootstrap.StartItemReminderWorker,
 			bootstrap.StartCurrencyMigrationWorker,
 			bootstrap.StartWeeklyDigestWorker,
 			bootstrap.StartBusinessMetricsWorker,

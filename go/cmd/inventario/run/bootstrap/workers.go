@@ -488,6 +488,25 @@ func StartMaintenanceReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *
 	return worker.Stop
 }
 
+// StartItemReminderWorker wires and starts the item reminder worker
+// (#2805), with the same notifications.Service as the other reminder
+// workers so per-user and per-group toggles apply.
+func StartItemReminderWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func() {
+	urlBuilder := buildCommodityURLBuilder(cfg.PublicURL)
+	prefs := notifications.NewService(rs.FactorySet.SettingsRegistryFactory)
+	prefs.SetGroupPrefs(rs.FactorySet.GroupNotificationPrefRegistry)
+	service := services.NewItemReminderService(rs.FactorySet, rs.EmailLifecycle.Service, urlBuilder).WithPreferences(prefs)
+	opts := []services.ItemReminderOption{
+		services.WithItemReminderInterval(rs.WorkerDurations.ItemReminderInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithItemReminderPauseController(rs.PauseController))
+	}
+	worker := services.NewItemReminderWorker(service, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartCurrencyMigrationWorker wires and starts the currency migration
 // worker (#1552 / #202 §4.5). Returns a no-op stop function when the
 // feature flag is off OR the active backend is not postgres — TX2 of

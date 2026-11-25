@@ -880,6 +880,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 			r.With(contentWriteGate).Route("/services", GroupServices(params))
 			r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
+			r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
+			r.Route("/upcoming", Upcoming())
 			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())

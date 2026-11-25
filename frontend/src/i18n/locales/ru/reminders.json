@@ -1,0 +1,132 @@
+{
+  "confirm": {
+    "delete": "Удалить это напоминание?"
+  },
+  "days": {
+    "ago_few": "{{count}} дня назад",
+    "ago_many": "{{count}} дней назад",
+    "ago_one": "{{count}} день назад",
+    "ago_other": "{{count}} дня назад",
+    "left_few": "Через {{count}} дня",
+    "left_many": "Через {{count}} дней",
+    "left_one": "Через {{count}} день",
+    "left_other": "Через {{count}} дня",
+    "overdue_few": "Просрочено на {{count}} дня",
+    "overdue_many": "Просрочено на {{count}} дней",
+    "overdue_one": "Просрочено на {{count}} день",
+    "overdue_other": "Просрочено на {{count}} дня",
+    "today": "Сегодня"
+  },
+  "dialog": {
+    "createTitle": "Добавить напоминание",
+    "dateLabel": "Дата",
+    "description": "Выберите дату и когда напомнить. Повторяющееся напоминание после каждой даты переходит на следующую.",
+    "editTitle": "Изменить напоминание",
+    "intervalLabel": {
+      "day": "Каждые (дней)",
+      "month": "Каждые (месяцев)",
+      "week": "Каждые (недель)",
+      "year": "Каждые (лет)"
+    },
+    "leadTimesHint": "Дни до даты через запятую, например 30, 7, 1. 0 означает в сам день.",
+    "leadTimesLabel": "Напомнить (дней до)",
+    "repeatLabel": "Повтор",
+    "titleLabel": "Название",
+    "titlePlaceholder": "Заканчивается срок возврата"
+  },
+  "every": {
+    "daily": "Каждый день",
+    "day_few": "Каждые {{count}} дня",
+    "day_many": "Каждые {{count}} дней",
+    "day_one": "Каждый {{count}} день",
+    "day_other": "Каждые {{count}} дня",
+    "month_few": "Каждые {{count}} месяца",
+    "month_many": "Каждые {{count}} месяцев",
+    "month_one": "Каждый {{count}} месяц",
+    "month_other": "Каждые {{count}} месяца",
+    "monthly": "Каждый месяц",
+    "none": "Однократно",
+    "week_few": "Каждые {{count}} недели",
+    "week_many": "Каждые {{count}} недель",
+    "week_one": "Каждую {{count}} неделю",
+    "week_other": "Каждые {{count}} недели",
+    "weekly": "Каждую неделю",
+    "year_few": "Каждые {{count}} года",
+    "year_many": "Каждые {{count}} лет",
+    "year_one": "Каждый {{count}} год",
+    "year_other": "Каждые {{count}} года",
+    "yearly": "Каждый год"
+  },
+  "kind": {
+    "loan": "Возврат займа",
+    "maintenance": "Обслуживание",
+    "reminder": "Напоминание",
+    "warranty": "Окончание гарантии"
+  },
+  "leadTimes": {
+    "beforeList_few": "за {{list}} дня",
+    "beforeList_many": "за {{list}} дней",
+    "beforeList_one": "за {{list}} день",
+    "beforeList_other": "за {{list}} дня",
+    "before_few": "за {{list}} дня",
+    "before_many": "за {{list}} дней",
+    "before_one": "за {{list}} день",
+    "before_other": "за {{list}} дня",
+    "onTheDay": "в сам день",
+    "prefix": "Письмо {{parts}}"
+  },
+  "repeat": {
+    "day": "Ежедневно",
+    "month": "Ежемесячно",
+    "none": "Не повторять",
+    "week": "Еженедельно",
+    "year": "Ежегодно"
+  },
+  "row": {
+    "deleteLabel": "Удалить напоминание {{title}}",
+    "editLabel": "Изменить напоминание {{title}}",
+    "passed": "Прошло"
+  },
+  "section": {
+    "add": "Добавить напоминание",
+    "description": "Даты, о которых нужно помнить для этого предмета, например срок возврата или продление страховки. Перед каждой мы пришлём письмо.",
+    "empty": "Напоминаний пока нет.",
+    "loadError": "Не удалось загрузить напоминания.",
+    "title": "Напоминания"
+  },
+  "toast": {
+    "created": "Напоминание добавлено.",
+    "deleteError": "Не удалось удалить напоминание.",
+    "deleted": "Напоминание удалено.",
+    "saveError": "Не удалось сохранить напоминание.",
+    "updated": "Напоминание изменено."
+  },
+  "upcoming": {
+    "empty": "В этот период ничего не предстоит.",
+    "subtitle": "Напоминания, окончания гарантий, займы и обслуживание по всей группе, по дате.",
+    "tabAll": "Все",
+    "tabLoans": "Займы",
+    "tabMaintenance": "Обслуживание",
+    "tabReminders": "Напоминания",
+    "tabWarranties": "Гарантии",
+    "title": "Предстоящие",
+    "unknownItem": "Неизвестный предмет",
+    "windowDays_few": "Ближайшие {{count}} дня",
+    "windowDays_many": "Ближайшие {{count}} дней",
+    "windowDays_one": "Ближайший {{count}} день",
+    "windowDays_other": "Ближайшие {{count}} дня",
+    "windowLabel": "Период",
+    "windowYear": "Ближайшие 12 месяцев"
+  },
+  "validation": {
+    "dateRequired": "Выберите дату.",
+    "intervalRange": "Введите целое число от 1 до 999.",
+    "leadTimesDuplicate": "Каждое значение можно указать только один раз.",
+    "leadTimesInvalid": "Введите целые числа через запятую.",
+    "leadTimesRange": "Каждое значение должно быть от 0 до 365.",
+    "leadTimesRequired": "Введите хотя бы одно значение.",
+    "leadTimesTooMany": "Введите не больше 5 значений.",
+    "titleRequired": "Введите название.",
+    "titleTooLong": "Название может содержать не больше 200 символов."
+  }
+}

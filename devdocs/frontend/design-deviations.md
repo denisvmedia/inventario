@@ -183,6 +183,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — asked to make the Items selection panel match the Files one.
 - **Reversion plan**: Permanent unless the upstream mock adopts a richer mass-action pattern; reconcile both surfaces together via the shared component if it does.
 
+#### 2026-11-25 — Item page: Reminders card on the Details tab
+
+- **Issue/PR**: #2805
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has no reminders surface; its Details tab is the facts card only.
+- **Reality**: The Details tab renders a **Reminders** card between the details card and the history timeline (`CommodityRemindersSection`, `data-testid="commodity-reminders"`). The card header carries the title, a one-line description and an outline **Add reminder** button; each row shows a `BellRing` icon, the title, a muted line with the repeat rule and lead times, the next date with "In N days" on the right, and ghost icon buttons for edit and delete. A one-off reminder whose date has passed keeps its row with an outline **Passed** badge. Create and edit use a dialog (`ReminderDialog`) with title, date, a comma-separated "Remind me (days before)" input and a Radix **Repeat** select that reveals an **Every (unit)** number input.
+- **Why**: Not present in mock. Built from the [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) Card and the row anatomy of [`WarrantiesView.tsx`](../../design-mocks/src/views/WarrantiesView.tsx) (icon, two-line text block, date column on the right). The card lives on the Details tab instead of a new tab so the item page stays at seven tabs and the change is one self-contained component.
+- **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when the upstream mock adds a reminders surface to the item page.
+
 ### Dashboard / Overview
 
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
@@ -533,6 +542,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — the Help entry is one of the decisions for #2787.
 - **Reversion plan**: Permanent unless the mock adds its own tour entry; follow the mock then.
 
+#### 2026-11-25 — Settings → Notifications gains an "Item reminders" row
+
+- **Issue/PR**: #2805
+- **Mock**: [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `NotificationsSection` lists two rows under **Reminders**: Warranty expiry and Maintenance reminders.
+- **Reality**: The **Reminders** subgroup has a fourth row, **Item reminders** (`data-testid="notification-row-item-reminder"`), after Loan reminders. Same row anatomy and Switch as its neighbors; default on.
+- **Why**: Item reminders (#2805) send their own emails, and every reminder category has an opt-out toggle in this section.
+- **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent; reconcile if the upstream mock adds the row.
+
 ### Navigation & App shell
 
 #### 2026-05-08 — Persistent "currency migration in progress" banner in Shell
@@ -579,6 +597,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Without a group the sidebar has no Add item button and no group sections, so every step fell back to a centered card about an element the user could not see, and finishing that tour marked it as seen before the user had a group (#2787). Below the breakpoint the sidebar is a closed sheet, which is the same situation.
 - **Approved by**: user (explicit) for skipping steps and for launching once a group is active (#2787 decisions), and for the narrow-screen gate with the user-menu entry left out (2026-11-24, after #2816 merged: a guided tour of a collapsed sidebar on a phone has no good shape).
 - **Reversion plan**: Permanent for the no-group behavior. If the tour gains a mobile variant (for example one that opens the sidebar sheet first), drop the narrow-screen gate.
+
+#### 2026-11-25 — "Upcoming" sidebar entry
+
+- **Issue/PR**: #2805
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has no Upcoming entry.
+- **Reality**: The **Inventory** group gains **Upcoming** (lucide `BellRing`) between **All Items** and **Warranties**, linking to `/g/:slug/upcoming`.
+- **Why**: Not present in mock. The Upcoming page is the group-wide list the issue asks for; it sits next to the per-kind pages it merges.
+- **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when the upstream mock adds the entry.
 
 ### i18n & Formatting
 
@@ -747,6 +774,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: (1) `useConfirm` — the frontend has no `AlertDialog` primitive; `useConfirm` is the established destructive-confirm pattern and is already mounted app-wide. (2) Email-lookup add — the mock has no real backend and can mint a member from arbitrary strings; the real BE requires a `userID` for an *existing* account. Scoping the lookup to the group's owning tenant also structurally prevents cross-tenant adds from the UI (a `admin.member.tenant_mismatch` 422 is still mapped defensively per the issue AC). A free-text name field would let the operator type a name that isn't backed by any real user.
 - **Approved by**: user (explicit) — issue #1756 spec mandates the membership editor, an email-lookup-based Add dialog ("Do NOT add a free-text name field that isn't backed by a real user"), and typed inline error banners; the `useConfirm` substitution follows the documented codebase convention.
 - **Reversion plan**: The email-lookup Add UX is permanent — it is dictated by the BE contract. The `useConfirm`-not-`AlertDialog` choice is permanent unless the codebase adopts a shadcn `AlertDialog` primitive repo-wide.
+
+#### 2026-11-25 — Upcoming page
+
+- **Issue/PR**: #2805
+- **Mock**: No Upcoming view exists in `design-mocks/src/views/`.
+- **Reality**: `/g/:slug/upcoming` (`data-testid="page-upcoming"`) follows [`WarrantiesView.tsx`](../../design-mocks/src/views/WarrantiesView.tsx): a page header, a line tab strip (**All / Reminders / Warranties / Loans / Maintenance**) with outline count badges, and one `Card p-0` list whose rows carry a kind icon, the item name, a muted "kind · title" line, and the date with days left on the right. Overdue rows use `text-destructive`, rows due within seven days `text-primary`. The header's actions slot holds a Radix **Period** select (30 days / 90 days / 12 months). The summary cards of the warranties view are left out.
+- **Why**: Not present in mock. The warranties view is the closest dated-list pattern; the period select replaces its summary cards because the list mixes four kinds whose counts already sit on the tabs.
+- **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when the upstream mock adds an Upcoming view.
 
 ### Empty / Error / Loading states
 

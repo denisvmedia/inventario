@@ -88,6 +88,10 @@ export default defineConfig({
       //   render time. Same pattern as auth:validation.*.
       "feedback:types.*",
       "feedback:validation.*",
+      // reminders:validation.* — zod messages in features/reminders/schemas.ts
+      //   are plain strings surfaced through <FieldError>. Same pattern as
+      //   auth:validation.*. (#2805)
+      "reminders:validation.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
       //   reminders/updates/channels; row ids: warrantyExpiry,

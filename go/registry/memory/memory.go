@@ -27,6 +27,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
+	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -54,6 +55,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityServiceRegistryFactory = commodityServiceFactory
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
+	fs.CommodityReminderRegistryFactory = commodityReminderFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -123,6 +125,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry()
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
+	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	fs.GroupPurger = NewGroupPurger(
@@ -142,6 +145,8 @@ func NewFactorySet() *registry.FactorySet {
 		userConcurrencySlotFactory,
 		maintenanceScheduleFactory,
 		fs.MaintenanceReminderRegistry,
+		commodityReminderFactory,
+		fs.CommodityReminderSendRegistry,
 		fs.CurrencyMigrationRegistryFactory,
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,

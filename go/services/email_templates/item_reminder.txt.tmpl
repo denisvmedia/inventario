@@ -1,0 +1,11 @@
+Hi {{.Name}},
+
+{{if eq .ReminderDaysLeft 0}}Your reminder for {{.CommodityName}} is due today.{{else if eq .ReminderDaysLeft 1}}Your reminder for {{.CommodityName}} is due tomorrow.{{else}}Your reminder for {{.CommodityName}} is due in {{.ReminderDaysLeft}} days.{{end}}
+
+Reminder: {{.ReminderTitle}}
+Date: {{.ReminderDueDate}}
+{{if .CommodityURL}}
+You can review the item here: {{.CommodityURL}}
+{{end}}
+You set this reminder on the item in Inventario. You can change or delete
+it on the item page.

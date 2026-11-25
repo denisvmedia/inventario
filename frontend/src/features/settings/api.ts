@@ -18,6 +18,7 @@ export const SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER = "notifications.mainten
 export const SETTING_NOTIFICATIONS_WEEKLY_DIGEST = "notifications.weekly_digest"
 export const SETTING_NOTIFICATIONS_PRICE_DROP = "notifications.price_drop"
 export const SETTING_NOTIFICATIONS_LOAN_REMINDER = "notifications.loan_reminder"
+export const SETTING_NOTIFICATIONS_ITEM_REMINDER = "notifications.item_reminder"
 export const SETTING_NOTIFICATIONS_CHANNEL_EMAIL = "notifications.channel.email"
 export const SETTING_NOTIFICATIONS_CHANNEL_PUSH = "notifications.channel.push"
 export const SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW = "appearance.default_items_view"

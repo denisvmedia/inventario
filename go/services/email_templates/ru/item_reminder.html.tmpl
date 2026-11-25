@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="ru">
+<body>
+<p>Здравствуйте, {{.Name}}!</p>
+{{- if eq .ReminderDaysLeft 0}}
+<p>Ваше напоминание для предмета <strong>{{.CommodityName}}</strong> наступает <strong>сегодня</strong>.</p>
+{{- else if eq .ReminderDaysLeft 1}}
+<p>Ваше напоминание для предмета <strong>{{.CommodityName}}</strong> наступает <strong>завтра</strong>.</p>
+{{- else}}
+<p>Ваше напоминание для предмета <strong>{{.CommodityName}}</strong> наступает <strong>через {{.ReminderDaysLeft}} дн.</strong></p>
+{{- end}}
+<p>Напоминание: <strong>{{.ReminderTitle}}</strong><br/>
+Дата: <strong>{{.ReminderDueDate}}</strong></p>
+{{- if .CommodityURL}}
+<p>Вы можете просмотреть предмет здесь: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Вы сами создали это напоминание для предмета в Inventario. Изменить или
+удалить его можно на странице предмета.</p>
+</body>
+</html>

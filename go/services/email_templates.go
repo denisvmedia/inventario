@@ -31,6 +31,7 @@ const (
 	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
 	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
 	emailTemplateMaintenanceReminder emailTemplateType = "maintenance_reminder"
+	emailTemplateItemReminder        emailTemplateType = "item_reminder"
 	emailTemplateFeedback            emailTemplateType = "feedback"
 	emailTemplateWeeklyDigest        emailTemplateType = "weekly_digest"
 )
@@ -102,6 +103,11 @@ type emailTemplateData struct {
 	// DueDate is the next_due_at formatted as YYYY-MM-DD.
 	MaintenanceTitle   string
 	MaintenanceDueDate string
+	// Item-reminder fields (#2805). ReminderDaysLeft is 0 when the date is
+	// today.
+	ReminderTitle    string
+	ReminderDueDate  string
+	ReminderDaysLeft int
 	// Feedback fields (#1387). Populated only by
 	// AsyncEmailService.SendFeedbackEmail. FeedbackType is the human
 	// label ("Bug", "Feature request", etc.) the renderer surfaces in
@@ -148,6 +154,7 @@ var emailTemplateBasenames = map[emailTemplateType]string{
 	emailTemplateWeeklyDigest:        "weekly_digest",
 	emailTemplateLoanReminder:        "loan_reminder",
 	emailTemplateMaintenanceReminder: "maintenance_reminder",
+	emailTemplateItemReminder:        "item_reminder",
 	emailTemplateFeedback:            "feedback",
 }
 
@@ -267,6 +274,9 @@ func (r *emailTemplateRenderer) render(job emailJob) (renderedEmail, error) {
 		LoanIsDueSoon:      job.LoanKind == "due_soon",
 		MaintenanceTitle:   strings.TrimSpace(job.MaintenanceTitle),
 		MaintenanceDueDate: strings.TrimSpace(job.MaintenanceDueDate),
+		ReminderTitle:      strings.TrimSpace(job.ReminderTitle),
+		ReminderDueDate:    strings.TrimSpace(job.ReminderDueDate),
+		ReminderDaysLeft:   job.ReminderDaysLeft,
 		FeedbackType:       strings.TrimSpace(job.FeedbackType),
 		FromName:           strings.TrimSpace(job.FromName),
 		FromEmail:          strings.TrimSpace(job.FromEmail),
@@ -347,6 +357,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWeeklyDigest:        "Your inventory this week",
 		emailTemplateLoanReminder:        "Inventario loan reminder",
 		emailTemplateMaintenanceReminder: "Inventario maintenance reminder",
+		emailTemplateItemReminder:        "Inventario reminder",
 		emailTemplateFeedback:            "Inventario feedback",
 	},
 	"cs": { // #nosec G101 -- email subject lines, not credentials
@@ -361,6 +372,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWeeklyDigest:        "Váš inventář tento týden",
 		emailTemplateLoanReminder:        "Připomenutí zápůjčky Inventario",
 		emailTemplateMaintenanceReminder: "Připomenutí údržby v Inventariu",
+		emailTemplateItemReminder:        "Připomínka z Inventaria",
 	},
 	"ru": { // #nosec G101 -- email subject lines, not credentials
 		emailTemplateVerification:        "Подтвердите свою учётную запись Inventario",
@@ -374,6 +386,7 @@ var emailSubjects = map[string]map[emailTemplateType]string{
 		emailTemplateWeeklyDigest:        "Ваш инвентарь на этой неделе",
 		emailTemplateLoanReminder:        "Напоминание о займе Inventario",
 		emailTemplateMaintenanceReminder: "Напоминание об обслуживании в Inventario",
+		emailTemplateItemReminder:        "Напоминание от Inventario",
 	},
 }
 
@@ -418,6 +431,13 @@ func computeSubject(job emailJob, lang string) (string, bool) {
 		}
 		return fmt.Sprintf("[Inventario %s] from %s", feedbackType, from), true
 	}
+	if job.TemplateType == emailTemplateItemReminder {
+		// The title is concatenated, never fmt-interpolated, for the same
+		// reason as the loan subject below.
+		if title := strings.TrimSpace(job.ReminderTitle); title != "" {
+			return itemReminderSubjectPrefix(lang) + title, true
+		}
+	}
 	if job.TemplateType == emailTemplateLoanReminder {
 		ls := loanSubjects(lang)
 		name := strings.TrimSpace(job.CommodityName)
@@ -441,6 +461,19 @@ func computeSubject(job emailJob, lang string) (string, bool) {
 
 // subjectByTemplateType returns the fixed subject for a template type in the
 // requested language, falling back to en when the (lang, type) is absent.
+// itemReminderSubjectPrefix returns the subject prefix put in front of an
+// item reminder's title.
+func itemReminderSubjectPrefix(lang string) string {
+	switch lang {
+	case "cs":
+		return "Připomínka: "
+	case "ru":
+		return "Напоминание: "
+	default:
+		return "Reminder: "
+	}
+}
+
 func subjectByTemplateType(tt emailTemplateType, lang string) (string, bool) {
 	if m, ok := emailSubjects[lang]; ok {
 		if s, ok := m[tt]; ok {

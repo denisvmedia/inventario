@@ -1,0 +1,112 @@
+{
+  "confirm": {
+    "delete": "Delete this reminder?"
+  },
+  "days": {
+    "ago_one": "{{count}} day ago",
+    "ago_other": "{{count}} days ago",
+    "left_one": "In {{count}} day",
+    "left_other": "In {{count}} days",
+    "overdue_one": "{{count}} day overdue",
+    "overdue_other": "{{count}} days overdue",
+    "today": "Today"
+  },
+  "dialog": {
+    "createTitle": "Add reminder",
+    "dateLabel": "Date",
+    "description": "Pick a date and when to be reminded. A repeating reminder moves to its next date after each one passes.",
+    "editTitle": "Edit reminder",
+    "intervalLabel": {
+      "day": "Every (days)",
+      "month": "Every (months)",
+      "week": "Every (weeks)",
+      "year": "Every (years)"
+    },
+    "leadTimesHint": "Days before, separated by commas, e.g. 30, 7, 1. Use 0 for the day itself.",
+    "leadTimesLabel": "Remind me (days before)",
+    "repeatLabel": "Repeat",
+    "titleLabel": "Title",
+    "titlePlaceholder": "Return window ends"
+  },
+  "every": {
+    "daily": "Every day",
+    "day_one": "Every {{count}} day",
+    "day_other": "Every {{count}} days",
+    "month_one": "Every {{count}} month",
+    "month_other": "Every {{count}} months",
+    "monthly": "Every month",
+    "none": "One-off",
+    "week_one": "Every {{count}} week",
+    "week_other": "Every {{count}} weeks",
+    "weekly": "Every week",
+    "year_one": "Every {{count}} year",
+    "year_other": "Every {{count}} years",
+    "yearly": "Every year"
+  },
+  "kind": {
+    "loan": "Loan due back",
+    "maintenance": "Maintenance",
+    "reminder": "Reminder",
+    "warranty": "Warranty expires"
+  },
+  "leadTimes": {
+    "before_one": "{{list}} day before",
+    "before_other": "{{list}} days before",
+    "beforeList_one": "{{list}} days before",
+    "beforeList_other": "{{list}} days before",
+    "onTheDay": "on the day",
+    "prefix": "Email {{parts}}"
+  },
+  "repeat": {
+    "day": "Daily",
+    "month": "Monthly",
+    "none": "Does not repeat",
+    "week": "Weekly",
+    "year": "Yearly"
+  },
+  "row": {
+    "deleteLabel": "Delete reminder {{title}}",
+    "editLabel": "Edit reminder {{title}}",
+    "passed": "Passed"
+  },
+  "section": {
+    "add": "Add reminder",
+    "description": "Dates to remember for this item, like a return window or an insurance renewal. We email you before each one.",
+    "empty": "No reminders yet.",
+    "loadError": "Couldn't load the reminders.",
+    "title": "Reminders"
+  },
+  "toast": {
+    "created": "Reminder added.",
+    "deleted": "Reminder deleted.",
+    "deleteError": "Couldn't delete the reminder.",
+    "saveError": "Couldn't save the reminder.",
+    "updated": "Reminder updated."
+  },
+  "upcoming": {
+    "empty": "Nothing coming up in this period.",
+    "subtitle": "Reminders, warranty expiries, loans and maintenance across the group, by date.",
+    "tabAll": "All",
+    "tabLoans": "Loans",
+    "tabMaintenance": "Maintenance",
+    "tabReminders": "Reminders",
+    "tabWarranties": "Warranties",
+    "title": "Upcoming",
+    "unknownItem": "Unknown item",
+    "windowDays_one": "Next {{count}} day",
+    "windowDays_other": "Next {{count}} days",
+    "windowLabel": "Period",
+    "windowYear": "Next 12 months"
+  },
+  "validation": {
+    "dateRequired": "Pick a date.",
+    "intervalRange": "Enter a whole number from 1 to 999.",
+    "leadTimesDuplicate": "Each value can appear only once.",
+    "leadTimesInvalid": "Use whole numbers separated by commas.",
+    "leadTimesRange": "Each value must be from 0 to 365.",
+    "leadTimesRequired": "Enter at least one value.",
+    "leadTimesTooMany": "Enter at most 5 values.",
+    "titleRequired": "Enter a title.",
+    "titleTooLong": "The title can be at most 200 characters."
+  }
+}

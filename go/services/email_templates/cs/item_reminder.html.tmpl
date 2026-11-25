@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den {{.Name}},</p>
+{{- if eq .ReminderDaysLeft 0}}
+<p>Vaše připomínka u položky <strong>{{.CommodityName}}</strong> nastává <strong>dnes</strong>.</p>
+{{- else if eq .ReminderDaysLeft 1}}
+<p>Vaše připomínka u položky <strong>{{.CommodityName}}</strong> nastává <strong>zítra</strong>.</p>
+{{- else}}
+<p>Vaše připomínka u položky <strong>{{.CommodityName}}</strong> nastane <strong>za {{.ReminderDaysLeft}} dní</strong>.</p>
+{{- end}}
+<p>Připomínka: <strong>{{.ReminderTitle}}</strong><br/>
+Datum: <strong>{{.ReminderDueDate}}</strong></p>
+{{- if .CommodityURL}}
+<p>Položku si můžete prohlédnout zde: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>Tuto připomínku jste nastavili u položky v Inventariu. Změnit nebo smazat
+ji můžete na stránce položky.</p>
+</body>
+</html>

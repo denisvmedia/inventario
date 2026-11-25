@@ -171,10 +171,12 @@ If you try to close the dialog with unsaved changes, Inventario asks whether to
 Opening an item shows its detail page, with the cover photo, key facts, and a
 row of tabs.
 
-![An item detail page showing the cover photo, key facts, and the row of tabs](../../assets/screenshots/item-detail.png)
+![An item detail page showing the cover photo, key facts, the row of tabs, and the Reminders card below the details](../../assets/screenshots/item-detail.png)
 
 - **Details** — name, status, type, location/area, prices, serial numbers, part
-  numbers, links, tags, notes, and dates.
+  numbers, links, tags, notes, and dates, followed by the item's **Reminders**
+  (see [Item reminders](../warranties-loans-maintenance/#item-reminders)) and its
+  history.
 - **Warranty** — expiry, notes, and a reminder of how long is left. See
   [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 - **Files** — every file attached to this item, filterable by **All**,

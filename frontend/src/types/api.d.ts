@@ -5022,6 +5022,92 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/reminders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List reminders for a commodity
+         * @description The reminders set on the commodity in the URL, ordered by date. Each carries its next occurrence.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityRemindersResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a reminder for a commodity
+         * @description Create a dated reminder with one or more lead times and an optional repeat rule.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Reminder attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityReminderRequest"];
+                };
+            };
+            responses: {
+                /** @description Reminder created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityReminderResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/{commodityID}/services": {
         parameters: {
             query?: never;
@@ -7669,6 +7755,108 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/reminders/{reminderID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a reminder
+         * @description Delete a reminder and its send history.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Reminder ID */
+                    reminderID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Reminder not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a reminder
+         * @description Patch the title, date, lead times or repeat rule of a reminder.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Reminder ID */
+                    reminderID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Reminder patch payload */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityReminderUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityReminderResponse"];
+                    };
+                };
+                /** @description Reminder not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/search": {
         parameters: {
             query?: never;
@@ -8382,6 +8570,60 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/g/{groupSlug}/upcoming": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List upcoming dates in the group
+         * @description Item reminders, warranty expiries, loan due dates and maintenance due dates from today up to `days` ahead, plus overdue loans and maintenance, ordered by date.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Days ahead to cover (1-365) */
+                    days?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.UpcomingResponse"];
+                    };
+                };
+                /** @description Invalid days value */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/g/{groupSlug}/upload-slots/check": {
@@ -11436,6 +11678,100 @@ export type components = {
             data?: components["schemas"]["models.CommodityLoan"][];
             meta?: components["schemas"]["jsonapi.CommodityLoansMeta"];
         };
+        "jsonapi.CommodityReminderRequest": {
+            data?: components["schemas"]["jsonapi.CommodityReminderRequestDataWrapper"];
+        };
+        "jsonapi.CommodityReminderRequestData": {
+            due_on?: string;
+            remind_days_before?: number[];
+            repeat_interval?: number;
+            /** @enum {unknown} */
+            repeat_unit?: "none" | "day" | "week" | "month" | "year";
+            title?: string;
+        };
+        "jsonapi.CommodityReminderRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityReminderRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityReminderResponse": {
+            data?: components["schemas"]["jsonapi.CommodityReminderResponseData"];
+        };
+        "jsonapi.CommodityReminderResponseData": {
+            attributes?: components["schemas"]["jsonapi.CommodityReminderView"];
+            id?: string;
+            /**
+             * @example commodity_reminders
+             * @enum {string}
+             */
+            type?: "commodity_reminders";
+        };
+        "jsonapi.CommodityReminderUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityReminderUpdateRequestDataWrapper"];
+        };
+        "jsonapi.CommodityReminderUpdateRequestData": {
+            due_on?: string;
+            remind_days_before?: number[];
+            repeat_interval?: number;
+            /** @enum {unknown} */
+            repeat_unit?: "none" | "day" | "week" | "month" | "year";
+            title?: string;
+        };
+        "jsonapi.CommodityReminderUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.CommodityReminderUpdateRequestData"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.CommodityReminderView": {
+            /**
+             * @description CommodityID is the item the reminder belongs to. Deleting the item
+             *     deletes its reminders.
+             */
+            commodity_id?: string;
+            created_at?: string;
+            days_until_next?: number;
+            /**
+             * @description DueOn is the reminder's date (YYYY-MM-DD) and the anchor of its
+             *     repeat rule.
+             */
+            due_on?: string;
+            id?: string;
+            /**
+             * Format: date
+             * @example 2026-12-24
+             */
+            next_occurrence?: string;
+            /**
+             * @description RemindDaysBefore lists the lead times in days, largest first. 0 means
+             *     on the day itself.
+             */
+            remind_days_before?: number[];
+            /**
+             * @description RepeatInterval is N in "every N units". It is 1 for a one-off
+             *     reminder.
+             */
+            repeat_interval?: number;
+            /**
+             * @description RepeatUnit is the unit of the repeat rule; "none" for a one-off
+             *     reminder.
+             */
+            repeat_unit?: components["schemas"]["models.ReminderRepeatUnit"];
+            /** @description Title says what the date is about ("Return window ends"). */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.CommodityRemindersMeta": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            reminders?: number;
+        };
+        "jsonapi.CommodityRemindersResponse": {
+            data?: components["schemas"]["jsonapi.CommodityReminderView"][];
+            meta?: components["schemas"]["jsonapi.CommodityRemindersMeta"];
+        };
         "jsonapi.CommodityRequest": {
             data?: components["schemas"]["jsonapi.CommodityData"];
         };
@@ -12655,6 +12991,47 @@ export type components = {
             /** @description signed URL for file access (attachment / download) */
             url?: string;
         };
+        "jsonapi.UpcomingItem": {
+            commodity?: components["schemas"]["jsonapi.MaintenanceCommodityRef"];
+            /**
+             * Format: date
+             * @description Date is the entry's date (YYYY-MM-DD).
+             * @example 2026-12-24
+             */
+            date?: string;
+            /**
+             * @description DaysLeft is the whole days from today to Date; negative when the
+             *     entry is overdue.
+             * @example 12
+             */
+            days_left?: number;
+            /**
+             * @description Kind is the source of the entry.
+             * @example reminder
+             * @enum {string}
+             */
+            kind?: "reminder" | "warranty" | "loan" | "maintenance";
+            /**
+             * @description SourceID is the reminder, loan or maintenance schedule id; for a
+             *     warranty it is the item id.
+             */
+            source_id?: string;
+            /**
+             * @description Title is the reminder or maintenance title, or the borrower for a
+             *     loan. Empty for a warranty.
+             */
+            title?: string;
+        };
+        "jsonapi.UpcomingMeta": {
+            /** @example 30 */
+            days?: number;
+            /** @example 7 */
+            total?: number;
+        };
+        "jsonapi.UpcomingResponse": {
+            data?: components["schemas"]["jsonapi.UpcomingItem"][];
+            meta?: components["schemas"]["jsonapi.UpcomingMeta"];
+        };
         "jsonapi.UpdateProfileRequest": {
             /**
              * @description DefaultGroupID is nil when the request wants to clear the preference.
@@ -13376,6 +13753,8 @@ export type components = {
             locations?: number;
             storage_bytes?: number;
         };
+        /** @enum {string} */
+        "models.ReminderRepeatUnit": "none" | "day" | "week" | "month" | "year";
         "models.RestoreOperation": {
             area_count?: number;
             binary_data_size?: number;
@@ -13440,6 +13819,7 @@ export type components = {
              */
             notificationsChannelEmail?: boolean;
             notificationsChannelPush?: boolean;
+            notificationsItemReminder?: boolean;
             notificationsLoanReminder?: boolean;
             notificationsMaintenanceReminder?: boolean;
             notificationsPriceDrop?: boolean;

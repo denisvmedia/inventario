@@ -84,6 +84,10 @@ func (r *recordingMaintenanceEmailService) SendMaintenanceReminderEmail(_ contex
 	return nil
 }
 
+func (*recordingMaintenanceEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (r *recordingMaintenanceEmailService) snapshot() []recordedMaintenanceEmail {
 	r.mu.Lock()
 	defer r.mu.Unlock()

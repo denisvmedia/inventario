@@ -285,6 +285,25 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Item reminder + a send record (#2805). The send's group_id FK is NO
+	// ACTION, so the purge must clear it before location_groups.
+	reminder, err := set.CommodityReminderRegistry.Create(ctx, models.CommodityReminder{
+		CommodityID:      commodityID,
+		Title:            "Inspection",
+		DueOn:            models.Date("2026-12-01"),
+		RemindDaysBefore: models.ValuerSlice[int]{7},
+		RepeatUnit:       models.ReminderRepeatNone,
+		RepeatInterval:   1,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fs.CommodityReminderSendRegistry.CreateOnce(ctx, models.CommodityReminderSend{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: tenantID, GroupID: groupID, CreatedByUserID: user.ID},
+		ReminderID:               reminder.ID,
+		OccurrenceOn:             models.Date("2026-12-01"),
+		LeadDays:                 7,
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Currency migration + audit row (#2095). The audit row's group_id FK is
 	// NO ACTION, so it must be cleared explicitly before currency_migrations.
 	migration, err := set.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{

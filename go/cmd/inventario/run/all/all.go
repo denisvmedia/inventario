@@ -123,6 +123,8 @@ func (c *Command) run() error {
 	defer stopLoanReminder()
 	stopMaintenanceReminder := bootstrap.StartMaintenanceReminderWorker(ctx, rs, c.cfg)
 	defer stopMaintenanceReminder()
+	stopItemReminder := bootstrap.StartItemReminderWorker(ctx, rs, c.cfg)
+	defer stopItemReminder()
 
 	stopWeeklyDigest := bootstrap.StartWeeklyDigestWorker(ctx, rs, c.cfg)
 	defer stopWeeklyDigest()
