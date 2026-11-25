@@ -1,4 +1,4 @@
-h1:2OweLTYOpP9KGZLkKZQnAcgtPs3e0NLg9AxXzcUvqFI=
+h1:Wz0JZTCAZYaKc5mJq2OsYjnjvKng+IY9+wZ9OaMzgDc=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -31,3 +31,5 @@ h1:2OweLTYOpP9KGZLkKZQnAcgtPs3e0NLg9AxXzcUvqFI=
 1795593879_add_commodity_brand_model.up.sql h1:XazYwIPzLr4iU0bKTeOzC0HoQQFxdjuxqFD6353i22k=
 1795594117_add_sellers.down.sql h1:0ImEtJvDpwz8Xptmifr8X7Vzw6aYkGzzA7tJvGSg9+o=
 1795594117_add_sellers.up.sql h1:cMdgvhoGoL+LWwYYYM7knz1uG+ZFKS96fBdYijZPaU4=
+1795600879_add_saved_views.down.sql h1:jMKzQ3155RfD0dowQktI5fL4UPr0qES6FnFDvaiey94=
+1795600879_add_saved_views.up.sql h1:SyYIhkNk46vc88dHYjSsECBjRcP6gT97qtRxS4jejLQ=

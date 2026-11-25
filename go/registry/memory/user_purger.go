@@ -49,6 +49,7 @@ type UserPurger struct {
 	inviteAudit   registry.GroupInviteAuditRegistry
 	reminders     registry.CommodityReminderRegistryFactory
 	reminderSends registry.CommodityReminderSendRegistry
+	savedViews    registry.SavedViewRegistryFactory
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -66,6 +67,7 @@ func NewUserPurger(
 	inviteAudit registry.GroupInviteAuditRegistry,
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
+	savedViews registry.SavedViewRegistryFactory,
 ) *UserPurger {
 	return &UserPurger{
 		refreshTokens: refreshTokens,
@@ -80,6 +82,7 @@ func NewUserPurger(
 		inviteAudit:   inviteAudit,
 		reminders:     reminders,
 		reminderSends: reminderSends,
+		savedViews:    savedViews,
 	}
 }
 
@@ -114,6 +117,11 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
+		// Where the user shows the views of others, then the views the user
+		// created, shared ones included: both carry a NOT NULL user column,
+		// like the postgres DELETEs.
+		{"saved_view_placements", func() error { return r.purgeSavedViewPlacements(tenantID, userID) }},
+		{"saved_views", func() error { return r.purgeSavedViews(ctx, tenantID, userID) }},
 		// System-admin grant the user HOLDS. RevokeAtomic(allowZero=true)
 		// removes it idempotently. The granted_by back-ref is nulled only on
 		// the postgres side; the memory grant registry has no granted_by index
@@ -253,6 +261,35 @@ func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tenantID, user
 			}
 		}
 		if err := reg.Delete(ctx, reminder.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeSavedViewPlacements deletes the placements the user has in the
+// tenant. Only the memory factory keeps them, so another implementation of
+// the factory has nothing to purge here.
+func (r *UserPurger) purgeSavedViewPlacements(tenantID, userID string) error {
+	if f, ok := r.savedViews.(*SavedViewRegistryFactory); ok {
+		f.purgeUserPlacements(tenantID, userID)
+	}
+	return nil
+}
+
+// purgeSavedViews deletes every saved view the user created in the tenant,
+// personal and shared, through the service registry that sees all of them.
+func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID string) error {
+	reg := r.savedViews.CreateServiceRegistry()
+	views, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, v := range views {
+		if v.TenantID != tenantID || v.CreatedByUserID != userID {
+			continue
+		}
+		if err := reg.Delete(ctx, v.ID); err != nil {
 			return err
 		}
 	}

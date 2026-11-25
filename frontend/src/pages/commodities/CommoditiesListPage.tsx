@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -127,6 +127,12 @@ import { useServiceCounts } from "@/features/services/hooks"
 import type { Seller } from "@/features/sellers/api"
 import { useSellers } from "@/features/sellers/hooks"
 import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
+import {
+  SavedViewControl,
+  SavedViewQueryErrorAlert,
+  SavedViewUnavailableAlert,
+  useOpenedSavedView,
+} from "@/features/saved-views/SavedViewControl"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -279,10 +285,15 @@ export function CommoditiesListPage() {
   // the pager describe the same set (#2128). includeInactive is always
   // sent, so the server applies the active-only default.
   const listOptions = commoditiesListOptions(listParams)
-  const list = useCommodities(listOptions, { enabled })
+  // A list opened from a saved view whose stored query cannot run does not
+  // run (see useOpenedSavedView); until the views load, or while they fail
+  // to, it cannot tell.
+  const openedView = useOpenedSavedView()
+  const listEnabled = enabled && !openedView.pending && !openedView.unknown && !openedView.broken
+  const list = useCommodities(listOptions, { enabled: listEnabled })
   // Tag counts load when the Tags menu opens, for the rest of the query.
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
-  const tagCounts = useCommodityTagCounts(listOptions, { enabled: enabled && tagMenuOpen })
+  const tagCounts = useCommodityTagCounts(listOptions, { enabled: listEnabled && tagMenuOpen })
   const areas = useAreas({ enabled })
   const sellers = useSellers()
   // Locations populate the create-dialog's Location → Area paired
@@ -652,6 +663,7 @@ export function CommoditiesListPage() {
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
           onSetViewMode={setViewMode}
+          savedViews={<SavedViewControl query={query} layout={viewMode} />}
         />
 
         {selected.size > 0 ? (
@@ -729,7 +741,13 @@ export function CommoditiesListPage() {
           </BulkActionBar>
         ) : null}
 
-        {invalidQuery !== null ? (
+        {openedView.broken ? (
+          <SavedViewQueryErrorAlert view={openedView.broken} />
+        ) : openedView.unknown ? (
+          <SavedViewUnavailableAlert onRetry={openedView.retry} />
+        ) : openedView.pending ? (
+          <ListLoading viewMode={viewMode} />
+        ) : invalidQuery !== null ? (
           <Alert variant="destructive" data-testid="commodities-invalid-query">
             <AlertTitle>{t("commodities:list.invalidQueryTitle")}</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-2">
@@ -909,6 +927,8 @@ interface ToolbarProps {
   onToggleInactive: () => void
   onClearFilters: () => void
   onSetViewMode: (v: ViewMode) => void
+  // The saved views control, shown before the layout switch.
+  savedViews?: ReactNode
 }
 
 function Toolbar(props: ToolbarProps) {
@@ -1213,7 +1233,8 @@ function Toolbar(props: ToolbarProps) {
           : t("commodities:filter.inactiveHidden")}
       </Button>
 
-      <div className="ml-auto flex gap-1">
+      <div className="ml-auto flex items-center gap-1">
+        {props.savedViews}
         <Button
           variant={props.viewMode === "grid" ? "secondary" : "ghost"}
           size="icon"
