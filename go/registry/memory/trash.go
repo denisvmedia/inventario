@@ -415,6 +415,46 @@ func (r *FileRegistry) Trash(_ context.Context, id, deletedBy, withCommodityID s
 	})
 }
 
+// TrashUnlessHeld mirrors the postgres method. The links are checked and
+// the file changed under the write lock. Without the commodity factory a
+// link to an item cannot be shown to be in Trash, so it holds the file.
+func (r *FileRegistry) TrashUnlessHeld(_ context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	f, ok := r.items.Get(id)
+	if !ok || !r.isItemVisible(f) || !isLiveFile(f) {
+		return false, nil
+	}
+	links := slices.Clone(r.links.byFile[id])
+	slices.SortStableFunc(links, func(a, b models.FileLink) int {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	withItem := ""
+	for _, l := range links {
+		if l.EntityType == entityType && l.EntityID == entityID {
+			continue
+		}
+		if l.EntityType != models.FileLinkCommodity || !r.itemInTrash(l.EntityID) {
+			return false, nil
+		}
+		if withItem == "" {
+			withItem = l.EntityID
+		}
+	}
+	next := *f
+	next.DeletedAt = new(at.UTC())
+	next.DeletedBy = new(deletedBy)
+	next.DeletedWithCommodityID = nil
+	if withItem != "" {
+		next.DeletedWithCommodityID = new(withItem)
+	}
+	r.items.Set(id, &next)
+	return true, nil
+}
+
 // Restore makes a trashed file live again.
 func (r *FileRegistry) Restore(_ context.Context, id string) error {
 	return r.setTrashState(id, (*models.FileEntity).IsTrashed, func(f *models.FileEntity) {

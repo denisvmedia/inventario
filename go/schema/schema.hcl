@@ -829,6 +829,92 @@ table "commodity_custom_field_values" {
   }
 }
 
+table "commodity_drafts" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant commodity draft isolation"
+  }
+  column "client_key" {
+    type = TEXT
+  }
+  column "form_values" {
+    type = JSONB
+  }
+  column "revision" {
+    type = INTEGER
+    default = "1"
+  }
+  column "status" {
+    type = TEXT
+    default = "open"
+  }
+  column "promoted_commodity_id" {
+    type = TEXT
+    null = true
+  }
+  column "promoted_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "promotion_key" {
+    type = TEXT
+    null = true
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_commodity_drafts_group_client_key" {
+    unique = true
+    columns = [column.group_id, column.client_key]
+  }
+  index "idx_commodity_drafts_group_status_updated" {
+    columns = [column.group_id, column.status, column.updated_at]
+  }
+  index "idx_commodity_drafts_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_commodity_drafts_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "commodity_events" {
   row_security {
     enabled = true
@@ -4702,6 +4788,24 @@ policy "commodity_custom_field_value_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures custom field values can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "commodity_draft_background_worker_access" {
+  on = table.commodity_drafts
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to read and purge commodity drafts across all groups"
+}
+
+policy "commodity_draft_isolation" {
+  on = table.commodity_drafts
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures commodity drafts can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "commodity_event_background_worker_access" {

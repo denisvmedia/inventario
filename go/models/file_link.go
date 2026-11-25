@@ -33,6 +33,13 @@ const (
 	// storage accounting reports it separately. Meta is the bundle format
 	// version ("xml-1.0", "inb-2.0").
 	FileLinkExport FileLinkEntityType = "export"
+	// FileLinkDraft attaches a file to an unfinished item (#2812). Meta is
+	// "images" or "documents", as on an item, and promoting the draft turns
+	// the link into an item link with the same meta. A draft is not an
+	// inventory entity, so its links are not among the ordinary links, and a
+	// file whose only links are draft links is still a standalone file to
+	// every other part of the app.
+	FileLinkDraft FileLinkEntityType = "draft"
 )
 
 // FileLinkMetaImages and the constants below are the buckets a link places a
@@ -59,11 +66,17 @@ func IsOrdinaryFileLinkType(entityType string) bool {
 	}
 }
 
+// IsAttachableFileLinkType reports whether a user can attach a file to an
+// entity of this type: an inventory entity or a draft.
+func IsAttachableFileLinkType(entityType string) bool {
+	return IsOrdinaryFileLinkType(entityType) || entityType == FileLinkDraft
+}
+
 // FileLinkMetaValues returns the meta values valid for an entity type, or nil
 // for an unknown type.
 func FileLinkMetaValues(entityType string) []string {
 	switch entityType {
-	case FileLinkCommodity:
+	case FileLinkCommodity, FileLinkDraft:
 		return []string{FileLinkMetaImages, FileLinkMetaDocuments}
 	case FileLinkLocation, FileLinkArea:
 		return []string{FileLinkMetaImages, FileLinkMetaFiles}
@@ -81,7 +94,7 @@ func DefaultFileLinkMeta(entityType string, category FileCategory) string {
 	if category == FileCategoryImages {
 		return FileLinkMetaImages
 	}
-	if entityType == FileLinkCommodity {
+	if entityType == FileLinkCommodity || entityType == FileLinkDraft {
 		return FileLinkMetaDocuments
 	}
 	return FileLinkMetaFiles
@@ -162,7 +175,7 @@ func (l *FileLink) ValidateWithContext(ctx context.Context) error {
 	}
 	return validation.ValidateStructWithContext(ctx, l,
 		validation.Field(&l.EntityType, rules.NotEmpty, validation.In(
-			FileLinkCommodity, FileLinkLocation, FileLinkArea, FileLinkExport,
+			FileLinkCommodity, FileLinkLocation, FileLinkArea, FileLinkExport, FileLinkDraft,
 		)),
 		validation.Field(&l.EntityID, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&l.Meta, rules.NotEmpty, validation.In(metas...)),

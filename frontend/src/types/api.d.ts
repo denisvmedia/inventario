@@ -6462,6 +6462,376 @@ export type paths = {
         };
         trace?: never;
     };
+    "/g/{groupSlug}/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List drafts
+         * @description The group's open drafts, most recently saved first. A draft is an unfinished
+         *     item saved on the server; it is not an item and appears in no item list, count
+         *     or search. A whole-group backup carries the open drafts. When a member who can
+         *     edit items lists the drafts, a discard that stopped more than ten minutes ago is
+         *     finished first.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Drafts per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a draft
+         * @description Save unfinished form values as a new draft. The values are stored as given and
+         *     are not validated as an item. client_key is the client's identity for the draft:
+         *     a create with a key the group already has returns that draft with 200 instead of
+         *     making another one, so a retry after a lost response is safe. A key whose draft
+         *     is being discarded answers 409 draft.discarded. Known fields of the item form
+         *     must have the type the form uses (text, a number or numeric text, a list of
+         *     text, true or false); a field of another type is refused with 422 on
+         *     values.<field>. A type in values.type must be one of the group's item types
+         *     (422 item_type_unknown on values.type otherwise).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Draft */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description A draft with this client key already exists */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/drafts/{draftID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a draft
+         * @description One draft with its values and revision. A promoted draft is returned too, with
+         *     its values cleared and the id of the item it became. A draft being discarded
+         *     answers 404. Its files are listed by GET
+         *     /g/{groupSlug}/files?linked_entity_type=draft&linked_entity_id={draftID}.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        /**
+         * Save a draft
+         * @description Replace the values of an open draft. revision is the revision the values were
+         *     based on; the response carries the next one. A save based on an older revision
+         *     is refused with 409 draft.revision_conflict and the current revision in meta, so
+         *     a stale tab cannot overwrite newer input. A promoted draft answers 409
+         *     draft.promoted, a draft being discarded 409 draft.discarded. The values are
+         *     checked as on create.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Values and revision */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftSaveRequest"];
+                };
+            };
+            responses: {
+                /** @description Saved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Stale revision, promoted draft, or draft being discarded */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Discard a draft
+         * @description Delete an open draft. Its files that nothing else uses go to Trash, where they
+         *     can be restored as standalone files until the Trash retention runs out; files
+         *     attached elsewhere only lose the link to the draft. A promoted draft answers 409
+         *     draft.promoted. Once the discard has begun the draft can no longer be saved,
+         *     promoted or given files; repeating a discard that did not finish completes it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Discarded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Promoted draft */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/drafts/{draftID}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a draft
+         * @description Create the item from the finished form and move the draft's files to it, in one
+         *     step. The body is the item as for POST /g/{groupSlug}/commodities, validated the
+         *     same way, and meta.revision is the draft revision it was based on (409
+         *     draft.revision_conflict when it is stale). meta.promotion_key is required: a key
+         *     the client makes for this promotion (a UUID) and sends again on every retry until
+         *     one succeeds. A repeat with the key of the promotion that happened creates nothing
+         *     and returns the item with 200, so a retry after a lost response is safe; any other
+         *     key, or the same key once that item no longer exists, answers 409 draft.promoted
+         *     with meta.commodity_id. A draft being discarded answers 409 draft.discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Finished item and draft revision */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftPromoteRequest"];
+                };
+            };
+            responses: {
+                /** @description The draft was already promoted to this item */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Item created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Stale revision, draft promoted by another request, or draft being discarded */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -7494,7 +7864,9 @@ export type paths = {
          *     new file, no upload, no storage charge. Attaching a file to an
          *     entity it is already attached to is a no-op and answers 200.
          *     The entity must be in the same group as the file. A backup
-         *     export file cannot be attached.
+         *     export file cannot be attached. A draft must be open: a promoted
+         *     draft answers 409 draft.promoted with meta.commodity_id, a draft
+         *     being discarded 409 draft.discarded.
          */
         post: {
             parameters: {
@@ -7535,6 +7907,15 @@ export type paths = {
                 };
                 /** @description File not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The draft is promoted or being discarded */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -13801,6 +14182,100 @@ export type components = {
              */
             type?: "commodities";
         };
+        "jsonapi.CommodityDraftCreateAttributes": {
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            client_key?: string;
+            values?: Record<string, never>;
+        };
+        "jsonapi.CommodityDraftCreateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityDraftCreateRequestData"];
+        };
+        "jsonapi.CommodityDraftCreateRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftCreateAttributes"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type?: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftPromoteMeta": {
+            /** @example 6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10 */
+            promotion_key?: string;
+            /** @example 3 */
+            revision?: number;
+        };
+        "jsonapi.CommodityDraftPromoteRequest": {
+            data?: components["schemas"]["jsonapi.CommodityData"];
+            meta?: components["schemas"]["jsonapi.CommodityDraftPromoteMeta"];
+        };
+        "jsonapi.CommodityDraftResponse": {
+            data?: components["schemas"]["jsonapi.CommodityDraftResponseData"];
+        };
+        "jsonapi.CommodityDraftResponseData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftView"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type?: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftSaveAttributes": {
+            /** @example 3 */
+            revision?: number;
+            values?: Record<string, never>;
+        };
+        "jsonapi.CommodityDraftSaveRequest": {
+            data?: components["schemas"]["jsonapi.CommodityDraftSaveRequestData"];
+        };
+        "jsonapi.CommodityDraftSaveRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftSaveAttributes"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type?: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftView": {
+            /**
+             * @description ClientKey identifies the draft for the client that created it; unique
+             *     in the group.
+             */
+            client_key?: string;
+            created_at?: string;
+            /** @example 2 */
+            file_count?: number;
+            id?: string;
+            promoted_at?: string;
+            /**
+             * @description PromotedCommodityID is the item the draft became. The item can be
+             *     deleted later, so there is no foreign key.
+             */
+            promoted_commodity_id?: string;
+            /** @description Revision starts at 1 and increases with every save and the promotion. */
+            revision?: number;
+            /** @description Status is open until the draft is promoted or its discard begins. */
+            status?: components["schemas"]["models.CommodityDraftStatus"];
+            /** @example Cordless drill */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+            /** @description Values is the form state as entered. */
+            values?: components["schemas"]["models.CommodityDraftValues"];
+        };
+        "jsonapi.CommodityDraftsMeta": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            drafts?: number;
+        };
+        "jsonapi.CommodityDraftsResponse": {
+            data?: components["schemas"]["jsonapi.CommodityDraftView"][];
+            meta?: components["schemas"]["jsonapi.CommodityDraftsMeta"];
+        };
         "jsonapi.CommodityEventActor": {
             email?: string;
             id?: string;
@@ -14719,7 +15194,7 @@ export type components = {
              * @example commodity
              * @enum {string}
              */
-            entity_type?: "commodity" | "location" | "area";
+            entity_type?: "commodity" | "location" | "area" | "draft";
             /**
              * @example documents
              * @enum {string}
@@ -16232,6 +16707,11 @@ export type components = {
              */
             warranty_expires_at?: string;
             warranty_notes?: string;
+        };
+        /** @enum {string} */
+        "models.CommodityDraftStatus": "open" | "promoted" | "discarding";
+        "models.CommodityDraftValues": {
+            [key: string]: unknown;
         };
         /** @enum {string} */
         "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "loan_reminder_sent" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted" | "restored";

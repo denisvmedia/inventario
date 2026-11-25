@@ -2,7 +2,9 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"time"
 
@@ -267,6 +269,41 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	}
 
 	return files, nil
+}
+
+// CountLinkedTo returns how many live files are linked to each entity.
+func (r *FileRegistry) CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(entityIDs))
+	if len(entityIDs) == 0 {
+		return out, nil
+	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT l.entity_id, COUNT(*)
+			FROM %s l
+			JOIN %s f ON f.id = l.file_id
+			WHERE f.deleted_at IS NULL AND l.entity_type = $1 AND l.entity_id = ANY($2)
+			GROUP BY l.entity_id`, r.tableNames.FileLinks(), r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, entityType, entityIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				return err
+			}
+			out[id] = n
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count files by linked entity", err)
+	}
+	return out, nil
 }
 
 // ListByGroup returns every file belonging to the given (tenant_id, group_id)
@@ -1043,6 +1080,66 @@ func (r *FileRegistry) Trash(ctx context.Context, id, deletedBy, withCommodityID
 		return errxtrace.Wrap("failed to trash file", err, errx.Attrs("file_id", id))
 	}
 	return nil
+}
+
+// TrashUnlessHeld moves a live file to Trash unless another link holds it
+// live; see the interface doc. Like DeleteIfUnlinked it locks the row first
+// and checks the links in a statement of its own, so the check sees every
+// link committed before the lock was granted.
+func (r *FileRegistry) TrashUnlessHeld(ctx context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error) {
+	var trashed bool
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		lock := fmt.Sprintf(`SELECT id FROM %s WHERE id = $1 AND %s FOR UPDATE`, r.tableNames.Files(), liveRow)
+		var locked string
+		if err := tx.QueryRowxContext(ctx, lock, id).Scan(&locked); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil // gone or in Trash already
+			}
+			return err
+		}
+
+		// A link holds the file unless it is the one being dropped or a
+		// link to an item in Trash. A link to an item the group cannot see
+		// holds it too: it is not known to be in Trash.
+		var held bool
+		heldQuery := fmt.Sprintf(`
+			SELECT EXISTS (
+				SELECT 1 FROM %[1]s l
+				WHERE l.file_id = $1 AND NOT (l.entity_type = $2 AND l.entity_id = $3)
+					AND NOT (l.entity_type = $4 AND EXISTS (
+						SELECT 1 FROM %[2]s c WHERE c.id = l.entity_id AND c.deleted_at IS NOT NULL))
+			)`, r.tableNames.FileLinks(), r.tableNames.Commodities())
+		if err := tx.QueryRowxContext(ctx, heldQuery, id, entityType, entityID, models.FileLinkCommodity).Scan(&held); err != nil {
+			return err
+		}
+		if held {
+			return nil
+		}
+
+		var withItem sql.NullString
+		withQuery := fmt.Sprintf(`
+			SELECT l.entity_id FROM %[1]s l
+			JOIN %[2]s c ON c.id = l.entity_id AND c.deleted_at IS NOT NULL
+			WHERE l.file_id = $1 AND l.entity_type = $2
+			ORDER BY l.created_at ASC, l.id ASC
+			LIMIT 1`, r.tableNames.FileLinks(), r.tableNames.Commodities())
+		if err := tx.QueryRowxContext(ctx, withQuery, id, models.FileLinkCommodity).Scan(&withItem); err != nil && !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+
+		update := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = $2, deleted_by = $3, deleted_with_commodity_id = NULLIF($4, '') WHERE id = $1`,
+			r.tableNames.Files())
+		if _, err := tx.ExecContext(ctx, update, id, at.UTC(), deletedBy, withItem.String); err != nil {
+			return err
+		}
+		trashed = true
+		return nil
+	})
+	if err != nil {
+		return false, errxtrace.Wrap("failed to trash file", err, errx.Attrs("file_id", id))
+	}
+	return trashed, nil
 }
 
 // Restore makes a trashed file live again.

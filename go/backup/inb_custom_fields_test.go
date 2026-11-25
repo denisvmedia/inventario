@@ -10,6 +10,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -211,4 +212,78 @@ func TestINBRestore_FullGroupLeavesOutTheTemplatesOfMissingTypes(t *testing.T) {
 	restored, err := fields.GetByName(f.ctx, "Plate")
 	c.Assert(err, qt.IsNil)
 	c.Check(restored.Templates, qt.HasLen, 0)
+}
+
+// TestINBRoundTrip_DraftCustomFieldsFollowTheFields: a draft's custom field
+// values are archived like an item's and map onto the restored fields, a
+// link onto the restored item, in a group whose fields have other ids.
+func TestINBRoundTrip_DraftCustomFieldsFollowTheFields(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	src := newCustomFieldFixture(c)
+	remote := src.commodityByUUID(c, src.remoteUUID)
+	drafts := must.Must(src.fs.CommodityDraftRegistryFactory.CreateUserRegistry(src.ctx))
+	must.Must2(drafts.CreateOrGet(src.ctx, models.CommodityDraft{
+		ClientKey: "draft-with-fields",
+		Values: models.CommodityDraftValues{
+			"name": "Second TV",
+			// Entries as the item form keeps them, and one as an item
+			// stores it.
+			"custom_fields": map[string]any{
+				src.serial.ID:   map[string]any{"value": "SN-7", "currency": ""},
+				src.fuel.ID:     map[string]any{"value": src.fuel.Options[0].ID},
+				src.size.ID:     float64(0),
+				src.link.ID:     map[string]any{"value": remote.ID},
+				"field-gone-id": map[string]any{"value": "dropped"},
+			},
+		},
+	}))
+
+	blobKey, archive := src.runExport(c, signer)
+	_, jsons := innerMembers(c, archive)
+	var doc types.INBDraftsDoc
+	c.Assert(json.Unmarshal(jsons[types.INBDraftsMember], &doc), qt.IsNil)
+	c.Assert(doc.Drafts, qt.HasLen, 1)
+	c.Check(doc.Drafts[0].Values["custom_fields"], qt.DeepEquals, map[string]any{
+		src.serial.UUID: map[string]any{"value": "SN-7", "currency": ""},
+		src.fuel.UUID:   map[string]any{"value": src.fuel.Options[0].ID},
+		src.size.UUID:   float64(0),
+		src.link.UUID:   map[string]any{"value": src.remoteUUID},
+	}, qt.Commentf("keyed by field UUID, a link naming the item's UUID, an unknown field left out"))
+
+	groupB := must.Must(src.fs.LocationGroupRegistry.Create(src.ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Group B",
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       "USD",
+		CreatedBy:           src.user.ID,
+	}))
+	dst := &inbFixture{fs: src.fs, ctx: appctx.WithGroup(appctx.WithUser(src.ctx, src.user), groupB), user: src.user, group: groupB}
+	final, err := restoreInbWithOptions(c, dst, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	fieldsB := map[string]*models.CustomFieldDefinition{}
+	for _, d := range must.Must(must.Must(src.fs.CustomFieldRegistryFactory.CreateUserRegistry(dst.ctx)).List(dst.ctx)) {
+		fieldsB[d.Name] = d
+	}
+	c.Assert(fieldsB["Serial"], qt.IsNotNil)
+	c.Check(fieldsB["Serial"].ID, qt.Not(qt.Equals), src.serial.ID)
+	var remoteB *models.Commodity
+	for _, com := range must.Must(must.Must(src.fs.CommodityRegistryFactory.CreateUserRegistry(dst.ctx)).List(dst.ctx)) {
+		if com.Name == "Remote" {
+			remoteB = com
+		}
+	}
+	c.Assert(remoteB, qt.IsNotNil)
+	c.Check(remoteB.ID, qt.Not(qt.Equals), remote.ID)
+
+	restored := must.Must(must.Must(src.fs.CommodityDraftRegistryFactory.CreateUserRegistry(dst.ctx)).GetByClientKey(dst.ctx, "draft-with-fields"))
+	c.Check(restored.Values["custom_fields"], qt.DeepEquals, map[string]any{
+		fieldsB["Serial"].ID: map[string]any{"value": "SN-7", "currency": ""},
+		fieldsB["Fuel"].ID:   map[string]any{"value": fieldsB["Fuel"].Options[0].ID},
+		fieldsB["Size"].ID:   float64(0),
+		fieldsB["Remote"].ID: map[string]any{"value": remoteB.ID},
+	})
 }

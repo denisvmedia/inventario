@@ -153,20 +153,7 @@ func (s *ExportService) writePayload(
 
 	// Write manifest.json FIRST — now that the statistics are fully known the
 	// import metadata path reaches them without inflating the payload bodies.
-	// The manifest records the unassigned member name only when one will be
-	// written (issue #1986), so a backup with no area-less commodities stays
-	// byte-stable.
-	unassignedMember := ""
-	if plan.unassigned.present {
-		unassignedMember = INBUnassignedName
-	}
-	// Same rule for the non-commodity files member (issue #2235): named only
-	// when one will actually be written.
-	filesMember := ""
-	if plan.files.present {
-		filesMember = INBFilesName
-	}
-	if err := builder.writeManifest(plan, unassignedMember, filesMember); err != nil {
+	if err := builder.writeManifest(&plan); err != nil {
 		return nil, nil, err
 	}
 
@@ -181,6 +168,13 @@ func (s *ExportService) writePayload(
 	// Then the area-less commodities member (issue #1986), same JSON-before-bytes
 	// ordering. Omitted entirely when no unassigned commodity is in scope.
 	if err := builder.writeUnassigned(plan.unassigned); err != nil {
+		return nil, nil, err
+	}
+
+	// Then the drafts (format 3.5). After the location members, because a
+	// draft's area is resolved through the areas they restore, and before the
+	// files member, which links files to the drafts.
+	if err := builder.writeDrafts(plan.drafts); err != nil {
 		return nil, nil, err
 	}
 
@@ -279,11 +273,21 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 }
 
 // writeManifest emits the manifest.json member from the accumulated stats and
-// the plan's per-location index, sellers, item types and custom fields.
-// unassignedMember names the area-less commodities member (issue #1986) and
-// filesMember the non-commodity files member (issue #2235); either is "" when
-// that member is not written (then the field is omitted).
-func (b *inbBuilder) writeManifest(plan inbPlan, unassignedMember, filesMember string) error {
+// the per-location index, the sellers, item types and custom fields. It names
+// the area-less commodities member (issue #1986), the drafts member and the
+// non-commodity files member (issue #2235) only when the plan writes them, so
+// a backup without them stays byte-stable.
+func (b *inbBuilder) writeManifest(plan *inbPlan) error {
+	var unassignedMember, draftsMember, filesMember string
+	if plan.unassigned.present {
+		unassignedMember = INBUnassignedName
+	}
+	if plan.drafts.present {
+		draftsMember = INBDraftsName
+	}
+	if plan.files.present {
+		filesMember = INBFilesName
+	}
 	manifest := INBManifest{
 		ExportDate:  time.Now().UTC().Format(time.RFC3339),
 		ExportType:  string(b.export.Type),
@@ -297,6 +301,7 @@ func (b *inbBuilder) writeManifest(plan inbPlan, unassignedMember, filesMember s
 		},
 		Locations:      plan.manifestLocs,
 		UnassignedFile: unassignedMember,
+		DraftsFile:     draftsMember,
 		FilesFile:      filesMember,
 		Sellers:        plan.sellers,
 		ItemTypes:      plan.itemTypes,
