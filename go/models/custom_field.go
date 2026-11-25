@@ -255,7 +255,7 @@ func (d *CustomFieldDefinition) ValidateWithContext(ctx context.Context) error {
 func (d *CustomFieldDefinition) ValidateFields(ctx context.Context) error {
 	errs := validation.Errors{}
 	if err := validation.ValidateStructWithContext(ctx, d,
-		validation.Field(&d.Name, validation.Required, validation.RuneLength(1, MaxCustomFieldNameRunes)),
+		validation.Field(&d.Name, validation.Required, validation.RuneLength(1, MaxCustomFieldNameRunes), validation.By(refuseNUL)),
 		validation.Field(&d.Type, validation.Required),
 	); err != nil {
 		fieldErrs, ok := errors.AsType[validation.Errors](err)
@@ -277,6 +277,15 @@ func (d *CustomFieldDefinition) ValidateFields(ctx context.Context) error {
 	return errs
 }
 
+// refuseNUL refuses a string with a NUL character, which a PostgreSQL text
+// column cannot store.
+func refuseNUL(v any) error {
+	if s, _ := v.(string); strings.ContainsRune(s, 0) {
+		return validation.NewError("custom_field_invalid_character", "must not contain a NUL character")
+	}
+	return nil
+}
+
 func (d *CustomFieldDefinition) validateOptions() error {
 	if d.Type != CustomFieldTypeSelect {
 		if len(d.Options) > 0 {
@@ -295,6 +304,9 @@ func (d *CustomFieldDefinition) validateOptions() error {
 	for _, o := range d.Options {
 		if err := validation.Validate(o.Label, validation.Required, validation.RuneLength(1, MaxCustomFieldOptionLabelRunes)); err != nil {
 			return validation.NewError("invalid_option_label", "every option needs a label of at most 100 characters")
+		}
+		if err := refuseNUL(o.Label); err != nil {
+			return err
 		}
 		if err := validation.Validate(o.ID, validation.Required,
 			validation.RuneLength(1, MaxCustomFieldOptionIDRunes), validation.Match(customFieldOptionIDPattern)); err != nil {

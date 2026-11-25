@@ -69,6 +69,9 @@ func (p parser) customFields(q *Query) error {
 }
 
 func parseCustomFieldCondition(raw string) (CustomFieldCondition, error) {
+	if strings.ContainsRune(raw, 0) {
+		return CustomFieldCondition{}, paramError(ParamCustomField, "", "must not contain a NUL character")
+	}
 	parts := strings.SplitN(raw, ":", 3)
 	if len(parts) < 2 || strings.TrimSpace(parts[0]) == "" {
 		return CustomFieldCondition{}, paramError(ParamCustomField, raw, "must be <field id>:<op>[:<value>]")
@@ -93,12 +96,18 @@ func parseCustomFieldCondition(raw string) (CustomFieldCondition, error) {
 	}
 	if cond.Op == registry.CustomFieldOpGte || cond.Op == registry.CustomFieldOpLte {
 		_, numErr := decimal.NewFromString(cond.Operand)
-		_, dateErr := time.Parse(time.DateOnly, cond.Operand)
-		if numErr != nil && dateErr != nil {
+		if numErr != nil && !isDateOperand(cond.Operand) {
 			return CustomFieldCondition{}, paramError(ParamCustomField, raw, "a range value must be a number or a date as YYYY-MM-DD")
 		}
 	}
 	return cond, nil
+}
+
+// isDateOperand reports whether s is a date as YYYY-MM-DD in year 1 or
+// later: PostgreSQL has no year 0, which time.Parse accepts.
+func isDateOperand(s string) bool {
+	t, err := time.Parse(time.DateOnly, s)
+	return err == nil && t.Year() >= 1
 }
 
 // customFieldSortID returns the field ID of a custom field sort, or "".
@@ -188,6 +197,9 @@ func customFieldFilter(cond CustomFieldCondition, d *models.CustomFieldDefinitio
 	if !cond.Op.TakesOperand() {
 		return f, nil
 	}
+	if strings.ContainsRune(cond.Operand, 0) {
+		return f, paramError(ParamCustomField, "", "must not contain a NUL character")
+	}
 	invalid := func(reason string) error { return paramError(ParamCustomField, cond.String(), reason) }
 	switch d.Type {
 	case models.CustomFieldTypeText, models.CustomFieldTypeLongText, models.CustomFieldTypeURL, models.CustomFieldTypeItemLink:
@@ -199,7 +211,7 @@ func customFieldFilter(cond CustomFieldCondition, d *models.CustomFieldDefinitio
 		}
 		f.Number = n
 	case models.CustomFieldTypeDate:
-		if _, err := time.Parse(time.DateOnly, cond.Operand); err != nil {
+		if !isDateOperand(cond.Operand) {
 			return f, invalid("must be a date as YYYY-MM-DD")
 		}
 		f.Text = cond.Operand

@@ -7,7 +7,9 @@
 dialect: postgres
 
 rules:
-  # DS107 is "dropping a database object removes existing schema behavior".
+  # destructive/drop-object (DS107 before Ptah 0.36, which names its rules
+  # category/name and refuses the old codes) reports dropping a schema, type,
+  # extension, function, procedure, trigger, role or policy.
   # Every occurrence in this tree is a DROP FUNCTION (96) or DROP POLICY (75)
   # immediately followed by the CREATE that replaces it -- the idempotent pair
   # Ptah's own generator emits for RLS functions and policies. No type,
@@ -16,5 +18,5 @@ rules:
   # do, so it is a warning: still reported, no longer a gate.
   #
   # Narrow this back to `error` if a migration ever drops an object for real.
-  DS107:
+  destructive/drop-object:
     severity: warning

@@ -196,6 +196,41 @@ func TestINBRoundTrip_RenamedCustomFieldIsMatchedByUUID(t *testing.T) {
 	c.Check(string(tv.CustomFields[f.fuel.ID]), qt.Equals, `"`+f.fuel.Options[1].ID+`"`)
 }
 
+// After the backup the group deleted "Model code" and renamed "Serial" to
+// "Model code". The archived "Serial" is the renamed field by its UUID, so
+// the archived "Model code" may not land on it by name: it is refused and
+// counted, and its value is left out instead of overwriting the serial.
+func TestINBRestore_FieldMatchedByUUIDIsNotMatchedByNameToo(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newCustomFieldFixture(c)
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	model := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Model code", Type: models.CustomFieldTypeText}))
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	tv := f.commodityByUUID(c, f.tvUUID)
+	tv.CustomFields = models.CustomFieldValues{model.ID: json.RawMessage(`"MC-7"`)}
+	must.Must(comReg.Update(f.ctx, *tv))
+	blobKey, _ := f.runExport(c, signer)
+
+	must.Must(fields.DeleteWithValues(f.ctx, model.ID, registry.AnyValueCount))
+	serial := must.Must(fields.Get(f.ctx, f.serial.ID))
+	serial.Name = "Model code"
+	serial.Templates = nil
+	must.Must(fields.Update(f.ctx, *serial))
+
+	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("the archived Model code is refused"))
+
+	c.Check(must.Must(fields.Count(f.ctx)), qt.Equals, 5)
+	got := f.commodityByUUID(c, f.tvUUID)
+	c.Check(string(got.CustomFields[f.serial.ID]), qt.Equals, `"SN-42"`)
+	for id, raw := range got.CustomFields {
+		c.Check(string(raw), qt.Not(qt.Equals), `"MC-7"`, qt.Commentf("field %s", id))
+	}
+}
+
 // A dry run writes no field, but counts each archived field the restore
 // would refuse.
 func TestINBRestore_DryRunCountsCustomFieldConflicts(t *testing.T) {
@@ -247,6 +282,26 @@ func TestINBRoundTrip_LinkToAnItemInTrash(t *testing.T) {
 	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("the link to the item in Trash"))
 	tv := dst.commodityByUUID(c, src.tvUUID)
 	c.Check(tv.CustomFields, qt.HasLen, 3, qt.Commentf("every value but the link restores: %v", tv.CustomFields))
+}
+
+// A merge_update into the same group while the link target is still in
+// Trash: the restore cannot name the target, the item keeps its link, and
+// nothing is counted.
+func TestINBRestore_MergeUpdateKeepsALinkToAnItemInTrash(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newCustomFieldFixture(c)
+	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
+	remote := f.commodityByUUID(c, f.remoteUUID)
+	must.Must(comReg.Trash(f.ctx, remote.ID, f.user.ID, time.Now()))
+	blobKey, _ := f.runExport(c, signer)
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeUpdate)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 0)
+	tv := f.commodityByUUID(c, f.tvUUID)
+	c.Check(string(tv.CustomFields[f.link.ID]), qt.Equals, `"`+remote.ID+`"`)
 }
 
 func TestINBRestore_DryRunCreatesNoCustomFields(t *testing.T) {

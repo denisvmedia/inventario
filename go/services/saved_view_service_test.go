@@ -376,6 +376,8 @@ func TestSavedViewService_KeepsAndCountsTheCustomFieldFilter(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	red, blue := color.Options[0].ID, color.Options[1].ID
+	bought, err := fields.Create(ctx, models.CustomFieldDefinition{Name: "Bought", Type: models.CustomFieldTypeDate})
+	c.Assert(err, qt.IsNil)
 	reg := f.factory.CommodityRegistryFactory.MustCreateUserRegistry(ctx)
 	for name, values := range map[string]models.CustomFieldValues{
 		"Drill": {watts.ID: json.RawMessage(`800`), color.ID: json.RawMessage(`"` + red + `"`)},
@@ -399,10 +401,16 @@ func TestSavedViewService_KeepsAndCountsTheCustomFieldFilter(t *testing.T) {
 	want := url.Values{"cf": conds, "sort": {"-cf." + watts.ID}}
 	c.Assert(view.View.Query, qt.Equals, want.Encode())
 
-	_, err = f.svc.Create(ctx, alice, viewInput("Mismatched", "cf="+color.ID+":gte:5", false))
-	qErr, ok := errors.AsType[*commodityquery.Error](err)
-	c.Assert(ok, qt.IsTrue)
-	c.Assert(qErr.Param, qt.Equals, "cf")
+	for _, refused := range []string{
+		"cf=" + color.ID + ":gte:5",
+		"cf=" + bought.ID + ":eq:0000-01-01",
+		"cf=" + color.ID + ":in:a%00b",
+	} {
+		_, err = f.svc.Create(ctx, alice, viewInput("Refused", refused, false))
+		qErr, ok := errors.AsType[*commodityquery.Error](err)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("query %s: %v", refused, err))
+		c.Assert(qErr.Param, qt.Equals, "cf")
+	}
 
 	set, err := f.factory.CreateUserRegistrySet(ctx)
 	c.Assert(err, qt.IsNil)

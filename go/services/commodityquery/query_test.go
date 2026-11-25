@@ -99,6 +99,8 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "set with a value", query: "cf=f-1:set:x", param: "cf"},
 		{name: "eq without a value", query: "cf=f-1:eq", param: "cf"},
 		{name: "a range over a word", query: "cf=f-1:gte:ten", param: "cf"},
+		{name: "a range over year zero", query: "cf=f-1:gte:0000-01-01", param: "cf"},
+		{name: "a custom field value with a NUL", query: "cf=f-1:contains:a%00b", param: "cf"},
 		{name: "a custom field value over the length limit", query: "cf=f-1:eq:" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "cf"},
 		{name: "too many custom field conditions", query: manyConditions(commodityquery.MaxCustomFieldFilters + 1), param: "cf"},
 	} {

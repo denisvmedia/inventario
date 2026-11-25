@@ -49,6 +49,14 @@ func TestCustomFields_CRUDAndItemValues(t *testing.T) {
 	rr = env.do(http.MethodPost, "/custom-fields", `{"data":{"type":"custom_fields","attributes":{"name":"Size","type":"select"}}}`)
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), qt.Contains, "options_required")
+	for _, body := range []string{
+		`{"data":{"type":"custom_fields","attributes":{"name":"Si\u0000ze","type":"text"}}}`,
+		`{"data":{"type":"custom_fields","attributes":{"name":"Size","type":"select","options":[{"label":"S\u0000"}]}}}`,
+	} {
+		rr = env.do(http.MethodPost, "/custom-fields", body)
+		c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), qt.Contains, "custom_field_invalid_character")
+	}
 
 	// An item write stores the values; a refused one is a 422 per field.
 	rr = env.do(http.MethodPost, "/commodities", commodityBodyWithCustomFields("Car",

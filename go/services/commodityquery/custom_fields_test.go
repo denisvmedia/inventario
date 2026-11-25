@@ -26,6 +26,8 @@ func TestList_CustomFields(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	petrol, diesel := fuel.Options[0].ID, fuel.Options[1].ID
+	day, err := set.CustomFieldRegistry.Create(ctx, models.CustomFieldDefinition{Name: "Day", Type: models.CustomFieldTypeDate})
+	c.Assert(err, qt.IsNil)
 
 	withValues := func(name string, values map[string]string) {
 		c.Helper()
@@ -78,6 +80,7 @@ func TestList_CustomFields(t *testing.T) {
 		"cf=" + km.ID + ":contains:1",
 		"cf=" + plate.ID + ":gte:1",
 		"cf=" + fuel.ID + ":eq:" + petrol + "," + diesel,
+		"cf=" + day.ID + ":eq:0000-01-01",
 	} {
 		values, err := url.ParseQuery(refused)
 		c.Assert(err, qt.IsNil)
