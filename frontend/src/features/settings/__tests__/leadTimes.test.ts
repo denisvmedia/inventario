@@ -18,6 +18,8 @@ describe("validateLeadTimes", () => {
 
   it.each([
     ["7, soon", list, "settings:notifications.leadTimes.errors.notNumbers"],
+    [", ; ", list, "settings:notifications.leadTimes.errors.notNumbers"],
+    [",", single, "settings:notifications.leadTimes.errors.notNumber"],
     ["7.5", single, "settings:notifications.leadTimes.errors.notNumber"],
     ["7, 3", single, "settings:notifications.leadTimes.errors.single"],
     ["1, 2, 3, 4, 5, 6", list, "settings:notifications.leadTimes.errors.tooMany"],
