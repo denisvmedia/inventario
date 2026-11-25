@@ -209,6 +209,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- The item delete dialog and the area delete dialog showed raw keys such as
+  "delete.title" instead of their text
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - The search page renders item results. It expected each result wrapped in
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item
