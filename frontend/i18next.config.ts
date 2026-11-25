@@ -106,6 +106,16 @@ export default defineConfig({
       //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only
       //   sees the template literal.
       "settings:storage.breakdown.*",
+      // settings:apiTokens.{scopes,scopeDescriptions,expiry,errors,validation}.*
+      //   — the API tokens page and its create dialog look these up from
+      //   the scope / expiry-preset unions, map server error codes via
+      //   `t(\`settings:apiTokens.errors.${code}\`)`, and hold zod messages
+      //   as raw keys. The extractor only sees the template literals.
+      "settings:apiTokens.scopes.*",
+      "settings:apiTokens.scopeDescriptions.*",
+      "settings:apiTokens.expiry.*",
+      "settings:apiTokens.errors.*",
+      "settings:apiTokens.validation.*",
       // groups:validation.* — schema messages in features/group/schemas.ts
       // are plain strings, surfaced through RHF errors[name].message →
       // t() at render time. Same pattern as auth:validation.*.

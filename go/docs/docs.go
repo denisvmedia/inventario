@@ -8584,6 +8584,141 @@ const docTemplate = `{
                 }
             }
         },
+        "/users/me/api-tokens": {
+            "get": {
+                "description": "Returns the authenticated user's personal API tokens that are not revoked, newest first, expired ones included. The token values themselves are never returned.\nRequires a browser session; API tokens are refused here (403 api_token.endpoint_not_allowed).",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "List personal API tokens",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.APITokensListResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates a token for scripts and other applications and returns it once in ` + "`" + `secret` + "`" + `; only its SHA-256 digest is stored.\nRequires a browser session that is not an impersonation session. The caller re-authenticates: ` + "`" + `current_password` + "`" + ` when the account has a password, and ` + "`" + `totp_code` + "`" + ` or ` + "`" + `backup_code` + "`" + ` when two-factor authentication is enabled.\n` + "`" + `scope` + "`" + ` is ` + "`" + `read_only` + "`" + ` (GET, HEAD and OPTIONS only) or ` + "`" + `read_write` + "`" + `. ` + "`" + `group_id` + "`" + ` restricts the token to one group the caller belongs to. ` + "`" + `expires_at` + "`" + ` is optional.\nValidation failures answer 422 with codes api_token.name_required, api_token.name_too_long, api_token.invalid_scope,\napi_token.expiry_in_past, api_token.group_not_allowed, api_token.limit_reached, api_token.invalid_password or api_token.invalid_mfa_code.\nA password change or reset, disabling two-factor authentication, an account block or a session revoke that lands while the request runs answers 401 api_token.credentials_changed, and no token is created.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Create a personal API token",
+                "parameters": [
+                    {
+                        "description": "Token settings and re-authentication",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.CreateAPITokenRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.CreateAPITokenResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/users/me/api-tokens/{id}": {
+            "delete": {
+                "description": "Revokes the token at once; the next request made with it answers 401. Returns 404 for an id that is not one of the caller's tokens.\nRequires a browser session that is not an impersonation session.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "users-me"
+                ],
+                "summary": "Revoke a personal API token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Token ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/users/me/login-history": {
             "get": {
                 "description": "Returns the authenticated user's most recent login attempts (default 100, max 500). Also returns failed_last_7d for the optional banner.",
@@ -8775,6 +8910,63 @@ const docTemplate = `{
         }
     },
     "definitions": {
+        "apiserver.APITokenView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "expired": {
+                    "description": "Expired is true once ExpiresAt has passed. An expired token is listed\nso its owner can see why a script stopped working, and can be revoked\nto remove it from the list.",
+                    "type": "boolean"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is absent for a token that does not expire.",
+                    "type": "string"
+                },
+                "group_id": {
+                    "description": "GroupID is the one group the token may reach, or absent for every group\nthe owner belongs to.",
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "last_used_at": {
+                    "description": "LastUsedAt is accurate to five minutes; absent when never used.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the label the user gave the token.",
+                    "type": "string"
+                },
+                "scope": {
+                    "enum": [
+                        "read_only",
+                        "read_write"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.APITokenScope"
+                        }
+                    ]
+                },
+                "token_prefix": {
+                    "description": "TokenPrefix is the start of the token, e.g. \"inv_pat_AbCd\", to tell\ntokens apart.",
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.APITokensListResponse": {
+            "type": "object",
+            "properties": {
+                "tokens": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.APITokenView"
+                    }
+                }
+            }
+        },
         "apiserver.AdminAddMemberRequest": {
             "type": "object",
             "required": [
@@ -9087,6 +9279,51 @@ const docTemplate = `{
                 },
                 "new_password": {
                     "type": "string"
+                }
+            }
+        },
+        "apiserver.CreateAPITokenRequest": {
+            "type": "object",
+            "properties": {
+                "backup_code": {
+                    "type": "string"
+                },
+                "current_password": {
+                    "description": "CurrentPassword is required when the account has a password.",
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is an RFC 3339 time in the future, or absent for no expiry.",
+                    "type": "string"
+                },
+                "group_id": {
+                    "description": "GroupID restricts the token to one group the caller is a member of.",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "scope": {
+                    "type": "string",
+                    "enum": [
+                        "read_only",
+                        "read_write"
+                    ]
+                },
+                "totp_code": {
+                    "description": "TOTPCode or BackupCode is required when the account has two-factor\nauthentication enabled.",
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.CreateAPITokenResponse": {
+            "type": "object",
+            "properties": {
+                "secret": {
+                    "type": "string"
+                },
+                "token": {
+                    "$ref": "#/definitions/apiserver.APITokenView"
                 }
             }
         },
@@ -13379,6 +13616,17 @@ const docTemplate = `{
                     "$ref": "#/definitions/jsonapi.ValueData"
                 }
             }
+        },
+        "models.APITokenScope": {
+            "type": "string",
+            "enum": [
+                "read_only",
+                "read_write"
+            ],
+            "x-enum-varnames": [
+                "APITokenScopeReadOnly",
+                "APITokenScopeReadWrite"
+            ]
         },
         "models.Area": {
             "type": "object",

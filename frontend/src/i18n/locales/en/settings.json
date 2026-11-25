@@ -28,6 +28,98 @@
     "memberSinceUnknown": "—",
     "title": "Account"
   },
+  "apiTokens": {
+    "card": {
+      "allGroups": "All your groups",
+      "createdAt": "Created {{value}}",
+      "expired": "Expired",
+      "expiredOn": "Expired {{value}}",
+      "expiresOn": "Expires {{value}}",
+      "lastUsed": "Last used {{value}}",
+      "neverUsed": "Never used",
+      "noExpiry": "No expiry",
+      "unknownGroup": "A group you no longer belong to"
+    },
+    "confirmRevoke": {
+      "cta": "Revoke",
+      "description": "Anything that uses “{{name}}” stops working at once. This cannot be undone.",
+      "title": "Revoke this token?"
+    },
+    "create": {
+      "allGroups": "All my groups",
+      "currentPassword": "Current password",
+      "description": "The token acts as you, with your current role in each group it can reach. It cannot sign in, change your password or security settings, or create other tokens.",
+      "expiry": "Expires",
+      "group": "Group",
+      "groupHelp": "Restrict the token to one group, or let it reach every group you belong to.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Home Assistant",
+      "reauthHint": "Confirm it is you.",
+      "scope": "Access",
+      "submit": "Create token",
+      "submitting": "Creating…",
+      "title": "New API token"
+    },
+    "createCard": {
+      "cta": "New token",
+      "description": "Choose what the token may do and, if you like, one group and an expiry date.",
+      "impersonating": "Tokens cannot be created or revoked while you are impersonating a user.",
+      "label": "Create a token"
+    },
+    "empty": "You have no API tokens.",
+    "errors": {
+      "expiry_in_past": "The expiry date must be in the future.",
+      "generic": "Could not create the token. Please try again.",
+      "group_not_allowed": "You are not a member of that group.",
+      "impersonation_forbidden": "Tokens cannot be created or revoked while you are impersonating a user.",
+      "invalid_mfa_code": "The code is incorrect or was already used.",
+      "invalid_password": "The password is incorrect.",
+      "invalid_scope": "Choose what the token may do.",
+      "limit_reached": "You have too many active tokens. Revoke one you no longer use.",
+      "name_required": "Give the token a name.",
+      "name_too_long": "The name is too long."
+    },
+    "expiry": {
+      "30d": "30 days",
+      "365d": "1 year",
+      "90d": "90 days",
+      "never": "No expiry"
+    },
+    "loadFailed": "Could not load your tokens.",
+    "loading": "Loading tokens…",
+    "reveal": {
+      "copied": "Token copied.",
+      "copy": "Copy token",
+      "copyFailed": "Could not copy. Select the token and copy it by hand.",
+      "description": "“{{name}}” is ready.",
+      "done": "Done",
+      "label": "Token",
+      "title": "Copy your new token",
+      "usage": "Send it in the Authorization header of every request:",
+      "warning": "This is the only time the token is shown. Store it somewhere safe now. If you lose it, revoke it and create a new one."
+    },
+    "revoke": "Revoke",
+    "scopeDescriptions": {
+      "read_only": "Can list and view data, but not change it.",
+      "read_write": "Can also create, change and delete what your role in the group allows."
+    },
+    "scopes": {
+      "read_only": "Read only",
+      "read_write": "Read and write"
+    },
+    "subtitle": "A personal API token lets a script or another app call the Inventario API as you, without your password. Each token is shown once, when you create it.",
+    "title": "API tokens",
+    "toasts": {
+      "revoked": "Token revoked.",
+      "revokeFailed": "Failed to revoke the token. Please try again."
+    },
+    "validation": {
+      "codeRequired": "Enter a code from your authenticator app or a backup code.",
+      "nameRequired": "Give the token a name.",
+      "nameTooLong": "Use at most 100 characters.",
+      "passwordRequired": "Enter your current password."
+    }
+  },
   "appearance": {
     "defaultViewHelp": "Sets the initial layout when opening the Items list. You can still flip per-session from the toolbar.",
     "defaultViewLabel": "Default view",
@@ -211,6 +303,10 @@
       "activeSessionsBadge_one": "{{count}} active",
       "activeSessionsBadge_other": "{{count}} active",
       "activeSessionsDescription": "Manage devices that are signed in to your account.",
+      "apiTokens": "API tokens",
+      "apiTokensBadge_one": "{{count}} active",
+      "apiTokensBadge_other": "{{count}} active",
+      "apiTokensDescription": "Let scripts and other apps use the API as you.",
       "loginHistory": "Login history",
       "loginHistoryDescription": "Review recent sign-in attempts."
     },

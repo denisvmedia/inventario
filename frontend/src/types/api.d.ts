@@ -9856,6 +9856,203 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/users/me/api-tokens": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List personal API tokens
+         * @description Returns the authenticated user's personal API tokens that are not revoked, newest first, expired ones included. The token values themselves are never returned.
+         *     Requires a browser session; API tokens are refused here (403 api_token.endpoint_not_allowed).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.APITokensListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a personal API token
+         * @description Creates a token for scripts and other applications and returns it once in `secret`; only its SHA-256 digest is stored.
+         *     Requires a browser session that is not an impersonation session. The caller re-authenticates: `current_password` when the account has a password, and `totp_code` or `backup_code` when two-factor authentication is enabled.
+         *     `scope` is `read_only` (GET, HEAD and OPTIONS only) or `read_write`. `group_id` restricts the token to one group the caller belongs to. `expires_at` is optional.
+         *     Validation failures answer 422 with codes api_token.name_required, api_token.name_too_long, api_token.invalid_scope,
+         *     api_token.expiry_in_past, api_token.group_not_allowed, api_token.limit_reached, api_token.invalid_password or api_token.invalid_mfa_code.
+         *     A password change or reset, disabling two-factor authentication, an account block or a session revoke that lands while the request runs answers 401 api_token.credentials_changed, and no token is created.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Token settings and re-authentication */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.CreateAPITokenRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.CreateAPITokenResponse"];
+                    };
+                };
+                /** @description Bad Request */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/api-tokens/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke a personal API token
+         * @description Revokes the token at once; the next request made with it answers 401. Returns 404 for an id that is not one of the caller's tokens.
+         *     Requires a browser session that is not an impersonation session.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Token ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/me/login-history": {
         parameters: {
             query?: never;
@@ -10138,6 +10335,37 @@ export type paths = {
 export type webhooks = Record<string, never>;
 export type components = {
     schemas: {
+        "apiserver.APITokenView": {
+            created_at?: string;
+            /**
+             * @description Expired is true once ExpiresAt has passed. An expired token is listed
+             *     so its owner can see why a script stopped working, and can be revoked
+             *     to remove it from the list.
+             */
+            expired?: boolean;
+            /** @description ExpiresAt is absent for a token that does not expire. */
+            expires_at?: string;
+            /**
+             * @description GroupID is the one group the token may reach, or absent for every group
+             *     the owner belongs to.
+             */
+            group_id?: string;
+            id?: string;
+            /** @description LastUsedAt is accurate to five minutes; absent when never used. */
+            last_used_at?: string;
+            /** @description Name is the label the user gave the token. */
+            name?: string;
+            /** @enum {unknown} */
+            scope?: "read_only" | "read_write";
+            /**
+             * @description TokenPrefix is the start of the token, e.g. "inv_pat_AbCd", to tell
+             *     tokens apart.
+             */
+            token_prefix?: string;
+        };
+        "apiserver.APITokensListResponse": {
+            tokens?: components["schemas"]["apiserver.APITokenView"][];
+        };
         "apiserver.AdminAddMemberRequest": {
             /** @description Role is the group role granted to the user: viewer|user|admin|owner. */
             role: components["schemas"]["models.GroupRole"];
@@ -10278,6 +10506,27 @@ export type components = {
         "apiserver.ChangePasswordRequest": {
             current_password?: string;
             new_password?: string;
+        };
+        "apiserver.CreateAPITokenRequest": {
+            backup_code?: string;
+            /** @description CurrentPassword is required when the account has a password. */
+            current_password?: string;
+            /** @description ExpiresAt is an RFC 3339 time in the future, or absent for no expiry. */
+            expires_at?: string;
+            /** @description GroupID restricts the token to one group the caller is a member of. */
+            group_id?: string;
+            name?: string;
+            /** @enum {string} */
+            scope?: "read_only" | "read_write";
+            /**
+             * @description TOTPCode or BackupCode is required when the account has two-factor
+             *     authentication enabled.
+             */
+            totp_code?: string;
+        };
+        "apiserver.CreateAPITokenResponse": {
+            secret?: string;
+            token?: components["schemas"]["apiserver.APITokenView"];
         };
         "apiserver.DeleteAccountRequest": {
             password?: string;
@@ -12368,6 +12617,8 @@ export type components = {
         "jsonapi.ValueResponse": {
             data?: components["schemas"]["jsonapi.ValueData"];
         };
+        /** @enum {string} */
+        "models.APITokenScope": "read_only" | "read_write";
         "models.Area": {
             /**
              * @description Icon is a short visual token (typically a single emoji) shown as

@@ -452,6 +452,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-24 — Personal API tokens: Privacy & security row, `/profile/api-tokens` page, create dialog with one-time reveal
+
+- **Issue/PR**: #2808 / PR (pending)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `PrivacySection` has three rows (Two-factor authentication, Active sessions, Login history) and the danger zone. The mock has no API tokens surface at all: no row, no list page, no create dialog.
+- **Reality**: `frontend/src/pages/SettingsPage.tsx` adds a fourth `PrivacyRow` ("API tokens", `privacy-row-apiTokens`) under Login history, with an "N active" badge that counts unexpired tokens. It links to `frontend/src/pages/ApiTokensPage.tsx` at `/profile/api-tokens`, which copies the `SessionsPage` shape: `Page width="narrow"`, `PageHeader size="detail"` with the back link to Privacy & security, an action card with a `bg-primary/10` icon tile and a "New token" button, then one `rounded-xl border bg-card p-4` card per token (name, scope badge, destructive "Expired" badge, display prefix, group or "All your groups", last used or "Never used", expiry or "No expiry", created time, Revoke) and a confirm `Dialog` for revoke. `frontend/src/components/settings/CreateAPITokenDialog.tsx` is a shadcn `Dialog` with a name `Input`, a scope `RadioGroup` (bordered option cards, as in the showcase), a group `Select` and an expiry `Select`. When the account has a password it asks for it, and when MFA is active it asks for a TOTP or backup code with the same toggle as `MFADisableDialog`. On success the dialog switches to the reveal step: a warning `Alert`, a read-only monospace `Input` holding the token, an icon copy button and Done. While the token is shown, a click outside the dialog does not close it.
+- **Why**: not present in mock. Composition falls back to the `SessionsPage` / `LoginHistoryPage` convention for `/profile/*` pages and to [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) for Dialog, RadioGroup, Select, Badge and Alert. The issue asks for name, optional expiry, scope, optional group, a one-time reveal, a list with last-used time, and revoke. These parts go beyond the issue text and are agent-suggested: expiry is a preset `Select` (30 days, 90 days, 1 year, no expiry; default 90 days) rather than a date picker; creating a token asks for the current password and the second factor; the Settings row shows an active-token badge; the reveal step cannot be dismissed by an outside click; the create and revoke buttons are disabled with an explanation while impersonating, matching the server's 403.
+- **Approved by**: user (explicit) — pre-approved for #2808 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when the upstream mock adds an API tokens surface: match its row, page and dialog anatomy and drop whatever this entry lists that the mock does not keep.
+
 #### 2026-05-26 — Personal Preferences lands on Account, not Appearance
 
 - **Issue/PR**: #1888 / PR (pending)

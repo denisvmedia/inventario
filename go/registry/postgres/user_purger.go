@@ -80,6 +80,7 @@ func NewUserPurgerWithTableNames(dbx *sqlx.DB, tableNames store.TableNames) *Use
 var userDeleteByUserID = []func(t store.TableNames) string{
 	// Auth / session.
 	func(t store.TableNames) string { return string(t.RefreshTokens()) },
+	func(t store.TableNames) string { return string(t.APITokens()) },
 	func(t store.TableNames) string { return string(t.LoginEvents()) },
 	func(t store.TableNames) string { return string(t.EmailVerifications()) },
 	func(t store.TableNames) string { return string(t.PasswordResets()) },

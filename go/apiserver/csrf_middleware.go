@@ -18,7 +18,8 @@ const (
 //
 // The middleware relies on the authenticated user being present in the request
 // context (set by JWTMiddleware). Safe methods (GET, HEAD, OPTIONS) are always
-// allowed without a CSRF token.
+// allowed without a CSRF token, and so is a request authenticated by a personal
+// API token (see below).
 //
 // Passing a nil csrfService disables CSRF validation entirely; this is
 // intended only for test environments.
@@ -43,6 +44,19 @@ func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 			// Safe methods do not require CSRF protection.
 			switch r.Method {
 			case http.MethodGet, http.MethodHead, http.MethodOptions:
+				next.ServeHTTP(w, r)
+				return
+			}
+
+			// A personal API token request carries no ambient credential: the
+			// token travels in the Authorization header, which a cross-site
+			// page cannot set, and no cookie authenticates it. There is nothing
+			// for a forged request to ride on, so there is nothing to check.
+			// The marker is set only by the token branch of
+			// SessionOrAPITokenMiddleware after the token validated, never from
+			// a header this middleware reads, so a session request cannot claim
+			// it.
+			if appctx.APITokenFromContext(r.Context()) != nil {
 				next.ServeHTTP(w, r)
 				return
 			}

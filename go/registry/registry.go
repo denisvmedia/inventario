@@ -2186,6 +2186,42 @@ type RefreshTokenRegistry interface {
 	DeleteExpired(ctx context.Context) error
 }
 
+// APITokenRegistry stores personal API tokens (#2808). It runs in service mode:
+// token authentication looks a row up by digest before any user context
+// exists. The surface is deliberately narrow — there is no generic Update, so
+// no caller can rewrite a token's scope, group or owner after creation.
+type APITokenRegistry interface {
+	// Create inserts a token. ID, UUID and CreatedAt are assigned here.
+	Create(ctx context.Context, token models.APIToken) (*models.APIToken, error)
+
+	// GetByTokenHash returns the token whose digest matches, revoked or not.
+	// Returns ErrNotFound when no row matches.
+	GetByTokenHash(ctx context.Context, tokenHash string) (*models.APIToken, error)
+
+	// ListByUserID returns the user's tokens that are not revoked, expired
+	// ones included so the user can see them, newest first.
+	ListByUserID(ctx context.Context, userID string) ([]*models.APIToken, error)
+
+	// CountActiveByUserID counts the user's tokens that are neither revoked
+	// nor expired at now.
+	CountActiveByUserID(ctx context.Context, userID string, now time.Time) (int, error)
+
+	// RevokeByID revokes one token, gated on the owner so a guessed id from
+	// another account returns ErrNotFound. Revoking an already revoked token
+	// is a no-op success. Returns the token as stored after the call.
+	RevokeByID(ctx context.Context, userID, id string) (*models.APIToken, error)
+
+	// RevokeAllByUserID revokes every token of the user that is not revoked
+	// yet, and returns how many it revoked.
+	RevokeAllByUserID(ctx context.Context, userID string) (int, error)
+
+	// TouchLastUsed sets last_used_at to at, but only when the stored value is
+	// NULL or older than staleBefore and the token is not revoked. It reports
+	// whether it wrote, so concurrent requests on several replicas produce one
+	// write per interval instead of one each.
+	TouchLastUsed(ctx context.Context, id string, at, staleBefore time.Time) (bool, error)
+}
+
 // LoginEventRegistry stores the append-only login_events audit trail
 // (issue #1379). The registry runs under the background-worker role so
 // the unauthenticated login flow (where no tenant context is set in the

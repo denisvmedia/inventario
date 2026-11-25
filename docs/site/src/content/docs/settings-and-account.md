@@ -1,6 +1,6 @@
 ---
 title: Settings & account
-description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, and connected sign-in methods.
+description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, API tokens, and connected sign-in methods.
 ---
 
 Everything about your account, your preferences, and keeping it secure lives in
@@ -148,7 +148,7 @@ except the password form, which is on the **Edit profile** page.
 :::caution
 When you change your password, Inventario signs you out **everywhere** — every
 device has to sign in again with the new password — and you'll be returned to
-the sign-in page.
+the sign-in page. It also revokes all your [API tokens](#api-tokens).
 :::
 
 :::tip
@@ -195,6 +195,8 @@ set 2FA up again to get a fresh set.
    **Use a backup code instead** and enter a backup code.
 3. Click **Disable**.
 
+Turning 2FA off also revokes all your [API tokens](#api-tokens).
+
 ## Active sessions
 
 Open **Active sessions** from **Privacy & security** to see every device and
@@ -222,6 +224,82 @@ address and device where available.
 If there have been several failed attempts (more than three) in the last seven
 days, a banner at the top points it out. If you don't recognise the activity, change your password
 and revoke any sessions you don't trust.
+
+## API tokens
+
+An API token lets a script or another app use Inventario as you, without your
+password: a Home Assistant card that shows what is lent out, a nightly job that
+exports a list, another app that adds a purchase. Open **API tokens** from
+**Privacy & security** to create and revoke them. The
+[API tokens for scripts](../api-tokens/) page explains how a script sends one
+and which endpoints it can use.
+
+### Create a token
+
+1. Click **New token**.
+2. Give it a **Name** you will recognise later, for example the app that uses
+   it.
+3. Choose its **Access**:
+   - **Read only** can list and view data but not change it.
+   - **Read and write** can also create, change and delete.
+4. Under **Group**, keep **All my groups** or pick one group. A token limited to
+   one group cannot reach any other.
+5. Under **Expires**, pick **30 days**, **90 days**, **1 year** or **No
+   expiry**.
+6. Confirm it is you: enter your **Current password**, and the code from your
+   authenticator app (or a backup code) if two-factor authentication is on.
+7. Click **Create token**, then **Copy token** and store it where the script
+   can read it. Click **Done**.
+
+:::caution
+The token is shown only once, when you create it. Inventario keeps only a
+fingerprint of it and cannot show it again. If you lose it, revoke it and
+create a new one.
+:::
+
+### What a token can do
+
+A token acts as you, with your current role in each group it can reach: if you
+are a viewer in a group, a **Read and write** token cannot change anything there
+either, and if you leave a group, the token loses it too. It works only on the
+data inside groups (items, locations, areas, files, tags, loans, services,
+maintenance, exports and the like), and it can read the list of your groups,
+each group's details, and its members and their photos.
+
+A token cannot sign in, change your profile, password or two-factor settings,
+see or end sessions, create or revoke tokens, see or accept invitations,
+create, leave or manage groups or members, or reach anything in the admin
+area. Those stay with you in the browser.
+
+### The token list
+
+Each card shows the token's name, its access, the first characters of the token
+so you can tell tokens apart, the group it is limited to (or **All your
+groups**), when it was last used, when it expires, and when you created it.
+**Last used** is updated at most every five minutes. An expired token stays on
+the list, marked **Expired**, until you revoke it.
+
+To revoke a token, click **Revoke** on its card and confirm. Anything that uses
+it stops working at once.
+
+### When tokens stop working on their own
+
+Besides expiring, all your tokens are revoked when:
+
+- you change your password, or reset it through a password-reset email;
+- you turn off two-factor authentication;
+- an administrator blocks your account, deactivates it, or signs you out of
+  every session.
+
+A token you are creating at the moment one of these happens is not created.
+Unblocking an account does not bring its tokens back; create new ones. Tokens
+are deleted with your account, and a token limited to one group is deleted when
+that group is deleted.
+
+:::note
+An administrator who is signed in as you, for example to help with a problem,
+can see your tokens but cannot create or revoke them.
+:::
 
 ## Connected accounts
 

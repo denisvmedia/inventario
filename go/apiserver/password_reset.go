@@ -32,6 +32,7 @@ type PasswordResetAPI struct {
 	auditService          services.AuditLogger
 	rateLimiter           services.AuthRateLimiter
 	publicBaseURL         string
+	apiTokens             *services.APITokenService
 }
 
 // PasswordResetParams holds all dependencies needed by the password-reset API.
@@ -44,6 +45,9 @@ type PasswordResetParams struct {
 	AuditService          services.AuditLogger
 	RateLimiter           services.AuthRateLimiter
 	PublicBaseURL         string
+	// APITokenService revokes the user's personal API tokens on a reset
+	// (#2808). Nil skips that step.
+	APITokenService *services.APITokenService
 }
 
 // ForgotPasswordRequest is the body for POST /forgot-password.
@@ -68,6 +72,7 @@ func PasswordReset(params PasswordResetParams) func(r chi.Router) {
 		auditService:          params.AuditService,
 		rateLimiter:           params.RateLimiter,
 		publicBaseURL:         strings.TrimSpace(params.PublicBaseURL),
+		apiTokens:             params.APITokenService,
 	}
 	return func(r chi.Router) {
 		r.With(PasswordResetRateLimitMiddleware(params.RateLimiter)).Post("/forgot-password", api.handleForgotPassword)
@@ -183,6 +188,15 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
+	// A reset is how a user recovers a compromised account, so the personal
+	// API tokens go too: one minted by whoever had the old password must not
+	// outlive it. They go first and the reset token stays unused if that
+	// fails, so the user can retry.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset"); err != nil {
+		api.logAuth(r, "password_reset", &user.ID, false, "failed to revoke API tokens")
+		http.Error(w, "Failed to update password", http.StatusInternalServerError)
+		return
+	}
 	if err := user.SetPassword(req.NewPassword); err != nil {
 		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
@@ -193,6 +207,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
+	sweepAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "password_reset")
 
 	// Consume the token by deleting all reset tokens for this user.
 	// The token is considered used-on-delete: once gone, GetByToken returns ErrNotFound.

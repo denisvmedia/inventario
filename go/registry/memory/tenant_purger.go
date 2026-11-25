@@ -209,6 +209,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		{"refresh_tokens", func() error {
 			return purgeByTenant(ctx, tenantID, fs.RefreshTokenRegistry.List, fs.RefreshTokenRegistry.Delete, tenantAware[models.RefreshToken])
 		}},
+		{"api_tokens", func() error { return r.purgeAPITokens(ctx, tenantID) }},
 		{"email_verifications", func() error {
 			return purgeByTenant(ctx, tenantID, fs.EmailVerificationRegistry.List, fs.EmailVerificationRegistry.Delete, func(e *models.EmailVerification) string {
 				return e.TenantID
@@ -310,6 +311,17 @@ func purgeByTenant[T any](
 // the tenant (any status). Used to fan out the two per-(tenant, group)-only
 // deletes (currency-migration audit rows, group_notification_prefs) across the
 // tenant's groups, since neither registry exposes a per-tenant delete.
+// purgeAPITokens deletes the tenant's personal API tokens. The registry
+// interface has no enumerable List/Delete on purpose (no caller may rewrite a
+// token), so this reaches the memory store's purge method directly.
+func (r *TenantPurger) purgeAPITokens(ctx context.Context, tenantID string) error {
+	tokens, ok := r.fs.APITokenRegistry.(*APITokenRegistry)
+	if !ok {
+		return nil
+	}
+	return tokens.DeleteByTenantID(ctx, tenantID)
+}
+
 func (r *TenantPurger) listGroupIDsForTenant(ctx context.Context, tenantID string) ([]string, error) {
 	groups, err := r.fs.LocationGroupRegistry.List(ctx)
 	if err != nil {
