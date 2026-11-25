@@ -29,6 +29,13 @@ describe("toFormValue / toFormValues", () => {
     })
   })
 
+  it("writes a JSON number without an exponent", () => {
+    expect(toFormValue(0.0000005)).toEqual({ value: "0.0000005", currency: "" })
+    expect(toFormValue(-1.25e-7)).toEqual({ value: "-0.000000125", currency: "" })
+    expect(toFormValue(1.5e21)).toEqual({ value: "1500000000000000000000", currency: "" })
+    expect(toFormValue(12.5)).toEqual({ value: "12.5", currency: "" })
+  })
+
   it("keeps zero, false and empty text, and drops null", () => {
     expect(toFormValues({ a: 0, b: false, c: "", d: null })).toEqual({
       a: { value: "0", currency: "" },

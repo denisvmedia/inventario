@@ -31,6 +31,25 @@ export function hasValue(values: CustomFieldValues | undefined, id: string): boo
   return values !== undefined && id in values && values[id] !== null
 }
 
+// plainDecimal writes n with the digits String gives, without an exponent
+// (5e-7 as 0.0000005), since the form's number check takes none. A JSON
+// number reaches the form from a draft saved through the API or an AI scan
+// guess; the item API sends a decimal string.
+function plainDecimal(n: number): string {
+  const s = String(n)
+  const m = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(s)
+  if (!m) return s
+  const [, sign, lead, rest = "", expText] = m
+  const digits = lead + rest
+  const exp = Number(expText)
+  if (exp < 0) return `${sign}0.${"0".repeat(-exp - 1)}${digits}`
+  return sign + digits.padEnd(exp + 1, "0")
+}
+
+function formText(v: unknown): string {
+  return typeof v === "number" ? plainDecimal(v) : String(v)
+}
+
 // toFormValue reads one stored value into the form's text. The API form of
 // each type tells the types apart where it matters (money is an object,
 // yes/no a boolean), so the field's definition is not needed.
@@ -39,12 +58,12 @@ export function toFormValue(raw: unknown): CustomFieldFormValue {
   if (isRecord(raw)) {
     const amount = raw.amount
     return {
-      value: amount === null || amount === undefined ? "" : String(amount),
+      value: amount === null || amount === undefined ? "" : formText(amount),
       currency: typeof raw.currency === "string" ? raw.currency : "",
     }
   }
   if (typeof raw === "boolean") return { value: raw ? "true" : "false", currency: "" }
-  return { value: String(raw), currency: "" }
+  return { value: formText(raw), currency: "" }
 }
 
 // toFormValues reads an item's stored values. A value of a field this
