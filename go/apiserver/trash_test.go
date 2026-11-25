@@ -3,15 +3,18 @@ package apiserver_test
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 )
 
@@ -213,6 +216,34 @@ func TestTrashAPI_ScheduleOfATrashedItemIsReadOnly(t *testing.T) {
 	}
 	got := must.Must(ctx.MaintenanceScheduleRegistry.Get(context.Background(), schedule.ID))
 	c.Assert(got.Title, qt.Equals, "Oil change")
+
+	rr = env.do(http.MethodPost, "/trash/commodities/"+ids[0]+"/restore", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodDelete, path, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
+}
+
+func TestTrashAPI_ReminderOfATrashedItemIsReadOnly(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	ids := env.commodityIDs()
+	c.Assert(ids, qt.Not(qt.HasLen), 0)
+
+	dueOn := time.Now().UTC().AddDate(0, 0, 20).Format("2006-01-02")
+	rr := env.do(http.MethodPost, "/commodities/"+ids[0]+"/reminders",
+		`{"data":{"type":"commodity_reminders","attributes":{"title":"Inspection","due_on":"`+dueOn+`","remind_days_before":[14]}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	var created jsonapi.CommodityReminderResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &created), qt.IsNil)
+	path := "/reminders/" + created.Data.ID
+
+	rr = env.do(http.MethodDelete, "/commodities/"+ids[0], "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
+
+	rr = env.do(http.MethodPatch, path, `{"data":{"type":"commodity_reminders","attributes":{"title":"Changed"}}}`)
+	c.Check(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodDelete, path, "")
+	c.Check(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("body=%s", rr.Body.String()))
 
 	rr = env.do(http.MethodPost, "/trash/commodities/"+ids[0]+"/restore", "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))

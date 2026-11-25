@@ -32,11 +32,11 @@ Right after you delete items, the message at the bottom of the screen has an
 
 An item in the trash is out of the way:
 
-- It does not appear in item lists, search, the dashboard, reports, or the
-  warranty, lent-out, in-service, and maintenance pages, and it is left out of
-  totals and counts.
-- You get no warranty, loan, or maintenance reminders for it, and it is left
-  out of the weekly digest.
+- It does not appear in item lists, search, the dashboard, reports, the
+  Upcoming page, or the warranty, lent-out, in-service, and maintenance pages,
+  and it is left out of totals and counts.
+- You get no warranty, loan, maintenance, or item reminders for it, and it is
+  left out of the weekly digest.
 
 Nothing about it is lost. Its history, loans, service records, maintenance
 schedules, tags, and attachments are kept and come back when you restore it.
