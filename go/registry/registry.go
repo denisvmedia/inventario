@@ -544,6 +544,18 @@ type FileRegistry interface {
 	// carries the given meta (bucket), newest first.
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
 
+	// GetMany returns the live files among ids, with their links, in one
+	// read. Ids that name no live file are skipped and duplicates are
+	// collapsed. An empty ids returns (nil, nil).
+	GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error)
+
+	// FirstPhotos returns, keyed by item id, the oldest photo of each item
+	// among commodityIDs that is not in Trash, in one read. A photo is a live
+	// file linked in the item's images bucket with Type=image and
+	// Category=images; the oldest by created_at wins, the lowest id on a
+	// tie. Items without a photo are absent from the map.
+	FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error)
+
 	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
 	// Meta come from the argument; the registry sets the ids, tenant, group,
 	// creator and created_at. Idempotent: when the file is already linked to

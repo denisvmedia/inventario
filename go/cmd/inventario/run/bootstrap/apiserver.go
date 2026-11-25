@@ -8,6 +8,7 @@ import (
 
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/httpserver"
+	"go.5x5.cz/inventario/services"
 )
 
 // StartAPIServer starts the HTTP listener on cfg.Addr and returns the server
@@ -15,8 +16,13 @@ import (
 // invoke WaitForShutdown (or otherwise consume errCh and call Shutdown) to
 // terminate the server cleanly.
 func StartAPIServer(cfg *Config, rs *RuntimeSetup, restoreStatus apiserver.RestoreStatusQuerier) (*httpserver.APIServer, <-chan error) {
+	params := rs.Params
+	// One thumbnail service for every request, so its per-user rate limit
+	// holds across requests; it stops with the server.
+	params.ThumbnailService = services.NewThumbnailGenerationService(params.FactorySet, params.UploadLocation, params.ThumbnailConfig)
 	srv := &httpserver.APIServer{}
-	errCh := srv.Run(cfg.Addr, apiserver.APIServer(rs.Params, restoreStatus))
+	srv.OnShutdown(params.ThumbnailService.Stop)
+	errCh := srv.Run(cfg.Addr, apiserver.APIServer(params, restoreStatus))
 	return srv, errCh
 }
 
