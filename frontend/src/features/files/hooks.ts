@@ -89,7 +89,10 @@ export function useFile(id: string | undefined, { enabled = true }: QueryOptions
 // search + tags + type combinations and a focused invalidation would
 // miss the cached permutations the user can switch back to. File writes
 // can auto-create file tags and change their usage counts, so the group's
-// tag queries are refreshed with them.
+// tag queries are refreshed with them. A file that is uploaded to an item,
+// moved to Trash or filed under another category can change which items
+// have a photo and the cover they show, so the item queries (the No photo
+// list and the inbox checks among them) are refreshed too.
 function useInvalidate() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
@@ -99,6 +102,7 @@ function useInvalidate() {
       Promise.all([
         qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
         qc.invalidateQueries({ queryKey: tagKeys.group(slug) }),
+        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
       ]),
     detail: (id: string) => qc.invalidateQueries({ queryKey: fileKeys.detail(slug, id) }),
   }
@@ -121,6 +125,8 @@ export function useUpdateFile(id: string) {
       })
       qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
       qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
+      // A new category or link can change which items have a photo.
+      qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
     },
   })
 }
