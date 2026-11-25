@@ -33,6 +33,7 @@ import { useAreas, useCreateArea } from "@/features/areas/hooks"
 import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { matchesEveryTerm, splitSearchTerms } from "@/features/search/terms"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
@@ -148,19 +149,20 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   const filteredLocations = useMemo(() => {
     const list = locations.data ?? []
-    if (!query.trim()) return list
-    const q = query.trim().toLowerCase()
+    const terms = splitSearchTerms(query)
+    if (terms.length === 0) return list
     const areaList = areas.data ?? []
-    return list.filter((l) => {
-      if ((l.name ?? "").toLowerCase().includes(q)) return true
-      if ((l.address ?? "").toLowerCase().includes(q)) return true
-      // A location matches if any of its areas match the query — keeps
-      // search useful when the user remembers the room name but not
-      // the building it's in.
-      return areaList.some(
-        (a) => a.location_id === l.id && (a.name ?? "").toLowerCase().includes(q)
-      )
-    })
+    // Every term has to be found in the location's name or address, as
+    // the search page matches locations, or in the name of one of its
+    // areas — which keeps search useful when the user remembers the room
+    // name but not the building it's in.
+    return list.filter((l) =>
+      matchesEveryTerm(terms, [
+        l.name,
+        l.address,
+        ...areaList.filter((a) => a.location_id === l.id).map((a) => a.name),
+      ])
+    )
   }, [locations.data, areas.data, query])
 
   async function handleCreateLocation(values: {

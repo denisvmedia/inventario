@@ -222,6 +222,37 @@ describe("<LocationsListPage />", () => {
     expect(screen.getByTestId("locations-search")).toHaveValue("garage")
   })
 
+  it("needs every word of q, each in the name, the address or an area name", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", { name: "Weekend Cottage", address: "Lakeside Road 7" }),
+        locationResource("loc2", { name: "Boathouse", address: "Lakeside Road 9" }),
+        locationResource("loc3", { name: "City flat", address: "Main street 1" }),
+      ]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Boat shed", location_id: "loc3" })]),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    // "cottage" is in the name and "road" in the address of one location;
+    // the search page matches locations the same way.
+    renderList(`/g/${SLUG}/locations?q=${encodeURIComponent("cottage road")}`)
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("Weekend Cottage")).toBeInTheDocument()
+
+    // One word still matches an area name, and a word may come from an
+    // area while another comes from the address.
+    const search = screen.getByTestId("locations-search")
+    const user = userEvent.setup()
+    await user.clear(search)
+    await user.type(search, "shed main")
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("City flat")).toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, "lakeside nowhere")
+    await waitFor(() => expect(screen.queryAllByTestId("location-card")).toHaveLength(0))
+  })
+
   it("opens the create dialog from the header CTA", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
