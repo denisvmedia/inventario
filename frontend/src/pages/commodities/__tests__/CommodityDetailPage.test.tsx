@@ -1513,6 +1513,35 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     expect(screen.getByTestId("commodity-quick-notes-input")).toHaveValue("Check the tires")
   })
 
+  it("stays on the item when its status dialog was opened while the next item was looked up", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    const lookup = gate()
+    let reads = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async () => {
+        reads += 1
+        if (reads >= 2) await lookup.promise
+        return undefined
+      })
+    )
+    await user.click(mark)
+    await waitFor(() => expect(reads).toBe(2))
+    await user.click(await screen.findByTestId("commodity-detail-transition-lost"))
+    const dialog = await screen.findByTestId("status-transition-dialog")
+    lookup.release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    // The status lands on the item the dialog was opened on.
+    await user.click(within(dialog).getByTestId("status-transition-confirm"))
+    await waitFor(() => expect(puts.at(-1)?.attributes.status).toBe("lost"))
+    expect(puts.at(-1)?.id).toBe("c1")
+    expect(puts.filter((p) => p.id === "c2")).toHaveLength(0)
+  })
+
   it("waits for a quick edit to save before a review", async () => {
     const user = userEvent.setup()
     const put = gate()
