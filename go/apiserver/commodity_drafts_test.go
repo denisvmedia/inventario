@@ -4,6 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -14,6 +16,7 @@ import (
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 func draftCreateBody(key, name string) string {
@@ -252,6 +255,62 @@ func TestCommodityDraftsAPI_NamesTheFieldOfTheWrongType(t *testing.T) {
 	rr = env.do(http.MethodPost, "/drafts",
 		`{"data":{"type":"commodity_drafts","attributes":{"client_key":"k","values":{"name":"Drill","count":2,"from_intake":{"any":"shape"}}}}}`)
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+}
+
+// TestCommodityDraftsAPI_ChecksTheItemType: the type a draft names must be
+// one of the group's item types (#2802), on a create and a save as on a
+// promotion. The built-in types count before the group's list is seeded.
+func TestCommodityDraftsAPI_ChecksTheItemType(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+
+	createBody := func(key, itemType string) string {
+		return `{"data":{"type":"commodity_drafts","attributes":{"client_key":"` + key + `","values":{"name":"Dinghy","type":"` + itemType + `"}}}}`
+	}
+	saveBody := func(revision, itemType string) string {
+		return `{"data":{"type":"commodity_drafts","attributes":{"revision":` + revision + `,"values":{"name":"Dinghy","type":"` + itemType + `"}}}}`
+	}
+	promoteBody := func(key, itemType string) string {
+		return `{"data":{"type":"commodities","attributes":{"name":"Dinghy","short_name":"Dinghy","type":"` + itemType +
+			`","status":"in_use","count":1,"original_price_currency":"USD"}},"meta":{"revision":1,"promotion_key":"` + key + `"}}`
+	}
+	draftID := func(rr *httptest.ResponseRecorder) string {
+		c.Helper()
+		c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+		return decodeDraft(c, rr.Body.Bytes()).Data.ID
+	}
+
+	builtin := draftID(env.do(http.MethodPost, "/drafts", createBody("builtin", "electronics")))
+	untyped := draftID(env.do(http.MethodPost, "/drafts", createBody("untyped", "")))
+
+	rr := env.do(http.MethodPost, "/drafts", createBody("unknown", "boat"))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.data.attributes.values.type.code"), services.ItemTypeUnknownCode)
+	rr = env.do(http.MethodPut, "/drafts/"+builtin, saveBody("1", "boat"))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.data.attributes.values.type.code"), services.ItemTypeUnknownCode)
+
+	// Once the group has the type, a draft can name it and become an item
+	// of that type.
+	boat := must.Must(regs.ItemTypeRegistry.Create(ctx, models.ItemType{Name: "Boat"}))
+	rr = env.do(http.MethodPut, "/drafts/"+builtin, saveBody("1", string(boat.Slug)))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodPost, "/drafts/"+builtin+"/promote", strings.Replace(promoteBody("p-boat", string(boat.Slug)), `"revision":1`, `"revision":2`, 1))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	var item jsonapi.CommodityResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
+	c.Check(must.Must(regs.CommodityRegistry.Get(ctx, item.Data.ID)).Type, qt.Equals, boat.Slug)
+
+	// A promotion to a type the group does not have is refused on the type
+	// and promotes nothing; the draft stays open.
+	itemsBefore := must.Must(regs.CommodityRegistry.Count(ctx))
+	rr = env.do(http.MethodPost, "/drafts/"+untyped+"/promote", promoteBody("p-unknown", "spaceship"))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.data.attributes.type.code"), services.ItemTypeUnknownCode)
+	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore)
+	c.Assert(must.Must(regs.CommodityDraftRegistry.Get(ctx, untyped)).IsOpen(), qt.IsTrue)
 }
 
 func TestCommodityDraftsAPI_ViewerCanReadOnly(t *testing.T) {

@@ -5255,7 +5255,7 @@
                 }
             },
             "post": {
-                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe. A key whose draft\nis being discarded answers 409 draft.discarded. Known fields of the item form\nmust have the type the form uses (text, a number or numeric text, a list of\ntext, true or false); a field of another type is refused with 422 on\nvalues.\u003cfield\u003e.",
+                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe. A key whose draft\nis being discarded answers 409 draft.discarded. Known fields of the item form\nmust have the type the form uses (text, a number or numeric text, a list of\ntext, true or false); a field of another type is refused with 422 on\nvalues.\u003cfield\u003e. A type in values.type must be one of the group's item types\n(422 item_type_unknown on values.type otherwise).",
                 "consumes": [
                     "application/vnd.api+json"
                 ],

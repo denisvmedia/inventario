@@ -37,7 +37,7 @@ const INBUnassignedMember = "unassigned-commodities.json"
 const INBFilesMember = "files/_index.json"
 
 // INBDraftsMember is the inner-tar member name of the drafts document (format
-// 3.4). Kept in sync with backup/export.INBDraftsName. It lives under the
+// 3.5). Kept in sync with backup/export.INBDraftsName. It lives under the
 // `files/` prefix too, so the walker matches it before the file-bytes case.
 const INBDraftsMember = "files/_drafts.json"
 
@@ -97,7 +97,7 @@ type INBManifest struct {
 	// the archive carries none. Informational here — restore dispatches by
 	// member name, so a 2.0 archive without this field round-trips unchanged.
 	FilesFile string `json:"filesFile,omitempty"`
-	// DraftsFile names the drafts member (format 3.4). Informational, like
+	// DraftsFile names the drafts member (format 3.5). Informational, like
 	// FilesFile.
 	DraftsFile string `json:"draftsFile,omitempty"`
 	// Sellers are the archived sellers (format 3.3), absent from older
@@ -271,7 +271,7 @@ type INBFilesDoc struct {
 	Files []INBEntityFileRef `json:"files"`
 }
 
-// INBDraftsDoc is the drafts document (format 3.4). Mirrors
+// INBDraftsDoc is the drafts document (format 3.5). Mirrors
 // backup/export.INBDraftsDoc.
 type INBDraftsDoc struct {
 	Drafts []INBDraft `json:"drafts"`

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -74,6 +75,9 @@ func (s *CommodityDraftService) Create(ctx context.Context, clientKey string, va
 	if err := draft.ValidateFields(ctx); err != nil {
 		return nil, false, err
 	}
+	if err := s.checkValuesType(ctx, values); err != nil {
+		return nil, false, err
+	}
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return nil, false, err
@@ -95,11 +99,38 @@ func (s *CommodityDraftService) Save(ctx context.Context, id string, revision in
 	if err := models.ValidateCommodityDraftValues(values); err != nil {
 		return nil, err
 	}
+	if err := s.checkValuesType(ctx, values); err != nil {
+		return nil, err
+	}
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return nil, err
 	}
 	return reg.SaveValues(ctx, id, revision, values)
+}
+
+// checkValuesType checks that the type the values name, when they name one,
+// is one of the group's item types (#2802), as an item's type must be. An
+// unknown type is refused under values.type with ItemTypeUnknownCode, so the
+// form can show it on its type field. The check is not held until the save:
+// a type deleted after it leaves the draft naming a type the group no longer
+// has, which the next save or the promotion refuses.
+func (s *CommodityDraftService) checkValuesType(ctx context.Context, values models.CommodityDraftValues) error {
+	t, _ := values["type"].(string)
+	if t == "" {
+		return nil
+	}
+	types, err := s.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create item type registry", err)
+	}
+	if err := CheckCommodityType(ctx, types, models.CommodityType(t)); err != nil {
+		if verr, ok := errors.AsType[validation.Error](err); ok {
+			return validation.Errors{"values": validation.Errors{"type": verr}}
+		}
+		return err
+	}
+	return nil
 }
 
 // Files returns the live files attached to the draft, newest first.
@@ -131,7 +162,9 @@ func (s *CommodityDraftService) FileCounts(ctx context.Context, ids []string) (m
 
 // Promote turns an open draft into an item, moving its files to the item,
 // and records the item's "created" event. The caller validated the item and
-// normalized its tags. promotionKey identifies this promotion: a repeat with
+// normalized its tags. The item's type must be one of the group's item
+// types: the registry checks it inside the promotion, seeding the built-in
+// types first, and refuses an unknown one with registry.ErrUnknownItemType. promotionKey identifies this promotion: a repeat with
 // the same key after a lost response creates nothing and returns the item
 // the draft became with created=false; another key gets
 // registry.ErrDraftPromoted, as does the same key when that item no longer

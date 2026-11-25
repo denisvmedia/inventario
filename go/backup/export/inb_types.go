@@ -97,7 +97,7 @@ const INBFilesPrefix = "files/"
 const INBFilesName = INBFilesPrefix + "_index.json"
 
 // INBDraftsName is the inner-tar member holding the group's open drafts of new
-// items (#2812, format 3.4). It lives under the `files/` prefix for the same
+// items (#2812, format 3.5). It lives under the `files/` prefix for the same
 // reason as INBFilesName: an older reader routes it to its file handler
 // instead of its location handler. It is written after the location and
 // unassigned documents, so the areas a draft names are restored before it,
@@ -146,7 +146,7 @@ type INBManifest struct {
 	// Restore keys off member names, so a 2.0 archive without this field
 	// round-trips unchanged.
 	FilesFile string `json:"filesFile,omitempty"`
-	// DraftsFile names the drafts member (format 3.4), or "" when the
+	// DraftsFile names the drafts member (format 3.5), or "" when the
 	// archive carries no draft.
 	DraftsFile string `json:"draftsFile,omitempty"`
 	// Sellers are the group's sellers (format 3.3): every seller in a
@@ -363,7 +363,7 @@ type INBDraft struct {
 type INBEntityFileRef struct {
 	INBFileRef
 
-	// LinkedEntityType is "location", "area", "draft" (format 3.4), or "" for
+	// LinkedEntityType is "location", "area", "draft" (format 3.5), or "" for
 	// a standalone file.
 	LinkedEntityType string `json:"linkedEntityType,omitempty"`
 	// LinkedEntityID is the linked location, area or draft UUID; "" for a

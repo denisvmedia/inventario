@@ -9936,7 +9936,8 @@ paths:
         is being discarded answers 409 draft.discarded. Known fields of the item form
         must have the type the form uses (text, a number or numeric text, a list of
         text, true or false); a field of another type is refused with 422 on
-        values.<field>.
+        values.<field>. A type in values.type must be one of the group's item types
+        (422 item_type_unknown on values.type otherwise).
       parameters:
       - description: Group slug
         in: path

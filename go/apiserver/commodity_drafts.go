@@ -97,6 +97,16 @@ func renderDraftErrorFor(w http.ResponseWriter, r *http.Request, err error, draf
 	}
 }
 
+// asAttributesError places the draft service's validation errors, which
+// name the draft's fields, under data.attributes, where the request has
+// them.
+func asAttributesError(err error) error {
+	if verrs, ok := errors.AsType[validation.Errors](err); ok {
+		return validation.Errors{"data": validation.Errors{"attributes": verrs}}
+	}
+	return err
+}
+
 // fileCount returns the number of live files attached to a draft.
 func (api *commodityDraftsAPI) fileCount(r *http.Request, id string) (int, error) {
 	files, err := api.service.Files(r.Context(), id)
@@ -197,7 +207,8 @@ func (api *commodityDraftsAPI) get(w http.ResponseWriter, r *http.Request) {
 // @Description is being discarded answers 409 draft.discarded. Known fields of the item form
 // @Description must have the type the form uses (text, a number or numeric text, a list of
 // @Description text, true or false); a field of another type is refused with 422 on
-// @Description values.<field>.
+// @Description values.<field>. A type in values.type must be one of the group's item types
+// @Description (422 item_type_unknown on values.type otherwise).
 // @Tags drafts
 // @Accept json-api
 // @Produce json-api
@@ -216,7 +227,7 @@ func (api *commodityDraftsAPI) create(w http.ResponseWriter, r *http.Request) {
 	attrs := input.Data.Attributes
 	draft, created, err := api.service.Create(r.Context(), attrs.ClientKey, attrs.Values)
 	if err != nil {
-		renderDraftError(w, r, err)
+		renderDraftError(w, r, asAttributesError(err))
 		return
 	}
 	count, err := api.fileCount(r, draft.ID)
@@ -262,7 +273,7 @@ func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
 	attrs := input.Data.Attributes
 	draft, err := api.service.Save(r.Context(), chi.URLParam(r, "draftID"), attrs.Revision, attrs.Values)
 	if err != nil {
-		renderDraftError(w, r, err)
+		renderDraftError(w, r, asAttributesError(err))
 		return
 	}
 	count, err := api.fileCount(r, draft.ID)

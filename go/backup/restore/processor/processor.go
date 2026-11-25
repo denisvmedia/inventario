@@ -472,7 +472,7 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		// prefix, so it must be matched before the file-bytes case below.
 		return w.handleFilesMember(hdr, r)
 	case hdr.Name == types.INBDraftsMember:
-		// Drafts document (format 3.4), also under `files/`.
+		// Drafts document (format 3.5), also under `files/`.
 		return w.handleDraftsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
