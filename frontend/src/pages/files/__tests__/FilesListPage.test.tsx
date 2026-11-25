@@ -3,13 +3,14 @@ import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { http, HttpResponse } from "msw"
 
 import { FilesListPage } from "@/pages/files/FilesListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { fileHandlers, groupHandlers } from "@/test/handlers"
+import { apiUrl, fileHandlers, groupHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -357,6 +358,22 @@ describe("<FilesListPage />", () => {
     renderPage()
     await screen.findByTestId("file-row-f0")
     expect(screen.getByTestId("files-pagination")).toBeInTheDocument()
+  })
+
+  it("moves from a page past the end to the last page with files", async () => {
+    const rows = Array.from({ length: 24 }, (_, i) => fileRow(`f${i}`))
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      http.get(apiUrl(`/g/${SLUG}/files`), ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get("page")) || 1
+        return HttpResponse.json({ data: page === 1 ? rows : [], meta: { total: rows.length } })
+      }),
+      ...fileHandlers.counts(SLUG, { all: 24 })
+    )
+    // Page 2 of a list that a save has just shrunk to one page.
+    renderPage(`/g/${SLUG}/files?page=2`)
+    expect(await screen.findByTestId("file-row-f0")).toBeInTheDocument()
+    expect(screen.queryByTestId("files-pagination")).toBeNull()
   })
 
   it("preserves search input state and submits to the list query", async () => {

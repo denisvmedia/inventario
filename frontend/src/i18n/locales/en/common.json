@@ -19,6 +19,9 @@
     "description": "The request failed, so nothing is shown here. This does not mean the list is empty.",
     "title": "Couldn't load this list"
   },
+  "listNav": {
+    "position": "{{position}} of {{total}}"
+  },
   "loading": "Loading…",
   "nav": {
     "backup": "Backup",

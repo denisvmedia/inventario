@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { Route, useLocation } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { http, HttpResponse } from "msw"
 
 import { CommodityDetailPage, CommodityDetailSheet } from "@/pages/commodities/CommodityDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -11,10 +12,12 @@ import { capture } from "@/test/capture"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import {
+  apiUrl,
   areaHandlers,
   commodityHandlers,
   fileHandlers,
   groupHandlers,
+  locationHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -71,6 +74,93 @@ function renderDetail(initialPath = `/g/${SLUG}/commodities/${ID}`) {
       />
     ),
   })
+}
+
+// Both item routes, as app/router.tsx mounts them, plus a probe that shows
+// where navigation landed.
+function LocationProbe() {
+  const location = useLocation()
+  return <span data-testid="location-probe">{`${location.pathname}${location.search}`}</span>
+}
+
+function renderItemRoutes(initialPath: string) {
+  setAccessToken("good-token")
+  const element = (
+    <GroupProvider>
+      <ConfirmProvider>
+        <CommodityDetailPage />
+        <LocationProbe />
+      </ConfirmProvider>
+    </GroupProvider>
+  )
+  return renderWithProviders({
+    initialPath,
+    routes: (
+      <>
+        <Route path="/g/:groupSlug/commodities/:id" element={element} />
+        <Route path="/g/:groupSlug/commodities/:id/edit" element={element} />
+      </>
+    ),
+  })
+}
+
+type Attrs = Record<string, unknown>
+
+function itemRow(id: string, name: string): { id: string; type: string; attributes: Attrs } {
+  return {
+    id,
+    type: "commodities",
+    attributes: { ...commodityFixture.attributes, id, name },
+  }
+}
+
+// Items behind list, detail and update, so a save shows up in what the page
+// reads next. Returns the PUT bodies in order; with `gate`, a PUT is recorded
+// at once and answered when the gate resolves.
+function serveItems(rows: ReturnType<typeof itemRow>[], opts: { gate?: Promise<void> } = {}) {
+  const store = new Map(rows.map((r) => [r.id, { ...r, attributes: { ...r.attributes } }]))
+  const puts: Array<{ id: string; attributes: Attrs }> = []
+  server.use(
+    ...groupHandlers.list(groupFixture),
+    ...areaHandlers.list(SLUG, areaFixture),
+    ...locationHandlers.list(SLUG, [
+      { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+    ]),
+    ...tagHandlers.list(SLUG, [
+      { id: "t1", slug: "work", label: "Work", color: "blue" },
+      { id: "t2", slug: "tech", label: "Tech", color: "green" },
+      { id: "t3", slug: "home", label: "Home", color: "amber" },
+    ]),
+    http.get(apiUrl(`/g/${SLUG}/commodities`), () =>
+      HttpResponse.json({ data: [...store.values()], meta: { commodities: store.size } })
+    ),
+    http.get(apiUrl(`/g/${SLUG}/commodities/:id`), ({ params }) => {
+      const row = store.get(params.id as string)
+      if (!row) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+      return HttpResponse.json({ data: row })
+    }),
+    http.put(apiUrl(`/g/${SLUG}/commodities/:id`), async ({ params, request }) => {
+      const id = params.id as string
+      const body = (await request.json()) as { data: { attributes: Attrs } }
+      puts.push({ id, attributes: body.data.attributes })
+      await opts.gate
+      const row = { id, type: "commodities", attributes: { ...body.data.attributes, id } }
+      store.set(id, row)
+      return HttpResponse.json({ data: row })
+    })
+  )
+  return puts
+}
+
+const LIST = `/g/${SLUG}/commodities?q=mac`
+const FROM = `from=${encodeURIComponent(LIST)}`
+
+function gate(): { promise: Promise<void>; release: () => void } {
+  let release = () => {}
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
 }
 
 beforeEach(() => {
@@ -259,18 +349,95 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByTestId("commodity-detail-warranty")).toBeInTheDocument()
   })
 
-  it("opens the edit dialog when the Edit button is clicked", async () => {
+  it("opens the edit form in place when the Edit button is clicked (#2795)", async () => {
     const user = userEvent.setup()
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    expect(await screen.findByTestId("commodity-edit-form")).toBeInTheDocument()
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      `/g/${SLUG}/commodities/${ID}/edit`
     )
-    renderDetail()
-    await screen.findByTestId("commodity-detail-edit")
-    await user.click(screen.getByTestId("commodity-detail-edit"))
-    // Form stepper aria-label is dialog-only.
-    expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
+    // In place of the read view, not in a dialog.
+    expect(screen.queryByTestId("commodity-detail-tabs")).toBeNull()
+    expect(screen.queryByLabelText(/form steps/i)).toBeNull()
+    expect(screen.getByLabelText(/^name/i)).toHaveValue("MacBook Pro 16")
+    // Cancel steps back to the read view it came from.
+    await user.click(screen.getByTestId("commodity-edit-cancel"))
+    expect(await screen.findByTestId("commodity-detail-tabs")).toBeInTheDocument()
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      new RegExp(`/commodities/${ID}$`)
+    )
+  })
+
+  it("saves the in-place form and returns to the read view (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    const name = await screen.findByLabelText(/^name/i)
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes.name).toBe("MacBook Air")
+    // What the form does not show goes back unchanged.
+    expect(puts[0].attributes.status).toBe("in_use")
+    expect(puts[0].attributes.tags).toEqual(["work", "tech"])
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        new RegExp(`/commodities/${ID}$`)
+      )
+    )
+    expect(await screen.findByTestId("commodity-detail-tabs")).toBeInTheDocument()
+  })
+
+  it("locks the edit form while its save is in flight (#2795)", async () => {
+    const user = userEvent.setup()
+    const held = gate()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")], { gate: held.promise })
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    const name = await screen.findByLabelText(/^name/i)
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    // An edit typed now would miss the request and be dropped after it.
+    expect(name).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-tags-option-home")).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-all-fields")).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-save")).toBeDisabled()
+
+    held.release()
+    expect(await screen.findByTestId("commodity-detail-tabs")).toBeInTheDocument()
+    expect(puts[0].attributes.name).toBe("MacBook Air")
+  })
+
+  it("toggles a tag from the edit form's palette (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    const work = await screen.findByTestId("commodity-edit-tags-option-work")
+    expect(work).toHaveAttribute("aria-pressed", "true")
+    await user.click(work)
+    await user.click(screen.getByTestId("commodity-edit-tags-option-home"))
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes.tags).toEqual(["tech", "home"])
+  })
+
+  it("opens every field in the step dialog with the values entered so far (#2795)", async () => {
+    const user = userEvent.setup()
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    const name = await screen.findByLabelText(/^name/i)
+    await user.clear(name)
+    await user.type(name, "Work laptop")
+    await user.click(screen.getByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    expect(within(dialog).getByLabelText(/form steps/i)).toBeInTheDocument()
+    expect(within(dialog).getByRole("textbox", { name: /^name/i })).toHaveValue("Work laptop")
+    // Save is on the first step already; edit mode needs no walk to the end.
+    expect(within(dialog).getByTestId("commodity-form-submit")).toBeInTheDocument()
   })
 
   it("deletes the commodity from the detail page", async () => {
@@ -339,29 +506,167 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByTestId("history-empty")).toHaveTextContent(/No activity yet/i)
   })
 
-  it("auto-opens the edit dialog when /commodities/:id/edit is the entry URL", async () => {
-    server.use(
-      ...groupHandlers.list(groupFixture),
-      ...areaHandlers.list(SLUG, areaFixture),
-      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+  it("shows the edit form when /commodities/:id/edit is the entry URL", async () => {
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    expect(await screen.findByTestId("commodity-edit-form")).toBeInTheDocument()
+    // Opened without a list, there is nothing to walk.
+    expect(screen.queryByTestId("commodity-edit-pager")).toBeNull()
+    expect(screen.queryByTestId("commodity-edit-save-next")).toBeNull()
+  })
+
+  it("walks the list the item was opened from (#2795)", async () => {
+    serveItems([itemRow("c0", "Mac mini"), itemRow(ID, "MacBook Pro 16"), itemRow("c2", "iMac")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}?${FROM}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
     )
-    setAccessToken("good-token")
-    renderWithProviders({
-      initialPath: `/g/${SLUG}/commodities/${ID}/edit`,
-      routes: (
-        <Route
-          path="/g/:groupSlug/commodities/:id/edit"
-          element={
-            <GroupProvider>
-              <ConfirmProvider>
-                <CommodityDetailPage />
-              </ConfirmProvider>
-            </GroupProvider>
-          }
-        />
-      ),
-    })
-    expect(await screen.findByLabelText(/form steps/i)).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-previous")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities/c0?${FROM}`
+    )
+    expect(screen.getByTestId("commodity-detail-next")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities/c2?${FROM}`
+    )
+    // Back returns to the list as the user left it.
+    expect(screen.getByTestId("commodity-detail-back")).toHaveAttribute("href", LIST)
+  })
+
+  it("saves and moves to the next item's edit form (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([
+      itemRow("c0", "Mac mini"),
+      itemRow(ID, "MacBook Pro 16"),
+      itemRow("c2", "iMac"),
+    ])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit?${FROM}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-edit-position")).toHaveTextContent("2 of 3")
+    )
+    const serial = screen.getByLabelText(/serial number/i)
+    await user.clear(serial)
+    await user.type(serial, "XYZ-9")
+    await user.click(screen.getByTestId("commodity-edit-save-next"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0]).toMatchObject({ id: ID, attributes: { serial_number: "XYZ-9" } })
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        `/g/${SLUG}/commodities/c2/edit?${FROM}`
+      )
+    )
+    expect(await screen.findByDisplayValue("iMac")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-edit-position")).toHaveTextContent("3 of 3")
+    )
+    expect(screen.getByTestId("commodity-edit-save-next")).toBeDisabled()
+  })
+
+  it("adds a tag from the Details tab without opening the edit form (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-tags"))
+    await user.click(await screen.findByTestId("commodity-quick-tags-palette-option-home"))
+    await user.click(screen.getByTestId("commodity-quick-tags-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes.tags).toEqual(["work", "tech", "home"])
+    expect(puts[0].attributes.name).toBe("MacBook Pro 16")
+    await waitFor(() => expect(screen.queryByTestId("commodity-quick-tags")).toBeNull())
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      new RegExp(`/commodities/${ID}$`)
+    )
+  })
+
+  it("edits the notes from the Details tab (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    const save = screen.getByTestId("commodity-quick-notes-save")
+    // Nothing to save until the text changes.
+    expect(save).toBeDisabled()
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Keep the box")
+    await user.click(save)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes.comments).toBe("Keep the box")
+    expect(await screen.findByText("Keep the box")).toBeInTheDocument()
+  })
+
+  it("clears the location from the Details tab (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-location"))
+    await user.click(await screen.findByTestId("quick-location-clear"))
+    await user.click(screen.getByTestId("commodity-quick-location-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(puts[0].attributes).not.toHaveProperty("area_id")
+  })
+
+  it("closes a quick edit when Next opens an item that is already loaded (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([
+      itemRow("c0", "Mac mini"),
+      itemRow(ID, "MacBook Pro 16"),
+      itemRow("c2", "iMac"),
+    ])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}?${FROM}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
+    )
+    // Visit the next item once, so it is in the cache when Next opens it again.
+    await user.click(screen.getByTestId("commodity-detail-next"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("3 of 3")
+    )
+    await user.click(screen.getByTestId("commodity-detail-previous"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
+    )
+
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "For the laptop")
+    await user.click(screen.getByTestId("commodity-detail-next"))
+
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("3 of 3")
+    )
+    expect(screen.queryByTestId("commodity-quick-notes")).toBeNull()
+    expect(screen.getByTestId("commodity-quick-edit-notes")).toBeInTheDocument()
+    expect(puts).toHaveLength(0)
+  })
+
+  it("keeps a notes editor opened while a tags save finishes (#2795)", async () => {
+    const user = userEvent.setup()
+    const held = gate()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")], { gate: held.promise })
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-tags"))
+    await user.click(await screen.findByTestId("commodity-quick-tags-palette-option-home"))
+    await user.click(screen.getByTestId("commodity-quick-tags-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+
+    await user.click(screen.getByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Draft")
+    held.release()
+
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-tags")).toHaveTextContent("Home")
+    )
+    expect(screen.getByTestId("commodity-quick-notes-input")).toHaveValue("Draft")
+  })
+
+  it("cancels a quick edit without saving (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Draft")
+    await user.click(screen.getByTestId("commodity-quick-notes-cancel"))
+    expect(screen.queryByTestId("commodity-quick-notes")).toBeNull()
+    expect(screen.getByTestId("commodity-quick-edit-notes")).toBeInTheDocument()
+    expect(puts).toHaveLength(0)
   })
 
   it("opens the upload dialog with the commodity name in the title from the Files tab upload zone (#1448, #1530)", async () => {
@@ -590,7 +895,7 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
     // backdrop URL stayed mounted while the sheet was on screen.
     function ListBackdrop() {
       const location = useLocation()
-      return <div data-testid="list-backdrop">{location.pathname}</div>
+      return <div data-testid="list-backdrop">{`${location.pathname}${location.search}`}</div>
     }
     return renderWithProviders({
       // Pass the full Location-shape so `state.background` carries
@@ -698,6 +1003,23 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
     expect(await screen.findByTestId("page-commodity-detail")).toBeInTheDocument()
     expect(screen.getByTestId("commodity-detail-tabs")).toBeInTheDocument()
     expect(screen.queryByTestId("sheet-commodity-detail")).toBeNull()
+  })
+
+  it("walks the list inside the sheet and keeps the list behind it in step (#2795)", async () => {
+    const user = userEvent.setup()
+    serveItems([itemRow("c0", "Mac mini"), itemRow(ID, "MacBook Pro 16"), itemRow("c2", "iMac")])
+    renderSheet({ search: `?${FROM}` })
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
+    )
+    await user.click(screen.getByTestId("commodity-detail-next"))
+    expect(await screen.findByRole("heading", { name: /^imac$/i, level: 1 })).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("3 of 3")
+    // Closing goes back to the list the item came from, filters included.
+    await user.keyboard("{Escape}")
+    await waitFor(() =>
+      expect(screen.getByTestId("list-backdrop")).toHaveTextContent(`/g/${SLUG}/commodities?q=mac`)
+    )
   })
 
   it("navigates back to the backdrop URL when the user closes the sheet (Escape)", async () => {

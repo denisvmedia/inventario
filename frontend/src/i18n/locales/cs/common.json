@@ -167,5 +167,8 @@
     "keepEditing": "Pokračovat v úpravách",
     "save": "Uložit",
     "title": "Uložit změny?"
+  },
+  "listNav": {
+    "position": "{{position}} z {{total}}"
   }
 }

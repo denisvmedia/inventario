@@ -1,4 +1,4 @@
-import { Hash } from "lucide-react"
+import { Hash, X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -33,13 +33,24 @@ export const TAG_DOT_TONE: Record<TagColor, string> = {
 export interface TagBadgeProps {
   label: string
   color: TagColor
-  size?: "sm" | "md"
+  // `xs` is the mock TagPill's `size="xs"`, used for the selected tags under
+  // the tag palette.
+  size?: "xs" | "sm" | "md"
   // When true (default) the badge renders the `#` glyph before the
   // label, matching the visual contract in `design-mocks/src/views/TagsView.tsx`.
   // Callers that show the slug elsewhere on the row can pass `false`.
   hashed?: boolean
   className?: string
   testId?: string
+  // Renders the mock TagPill's trailing remove button.
+  onRemove?: () => void
+  removeLabel?: string
+}
+
+const SIZE: Record<NonNullable<TagBadgeProps["size"]>, string> = {
+  xs: "h-4 px-1.5 text-[10px]",
+  sm: "h-5 px-2 text-[11px]",
+  md: "h-6 px-2.5 text-xs",
 }
 
 export function TagBadge({
@@ -49,6 +60,8 @@ export function TagBadge({
   hashed = true,
   className,
   testId,
+  onRemove,
+  removeLabel,
 }: TagBadgeProps) {
   return (
     <span
@@ -56,12 +69,26 @@ export function TagBadge({
       className={cn(
         "inline-flex items-center gap-1 rounded-full border font-medium select-none",
         TONE[color],
-        size === "sm" ? "h-5 px-2 text-[11px]" : "h-6 px-2.5 text-xs",
+        SIZE[size],
         className
       )}
     >
       {hashed ? <Hash aria-hidden="true" className="size-2.5 shrink-0" /> : null}
       {label}
+      {onRemove ? (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation()
+            onRemove()
+          }}
+          className="ml-0.5 opacity-60 transition-opacity hover:opacity-100"
+          aria-label={removeLabel}
+          data-testid={testId ? `${testId}-remove` : undefined}
+        >
+          <X aria-hidden="true" className={size === "xs" ? "size-2.5" : "size-3"} />
+        </button>
+      ) : null}
     </span>
   )
 }

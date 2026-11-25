@@ -62,3 +62,15 @@ export function currencyMeta(code: string): CurrencyMeta {
 // this a real, common currency" check without waiting on — or depending on —
 // the network (e.g. accepting an AI-guessed currency like CZK for prefill).
 export const KNOWN_CURRENCY_CODES: readonly string[] = ENTRIES.map((e) => e.code)
+
+// Left padding for a price input with the currency symbol drawn inside it at
+// `left-3`. The mock's static `pl-6` overlaps any symbol of two or more
+// characters (`Kč`, `NZ$`, `د.إ`), so the class follows the symbol's length.
+export function priceInputPaddingClass(symbol: string): string {
+  // Codepoint-aware length; a multi-byte symbol still counts as one glyph.
+  const len = [...(symbol || "$")].length
+  if (len <= 1) return "pl-7"
+  if (len === 2) return "pl-9"
+  if (len === 3) return "pl-12"
+  return "pl-14"
+}

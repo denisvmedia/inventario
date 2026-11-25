@@ -275,6 +275,26 @@ async function fillWarrantyStep(page: Page, c: TestCommodity) {
   }
 }
 
+// closeTagSuggestions closes the tag input's suggestion list, which can
+// cover the reveal buttons under it. The list opens again one render after
+// a chip is committed, so wait for it before pressing Escape: an Escape that
+// arrives first goes to the dialog instead, which then asks to save a draft
+// (create) or closes (edit). When no other tag in the group can be
+// suggested, the list stays closed and there is nothing to do.
+async function closeTagSuggestions(page: Page) {
+  const input = page.locator('[data-testid="commodity-tags-input"]');
+  const opened = await page
+    .locator('[data-testid="commodity-tags-input"][aria-expanded="true"]')
+    .waitFor({ timeout: 2000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!opened) return;
+  await input.press("Escape");
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+}
+
 async function fillExtrasStep(
   page: Page,
   c: TestCommodity,
@@ -298,10 +318,7 @@ async function fillExtrasStep(
   // DOM and we'd hit a 2-minute locator timeout.
   if (c.tags && c.tags.length) {
     await fillChips(page, "commodity-tags", c.tags);
-    // The TagsInput popover (autocomplete dropdown) stays open after
-    // commit and can overlap the reveal buttons below it. Press
-    // Escape to close the dropdown before moving on.
-    await page.keyboard.press("Escape");
+    await closeTagSuggestions(page);
   }
   if (c.extraSerialNumbers && c.extraSerialNumbers.length) {
     await revealAndFillChips(
@@ -494,35 +511,27 @@ export async function fillCommodityWizardAndSubmit(
 }
 
 // assignCommodityLocation files an already-created commodity under a
-// location/area via the edit dialog — the post-create counterpart to the
-// location picker the create dialog dropped (#1987). It opens edit, selects
-// Location → Area, then advances through the remaining (already-valid)
-// steps without re-filling and submits.
+// location/area — the post-create counterpart to the location picker the
+// create dialog dropped (#1987). It opens the in-place edit form (#2795),
+// picks Location → Area, and saves.
 async function assignCommodityLocation(
   page: Page,
   recorder: TestRecorder,
   c: TestCommodity,
 ) {
   await page.click('[data-testid="commodity-detail-edit"]');
-  await page.waitForSelector('[data-testid="commodity-form-dialog"]');
-  await waitForStep(page, "basics");
-  await selectLocationArea(page, c);
+  const form = page.locator('[data-testid="commodity-edit-form"]');
+  await form.waitFor({ state: "visible", timeout: 10000 });
+  if (c.locationName) {
+    await selectByPartialOptionText(page, "edit-location", c.locationName);
+  } else {
+    await pickFirstSelectOption(page, "edit-location");
+  }
+  await selectByPartialOptionText(page, "edit-area", c.areaName!);
   await recorder.takeScreenshot("commodity-create-06-assign-location");
-  await gotoNext(page);
-  await waitForStep(page, "purchase");
-  await gotoNext(page);
-  await waitForStep(page, "warranty");
-  await gotoNext(page);
-  await waitForStep(page, "extras");
-  await gotoNext(page);
-  await page.waitForSelector('[data-testid="commodity-form-files-step"]', {
-    state: "visible",
-    timeout: 5000,
-  });
-  await page.click('[data-testid="commodity-form-submit"]');
-  await page
-    .locator('[data-testid="commodity-form-dialog"]')
-    .waitFor({ state: "hidden", timeout: 30000 });
+  await page.click('[data-testid="commodity-edit-save"]');
+  await form.waitFor({ state: "hidden", timeout: 30000 });
+  await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);
   await page.waitForLoadState("networkidle");
 }
 
@@ -588,6 +597,10 @@ export async function editCommodity(
     }
   }
 
+  // Edit opens the in-place form (#2795); "All fields" opens the
+  // step-by-step dialog this helper fills.
+  await page.waitForSelector('[data-testid="commodity-edit-form"]');
+  await page.click('[data-testid="commodity-edit-all-fields"]');
   await page.waitForSelector('[data-testid="commodity-form-dialog"]');
   await recorder.takeScreenshot("commodity-edit-01-edit-form");
 
@@ -634,8 +647,8 @@ export async function editCommodity(
   await page
     .locator('[data-testid="commodity-form-dialog"]')
     .waitFor({ state: "hidden", timeout: 30000 });
-  // Stay on the detail page (no navigate after edit; the form just
-  // closes the dialog and revalidates the cached detail query).
+  // Saving from the dialog also leaves the in-place form: back on the
+  // item's read view, /edit dropped from the URL.
   await expect(page).toHaveURL(/\/commodities\/[0-9a-fA-F-]{36}(\?.*)?$/);
   await page.waitForLoadState("networkidle");
   await expect(page.locator("h1")).toContainText(updatedCommodity.name, {
