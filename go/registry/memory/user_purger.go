@@ -38,6 +38,7 @@ var _ registry.UserPurger = (*UserPurger)(nil)
 // final user delete after this returns.
 type UserPurger struct {
 	refreshTokens registry.RefreshTokenRegistry
+	apiTokens     *APITokenRegistry
 	mfaSecrets    registry.UserMFASecretRegistry
 	oauth         registry.OAuthIdentityRegistry
 	passwordReset registry.PasswordResetRegistry
@@ -52,6 +53,7 @@ type UserPurger struct {
 // in-memory data maps. All parameters are required.
 func NewUserPurger(
 	refreshTokens registry.RefreshTokenRegistry,
+	apiTokens *APITokenRegistry,
 	mfaSecrets registry.UserMFASecretRegistry,
 	oauth registry.OAuthIdentityRegistry,
 	passwordReset registry.PasswordResetRegistry,
@@ -63,6 +65,7 @@ func NewUserPurger(
 ) *UserPurger {
 	return &UserPurger{
 		refreshTokens: refreshTokens,
+		apiTokens:     apiTokens,
 		mfaSecrets:    mfaSecrets,
 		oauth:         oauth,
 		passwordReset: passwordReset,
@@ -94,6 +97,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 	}
 	steps := []step{
 		{"refresh_tokens", func() error { return r.purgeRefreshTokens(ctx, userID) }},
+		{"api_tokens", func() error { return r.apiTokens.DeleteByUserID(ctx, userID) }},
 		{"email_verifications", func() error { return r.purgeEmailVerifications(ctx, userID) }},
 		{"password_resets", func() error { return r.passwordReset.DeleteByUserID(ctx, userID) }},
 		{"magic_link_tokens", func() error { return r.magicLink.DeleteByUserID(ctx, userID) }},

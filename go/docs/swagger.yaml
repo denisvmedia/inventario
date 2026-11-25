@@ -1,5 +1,50 @@
 basePath: /api/v1
 definitions:
+  apiserver.APITokenView:
+    properties:
+      created_at:
+        type: string
+      expired:
+        description: |-
+          Expired is true once ExpiresAt has passed. An expired token is listed
+          so its owner can see why a script stopped working, and can be revoked
+          to remove it from the list.
+        type: boolean
+      expires_at:
+        description: ExpiresAt is absent for a token that does not expire.
+        type: string
+      group_id:
+        description: |-
+          GroupID is the one group the token may reach, or absent for every group
+          the owner belongs to.
+        type: string
+      id:
+        type: string
+      last_used_at:
+        description: LastUsedAt is accurate to five minutes; absent when never used.
+        type: string
+      name:
+        description: Name is the label the user gave the token.
+        type: string
+      scope:
+        allOf:
+        - $ref: '#/definitions/models.APITokenScope'
+        enum:
+        - read_only
+        - read_write
+      token_prefix:
+        description: |-
+          TokenPrefix is the start of the token, e.g. "inv_pat_AbCd", to tell
+          tokens apart.
+        type: string
+    type: object
+  apiserver.APITokensListResponse:
+    properties:
+      tokens:
+        items:
+          $ref: '#/definitions/apiserver.APITokenView'
+        type: array
+    type: object
   apiserver.AdminAddMemberRequest:
     properties:
       role:
@@ -227,6 +272,41 @@ definitions:
         type: string
       new_password:
         type: string
+    type: object
+  apiserver.CreateAPITokenRequest:
+    properties:
+      backup_code:
+        type: string
+      current_password:
+        description: CurrentPassword is required when the account has a password.
+        type: string
+      expires_at:
+        description: ExpiresAt is an RFC 3339 time in the future, or absent for no
+          expiry.
+        type: string
+      group_id:
+        description: GroupID restricts the token to one group the caller is a member
+          of.
+        type: string
+      name:
+        type: string
+      scope:
+        enum:
+        - read_only
+        - read_write
+        type: string
+      totp_code:
+        description: |-
+          TOTPCode or BackupCode is required when the account has two-factor
+          authentication enabled.
+        type: string
+    type: object
+  apiserver.CreateAPITokenResponse:
+    properties:
+      secret:
+        type: string
+      token:
+        $ref: '#/definitions/apiserver.APITokenView'
     type: object
   apiserver.DeleteAccountRequest:
     properties:
@@ -3273,6 +3353,14 @@ definitions:
       data:
         $ref: '#/definitions/jsonapi.ValueData'
     type: object
+  models.APITokenScope:
+    enum:
+    - read_only
+    - read_write
+    type: string
+    x-enum-varnames:
+    - APITokenScopeReadOnly
+    - APITokenScopeReadWrite
   models.Area:
     properties:
       icon:
@@ -10470,6 +10558,105 @@ paths:
       summary: Get system information
       tags:
       - system
+  /users/me/api-tokens:
+    get:
+      description: |-
+        Returns the authenticated user's personal API tokens that are not revoked, newest first, expired ones included. The token values themselves are never returned.
+        Requires a browser session; API tokens are refused here (403 api_token.endpoint_not_allowed).
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.APITokensListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List personal API tokens
+      tags:
+      - users-me
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates a token for scripts and other applications and returns it once in `secret`; only its SHA-256 digest is stored.
+        Requires a browser session that is not an impersonation session. The caller re-authenticates: `current_password` when the account has a password, and `totp_code` or `backup_code` when two-factor authentication is enabled.
+        `scope` is `read_only` (GET, HEAD and OPTIONS only) or `read_write`. `group_id` restricts the token to one group the caller belongs to. `expires_at` is optional.
+        Validation failures answer 422 with codes api_token.name_required, api_token.name_too_long, api_token.invalid_scope,
+        api_token.expiry_in_past, api_token.group_not_allowed, api_token.limit_reached, api_token.invalid_password or api_token.invalid_mfa_code.
+        A password change or reset, disabling two-factor authentication, an account block or a session revoke that lands while the request runs answers 401 api_token.credentials_changed, and no token is created.
+      parameters:
+      - description: Token settings and re-authentication
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.CreateAPITokenRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/apiserver.CreateAPITokenResponse'
+        "400":
+          description: Bad Request
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a personal API token
+      tags:
+      - users-me
+  /users/me/api-tokens/{id}:
+    delete:
+      description: |-
+        Revokes the token at once; the next request made with it answers 401. Returns 404 for an id that is not one of the caller's tokens.
+        Requires a browser session that is not an impersonation session.
+      parameters:
+      - description: Token ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "204":
+          description: No Content
+          schema:
+            type: string
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found
+          schema:
+            type: string
+      summary: Revoke a personal API token
+      tags:
+      - users-me
   /users/me/login-history:
     get:
       description: Returns the authenticated user's most recent login attempts (default

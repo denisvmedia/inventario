@@ -420,3 +420,53 @@ func TestService_ListTenants_FiltersAndPages(t *testing.T) {
 	c.Assert(offset.Tenants, qt.HasLen, 1)
 	c.Assert(offset.TotalCount, qt.Equals, 3)
 }
+
+// Deactivating an account, setting its password or moving it to another
+// tenant from the CLI revokes its personal API tokens, the same as the
+// matching self-service and back-office actions. Renaming it does not.
+func TestService_UpdateUser_RevokesAPITokens(t *testing.T) {
+	ctx := context.Background()
+
+	tests := []struct {
+		name    string
+		req     func() UserUpdateRequest
+		revoked bool
+	}{
+		{"rename keeps tokens", func() UserUpdateRequest { return UserUpdateRequest{Name: new("Renamed")} }, false},
+		{"reactivate keeps tokens", func() UserUpdateRequest { return UserUpdateRequest{IsActive: new(true)} }, false},
+		{"deactivate", func() UserUpdateRequest { return UserUpdateRequest{IsActive: new(false)} }, true},
+		{"set password", func() UserUpdateRequest { return UserUpdateRequest{Password: new("BrandNewPassword123")} }, true},
+		{"move tenant", func() UserUpdateRequest { return UserUpdateRequest{TenantID: new("tenant-2")} }, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			fs := memory.NewFactorySet()
+			for _, id := range []string{"tenant-1", "tenant-2"} {
+				_, err := fs.TenantRegistry.Create(ctx, models.Tenant{EntityID: models.EntityID{ID: id}, Name: id, Slug: id, Status: models.TenantStatusActive})
+				c.Assert(err, qt.IsNil)
+			}
+			svc := &Service{factorySet: fs}
+			user := seedUser(c, fs, "owner@example.com")
+
+			gen, err := models.GenerateAPIToken()
+			c.Assert(err, qt.IsNil)
+			hash := gen.Hash
+			_, err = fs.APITokenRegistry.Create(ctx, models.APIToken{
+				TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: user.TenantID, UserID: user.ID},
+				Name:                    "script",
+				TokenHash:               hash,
+				TokenPrefix:             gen.DisplayPrefix,
+				Scope:                   models.APITokenScopeReadOnly,
+			})
+			c.Assert(err, qt.IsNil)
+
+			_, err = svc.UpdateUser(ctx, user.ID, tt.req())
+			c.Assert(err, qt.IsNil)
+
+			token, err := fs.APITokenRegistry.GetByTokenHash(ctx, hash)
+			c.Assert(err, qt.IsNil)
+			c.Assert(token.IsRevoked(), qt.Equals, tt.revoked)
+		})
+	}
+}

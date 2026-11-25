@@ -25,6 +25,7 @@ import { UserAvatar } from "@/components/UserAvatar"
 import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
+import { useAPITokensList } from "@/features/api-tokens/hooks"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { Alert, AlertDescription } from "@/components/ui/alert"
@@ -1063,6 +1064,10 @@ function PrivacySection() {
   // when the count can't be fetched; the page itself renders the real state.
   const sessionsQuery = useSessionsList()
   const sessionCount = sessionsQuery.data?.sessions?.length ?? 0
+  // Same silent-badge rule for personal API tokens (#2808): expired tokens
+  // stay listed on their page but are not counted here.
+  const apiTokensQuery = useAPITokensList()
+  const activeTokenCount = apiTokensQuery.data?.tokens?.filter((tk) => !tk.expired).length ?? 0
 
   return (
     <div className="space-y-4" data-testid="section-privacy">
@@ -1092,6 +1097,18 @@ function PrivacySection() {
           badgeVariant="secondary"
           to="/profile/login-history"
           testId="privacy-row-loginHistory"
+        />
+        <PrivacyRow
+          label={t("settings:privacy.rows.apiTokens")}
+          description={t("settings:privacy.rows.apiTokensDescription")}
+          badge={
+            activeTokenCount > 0
+              ? t("settings:privacy.rows.apiTokensBadge", { count: activeTokenCount })
+              : null
+          }
+          badgeVariant="secondary"
+          to="/profile/api-tokens"
+          testId="privacy-row-apiTokens"
         />
       </div>
       {/* Connected accounts (#1394) — only renders when the BE reports at

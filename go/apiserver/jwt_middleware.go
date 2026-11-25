@@ -191,9 +191,19 @@ func validateUser(r *http.Request, userID string, userRegistry registry.UserRegi
 
 // JWTMiddleware creates middleware that validates JWT tokens and extracts user context.
 // Pass a non-nil blacklist to enable token/user revocation checks.
+//
+// It refuses personal API tokens with 403 api_token.endpoint_not_allowed. Every
+// route that authenticates with it alone — the account, session, MFA and token
+// management endpoints among them — is therefore closed to tokens; routes that
+// accept tokens use SessionOrAPITokenMiddleware instead.
 func JWTMiddleware(jwtSecret []byte, userRegistry registry.UserRegistry, blacklist services.TokenBlacklister) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if requestCarriesAPIToken(r) {
+				_ = codedForbiddenError(w, r, errAPITokenEndpointNotAllowed, apiTokenEndpointNotAllowedCode)
+				return
+			}
+
 			// Extract token from request
 			tokenString, err := extractTokenFromRequest(r)
 			if err != nil {

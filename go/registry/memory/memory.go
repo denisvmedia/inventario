@@ -74,6 +74,8 @@ func NewFactorySet() *registry.FactorySet {
 	userReg := NewUserRegistry()
 	fs.UserRegistry = userReg
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
+	apiTokenReg := NewAPITokenRegistry()
+	fs.APITokenRegistry = apiTokenReg
 	fs.LoginEventRegistry = NewLoginEventRegistry()
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
@@ -150,6 +152,7 @@ func NewFactorySet() *registry.FactorySet {
 	// in-memory maps; all are set above, so it can be wired here.
 	fs.UserPurger = NewUserPurger(
 		fs.RefreshTokenRegistry,
+		apiTokenReg,
 		fs.UserMFASecretRegistry,
 		fs.OAuthIdentityRegistry,
 		fs.PasswordResetRegistry,
