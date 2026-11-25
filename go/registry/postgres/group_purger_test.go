@@ -314,6 +314,14 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	_, _, err = set.FileRegistry.AddLink(ctx, models.FileLink{FileID: draftFileID, EntityType: models.FileLinkDraft, EntityID: draft.ID, Meta: models.FileLinkMetaImages})
 	c.Assert(err, qt.IsNil)
 
+	// Intake session (#2810) holding a file. group_id is NO ACTION on the
+	// session, its sources and its candidates.
+	intakeFileID := seedTagFile(c, set, ctx, "intake-receipt")
+	intake, _, err := set.IntakeRegistry.CreateSession(ctx,
+		models.IntakeSession{ClientKey: "purge-intake", Origin: models.IntakeOriginUpload},
+		[]registry.IntakeSourceInput{{FileIDs: []string{intakeFileID}}})
+	c.Assert(err, qt.IsNil)
+
 	// Currency migration + audit row (#2095). The audit row's group_id FK is
 	// NO ACTION, so it must be cleared explicitly before currency_migrations.
 	migration, err := set.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{
@@ -407,6 +415,10 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	_, err = set.FileRegistry.Get(ctx, draftFileID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = fs.CommodityDraftRegistryFactory.CreateServiceRegistry().Get(context.Background(), draft.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.IntakeRegistryFactory.CreateServiceRegistry().Get(context.Background(), intake.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = set.FileRegistry.Get(ctx, intakeFileID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// The final location_groups DELETE is what was blocked before the fix:
