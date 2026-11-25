@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -102,6 +102,10 @@ async function typeQuery(
   await user.type(within(palette).getByRole("combobox"), q)
 }
 
+afterEach(() => {
+  vi.restoreAllMocks()
+})
+
 beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
@@ -136,6 +140,54 @@ describe("<CommandPalette /> from the TopBar", () => {
 
     await user.keyboard("{Control>}k{/Control}")
     expect(await screen.findByTestId("command-palette")).toBeInTheDocument()
+  })
+
+  it("returns focus to the entry after a reopen during the closing animation", async () => {
+    // Radix keeps a closing dialog mounted until its exit animation ends.
+    // jsdom runs no animations, so the dialog content reports one while
+    // `animate` is on.
+    let animate = true
+    const realGetComputedStyle = window.getComputedStyle.bind(window)
+    vi.spyOn(window, "getComputedStyle").mockImplementation((element, pseudo) => {
+      const style = realGetComputedStyle(element, pseudo)
+      if (!(element instanceof HTMLElement) || element.dataset.slot !== "dialog-content") {
+        return style
+      }
+      return new Proxy(style, {
+        get(target, prop) {
+          if (prop === "animationName") {
+            if (!animate) return "none"
+            return element.dataset.state === "closed" ? "exit" : "enter"
+          }
+          const value: unknown = Reflect.get(target, prop)
+          return typeof value === "function" ? value.bind(target) : value
+        },
+      })
+    })
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const entry = await screen.findByTestId("header-search")
+
+    await openFromHeader(user)
+    await user.keyboard("{Escape}")
+    // Still on screen, closing, with focus in its input.
+    const closing = screen.getByTestId("command-palette")
+    expect(closing).toHaveAttribute("data-state", "closed")
+    expect(within(closing).getByRole("combobox")).toHaveFocus()
+
+    await user.keyboard("{Control>}k{/Control}")
+    await waitFor(() =>
+      expect(screen.getByTestId("command-palette")).toHaveAttribute("data-state", "open")
+    )
+    await waitFor(() =>
+      expect(within(screen.getByTestId("command-palette")).getByRole("combobox")).toHaveFocus()
+    )
+
+    animate = false
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByTestId("command-palette")).not.toBeInTheDocument())
+    await waitFor(() => expect(entry).toHaveFocus())
   })
 
   it("lists the matches by kind, each opening its page", async () => {

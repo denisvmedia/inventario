@@ -41,9 +41,14 @@ export function CommandPaletteProvider({ children }: { children: ReactNode }) {
 
   const setOpen = useCallback((next: boolean, opener?: HTMLElement) => {
     if (next && !openRef.current) {
-      const active = document.activeElement
-      returnFocus.current =
-        opener ?? (active instanceof HTMLElement && active !== document.body ? active : null)
+      // A palette reopened during its closing animation has not handed focus
+      // back yet, and focus is still in its input: keep the element the
+      // first opening recorded.
+      if (!returnFocus.current) {
+        const active = document.activeElement
+        returnFocus.current =
+          opener ?? (active instanceof HTMLElement && active !== document.body ? active : null)
+      }
       setSession((n) => n + 1)
     }
     openRef.current = next
