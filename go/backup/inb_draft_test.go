@@ -18,6 +18,7 @@ import (
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/backup/export"
+	"go.5x5.cz/inventario/backup/restore/processor"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
@@ -575,6 +576,47 @@ func TestINBRestore_FailedDraftKeepsItsFiles(t *testing.T) {
 	receipt := f.fileByUUID(c, f.receipt)
 	c.Assert(receipt.Links, qt.HasLen, 1)
 	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+}
+
+// TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile: when the TV fails
+// to restore, the receipt's bytes, stored under the TV, match no reference.
+// The draft's later reference to the receipt then finds no bytes, and a real
+// restore fails as a missing member rather than restoring the draft without
+// the receipt.
+func TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	_, archive := f.runExport(c, signer)
+
+	_, jsons := innerMembers(c, archive)
+	var member string
+	for name, body := range jsons {
+		if strings.HasPrefix(name, "location-") && bytes.Contains(body, []byte(f.tvUUID)) {
+			member = name
+		}
+	}
+	c.Assert(member, qt.Not(qt.Equals), "")
+	broken := rewriteInnerMember(c, signer, archive, member, func(body []byte) []byte {
+		var doc map[string]any
+		c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
+		items, _ := doc["commodities"].([]any)
+		found := false
+		for _, it := range items {
+			if item, ok := it.(map[string]any); ok && item["id"] == f.tvUUID {
+				item["name"] = ""
+				found = true
+			}
+		}
+		c.Assert(found, qt.IsTrue)
+		return must.Must(json.Marshal(doc))
+	})
+	key := "t/tenant-a/restores/drafts-item-failed.inb"
+	writeArchive(c, f.inbFixture, key, broken)
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+	c.Assert(err, qt.ErrorIs, processor.ErrMissingFileMembers)
+	c.Check(final.Status, qt.Equals, models.RestoreStatusFailed)
 }
 
 // TestINBRestore_MergeReportsWhyADraftWasKept: the restore log says what
