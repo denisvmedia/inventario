@@ -1,4 +1,4 @@
-import { Building2, Calendar, DollarSign, Hash, Package } from "lucide-react"
+import { Building2, Calendar, DollarSign, Hash, Package, Store } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Separator } from "@/components/ui/separator"
@@ -36,6 +36,8 @@ interface LocationReportProps {
   covers: Record<string, CommodityCover>
   // "{Location} · {Area}" resolver for each item's area_id.
   areaLabelFor: (areaId?: string) => string
+  // The name of the seller an item was bought from, "" for none.
+  sellerNameFor?: (sellerId?: string) => string
   imageSize: PhotoSize
   groupCurrency: string
   generatedDate: string
@@ -48,6 +50,7 @@ export function LocationReport({
   commodities,
   covers,
   areaLabelFor,
+  sellerNameFor = () => "",
   imageSize,
   groupCurrency,
   generatedDate,
@@ -206,6 +209,11 @@ export function LocationReport({
                   value={
                     item.purchase_date ? formatDate(item.purchase_date, { style: "long" }) : noValue
                   }
+                />
+                <ItemDetail
+                  icon={Store}
+                  label={t("reports:insurance.fields.seller")}
+                  value={sellerNameFor(item.seller_id) || noValue}
                 />
               </div>
             </div>

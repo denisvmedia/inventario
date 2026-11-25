@@ -244,6 +244,53 @@ func TestCommodityEventService_EmitUpdated_BrandAndModel(t *testing.T) {
 	}
 }
 
+func TestCommodityEventService_EmitUpdated_SellerOnly(t *testing.T) {
+	// Picking, changing or clearing the seller alone is a generic update,
+	// and the snapshot carries the seller ids so the History can name them.
+	sellerA, sellerB := "seller-a", "seller-b"
+	for _, tc := range []struct {
+		name          string
+		before, after *string
+		wantBefore    string
+		wantAfter     string
+	}{
+		{name: "set", before: nil, after: &sellerA, wantBefore: "", wantAfter: sellerA},
+		{name: "changed", before: &sellerA, after: &sellerB, wantBefore: sellerA, wantAfter: sellerB},
+		{name: "cleared", before: &sellerA, after: nil, wantBefore: sellerA, wantAfter: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx, svc, reg := newEventTestContext(c)
+
+			before := makeCommodity("c1", func(c *models.Commodity) { c.SellerID = tc.before })
+			after := makeCommodity("c1", func(c *models.Commodity) { c.SellerID = tc.after })
+			svc.EmitUpdated(ctx, before, after)
+
+			events, err := reg.List(ctx)
+			c.Assert(err, qt.IsNil)
+			c.Assert(events, qt.HasLen, 1)
+			c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindUpdated)
+			c.Check(events[0].Before["seller_id"], qt.Equals, tc.wantBefore)
+			c.Check(events[0].After["seller_id"], qt.Equals, tc.wantAfter)
+		})
+	}
+}
+
+func TestCommodityEventService_EmitUpdated_SameSeller(t *testing.T) {
+	// The same seller saved again under a different pointer is no change.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	a, b := "seller-a", "seller-a"
+	before := makeCommodity("c1", func(c *models.Commodity) { c.SellerID = &a })
+	after := makeCommodity("c1", func(c *models.Commodity) { c.SellerID = &b })
+	svc.EmitUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 0)
+}
+
 func makeLoan(id, commodityID string, mutators ...func(*models.CommodityLoan)) *models.CommodityLoan {
 	due := models.Date("2026-06-01")
 	l := &models.CommodityLoan{

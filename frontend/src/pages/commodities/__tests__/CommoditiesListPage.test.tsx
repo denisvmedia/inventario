@@ -17,6 +17,7 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  sellerHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
@@ -89,7 +90,7 @@ beforeEach(() => {
   // would otherwise issue an unhandled request the moment the group
   // context resolves. Tests that care about the value override this with
   // their own `server.use(settingsStub({...}))` later in the case.
-  server.use(settingsStub())
+  server.use(settingsStub(), ...sellerHandlers.list(SLUG, []))
 })
 
 describe("<CommoditiesListPage />", () => {
@@ -1057,6 +1058,42 @@ describe("<CommoditiesListPage />", () => {
       expect(last.get("lent_out")).toBe("true")
       expect(last.get("tags")).toBe("garage,red")
     })
+  })
+
+  it("filters by seller from the Seller menu and sends every picked seller (#2804)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...sellerHandlers.list(SLUG, [
+        { id: "s1", name: "Hardware Store", item_count: 1 },
+        { id: "s2", name: "Corner Market", item_count: 0 },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?seller=s1&seller=gone`)
+    await screen.findByTestId("commodity-card")
+    await waitFor(() =>
+      expect(new URLSearchParams(queries[0]).getAll("seller_id")).toEqual(["gone", "s1"])
+    )
+
+    await user.click(screen.getByTestId("commodities-filter-seller"))
+    const menu = await screen.findByRole("menu")
+    expect(within(menu).getByRole("menuitemcheckbox", { name: "Hardware Store" })).toBeChecked()
+    // A deleted seller's id stays listed, so the filter can be cleared.
+    expect(within(menu).getByRole("menuitemcheckbox", { name: "Deleted seller" })).toBeChecked()
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Corner Market" }))
+    await waitFor(() =>
+      expect(new URLSearchParams(queries[queries.length - 1]).getAll("seller_id")).toEqual([
+        "gone",
+        "s1",
+        "s2",
+      ])
+    )
   })
 
   it("links each tag on a card to the list filtered by that tag", async () => {

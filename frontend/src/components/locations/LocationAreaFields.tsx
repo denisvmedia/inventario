@@ -1,15 +1,8 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type DragEvent,
-  type KeyboardEvent,
-  type ReactNode,
-  type RefObject,
-} from "react"
+import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
 
+import { PortalEventBoundary } from "@/components/PortalEventBoundary"
 import { AreaFormDialog } from "@/components/locations/AreaFormDialog"
 import { LocationFormDialog } from "@/components/locations/LocationFormDialog"
 import { Label } from "@/components/ui/label"
@@ -389,21 +382,7 @@ function CreateDialogs({
   }
 
   return (
-    // The dialogs render in a portal, outside the form in the page, but React
-    // still bubbles their events through the components around this picker.
-    // A submit would reach the item form and save the item, Enter would reach
-    // the step-by-step dialog and move it to the next step, and a file dropped
-    // on a dialog would reach the item page, which takes it as an attachment.
-    <div
-      role="presentation"
-      className="contents"
-      onSubmit={stopEvent}
-      onKeyDown={stopEnter}
-      onDragEnter={refuseFileDrag}
-      onDragOver={refuseFileDrag}
-      onDragLeave={refuseFileDrag}
-      onDrop={refuseFileDrag}
-    >
+    <PortalEventBoundary>
       <LocationFormDialog
         open={dialog?.kind === "location"}
         onOpenChange={closeOnDismiss}
@@ -420,23 +399,6 @@ function CreateDialogs({
         isPending={createArea.isPending}
         onCloseAutoFocus={focusOnClose(areaTrigger)}
       />
-    </div>
+    </PortalEventBoundary>
   )
-}
-
-function stopEvent(event: { stopPropagation: () => void }) {
-  event.stopPropagation()
-}
-
-function stopEnter(event: KeyboardEvent) {
-  if (event.key === "Enter") event.stopPropagation()
-}
-
-// The default is prevented too, or the browser would open the dropped file
-// in place of the page and drop the form with it.
-function refuseFileDrag(event: DragEvent) {
-  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return
-  event.stopPropagation()
-  event.preventDefault()
-  event.dataTransfer.dropEffect = "none"
 }

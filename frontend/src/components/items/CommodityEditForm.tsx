@@ -6,6 +6,7 @@ import { ArrowLeft, ChevronRight, ListChecks } from "lucide-react"
 
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { BrandModelFields } from "@/components/items/BrandModelFields"
+import { SellerField } from "@/components/sellers/SellerField"
 import { ListPager } from "@/components/ListPager"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import {
@@ -56,6 +57,7 @@ const FORM_FIELDS = [
   "serial_number",
   "area_id",
   "purchase_date",
+  "seller_id",
   "original_price",
   "original_price_currency",
   "converted_original_price",
@@ -396,6 +398,18 @@ export function CommodityEditForm({
                 aria-invalid={!!errors.purchase_date}
               />
             </EditField>
+            <Controller
+              control={control}
+              name="seller_id"
+              render={({ field }) => (
+                <SellerField
+                  id="edit-seller"
+                  value={field.value ?? ""}
+                  onChange={(next) => field.onChange(next)}
+                  error={errors.seller_id}
+                />
+              )}
+            />
             <div className="grid grid-cols-2 gap-3">
               <EditField
                 label={t("commodities:fields.originalPrice")}
