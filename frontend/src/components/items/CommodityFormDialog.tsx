@@ -257,19 +257,20 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
 
 // resumeStep is the step a resumed server draft opens on (#2794), so Continue
 // picks up where the draft was left instead of walking every step again: the
-// first step with a field the form refuses, else the step after the last one
-// the draft holds values on. The earlier steps stay one click away, on the
-// stepper and with Back.
+// first step with a field the form refuses (`refused`: the form marks those
+// fields as it opens), else the step after the last one the draft holds
+// values on. The earlier steps stay one click away, on the stepper and with
+// Back.
 function resumeStep(
   schema: ReturnType<typeof buildCommoditySchema>,
   values: CommodityFormInput,
   defaults: CommodityFormInput
-): FormStepKey {
+): { step: FormStepKey; refused: boolean } {
   const parsed = schema.safeParse(values)
   if (!parsed.success) {
     const failing = new Set(parsed.error.issues.map((issue) => String(issue.path[0])))
     const invalid = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
-    if (invalid) return invalid
+    if (invalid) return { step: invalid, refused: true }
   }
   let lastFilled = -1
   FORM_STEPS.forEach((s, i) => {
@@ -278,7 +279,7 @@ function resumeStep(
     )
     if (filled) lastFilled = i
   })
-  return FORM_STEPS[Math.min(lastFilled + 1, FORM_STEPS.length - 1)]
+  return { step: FORM_STEPS[Math.min(lastFilled + 1, FORM_STEPS.length - 1)], refused: false }
 }
 
 // CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
@@ -509,11 +510,14 @@ export function CommodityFormDialog({
     setRestoredUnsaved(serverMode && unsaved)
     if (resumeId) {
       // A resumed draft opens on the step it still needs, with the steps
-      // before it shown as visited.
-      const landing = openDraft ? resumeStep(schema, starting, defaults) : initialStep
+      // before it shown as visited. A step it opens on because of a field
+      // the form refuses shows that field marked, as Next would.
+      const resume = openDraft ? resumeStep(schema, starting, defaults) : null
+      const landing = resume ? resume.step : initialStep
       const reached = FORM_STEPS.indexOf(landing as FormStepKey)
       setStep(landing)
       setVisitedSteps(new Set(reached > 0 ? FORM_STEPS.slice(0, reached + 1) : openingVisitedSteps))
+      if (resume?.refused) void trigger(STEP_FIELDS[resume.step])
     } else {
       setStep(initialStep)
     }
@@ -572,6 +576,7 @@ export function CommodityFormDialog({
     serverMode,
     schema,
     openingVisitedSteps,
+    trigger,
   ])
 
   // Mark each form step visited the moment we land on it. The

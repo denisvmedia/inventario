@@ -39,8 +39,8 @@ of 50 rows.
 
 - **Continue** opens the draft in the **Add item** dialog on top of the inbox,
   with its values and files. The dialog opens on the first step that still
-  needs input: the step with a field to correct, or else the step after the
-  last one the draft has values on. The steps before it are one click away on
+  needs input: the step with a field to correct, with that field marked, or
+  else the step after the last one the draft has values on. The steps before it are one click away on
   the step bar or with **Back**. Add the item to finish it; the draft leaves
   the inbox. Close the dialog to come back to the inbox with the draft
   unchanged.

@@ -209,6 +209,35 @@ describe("<CommodityFormDialog /> server drafts", () => {
     }
   })
 
+  it("marks the field a resumed draft opens on because the form refuses it", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        revision: 1,
+        values: {
+          name: "Lamp",
+          short_name: "Lamp",
+          type: "furniture",
+          original_price: "40",
+          original_price_currency: "EUR",
+        },
+      },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await waitFor(() => expect(document.querySelector('[aria-invalid="true"]')).not.toBeNull())
+  })
+
+  it("marks nothing on the step a complete resumed draft opens on", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp", type: "furniture" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await screen.findByLabelText(/Purchase date/i)
+    expect(document.querySelector('[aria-invalid="true"]')).toBeNull()
+  })
+
   it("promotes a resumed draft instead of creating an item", async () => {
     const fake = draftHandlers.backend(SLUG, [
       {
