@@ -152,8 +152,8 @@ func prepareNewCommodity(ctx context.Context, commodity *models.Commodity) int {
 }
 
 // prepareNewCommodityInTx runs the steps of creating an item that belong in
-// the insert transaction: the asset number, the area and seller checks and
-// the tag rows.
+// the insert transaction: the asset number, the type, area and seller checks
+// and the tag rows.
 // row already carries its ids, tenant, group and author.
 func prepareNewCommodityInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, row *models.Commodity, requestedAssetNumber int) error {
 	// Taken first: every lock this transaction acquires after it
@@ -161,6 +161,11 @@ func prepareNewCommodityInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.
 	// for while holding it, so the order cannot deadlock with Update
 	// or the backfill.
 	if err := assignAssetNumberInTx(ctx, tx, tableNames.Commodities(), row, requestedAssetNumber); err != nil {
+		return err
+	}
+	// The type must be one of the group's item types; the check locks it
+	// against a concurrent delete until this insert commits.
+	if err := checkCommodityTypeInTx(ctx, tx, tableNames, tenantID, groupID, row.Type); err != nil {
 		return err
 	}
 	// Area is optional (issue #1986): only verify it exists when set.
@@ -381,6 +386,29 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	}
 
 	return commodities, total, nil
+}
+
+// ListIDs returns the ids of at most limit commodities opts selects. The
+// WHERE clause is the list's, so the ids are those of the rows ListPaginated
+// returns for the same opts.
+func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.CommodityListOptions, limit int) ([]string, error) {
+	if limit <= 0 {
+		return []string{}, nil
+	}
+	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
+	ids := make([]string, 0)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		sb := newSelect().Select("id").From(string(r.tableNames.Commodities()))
+		addWhere(sb, where)
+		sb.Limit(limit)
+		query, args := sb.Build()
+		return tx.SelectContext(ctx, &ids, query, args...)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity ids", err)
+	}
+	return ids, nil
 }
 
 // CountEach runs one COUNT(*) per entry of opts, with the WHERE clause of
@@ -810,6 +838,23 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			return err
 		}
 		commodity.AssetNumber = row.AssetNumber
+		// A changed type must be one of the group's item types. "Changed"
+		// compares with the type the row holds under the lock, not with
+		// stored: a type delete may have moved the item to another type
+		// after stored was read, and an update that kept the old type would
+		// then write back a type the group no longer has. The new type's
+		// row is locked after the item's, and a type delete locks the
+		// deleted type before the items it moves; an update never waits for
+		// the type it leaves, so the orders cannot deadlock.
+		current, err := lockedCommodityType(ctx, tx, r.tableNames.Commodities(), stored.ID)
+		if err != nil {
+			return err
+		}
+		if row.Type != current {
+			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
+				return err
+			}
+		}
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
@@ -830,6 +875,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return &commodity, nil
+}
+
+// lockedCommodityType returns the type of the commodity id, which the
+// caller's transaction has already locked.
+func lockedCommodityType(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (models.CommodityType, error) {
+	var current models.CommodityType
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type FROM %s WHERE id = $1`, table), id); err != nil {
+		return "", errxtrace.Wrap("failed to read commodity type", err, errx.Attrs("commodity_id", id))
+	}
+	return current, nil
 }
 
 // clonePtrDecimal returns a heap-allocated copy of d (or nil). Used to

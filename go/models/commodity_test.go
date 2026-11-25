@@ -83,9 +83,34 @@ func TestCommodityType_IsValid_HappyPaths(t *testing.T) {
 	}
 }
 
+func TestCommodityType_IsValid_CustomSlugs(t *testing.T) {
+	c := qt.New(t)
+
+	for _, slug := range []string{"vehicle", "power-tools", "white_goods", "автомобиль", "type-2", strings.Repeat("a", 64)} {
+		c.Run(slug, func(c *qt.C) {
+			c.Assert(models.CommodityType(slug).IsValid(), qt.IsTrue)
+		})
+	}
+}
+
 func TestCommodityType_IsValid_Invalid(t *testing.T) {
 	c := qt.New(t)
-	c.Assert(models.CommodityType("invalid_type").IsValid(), qt.IsFalse)
+
+	for _, slug := range []string{"Vehicle", "power tools", "-vehicle", "vehicle-", "a--b", "a_-b", "car!", strings.Repeat("a", 65)} {
+		c.Run(slug, func(c *qt.C) {
+			c.Assert(models.CommodityType(slug).IsValid(), qt.IsFalse)
+		})
+	}
+}
+
+func TestCommodityType_IsBuiltin(t *testing.T) {
+	c := qt.New(t)
+
+	for _, b := range models.BuiltinItemTypes {
+		c.Assert(b.Slug.IsBuiltin(), qt.IsTrue)
+	}
+	c.Assert(models.CommodityType("vehicle").IsBuiltin(), qt.IsFalse)
+	c.Assert(models.CommodityType("white-goods").IsBuiltin(), qt.IsFalse)
 }
 
 func TestCommodityType_IsValid_Empty(t *testing.T) {
@@ -103,7 +128,7 @@ func TestCommodityType_Validate_Valid(t *testing.T) {
 
 func TestCommodityType_Validate_Invalid(t *testing.T) {
 	c := qt.New(t)
-	cType := models.CommodityType("invalid_type")
+	cType := models.CommodityType("Invalid Type")
 
 	err := cType.Validate()
 	c.Assert(err, qt.IsNotNil)

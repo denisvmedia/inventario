@@ -239,3 +239,22 @@ export function extractFieldErrorCodes(err: unknown): Record<string, FieldErrorC
   flattenCodeTree(attrs, "", result)
   return Object.keys(result).length > 0 ? result : null
 }
+
+// extractTopLevelErrorCodes reads the errorCodes tree of a 422 whose
+// validation errors are keyed by field at the top level rather than under
+// data.attributes, as a bulk patch's are (`{ type: { code } }`). Keys are
+// dotted paths from the root of the tree; null when there is none.
+export function extractTopLevelErrorCodes(err: unknown): Record<string, FieldErrorCode> | null {
+  if (!(err instanceof HttpError)) return null
+  const data = err.data
+  if (!data || typeof data !== "object") return null
+  const first = (data as ErrorEnvelope).errors?.[0] as { error?: unknown } | undefined
+  if (!first || typeof first !== "object") return null
+  const userErr = first.error
+  if (!userErr || typeof userErr !== "object") return null
+  const codes = (userErr as { errorCodes?: unknown }).errorCodes
+  if (!codes || typeof codes !== "object") return null
+  const result: Record<string, FieldErrorCode> = {}
+  flattenCodeTree(codes, "", result)
+  return Object.keys(result).length > 0 ? result : null
+}

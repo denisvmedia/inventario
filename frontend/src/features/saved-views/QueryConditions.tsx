@@ -14,6 +14,8 @@ interface QueryConditionsProps {
   tagLabel: (slug: string) => string
   // Seller names by ID, for the seller conditions.
   sellerNames: ReadonlyMap<string, string>
+  // Item type labels by slug.
+  typeLabel: (slug: string) => string
   stale?: StaleReferences
 }
 
@@ -25,11 +27,13 @@ export function QueryConditions({
   areaNames,
   tagLabel,
   sellerNames,
+  typeLabel,
   stale,
 }: QueryConditionsProps) {
   const { t } = useTranslation()
   const staleTags = new Set(stale?.tags ?? [])
   const staleSellers = new Set(stale?.sellers ?? [])
+  const staleTypes = new Set(stale?.types ?? [])
   const chips: { key: string; label: string; stale?: boolean }[] = []
 
   if (query.text) {
@@ -38,8 +42,15 @@ export function QueryConditions({
       label: t("commodities:savedViews.conditions.text", { text: query.text }),
     })
   }
+  // A deleted type says so in words, like a deleted tag.
   for (const type of query.types) {
-    chips.push({ key: `type-${type}`, label: t(`commodities:type.${type}`) })
+    const gone = staleTypes.has(type)
+    const label = typeLabel(type)
+    chips.push({
+      key: `type-${type}`,
+      label: gone ? t("commodities:savedViews.conditions.deletedType", { type: label }) : label,
+      stale: gone,
+    })
   }
   for (const status of query.statuses) {
     chips.push({ key: `status-${status}`, label: t(`commodities:status.${status}`) })

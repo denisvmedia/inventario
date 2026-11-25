@@ -43,6 +43,8 @@ const GROUP_SCOPED_PREFIXES = [
   "/files",
   "/exports",
   "/tags",
+  // The group's item types (#2802).
+  "/item-types",
   // /loans and /loans/counts (#1452). The per-commodity loan paths are
   // rewritten via the /commodities prefix above; this entry handles the
   // group-wide /lent surface + the bulk-counts endpoint.
@@ -276,6 +278,15 @@ function buildUrl(path: string, skipGroupRewrite: boolean | undefined): string {
   if (!normalized.startsWith("/")) normalized = `/${normalized}`
   const rewritten = skipGroupRewrite ? normalized : applyGroupRewrite(normalized)
   return `${BASE_URL}${rewritten}`
+}
+
+// groupScopedPath returns path as a request sent now would address it: under
+// /g/{slug}/ for the group active at this moment, when the path is group
+// scoped. An action that sends several requests reads it once and sends each
+// of them there with skipGroupRewrite, so a group switch in between does not
+// send the later ones to another group.
+export function groupScopedPath(path: string): string {
+  return buildUrl(path, false).slice(BASE_URL.length)
 }
 
 function buildHeaders(method: HttpMethod, path: string, init: HttpRequestInit): Headers {

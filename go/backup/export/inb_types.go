@@ -44,12 +44,17 @@ package export
 // member would reach an older reader's location handler. A 3.2 reader
 // restores a 3.3 archive without sellers.
 //
-// 3.4 adds the group's open drafts of new items (INBDraftsName) and the links
+// 3.4 adds the group's item types to the manifest (INBManifest.ItemTypes).
+// An item's type stays the slug it was, so a 3.3 reader restores a 3.4
+// archive as before: the built-in types restore and an item whose type is a
+// custom one fails as an item of an unknown type would.
+//
+// 3.5 adds the group's open drafts of new items (INBDraftsName) and the links
 // of files to them: a draft's file is referenced from the files member with
-// linked entity type "draft". A 3.3 reader restores a 3.4 archive without the
+// linked entity type "draft". A 3.4 reader restores a 3.5 archive without the
 // drafts. It counts an error for the drafts member and one for each link to a
 // draft, and leaves out a file that only drafts use.
-const INBFormatVersion = "3.4"
+const INBFormatVersion = "3.5"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -92,7 +97,7 @@ const INBFilesPrefix = "files/"
 const INBFilesName = INBFilesPrefix + "_index.json"
 
 // INBDraftsName is the inner-tar member holding the group's open drafts of new
-// items (#2812, format 3.4). It lives under the `files/` prefix for the same
+// items (#2812, format 3.5). It lives under the `files/` prefix for the same
 // reason as INBFilesName: an older reader routes it to its file handler
 // instead of its location handler. It is written after the location and
 // unassigned documents, so the areas a draft names are restored before it,
@@ -141,14 +146,26 @@ type INBManifest struct {
 	// Restore keys off member names, so a 2.0 archive without this field
 	// round-trips unchanged.
 	FilesFile string `json:"filesFile,omitempty"`
-	// DraftsFile names the drafts member (format 3.4), or "" when the
+	// DraftsFile names the drafts member (format 3.5), or "" when the
 	// archive carries no draft.
 	DraftsFile string `json:"draftsFile,omitempty"`
 	// Sellers are the group's sellers (format 3.3): every seller in a
 	// whole-group export, and the sellers the exported items name in a
 	// selected-items export. Omitted when there is none.
-	Sellers    []INBSeller      `json:"sellers,omitempty"`
+	Sellers []INBSeller `json:"sellers,omitempty"`
+	// ItemTypes are the group's item types (format 3.4): every type in a
+	// whole-group export, and the types the exported items have in a
+	// selected-items export.
+	ItemTypes  []INBItemType    `json:"itemTypes,omitempty"`
 	Statistics INBManifestStats `json:"statistics"`
+}
+
+// INBItemType is an item type keyed by its slug, which INBCommodity.Type
+// holds. Name is empty for a built-in type that keeps its default name.
+type INBItemType struct {
+	Slug string `json:"slug"`
+	Name string `json:"name,omitempty"`
+	Icon string `json:"icon,omitempty"`
 }
 
 // INBSeller is a seller keyed by its immutable UUID, which
@@ -346,7 +363,7 @@ type INBDraft struct {
 type INBEntityFileRef struct {
 	INBFileRef
 
-	// LinkedEntityType is "location", "area", "draft" (format 3.4), or "" for
+	// LinkedEntityType is "location", "area", "draft" (format 3.5), or "" for
 	// a standalone file.
 	LinkedEntityType string `json:"linkedEntityType,omitempty"`
 	// LinkedEntityID is the linked location, area or draft UUID; "" for a

@@ -25,7 +25,7 @@ import (
 )
 
 // TestINBDraftsRoundTripPostgres is the postgres half of the drafts round trip
-// (#2812, format 3.4): an open draft with its area, seller, tags and a photo
+// (#2812, format 3.5): an open draft with its area, seller, tags and a photo
 // survives a full replace in its group, and a merge into another group of the
 // tenant links the draft there to that group's copy of the photo and to the
 // area and seller the restore made there, leaving the source group alone.

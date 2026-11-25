@@ -469,6 +469,9 @@ func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := accountDeletionSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
+	if jsErr, ok := itemTypeSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
 	return jsonapi.Error{}, false
 }
 

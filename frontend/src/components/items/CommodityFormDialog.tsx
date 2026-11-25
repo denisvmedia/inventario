@@ -66,13 +66,8 @@ import { useTagAutocomplete, useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
-import {
-  COMMODITY_STATUSES,
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
-  warrantyStatus,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+import { COMMODITY_STATUSES, warrantyStatus } from "@/features/commodities/constants"
+import { ItemTypeField } from "@/components/itemTypes/ItemTypeField"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import {
   LocationAreaFields,
@@ -1696,27 +1691,14 @@ function BasicsStep(props: any) {
             control={control}
             name="type"
             render={({ field }) => (
-              <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger
-                  id="commodity-type"
-                  className="w-full"
-                  aria-required
-                  aria-invalid={!!errors.type}
-                >
-                  <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMMODITY_TYPES.map((tp) => {
-                    const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
-                    return (
-                      <SelectItem key={tp} value={tp}>
-                        <Icon aria-hidden="true" />
-                        {t(`commodities:type.${tp}`)}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
+              <ItemTypeField
+                id="commodity-type"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                ariaRequired
+                invalid={!!errors.type}
+                errorMessage={errors.type?.message}
+              />
             )}
           />
           <FieldError error={errors.type} />

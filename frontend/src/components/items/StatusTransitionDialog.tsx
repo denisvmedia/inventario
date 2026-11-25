@@ -142,6 +142,9 @@ export interface StatusTransitionDialogProps {
   purchaseCurrency?: string
   onSubmit: (payload: StatusTransitionPayload) => Promise<void>
   isPending?: boolean
+  /** Replaces the title and description, which speak of one item. */
+  title?: string
+  description?: string
 }
 
 export function StatusTransitionDialog({
@@ -151,6 +154,8 @@ export function StatusTransitionDialog({
   purchaseCurrency,
   onSubmit,
   isPending = false,
+  title,
+  description,
 }: StatusTransitionDialogProps) {
   const { t } = useTranslation(["commodities", "common"])
   const {
@@ -202,10 +207,11 @@ export function StatusTransitionDialog({
       <DialogContent className="sm:max-w-md" data-testid="status-transition-dialog">
         <DialogHeader>
           <DialogTitle>
-            {t("commodities:detail.statusTransitionDialog.title", { label: statusLabel })}
+            {title ?? t("commodities:detail.statusTransitionDialog.title", { label: statusLabel })}
           </DialogTitle>
           <DialogDescription>
-            {t(`commodities:detail.statusTransitionDialog.description.${targetStatus}`)}
+            {description ??
+              t(`commodities:detail.statusTransitionDialog.description.${targetStatus}`)}
           </DialogDescription>
         </DialogHeader>
 

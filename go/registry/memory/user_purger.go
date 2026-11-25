@@ -53,6 +53,13 @@ type UserPurger struct {
 	drafts        registry.CommodityDraftRegistryFactory
 	files         registry.FileRegistryFactory
 	savedViews    registry.SavedViewRegistryFactory
+	itemTypes     *ItemTypeRegistryFactory
+}
+
+// SetItemTypeFactory wires the item type store, whose types the user created
+// are handed to another member of their group.
+func (r *UserPurger) SetItemTypeFactory(f *ItemTypeRegistryFactory) {
+	r.itemTypes = f
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -119,6 +126,10 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"magic_link_tokens", func() error { return r.magicLink.DeleteByUserID(ctx, userID) }},
 		{"user_mfa_secrets", func() error { return r.mfaSecrets.DeleteByUser(ctx, tenantID, userID) }},
 		{"user_oauth_identities", func() error { return r.purgeOAuthIdentities(ctx, tenantID, userID) }},
+		// Item types the user created go to another member of their group,
+		// as on postgres; they are group configuration, not the user's
+		// content.
+		{"item_types", func() error { return r.reattributeItemTypes(ctx, tenantID, userID) }},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
@@ -329,4 +340,56 @@ func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID strin
 		}
 	}
 	return nil
+}
+
+// reattributeItemTypes gives each item type the user created to another
+// member of its group: the owner first, then an admin, then the member who
+// joined first. A type whose group has no other member keeps its creator.
+func (r *UserPurger) reattributeItemTypes(ctx context.Context, tenantID, userID string) error {
+	if r.itemTypes == nil {
+		return nil
+	}
+	heirs := map[string]string{}
+	for _, groupID := range r.itemTypes.groupsCreatedBy(tenantID, userID) {
+		members, err := r.memberships.ListByGroup(ctx, groupID)
+		if err != nil {
+			return err
+		}
+		if heir := itemTypeHeir(members, userID); heir != "" {
+			heirs[groupID] = heir
+		}
+	}
+	r.itemTypes.reattributeCreator(tenantID, userID, heirs)
+	return nil
+}
+
+// itemTypeHeir picks the member who takes over the item types userID
+// created: the owner first, then an admin, then the member who joined first.
+func itemTypeHeir(members []*models.GroupMembership, userID string) string {
+	rank := func(role models.GroupRole) int {
+		switch role {
+		case models.GroupRoleOwner:
+			return 0
+		case models.GroupRoleAdmin:
+			return 1
+		default:
+			return 2
+		}
+	}
+	var best *models.GroupMembership
+	for _, m := range members {
+		if m == nil || m.MemberUserID == userID {
+			continue
+		}
+		if best == nil ||
+			rank(m.Role) < rank(best.Role) ||
+			(rank(m.Role) == rank(best.Role) && m.JoinedAt.Before(best.JoinedAt)) ||
+			(rank(m.Role) == rank(best.Role) && m.JoinedAt.Equal(best.JoinedAt) && m.MemberUserID < best.MemberUserID) {
+			best = m
+		}
+	}
+	if best == nil {
+		return ""
+	}
+	return best.MemberUserID
 }

@@ -21,7 +21,7 @@ import (
 // draftsStep is the restore log step of the drafts member.
 const draftsStep = "Drafts"
 
-// handleDraftsMember decodes the drafts document (format 3.4) and recreates
+// handleDraftsMember decodes the drafts document (format 3.5) and recreates
 // each draft. It comes after the location documents, so the areas the drafts
 // name are mapped, and before the files member, which links files to them.
 func (w *inbWalker) handleDraftsMember(hdr *tar.Header, r io.Reader) error {
@@ -106,6 +106,9 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	if err := w.ensureDraftTags(draft.Values); err != nil {
 		return false, errxtrace.Wrap("failed to ensure draft tags", err, errx.Attrs("draft_id", a.ID))
 	}
+	if err := w.restoreDraftType(draft.Values); err != nil {
+		return false, errxtrace.Wrap("failed to resolve draft item type", err, errx.Attrs("draft_id", a.ID))
+	}
 	ctx := registry.WithRestoredDraft(w.ctx, registry.RestoredDraft{
 		Revision:  a.Revision,
 		CreatedAt: createdAt,
@@ -160,20 +163,40 @@ func (w *inbWalker) isUnrestoredDraft(link inbFileLink) bool {
 // restoreDraftValues maps the references in archived draft values to the
 // destination group, the way an item's are mapped: the area through the
 // restored areas and the seller through the restored sellers. A reference
-// that maps to nothing, and a type that is not an item type, is left out,
-// so the form shows its default and the draft never names an entity outside
-// the group. An empty reference stays, meaning nothing chosen.
+// that maps to nothing is left out, so the form shows its default and the
+// draft never names an entity outside the group. An empty reference stays,
+// meaning nothing chosen. The type is mapped by restoreDraftType once the
+// draft is known to be restored.
 func (w *inbWalker) restoreDraftValues(archived models.CommodityDraftValues) models.CommodityDraftValues {
 	values := make(models.CommodityDraftValues, len(archived))
 	maps.Copy(values, archived)
 	restoreDraftReference(values, "area_id", w.idMapping.Areas)
 	restoreDraftReference(values, "seller_id", w.sellerIDs)
-	if raw, ok := values["type"]; ok {
-		if t, isText := raw.(string); !isText || (t != "" && !models.CommodityType(t).IsValid()) {
-			delete(values, "type")
-		}
+	if _, isText := values["type"].(string); !isText {
+		delete(values, "type")
 	}
 	return values
+}
+
+// restoreDraftType maps the item type a draft names onto the destination
+// group's, as an item's type is mapped (#2802): the same slug, the type with
+// the archived name, or a type the restore creates. It runs only for a draft
+// the restore creates, so a kept draft creates no type.
+func (w *inbWalker) restoreDraftType(values models.CommodityDraftValues) error {
+	archived, _ := values["type"].(string)
+	if archived == "" {
+		return nil
+	}
+	resolver, err := w.proc.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	slug, err := resolver.resolve(w.ctx, models.CommodityType(archived), w.stats)
+	if err != nil {
+		return err
+	}
+	values["type"] = string(slug)
+	return nil
 }
 
 // restoreDraftReference replaces the archive UUID in values[key] with the DB

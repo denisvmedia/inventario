@@ -16,12 +16,13 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
 )
 
-// Open drafts of new items are in a whole-group backup (#2812, format 3.4),
+// Open drafts of new items are in a whole-group backup (#2812, format 3.5),
 // with the links of their files.
 
 // draftFixture is an inbFixture with an open draft that names the fixture's
@@ -107,7 +108,7 @@ func TestINBExport_Drafts(t *testing.T) {
 
 	var manifest types.INBManifest
 	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
-	c.Check(manifest.Version, qt.Equals, "3.4")
+	c.Check(manifest.Version, qt.Equals, export.INBFormatVersion)
 	c.Check(manifest.DraftsFile, qt.Equals, types.INBDraftsMember)
 
 	// After the location documents, before the files document.
@@ -291,8 +292,9 @@ func TestINBRestore_MergeKeepsTheGroupsDraft(t *testing.T) {
 	c.Check(skipped, qt.DeepEquals, []string{"Draft: Half-done drill"})
 }
 
-// TestINBRestore_DraftReferencesThatDoNotMap: an area, a seller or a type the
-// restore cannot map is left out of the draft, never stored as given.
+// TestINBRestore_DraftReferencesThatDoNotMap: an area or a seller the restore
+// cannot map is left out of the draft, never stored as given. A type the
+// group does not have is created, as for an item of that type.
 func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -312,7 +314,7 @@ func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 		},
 	}}}
 	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
-		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"3.4"}`))
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"3.5"}`))
 		writeMember(c, tw, &tar.Header{Name: "location-home.json", Mode: 0o600, Typeflag: tar.TypeReg}, must.Must(json.Marshal(inbLocationOnlyDoc(loc))))
 		writeMember(c, tw, &tar.Header{Name: types.INBDraftsMember, Mode: 0o600, Typeflag: tar.TypeReg}, must.Must(json.Marshal(draftsDoc)))
 	})
@@ -325,8 +327,45 @@ func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 
 	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
 	restored := must.Must(drafts.GetByClientKey(f.ctx, "hand-built"))
-	c.Check(restored.Values, qt.DeepEquals, models.CommodityDraftValues{"name": "Kettle", "status": "in_use"})
+	c.Check(restored.Values, qt.DeepEquals, models.CommodityDraftValues{"name": "Kettle", "type": "spaceship", "status": "in_use"})
 	c.Check(restored.Revision, qt.Equals, 4)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Check(must.Must(itemTypes.GetBySlug(f.ctx, "spaceship")).Name, qt.Equals, "spaceship")
+}
+
+// TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType: a draft's type is mapped
+// onto the group's item types as an item's is (#2802), here by name, because
+// the group replaced the type with one of the same name under another slug.
+// A dry run and a kept draft create no type.
+func TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	boat := must.Must(itemTypes.Create(f.ctx, models.ItemType{Name: "Boat"}))
+	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+	values := models.CommodityDraftValues{"name": "Half-done dinghy", "type": string(boat.Slug)}
+	must.Must(drafts.SaveValues(f.ctx, f.draft.ID, f.draft.Revision, values))
+	blobKey, _ := f.runExport(c, signer)
+
+	c.Assert(itemTypes.Delete(f.ctx, boat.ID), qt.IsNil)
+	craft := must.Must(itemTypes.Create(f.ctx, models.ItemType{Slug: "watercraft", Name: "boat"}))
+	typesBefore := len(must.Must(itemTypes.List(f.ctx)))
+
+	// The group still has the draft: a merge keeps it and creates no type.
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(must.Must(itemTypes.List(f.ctx)), qt.HasLen, typesBefore)
+	c.Check(f.draftsByKey(c)["draft-in-backup"].Values["type"], qt.Equals, string(boat.Slug))
+
+	final, err = restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(must.Must(itemTypes.List(f.ctx)), qt.HasLen, typesBefore, qt.Commentf("the type was matched by name, not created"))
+	restored := f.draftsByKey(c)["draft-in-backup"]
+	c.Assert(restored, qt.IsNotNil)
+	c.Check(restored.Values["type"], qt.Equals, string(craft.Slug))
 }
 
 // TestINBRestore_DraftsIntoAnotherGroup restores a group's backup into another

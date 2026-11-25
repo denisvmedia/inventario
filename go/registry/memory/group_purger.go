@@ -42,6 +42,15 @@ type GroupPurger struct {
 	currencyMigrations   registry.CurrencyMigrationRegistryFactory
 	notificationPrefs    registry.GroupNotificationPrefRegistry
 	memberships          registry.GroupMembershipRegistry
+	// itemTypes is set by SetItemTypeFactory. The purge drops a group's
+	// types without the delete rules, which would keep the last one.
+	itemTypes *ItemTypeRegistryFactory
+}
+
+// SetItemTypeFactory attaches the item types the purge drops with the
+// group (#2802).
+func (r *GroupPurger) SetItemTypeFactory(itemTypes *ItemTypeRegistryFactory) {
+	r.itemTypes = itemTypes
 }
 
 // NewGroupPurger wires a GroupPurger to the registry factories that own the
@@ -256,6 +265,15 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		{"sellers", func() error {
 			reg := r.sellers.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Item types (#2802), after the commodities whose type named them.
+		{"item_types", func() error {
+			if r.itemTypes != nil {
+				r.itemTypes.purgeWhere(func(t *models.ItemType) bool {
+					return t.TenantID == tenantID && t.GroupID == groupID
+				})
+			}
+			return nil
 		}},
 		// Per-user/per-group notification overrides (#2095). The registry is
 		// service-mode only (not TenantGroupAware), so use the Piece-A

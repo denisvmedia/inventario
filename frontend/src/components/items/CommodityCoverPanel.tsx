@@ -5,9 +5,9 @@ import { Images } from "lucide-react"
 import { ImageViewer, type GalleryImage } from "@/components/files/ImageViewer"
 import type { Commodity } from "@/features/commodities/api"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
-import type { CommodityTypeValue } from "@/features/commodities/constants"
 import { isImageMime } from "@/features/files/constants"
 import { useFiles } from "@/features/files/hooks"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { cn } from "@/lib/utils"
 
 // How many of the item's photos the viewer cycles through. The Files tab
@@ -33,6 +33,7 @@ export function CommodityCoverPanel({ commodity, className }: CommodityCoverPane
   const id = commodity.id ?? ""
   const cover = commodity.cover
   const name = commodity.name ?? ""
+  const itemTypes = useItemTypeLookup()
   // The same request as the Files tab's Images chip, without its paging.
   const photos = useFiles(
     {
@@ -100,7 +101,8 @@ export function CommodityCoverPanel({ commodity, className }: CommodityCoverPane
         <CommodityThumb
           fill
           cover={cover}
-          type={commodity.type as CommodityTypeValue | undefined}
+          type={commodity.type}
+          icon={itemTypes.get(commodity.type)?.Icon}
           name={name}
           sizes={COVER_SIZES}
           className="rounded-none"
