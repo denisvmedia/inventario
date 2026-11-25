@@ -87,8 +87,9 @@ change applies immediately.
 - **Language** — switch the app's language between **English**, **Čeština**, and
   **Русский**. This also sets the language Inventario uses for emails it sends
   you.
-- **Default view** — whether the Items list opens in **Grid** or **List**. You
-  can still flip the layout per session from the toolbar.
+- **Default view** — whether the Items list opens as **Photo cards**,
+  **Compact cards**, or a **List**. Once you pick a layout from the Items list
+  toolbar, that choice wins on this device.
 - **Preferred currency** — a saved preference for how currency should be
   displayed. It's stored on your account, but display conversion isn't wired up
   yet, so amounts still show in their stored currency for now.

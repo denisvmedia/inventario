@@ -189,3 +189,67 @@ func TestThumbnailGenerationService_HandlesExistingJobs(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(pendingJobs, qt.HasLen, 1)
 }
+
+// A completed job whose thumbnails are missing (a size added since, or lost
+// blobs) does not stop a new request: RequestThumbnailGeneration only reuses a
+// job that is still pending or processing.
+func TestThumbnailGenerationService_RequestsAgainAfterACompletedJob(t *testing.T) {
+	c := qt.New(t)
+	factorySet := memory.NewFactorySet()
+
+	user, err := factorySet.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant"},
+		Email:               "test@example.com",
+		Name:                "Test User",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	group, err := factorySet.LocationGroupRegistry.Create(context.Background(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Test Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+	file, err := factorySet.FileRegistryFactory.CreateServiceRegistry().Create(context.Background(), models.FileEntity{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
+		},
+		File: &models.File{
+			Path:         "test-image",
+			OriginalPath: "test-image.jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+		Title: "Test Image",
+	})
+	c.Assert(err, qt.IsNil)
+
+	thumbnailService := services.NewThumbnailGenerationService(factorySet, "memory://", services.ThumbnailGenerationConfig{
+		MaxConcurrentPerUser: 5,
+		RateLimitPerMinute:   50,
+		SlotDuration:         5 * time.Minute,
+	})
+	reqCtx := appctx.WithUser(context.Background(), user)
+
+	first, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
+	c.Assert(err, qt.IsNil)
+	jobReg := factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
+	c.Assert(jobReg.UpdateJobStatus(context.Background(), first.ID, models.ThumbnailStatusCompleted, ""), qt.IsNil)
+
+	second, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(second.ID, qt.Not(qt.Equals), first.ID)
+	c.Assert(second.Status, qt.Equals, models.ThumbnailStatusPending)
+
+	// The new job is the file's current one, and a further request reuses it.
+	current, err := thumbnailService.GetJobByFileID(context.Background(), file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(current.ID, qt.Equals, second.ID)
+	third, err := thumbnailService.RequestThumbnailGeneration(reqCtx, file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(third.ID, qt.Equals, second.ID)
+}

@@ -33,6 +33,11 @@
     "acquisitionPrice": "Originally purchased for {{price}}",
     "assetId": "Asset ID",
     "backToList": "Back to items",
+    "cover": {
+      "open": "View photos of {{name}}",
+      "photoCount_one": "{{count}} photo",
+      "photoCount_other": "{{count}} photos"
+    },
     "delete": "Delete",
     "documentTitle": "Item",
     "edit": "Edit",
@@ -452,12 +457,14 @@
     "heading": "Items",
     "invalidQueryDescription": "The link asks for a filter the item list cannot apply ({{parameter}}). Clear the filters to see your items.",
     "invalidQueryTitle": "This filter is not supported",
+    "pageSize": "Items per page",
     "searchPlaceholder": "Search by name, serial or part number, tag, notes or asset ID…",
     "selectAll": "Select all visible",
     "subtitle_one": "{{count}} item in this group",
     "subtitle_other": "{{count}} items in this group",
-    "viewGrid": "Grid view",
-    "viewList": "List view"
+    "viewCompact": "Compact cards",
+    "viewGrid": "Photo cards",
+    "viewList": "List"
   },
   "listNav": {
     "label": "Items in this list",

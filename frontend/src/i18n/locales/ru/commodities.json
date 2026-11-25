@@ -41,6 +41,13 @@
     "acquisitionPrice": "Изначально куплено за {{price}}",
     "assetId": "Инвентарный номер",
     "backToList": "К списку предметов",
+    "cover": {
+      "open": "Посмотреть фотографии: {{name}}",
+      "photoCount_one": "{{count}} фотография",
+      "photoCount_few": "{{count}} фотографии",
+      "photoCount_many": "{{count}} фотографий",
+      "photoCount_other": "{{count}} фотографии"
+    },
     "delete": "Удалить",
     "documentTitle": "Предмет",
     "edit": "Изменить",
@@ -461,14 +468,16 @@
     "heading": "Предметы",
     "invalidQueryDescription": "Ссылка требует фильтр, который список предметов не умеет применять ({{parameter}}). Сбросьте фильтры, чтобы увидеть свои предметы.",
     "invalidQueryTitle": "Этот фильтр не поддерживается",
+    "pageSize": "Предметов на странице",
     "searchPlaceholder": "Поиск по названию, серийному номеру, артикулу, тегу, заметкам или инвентарному номеру…",
     "selectAll": "Выбрать все видимые",
     "subtitle_one": "{{count}} предмет в этой группе",
     "subtitle_few": "{{count}} предмета в этой группе",
     "subtitle_many": "{{count}} предметов в этой группе",
     "subtitle_other": "{{count}} предмета в этой группе",
-    "viewGrid": "Вид сеткой",
-    "viewList": "Вид списком"
+    "viewCompact": "Компактные карточки",
+    "viewGrid": "Карточки с фото",
+    "viewList": "Список"
   },
   "pagination": {
     "label": "Постраничная навигация",
