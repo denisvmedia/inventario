@@ -3,8 +3,10 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
@@ -117,4 +119,80 @@ func TestItemTypes_MemberTypesGoToTheOwner_Postgres(t *testing.T) {
 	c.Check(got.CreatedByUserID, qt.Equals, fx.user.ID)
 
 	c.Check(fx.factorySet.UserRegistry.Delete(ctx, member.ID), qt.IsNil)
+}
+
+// Without an owner, the types go to an admin before an earlier member; among
+// members of one rank the one who joined first takes them.
+func TestItemTypes_HandoverPicksAdminThenJoinOrder_Postgres(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+	ctx := appctx.WithUser(context.Background(), fx.user)
+	tenantID := fx.user.TenantID
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+
+	newUser := func(name string) *models.User {
+		m := models.User{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+			Email:               "handover-" + name + "@test-org.com",
+			Name:                name,
+			IsActive:            true,
+		}
+		c.Assert(m.SetPassword("Password123"), qt.IsNil)
+		u, err := fx.factorySet.UserRegistry.Create(ctx, m)
+		c.Assert(err, qt.IsNil)
+		return u
+	}
+	services := fx.factorySet.CreateServiceRegistrySet()
+	newGroup := func(name string) string {
+		g, err := services.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+			Name:                name,
+			Slug:                must.Must(models.GenerateGroupSlug()),
+			Status:              models.LocationGroupStatusActive,
+			CreatedBy:           fx.user.ID,
+			GroupCurrency:       models.Currency("USD"),
+		})
+		c.Assert(err, qt.IsNil)
+		return g.ID
+	}
+	join := func(groupID string, u *models.User, role models.GroupRole, joined time.Time) {
+		_, err := fx.factorySet.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+			GroupID:             groupID,
+			MemberUserID:        u.ID,
+			Role:                role,
+			JoinedAt:            joined,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	leaver, early, late, admin := newUser("leaver"), newUser("early"), newUser("late"), newUser("admin")
+
+	withAdmin := newGroup("With an admin")
+	join(withAdmin, leaver, models.GroupRoleUser, t0.Add(-time.Hour))
+	join(withAdmin, early, models.GroupRoleUser, t0)
+	join(withAdmin, admin, models.GroupRoleAdmin, t0.Add(time.Hour))
+
+	membersOnly := newGroup("Members only")
+	join(membersOnly, leaver, models.GroupRoleUser, t0.Add(-time.Hour))
+	join(membersOnly, late, models.GroupRoleUser, t0.Add(time.Hour))
+	join(membersOnly, early, models.GroupRoleViewer, t0)
+
+	created := map[string]*models.ItemType{}
+	for _, groupID := range []string{withAdmin, membersOnly} {
+		set := postgres.NewRegistrySetWithUserAndGroupID(fx.dbx, leaver.ID, tenantID, groupID)
+		it, err := set.ItemTypeRegistry.Create(tagCtxFor(leaver, groupID), models.ItemType{Name: "Vehicle"})
+		c.Assert(err, qt.IsNil)
+		created[groupID] = it
+	}
+
+	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(t.Context(), tenantID, leaver.ID), qt.IsNil)
+
+	for groupID, heir := range map[string]string{withAdmin: admin.ID, membersOnly: early.ID} {
+		set := postgres.NewRegistrySetWithUserAndGroupID(fx.dbx, fx.user.ID, tenantID, groupID)
+		got, err := set.ItemTypeRegistry.Get(tagCtxFor(fx.user, groupID), created[groupID].ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.CreatedByUserID, qt.Equals, heir, qt.Commentf("group %s", groupID))
+	}
+	c.Check(fx.factorySet.UserRegistry.Delete(ctx, leaver.ID), qt.IsNil)
 }

@@ -710,7 +710,7 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if err != nil {
 		return err
 	}
-	if commodity.Type, err = resolver.resolve(w.ctx, commodity.Type); err != nil {
+	if commodity.Type, err = resolver.resolve(w.ctx, commodity.Type, w.stats); err != nil {
 		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("commodity_id", c.ID))
 	}
 
