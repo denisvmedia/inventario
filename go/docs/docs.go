@@ -3156,6 +3156,12 @@ const docTemplate = `{
                         "description": "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent",
                         "name": "lent_out",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true lists the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3485,6 +3491,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Filter by current loan state",
                         "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Count the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
                         "in": "query"
                     },
                     {
@@ -7112,6 +7124,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Commodities only: true = only items currently lent, false = only items not lent",
                         "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: true searches the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
                         "in": "query"
                     },
                     {

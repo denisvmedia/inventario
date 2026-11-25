@@ -4092,6 +4092,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent */
                     lent_out?: boolean;
+                    /** @description true lists the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                 };
                 header?: never;
                 path: {
@@ -4419,6 +4421,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Filter by current loan state */
                     lent_out?: boolean;
+                    /** @description Count the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                     /** @description Validated as for GET /commodities, then set aside for the counts */
                     tags?: string[];
                     /** @description Validated as for GET /commodities, then set aside for the counts */
@@ -8009,6 +8013,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Commodities only: true = only items currently lent, false = only items not lent */
                     lent_out?: boolean;
+                    /** @description Commodities only: true searches the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                     /** @description Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
                     sort?: string;
                 };

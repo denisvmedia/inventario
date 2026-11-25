@@ -55,6 +55,7 @@ type commoditiesAPI struct {
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
+// @Param trashed query bool false "true lists the items in Trash instead of the live ones (default false); cannot be combined with lent_out"
 // @Success 200 {object} jsonapi.CommoditiesResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/commodities [get].
@@ -116,6 +117,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state"
+// @Param trashed query bool false "Count the items in Trash instead of the live ones (default false); cannot be combined with lent_out"
 // @Param tags query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
 // @Param tag_mode query string false "Validated as for GET /commodities, then set aside for the counts" Enums(all,any)
 // @Param tags_exclude query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)

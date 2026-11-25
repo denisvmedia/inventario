@@ -128,6 +128,14 @@ func TestCommodityListSQL(t *testing.T) {
 			args: []any{[]string{"a", "b"}, 24, 0},
 		},
 		{
+			// The trash swaps the live-row predicate; it never adds to it.
+			name: "trashed items only",
+			opts: registry.CommodityListOptions{IncludeInactive: true, Trashed: true},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE deleted_at IS NOT NULL " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $1 OFFSET $2",
+			args: []any{24, 0},
+		},
+		{
 			// NULL and [] both read as "no tags".
 			name: "tag filter: untagged takes no argument",
 			opts: registry.CommodityListOptions{

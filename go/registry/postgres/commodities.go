@@ -427,8 +427,12 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		exprs = append(exprs, expr)
 	}
 
-	// Trashed items are never listed here; Trash has its own read.
-	add(liveRow)
+	// Live items, or with opts.Trashed the items in Trash; never both.
+	if opts.Trashed {
+		add(trashedRow)
+	} else {
+		add(liveRow)
+	}
 
 	// Default view: hide drafts unless caller asked to see them.
 	if !opts.IncludeInactive {

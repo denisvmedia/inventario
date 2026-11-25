@@ -374,7 +374,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 // reflects the filtered count, not the raw row count, so the client can
 // build a correct paginator.
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	all, err := r.List(ctx)
+	all, err := r.listCandidates(ctx, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -398,11 +398,20 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 
 // CountTags counts the tags of the commodities opts selects.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
-	all, err := r.List(ctx)
+	all, err := r.listCandidates(ctx, opts)
 	if err != nil {
 		return registry.CommodityTagCounts{}, err
 	}
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
+}
+
+// listCandidates returns the rows the filters of opts run over: the live
+// items, or with opts.Trashed the items in Trash.
+func (r *CommodityRegistry) listCandidates(ctx context.Context, opts registry.CommodityListOptions) ([]*models.Commodity, error) {
+	if opts.Trashed {
+		return r.trashedItems(func(*models.Commodity) bool { return true }), nil
+	}
+	return r.List(ctx)
 }
 
 // filterCommodities applies the predicate fields of opts in-memory. Empty

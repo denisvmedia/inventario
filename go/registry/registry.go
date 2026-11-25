@@ -216,6 +216,11 @@ type CommodityListOptions struct {
 	// the relationship in-database). Callers (the apiserver handler)
 	// populate this iff LentOut is non-nil.
 	OpenLoanCommodityIDs []string
+	// Trashed selects the items in Trash instead of the live ones; every
+	// other field filters them the same way. The loans of a trashed item
+	// are hidden, so a caller does not combine it with LentOut
+	// (services/commodityquery refuses the pair).
+	Trashed bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -307,8 +312,8 @@ func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
 // only — Get, List, Count, ListPaginated, GetMany — so a trashed item is absent
 // from lists, counts, search, reports, exports and reminders without each
 // caller filtering for it. The exceptions are named: ListByGroup and
-// BackfillAssetNumbers see trashed items too, and the *Trashed methods see
-// trashed items only. Update refuses a trashed item with ErrNotFound. Code that
+// BackfillAssetNumbers see trashed items too, and the *Trashed methods and
+// ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
 // queries the commodities table directly (a new worker, a report) has to apply
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
 type CommodityRegistry interface {

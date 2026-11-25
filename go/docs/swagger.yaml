@@ -7540,6 +7540,11 @@ paths:
         in: query
         name: lent_out
         type: boolean
+      - description: true lists the items in Trash instead of the live ones (default
+          false); cannot be combined with lent_out
+        in: query
+        name: trashed
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:
@@ -8642,6 +8647,11 @@ paths:
       - description: Filter by current loan state
         in: query
         name: lent_out
+        type: boolean
+      - description: Count the items in Trash instead of the live ones (default false);
+          cannot be combined with lent_out
+        in: query
+        name: trashed
         type: boolean
       - collectionFormat: multi
         description: Validated as for GET /commodities, then set aside for the counts
@@ -10278,6 +10288,11 @@ paths:
           only items not lent'
         in: query
         name: lent_out
+        type: boolean
+      - description: 'Commodities only: true searches the items in Trash instead of
+          the live ones (default false); cannot be combined with lent_out'
+        in: query
+        name: trashed
         type: boolean
       - description: 'Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count,
           prefix with ''-'' for descending'

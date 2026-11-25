@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -100,6 +101,43 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		c.Check(body, checkers.JSONPathMatches("$.data.tags", qt.HasLen), 0)
 	})
 
+	c.Run("trashed=true selects the items in Trash", func(c *qt.C) {
+		trashed := must.Must(commodityReg.Create(ctx, models.Commodity{
+			Name:                   "Hedge Shears",
+			ShortName:              "Shears",
+			Type:                   models.CommodityTypeOther,
+			OriginalPrice:          decimal.RequireFromString("5.00"),
+			OriginalPriceCurrency:  models.Currency("USD"),
+			ConvertedOriginalPrice: decimal.Zero,
+			CurrentPrice:           decimal.RequireFromString("5.00"),
+			Count:                  1,
+			Status:                 models.CommodityStatusInUse,
+			PurchaseDate:           models.ToPDate("2023-01-01"),
+			Tags:                   models.ValuerSlice[string]{"shed"},
+		}))
+		must.Must(commodityReg.Trash(ctx, trashed.ID, testUser.ID, time.Now()))
+
+		for _, path := range []string{"/commodities?q=hedge", "/search?type=commodities&q=hedge"} {
+			code, body := get(c, path)
+			c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+			c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1, qt.Commentf("GET %s", path))
+			c.Check(body, checkers.JSONPathEquals("$.data[0].id"), target.ID, qt.Commentf("GET %s", path))
+
+			code, body = get(c, path+"&trashed=true&tags=shed")
+			c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+			c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1, qt.Commentf("GET %s in Trash", path))
+			c.Check(body, checkers.JSONPathEquals("$.data[0].id"), trashed.ID, qt.Commentf("GET %s in Trash", path))
+		}
+
+		code, body := get(c, "/commodities/tag-counts?q=shears")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data.tags", qt.HasLen), 0)
+
+		code, body = get(c, "/commodities/tag-counts?q=shears&trashed=true")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathEquals("$.data.tags.shed"), float64(1))
+	})
+
 	c.Run("a list without q carries no matches", func(c *qt.C) {
 		code, body := get(c, "/commodities")
 		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
@@ -120,6 +158,7 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		{"search refuses a value it cannot decode", "/search?type=commodities&q=x&lent_out=%G1", "lent_out"},
 		{"list refuses an unreadable flag", "/commodities?unassigned=invalid", "unassigned"},
 		{"list refuses an unknown tag mode without tags", "/commodities?tag_mode=some", "tag_mode"},
+		{"list refuses lent_out in the trash", "/commodities?trashed=true&lent_out=true", "lent_out"},
 	} {
 		c.Run(tc.name, func(c *qt.C) {
 			code, body := get(c, tc.path)
