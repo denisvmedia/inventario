@@ -61,7 +61,8 @@ var (
 //  2. For each PRIVATE group, run GroupPurgeService.purgeGroup (blobs ->
 //     GroupPurger -> invites -> location_groups row).
 //  3. UserPurger.PurgeUserDependents (auth/identity + memberships + per-user rows
-//     + the user's group_invites_audit references).
+//     + the user's group_invites_audit references + the item reminders the
+//     user created, which email only their author).
 //  4. UserRegistry.Delete. A foreign-key violation here (SQLSTATE 23503) means a
 //     concurrent request re-created user-owned content after the pre-check (a
 //     TOCTOU race) -> ErrAccountStillOwnsContent. Any other error -> 500.

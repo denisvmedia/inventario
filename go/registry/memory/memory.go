@@ -166,6 +166,8 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupMembershipRegistry,
 		fs.SystemAdminGrantRegistry,
 		fs.GroupInviteAuditRegistry,
+		commodityReminderFactory,
+		fs.CommodityReminderSendRegistry,
 	)
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request

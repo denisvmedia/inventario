@@ -68,7 +68,9 @@ A couple of things to know:
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
   and if you still own items shared inside a group someone else owns, those need
-  to be removed first. Once deletion succeeds you're signed out immediately.
+  to be removed first. Item reminders you set in a shared group are deleted
+  with your account, since they only ever emailed you. Once deletion succeeds
+  you're signed out immediately.
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).
