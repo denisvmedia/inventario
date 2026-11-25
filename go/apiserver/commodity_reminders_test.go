@@ -106,8 +106,11 @@ func TestCommodityReminders_RejectsInvalidInput(t *testing.T) {
 		{name: "bad date", attrs: `"title":"x","due_on":"01/01/2027","remind_days_before":[1]`},
 		{name: "no lead times", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[]`},
 		{name: "lead time too large", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[366]`},
-		{name: "unknown repeat", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[1],"repeat_unit":"hourly"}`},
+		{name: "unknown repeat", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[1],"repeat_unit":"hourly"`},
 		{name: "interval too large", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[1],"repeat_unit":"day","repeat_interval":1000`},
+		{name: "year typo", attrs: `"title":"x","due_on":"0226-01-01","remind_days_before":[1]`},
+		{name: "year after 2200", attrs: `"title":"x","due_on":"2201-01-01","remind_days_before":[1]`},
+		{name: "lead time not shorter than the repeat", attrs: `"title":"x","due_on":"2027-01-01","remind_days_before":[7],"repeat_unit":"week","repeat_interval":1`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {

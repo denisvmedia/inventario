@@ -119,9 +119,11 @@
     "windowYear": "Příštích 12 měsíců"
   },
   "validation": {
+    "dateRange": "Vyberte datum mezi lety 1900 a 2200.",
     "dateRequired": "Zvolte datum.",
     "intervalRange": "Zadejte celé číslo od 1 do 999.",
     "leadTimesDuplicate": "Každá hodnota smí být uvedena jen jednou.",
+    "leadTimesExceedRepeat": "Každá hodnota musí být kratší než interval opakování. Měsíc se počítá jako 28 dní a rok jako 365.",
     "leadTimesInvalid": "Zadejte celá čísla oddělená čárkami.",
     "leadTimesRange": "Každá hodnota musí být od 0 do 365.",
     "leadTimesRequired": "Zadejte alespoň jednu hodnotu.",

@@ -30,6 +30,8 @@ export const REMINDER_TITLE_MAX = 200
 export const REMINDER_MAX_LEAD_DAYS = 365
 export const REMINDER_MAX_LEAD_TIMES = 5
 export const REMINDER_MAX_INTERVAL = 999
+export const REMINDER_MIN_YEAR = 1900
+export const REMINDER_MAX_YEAR = 2200
 
 interface ReminderListEnvelope {
   data?: Reminder[]
