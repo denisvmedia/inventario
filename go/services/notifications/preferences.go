@@ -12,6 +12,7 @@ package notifications
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"sync"
 
@@ -491,4 +492,63 @@ func (c *Cache) lookup(ctx context.Context, user *models.User) (models.SettingsO
 	settings, ok := c.svc.fetchSettings(ctx, user)
 	c.entries.inner.Store(user.ID, &cacheEntry{settings: settings, ok: ok})
 	return settings, ok
+}
+
+// WarrantyLeadTimes returns the recipient's warranty lead times, largest
+// first, or models.DefaultWarrantyLeadTimes when they are unset or cannot
+// be read (#2805). A nil Cache returns the defaults, so callers without a
+// preferences service need no special case.
+func (c *Cache) WarrantyLeadTimes(ctx context.Context, user *models.User) []int {
+	return c.leadTimes(ctx, user, func(s models.SettingsObject) []int { return s.NotificationsWarrantyLeadTimes }, models.DefaultWarrantyLeadTimes)
+}
+
+// MaintenanceLeadTimes is WarrantyLeadTimes for maintenance reminders. The
+// overdue reminder is not part of the list.
+func (c *Cache) MaintenanceLeadTimes(ctx context.Context, user *models.User) []int {
+	return c.leadTimes(ctx, user, func(s models.SettingsObject) []int { return s.NotificationsMaintenanceLeadTimes }, models.DefaultMaintenanceLeadTimes)
+}
+
+// LoanLeadTime returns the recipient's loan lead time and true, or false
+// when it is unset, out of range or unreadable, so the caller applies the
+// server-wide default.
+func (c *Cache) LoanLeadTime(ctx context.Context, user *models.User) (int, bool) {
+	if c == nil || user == nil || user.ID == "" {
+		return 0, false
+	}
+	settings, ok := c.lookup(ctx, user)
+	if !ok || settings.NotificationsLoanLeadTime == nil {
+		return 0, false
+	}
+	days := *settings.NotificationsLoanLeadTime
+	if days < 1 || days > models.LoanReminderMaxLeadDays {
+		return 0, false
+	}
+	return days, true
+}
+
+// leadTimes reads one lead-time list through the cache. Stored values are
+// checked again here, because a row written before a limit changed should
+// not make the worker send at a nonsensical offset: values outside 1 to
+// models.ReminderMaxLeadDays are dropped, duplicates are removed, and an
+// empty result falls back to the defaults.
+func (c *Cache) leadTimes(ctx context.Context, user *models.User, pick func(models.SettingsObject) []int, defaults func() []int) []int {
+	if c == nil || user == nil || user.ID == "" {
+		return defaults()
+	}
+	settings, ok := c.lookup(ctx, user)
+	if !ok {
+		return defaults()
+	}
+	out := make([]int, 0, len(pick(settings)))
+	for _, d := range pick(settings) {
+		if d >= 1 && d <= models.ReminderMaxLeadDays && !slices.Contains(out, d) {
+			out = append(out, d)
+		}
+	}
+	if len(out) == 0 {
+		return defaults()
+	}
+	slices.Sort(out)
+	slices.Reverse(out)
+	return out
 }

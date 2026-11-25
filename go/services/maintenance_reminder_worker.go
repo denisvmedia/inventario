@@ -11,7 +11,6 @@ package services
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
@@ -25,13 +24,13 @@ const defaultMaintenanceReminderInterval = 1 * time.Hour
 
 // Prometheus counters for the maintenance reminder worker (#1368).
 // Labels:
-//   - threshold: "14", "7", "1", "0" — matches
-//     MaintenanceReminderThreshold's int value. "0" is the overdue
-//     sentinel.
+//   - threshold: "14", "7" or "1" for the default lead times, "0" for
+//     the overdue sentinel, "custom" for any lead time a user chose
+//     instead (#2805). See MaintenanceReminderThreshold.MetricLabel.
 var (
 	maintenanceRemindersSentTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "inventario_maintenance_reminders_sent_total",
-		Help: "Number of maintenance reminder emails enqueued, partitioned by threshold (14/7/1 days remaining, or 0 for overdue).",
+		Help: "Number of maintenance reminder emails enqueued, partitioned by threshold (14/7/1 days for the defaults, custom for user-chosen lead times, 0 for overdue).",
 	}, []string{"threshold"})
 	maintenanceReminderFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "inventario_maintenance_reminder_failures_total",
@@ -163,7 +162,7 @@ func (w *MaintenanceReminderWorker) tick(ctx context.Context) {
 	for threshold, count := range stats.SentByThreshold {
 		if count > 0 {
 			maintenanceRemindersSentTotal.
-				WithLabelValues(strconv.Itoa(int(threshold))).
+				WithLabelValues(threshold.MetricLabel()).
 				Add(float64(count))
 		}
 	}

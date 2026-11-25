@@ -252,6 +252,7 @@ type Params struct {
 	TrashRetention             time.Duration
 	DebugInfo                  *debug.Info
 	StartTime                  time.Time
+	LoanReminderDueSoonDays    int                                // --loan-reminder-due-soon-days, reported by /system (#2805)
 	JWTSecret                  []byte                             // JWT secret for user authentication
 	FileSigningKey             []byte                             // File signing key for secure file URLs
 	BackupSigner               *backupsign.Signer                 // Ed25519 signer for .inb backup archives (#534)
@@ -804,7 +805,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Note: RegistrySetMiddleware creates user-aware registries and adds them to context.
 		// System requires a settings registry.
 		// Non-group-scoped routes (system, debug, users, groups management)
-		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime))
+		r.With(userMiddlewares...).Route("/system", System(params.DebugInfo, params.StartTime, params.LoanReminderDueSoonDays))
 		// GET /debug moved to /admin/debug behind the back-office plane
 		// (issue #2113, L-4): it leaks operational config (storage/db driver,
 		// OS) and must not be readable by an ordinary tenant user. Wired into

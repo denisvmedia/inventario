@@ -12251,6 +12251,13 @@ export type components = {
             debug?: boolean;
             file_storage_backend?: string;
             go_version?: string;
+            /**
+             * @description LoanReminderDueSoonDays is the server-wide default for how many days
+             *     before the due date the loan reminder goes out
+             *     (--loan-reminder-due-soon-days). A user's
+             *     notifications.loan_lead_time setting replaces it for them.
+             */
+            loan_reminder_due_soon_days?: number;
             memory_usage?: string;
             num_cpu?: number;
             num_goroutines?: number;
@@ -15335,7 +15342,9 @@ export type components = {
             notificationsChannelEmail?: boolean;
             notificationsChannelPush?: boolean;
             notificationsItemReminder?: boolean;
+            notificationsLoanLeadTime?: number;
             notificationsLoanReminder?: boolean;
+            notificationsMaintenanceLeadTimes?: number[];
             notificationsMaintenanceReminder?: boolean;
             notificationsPriceDrop?: boolean;
             /**
@@ -15345,6 +15354,13 @@ export type components = {
              *     never consult these and so cannot be opted out.
              */
             notificationsWarrantyExpiry?: boolean;
+            /**
+             * @description Lead times for the built-in reminders, in days before the date. Nil
+             *     means the defaults (see SettingNameNotificationsWarrantyLeadTimes).
+             *     The maintenance overdue reminder is not a lead time and always
+             *     applies.
+             */
+            notificationsWarrantyLeadTimes?: number[];
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;

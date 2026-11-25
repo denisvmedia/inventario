@@ -205,6 +205,18 @@ func (api *settingsAPI) patchSetting(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Range-check the value on a scratch object before storing it, so a
+	// reminder lead time of 0 or 400 days is refused here rather than
+	// stored and ignored by the worker. A value that does not fit the
+	// field at all fails in Patch below.
+	var probe models.SettingsObject
+	if err := probe.Set(field, value); err == nil {
+		if err := probe.ValidateWithContext(r.Context()); err != nil {
+			http.Error(w, err.Error(), http.StatusBadRequest)
+			return
+		}
+	}
+
 	// Patch the setting. Registry returns ErrInvalidSettingName for unknown
 	// fields — surface those as 400, not 500.
 	if err := settingsRegistry.Patch(r.Context(), field, value); err != nil {
