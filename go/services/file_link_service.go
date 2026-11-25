@@ -46,9 +46,11 @@ func NewFileLinkService(factorySet *registry.FactorySet) *FileLinkService {
 // through the caller's group-scoped registries, so a file can only be attached
 // to an entity in its own group. An empty meta picks the bucket from the file's
 // category. Attaching a file to an entity it is already attached to returns the
-// existing link with created=false.
+// existing link with created=false. A file can be attached to an open draft
+// (#2812) like to an item; the link moves to the item when the draft is
+// promoted.
 func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entityID, meta string) (*models.FileEntity, bool, error) {
-	if !models.IsOrdinaryFileLinkType(entityType) {
+	if !models.IsAttachableFileLinkType(entityType) {
 		return nil, false, errxtrace.Classify(ErrFileLinkInvalid, errx.Attrs("entity_type", entityType))
 	}
 	if entityID == "" {
@@ -130,12 +132,32 @@ func (s *FileLinkService) requireTarget(ctx context.Context, entityType, entityI
 		if reg, err = s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx); err == nil {
 			_, err = reg.Get(ctx, entityID)
 		}
+	case models.FileLinkDraft:
+		err = s.requireOpenDraft(ctx, entityID)
 	}
 	if errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Classify(ErrFileLinkTargetNotFound, errx.Attrs("entity_type", entityType, "entity_id", entityID))
 	}
 	if err != nil {
 		return errxtrace.Wrap("failed to look up the attachment target", err)
+	}
+	return nil
+}
+
+// requireOpenDraft checks that the draft exists and has not been promoted.
+// A promoted draft has handed its files to the item, so a late attachment
+// would link a file to a draft nobody can open any more.
+func (s *FileLinkService) requireOpenDraft(ctx context.Context, id string) error {
+	reg, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return err
+	}
+	draft, err := reg.Get(ctx, id)
+	if err != nil {
+		return err
+	}
+	if !draft.IsOpen() {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", models.FileLinkDraft, "entity_id", id))
 	}
 	return nil
 }

@@ -154,6 +154,10 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.CommodityReminderRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityReminder])
 		}},
+		{"commodity_drafts", func() error {
+			reg := fs.CommodityDraftRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityDraft])
+		}},
 		// Commodity sub-resources before commodities.
 		{"commodity_supply_links", func() error {
 			reg := fs.SupplyLinkRegistryFactory.CreateServiceRegistry()

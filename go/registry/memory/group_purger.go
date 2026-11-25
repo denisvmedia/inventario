@@ -36,6 +36,7 @@ type GroupPurger struct {
 	maintenanceReminders registry.MaintenanceReminderRegistry
 	reminders            registry.CommodityReminderRegistryFactory
 	reminderSends        registry.CommodityReminderSendRegistry
+	drafts               registry.CommodityDraftRegistryFactory
 	currencyMigrations   registry.CurrencyMigrationRegistryFactory
 	notificationPrefs    registry.GroupNotificationPrefRegistry
 	memberships          registry.GroupMembershipRegistry
@@ -64,6 +65,7 @@ func NewGroupPurger(
 	maintenanceReminders registry.MaintenanceReminderRegistry,
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
+	drafts registry.CommodityDraftRegistryFactory,
 	currencyMigrations registry.CurrencyMigrationRegistryFactory,
 	notificationPrefs registry.GroupNotificationPrefRegistry,
 	memberships registry.GroupMembershipRegistry,
@@ -87,6 +89,7 @@ func NewGroupPurger(
 		maintenanceReminders: maintenanceReminders,
 		reminders:            reminders,
 		reminderSends:        reminderSends,
+		drafts:               drafts,
 		currencyMigrations:   currencyMigrations,
 		notificationPrefs:    notificationPrefs,
 		memberships:          memberships,
@@ -180,6 +183,11 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		}},
 		{"commodity_reminders", func() error {
 			reg := r.reminders.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Drafts (#2812), as in the postgres purger.
+		{"commodity_drafts", func() error {
+			reg := r.drafts.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Currency-migration audit rows (#2095) dropped before the migration

@@ -5118,6 +5118,319 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/drafts": {
+            "get": {
+                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count,\nsearch or export.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "List drafts",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Drafts per page (at most 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "Create a draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Draft",
+                        "name": "draft",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A draft with this client key already exists",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Draft created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/drafts/{draftID}": {
+            "get": {
+                "description": "One draft with its values and revision. A promoted draft is returned too, with\nits values cleared and the id of the item it became. Its files are listed by GET\n/g/{groupSlug}/files?linked_entity_type=draft\u0026linked_entity_id={draftID}.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "Get a draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Draft ID",
+                        "name": "draftID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Draft not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "put": {
+                "description": "Replace the values of an open draft. revision is the revision the values were\nbased on; the response carries the next one. A save based on an older revision\nis refused with 409 draft.revision_conflict and the current revision in meta, so\na stale tab cannot overwrite newer input. A promoted draft answers 409\ndraft.promoted.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "Save a draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Draft ID",
+                        "name": "draftID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Values and revision",
+                        "name": "draft",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftSaveRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Saved",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Draft not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Stale revision or promoted draft",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete an open draft. Its files that nothing else uses go to Trash, where they\ncan be restored as standalone files until the Trash retention runs out; files\nattached elsewhere only lose the link to the draft. A promoted draft answers 409\ndraft.promoted.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "Discard a draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Draft ID",
+                        "name": "draftID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Discarded"
+                    },
+                    "404": {
+                        "description": "Draft not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Promoted draft",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/drafts/{draftID}/promote": {
+            "post": {
+                "description": "Create the item from the finished form and move the draft's files to it, in one\nstep. The body is the item as for POST /g/{groupSlug}/commodities, validated the\nsame way, and meta.revision is the draft revision it was based on (409\ndraft.revision_conflict when it is stale). Promoting a draft that is already\npromoted creates nothing and returns the item it became with 200, so a retry\nafter a lost response is safe; when that item no longer exists the answer is 409\ndraft.promoted.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "drafts"
+                ],
+                "summary": "Finish a draft",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Draft ID",
+                        "name": "draftID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Finished item and draft revision",
+                        "name": "commodity",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftPromoteRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The draft was already promoted to this item",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Item created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Draft not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Stale revision, or the item the draft became is gone",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/exports": {
             "get": {
                 "description": "get exports",
@@ -11820,6 +12133,208 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityDraftCreateAttributes": {
+            "type": "object",
+            "properties": {
+                "client_key": {
+                    "type": "string",
+                    "example": "5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"
+                },
+                "values": {
+                    "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftCreateAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_drafts"
+                    ],
+                    "example": "commodity_drafts"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftPromoteMeta": {
+            "type": "object",
+            "properties": {
+                "revision": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.CommodityDraftPromoteRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftPromoteMeta"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftResponseData"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_drafts"
+                    ],
+                    "example": "commodity_drafts"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftSaveAttributes": {
+            "type": "object",
+            "properties": {
+                "revision": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "values": {
+                    "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftSaveRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftSaveRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftSaveRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftSaveAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_drafts"
+                    ],
+                    "example": "commodity_drafts"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftView": {
+            "type": "object",
+            "properties": {
+                "client_key": {
+                    "description": "ClientKey identifies the draft for the client that created it; unique\nin the group.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "file_count": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "id": {
+                    "type": "string"
+                },
+                "promoted_at": {
+                    "type": "string"
+                },
+                "promoted_commodity_id": {
+                    "description": "PromotedCommodityID is the item the draft became. The item can be\ndeleted later, so there is no foreign key.",
+                    "type": "string"
+                },
+                "revision": {
+                    "description": "Revision starts at 1 and increases with every save and the promotion.",
+                    "type": "integer"
+                },
+                "status": {
+                    "description": "Status is open until the draft is promoted.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.CommodityDraftStatus"
+                        }
+                    ]
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Cordless drill"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "values": {
+                    "description": "Values is the form state as entered.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.CommodityDraftValues"
+                        }
+                    ]
+                }
+            }
+        },
+        "jsonapi.CommodityDraftsMeta": {
+            "type": "object",
+            "properties": {
+                "drafts": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.CommodityDraftsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityDraftView"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftsMeta"
+                }
+            }
+        },
         "jsonapi.CommodityEventActor": {
             "type": "object",
             "properties": {
@@ -13286,7 +13801,8 @@ const docTemplate = `{
                     "enum": [
                         "commodity",
                         "location",
-                        "area"
+                        "area",
+                        "draft"
                     ],
                     "example": "commodity"
                 },
@@ -15468,6 +15984,21 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.CommodityDraftStatus": {
+            "type": "string",
+            "enum": [
+                "open",
+                "promoted"
+            ],
+            "x-enum-varnames": [
+                "CommodityDraftOpen",
+                "CommodityDraftPromoted"
+            ]
+        },
+        "models.CommodityDraftValues": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "models.CommodityEventKind": {
             "type": "string",

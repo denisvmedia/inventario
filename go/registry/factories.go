@@ -90,6 +90,13 @@ type CommodityReminderRegistryFactory interface {
 	ServiceRegistryFactory[models.CommodityReminder, CommodityReminderRegistry]
 }
 
+// CommodityDraftRegistryFactory creates CommodityDraftRegistry instances
+// with proper context (#2812).
+type CommodityDraftRegistryFactory interface {
+	UserRegistryFactory[models.CommodityDraft, CommodityDraftRegistry]
+	ServiceRegistryFactory[models.CommodityDraft, CommodityDraftRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -183,6 +190,7 @@ type FactorySet struct {
 	SupplyLinkRegistryFactory             SupplyLinkRegistryFactory
 	MaintenanceScheduleRegistryFactory    MaintenanceScheduleRegistryFactory
 	CommodityReminderRegistryFactory      CommodityReminderRegistryFactory
+	CommodityDraftRegistryFactory         CommodityDraftRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -314,31 +322,6 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
-	commodityLoanRegistry, err := fs.CommodityLoanRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	commodityServiceRegistry, err := fs.CommodityServiceRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	supplyLinkRegistry, err := fs.SupplyLinkRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	maintenanceScheduleRegistry, err := fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	commodityReminderRegistry, err := fs.CommodityReminderRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -369,7 +352,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
-	return &Set{
+	set := &Set{
 		LocationRegistry:               locationRegistry,
 		AreaRegistry:                   areaRegistry,
 		CommodityRegistry:              commodityRegistry,
@@ -380,11 +363,6 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		RestoreStepRegistry:            restoreStepRegistry,
 		FileRegistry:                   fileRegistry,
 		TagRegistry:                    tagRegistry,
-		CommodityLoanRegistry:          commodityLoanRegistry,
-		CommodityServiceRegistry:       commodityServiceRegistry,
-		SupplyLinkRegistry:             supplyLinkRegistry,
-		MaintenanceScheduleRegistry:    maintenanceScheduleRegistry,
-		CommodityReminderRegistry:      commodityReminderRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -412,7 +390,37 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
 		OAuthIdentityRegistry:          fs.OAuthIdentityRegistry,
 		WorkerControlRegistry:          fs.WorkerControlRegistry,
-	}, nil
+	}
+	if err := fs.addUserItemRegistries(ctx, set); err != nil {
+		return nil, err
+	}
+	return set, nil
+}
+
+// addUserItemRegistries adds the user-aware registries of the records kept
+// beside items to set: loans, services, supply links, maintenance schedules,
+// reminders and drafts.
+func (fs *FactorySet) addUserItemRegistries(ctx context.Context, set *Set) error {
+	var err error
+	if set.CommodityLoanRegistry, err = fs.CommodityLoanRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	if set.CommodityServiceRegistry, err = fs.CommodityServiceRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	if set.SupplyLinkRegistry, err = fs.SupplyLinkRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	if set.MaintenanceScheduleRegistry, err = fs.MaintenanceScheduleRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	if set.CommodityReminderRegistry, err = fs.CommodityReminderRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	if set.CommodityDraftRegistry, err = fs.CommodityDraftRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	return nil
 }
 
 // CreateServiceRegistrySet creates a complete set of service-aware registries from factories
@@ -433,6 +441,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		SupplyLinkRegistry:             fs.SupplyLinkRegistryFactory.CreateServiceRegistry(),
 		MaintenanceScheduleRegistry:    fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry(),
 		CommodityReminderRegistry:      fs.CommodityReminderRegistryFactory.CreateServiceRegistry(),
+		CommodityDraftRegistry:         fs.CommodityDraftRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),

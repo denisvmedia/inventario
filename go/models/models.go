@@ -195,7 +195,7 @@ var ValidFileCategories = []FileCategory{
 // scan of a receipt, matching the mock's tile semantics.
 func FileCategoryFromContext(linkedEntityType, linkedEntityMeta, mimeType string) FileCategory {
 	switch linkedEntityType {
-	case "commodity":
+	case "commodity", "draft":
 		switch linkedEntityMeta {
 		case "images":
 			return FileCategoryImages

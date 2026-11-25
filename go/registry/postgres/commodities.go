@@ -96,7 +96,25 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
+	requestedAssetNumber := prepareNewCommodity(ctx, &commodity)
 
+	reg := r.newSQLRegistry()
+
+	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
+		return prepareNewCommodityInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, row, requestedAssetNumber)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create commodity", err)
+	}
+
+	return &createdCommodity, nil
+}
+
+// prepareNewCommodity applies the rules every new item gets before it is
+// stored, and returns the asset number a backup restore asks for (0 for
+// none). CommodityRegistry.Create and CommodityDraftRegistry.Promote both
+// create items through it.
+func prepareNewCommodity(ctx context.Context, commodity *models.Commodity) int {
 	// Acquisition columns are server-managed (issue #1550 / #202): drop any
 	// value the API caller smuggled in. The only legitimate writers are the
 	// migration worker (via go/registry/internal/migrationops, NULL→value once)
@@ -118,7 +136,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeAreaID()
 
 	// Every row written now tells an unknown price from a zero one.
-	registry.NormalizeCommodityPrices(ctx, &commodity)
+	registry.NormalizeCommodityPrices(ctx, commodity)
 	commodity.LegacyZeroPrices = false
 
 	// The trash columns belong to Trash and Restore; a new item is live.
@@ -128,35 +146,32 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// dropped and the number is assigned inside the insert transaction.
 	// Only the backup restore may ask for a specific (archived) number.
 	commodity.AssetNumber = nil
-	requestedAssetNumber, _ := registry.RestoreAssetNumberFromContext(ctx)
+	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
+	return requested
+}
 
-	reg := r.newSQLRegistry()
-
-	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
-		// Taken first: every lock this transaction acquires after it
-		// (tag rows) is one that no holder of a commodity row lock waits
-		// for while holding it, so the order cannot deadlock with Update
-		// or the backfill.
-		if err := assignAssetNumberInTx(ctx, tx, r.tableNames.Commodities(), row, requestedAssetNumber); err != nil {
+// prepareNewCommodityInTx runs the steps of creating an item that belong in
+// the insert transaction: the asset number, the area check and the tag rows.
+// row already carries its ids, tenant, group and author.
+func prepareNewCommodityInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, row *models.Commodity, requestedAssetNumber int) error {
+	// Taken first: every lock this transaction acquires after it
+	// (tag rows) is one that no holder of a commodity row lock waits
+	// for while holding it, so the order cannot deadlock with Update
+	// or the backfill.
+	if err := assignAssetNumberInTx(ctx, tx, tableNames.Commodities(), row, requestedAssetNumber); err != nil {
+		return err
+	}
+	// Area is optional (issue #1986): only verify it exists when set.
+	if row.AreaID != nil && *row.AreaID != "" {
+		if _, err := getAreaInTx(ctx, tx, tableNames, *row.AreaID); err != nil {
 			return err
 		}
-		// Area is optional (issue #1986): only verify it exists when set.
-		if commodity.AreaID != nil && *commodity.AreaID != "" {
-			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
-				return err
-			}
-		}
-		// Auto-create / row-lock referenced tag rows inside this same tx
-		// so a concurrent DeleteTag(force=true) on one of these slugs
-		// can't leave us with an orphan JSONB reference at commit. See
-		// ensureTagRowsInTx in tags.go for the full lock invariant.
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindCommodity, []string(commodity.Tags))
-	})
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create commodity", err)
 	}
-
-	return &createdCommodity, nil
+	// Auto-create / row-lock referenced tag rows inside this same tx
+	// so a concurrent DeleteTag(force=true) on one of these slugs
+	// can't leave us with an orphan JSONB reference at commit. See
+	// ensureTagRowsInTx in tags.go for the full lock invariant.
+	return ensureTagRowsInTx(ctx, tx, tableNames, tenantID, groupID, userID, models.TagKindCommodity, []string(row.Tags))
 }
 
 func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models.Commodity, error) {
@@ -837,8 +852,13 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 }
 
 func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID string) (*models.Area, error) {
+	return getAreaInTx(ctx, tx, r.tableNames, areaID)
+}
+
+// getAreaInTx reads an area in tx; ErrNotFound when it is not visible.
+func getAreaInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, areaID string) (*models.Area, error) {
 	var area models.Area
-	areaReg := store.NewTxRegistry[models.Area](tx, r.tableNames.Areas())
+	areaReg := store.NewTxRegistry[models.Area](tx, tableNames.Areas())
 	err := areaReg.ScanOneByField(ctx, store.Pair("id", areaID), &area)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get area", err)

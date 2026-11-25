@@ -152,4 +152,15 @@ var (
 	// decide whether to issue a 501 (MFAEnforced=true, no secret) vs.
 	// a MFA challenge (MFAEnforced=true, secret present).
 	ErrBackofficeMFASecretNotFound = errx.NewSentinel("backoffice MFA secret not found", ErrNotFound)
+
+	// ErrDraftRevisionConflict is returned when a draft save or promotion
+	// names a revision other than the draft's current one: another tab or
+	// device saved the draft in between. The handler maps it to 409 with
+	// the current revision so the client can reload instead of overwriting
+	// newer input (#2812).
+	ErrDraftRevisionConflict = errx.NewSentinel("the draft was changed by another save")
+
+	// ErrDraftPromoted is returned when a save or a discard reaches a draft
+	// that has already become an item (#2812).
+	ErrDraftPromoted = errx.NewSentinel("the draft has already been turned into an item")
 )

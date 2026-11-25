@@ -8,6 +8,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/postgres/store"
 )
@@ -32,7 +33,10 @@ var _ registry.UserPurger = (*UserPurger)(nil)
 //     NO ACTION, so they must be cleared here or the final users delete is
 //     rejected (#2147). Also the item reminders the user created and their
 //     send records (#2805): a reminder emails only its author, so it is
-//     personal even in a shared group.
+//     personal even in a shared group. And the drafts the user created
+//     (#2812): unfinished work leaves with its author; the links other
+//     members' files had to those drafts go first, so the files become
+//     standalone instead of pointing at a missing draft.
 //   - SET NULL the authorship back-refs that are NULLABLE: login_events.user_id
 //     (already nulled by the DELETE-by-user above — see note), and
 //     system_admin_grants.granted_by (the *operator* who granted someone else's
@@ -190,6 +194,12 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			return err
 		}
 
+		// Drafts (#2812) the user created, after the links to them.
+		// created_by_user_id is a NOT NULL FK -> users(id) with NO ACTION.
+		if err := r.purgeCommodityDrafts(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
+
 		// system_admin_grants is NON-RLS and carries NO tenant_id column, so it
 		// can't ride the tenant_id template. Two FKs point at users(id):
 		//   user_id    -> ON DELETE CASCADE (the granted user) — DELETE the row.
@@ -221,6 +231,28 @@ func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tx *sqlx.Tx, t
 				errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
 			)
 		}
+	}
+	return nil
+}
+
+// purgeCommodityDrafts deletes the drafts the user created and every file
+// link to them. The files stay: a file is content and is handled by the
+// content ownership check, not here.
+func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	drafts := string(r.tableNames.CommodityDrafts())
+	links := fmt.Sprintf(`
+		DELETE FROM %s
+		WHERE entity_type = $1 AND entity_id IN (
+			SELECT id FROM %s WHERE tenant_id = $2 AND created_by_user_id = $3
+		)`, r.tableNames.FileLinks(), drafts)
+	if _, err := tx.ExecContext(ctx, links, models.FileLinkDraft, tenantID, userID); err != nil {
+		return errxtrace.Wrap("failed to purge the links to the user's drafts", err,
+			errx.Attrs("tenant_id", tenantID, "user_id", userID))
+	}
+	query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", drafts)
+	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		return errxtrace.Wrap("failed to purge the user's drafts", err,
+			errx.Attrs("table", drafts, "tenant_id", tenantID, "user_id", userID))
 	}
 	return nil
 }

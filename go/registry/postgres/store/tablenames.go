@@ -42,6 +42,7 @@ type TableNames struct {
 	MaintenanceReminders     func() TableName
 	CommodityReminders       func() TableName
 	CommodityReminderSends   func() TableName
+	CommodityDrafts          func() TableName
 	CurrencyMigrations       func() TableName
 	CurrencyMigrationAudit   func() TableName
 	CommodityScanAudits      func() TableName
@@ -93,6 +94,7 @@ var DefaultTableNames = TableNames{
 	MaintenanceReminders:     func() TableName { return "maintenance_reminders" },
 	CommodityReminders:       func() TableName { return "commodity_reminders" },
 	CommodityReminderSends:   func() TableName { return "commodity_reminder_sends" },
+	CommodityDrafts:          func() TableName { return "commodity_drafts" },
 	CurrencyMigrations:       func() TableName { return "currency_migrations" },
 	CurrencyMigrationAudit:   func() TableName { return "currency_migration_audit_rows" },
 	CommodityScanAudits:      func() TableName { return "commodity_scan_audits" },

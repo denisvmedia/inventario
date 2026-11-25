@@ -1118,11 +1118,14 @@ func (s *ExportService) streamFiles(
 // legacyXMLLink is the one link a legacy XML file element can carry: the
 // file's first link, or none for a standalone file. The legacy format has a
 // single link per file, so the other links of a shared file are not written.
+// Links to drafts do not count: a backup has no drafts, so a file linked
+// only to drafts is written as a standalone file.
 func legacyXMLLink(file *models.FileEntity) models.FileLink {
-	if len(file.Links) == 0 {
+	links := exportedFileLinks(file.Links)
+	if len(links) == 0 {
 		return models.FileLink{}
 	}
-	return file.Links[0]
+	return links[0]
 }
 
 // shouldEmitFile is the cheap-pre-resolve filter for streamFiles: returns

@@ -5,6 +5,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
 
@@ -49,6 +50,8 @@ type UserPurger struct {
 	inviteAudit   registry.GroupInviteAuditRegistry
 	reminders     registry.CommodityReminderRegistryFactory
 	reminderSends registry.CommodityReminderSendRegistry
+	drafts        registry.CommodityDraftRegistryFactory
+	files         registry.FileRegistryFactory
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -66,6 +69,8 @@ func NewUserPurger(
 	inviteAudit registry.GroupInviteAuditRegistry,
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
+	drafts registry.CommodityDraftRegistryFactory,
+	files registry.FileRegistryFactory,
 ) *UserPurger {
 	return &UserPurger{
 		refreshTokens: refreshTokens,
@@ -80,6 +85,8 @@ func NewUserPurger(
 		inviteAudit:   inviteAudit,
 		reminders:     reminders,
 		reminderSends: reminderSends,
+		drafts:        drafts,
+		files:         files,
 	}
 }
 
@@ -114,6 +121,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
+		{"commodity_drafts", func() error { return r.purgeCommodityDrafts(ctx, tenantID, userID) }},
 		// System-admin grant the user HOLDS. RevokeAtomic(allowZero=true)
 		// removes it idempotently. The granted_by back-ref is nulled only on
 		// the postgres side; the memory grant registry has no granted_by index
@@ -225,6 +233,33 @@ func (r *UserPurger) purgeMemberships(ctx context.Context, tenantID, userID stri
 			continue
 		}
 		if err := r.memberships.Delete(ctx, m.GetID()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeCommodityDrafts deletes the drafts the user created and the file
+// links to them (#2812), the same rows the postgres purger removes.
+func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tenantID, userID string) error {
+	if r.drafts == nil {
+		return nil
+	}
+	reg := r.drafts.CreateServiceRegistry()
+	all, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, draft := range all {
+		if draft == nil || draft.TenantID != tenantID || draft.CreatedByUserID != userID {
+			continue
+		}
+		if r.files != nil {
+			if _, err := r.files.CreateServiceRegistry().RemoveLinksToEntity(ctx, models.FileLinkDraft, draft.ID); err != nil {
+				return err
+			}
+		}
+		if err := reg.Delete(ctx, draft.ID); err != nil {
 			return err
 		}
 	}

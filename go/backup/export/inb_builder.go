@@ -324,7 +324,10 @@ func (b *inbBuilder) loadCommodities() ([]*models.Commodity, error) {
 // location-/area-linked and standalone files are collected for the dedicated
 // files member (issue #2235). A file with several links is routed once per
 // link. Export artifacts (files with an export link) are skipped — a backup
-// must never embed previous backups.
+// must never embed previous backups. Drafts (#2812) are not exported, so
+// their links are left out and a file linked only to drafts is exported as a
+// standalone file: its bytes survive a restore even though the draft does
+// not.
 //
 // Orphan rows (missing/unsized blob) are dropped in EVERY branch, so they never
 // reach a document or the statistics. That drop is mandatory: the restore side
@@ -350,13 +353,14 @@ func (b *inbBuilder) indexFiles() error {
 		}
 		// A blob probe that cannot determine a file's state aborts the export:
 		// an incomplete-but-successful backup is worse than a failed one.
-		if len(file.Links) == 0 {
+		links := exportedFileLinks(file.Links)
+		if len(links) == 0 {
 			if err := b.indexStandaloneFile(file); err != nil {
 				return err
 			}
 			continue
 		}
-		for _, link := range file.Links {
+		for _, link := range links {
 			var indexErr error
 			switch link.EntityType {
 			case models.FileLinkCommodity:
@@ -373,6 +377,18 @@ func (b *inbBuilder) indexFiles() error {
 		}
 	}
 	return nil
+}
+
+// exportedFileLinks returns the links a backup carries: every link except
+// the links to drafts, which a backup does not contain.
+func exportedFileLinks(links []models.FileLink) []models.FileLink {
+	out := make([]models.FileLink, 0, len(links))
+	for _, link := range links {
+		if link.EntityType != models.FileLinkDraft {
+			out = append(out, link)
+		}
+	}
+	return out
 }
 
 // cachedFileSize resolves a file's size once per export.

@@ -549,6 +549,10 @@ type FileRegistry interface {
 	// file_links, newest first.
 	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
 
+	// CountLinkedTo returns, for each of the entities of entityType, how many
+	// live files are linked to it. Entities without files are absent.
+	CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error)
+
 	// ListByLinkedEntityAndMeta returns the files whose link to the entity
 	// carries the given meta (bucket), newest first.
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
@@ -1272,6 +1276,59 @@ type CommodityReminderRegistry interface {
 	// ListByCommodity returns the reminders of one item, ordered by
 	// due_on ascending.
 	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityReminder, error)
+}
+
+// CommodityDraftRegistry is the group-scoped registry of commodity_drafts,
+// the unfinished items saved on the server (#2812). A draft is not an item:
+// no CommodityRegistry read returns it.
+//
+// List and Count see open and promoted drafts; ListOpen sees open drafts
+// only. A promoted draft keeps its row with the values cleared, so a
+// repeated create with its client key or a repeated promotion finds it.
+type CommodityDraftRegistry interface {
+	Registry[models.CommodityDraft]
+
+	// CreateOrGet stores a new open draft unless the group already has a
+	// draft with the same ClientKey, which is returned unchanged with
+	// created=false. The registry sets the ids, tenant, group, author,
+	// status, revision and timestamps.
+	CreateOrGet(ctx context.Context, draft models.CommodityDraft) (stored *models.CommodityDraft, created bool, err error)
+
+	// GetByClientKey returns the group's draft with the key; ErrNotFound
+	// when there is none.
+	GetByClientKey(ctx context.Context, clientKey string) (*models.CommodityDraft, error)
+
+	// ListOpen returns a page of the group's open drafts, most recently
+	// saved first, with the total.
+	ListOpen(ctx context.Context, offset, limit int) ([]*models.CommodityDraft, int, error)
+
+	// SaveValues replaces the values of an open draft and increments its
+	// revision. revision is the revision the values were based on:
+	// ErrDraftRevisionConflict when it is not the current one,
+	// ErrDraftPromoted when the draft is promoted, ErrNotFound when it does
+	// not exist.
+	SaveValues(ctx context.Context, id string, revision int, values models.CommodityDraftValues) (*models.CommodityDraft, error)
+
+	// Promote turns an open draft into an item in one step: it creates the
+	// item from commodity the way CommodityRegistry.Create does, moves the
+	// draft's file links to the item, and marks the draft promoted with its
+	// values cleared. Either all of it happens or none of it.
+	//
+	// It is idempotent: on a promoted draft it changes nothing and returns
+	// the draft with a nil Commodity, whatever revision says; the caller
+	// reads the item through PromotedCommodityID. On an open draft revision
+	// must be the current one (ErrDraftRevisionConflict). The caller
+	// validates the item and normalizes its tags beforehand.
+	Promote(ctx context.Context, id string, revision int, commodity models.Commodity) (DraftPromotion, error)
+}
+
+// DraftPromotion is the result of CommodityDraftRegistry.Promote.
+type DraftPromotion struct {
+	// Draft is the draft after the call, in the promoted state.
+	Draft *models.CommodityDraft
+	// Commodity is the item this call created. It is nil when the draft
+	// was promoted before the call.
+	Commodity *models.Commodity
 }
 
 // CommodityReminderSendRegistry records which reminder emails the worker
@@ -2781,6 +2838,7 @@ type Set struct {
 	SupplyLinkRegistry             SupplyLinkRegistry
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
+	CommodityDraftRegistry         CommodityDraftRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -2875,6 +2933,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
+		validation.Field(&s.CommodityDraftRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

@@ -886,6 +886,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// are viewer+, restores user+, deleting for good admin+.
 			migrationLock := requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})
 			r.With(migrationLock, contentWriteGate).Route("/commodities", Commodities(params))
+			// Drafts (#2812): promoting one creates an item, so the
+			// currency-migration lock applies as on /commodities.
+			r.With(migrationLock, contentWriteGate).Route("/drafts", Drafts(params))
 			r.With(contentWriteGate).Route("/files", Files(params))
 			r.With(contentWriteGate).Route("/tags", Tags(params))
 			r.With(contentWriteGate).Route("/loans", GroupLoans(params))

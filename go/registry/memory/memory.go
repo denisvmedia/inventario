@@ -28,6 +28,7 @@ func NewFactorySet() *registry.FactorySet {
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
+	commodityDraftFactory := NewCommodityDraftRegistryFactory(commodityFactory, fileFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -63,6 +64,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
 	fs.CommodityReminderRegistryFactory = commodityReminderFactory
+	fs.CommodityDraftRegistryFactory = commodityDraftFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -154,6 +156,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.MaintenanceReminderRegistry,
 		commodityReminderFactory,
 		fs.CommodityReminderSendRegistry,
+		commodityDraftFactory,
 		fs.CurrencyMigrationRegistryFactory,
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,
@@ -175,6 +178,8 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupInviteAuditRegistry,
 		commodityReminderFactory,
 		fs.CommodityReminderSendRegistry,
+		commodityDraftFactory,
+		fileFactory,
 	)
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request

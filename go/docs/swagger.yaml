@@ -1310,6 +1310,142 @@ definitions:
         example: commodities
         type: string
     type: object
+  jsonapi.CommodityDraftCreateAttributes:
+    properties:
+      client_key:
+        example: 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11
+        type: string
+      values:
+        type: object
+    type: object
+  jsonapi.CommodityDraftCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityDraftCreateRequestData'
+    type: object
+  jsonapi.CommodityDraftCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityDraftCreateAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_drafts
+        example: commodity_drafts
+        type: string
+    type: object
+  jsonapi.CommodityDraftPromoteMeta:
+    properties:
+      revision:
+        example: 3
+        type: integer
+    type: object
+  jsonapi.CommodityDraftPromoteRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityData'
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityDraftPromoteMeta'
+    type: object
+  jsonapi.CommodityDraftResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityDraftResponseData'
+    type: object
+  jsonapi.CommodityDraftResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityDraftView'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_drafts
+        example: commodity_drafts
+        type: string
+    type: object
+  jsonapi.CommodityDraftSaveAttributes:
+    properties:
+      revision:
+        example: 3
+        type: integer
+      values:
+        type: object
+    type: object
+  jsonapi.CommodityDraftSaveRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityDraftSaveRequestData'
+    type: object
+  jsonapi.CommodityDraftSaveRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityDraftSaveAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - commodity_drafts
+        example: commodity_drafts
+        type: string
+    type: object
+  jsonapi.CommodityDraftView:
+    properties:
+      client_key:
+        description: |-
+          ClientKey identifies the draft for the client that created it; unique
+          in the group.
+        type: string
+      created_at:
+        type: string
+      file_count:
+        example: 2
+        type: integer
+      id:
+        type: string
+      promoted_at:
+        type: string
+      promoted_commodity_id:
+        description: |-
+          PromotedCommodityID is the item the draft became. The item can be
+          deleted later, so there is no foreign key.
+        type: string
+      revision:
+        description: Revision starts at 1 and increases with every save and the promotion.
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.CommodityDraftStatus'
+        description: Status is open until the draft is promoted.
+      title:
+        example: Cordless drill
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      values:
+        allOf:
+        - $ref: '#/definitions/models.CommodityDraftValues'
+        description: Values is the form state as entered.
+    type: object
+  jsonapi.CommodityDraftsMeta:
+    properties:
+      drafts:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommodityDraftsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CommodityDraftView'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityDraftsMeta'
+    type: object
   jsonapi.CommodityEventActor:
     properties:
       email:
@@ -2387,6 +2523,7 @@ definitions:
         - commodity
         - location
         - area
+        - draft
         example: commodity
         type: string
       meta:
@@ -4012,6 +4149,17 @@ definitions:
         type: string
       warranty_notes:
         type: string
+    type: object
+  models.CommodityDraftStatus:
+    enum:
+    - open
+    - promoted
+    type: string
+    x-enum-varnames:
+    - CommodityDraftOpen
+    - CommodityDraftPromoted
+  models.CommodityDraftValues:
+    additionalProperties: {}
     type: object
   models.CommodityEventKind:
     enum:
@@ -8949,6 +9097,241 @@ paths:
       summary: Preview a currency migration
       tags:
       - currency-migrations
+  /g/{groupSlug}/drafts:
+    get:
+      description: |-
+        The group's open drafts, most recently saved first. A draft is an unfinished
+        item saved on the server; it is not an item and appears in no item list, count,
+        search or export.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Drafts per page (at most 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityDraftsResponse'
+      summary: List drafts
+      tags:
+      - drafts
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Save unfinished form values as a new draft. The values are stored as given and
+        are not validated as an item. client_key is the client's identity for the draft:
+        a create with a key the group already has returns that draft with 200 instead of
+        making another one, so a retry after a lost response is safe.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft
+        in: body
+        name: draft
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityDraftCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: A draft with this client key already exists
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityDraftResponse'
+        "201":
+          description: Draft created
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityDraftResponse'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a draft
+      tags:
+      - drafts
+  /g/{groupSlug}/drafts/{draftID}:
+    delete:
+      description: |-
+        Delete an open draft. Its files that nothing else uses go to Trash, where they
+        can be restored as standalone files until the Trash retention runs out; files
+        attached elsewhere only lose the link to the draft. A promoted draft answers 409
+        draft.promoted.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft ID
+        in: path
+        name: draftID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: Discarded
+        "404":
+          description: Draft not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Promoted draft
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Discard a draft
+      tags:
+      - drafts
+    get:
+      description: |-
+        One draft with its values and revision. A promoted draft is returned too, with
+        its values cleared and the id of the item it became. Its files are listed by GET
+        /g/{groupSlug}/files?linked_entity_type=draft&linked_entity_id={draftID}.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft ID
+        in: path
+        name: draftID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityDraftResponse'
+        "404":
+          description: Draft not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a draft
+      tags:
+      - drafts
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Replace the values of an open draft. revision is the revision the values were
+        based on; the response carries the next one. A save based on an older revision
+        is refused with 409 draft.revision_conflict and the current revision in meta, so
+        a stale tab cannot overwrite newer input. A promoted draft answers 409
+        draft.promoted.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft ID
+        in: path
+        name: draftID
+        required: true
+        type: string
+      - description: Values and revision
+        in: body
+        name: draft
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityDraftSaveRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Saved
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityDraftResponse'
+        "404":
+          description: Draft not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Stale revision or promoted draft
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Save a draft
+      tags:
+      - drafts
+  /g/{groupSlug}/drafts/{draftID}/promote:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Create the item from the finished form and move the draft's files to it, in one
+        step. The body is the item as for POST /g/{groupSlug}/commodities, validated the
+        same way, and meta.revision is the draft revision it was based on (409
+        draft.revision_conflict when it is stale). Promoting a draft that is already
+        promoted creates nothing and returns the item it became with 200, so a retry
+        after a lost response is safe; when that item no longer exists the answer is 409
+        draft.promoted.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft ID
+        in: path
+        name: draftID
+        required: true
+        type: string
+      - description: Finished item and draft revision
+        in: body
+        name: commodity
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityDraftPromoteRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: The draft was already promoted to this item
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "201":
+          description: Item created
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "404":
+          description: Draft not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Stale revision, or the item the draft became is gone
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Finish a draft
+      tags:
+      - drafts
   /g/{groupSlug}/exports:
     get:
       consumes:

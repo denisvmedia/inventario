@@ -269,6 +269,41 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	return files, nil
 }
 
+// CountLinkedTo returns how many live files are linked to each entity.
+func (r *FileRegistry) CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error) {
+	out := make(map[string]int, len(entityIDs))
+	if len(entityIDs) == 0 {
+		return out, nil
+	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT l.entity_id, COUNT(*)
+			FROM %s l
+			JOIN %s f ON f.id = l.file_id
+			WHERE f.deleted_at IS NULL AND l.entity_type = $1 AND l.entity_id = ANY($2)
+			GROUP BY l.entity_id`, r.tableNames.FileLinks(), r.tableNames.Files())
+		rows, err := tx.QueryxContext(ctx, query, entityType, entityIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var n int
+			if err := rows.Scan(&id, &n); err != nil {
+				return err
+			}
+			out[id] = n
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count files by linked entity", err)
+	}
+	return out, nil
+}
+
 // ListByGroup returns every file belonging to the given (tenant_id, group_id)
 // tuple, trashed files included. Used by GroupPurgeService to find physical blobs to delete before
 // the dependent-row purge wipes the file table. Runs as a single indexed

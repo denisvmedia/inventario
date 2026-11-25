@@ -146,6 +146,10 @@ func (s *stubFileRegistry) CountTrashedWith(context.Context, []string) (map[stri
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) CountLinkedTo(context.Context, string, []string) (map[string]int, error) {
+	panic("not implemented")
+}
+
 func (s *stubFileRegistry) ListStrandedTrashed(context.Context, int) ([]*models.FileEntity, error) {
 	return nil, nil
 }

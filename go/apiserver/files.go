@@ -616,26 +616,9 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		if name, ok := names[key]; ok {
 			return name
 		}
-		var name string
-		switch entityType {
-		case models.FileLinkCommodity:
-			c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
-			switch {
-			case err == nil:
-				name = c.Name
-			case errors.Is(err, registry.ErrNotFound):
-				if _, trashErr := registrySet.CommodityRegistry.GetTrashed(ctx, entityID); trashErr == nil {
-					trashed[key] = true
-				}
-			}
-		case models.FileLinkLocation:
-			if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
-				name = l.Name
-			}
-		case models.FileLinkArea:
-			if a, err := registrySet.AreaRegistry.Get(ctx, entityID); err == nil {
-				name = a.Name
-			}
+		name, inTrash := linkEntityName(ctx, registrySet, entityType, entityID)
+		if inTrash {
+			trashed[key] = true
 		}
 		names[key] = name
 		return name
@@ -654,6 +637,38 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		}
 		f.Links = kept
 	}
+}
+
+// linkEntityName reads the display name of a link's entity. inTrash reports
+// an item that is in Trash; its name stays empty.
+func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, entityID string) (name string, inTrash bool) {
+	switch entityType {
+	case models.FileLinkCommodity:
+		c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
+		switch {
+		case err == nil:
+			return c.Name, false
+		case errors.Is(err, registry.ErrNotFound):
+			_, trashErr := registrySet.CommodityRegistry.GetTrashed(ctx, entityID)
+			return "", trashErr == nil
+		}
+	case models.FileLinkLocation:
+		if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
+			return l.Name, false
+		}
+	case models.FileLinkArea:
+		if a, err := registrySet.AreaRegistry.Get(ctx, entityID); err == nil {
+			return a.Name, false
+		}
+	case models.FileLinkDraft:
+		if registrySet.CommodityDraftRegistry == nil {
+			return "", false
+		}
+		if d, err := registrySet.CommodityDraftRegistry.Get(ctx, entityID); err == nil {
+			return d.Values.Title(), false
+		}
+	}
+	return "", false
 }
 
 // deleteFile moves a file to Trash.
