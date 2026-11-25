@@ -405,7 +405,8 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Clear filters** — reset everything back to the default view.
 - **Show inactive / Hide inactive** — include or hide items in an end status.
 
-A **Grid view** / **List view** toggle switches the layout.
+A **Grid view** / **List view** toggle switches the layout. **Views**, next to
+it, keeps the current filters under a name; see [Saved views](#saved-views).
 
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a
@@ -464,6 +465,66 @@ already has: the search and the other filters stay, and the list goes back to
 the first page. A tag on the item page, or a tag's name on the [Tags](../tags/)
 page, opens **All Items** filtered by that tag alone, with **Show inactive**
 on, so it lists every item that has the tag.
+
+### Saved views
+
+A saved view keeps a set of filters, the search, the sort and the layout under
+a name, so a list you open often is one click away.
+
+1. Set up the list the way you want it.
+2. Click **Views** in the toolbar and choose **Save view…**.
+3. Give the view a name (up to 60 characters) and pick an icon.
+4. Choose where it shows: **Sidebar**, **Dashboard**, or both.
+5. Click **Save view**.
+
+A view in the sidebar appears under **Saved views** with the number of items it
+lists. A view on the Dashboard gets a card with that number and its first five
+items. The number is counted the same way as the list, so the sidebar, the
+Dashboard and the opened view agree.
+
+Dates in a view stay relative: a view of **Expiring Soon** warranties shows the
+warranties that expire soon on the day you open it, not the ones that did when
+you saved it.
+
+While a view is open, the **Views** button shows its name. If you change a
+filter, the sort or the layout, a dot on the button says the list no longer
+matches the view, and the **Views** menu offers **Save changes** (to update the
+view) and **Revert to saved** (to go back to it). **Close view** keeps the
+current filters and leaves the view.
+
+If a view refers to an area or a tag that was deleted, it still opens and still
+applies that condition, so it shows what still matches (often nothing, for a
+deleted area). The **Views** button shows a warning, and the menu says what no
+longer exists. Renaming a tag's slug on the [Tags](../tags/) page updates the
+views that use it.
+
+**Manage views** in the **Views** menu, or the gear next to **Saved views** in
+the sidebar, opens the list of your views. There you can see each view's
+filters and item count, pin it to the sidebar or the Dashboard, rename it or
+change its icon (**Edit**), move it up or down, and delete it. To change a
+view's filters, open it, adjust the list, and choose **Save changes**.
+
+Until you keep views of your own, the Dashboard offers a few to start with:
+**Expiring warranties**, **Lent out**, **Without a location** and
+**Untagged**. **Add** saves one to the sidebar and the Dashboard; the **×**
+hides the suggestions.
+
+#### Personal and shared views
+
+A view is **personal**: only you see it. Tick **Share with the group** when you
+save or edit it to show it to everyone in the group. Sharing a view shares the
+filter, not access: each member sees the items they can see. Viewers can keep
+personal views; sharing needs the **User** role or higher. You can change the
+views you created, and administrators and owners can change or delete any
+shared view.
+
+You can keep up to 50 views of your own in a group, and a group can have up to
+50 shared views.
+
+A view uses the filters of the All Items page. A link that filters by a
+warranty end date can't be saved as a view, because that date would never
+change. If a future update stops supporting a filter a view uses, the view is
+marked **Needs an update** instead of opening with that filter left out.
 
 ## Select, move, and delete in bulk
 
