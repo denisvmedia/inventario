@@ -206,6 +206,22 @@ describe("<LocationsListPage />", () => {
     })
   })
 
+  it("starts filtered by the q parameter the search page links with (#2801)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", { name: "Main House" }),
+        locationResource("loc2", { name: "Garage" }),
+      ]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList(`/g/${SLUG}/locations?q=garage`)
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("Garage")).toBeInTheDocument()
+    expect(screen.getByTestId("locations-search")).toHaveValue("garage")
+  })
+
   it("opens the create dialog from the header CTA", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

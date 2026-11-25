@@ -8,7 +8,7 @@ import type { CommoditySearchMatch } from "@/features/commodities/query"
 import { http, HttpError } from "@/lib/http"
 import type { Schema } from "@/types"
 
-export type SearchableType = "commodities" | "files" | "areas" | "locations"
+export type SearchableType = "commodities" | "files" | "areas" | "locations" | "tags"
 
 export interface SearchResource<TAttrs = Record<string, unknown>> {
   id: string
@@ -20,6 +20,7 @@ export type CommodityAttrs = Schema<"models.Commodity">
 export type FileAttrs = Schema<"models.FileEntity">
 export type LocationAttrs = Schema<"models.Location">
 export type AreaAttrs = Schema<"models.Area">
+export type TagAttrs = Schema<"models.Tag">
 
 export interface SearchPage<TAttrs = Record<string, unknown>> {
   results: Array<SearchResource<TAttrs>>
@@ -50,7 +51,7 @@ interface RawSearchResponse {
 export interface SearchOptions {
   type: SearchableType
   // BE caps at server-side default; we ask for 5 in the grouped page
-  // and 3 in the palette to stay snappy. `limit` is forwarded as-is.
+  // and fewer in the palette to stay snappy. `limit` is forwarded as-is.
   limit?: number
   offset?: number
   signal?: AbortSignal

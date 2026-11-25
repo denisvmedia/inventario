@@ -13,7 +13,7 @@ import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { clearRecent, pushRecent } from "@/features/search/recent"
+import { clearRecent, getRecent, pushRecent } from "@/features/search/recent"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -85,7 +85,9 @@ describe("<SearchPage />", () => {
     renderSearch()
     await waitFor(() => expect(screen.getByTestId("recent-list")).toBeInTheDocument())
     expect(screen.getByTestId("recent-commodity-c1")).toHaveTextContent(/cordless drill/i)
+    expect(screen.getByTestId("recent-commodity-c1")).toHaveTextContent("Item")
     expect(screen.getByTestId("recent-location-l1")).toHaveTextContent(/garage/i)
+    expect(screen.getByTestId("recent-location-l1")).toHaveTextContent("Location")
   })
 
   it("submits a query into the URL and renders grouped results", async () => {
@@ -182,18 +184,86 @@ describe("<SearchPage />", () => {
     expect(await screen.findByTestId("search-no-results")).toHaveTextContent(/qwerty/i)
   })
 
-  it("renders the unavailable stub for tags regardless of query", async () => {
+  it("lists areas and tags with a link to their items (#2801)", async () => {
     server.use(
       groupsHandler,
       userHandler,
-      msw.get(api("/g/household/search"), () => HttpResponse.json({ data: [], meta: { total: 0 } }))
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const type = new URL(request.url).searchParams.get("type")
+        if (type === "areas") {
+          return HttpResponse.json({
+            data: [{ id: "a1", name: "Garage shelf", location_id: "l1" }],
+            meta: { total: 1, entity_type: "areas" },
+          })
+        }
+        if (type === "tags") {
+          return HttpResponse.json({
+            data: [
+              { id: "t1", slug: "garage", label: "Garage", kind: "commodity", color: "blue" },
+              { id: "t2", slug: "garage-receipts", label: "Garage receipts", kind: "file" },
+            ],
+            meta: { total: 2, entity_type: "tags" },
+          })
+        }
+        return HttpResponse.json({ data: [], meta: { total: 0, entity_type: type } })
+      })
+    )
+    renderSearch("/g/household/search?q=garage")
+    expect(await screen.findByTestId("result-area-a1")).toHaveAttribute(
+      "href",
+      "/g/household/areas/a1"
+    )
+    expect(screen.getByTestId("result-area-items-a1")).toHaveAttribute(
+      "href",
+      "/g/household/commodities?area=a1"
+    )
+    expect(screen.getByTestId("result-area-items-a1")).toHaveAccessibleName(
+      "Show items in Garage shelf"
+    )
+    // A tag opens on the Tags page; its second link lists what carries it.
+    expect(screen.getByTestId("result-tag-t1")).toHaveAttribute(
+      "href",
+      "/g/household/tags?kind=commodity&q=garage"
+    )
+    expect(screen.getByTestId("result-tag-t1")).toHaveTextContent("Item tag")
+    expect(screen.getByTestId("result-tag-list-t1")).toHaveAttribute(
+      "href",
+      "/g/household/commodities?tags=garage"
+    )
+    expect(screen.getByTestId("result-tag-t2")).toHaveTextContent("File tag")
+    expect(screen.getByTestId("result-tag-list-t2")).toHaveAttribute(
+      "href",
+      "/g/household/files?tags=garage-receipts"
+    )
+    expect(screen.getByTestId("result-tag-list-t2")).toHaveTextContent("Show files")
+  })
+
+  it("remembers an opened result for the empty page (#2801)", async () => {
+    server.use(
+      groupsHandler,
+      userHandler,
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const type = new URL(request.url).searchParams.get("type")
+        if (type === "locations") {
+          return HttpResponse.json({
+            data: [{ id: "l1", name: "Garage", address: "Main street 1" }],
+            meta: { total: 1, entity_type: "locations" },
+          })
+        }
+        return HttpResponse.json({ data: [], meta: { total: 0, entity_type: type } })
+      })
     )
     const user = userEvent.setup()
-    renderSearch()
-    await user.type(await screen.findByTestId("search-input"), "anything")
-    await user.click(screen.getByTestId("search-submit"))
-    // Tags is BE-blocked on #1400 — always rendered as a stub.
-    expect(await screen.findByTestId("group-tags")).toHaveTextContent(/coming|tracked under/i)
+    renderSearch("/g/household/search?q=garage")
+    await user.click(await screen.findByTestId("result-location-l1"))
+    expect(getRecent("household")).toEqual([
+      expect.objectContaining({
+        type: "location",
+        id: "l1",
+        title: "Garage",
+        url: "/g/household/locations/l1",
+      }),
+    ])
   })
 
   it("renders the files unavailable stub when the BE returns 501 for that type", async () => {

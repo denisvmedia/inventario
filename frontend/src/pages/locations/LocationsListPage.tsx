@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useMatch, useNavigate } from "react-router-dom"
+import { Link, useMatch, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ChevronRight,
@@ -89,8 +89,10 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   // Search filters locations + their areas client-side. The list is
   // typically small (single-digit) so paging / server-side search
-  // would be over-engineered.
-  const [query, setQuery] = useState("")
+  // would be over-engineered. It starts from `?q=`, which the search
+  // page's "see all" link for locations carries.
+  const [searchParams] = useSearchParams()
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "")
 
   // Target for the non-empty cascade/unlink delete dialog (#2137); null
   // when closed.
