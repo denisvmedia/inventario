@@ -23,6 +23,9 @@ interface CurrencyComboboxProps {
   disabled?: boolean
   placeholder?: string
   ariaInvalid?: boolean
+  // The trigger's accessible name; a generic "currency" label otherwise.
+  // A form with several currency pickers names each one.
+  ariaLabel?: string
   // "default" stretches `w-full` (settings forms / standalone fields).
   // "compact" snaps to a fixed code-width — used inline with a price
   // input where the price should take the rest of the row.
@@ -45,6 +48,7 @@ export function CurrencyCombobox({
   disabled,
   placeholder,
   ariaInvalid,
+  ariaLabel,
   variant = "default",
 }: CurrencyComboboxProps) {
   const { t } = useTranslation()
@@ -74,7 +78,7 @@ export function CurrencyCombobox({
           aria-controls={listboxId}
           aria-expanded={open}
           aria-invalid={ariaInvalid || undefined}
-          aria-label={t("groups:create.currencyAriaLabel")}
+          aria-label={ariaLabel ?? t("groups:create.currencyAriaLabel")}
           disabled={disabled}
           className={cn(
             "flex h-9 items-center justify-between rounded-md border border-input bg-background px-3 py-1 text-sm shadow-xs",
