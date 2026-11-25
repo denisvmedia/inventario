@@ -459,6 +459,29 @@ func TestCommodityBulkService_MoveAndDelete(t *testing.T) {
 	c.Assert(out.Failed[0].Err, qt.ErrorIs, registry.ErrNotFound)
 }
 
+// An edit saved after the query was resolved, while the action runs, is
+// kept: each item is read again right before it is written.
+func TestCommodityBulkService_UpdateKeepsAnEditSavedAfterTheSelection(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	lamp := f.item(c, "Lamp", withTags("sale"))
+	query := must.Must(commodityquery.Parse(map[string][]string{"tags": {"sale"}}))
+	targets, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{
+		Query: &query, ExpectedCount: 1, ExpectedDigest: commodityquery.Digest([]string{lamp.ID}),
+	})
+	c.Assert(err, qt.IsNil)
+
+	edited := *f.get(c, lamp.ID)
+	edited.Comments = "saved by someone else"
+	must.Must(f.set.CommodityRegistry.Update(f.ctx, edited))
+
+	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, targets, parsePatch(c, services.CommodityPatchInput{Type: new("electronics")}))
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{lamp.ID})
+	got := f.get(c, lamp.ID)
+	c.Assert(got.Type, qt.Equals, models.CommodityTypeElectronics)
+	c.Assert(got.Comments, qt.Equals, "saved by someone else")
+}
+
 // fileTrashFails is a file registry whose Trash always fails, as when the
 // database drops the connection between the item and its files.
 type fileTrashFails struct{ registry.FileRegistry }

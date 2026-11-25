@@ -59,8 +59,9 @@ func (e *BulkSelectionChangedError) Error() string {
 }
 
 // BulkTarget is one item of a bulk action. Row is the item as the selection
-// read it, nil when the selection named it by id only; the action then reads
-// it itself.
+// read it, nil when the selection named it by id only. It names the item in
+// a failure; an action reads the item again right before it writes it, so an
+// edit saved after the selection was resolved is not overwritten.
 type BulkTarget struct {
 	ID  string
 	Row *models.Commodity
@@ -87,7 +88,7 @@ func (e *BulkTooManyError) Error() string {
 // ResolveBulkSelection returns the items sel names, each once. A query is run
 // through the item query contract (commodityquery), so it selects exactly the
 // items the items list shows for it, in its order, and the targets carry the
-// rows it read. It may not select items in Trash, and it fails with
+// rows it read, for naming them. It may not select items in Trash, and it fails with
 // BulkTooManyError or BulkSelectionChangedError instead of acting on a set
 // the caller did not see. Ids are returned without rows.
 func ResolveBulkSelection(ctx context.Context, set *registry.Set, sel BulkSelection) ([]BulkTarget, error) {
@@ -450,9 +451,9 @@ func (s *CommodityBulkService) EnsureTags(ctx context.Context, patch *CommodityP
 	return nil
 }
 
-// Update applies patch to every target. An item the patch does not change
-// is skipped. The context must carry the group currency, which the item
-// validation reads.
+// Update applies patch to every target, reading each item right before it
+// writes it. An item the patch does not change is skipped. The context must
+// carry the group currency, which the item validation reads.
 func (s *CommodityBulkService) Update(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, patch CommodityPatch) BulkOutcome {
 	var out BulkOutcome
 	for i, t := range targets {
@@ -460,9 +461,9 @@ func (s *CommodityBulkService) Update(ctx context.Context, items registry.Commod
 			failRest(&out, targets[i:], err)
 			break
 		}
-		before, err := targetRow(ctx, items, t)
+		before, err := items.Get(ctx, t.ID)
 		if err != nil {
-			out.fail(t.ID, "", err)
+			out.fail(t.ID, t.name(), err)
 			continue
 		}
 		after, changed := patch.Apply(*before)
@@ -490,7 +491,8 @@ func (s *CommodityBulkService) Update(ctx context.Context, items registry.Commod
 }
 
 // Move puts every target into the area areaID, which the caller has checked
-// exists. An item already there is skipped.
+// exists, reading each item right before it writes it. An item already
+// there is skipped.
 func (s *CommodityBulkService) Move(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, areaID string) BulkOutcome {
 	var out BulkOutcome
 	for i, t := range targets {
@@ -498,9 +500,9 @@ func (s *CommodityBulkService) Move(ctx context.Context, items registry.Commodit
 			failRest(&out, targets[i:], err)
 			break
 		}
-		before, err := targetRow(ctx, items, t)
+		before, err := items.Get(ctx, t.ID)
 		if err != nil {
-			out.fail(t.ID, "", err)
+			out.fail(t.ID, t.name(), err)
 			continue
 		}
 		if before.AreaID != nil && *before.AreaID == areaID {
@@ -545,14 +547,6 @@ func (s *CommodityBulkService) Delete(ctx context.Context, targets []BulkTarget)
 		}
 	}
 	return out
-}
-
-// targetRow returns the row of t, reading it when the selection did not.
-func targetRow(ctx context.Context, items registry.CommodityRegistry, t BulkTarget) (*models.Commodity, error) {
-	if t.Row != nil {
-		return t.Row, nil
-	}
-	return items.Get(ctx, t.ID)
 }
 
 func failRest(out *BulkOutcome, targets []BulkTarget, err error) {
