@@ -87,6 +87,14 @@ type File struct {
 	// and updates them best-effort on first boot.
 	//ptah:schema:field name="size_bytes" type="BIGINT" not_null="true" default="0"
 	SizeBytes int64 `json:"size_bytes" db:"size_bytes"`
+
+	// SHA256 is the lowercase hex SHA-256 of the stored blob, computed while
+	// the upload streams in. Two files of one group with the same checksum are
+	// the same document; the upload dialog offers to attach the existing one
+	// instead. Empty until known: files stored before the column existed get it
+	// from a background pass at startup.
+	//ptah:schema:field name="sha256" type="TEXT" not_null="true" default=""
+	SHA256 string `json:"sha256" db:"sha256" userinput:"false"`
 }
 
 func (*File) Validate() error {
@@ -288,19 +296,8 @@ type FileEntity struct {
 	//ptah:schema:field name="tags" type="JSONB"
 	Tags StringSlice `json:"tags" db:"tags"`
 
-	// LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files)
-	//ptah:schema:field name="linked_entity_type" type="TEXT"
-	LinkedEntityType string `json:"linked_entity_type" db:"linked_entity_type"`
-
-	// LinkedEntityID is the ID of the linked entity (commodity or export)
-	//ptah:schema:field name="linked_entity_id" type="TEXT"
-	LinkedEntityID string `json:"linked_entity_id" db:"linked_entity_id"`
-
-	// LinkedEntityMeta contains metadata about the link type
-	// For commodities: "images", "documents"
-	// For exports: "xml-1.0" (version of the export file format)
-	//ptah:schema:field name="linked_entity_meta" type="TEXT"
-	LinkedEntityMeta string `json:"linked_entity_meta" db:"linked_entity_meta"`
+	//ptah:embedded mode="inline"
+	LegacyFileLink
 
 	// CreatedAt is when the file was created
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
@@ -313,6 +310,27 @@ type FileEntity struct {
 	// File contains the actual file metadata
 	//ptah:embedded mode="inline"
 	*File
+
+	// Links are the entities the file is attached to (see FileLink). The file
+	// registries fill them on every read; Create inserts them with the file,
+	// Update never touches them — use FileRegistry.AddLink / RemoveLink.
+	Links []FileLink `json:"links" db:"-" userinput:"false"`
+}
+
+// LegacyFileLink holds the single-link columns of files that file_links
+// replaces. Nothing reads or writes them except the startup move into
+// file_links (FileRegistry.MoveLegacyLinks), which empties each row it moves.
+// The columns are dropped by a later migration, once every installation has run
+// that move.
+type LegacyFileLink struct {
+	//ptah:schema:field name="linked_entity_type" type="TEXT"
+	LegacyLinkedEntityType string `json:"-" db:"linked_entity_type" userinput:"false"`
+
+	//ptah:schema:field name="linked_entity_id" type="TEXT"
+	LegacyLinkedEntityID string `json:"-" db:"linked_entity_id" userinput:"false"`
+
+	//ptah:schema:field name="linked_entity_meta" type="TEXT"
+	LegacyLinkedEntityMeta string `json:"-" db:"linked_entity_meta" userinput:"false"`
 }
 
 // PostgreSQL-specific indexes for files
@@ -329,8 +347,12 @@ type FileIndexes struct {
 	//ptah:schema:index name="idx_files_tenant_type" fields="tenant_id,type" table="files"
 	_ int
 
-	// Composite index for tenant + linked entity queries
+	// Composite index on the legacy single-link columns, dropped with them.
 	//ptah:schema:index name="idx_files_tenant_linked_entity" fields="tenant_id,linked_entity_type,linked_entity_id" table="files"
+	_ int
+
+	// Duplicate lookup: files of one group with a given checksum.
+	//ptah:schema:index name="idx_files_tenant_group_sha256" fields="tenant_id,group_id,sha256" table="files"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
@@ -350,11 +372,11 @@ type FileIndexes struct {
 	//ptah:schema:index name="idx_files_tenant_group_category" fields="tenant_id,group_id,category" table="files"
 	_ int
 
-	// Index for linked entity queries
+	// Indexes on the legacy single-link columns. The startup move into
+	// file_links scans by linked_entity_type; both go with the columns.
 	//ptah:schema:index name="files_linked_entity_idx" fields="linked_entity_type,linked_entity_id" table="files"
 	_ int
 
-	// Index for linked entity with metadata
 	//ptah:schema:index name="files_linked_entity_meta_idx" fields="linked_entity_type,linked_entity_id,linked_entity_meta" table="files"
 	_ int
 
@@ -397,38 +419,18 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&fe.Category, validation.Required, validation.In(
 			FileCategoryImages, FileCategoryDocuments, FileCategoryOther,
 		)),
-		validation.Field(&fe.LinkedEntityType, validation.In("", "commodity", "export", "location", "area")),
 		validation.Field(&fe.File, validation.Required),
 	)
 
-	// If linked entity type is specified, validate the linked entity ID and meta
-	if fe.LinkedEntityType != "" {
-		fields = append(fields,
-			validation.Field(&fe.LinkedEntityID, validation.Required),
-			validation.Field(&fe.LinkedEntityMeta, validation.Required),
-		)
-
-		// Validate linked entity meta based on type
-		switch fe.LinkedEntityType {
-		case "commodity":
-			fields = append(fields,
-				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "documents")),
-			)
-		case "export":
-			fields = append(fields,
-				validation.Field(&fe.LinkedEntityMeta, validation.In("xml-1.0")),
-			)
-		case "location", "area":
-			// Locations and areas use the same two meta buckets so the
-			// EntityFilesPanel renders both the same way; the BE is
-			// agnostic to which level the file is attached at.
-			fields = append(fields,
-				validation.Field(&fe.LinkedEntityMeta, validation.In("images", "files")),
-			)
+	if err := validation.ValidateStructWithContext(ctx, fe, fields...); err != nil {
+		return err
+	}
+	for i := range fe.Links {
+		if err := fe.Links[i].ValidateWithContext(ctx); err != nil {
+			return err
 		}
 	}
-
-	return validation.ValidateStructWithContext(ctx, fe, fields...)
+	return nil
 }
 
 // GetDisplayTitle returns the title if set, otherwise returns the filename (path without extension)

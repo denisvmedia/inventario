@@ -2,6 +2,8 @@ package apiserver
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"io"
 	"log/slog"
@@ -62,6 +64,9 @@ type uploadedFile struct {
 	Basename string
 	MIMEType string
 	Size     int64
+	// SHA256 is the hex SHA-256 of the stored bytes, computed while they
+	// stream to the bucket.
+	SHA256 string
 }
 
 const uploadedFilesCtxKey ctxValueKey = "uploadedFiles"
@@ -89,6 +94,7 @@ type uploadsAPI struct {
 
 // @Summary Upload a file
 // @Description Upload a single file of any type. The file is stored and a file entity is created without a linked entity.
+// @Description The response carries the SHA-256 of the content; GET /files/{id}/duplicates lists the files of the group with the same content.
 // @Tags uploads
 // @Accept multipart/form-data
 // @Produce json-api
@@ -163,6 +169,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 			Ext:          ext,
 			MIMEType:     f.MIMEType,
 			SizeBytes:    f.Size,
+			SHA256:       f.SHA256,
 		},
 	}
 
@@ -384,7 +391,7 @@ func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename
 	default:
 		blobKey = blobkeys.BuildFileBlobKey(tenantID, blobID, filekit.Extension(basename))
 	}
-	mimeType, size, err := api.saveFile(ctx, blobKey, part, allowedContentTypes)
+	saved, err := api.saveFile(ctx, blobKey, part, allowedContentTypes)
 	switch {
 	case errors.Is(err, mimekit.ErrInvalidContentType):
 		return uploadedFile{}, &uploadHTTPError{
@@ -399,13 +406,22 @@ func (api *uploadsAPI) saveOnePart(ctx context.Context, part io.Reader, basename
 	case err != nil:
 		return uploadedFile{}, errxtrace.Wrap("unable to save file", err)
 	}
-	return uploadedFile{FilePath: blobKey, Basename: basename, MIMEType: mimeType, Size: size}, nil
+	return uploadedFile{FilePath: blobKey, Basename: basename, MIMEType: saved.mimeType, Size: saved.size, SHA256: saved.sha256}, nil
 }
 
-func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (mimeType string, size int64, err error) {
+// savedBlob describes the bytes saveFile stored.
+type savedBlob struct {
+	mimeType string // sniffed from the content
+	size     int64
+	sha256   string // hex
+}
+
+// saveFile streams src to the bucket under filename and returns the sniffed
+// MIME type, the byte count and the hex SHA-256 of the stored bytes.
+func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Reader, allowedContentTypes []string) (saved savedBlob, err error) {
 	b, err := blob.OpenBucket(ctx, api.uploadLocation)
 	if err != nil {
-		return "", 0, errxtrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
+		return savedBlob{}, errxtrace.Wrap("failed to open bucket", err) // TODO: we might want adding uploadLocation as a field, but it may contain sensitive data
 	}
 	defer func() {
 		err = errors.Join(err, b.Close())
@@ -413,7 +429,7 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	fw, err := b.NewWriter(ctx, filename, nil)
 	if err != nil {
-		return "", 0, errxtrace.Wrap("failed to create a new writer", err)
+		return savedBlob{}, errxtrace.Wrap("failed to create a new writer", err)
 	}
 
 	// gocloud's Writer has no Abort: a rejected upload (invalid MIME type,
@@ -462,18 +478,19 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 
 	wrappedSrc := mimekit.NewMIMEReader(bodySrc, allowedContentTypes)
 
-	written, err := io.Copy(fw, wrappedSrc)
+	hasher := sha256.New()
+	written, err := io.Copy(io.MultiWriter(fw, hasher), wrappedSrc)
 	if err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return "", 0, &uploadHTTPError{
+			return savedBlob{}, &uploadHTTPError{
 				status: http.StatusRequestEntityTooLarge,
 				err:    errxtrace.Classify(errx.NewDisplayable("uploaded file exceeds the maximum allowed size")),
 			}
 		}
-		return "", 0, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
+		return savedBlob{}, errxtrace.Wrap("failed when saving the file", err, errx.Attrs("filename", filename))
 	}
 
-	return wrappedSrc.MIMEType(), written, nil
+	return savedBlob{mimeType: wrappedSrc.MIMEType(), size: written, sha256: hex.EncodeToString(hasher.Sum(nil))}, nil
 }
 
 func Uploads(params Params) func(r chi.Router) {
@@ -492,15 +509,11 @@ func Uploads(params Params) func(r chi.Router) {
 	uploadLimiter := middleware.UploadLimiter(concurrentUploadService)
 
 	return func(r chi.Router) {
-		// Legacy commodity-/location-scoped upload routes
-		// (`/uploads/{commodities,locations}/{id}/{image,manual,invoice,file}`)
-		// were removed under #1421. Clients now POST a multipart file to
-		// `/uploads/file` (creates an unlinked FileEntity) and then
-		// PUT `/files/{id}` with `linked_entity_type` / `linked_entity_id`
-		// set in the JSON:API attributes to attach the row to a
-		// commodity / location. The unified `/uploads/file` handler
-		// itself does NOT read linked-entity fields off the multipart
-		// form — see `handleFileUpload` below.
+		// Clients POST a multipart file to `/uploads/file` (creates a
+		// standalone FileEntity) and then POST `/files/{id}/links` to
+		// attach it to an item, a location or an area. The upload handler
+		// does not read link fields off the multipart form — see
+		// `handleFileUpload` below.
 
 		// Single file upload - allow all content types with concurrent upload limiting
 		fileMiddlewares := []func(http.Handler) http.Handler{

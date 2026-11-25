@@ -194,7 +194,8 @@ The header also has:
 - **Insurance Report** and **Print** — printable views (see [Reports](../reports/)).
 - **Print label** (the QR code button) — a label for this item (see
   [Asset IDs and QR labels](#asset-ids-and-qr-labels)).
-- **Delete** — permanently removes the item and any attached files.
+- **Delete** — permanently removes the item and the files attached only to it.
+  A file that is also attached to another item, location, or area stays there.
 
 ![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
 

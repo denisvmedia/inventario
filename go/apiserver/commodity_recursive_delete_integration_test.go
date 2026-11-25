@@ -49,15 +49,13 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 
 	// Create an image file
 	imageFile := models.FileEntity{
-		Title:            "Test Image for Deletion",
-		Description:      "A test image file that should be deleted",
-		Type:             models.FileTypeImage,
-		Tags:             []string{"test", "deletion"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Image for Deletion",
+		Description: "A test image file that should be deleted",
+		Type:        models.FileTypeImage,
+		Tags:        []string{"test", "deletion"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "images"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-image-delete",
 			OriginalPath: "test-image-delete.jpg",
@@ -70,15 +68,13 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 
 	// Create a manual file
 	manualFile := models.FileEntity{
-		Title:            "Test Manual for Deletion",
-		Description:      "A test manual file that should be deleted",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{"test", "deletion"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "manuals",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Manual for Deletion",
+		Description: "A test manual file that should be deleted",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{"test", "deletion"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "manuals"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-manual-delete",
 			OriginalPath: "test-manual-delete.pdf",
@@ -91,15 +87,13 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 
 	// Create an invoice file
 	invoiceFile := models.FileEntity{
-		Title:            "Test Invoice for Deletion",
-		Description:      "A test invoice file that should be deleted",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{"test", "deletion"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "invoices",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Invoice for Deletion",
+		Description: "A test invoice file that should be deleted",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{"test", "deletion"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "invoices"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-invoice-delete",
 			OriginalPath: "test-invoice-delete.pdf",

@@ -174,6 +174,7 @@ describe("<FirstItemResolver />", () => {
     ])
     server.use(...groupHandlers.list([household]))
     createdCommodity("household")
+    const updated: { attributes?: Record<string, unknown> } = {}
     const linked: { attributes?: Record<string, unknown> } = {}
     server.use(
       msw.post(apiUrl("/g/household/uploads/file"), () =>
@@ -181,17 +182,30 @@ describe("<FirstItemResolver />", () => {
       ),
       msw.put(apiUrl("/g/household/files/f1"), async ({ request }) => {
         const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
-        linked.attributes = body.data?.attributes
+        updated.attributes = body.data?.attributes
         return HttpResponse.json({ id: "f1", type: "files", attributes: {} })
+      }),
+      msw.post(apiUrl("/g/household/files/f1/links"), async ({ request }) => {
+        const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
+        linked.attributes = body.data?.attributes
+        return HttpResponse.json(
+          { id: "f1", type: "files", attributes: { links: [body.data?.attributes] } },
+          { status: 201 }
+        )
       })
     )
 
     renderResolver()
 
     await expectNavigatedTo("/g/household/commodities/c1")
-    expect(linked.attributes?.linked_entity_type).toBe("commodity")
-    expect(linked.attributes?.linked_entity_id).toBe("c1")
-    expect(linked.attributes?.tags).toEqual(["receipt"])
+    await waitFor(() =>
+      expect(linked.attributes).toEqual({
+        entity_type: "commodity",
+        entity_id: "c1",
+        meta: "images",
+      })
+    )
+    expect(updated.attributes?.tags).toEqual(["receipt"])
   })
 
   it("keeps the item when a file upload fails", async () => {

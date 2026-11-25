@@ -5,16 +5,19 @@ import {
   File as FileIcon,
   FileText,
   Image as ImageIcon,
+  Link2,
   Paperclip,
   Receipt,
   Upload,
 } from "lucide-react"
 
+import { AttachExistingFileDialog } from "@/components/files/AttachExistingFileDialog"
 import { FileCollection } from "@/components/files/FileCollection"
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
 import { FileViewToggle } from "@/components/files/FileViewToggle"
 import type { GalleryImage } from "@/components/files/ImageViewer"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
+import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
 import { isImageMime } from "@/features/files/constants"
 import { useFileCategoryCounts, useFiles } from "@/features/files/hooks"
@@ -110,6 +113,8 @@ const PAGE_SIZE = 24
 
 export interface CommodityFilesTabProps {
   commodityId: string
+  // Shown in the "Attach an existing file" dialog title.
+  commodityName?: string
   // Opens the page-level UploadFilesDialog with the commodity
   // preselected. The page also exposes a drag-drop overlay that opens the
   // same dialog with files preloaded — see `CommodityDetailPage`'s
@@ -127,6 +132,7 @@ export interface CommodityFilesTabProps {
 
 export function CommodityFilesTab({
   commodityId,
+  commodityName,
   onAttachClick,
   coverState,
   onSetCover,
@@ -151,6 +157,7 @@ export function CommodityFilesTab({
   // The file whose detail sheet is open, kept locally so opening it never
   // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [attachExistingOpen, setAttachExistingOpen] = useState(false)
 
   // The list is one page of the active chip's filter, resolved server-side;
   // the chip counts come from the category-counts endpoint, so a commodity
@@ -267,25 +274,38 @@ export function CommodityFilesTab({
         {/* Upload zone — dashed-border CTA. Click opens the upload dialog
           via the parent. Drop is owned by the page-level `<DropOverlay>`
           wired in CommodityDetailPage so a second drop catcher here would
-          just fight that one. */}
-        <button
-          type="button"
-          onClick={onAttachClick}
-          className={cn(
-            "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
-            "hover:border-primary/40 hover:bg-muted/30",
-            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-          )}
-          data-testid="commodity-files-upload-zone"
-        >
-          <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
-          <span className="flex-1 text-sm text-muted-foreground">
-            {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
-            <span className="font-medium text-foreground">
-              {t("commodities:detail.filesTab.browse")}
+          just fight that one. Beside it, "Attach an existing file" links a
+          file the group already holds (#2806). */}
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <button
+            type="button"
+            onClick={onAttachClick}
+            className={cn(
+              "flex w-full items-center gap-3 rounded-lg border-2 border-dashed border-border bg-transparent px-4 py-3 text-left transition-colors",
+              "hover:border-primary/40 hover:bg-muted/30",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            )}
+            data-testid="commodity-files-upload-zone"
+          >
+            <Upload className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+            <span className="flex-1 text-sm text-muted-foreground">
+              {t(`commodities:detail.filesTab.${activeChipDef.dropKey}`)}{" "}
+              <span className="font-medium text-foreground">
+                {t("commodities:detail.filesTab.browse")}
+              </span>
             </span>
-          </span>
-        </button>
+          </button>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => setAttachExistingOpen(true)}
+            className="h-auto gap-1.5 py-3"
+            data-testid="commodity-files-attach-existing"
+          >
+            <Link2 className="size-4" aria-hidden="true" />
+            {t("files:attachExisting.title", { defaultValue: "Attach an existing file" })}
+          </Button>
+        </div>
 
         {filesQuery.isError ? (
           <Alert variant="destructive" data-testid="commodity-files-error">
@@ -358,6 +378,11 @@ export function CommodityFilesTab({
         onEdit={(id) => navigate(fileReviewHref(slug, id, listContextFromLocation(location)))}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
+      />
+      <AttachExistingFileDialog
+        open={attachExistingOpen}
+        onOpenChange={setAttachExistingOpen}
+        entity={{ type: "commodity", id: commodityId, name: commodityName }}
       />
     </>
   )

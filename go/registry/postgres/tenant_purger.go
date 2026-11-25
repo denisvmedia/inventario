@@ -92,7 +92,11 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.UserConcurrencySlots()) },
 	func(t store.TableNames) string { return string(t.ThumbnailGenerationJobs()) },
 
-	// Generic polymorphic files (linked by entity_type/id, no FK chain). Must
+	// File links (#2806). file_id -> files CASCADE; explicit DELETE keeps
+	// tenant scoping local.
+	func(t store.TableNames) string { return string(t.FileLinks()) },
+
+	// Generic files, attached to entities through file_links. Must
 	// drop after the thumbnail chain (jobs.file_id -> files NO ACTION);
 	// exports.file_id (SET NULL, #2180) and commodities.cover_file_id (SET NULL)
 	// are harmless either way.

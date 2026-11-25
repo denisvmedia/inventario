@@ -76,8 +76,7 @@ describe("<EntityFilesPanel />", () => {
             mime_type: "application/pdf",
             category: "documents",
             type: "document",
-            linked_entity_type: "commodity",
-            linked_entity_id: COMMODITY,
+            links: [{ entity_type: "commodity", entity_id: COMMODITY }],
             tags: ["tax"],
             created_at: "2026-04-01T10:00:00Z",
           },
@@ -92,8 +91,7 @@ describe("<EntityFilesPanel />", () => {
             mime_type: "image/jpeg",
             category: "images",
             type: "image",
-            linked_entity_type: "commodity",
-            linked_entity_id: COMMODITY,
+            links: [{ entity_type: "commodity", entity_id: COMMODITY }],
             tags: [],
             created_at: "2026-04-02T10:00:00Z",
           },
@@ -119,6 +117,15 @@ describe("<EntityFilesPanel />", () => {
     renderPanel()
     await waitFor(() => expect(screen.getByTestId("entity-files-panel-empty")).toBeInTheDocument())
     expect(screen.queryByTestId("entity-files-panel-attach")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("entity-files-panel-attach-existing")).not.toBeInTheDocument()
+  })
+
+  it("opens the attach-an-existing-file dialog next to the upload button", async () => {
+    const user = userEvent.setup()
+    server.use(...groupHandlers.list(groupFixture), ...fileHandlers.list(SLUG, []))
+    renderPanel("location", { onAttachClick: vi.fn() })
+    await user.click(await screen.findByTestId("entity-files-panel-attach-existing"))
+    expect(await screen.findByTestId("attach-existing-dialog")).toBeInTheDocument()
   })
 
   it("renders the Attach files button and fires onAttachClick when clicked", async () => {
@@ -140,8 +147,7 @@ describe("<EntityFilesPanel />", () => {
       mime_type: "image/jpeg",
       category: "images" as const,
       type: "image",
-      linked_entity_type: "location",
-      linked_entity_id: COMMODITY,
+      links: [{ entity_type: "location", entity_id: COMMODITY }],
       created_at: "2026-04-02T10:00:00Z",
     }
     server.use(
@@ -179,8 +185,7 @@ describe("<EntityFilesPanel />", () => {
         mime_type: "application/pdf",
         category: "documents",
         type: "document",
-        linked_entity_type: "commodity",
-        linked_entity_id: COMMODITY,
+        links: [{ entity_type: "commodity", entity_id: COMMODITY }],
         size_bytes: 2048,
         tags: [],
         created_at: "2026-04-01T10:00:00Z",
@@ -210,8 +215,7 @@ describe("<EntityFilesPanel />", () => {
             mime_type: "application/pdf",
             category: "documents",
             type: "document",
-            linked_entity_type: "commodity",
-            linked_entity_id: COMMODITY,
+            links: [{ entity_type: "commodity", entity_id: COMMODITY }],
             size_bytes: 2048,
             tags: [],
             created_at: "2026-04-01T10:00:00Z",
@@ -238,8 +242,7 @@ describe("<EntityFilesPanel />", () => {
             mime_type: "application/pdf",
             category: "documents",
             type: "document",
-            linked_entity_type: "commodity",
-            linked_entity_id: COMMODITY,
+            links: [{ entity_type: "commodity", entity_id: COMMODITY }],
             tags: [],
             created_at: "2026-04-01T10:00:00Z",
           },

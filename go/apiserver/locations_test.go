@@ -77,7 +77,7 @@ func TestLocationsDelete_NonEmptyRejected(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(c.Context()))
 	var fileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			fileID = f.ID
 			break
 		}
@@ -135,16 +135,14 @@ func TestLocationsDelete_CascadeStrategy(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(c.Context()))
 	var commodityFileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			commodityFileID = f.ID
 			break
 		}
 	}
 	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
 	locationFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: "loc-doc.pdf",
@@ -153,9 +151,7 @@ func TestLocationsDelete_CascadeStrategy(t *testing.T) {
 		},
 	}))
 	areaFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   areaIDs[0],
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: areaIDs[0], Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: "area-doc.pdf",
@@ -223,16 +219,14 @@ func TestLocationsDelete_UnlinkStrategy(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(c.Context()))
 	var commodityFileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			commodityFileID = f.ID
 			break
 		}
 	}
 	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
 	locationFile := must.Must(registrySet.FileRegistry.Create(c.Context(), models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: "loc-doc.pdf",

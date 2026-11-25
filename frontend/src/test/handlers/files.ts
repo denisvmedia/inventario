@@ -48,10 +48,16 @@ function matches(attrs: Record<string, unknown>, params: URLSearchParams): boole
   const category = params.get("category")
   if (category && attrs.category !== category) return false
 
+  // The BE filters on the file_links table: the file needs a link to the
+  // entity. Both halves must be set, as in listFiles.
   const linkedType = params.get("linked_entity_type")
   const linkedId = params.get("linked_entity_id")
-  if (linkedType && attrs.linked_entity_type !== linkedType) return false
-  if (linkedId && attrs.linked_entity_id !== linkedId) return false
+  if (linkedType && linkedId) {
+    const links = Array.isArray(attrs.links)
+      ? (attrs.links as Array<{ entity_type?: string; entity_id?: string }>)
+      : []
+    if (!links.some((l) => l.entity_type === linkedType && l.entity_id === linkedId)) return false
+  }
 
   const type = params.get("type")
   if (type && attrs.type !== type) return false
@@ -229,6 +235,85 @@ export function error(slug: string, status = 500) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/files`), () =>
       HttpResponse.json({ error: "boom" }, { status })
+    ),
+  ]
+}
+
+// attach answers POST /files/{id}/links with the file and its new link, and
+// hands each request's attributes to `onBody` so a test can assert on them.
+export function attach(
+  slug: string,
+  fileId: string,
+  opts: {
+    attributes?: Record<string, unknown>
+    onBody?: (attrs: Record<string, unknown>) => void
+    status?: number
+  } = {}
+) {
+  return [
+    http.post(
+      apiUrl(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}/links`),
+      async ({ request }) => {
+        const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
+        const attrs = body.data?.attributes ?? {}
+        opts.onBody?.(attrs)
+        if (opts.status && opts.status >= 400) {
+          return HttpResponse.json({ error: "attach rejected" }, { status: opts.status })
+        }
+        return HttpResponse.json(
+          {
+            id: fileId,
+            type: "files",
+            attributes: {
+              id: fileId,
+              ...opts.attributes,
+              links: [{ id: `link-${fileId}`, file_id: fileId, ...attrs }],
+            },
+          },
+          { status: opts.status ?? 201 }
+        )
+      }
+    ),
+  ]
+}
+
+// detach answers DELETE /files/{id}/links/{linkId} with the file as it is
+// afterwards.
+export function detach(
+  slug: string,
+  fileId: string,
+  linkId: string,
+  attributes: Record<string, unknown>,
+  onCall?: () => void
+) {
+  return [
+    http.delete(
+      apiUrl(
+        `/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}/links/${encodeURIComponent(linkId)}`
+      ),
+      () => {
+        onCall?.()
+        return HttpResponse.json({ id: fileId, type: "files", attributes })
+      }
+    ),
+  ]
+}
+
+// duplicates answers GET /files/{id}/duplicates with the given files, in the
+// flat list shape of GET /files.
+export function duplicates(
+  slug: string,
+  fileId: string,
+  items: Array<{ id: string; attributes: Record<string, unknown> }> = []
+) {
+  return [
+    http.get(
+      apiUrl(`/g/${encodeURIComponent(slug)}/files/${encodeURIComponent(fileId)}/duplicates`),
+      () =>
+        HttpResponse.json({
+          data: items.map((it) => ({ ...it.attributes, id: it.id })),
+          meta: { files: items.length, total: items.length },
+        })
     ),
   ]
 }

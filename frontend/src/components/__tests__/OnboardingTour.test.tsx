@@ -218,6 +218,38 @@ describe("OnboardingTour", () => {
     expect(screen.getByTestId("onboarding-card")).toHaveAttribute("data-step", "navDashboard")
   })
 
+  it("keeps its steps while hidden, even when the targets go away for a moment", async () => {
+    // Shell hides the tour while the window is below the mobile breakpoint,
+    // where the sidebar the steps point at is not rendered. When it comes
+    // back, it must show the same steps and the same position.
+    mountTargets()
+    const props = {
+      step: 1,
+      onNext: vi.fn(),
+      onPrev: vi.fn(),
+      onFinish: vi.fn(),
+      onSkip: vi.fn(),
+      onClose: vi.fn(),
+    }
+    const { rerender } = render(<OnboardingTour {...props} />)
+    expect(screen.getByTestId("onboarding-card")).toHaveAttribute("data-step", "addItem")
+
+    rerender(<OnboardingTour {...props} hidden />)
+    expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument()
+    fireEvent.keyDown(document, { key: "Escape" })
+    fireEvent.keyDown(document, { key: "ArrowRight" })
+    expect(props.onSkip).not.toHaveBeenCalled()
+    expect(props.onNext).not.toHaveBeenCalled()
+
+    document.querySelectorAll("[data-testid='tour-targets']").forEach((el) => el.remove())
+    mountTargets()
+    rerender(<OnboardingTour {...props} hidden={false} />)
+    expect(screen.getByTestId("onboarding-card")).toHaveAttribute("data-step", "addItem")
+    expect(screen.getByTestId("onboarding-dots").children).toHaveLength(TOUR_STEPS.length)
+    expect(await screen.findByTestId("onboarding-highlight")).toBeInTheDocument()
+    expect(props.onClose).not.toHaveBeenCalled()
+  })
+
   it("renders nothing and calls onClose when no step has a target", async () => {
     // The welcome target alone (the sidebar header, which renders for a
     // user without a group too) is not enough: the welcome card followed

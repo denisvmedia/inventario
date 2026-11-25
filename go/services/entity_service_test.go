@@ -70,9 +70,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 				// Create linked files
 				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity.ID,
-					LinkedEntityMeta: "images",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: "images"}},
 					File: &models.File{
 						Path:         "test1",
 						OriginalPath: "test1.jpg",
@@ -81,9 +79,7 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 					},
 				})
 				file2, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity.ID,
-					LinkedEntityMeta: "manuals",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: "manuals"}},
 					File: &models.File{
 						Path:         "test2",
 						OriginalPath: "test2.pdf",
@@ -187,9 +183,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 
 				// Create linked files
 				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity1.ID,
-					LinkedEntityMeta: "images",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity1.ID, Meta: "images"}},
 					File: &models.File{
 						Path:         "test1",
 						OriginalPath: "test1.jpg",
@@ -198,9 +192,7 @@ func TestEntityService_DeleteAreaRecursive(t *testing.T) {
 					},
 				})
 				file2, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity2.ID,
-					LinkedEntityMeta: "manuals",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity2.ID, Meta: "manuals"}},
 					File: &models.File{
 						Path:         "test2",
 						OriginalPath: "test2.pdf",
@@ -307,9 +299,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 
 				// Create linked files
 				file1, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity1.ID,
-					LinkedEntityMeta: "images",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity1.ID, Meta: "images"}},
 					File: &models.File{
 						Path:         "test1",
 						OriginalPath: "test1.jpg",
@@ -318,9 +308,7 @@ func TestEntityService_DeleteLocationRecursive(t *testing.T) {
 					},
 				})
 				file2, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "commodity",
-					LinkedEntityID:   commodity2.ID,
-					LinkedEntityMeta: "manuals",
+					Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity2.ID, Meta: "manuals"}},
 					File: &models.File{
 						Path:         "test2",
 						OriginalPath: "test2.pdf",
@@ -415,8 +403,7 @@ func TestEntityService_DeleteExportWithFile(t *testing.T) {
 			setupData: func(ctx context.Context, registrySet *registry.Set) (string, string) {
 				// Create file
 				file, _ := registrySet.FileRegistry.Create(ctx, models.FileEntity{
-					LinkedEntityType: "export",
-					LinkedEntityMeta: "xml-1.0",
+					Links: []models.FileLink{{EntityType: "export", Meta: "xml-1.0"}},
 					File: &models.File{
 						Path:         "export",
 						OriginalPath: "export.xml",
@@ -817,9 +804,7 @@ func TestDeleteCommodityRecursive_RowFirst(t *testing.T) {
 	for i, p := range filePaths {
 		c.Assert(b.WriteAll(ctx, p, []byte("bytes"), nil), qt.IsNil)
 		file := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   commodity.ID,
-			LinkedEntityMeta: "images",
+			Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: "images"}},
 			File: &models.File{
 				Path:         p,
 				OriginalPath: p,
@@ -872,9 +857,7 @@ func TestDeleteAreaRecursive_DeletesAttachedFiles(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: blobKey,
@@ -926,9 +909,7 @@ func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: locationBlobKey,
@@ -937,9 +918,7 @@ func TestDeleteLocationRecursive_DeletesAttachedFiles(t *testing.T) {
 		},
 	}))
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: areaBlobKey,
@@ -992,9 +971,7 @@ func TestDeleteArea_DeletesLinkedFiles(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, blobKey, []byte("jpeg bytes"), nil), qt.IsNil)
 
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-photo",
 			OriginalPath: blobKey,
@@ -1060,9 +1037,7 @@ func TestDeleteArea_NonEmptyRejected(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: blobKey,
@@ -1106,9 +1081,7 @@ func TestDeleteLocation_DeletesLinkedFiles(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: blobKey,
@@ -1159,9 +1132,7 @@ func TestDeleteLocation_NonEmptyRejected(t *testing.T) {
 	c.Assert(b.WriteAll(ctx, blobKey, []byte("pdf bytes"), nil), qt.IsNil)
 
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: blobKey,
@@ -1215,9 +1186,7 @@ func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
 	areaBlobKey := "area-doc.pdf"
 	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("area pdf"), nil), qt.IsNil)
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: areaBlobKey,
@@ -1230,9 +1199,7 @@ func TestUnlinkAndDeleteArea_KeepsCommodities(t *testing.T) {
 	commodityBlobKey := "com-doc.pdf"
 	c.Assert(b.WriteAll(ctx, commodityBlobKey, []byte("com pdf"), nil), qt.IsNil)
 	commodityFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodity1.ID,
-		LinkedEntityMeta: "manuals",
+		Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity1.ID, Meta: "manuals"}},
 		File: &models.File{
 			Path:         "com-doc",
 			OriginalPath: commodityBlobKey,
@@ -1297,9 +1264,7 @@ func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 	locationBlobKey := "loc-doc.pdf"
 	c.Assert(b.WriteAll(ctx, locationBlobKey, []byte("loc pdf"), nil), qt.IsNil)
 	locationFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "location",
-		LinkedEntityID:   location.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "location", EntityID: location.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "loc-doc",
 			OriginalPath: locationBlobKey,
@@ -1311,9 +1276,7 @@ func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 	areaBlobKey := "area-doc.pdf"
 	c.Assert(b.WriteAll(ctx, areaBlobKey, []byte("area pdf"), nil), qt.IsNil)
 	areaFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area1.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area1.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: areaBlobKey,
@@ -1326,9 +1289,7 @@ func TestUnlinkAndDeleteLocation_KeepsCommodities(t *testing.T) {
 	commodityBlobKey := "com-doc.pdf"
 	c.Assert(b.WriteAll(ctx, commodityBlobKey, []byte("com pdf"), nil), qt.IsNil)
 	commodityFile := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodity2.ID,
-		LinkedEntityMeta: "manuals",
+		Links: []models.FileLink{{EntityType: "commodity", EntityID: commodity2.ID, Meta: "manuals"}},
 		File: &models.File{
 			Path:         "com-doc",
 			OriginalPath: commodityBlobKey,
@@ -1485,9 +1446,7 @@ func TestEntityService_MissingEntitySweepsOrphanedFiles(t *testing.T) {
 			// A file row still linked to an entity id whose row no longer
 			// exists — exactly what an interrupted earlier delete leaves.
 			orphan := must.Must(registrySet.FileRegistry.Create(ctx, models.FileEntity{
-				LinkedEntityType: tt.entityType,
-				LinkedEntityID:   "ghost-id",
-				LinkedEntityMeta: "images",
+				Links: []models.FileLink{{EntityType: tt.entityType, EntityID: "ghost-id", Meta: "images"}},
 				File: &models.File{
 					Path:         "orphan-doc",
 					OriginalPath: blobKey,

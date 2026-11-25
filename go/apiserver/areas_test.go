@@ -246,7 +246,7 @@ func TestAreaDelete_NonEmptyRejected(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(context.Background()))
 	var fileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			fileID = f.ID
 			break
 		}
@@ -300,16 +300,14 @@ func TestAreaDelete_CascadeStrategy(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(context.Background()))
 	var commodityFileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			commodityFileID = f.ID
 			break
 		}
 	}
 	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
 	areaFile := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: "area-doc.pdf",
@@ -371,16 +369,14 @@ func TestAreaDelete_UnlinkStrategy(t *testing.T) {
 	files := must.Must(registrySet.FileRegistry.List(context.Background()))
 	var commodityFileID string
 	for _, f := range files {
-		if f.LinkedEntityType == "commodity" && f.LinkedEntityID == commodityIDs[0] {
+		if f.LinkTo("commodity", commodityIDs[0]) != nil {
 			commodityFileID = f.ID
 			break
 		}
 	}
 	c.Assert(commodityFileID, qt.Not(qt.Equals), "")
 	areaFile := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
-		LinkedEntityType: "area",
-		LinkedEntityID:   area.ID,
-		LinkedEntityMeta: "images",
+		Links: []models.FileLink{{EntityType: "area", EntityID: area.ID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-doc",
 			OriginalPath: "area-doc.pdf",

@@ -6790,6 +6790,209 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/files/{fileID}/duplicates": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List files with the same content
+         * @description Returns the other files of the group whose SHA-256 checksum
+         *     equals this file's, newest first. Empty while the file's
+         *     checksum is not known yet. Backup export files are left out.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description File ID */
+                    fileID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.FilesResponse"];
+                    };
+                };
+                /** @description File not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/files/{fileID}/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Attach a file to an entity
+         * @description Creates a link from the file to the entity and nothing else: no
+         *     new file, no upload, no storage charge. Attaching a file to an
+         *     entity it is already attached to is a no-op and answers 200.
+         *     The entity must be in the same group as the file. A backup
+         *     export file cannot be attached.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description File ID */
+                    fileID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Entity to attach the file to */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.FileLinkRequest"];
+                };
+            };
+            responses: {
+                /** @description Already attached */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.FileResponse"];
+                    };
+                };
+                /** @description Attached */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.FileResponse"];
+                    };
+                };
+                /** @description File not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Invalid entity, entity not found, or export file */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/files/{fileID}/links/{linkID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove a file attachment
+         * @description Removes the link and nothing else. A file whose last attachment
+         *     is removed stays as a standalone file; deleting it is a separate
+         *     call. Removing the attachment of an item's cover photo clears
+         *     that item's cover choice. The link of a backup export file
+         *     cannot be removed.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description File ID */
+                    fileID: string;
+                    /** @description Link ID */
+                    linkID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The file with its remaining attachments */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.FileResponse"];
+                    };
+                };
+                /** @description File or link not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Export link */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files/{fileID}/signed-url": {
         parameters: {
             query?: never;
@@ -8433,6 +8636,7 @@ export type paths = {
         /**
          * Upload a file
          * @description Upload a single file of any type. The file is stored and a file entity is created without a linked entity.
+         *     The response carries the SHA-256 of the content; GET /files/{id}/duplicates lists the files of the group with the same content.
          */
         post: {
             parameters: {
@@ -11776,6 +11980,30 @@ export type components = {
         "jsonapi.FileCategoryCountsResponse": {
             data?: components["schemas"]["jsonapi.FileCategoryCounts"];
         };
+        "jsonapi.FileLinkRequest": {
+            data?: components["schemas"]["jsonapi.FileLinkRequestData"];
+        };
+        "jsonapi.FileLinkRequestAttributes": {
+            entity_id?: string;
+            /**
+             * @example commodity
+             * @enum {string}
+             */
+            entity_type?: "commodity" | "location" | "area";
+            /**
+             * @example documents
+             * @enum {string}
+             */
+            meta?: "images" | "documents" | "files";
+        };
+        "jsonapi.FileLinkRequestData": {
+            attributes?: components["schemas"]["jsonapi.FileLinkRequestAttributes"];
+            /**
+             * @example file-links
+             * @enum {string}
+             */
+            type?: "file-links";
+        };
         "jsonapi.FileMeta": {
             /** @description Map of file ID to signed URLs and thumbnails */
             signed_urls?: {
@@ -11787,12 +12015,6 @@ export type components = {
         };
         "jsonapi.FileRequestData": {
             description?: string;
-            /** @description ID of linked entity */
-            linked_entity_id?: string;
-            /** @description metadata about the link */
-            linked_entity_meta?: string;
-            /** @description commodity, export, or empty */
-            linked_entity_type?: string;
             tags?: string[];
             title?: string;
         };
@@ -11826,12 +12048,6 @@ export type components = {
         };
         "jsonapi.FileUpdateRequestFileData": {
             description?: string;
-            /** @description ID of linked entity */
-            linked_entity_id?: string;
-            /** @description metadata about the link */
-            linked_entity_meta?: string;
-            /** @description commodity, export, or empty */
-            linked_entity_type?: string;
             /** @description User-editable filename */
             path?: string;
             tags?: string[];
@@ -12976,16 +13192,12 @@ export type components = {
              */
             ext?: string;
             id?: string;
-            /** @description LinkedEntityID is the ID of the linked entity (commodity or export) */
-            linked_entity_id?: string;
             /**
-             * @description LinkedEntityMeta contains metadata about the link type
-             *     For commodities: "images", "documents"
-             *     For exports: "xml-1.0" (version of the export file format)
+             * @description Links are the entities the file is attached to (see FileLink). The file
+             *     registries fill them on every read; Create inserts them with the file,
+             *     Update never touches them — use FileRegistry.AddLink / RemoveLink.
              */
-            linked_entity_meta?: string;
-            /** @description LinkedEntityType indicates what type of entity this file is linked to (commodity, export, or empty for standalone files) */
-            linked_entity_type?: string;
+            links?: components["schemas"]["models.FileLink"][];
             /**
              * @description MIMEType is the MIME type of the file.
              *     Example: "application/pdf"
@@ -13008,6 +13220,14 @@ export type components = {
              */
             path?: string;
             /**
+             * @description SHA256 is the lowercase hex SHA-256 of the stored blob, computed while
+             *     the upload streams in. Two files of one group with the same checksum are
+             *     the same document; the upload dialog offers to attach the existing one
+             *     instead. Empty until known: files stored before the column existed get it
+             *     from a background pass at startup.
+             */
+            sha256?: string;
+            /**
              * @description SizeBytes is the byte size of the stored blob, captured at upload time
              *     and used by the per-group storage-usage aggregation (#1388). Defaults
              *     to 0 for rows that pre-date the column; a backfill walks the bucket
@@ -13022,6 +13242,29 @@ export type components = {
             type?: components["schemas"]["models.FileType"];
             /** @description UpdatedAt is when the file was last updated */
             updated_at?: string;
+            uuid?: string;
+        };
+        "models.FileLink": {
+            created_at?: string;
+            /**
+             * @description EntityID is the database id of the attached entity. The reference is
+             *     polymorphic, so there is no foreign key: the entity-deletion paths remove
+             *     the links of the entity they delete.
+             */
+            entity_id?: string;
+            /**
+             * @description EntityName is the display name of the attached entity, filled by the API
+             *     handlers for the "Linked to" list. Empty when the entity is not visible
+             *     to the caller.
+             */
+            readonly entity_name?: string;
+            /** @description EntityType is one of the FileLink* constants. */
+            entity_type?: string;
+            /** @description FileID is the attached file. Deleting the file deletes its links. */
+            file_id?: string;
+            id?: string;
+            /** @description Meta is the bucket on the entity's Files tab (see FileLinkMetaValues). */
+            meta?: string;
             uuid?: string;
         };
         /** @enum {string} */

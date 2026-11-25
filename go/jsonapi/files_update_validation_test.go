@@ -2,6 +2,7 @@ package jsonapi_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -22,66 +23,24 @@ func newFileUpdateRequest(attrs jsonapi.FileUpdateRequestFileData) *jsonapi.File
 }
 
 // TestFileUpdateRequestValidate_Passes covers the request shapes that MUST be
-// accepted — most importantly the live "attach uploaded file to commodity"
-// flow (#1983 Part A / PR #2032), which sends a metadata-only PUT carrying no
-// `path` and no `linked_entity_meta`. Before #2033 the nested attribute
-// validator never ran at all; these guard that enforcing it didn't break a
-// live flow.
+// accepted: a metadata-only edit carries no `path`, and the handler keeps the
+// persisted one.
 func TestFileUpdateRequestValidate_Passes(t *testing.T) {
 	cases := []struct {
 		name  string
 		attrs jsonapi.FileUpdateRequestFileData
 	}{
 		{
-			name: "live commodity attach flow: no path, no meta, server derives",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "commodity",
-				LinkedEntityID:   "commodity-1",
-			},
-		},
-		{
-			name: "commodity attach with valid meta",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				Path:             "receipt.pdf",
-				LinkedEntityType: "commodity",
-				LinkedEntityID:   "commodity-1",
-				LinkedEntityMeta: "images",
-			},
-		},
-		{
-			name: "metadata-only edit: title + tags, no link",
+			name: "metadata-only edit: title + tags, no path",
 			attrs: jsonapi.FileUpdateRequestFileData{
 				Title: "Invoice 2026",
 				Tags:  []string{"invoice"},
 			},
 		},
 		{
-			name: "rename: path supplied, no link",
+			name: "rename: path supplied",
 			attrs: jsonapi.FileUpdateRequestFileData{
 				Path: "renamed-file.jpg",
-			},
-		},
-		{
-			name: "location attach with valid meta",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "location",
-				LinkedEntityID:   "location-1",
-				LinkedEntityMeta: "files",
-			},
-		},
-		{
-			name: "location attach, meta omitted (server derives)",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "location",
-				LinkedEntityID:   "location-1",
-			},
-		},
-		{
-			name: "export relink with valid meta",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "export",
-				LinkedEntityID:   "export-1",
-				LinkedEntityMeta: "xml-1.0",
 			},
 		},
 	}
@@ -96,52 +55,30 @@ func TestFileUpdateRequestValidate_Passes(t *testing.T) {
 	}
 }
 
-// TestFileUpdateRequestValidate_Rejects covers the bad request shapes that
-// MUST now be rejected. Before #2033 the nested FileUpdateRequestFileData
-// validator was silently skipped (Attributes is a struct value, the validator
-// has a pointer receiver), so every one of these slipped through with a 200.
+// TestFileUpdateRequestValidate_Rejects covers the bad request shapes that MUST
+// be rejected. Attributes is a struct value whose validator has a pointer
+// receiver, so these only fail when the parent invokes the nested validator
+// explicitly (#2033).
 func TestFileUpdateRequestValidate_Rejects(t *testing.T) {
 	cases := []struct {
 		name  string
 		attrs jsonapi.FileUpdateRequestFileData
 	}{
 		{
-			name: "commodity with bogus meta enum",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "commodity",
-				LinkedEntityID:   "commodity-1",
-				LinkedEntityMeta: "BOGUS",
-			},
+			name:  "title over 255 characters",
+			attrs: jsonapi.FileUpdateRequestFileData{Title: strings.Repeat("t", 256)},
 		},
 		{
-			name: "commodity link without an id",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "commodity",
-				LinkedEntityMeta: "images",
-			},
+			name:  "description over 1000 characters",
+			attrs: jsonapi.FileUpdateRequestFileData{Description: strings.Repeat("d", 1001)},
 		},
 		{
-			name: "location with meta from the wrong bucket",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "location",
-				LinkedEntityID:   "location-1",
-				LinkedEntityMeta: "manuals",
-			},
+			name:  "path over 1024 characters",
+			attrs: jsonapi.FileUpdateRequestFileData{Path: strings.Repeat("p", 1025)},
 		},
 		{
-			name: "export with non-version meta",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "export",
-				LinkedEntityID:   "export-1",
-				LinkedEntityMeta: "images",
-			},
-		},
-		{
-			name: "unknown linked_entity_type",
-			attrs: jsonapi.FileUpdateRequestFileData{
-				LinkedEntityType: "spaceship",
-				LinkedEntityID:   "x-1",
-			},
+			name:  "more than 100 tags",
+			attrs: jsonapi.FileUpdateRequestFileData{Tags: make([]string, 101)},
 		},
 	}
 
@@ -153,6 +90,103 @@ func TestFileUpdateRequestValidate_Rejects(t *testing.T) {
 			c.Assert(err, qt.IsNotNil)
 		})
 	}
+}
+
+func newFileLinkRequest(attrs jsonapi.FileLinkRequestAttributes) *jsonapi.FileLinkRequest {
+	return &jsonapi.FileLinkRequest{
+		Data: &jsonapi.FileLinkRequestData{Type: "file-links", Attributes: attrs},
+	}
+}
+
+// TestFileLinkRequestValidate_Passes covers the attach requests the API
+// accepts: every inventory entity type, with a meta of its own bucket or none.
+func TestFileLinkRequestValidate_Passes(t *testing.T) {
+	cases := []struct {
+		name  string
+		attrs jsonapi.FileLinkRequestAttributes
+	}{
+		{
+			name:  "commodity, meta omitted (server picks the bucket)",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1"},
+		},
+		{
+			name:  "commodity with documents meta",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1", Meta: "documents"},
+		},
+		{
+			name:  "location with files meta",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "location", EntityID: "location-1", Meta: "files"},
+		},
+		{
+			name:  "area with images meta",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "area", EntityID: "area-1", Meta: "images"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := newFileLinkRequest(tc.attrs).ValidateWithContext(context.Background())
+			c.Assert(err, qt.IsNil)
+		})
+	}
+}
+
+// TestFileLinkRequestValidate_Rejects covers the attach requests the API
+// refuses before touching a registry.
+func TestFileLinkRequestValidate_Rejects(t *testing.T) {
+	cases := []struct {
+		name  string
+		attrs jsonapi.FileLinkRequestAttributes
+	}{
+		{
+			name:  "commodity with bogus meta",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1", Meta: "BOGUS"},
+		},
+		{
+			name:  "commodity with the location bucket",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1", Meta: "files"},
+		},
+		{
+			name:  "location with the commodity bucket",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "location", EntityID: "location-1", Meta: "documents"},
+		},
+		{
+			name:  "missing entity id",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "commodity"},
+		},
+		{
+			name:  "export is not attachable",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "export", EntityID: "export-1", Meta: "xml-1.0"},
+		},
+		{
+			name:  "unknown entity type",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityType: "spaceship", EntityID: "x-1"},
+		},
+		{
+			name:  "missing entity type",
+			attrs: jsonapi.FileLinkRequestAttributes{EntityID: "x-1"},
+		},
+	}
+
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := newFileLinkRequest(tc.attrs).ValidateWithContext(context.Background())
+			c.Assert(err, qt.IsNotNil)
+		})
+	}
+}
+
+// TestFileLinkRequestValidate_Envelope guards the outer envelope: a missing
+// data object or a wrong type is rejected regardless of the attributes.
+func TestFileLinkRequestValidate_Envelope(t *testing.T) {
+	c := qt.New(t)
+	c.Assert((&jsonapi.FileLinkRequest{}).ValidateWithContext(context.Background()), qt.IsNotNil)
+
+	req := newFileLinkRequest(jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1"})
+	req.Data.Type = "files"
+	c.Assert(req.ValidateWithContext(context.Background()), qt.IsNotNil)
 }
 
 // TestFileUpdateRequestValidate_TypeRequired guards the outer envelope: a

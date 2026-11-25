@@ -132,8 +132,8 @@ describe("<UploadFilesDialog />", () => {
     ).toBeInTheDocument()
   })
 
-  it("PUTs linked_entity_* on every successful upload when linkedEntity is set", async () => {
-    const updateBodies: Array<Record<string, unknown>> = []
+  it("attaches every successful upload to the linked entity", async () => {
+    const attachBodies: Array<Record<string, unknown>> = []
     let capacityRequests = 0
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -158,15 +158,8 @@ describe("<UploadFilesDialog />", () => {
         category: "images",
         mime_type: "image/png",
       }),
-      http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), async ({ request }) => {
-        const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
-        updateBodies.push(body.data?.attributes ?? {})
-        return HttpResponse.json({
-          id: "uploaded-1",
-          type: "files",
-          attributes: body.data?.attributes ?? {},
-        })
-      })
+      ...fileHandlers.attach(SLUG, "uploaded-1", { onBody: (attrs) => attachBodies.push(attrs) }),
+      ...fileHandlers.duplicates(SLUG, "uploaded-1")
     )
     const user = userEvent.setup()
     const dropped = [new File(["x"], "from-drop.png", { type: "image/png" })]
@@ -179,14 +172,24 @@ describe("<UploadFilesDialog />", () => {
     await screen.findByTestId("files-upload-metadata-list")
     await user.click(screen.getByTestId("files-upload-start"))
     await waitFor(() => expect(screen.getByTestId("files-upload-progress")).toBeInTheDocument())
-    await waitFor(() => expect(updateBodies).toHaveLength(1))
+    await waitFor(() => expect(attachBodies).toHaveLength(1))
     expect(capacityRequests).toBeGreaterThanOrEqual(1)
-    const attrs = updateBodies[0]
-    expect(attrs.linked_entity_type).toBe("commodity")
-    expect(attrs.linked_entity_id).toBe("com-9")
+    // A photo goes to the item's images bucket.
+    expect(attachBodies[0]).toEqual({
+      entity_type: "commodity",
+      entity_id: "com-9",
+      meta: "images",
+    })
+    await waitFor(() =>
+      expect(screen.getAllByTestId(/files-upload-progress-item-/)[0]).toHaveAttribute(
+        "data-status",
+        "done"
+      )
+    )
+    expect(screen.queryByTestId("files-upload-duplicate")).not.toBeInTheDocument()
   })
 
-  it("marks an item as failed when the linkage PUT fails (orphan would otherwise be silent)", async () => {
+  it("marks an item as failed when attaching it fails (a standalone file would otherwise be silent)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
       http.get(apiUrl(`/g/${SLUG}/upload-slots/check`), () =>
@@ -203,9 +206,7 @@ describe("<UploadFilesDialog />", () => {
         })
       ),
       ...fileHandlers.upload(SLUG, { title: "x", category: "images" }),
-      http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), () =>
-        HttpResponse.json({ error: "linkage rejected" }, { status: 422 })
-      )
+      ...fileHandlers.attach(SLUG, "uploaded-1", { status: 422 })
     )
     const user = userEvent.setup()
     renderDialog({
@@ -336,14 +337,8 @@ describe("<UploadFilesDialog />", () => {
         })
       ),
       ...fileHandlers.upload(SLUG, { title: "cover-shot", category: "images" }),
-      http.put(apiUrl(`/g/${SLUG}/files/uploaded-1`), async ({ request }) => {
-        const body = (await request.json()) as { data?: { attributes?: Record<string, unknown> } }
-        return HttpResponse.json({
-          id: "uploaded-1",
-          type: "files",
-          attributes: body.data?.attributes ?? {},
-        })
-      })
+      ...fileHandlers.attach(SLUG, "uploaded-1"),
+      ...fileHandlers.duplicates(SLUG, "uploaded-1")
     )
     const user = userEvent.setup()
     renderDialog({
@@ -357,6 +352,100 @@ describe("<UploadFilesDialog />", () => {
     // Default-on checkbox stays checked → upload promotes the file.
     await user.click(screen.getByTestId("files-upload-start"))
     await waitFor(() => expect(onSetCover).toHaveBeenCalledWith("uploaded-1"))
+  })
+
+  describe("when the group already holds the same content", () => {
+    const existing = {
+      id: "existing-1",
+      attributes: { title: "Store receipt", category: "documents", mime_type: "application/pdf" },
+    }
+
+    function seedDuplicate(onAttachExisting?: (attrs: Record<string, unknown>) => void) {
+      let deleted = false
+      server.use(
+        ...groupHandlers.list(groupFixture),
+        ...fileHandlers.uploadCapacity(SLUG),
+        ...fileHandlers.upload(SLUG, { title: "receipt", category: "documents" }),
+        ...fileHandlers.attach(SLUG, "uploaded-1"),
+        ...fileHandlers.attach(SLUG, "existing-1", { onBody: onAttachExisting }),
+        ...fileHandlers.duplicates(SLUG, "uploaded-1", [existing]),
+        http.delete(apiUrl(`/g/${SLUG}/files/uploaded-1`), () => {
+          deleted = true
+          return new HttpResponse(null, { status: 204 })
+        })
+      )
+      return { wasDeleted: () => deleted }
+    }
+
+    async function upload(user: ReturnType<typeof userEvent.setup>) {
+      await screen.findByText("receipt.pdf")
+      await user.click(screen.getByTestId("files-upload-next"))
+      await user.click(screen.getByTestId("files-upload-start"))
+      return screen.findByTestId("files-upload-duplicate")
+    }
+
+    it("attaches the existing file instead and deletes the new copy", async () => {
+      const attached: Array<Record<string, unknown>> = []
+      const { wasDeleted } = seedDuplicate((attrs) => attached.push(attrs))
+      const user = userEvent.setup()
+      renderDialog({
+        initialFiles: [new File(["x"], "receipt.pdf", { type: "application/pdf" })],
+        linkedEntity: { type: "commodity", id: "com-9" },
+      })
+      const notice = await upload(user)
+      expect(notice).toHaveTextContent("Store receipt")
+      await user.click(screen.getByTestId("files-upload-duplicate-use-existing"))
+      expect(await screen.findByTestId("files-upload-duplicate-done")).toBeInTheDocument()
+      expect(attached).toEqual([
+        { entity_type: "commodity", entity_id: "com-9", meta: "documents" },
+      ])
+      expect(wasDeleted()).toBe(true)
+    })
+
+    it("moves the cover to the existing file when the new copy was the cover", async () => {
+      const onSetCover = (await import("vitest")).vi.fn()
+      seedDuplicate()
+      const user = userEvent.setup()
+      renderDialog({
+        initialFiles: [new File(["x"], "receipt.pdf", { type: "image/png" })],
+        linkedEntity: { type: "commodity", id: "com-9" },
+        onSetCover,
+        commodityHasCover: false,
+      })
+      await upload(user)
+      await waitFor(() => expect(onSetCover).toHaveBeenCalledWith("uploaded-1"))
+      await user.click(screen.getByTestId("files-upload-duplicate-use-existing"))
+      await waitFor(() => expect(onSetCover).toHaveBeenLastCalledWith("existing-1"))
+    })
+
+    it("keeps both files when the user says so", async () => {
+      const { wasDeleted } = seedDuplicate()
+      const user = userEvent.setup()
+      renderDialog({
+        initialFiles: [new File(["x"], "receipt.pdf", { type: "application/pdf" })],
+        linkedEntity: { type: "commodity", id: "com-9" },
+      })
+      await upload(user)
+      await user.click(screen.getByTestId("files-upload-duplicate-keep-both"))
+      expect(screen.queryByTestId("files-upload-duplicate")).not.toBeInTheDocument()
+      expect(wasDeleted()).toBe(false)
+    })
+
+    it("offers to remove the copy when nothing is attached", async () => {
+      const { wasDeleted } = seedDuplicate()
+      const user = userEvent.setup()
+      renderDialog({
+        initialFiles: [new File(["x"], "receipt.pdf", { type: "application/pdf" })],
+      })
+      await upload(user)
+      const button = screen.getByTestId("files-upload-duplicate-use-existing")
+      expect(button).toHaveTextContent(/remove this copy/i)
+      await user.click(button)
+      expect(await screen.findByTestId("files-upload-duplicate-done")).toHaveTextContent(
+        /removed this copy/i
+      )
+      expect(wasDeleted()).toBe(true)
+    })
   })
 
   it("removes a queued file via the per-row remove button", async () => {

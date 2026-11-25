@@ -139,10 +139,12 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c.Assert(restored.CoverFileID, qt.IsNotNil, qt.Commentf("cover photo must round-trip"))
 	fileReg := must.Must(factorySet.FileRegistryFactory.CreateUserRegistry(uctx))
 	restoredCover := must.Must(fileReg.Get(uctx, *restored.CoverFileID))
-	c.Assert(restoredCover.LinkedEntityType, qt.Equals, "commodity")
-	c.Assert(restoredCover.LinkedEntityID, qt.Equals, restored.ID,
+	c.Assert(restoredCover.Links, qt.HasLen, 1)
+	c.Assert(restoredCover.Links[0].EntityType, qt.Equals, "commodity")
+	c.Assert(restoredCover.Links[0].EntityID, qt.Equals, restored.ID,
 		qt.Commentf("restored cover must be linked to the restored commodity"))
-	c.Assert(restoredCover.LinkedEntityMeta, qt.Equals, "images")
+	c.Assert(restoredCover.Links, qt.HasLen, 1)
+	c.Assert(restoredCover.Links[0].Meta, qt.Equals, "images")
 }
 
 // seedFidelityTenant creates a tenant + active user + USD group. GroupCurrency is
@@ -244,9 +246,7 @@ func attachFidelityCover(c *qt.C, fs *registry.FactorySet, uctx context.Context,
 		Type:                     models.FileTypeFromMIME("image/jpeg"),
 		Category:                 models.FileCategoryFromContext("commodity", "images", "image/jpeg"),
 		Tags:                     models.StringSlice{},
-		LinkedEntityType:         "commodity",
-		LinkedEntityID:           com.ID,
-		LinkedEntityMeta:         "images",
+		Links:                    []models.FileLink{{EntityType: "commodity", EntityID: com.ID, Meta: "images"}},
 		File: &models.File{
 			Path:     "cover-photo",
 			Ext:      ".jpg",

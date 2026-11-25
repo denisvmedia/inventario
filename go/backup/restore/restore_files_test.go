@@ -123,16 +123,14 @@ func (f *fileFixture) makeFile(c *qt.C, title, mime, linkedType, linkedID, linke
 			GroupID:         f.groupID,
 			CreatedByUserID: f.userID,
 		},
-		Title:            title,
-		Description:      "for-1485",
-		Type:             models.FileTypeFromMIME(mime),
-		Category:         models.FileCategoryFromContext(linkedType, linkedMeta, mime),
-		Tags:             models.StringSlice(tags),
-		LinkedEntityType: linkedType,
-		LinkedEntityID:   linkedID,
-		LinkedEntityMeta: linkedMeta,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       title,
+		Description: "for-1485",
+		Type:        models.FileTypeFromMIME(mime),
+		Category:    models.FileCategoryFromContext(linkedType, linkedMeta, mime),
+		Tags:        models.StringSlice(tags),
+		Links:       fileLinks(linkedType, linkedID, linkedMeta),
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "blob-" + title,
 			OriginalPath: "blob-" + title + ".bin",
@@ -167,7 +165,7 @@ func (f *fileFixture) runExport(c *qt.C, exportType models.ExportType, includeFi
 // Creates a hierarchy with three files (a commodity-linked image, a
 // commodity-linked invoice, and a standalone document), exports the entire
 // group, full-replaces into a fresh fixture, and verifies that every file
-// reappears with original metadata + remapped linked_entity_id pointing at
+// reappears with original metadata + a remapped link entity id pointing at
 // the new commodity DB row.
 func TestExportRestore_FileRoundTrip(t *testing.T) {
 	c := qt.New(t)
@@ -244,9 +242,10 @@ func TestExportRestore_FileRoundTrip(t *testing.T) {
 	// Photo: linked to remapped commodity DB id, category=photos, tags preserved.
 	photo := byUUID[commImage.UUID]
 	c.Assert(photo, qt.IsNotNil)
-	c.Assert(photo.LinkedEntityType, qt.Equals, "commodity")
-	c.Assert(photo.LinkedEntityID, qt.Equals, newCommodityID, qt.Commentf("expected commodity ID remap"))
-	c.Assert(photo.LinkedEntityMeta, qt.Equals, "images")
+	c.Assert(photo.Links, qt.HasLen, 1)
+	c.Assert(photo.Links[0].EntityType, qt.Equals, "commodity")
+	c.Assert(photo.Links[0].EntityID, qt.Equals, newCommodityID, qt.Commentf("expected commodity ID remap"))
+	c.Assert(photo.Links[0].Meta, qt.Equals, "images")
 	c.Assert(photo.Category, qt.Equals, models.FileCategoryImages)
 	c.Assert([]string(photo.Tags), qt.DeepEquals, []string{"photos"})
 
@@ -255,16 +254,16 @@ func TestExportRestore_FileRoundTrip(t *testing.T) {
 	// carries the conventional `invoice` tag.
 	invoice := byUUID[commInvoice.UUID]
 	c.Assert(invoice, qt.IsNotNil)
-	c.Assert(invoice.LinkedEntityType, qt.Equals, "commodity")
-	c.Assert(invoice.LinkedEntityID, qt.Equals, newCommodityID)
-	c.Assert(invoice.LinkedEntityMeta, qt.Equals, "invoices")
+	c.Assert(invoice.Links, qt.HasLen, 1)
+	c.Assert(invoice.Links[0].EntityType, qt.Equals, "commodity")
+	c.Assert(invoice.Links[0].EntityID, qt.Equals, newCommodityID)
+	c.Assert(invoice.Links[0].Meta, qt.Equals, "invoices")
 	c.Assert(invoice.Category, qt.Equals, models.FileCategoryDocuments)
 
 	// Standalone: no link, no remap.
 	guide := byUUID[standalone.UUID]
 	c.Assert(guide, qt.IsNotNil)
-	c.Assert(guide.LinkedEntityType, qt.Equals, "")
-	c.Assert(guide.LinkedEntityID, qt.Equals, "")
+	c.Assert(guide.Links, qt.HasLen, 0)
 
 	// Blob round-trip: restored bucket has the same bytes.
 	c.Assert(readBlob(c, uploadLocation, commImage.OriginalPath), qt.DeepEquals, []byte("image-bytes"))
@@ -301,7 +300,7 @@ func TestExportRestore_EmptyFileSection(t *testing.T) {
 }
 
 // TestExportRestore_ExcludesExportLinkedFiles guards the rule that the
-// export's own backup-bundle FileEntity (linked_entity_type="export") does
+// export's own backup-bundle FileEntity (the one with an export link) does
 // NOT appear inside the <files> section it itself produces — that would
 // create a self-reference that the restore can't reconstruct safely.
 func TestExportRestore_ExcludesExportLinkedFiles(t *testing.T) {
@@ -313,7 +312,8 @@ func TestExportRestore_ExcludesExportLinkedFiles(t *testing.T) {
 	// Stamp an export-linked file directly. ProcessExport would create
 	// one for the bundle, but here we just want to verify the filter.
 	bundleFile := src.makeFile(c, "bundle", "application/xml", "export", "some-export-id", "xml-1.0")
-	c.Assert(bundleFile.LinkedEntityType, qt.Equals, "export")
+	c.Assert(bundleFile.Links, qt.HasLen, 1)
+	c.Assert(bundleFile.Links[0].EntityType, qt.Equals, "export")
 
 	xmlBytes := src.runExport(c, models.ExportTypeFullDatabase, false, uploadLocation)
 	c.Assert(string(xmlBytes), qt.Not(qt.Contains), bundleFile.UUID,
@@ -566,15 +566,13 @@ func stampTenantWithCommodityFile(c *qt.C, factorySet *registry.FactorySet, tena
 			GroupID:         group.ID,
 			CreatedByUserID: user.ID,
 		},
-		Title:            fileTitle,
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		Tags:             models.StringSlice{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodity.ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:     fileTitle,
+		Type:      models.FileTypeImage,
+		Category:  models.FileCategoryImages,
+		Tags:      models.StringSlice{},
+		Links:     []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: "images"}},
+		CreatedAt: now,
+		UpdatedAt: now,
 		File: &models.File{
 			Path:         fileTitle,
 			OriginalPath: fileTitle + ".jpg",
@@ -829,15 +827,13 @@ func TestExportRestore_MergeAddDoesNotOverwriteExistingBlob(t *testing.T) {
 			GroupID:         dst.groupID,
 			CreatedByUserID: dst.userID,
 		},
-		Title:            "destination-original",
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		Tags:             models.StringSlice{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   dst.commodity.ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        time.Now(),
-		UpdatedAt:        time.Now(),
+		Title:     "destination-original",
+		Type:      models.FileTypeImage,
+		Category:  models.FileCategoryImages,
+		Tags:      models.StringSlice{},
+		Links:     []models.FileLink{{EntityType: "commodity", EntityID: dst.commodity.ID, Meta: "images"}},
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
 		File: &models.File{
 			Path:         srcFile.Path,
 			OriginalPath: srcFile.OriginalPath,
@@ -934,3 +930,12 @@ func TestExportRestore_DropsBlobOnUnresolvedLinkedEntity(t *testing.T) {
 
 // Compile-time guard: keep us honest about the shape of types.RestoreStats.
 var _ = exporttypes.ExportStats{FileCount: 0}
+
+// fileLinks is the link list of a seeded file: none for a standalone file
+// (empty entityType), otherwise the one link.
+func fileLinks(entityType, entityID, meta string) []models.FileLink {
+	if entityType == "" {
+		return nil
+	}
+	return []models.FileLink{{EntityType: entityType, EntityID: entityID, Meta: meta}}
+}

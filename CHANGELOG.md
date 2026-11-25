@@ -80,6 +80,31 @@ the section matching the tag and publishes it as the GitHub Release body. See
   tokens for scripts" page of the user guide lists the endpoints worth
   scripting against
   ([#2808](https://github.com/denisvmedia/inventario/issues/2808)).
+- One file can be attached to several items, locations and areas, so a receipt
+  for three items is uploaded once. "Attach an existing file" on an item's
+  Files tab (and "Attach existing" on a location or area) attaches a file the
+  group already holds, and the file panel lists every place under "Linked to",
+  each with its own Remove attachment. Removing the last attachment leaves a
+  standalone file; deleting a file stays a separate action whose confirmation
+  names every place it disappears from. Deleting an item keeps the files
+  another item still uses. Each attached file counts toward storage once.
+  Uploads compute a SHA-256, and when the group already holds the same content
+  the upload dialog offers to attach the existing file instead. Existing
+  attachments move to the new shape when the server first starts after the
+  upgrade, and existing files get their checksum in the background
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+
+### Changed
+
+- File API: a file carries a `links` list instead of `linked_entity_type`,
+  `linked_entity_id` and `linked_entity_meta`, and `PUT /files/{id}` no
+  longer accepts those fields. Attach and detach with
+  `POST /files/{id}/links` and `DELETE /files/{id}/links/{linkID}`;
+  `GET /files/{id}/duplicates` lists files with the same content. The
+  `linked_entity_type` / `linked_entity_id` list filter is unchanged. Backups
+  are written in INB format 3.0, which stores a shared file once; 2.x backups
+  still restore
+  ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
 
 ### Changed
 
@@ -104,6 +129,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- In Safari, **Save** in the unsaved-changes prompt saves when the prompt
+  opens again right after **Keep editing**. Before, the click closed the
+  prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
@@ -134,6 +162,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hid the tour for good. The tour now starts the first time a group is active,
   and it skips a step whose element is not on the page
   ([#2816](https://github.com/denisvmedia/inventario/pull/2816)).
+- The onboarding tour started over from its welcome card, or closed under
+  browser automation, when the window was narrower than the mobile breakpoint
+  for a moment only: while Chromium takes a full-page screenshot, or when a
+  window is dragged across that width and back. The tour now hides while the
+  window is narrow and comes back on the step it was on. It closes only when
+  the window stays narrow for a second
+  ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
 
 ### Security
 

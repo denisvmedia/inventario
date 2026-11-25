@@ -6,7 +6,7 @@ import userEvent from "@testing-library/user-event"
 import { Shell } from "@/app/Shell"
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
+import { TOUR_BLOCKER_GRACE_MS, useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
 import { authHandlers, groupHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -24,6 +24,41 @@ const SEEN_KEY = `inventario-tour-seen-v1:${authHandlers.fixtureUser.id}`
 // narrow screen swaps in its own and afterEach puts this one back. It is a
 // shared vi.fn, so vi.spyOn + mockRestore would wipe its implementation.
 const originalMatchMedia = window.matchMedia
+
+// Swaps in a matchMedia whose mobile (max-width) query answers from a
+// switch. set() flips it and fires the change listeners, which is what a
+// resize across the breakpoint does.
+function mockMobileQuery() {
+  let narrow = false
+  const listeners = new Set<() => void>()
+  window.matchMedia = vi.fn().mockImplementation((query: string) => {
+    const isMobileQuery = query.includes("max-width")
+    return {
+      get matches() {
+        return isMobileQuery && narrow
+      },
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: (_type: string, cb: () => void) => {
+        if (isMobileQuery) listeners.add(cb)
+      },
+      removeEventListener: (_type: string, cb: () => void) => {
+        listeners.delete(cb)
+      },
+      dispatchEvent: vi.fn(),
+    } as unknown as MediaQueryList
+  })
+  return {
+    set(width: "narrow" | "wide") {
+      act(() => {
+        narrow = width === "narrow"
+        listeners.forEach((cb) => cb())
+      })
+    },
+  }
+}
 
 // Stands in for the routed page. It exposes the tour controls Shell
 // provides, so a test can read the blocker and force a restart the UI
@@ -146,41 +181,58 @@ describe("<Shell /> — onboarding tour with a group", () => {
     expect(window.localStorage.getItem(SEEN_KEY)).toBe("1")
   })
 
-  it("closes an open tour without marking it seen when the window narrows", async () => {
-    // The mobile query answers from `narrow`; flipping it and firing the
-    // change listeners is what a resize below the breakpoint does.
-    let narrow = false
-    const listeners = new Set<() => void>()
-    window.matchMedia = vi.fn().mockImplementation((query: string) => {
-      const isMobileQuery = query.includes("max-width")
-      return {
-        get matches() {
-          return isMobileQuery && narrow
-        },
-        media: query,
-        onchange: null,
-        addListener: vi.fn(),
-        removeListener: vi.fn(),
-        addEventListener: (_type: string, cb: () => void) => {
-          if (isMobileQuery) listeners.add(cb)
-        },
-        removeEventListener: (_type: string, cb: () => void) => {
-          listeners.delete(cb)
-        },
-        dispatchEvent: vi.fn(),
-      } as unknown as MediaQueryList
-    })
+  it("closes an open tour without marking it seen when the window stays narrow", async () => {
+    // Under WebDriver the tour does not launch by itself, so a tour that is
+    // gone after the window widens again was closed, not just hidden.
+    Object.defineProperty(window.navigator, "webdriver", { configurable: true, value: true })
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    try {
+      const screenWidth = mockMobileQuery()
+      server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+      const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime })
+      renderShell("/g/household")
+      await user.click(await screen.findByTestId("probe-restart"))
+      expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
+
+      screenWidth.set("narrow")
+      expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument()
+      expect(screen.getByTestId("probe-blocker")).toHaveTextContent("narrowScreen")
+
+      await act(() => vi.advanceTimersByTimeAsync(TOUR_BLOCKER_GRACE_MS + 100))
+      screenWidth.set("wide")
+
+      expect(screen.getByTestId("probe-blocker")).toHaveTextContent("none")
+      expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument()
+      expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
+    } finally {
+      vi.useRealTimers()
+      Object.defineProperty(window.navigator, "webdriver", { configurable: true, value: false })
+    }
+  })
+
+  it("keeps an open tour on its step when the window is narrow for a moment only", async () => {
+    // Chromium shrinks the page to 1x1 while it takes a full-page
+    // screenshot, and a window dragged across the breakpoint and back
+    // passes it twice. Neither may close the tour or send it back to the
+    // welcome card.
+    const screenWidth = mockMobileQuery()
     server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    const user = userEvent.setup()
     renderShell("/g/household")
     expect(await screen.findByTestId("onboarding-tour")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByTestId("onboarding-tour").style.pointerEvents).not.toBe("none")
+    )
+    await user.click(screen.getByTestId("onboarding-next"))
+    expect(screen.getByTestId("onboarding-card")).toHaveAttribute("data-step", "addItem")
 
-    act(() => {
-      narrow = true
-      listeners.forEach((cb) => cb())
-    })
+    screenWidth.set("narrow")
+    expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument()
+    screenWidth.set("wide")
 
-    await waitFor(() => expect(screen.queryByTestId("onboarding-tour")).not.toBeInTheDocument())
-    expect(screen.getByTestId("probe-blocker")).toHaveTextContent("narrowScreen")
+    expect(screen.getByTestId("onboarding-card")).toHaveAttribute("data-step", "addItem")
+    expect(screen.getByTestId("onboarding-dots").children).toHaveLength(7)
+    expect(await screen.findByTestId("onboarding-highlight")).toBeInTheDocument()
     expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
   })
 

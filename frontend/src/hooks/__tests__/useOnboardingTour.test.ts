@@ -108,6 +108,21 @@ describe("useOnboardingTour", () => {
     expect(window.localStorage.getItem(SEEN_KEY)).toBeNull()
   })
 
+  it("keeps the step of an open tour when autoLaunch turns off and on again", () => {
+    // Shell does this when the window crosses the mobile breakpoint for a
+    // moment; the tour must not jump back to its first step.
+    const { result, rerender } = renderHook(
+      ({ autoLaunch }) => useOnboardingTour(USER, { hasGroup: true, autoLaunch }),
+      { initialProps: { autoLaunch: true } }
+    )
+    act(() => result.current.next())
+    act(() => result.current.next())
+    rerender({ autoLaunch: false })
+    rerender({ autoLaunch: true })
+    expect(result.current.isOpen).toBe(true)
+    expect(result.current.step).toBe(2)
+  })
+
   it("autoLaunch=false suppresses the auto-launch even for a fresh user", () => {
     const { result } = renderHook(() =>
       useOnboardingTour(USER, { hasGroup: true, autoLaunch: false })

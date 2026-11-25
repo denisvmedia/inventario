@@ -6,6 +6,8 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -45,10 +47,12 @@ const (
 )
 
 // maxSupportedInbMajor is the highest `.inb` format MAJOR version this build can
-// read. MINOR bumps are additive-only (a new optional member dispatched by name),
-// so any 2.x archive restores here; a 3.x archive would carry shape changes this
-// reader cannot know about, so it is rejected outright rather than half-applied.
-const maxSupportedInbMajor = 2
+// read. MINOR bumps are additive-only (a new optional member dispatched by name).
+// A 2.x archive references every file once; a 3.x archive may reference a
+// shared file from several documents, which this reader turns into several
+// links on one file. A 4.x archive would carry shape changes this reader cannot
+// know about, so it is rejected outright rather than half-applied.
+const maxSupportedInbMajor = 3
 
 var (
 	// ErrJSONDocTooLarge is returned when a JSON document member (a location
@@ -247,7 +251,8 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		existing:  existing,
 		idMapping: idMapping,
 		options:   options,
-		fileRefs:  map[string]inbPendingFile{},
+		fileRefs:  map[string]*inbPendingFile{},
+		delivered: map[string]string{},
 	}
 
 	// Open the destination bucket once for the whole walk rather than per file
@@ -359,10 +364,13 @@ func (w *inbWalker) applyPendingCovers() error {
 	return nil
 }
 
-// inbPendingFile records the metadata a file member needs once its bytes arrive.
+// inbPendingFile records the metadata a file member needs once its bytes
+// arrive. A file attached to several entities is referenced once per entity,
+// every reference naming the same archive path; links collects one entry per
+// reference registered before the bytes arrived.
 type inbPendingFile struct {
-	ref  types.INBFileRef
-	link inbFileLink
+	ref   types.INBFileRef
+	links []inbFileLink
 }
 
 // inbFileLink is a file's ARCHIVE-side link: the linked entity's immutable UUID
@@ -407,7 +415,13 @@ type inbWalker struct {
 
 	// fileRefs maps an archive file path → its metadata, registered when a
 	// location document is processed. A file member must match one of these.
-	fileRefs map[string]inbPendingFile
+	fileRefs map[string]*inbPendingFile
+
+	// delivered maps the archive path of every file member already processed →
+	// the file's UUID. A reference registered after its bytes arrived (the
+	// second entity of a shared file, in a later document) becomes a link on
+	// the restored file instead of a pending member.
+	delivered map[string]string
 
 	// pendingCovers accumulates cover-photo cross-references to patch once every
 	// file member has been processed (so idMapping.Files is fully populated).
@@ -653,9 +667,10 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 
 	// Register file refs so the later file members know which commodity (and
 	// bucket) they belong to.
-	w.registerFileRefs(c.ID, "images", c.Images)
-	w.registerFileRefs(c.ID, "documents", c.Documents)
-	return nil
+	if err := w.registerFileRefs(c.ID, models.FileLinkMetaImages, c.Images); err != nil {
+		return err
+	}
+	return w.registerFileRefs(c.ID, models.FileLinkMetaDocuments, c.Documents)
 }
 
 // commodityWasCreated reports whether applyStrategyForCommodityModel just
@@ -686,14 +701,79 @@ func (w *inbWalker) queueCoverPatch(c *types.INBCommodity) {
 }
 
 // registerFileRefs indexes a commodity's file references by their archive path.
-func (w *inbWalker) registerFileRefs(commodityUUID, bucket string, refs []types.INBFileRef) {
+func (w *inbWalker) registerFileRefs(commodityUUID, bucket string, refs []types.INBFileRef) error {
 	for _, ref := range refs {
-		key := blobkeys.SanitizeArchivePath(ref.Path)
-		w.fileRefs[key] = inbPendingFile{
-			ref:  ref,
-			link: inbFileLink{linkedType: "commodity", entityUUID: commodityUUID, meta: bucket},
+		link := inbFileLink{linkedType: models.FileLinkCommodity, entityUUID: commodityUUID, meta: bucket}
+		if err := w.registerRef(ref, link); err != nil {
+			return err
 		}
 	}
+	return nil
+}
+
+// registerRef records one archived reference to a file. The first reference to
+// an archive path creates the pending entry; later ones add their link to it,
+// or, when the bytes were already delivered, to the restored file.
+func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
+	key := blobkeys.SanitizeArchivePath(ref.Path)
+	if pending, ok := w.fileRefs[key]; ok {
+		pending.links = append(pending.links, link)
+		return nil
+	}
+	if fileUUID, ok := w.delivered[key]; ok {
+		return w.linkDeliveredFile(fileUUID, ref, link)
+	}
+	w.fileRefs[key] = &inbPendingFile{ref: ref, links: []inbFileLink{link}}
+	return nil
+}
+
+// linkDeliveredFile attaches an already-restored file to the entity of a
+// reference that arrived after the file's bytes. The attach is idempotent, so a
+// retried restore never duplicates a link.
+func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
+	if link.linkedType == "" {
+		return nil
+	}
+	dbID, ok := w.resolveLinkedDBID(link)
+	if !ok {
+		w.stats.ErrorCount++
+		w.stats.Errors = append(w.stats.Errors,
+			fmt.Sprintf("file %s references unmapped %s %s", fileUUID, link.linkedType, link.entityUUID))
+		return nil
+	}
+	w.incBucketStat(link, ref.Tags)
+	if w.options.DryRun {
+		return nil
+	}
+	fileDBID := w.idMapping.Files[fileUUID]
+	if fileDBID == "" {
+		// The file itself did not land (every earlier link was unmapped), so
+		// there is nothing to attach.
+		return nil
+	}
+	return w.ensureLinks(fileDBID, []types.INBFileLink{{Type: link.linkedType, DBID: dbID, Meta: link.meta}})
+}
+
+// ensureLinks attaches the file to every given entity it is not attached to
+// yet. Used when the file row already existed (merge strategies) and for
+// references that arrive after the bytes.
+func (w *inbWalker) ensureLinks(fileDBID string, links []types.INBFileLink) error {
+	if len(links) == 0 || w.options.DryRun {
+		return nil
+	}
+	fileReg, err := w.proc.factorySet.FileRegistryFactory.CreateUserRegistry(w.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user file registry", err)
+	}
+	for _, l := range links {
+		if l.Type == "" {
+			continue
+		}
+		if _, _, err := fileReg.AddLink(w.ctx, models.FileLink{FileID: fileDBID, EntityType: l.Type, EntityID: l.DBID, Meta: l.Meta}); err != nil {
+			return errxtrace.Wrap("failed to restore file link", err, errx.Attrs("file_id", fileDBID))
+		}
+	}
+	return nil
 }
 
 // handleFilesMember decodes the non-commodity files document (issue #2235) and
@@ -713,28 +793,27 @@ func (w *inbWalker) handleFilesMember(hdr *tar.Header, r io.Reader) error {
 	if err := json.Unmarshal(data, &doc); err != nil {
 		return errxtrace.Wrap("failed to decode files document", err, errx.Attrs("member", hdr.Name))
 	}
-	w.registerEntityFileRefs(doc.Files)
-	return nil
+	return w.registerEntityFileRefs(doc.Files)
 }
 
 // registerEntityFileRefs indexes the non-commodity file references by their
 // archive path (issue #2235). Each ref carries its own link, so the later file
 // member recreates the row with the original linked_entity_type / meta instead of
 // assuming a commodity attachment.
-func (w *inbWalker) registerEntityFileRefs(refs []types.INBEntityFileRef) {
+func (w *inbWalker) registerEntityFileRefs(refs []types.INBEntityFileRef) error {
 	for _, ref := range refs {
-		key := blobkeys.SanitizeArchivePath(ref.Path)
-		w.fileRefs[key] = inbPendingFile{
-			ref: ref.INBFileRef,
-			link: inbFileLink{
-				linkedType: ref.LinkedEntityType,
-				entityUUID: ref.LinkedEntityID,
-				meta:       ref.LinkedEntityMeta,
-				fileType:   ref.Type,
-				category:   ref.Category,
-			},
+		link := inbFileLink{
+			linkedType: ref.LinkedEntityType,
+			entityUUID: ref.LinkedEntityID,
+			meta:       ref.LinkedEntityMeta,
+			fileType:   ref.Type,
+			category:   ref.Category,
+		}
+		if err := w.registerRef(ref.INBFileRef, link); err != nil {
+			return err
 		}
 	}
+	return nil
 }
 
 // resolveLinkedDBID maps a file's archived link to the destination entity's DB id.
@@ -783,16 +862,16 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// refs whose member never appeared in the archive (e.g. dry-run, where the
 	// commodity isn't persisted, still delivers and consumes the member here).
 	delete(w.fileRefs, hdr.Name)
+	w.delivered[hdr.Name] = pending.ref.ID
 
-	// Resolve the archived link (commodity / location / area / standalone) to a
+	// Resolve every archived link (commodity / location / area) to a
 	// destination DB id. A link whose entity never landed is dropped with a
-	// counted error — a dangling linked_entity_id must never be persisted.
-	linkedDBID, resolved := w.resolveLinkedDBID(pending.link)
-	if !resolved {
+	// counted error — a dangling link must never be persisted. A file whose
+	// links all failed to resolve is dropped; a standalone file has no link to
+	// resolve and always lands.
+	links, standalone := w.resolveLinks(pending)
+	if !standalone && len(links) == 0 {
 		_, _ = io.Copy(io.Discard, r)
-		w.stats.ErrorCount++
-		w.stats.Errors = append(w.stats.Errors,
-			fmt.Sprintf("file %s references unmapped %s %s", pending.ref.ID, pending.link.linkedType, pending.link.entityUUID))
 		return nil
 	}
 
@@ -812,13 +891,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// Build the file entity BEFORE streaming the bytes: a malformed timestamp
 	// corrupts the restored metadata, so fail the restore (rather than coercing
 	// to time.Now()) without first writing a doomed blob.
-	fileEntity, err := pending.ref.ConvertToFileEntity(types.INBFileLink{
-		Type:     pending.link.linkedType,
-		DBID:     linkedDBID,
-		Meta:     pending.link.meta,
-		FileType: pending.link.fileType,
-		Category: pending.link.category,
-	}, blobKey)
+	fileEntity, err := pending.ref.ConvertToFileEntity(links, blobKey)
 	if err != nil {
 		// A malformed timestamp is archive corruption — drain the member and
 		// abort the restore (handleFileMember errors already propagate hard).
@@ -838,10 +911,20 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	action := decideFileStrategyAction(w.options.Strategy, w.existing.Files[pending.ref.ID])
 
 	if action == fileActionSkip {
-		return w.skipFileMember(r, hdr.Size, blobKey)
+		if err := w.skipFileMember(r, hdr.Size, blobKey); err != nil {
+			return err
+		}
+		// The file is already here; a merge still brings over the links the
+		// archive has and the database lacks.
+		if existingFile := w.existing.Files[pending.ref.ID]; existingFile != nil {
+			if err := w.ensureLinks(existingFile.ID, links); err != nil {
+				return err
+			}
+		}
+		return nil
 	}
 
-	written, err := w.streamFileBytes(blobKey, r, hdr.Size)
+	written, checksum, err := w.streamFileBytes(blobKey, r, hdr.Size)
 	if err != nil {
 		return err
 	}
@@ -849,9 +932,11 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 
 	// Record the restored byte count so per-group storage-usage accounting
 	// (#1388) isn't under-counted — `.inb` is the first format to round-trip
-	// commodity file bytes, so this is the authoritative size on restore.
+	// commodity file bytes, so this is the authoritative size on restore. The
+	// checksum is computed from the same stream.
 	if fileEntity.File != nil {
 		fileEntity.File.SizeBytes = written
+		fileEntity.File.SHA256 = checksum
 	}
 	fileEntity.TenantID = user.TenantID
 	fileEntity.CreatedByUserID = user.ID
@@ -867,11 +952,49 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	if err := w.proc.applyStrategyForFileModel(w.ctx, fileEntity, pending.ref.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
 		return err
 	}
+	if action == fileActionUpdate {
+		// Update leaves links alone; bring over the ones the row lacks.
+		if err := w.ensureLinks(fileEntity.ID, links); err != nil {
+			return err
+		}
+	}
 
 	w.deleteSupersededBlob(staleBlobKey, blobKey)
 
-	w.incBucketStat(pending.link, pending.ref.Tags)
+	for _, link := range pending.links {
+		w.incBucketStat(link, pending.ref.Tags)
+	}
 	return nil
+}
+
+// resolveLinks maps a pending file's archived links to destination links.
+// standalone is true for a file archived without any link. Unmapped links are
+// counted as errors and left out.
+func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool) {
+	for _, link := range pending.links {
+		if link.linkedType == "" {
+			standalone = true
+			continue
+		}
+		dbID, ok := w.resolveLinkedDBID(link)
+		if !ok {
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors,
+				fmt.Sprintf("file %s references unmapped %s %s", pending.ref.ID, link.linkedType, link.entityUUID))
+			continue
+		}
+		links = append(links, types.INBFileLink{
+			Type:     link.linkedType,
+			DBID:     dbID,
+			Meta:     link.meta,
+			FileType: link.fileType,
+			Category: link.category,
+		})
+	}
+	if len(links) > 0 {
+		standalone = false
+	}
+	return links, standalone
 }
 
 // skipFileMember drains a file member's bytes (so the byte count still flows
@@ -952,27 +1075,30 @@ func (w *inbWalker) deleteSupersededBlob(staleBlobKey, newBlobKey string) {
 }
 
 // streamFileBytes copies a file member's bytes into the destination blob key,
-// without buffering. When no bucket is configured (DryRun or no upload location)
-// it drains the bytes so the byte count still flows into stats.
-func (w *inbWalker) streamFileBytes(blobKey string, r io.Reader, size int64) (int64, error) {
-	src := io.LimitReader(r, size)
+// without buffering, and returns the byte count and the SHA-256 of the bytes.
+// When no bucket is configured (DryRun or no upload location) it drains the
+// bytes so the byte count still flows into stats.
+func (w *inbWalker) streamFileBytes(blobKey string, r io.Reader, size int64) (int64, string, error) {
+	hasher := sha256.New()
+	src := io.TeeReader(io.LimitReader(r, size), hasher)
 	if w.bucket == nil {
-		return io.Copy(io.Discard, src)
+		n, err := io.Copy(io.Discard, src)
+		return n, hex.EncodeToString(hasher.Sum(nil)), err
 	}
 
 	writer, err := w.bucket.NewWriter(w.ctx, blobKey, nil)
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to create blob writer", err, errx.Attrs("blob_key", blobKey))
+		return 0, "", errxtrace.Wrap("failed to create blob writer", err, errx.Attrs("blob_key", blobKey))
 	}
 	n, copyErr := io.Copy(writer, src)
 	closeErr := writer.Close()
 	if copyErr != nil {
-		return 0, errxtrace.Wrap("failed to stream file bytes", copyErr, errx.Attrs("blob_key", blobKey))
+		return 0, "", errxtrace.Wrap("failed to stream file bytes", copyErr, errx.Attrs("blob_key", blobKey))
 	}
 	if closeErr != nil {
-		return 0, errxtrace.Wrap("failed to close blob writer", closeErr, errx.Attrs("blob_key", blobKey))
+		return 0, "", errxtrace.Wrap("failed to close blob writer", closeErr, errx.Attrs("blob_key", blobKey))
 	}
-	return n, nil
+	return n, hex.EncodeToString(hasher.Sum(nil)), nil
 }
 
 // incBucketStat increments the per-bucket file counter. ImageCount/InvoiceCount/
@@ -985,7 +1111,7 @@ func (w *inbWalker) streamFileBytes(blobKey string, r io.Reader, size int64) (in
 // exports screen shows them, so they are derived from the tags the same way the
 // export side derives them.
 func (w *inbWalker) incBucketStat(link inbFileLink, tags []string) {
-	if link.linkedType != "commodity" {
+	if link.linkedType != models.FileLinkCommodity {
 		return
 	}
 	switch link.meta {

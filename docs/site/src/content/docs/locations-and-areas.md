@@ -115,7 +115,7 @@ To start a delete:
 When the container still holds items (or, for a location, areas), the **Delete** dialog offers two options. The safe option is selected by default:
 
 - **Keep items, just remove the area** / **Keep items, just remove the location** (the default) — the items stay in your inventory but become **un-located**. Only the container is removed. For a location this also removes its areas, but the items inside those areas survive — they just lose their area assignment.
-- **Delete everything** — permanently deletes the items inside *and their attached files*, along with the container.
+- **Delete everything** — permanently deletes the items inside *and their attached files*, along with the container. A file that is also attached to something you keep stays there.
 
 Choose an option, then click **Delete**. If you change your mind, **Cancel**, press Escape, or click outside the dialog.
 

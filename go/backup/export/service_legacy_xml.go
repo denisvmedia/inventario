@@ -1101,6 +1101,16 @@ func (s *ExportService) streamFiles(
 	return nil
 }
 
+// legacyXMLLink is the one link a legacy XML file element can carry: the
+// file's first link, or none for a standalone file. The legacy format has a
+// single link per file, so the other links of a shared file are not written.
+func legacyXMLLink(file *models.FileEntity) models.FileLink {
+	if len(file.Links) == 0 {
+		return models.FileLink{}
+	}
+	return file.Links[0]
+}
+
 // shouldEmitFile is the cheap-pre-resolve filter for streamFiles: returns
 // false for nil rows, files without an embedded *File, the export's own
 // backup-bundle blobs, and (when scope is set) rows that aren't linked
@@ -1110,7 +1120,7 @@ func shouldEmitFile(file *models.FileEntity, scope *selectedFileScope) bool {
 	if file == nil || file.File == nil {
 		return false
 	}
-	if file.LinkedEntityType == "export" {
+	if file.IsExportOwned() {
 		return false
 	}
 	if scope != nil && !inSelectedScope(file, scope) {
@@ -1126,9 +1136,9 @@ func shouldEmitFile(file *models.FileEntity, scope *selectedFileScope) bool {
 func buildXMLFile(file *models.FileEntity, linkedID string) XMLFile {
 	return XMLFile{
 		ID:               file.UUID,
-		LinkedEntityType: file.LinkedEntityType,
+		LinkedEntityType: legacyXMLLink(file).EntityType,
 		LinkedEntityID:   linkedID,
-		LinkedEntityMeta: file.LinkedEntityMeta,
+		LinkedEntityMeta: legacyXMLLink(file).Meta,
 		Type:             string(file.Type),
 		Category:         string(file.Category),
 		Title:            file.Title,
@@ -1405,18 +1415,18 @@ func resolveLinkedEntityUUID(
 	file *models.FileEntity,
 	locUUIDMap, areaUUIDMap, commodityUUIDMap map[string]string,
 ) (string, bool) {
-	if file.LinkedEntityType == "" || file.LinkedEntityID == "" {
+	if legacyXMLLink(file).EntityType == "" || legacyXMLLink(file).EntityID == "" {
 		return "", true
 	}
-	switch file.LinkedEntityType {
+	switch legacyXMLLink(file).EntityType {
 	case "commodity":
-		uuid, ok := commodityUUIDMap[file.LinkedEntityID]
+		uuid, ok := commodityUUIDMap[legacyXMLLink(file).EntityID]
 		return uuid, ok
 	case "location":
-		uuid, ok := locUUIDMap[file.LinkedEntityID]
+		uuid, ok := locUUIDMap[legacyXMLLink(file).EntityID]
 		return uuid, ok
 	case "area":
-		uuid, ok := areaUUIDMap[file.LinkedEntityID]
+		uuid, ok := areaUUIDMap[legacyXMLLink(file).EntityID]
 		return uuid, ok
 	default:
 		// Unknown linked-entity-type means we can't safely round-trip it.
@@ -1431,16 +1441,16 @@ func resolveLinkedEntityUUID(
 // considered; standalone files are excluded from selected exports because
 // the user picked specific entities.
 func inSelectedScope(file *models.FileEntity, scope *selectedFileScope) bool {
-	if file.LinkedEntityType == "" || file.LinkedEntityID == "" {
+	if legacyXMLLink(file).EntityType == "" || legacyXMLLink(file).EntityID == "" {
 		return false
 	}
-	switch file.LinkedEntityType {
+	switch legacyXMLLink(file).EntityType {
 	case "commodity":
-		return slices.Contains(scope.Commodities, file.LinkedEntityID)
+		return slices.Contains(scope.Commodities, legacyXMLLink(file).EntityID)
 	case "area":
-		return slices.Contains(scope.Areas, file.LinkedEntityID)
+		return slices.Contains(scope.Areas, legacyXMLLink(file).EntityID)
 	case "location":
-		return slices.Contains(scope.Locations, file.LinkedEntityID)
+		return slices.Contains(scope.Locations, legacyXMLLink(file).EntityID)
 	}
 	return false
 }

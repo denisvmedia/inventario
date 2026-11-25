@@ -15,7 +15,7 @@ import (
 
 // TestFileRegistry_Postgres_ListByLinkedEntity_AreaAndLocation exercises the
 // ListByLinkedEntity SQL path — the query the #2119 fix
-// (EntityService → FileService.DeleteLinkedFiles) depends on — for the 'area'
+// (EntityService → FileService.DetachEntityFiles) depends on — for the 'area'
 // and 'location' link types against a real PostgreSQL schema. The query
 // itself carries no tenant filter (RLS supplies it), so the cross-group
 // isolation subtest is the load-bearing assertion: a user from another
@@ -31,12 +31,10 @@ func TestFileRegistry_Postgres_ListByLinkedEntity_AreaAndLocation(t *testing.T) 
 
 	mk := func(name, linkedType, linkedID string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeDocument,
-			Category:         models.FileCategoryDocuments,
-			LinkedEntityType: linkedType,
-			LinkedEntityID:   linkedID,
-			LinkedEntityMeta: "images",
+			Title:    name,
+			Type:     models.FileTypeDocument,
+			Category: models.FileCategoryDocuments,
+			Links:    []models.FileLink{{EntityType: linkedType, EntityID: linkedID, Meta: "images"}},
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ".pdf",
@@ -67,8 +65,9 @@ func TestFileRegistry_Postgres_ListByLinkedEntity_AreaAndLocation(t *testing.T) 
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.HasLen, 2)
 		for _, f := range got {
-			c.Assert(f.LinkedEntityType, qt.Equals, "area")
-			c.Assert(f.LinkedEntityID, qt.Equals, "area-1")
+			c.Assert(f.Links, qt.HasLen, 1)
+			c.Assert(f.Links[0].EntityType, qt.Equals, "area")
+			c.Assert(f.Links[0].EntityID, qt.Equals, "area-1")
 		}
 	})
 
@@ -77,8 +76,9 @@ func TestFileRegistry_Postgres_ListByLinkedEntity_AreaAndLocation(t *testing.T) 
 		got, err := set.FileRegistry.ListByLinkedEntity(ctx, "location", "loc-1")
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].LinkedEntityType, qt.Equals, "location")
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "loc-1")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityType, qt.Equals, "location")
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "loc-1")
 	})
 
 	t.Run("empty slice for an entity with no files", func(t *testing.T) {

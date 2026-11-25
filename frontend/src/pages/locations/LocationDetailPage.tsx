@@ -483,6 +483,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
             <EntityFilesPanel
               linkedEntityType="location"
               linkedEntityId={id}
+              entityName={location.data?.name}
               onAttachClick={() => {
                 setPendingDropFiles([])
                 setUploadOpen(true)
