@@ -267,7 +267,7 @@ describe("listOptionsToParams", () => {
       tags: ["garage,red"],
       tag_mode: ["any"],
       tags_exclude: ["broken"],
-      cf: ["f1:gte:10", "f2:in:o2,o1"],
+      cf: ["f1:gte:10", "f2:in:o1,o2"],
     })
   })
 
@@ -338,7 +338,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       statuses: [...FULL.statuses].sort(),
       warrantyStatuses: [...FULL.warrantyStatuses].sort(),
       tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },
-      customFields: [...FULL.customFields].sort(),
+      customFields: ["f1:gte:10", "f2:in:o1,o2"],
     })
   })
 
@@ -435,6 +435,18 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     expect(sameCommodityQuery(tags([], ["Power Tools"]), tags([], ["power-tools"]))).toBe(true)
     expect(sameCommodityQuery(tags(["fragile"]), tags(["fragile-2"]))).toBe(false)
     expect(sameCommodityQuery(tags(["fragile"]), tags([], ["fragile"]))).toBe(false)
+  })
+
+  // The server sorts the option ids of an "in" condition and drops repeats
+  // before it stores them, and drops a condition that repeats another.
+  it("compares select option sets as the server stores them", () => {
+    const cf = (...customFields: string[]) => ({ ...DEFAULT_COMMODITY_QUERY, customFields })
+    expect(sameCommodityQuery(cf("f2:in:o2,o1"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o2, o1,o2"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o1,o2", "f2:in:o2,o1"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o1"), cf("f2:in:o1,o2"))).toBe(false)
+    expect(commodityQueryToApiQuery(cf("f2:in:,"))).toContain("cf=f2%3Ain%3A%2C")
+    expect(commodityQueryToApiQuery(cf("f1:contains:b,a"))).toContain("cf=f1%3Acontains%3Ab%2Ca")
   })
 })
 
