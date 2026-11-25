@@ -571,7 +571,13 @@ describe("<CommodityFormDialog /> files carried to a new draft", () => {
         category: "images",
         tags: [],
         links: [
-          { id: "link-1", file_id: "file-photo", entity_type: "draft", entity_id: "d1", meta: "images" },
+          {
+            id: "link-1",
+            file_id: "file-photo",
+            entity_type: "draft",
+            entity_id: "d1",
+            meta: "images",
+          },
         ],
       })
       server.use(...groupHandlers.list(groups), ...fake.handlers)

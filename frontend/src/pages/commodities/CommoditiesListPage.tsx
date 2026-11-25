@@ -62,10 +62,7 @@ import { useLocations } from "@/features/locations/hooks"
 import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
-import {
-  useCommodities,
-  useCommodityTagCounts,
-} from "@/features/commodities/hooks"
+import { useCommodities, useCommodityTagCounts } from "@/features/commodities/hooks"
 import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
 import {
   COMMODITY_SORT_OPTIONS,
