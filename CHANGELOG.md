@@ -257,6 +257,18 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- The Helm chart's Grafana dashboard shows its "Scrape target up" panel on
+  Kubernetes. The panel asked for `up{job="inventario"}`, a job name only the
+  compose stack uses. Under the Prometheus Operator the job is named after the
+  Service (for example `inventario-inventario`), so the panel stayed empty. It
+  now shows every job that reports Inventario's metrics.
+- The Helm chart's install notes point to the right place for the admin's
+  email and password when `secrets.existingSecret` is set: the
+  `SETUP_ADMIN_EMAIL` and `SETUP_ADMIN_PASSWORD` keys of that Secret. Before,
+  they printed `setupJob.initData.adminEmail`, which that Secret's email
+  overrides, and pointed to `setupJob.initData.adminPassword`, which an
+  existing Secret does not use.
+
 - Settings saved on the server show up in the app again. The settings
   endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
   app reads camelCase (`notificationsWarrantyExpiry`), so after a reload the

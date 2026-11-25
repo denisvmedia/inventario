@@ -16,8 +16,14 @@ Then open: http://localhost:3333
 {{- if .Values.setupJob.enabled }}
 
 Admin credentials:
+{{- if .Values.secrets.existingSecret }}
+  Email:    the SETUP_ADMIN_EMAIL key in the Secret {{ .Values.secrets.existingSecret }},
+            or {{ .Values.setupJob.initData.adminEmail }} when that key is missing
+  Password: the SETUP_ADMIN_PASSWORD key in the Secret {{ .Values.secrets.existingSecret }}
+{{- else }}
   Email:    {{ .Values.setupJob.initData.adminEmail }}
   Password: (the value you provided in setupJob.initData.adminPassword)
+{{- end }}
 {{- end }}
 
 {{- if .Values.demo.postgresql.enabled }}
