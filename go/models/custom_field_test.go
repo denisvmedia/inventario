@@ -102,6 +102,11 @@ func TestCustomFieldDefinition_NormalizeAndValidate(t *testing.T) {
 		field string
 	}{
 		{name: "no name", def: models.CustomFieldDefinition{Type: models.CustomFieldTypeText}, field: "name"},
+		{name: "a NUL in the name", def: models.CustomFieldDefinition{Name: "a\x00b", Type: models.CustomFieldTypeText}, field: "name"},
+		{name: "a NUL in an option label", def: models.CustomFieldDefinition{
+			Name: "X", Type: models.CustomFieldTypeSelect,
+			Options: models.ValuerSlice[models.CustomFieldOption]{{ID: "a", Label: "x\x00y"}},
+		}, field: "options"},
 		{name: "unknown type", def: models.CustomFieldDefinition{Name: "X", Type: "colour"}, field: "type"},
 		{name: "select without options", def: models.CustomFieldDefinition{Name: "X", Type: models.CustomFieldTypeSelect}, field: "options"},
 		{name: "two options with one label", def: models.CustomFieldDefinition{

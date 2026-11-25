@@ -86,6 +86,8 @@ func TestParseSaved_Refuses(t *testing.T) {
 		{"a malformed escape", "q=%zz", "q"},
 		{"a custom field condition without a comparison", "cf=f1", "cf"},
 		{"an in condition without options", "cf=f1:in:,", "cf"},
+		{"a custom field value with a NUL", "cf=f1:contains:a%00b", "cf"},
+		{"a range over year zero", "cf=f1:lte:0000-12-31", "cf"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

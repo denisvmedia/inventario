@@ -363,6 +363,13 @@ func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft
 	return d, true
 }
 
+// CommodityName is an item's ID and name, and whether it is in Trash.
+type CommodityName struct {
+	ID      string `db:"id"`
+	Name    string `db:"name"`
+	Trashed bool   `db:"trashed"`
+}
+
 // CommodityRegistry stores items.
 //
 // Trash: an item moved to Trash keeps its row with deleted_at set
@@ -374,13 +381,6 @@ func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft
 // ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
 // queries the commodities table directly (a new worker, a report) has to apply
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
-// CommodityName is an item's ID and name, and whether it is in Trash.
-type CommodityName struct {
-	ID      string `db:"id"`
-	Name    string `db:"name"`
-	Trashed bool   `db:"trashed"`
-}
-
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 

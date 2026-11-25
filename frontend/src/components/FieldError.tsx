@@ -43,7 +43,7 @@ export function FieldError({ message, values, id, testId, className }: FieldErro
       data-testid={testId}
       className={cn("field-error text-xs text-destructive", className)}
     >
-      {t(message, values)}
+      {t(message, values ?? {})}
     </p>
   )
 }

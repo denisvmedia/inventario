@@ -35,13 +35,17 @@ type inbPendingLink struct {
 // restoreCustomFields maps the archived custom fields onto the destination
 // group's before the first item names one. A field is matched by its UUID
 // first, so a field renamed since the backup is still the same field, and
-// then by name, the way the group keeps names unique. A match of the same
-// type is reused, its templates left as they are, and gets the archived
-// options it lacks (see mergeCustomFieldOptions). A name match of another
-// type cannot hold the archived values, so the field is counted as an error
-// and its values are left out. A field the group lacks is created with its
-// archived options and templates. A dry run writes nothing and maps nothing,
-// but counts the fields a restore would refuse.
+// then by name, the way the group keeps names unique. Every UUID match is
+// made before the first name match, and a field matched by UUID is not
+// matched by name too: when the group renamed a field to the name of
+// another archived field, that other field is counted as an error and its
+// values are left out, so two archived fields never share one destination.
+// A match of the same type is reused, its templates left as they are, and
+// gets the archived options it lacks (see mergeCustomFieldOptions). A name
+// match of another type cannot hold the archived values, so the field is
+// counted as an error and its values are left out. A field the group lacks
+// is created with its archived options and templates. A dry run writes
+// nothing and maps nothing, but counts the fields a restore would refuse.
 func (w *inbWalker) restoreCustomFields(archived []types.INBCustomField) error {
 	w.customFields = map[string]*restoredCustomField{}
 	if len(archived) == 0 || w.proc.factorySet.CustomFieldRegistryFactory == nil {
@@ -56,6 +60,7 @@ func (w *inbWalker) restoreCustomFields(archived []types.INBCustomField) error {
 		return errxtrace.Wrap("failed to list custom fields", err)
 	}
 	index := newCustomFieldIndex(list)
+	index.claim(archived)
 	for _, a := range archived {
 		if a.ID == "" {
 			continue
@@ -81,6 +86,9 @@ func (w *inbWalker) restoreCustomFields(archived []types.INBCustomField) error {
 type customFieldIndex struct {
 	byUUID map[string]*models.CustomFieldDefinition
 	byName map[string]*models.CustomFieldDefinition
+	// claimed maps the ID of a destination field an archived field matches
+	// by UUID to that archived field's UUID.
+	claimed map[string]string
 	// count is how many fields the group has, counting the ones a dry run
 	// would create.
 	count int
@@ -88,8 +96,9 @@ type customFieldIndex struct {
 
 func newCustomFieldIndex(list []*models.CustomFieldDefinition) *customFieldIndex {
 	index := &customFieldIndex{
-		byUUID: make(map[string]*models.CustomFieldDefinition, len(list)),
-		byName: make(map[string]*models.CustomFieldDefinition, len(list)),
+		byUUID:  make(map[string]*models.CustomFieldDefinition, len(list)),
+		byName:  make(map[string]*models.CustomFieldDefinition, len(list)),
+		claimed: map[string]string{},
 	}
 	for _, d := range list {
 		index.put(d)
@@ -103,6 +112,16 @@ func (x *customFieldIndex) put(d *models.CustomFieldDefinition) {
 	}
 	x.byUUID[d.UUID] = d
 	x.byName[d.NameKey] = d
+}
+
+// claim records the destination field each archived field matches by UUID
+// and type, before any field is matched by name.
+func (x *customFieldIndex) claim(archived []types.INBCustomField) {
+	for _, a := range archived {
+		if d := x.byUUID[a.ID]; d != nil && string(d.Type) == a.Type {
+			x.claimed[d.ID] = a.ID
+		}
+	}
 }
 
 // match returns the destination field of a: the field with its UUID and
@@ -124,6 +143,9 @@ func (r customFieldRefusal) Error() string { return r.err.Error() }
 // a dry run, or a customFieldRefusal.
 func (w *inbWalker) restoreCustomField(reg registry.CustomFieldRegistry, index *customFieldIndex, a types.INBCustomField) (*restoredCustomField, error) {
 	if existing := index.match(a); existing != nil {
+		if owner, ok := index.claimed[existing.ID]; ok && owner != a.ID {
+			return nil, customFieldRefusal{fmt.Errorf("the group's field %q is the backup's field %s, renamed since", existing.Name, owner)}
+		}
 		if string(existing.Type) != a.Type {
 			return nil, customFieldRefusal{fmt.Errorf("the group has a field named %q of type %s", existing.Name, existing.Type)}
 		}
@@ -366,7 +388,9 @@ func (f *restoredCustomField) value(raw json.RawMessage) (json.RawMessage, error
 // applyPendingLinks sets the item link values once every item of the archive
 // is restored. A link is left out and counted as an error when it names an
 // item neither restored nor in the group outside Trash, when the item that
-// holds it cannot be read, or when the destination refuses it.
+// holds it cannot be read, or when the destination refuses it. A link to an
+// item in the group's Trash that the item already holds stays as it is and
+// is not counted.
 func (w *inbWalker) applyPendingLinks() error {
 	if len(w.pendingLinks) == 0 {
 		return nil
@@ -379,16 +403,23 @@ func (w *inbWalker) applyPendingLinks() error {
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("commodity %s: item link to %s: %v", pl.commodityUUID, pl.targetUUID, reason))
 	}
+	errUnresolved := errors.New("the linked item is neither in the backup nor in the group")
 	for _, pl := range w.pendingLinks {
 		commodityID := w.commodityDBID(pl.commodityUUID)
-		targetID := w.commodityDBID(pl.targetUUID)
-		if commodityID == "" || targetID == "" {
-			dropLink(pl, errors.New("the linked item is neither in the backup nor in the group"))
+		if commodityID == "" {
+			dropLink(pl, errUnresolved)
 			continue
 		}
 		commodity, err := comReg.Get(w.ctx, commodityID)
 		if err != nil {
 			dropLink(pl, err)
+			continue
+		}
+		targetID := w.commodityDBID(pl.targetUUID)
+		if targetID == "" {
+			if !w.holdsTrashedLink(comReg, commodity, pl) {
+				dropLink(pl, errUnresolved)
+			}
 			continue
 		}
 		commodity.CustomFields = models.CustomFieldValues{pl.fieldID: json.RawMessage(`"` + targetID + `"`)}
@@ -400,6 +431,18 @@ func (w *inbWalker) applyPendingLinks() error {
 		}
 	}
 	return nil
+}
+
+// holdsTrashedLink reports whether commodity already holds the link pl names,
+// to an item in the group's Trash: the restore cannot name that item, but
+// the stored link stays.
+func (w *inbWalker) holdsTrashedLink(comReg registry.CommodityRegistry, commodity *models.Commodity, pl inbPendingLink) bool {
+	var stored string
+	if json.Unmarshal(commodity.CustomFields[pl.fieldID], &stored) != nil || stored == "" {
+		return false
+	}
+	target, err := comReg.GetTrashed(w.ctx, stored)
+	return err == nil && target.UUID == pl.targetUUID
 }
 
 // commodityDBID resolves an archived item UUID to the destination item: one

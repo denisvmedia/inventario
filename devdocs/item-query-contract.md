@@ -112,14 +112,14 @@ A `cf` condition is `<field id>:<op>` for `set` and `unset`, and `<field id>:<op
 | ---- | ----------- | ----- |
 | text, long text, URL | `set`, `unset`, `eq`, `contains` | text; `eq` ignores case, `contains` is a substring test without regard to case |
 | number, money | `set`, `unset`, `eq`, `gte`, `lte` | a decimal number; money compares the amount whatever its currency |
-| date | `set`, `unset`, `eq`, `gte`, `lte` | `YYYY-MM-DD` |
+| date | `set`, `unset`, `eq`, `gte`, `lte` | `YYYY-MM-DD`, year 1 or later |
 | yes/no | `set`, `unset`, `eq` | `true`/`false` or `1`/`0` |
 | select | `set`, `unset`, `eq`, `in` | option ids; `eq` takes one, `in` a comma-separated list |
 | link to another item | `set`, `unset`, `eq` | an item id |
 
 `set` keeps items with a value and `unset` items without one. A value of zero, `false` or empty text is a value: `set` keeps it, and `eq:0` or `eq:false` finds it.
 
-`commodityquery.Parse` checks the shape of a condition, the comparison name, and that a range value is a number or a date. `commodityquery.Resolve` reads the group's fields and checks the rest; a comparison the field's type does not take, or a value it cannot read, is a 400 like any other parameter error. A condition on a field the group does not have, or an option the field no longer has, matches nothing, the way a deleted tag or seller does: a saved view that names a deleted field lists no items instead of failing.
+`commodityquery.Parse` checks the shape of a condition, the comparison name, that a range value is a number or a date, and that the condition has no NUL character, which PostgreSQL text cannot hold. `commodityquery.Resolve` reads the group's fields and checks the rest; a comparison the field's type does not take, or a value it cannot read, is a 400 like any other parameter error. A condition on a field the group does not have, or an option the field no longer has, matches nothing, the way a deleted tag or seller does: a saved view that names a deleted field lists no items instead of failing.
 
 `sort=cf.<field id>` orders by the field's value: text without regard to case, numbers and money by amount, dates by day, `false` before `true`, select options in the order the field lists them. Items without a value come last in both directions. Long text and item links do not sort, and a sort by them, or by a field the group does not have, falls back to `name`.
 

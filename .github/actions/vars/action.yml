@@ -14,5 +14,5 @@ runs:
     - name: Expose the pinned golangci-lint version
       id: golangci
       run: |
-        echo "GOLANGCI_LINT_VERSION=v2.14.0" >> "$GITHUB_OUTPUT"
+        echo "GOLANGCI_LINT_VERSION=v2.15.0" >> "$GITHUB_OUTPUT"
       shell: bash
