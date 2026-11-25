@@ -312,6 +312,11 @@ type CommodityRegistry interface {
 	// previous "all rows, name+id ascending" behaviour.
 	ListPaginated(ctx context.Context, offset, limit int, opts CommodityListOptions) ([]*models.Commodity, int, error)
 
+	// CountTags counts, among the commodities opts selects, the items that
+	// carry each tag and the items without tags. Sorting and pagination do
+	// not apply.
+	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status. Used by the currency-migration
 	// service (issue #202): the conversion needs to see all rows in the

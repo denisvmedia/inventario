@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { http, HttpResponse } from "msw"
 
-import { setCommodityCover } from "@/features/commodities/api"
+import { setCommodityCover, tagCountsOptions } from "@/features/commodities/api"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -105,5 +105,32 @@ describe("setCommodityCover", () => {
     const result = await setCommodityCover("c1", "f-explicit")
     // No usable thumbnail → normalizeCover returns undefined.
     expect(result.commodity.cover).toBeUndefined()
+  })
+})
+
+describe("tagCountsOptions", () => {
+  it("sets the tag filter aside, unreadable tag values included", () => {
+    expect(
+      tagCountsOptions({
+        page: 2,
+        perPage: 24,
+        search: "drill",
+        tags: ["red"],
+        tagMode: "any",
+        noTags: true,
+        sort: "count",
+        unreadable: { tag_mode: "some", no_tags: "x", lent_out: "maybe" },
+      })
+    ).toMatchObject({
+      page: undefined,
+      perPage: undefined,
+      search: "drill",
+      tags: undefined,
+      tagMode: undefined,
+      noTags: undefined,
+      sort: undefined,
+      unreadable: { lent_out: "maybe" },
+    })
+    expect(tagCountsOptions({ unreadable: { tag_mode: "some" } }).unreadable).toBeUndefined()
   })
 })

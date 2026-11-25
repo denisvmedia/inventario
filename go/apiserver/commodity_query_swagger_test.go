@@ -12,8 +12,8 @@ import (
 )
 
 // TestSwaggerDeclaresCommodityQueryParams checks that docs/swagger.json
-// declares every filter of the item query contract on the two endpoints
-// that read it, so generated clients see the same parameters the handlers
+// declares every filter of the item query contract on the endpoints that
+// read it, so generated clients see the same parameters the handlers
 // accept. /search takes `type` as the entity type, not as a filter.
 func TestSwaggerDeclaresCommodityQueryParams(t *testing.T) {
 	c := qt.New(t)
@@ -43,9 +43,11 @@ func TestSwaggerDeclaresCommodityQueryParams(t *testing.T) {
 	}
 
 	list := queryParams("/g/{groupSlug}/commodities")
+	tagCounts := queryParams("/g/{groupSlug}/commodities/tag-counts")
 	search := queryParams("/g/{groupSlug}/search")
 	for _, name := range commodityquery.FilterParams() {
 		c.Check(list[name], qt.IsTrue, qt.Commentf("GET /commodities does not declare %q", name))
+		c.Check(tagCounts[name], qt.IsTrue, qt.Commentf("GET /commodities/tag-counts does not declare %q", name))
 		if name == commodityquery.ParamType {
 			continue
 		}

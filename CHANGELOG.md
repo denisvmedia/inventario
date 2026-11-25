@@ -28,6 +28,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
   items list, the area page and the search page use the same search, done in
   SQL on an indexed column
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
+- Filter items by tag. The **Tags** menu on the items list has a search box,
+  each tag with its color and item count, **All tags** / **Any tag**, and
+  **No tags**; clicking a selected tag again excludes it. Tags on item cards
+  and on the item page are colored pills that open the list filtered by the
+  tag, and so are tag names on the Tags page; the area and the type on the
+  item page link the same way. The file browser gets a **More tags** picker
+  for any file tag. The new `GET /commodities/tag-counts` endpoint returns the
+  per-tag counts for a query
+  ([#2792](https://github.com/denisvmedia/inventario/issues/2792)).
 
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,

@@ -119,7 +119,9 @@ import {
   commoditiesListSource,
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
-import { useTagLabel } from "@/features/tags/hooks"
+import { commodityListHref, commodityTagHref } from "@/features/commodities/query"
+import { useTagIndex } from "@/features/tags/hooks"
+import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
@@ -768,7 +770,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               ) : null}
               {type ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
-                  {t(`commodities:type.${type}`)}
+                  {slug ? (
+                    // The items list with every item of this type, inactive
+                    // ones included, since this item may be one of them.
+                    <Link
+                      to={commodityListHref(slug, { types: [type], includeInactive: true })}
+                      className="hover:text-foreground hover:underline"
+                      data-testid="commodity-detail-type-link"
+                    >
+                      {t(`commodities:type.${type}`)}
+                    </Link>
+                  ) : (
+                    t(`commodities:type.${type}`)
+                  )}
                 </p>
               ) : null}
             </div>
@@ -1375,8 +1389,26 @@ function DetailsTab({
   locations = [],
 }: DetailsTabProps) {
   const { t } = useTranslation()
-  const tagLabel = useTagLabel("commodity")
+  const { currentGroup } = useCurrentGroup()
+  const groupSlug = currentGroup?.slug ?? ""
+  const tagIndex = useTagIndex("commodity")
   const noValue = t("commodities:detail.noValue")
+  const areaText = (isSheetVariant: boolean) => (isSheetVariant ? areaLabel : areaName) || noValue
+  // Tags, the area and the type link to the items list filtered by them
+  // alone, inactive items included.
+  const tagPills = (commodity.tags ?? []).map((slug) => {
+    const tag = tagIndex.resolve(slug)
+    return (
+      <TagPill
+        key={slug}
+        label={tag.label}
+        color={tag.color}
+        size="xs"
+        href={groupSlug ? commodityTagHref(groupSlug, slug) : undefined}
+        data-testid="commodity-detail-tag"
+      />
+    )
+  })
   // Sheet mode shows the breadcrumb-style "Location · Area"
   // value with a "Location" label (mock parity); page mode keeps
   // the bare "Area" / area-name pair to match the existing column
@@ -1509,8 +1541,19 @@ function DetailsTab({
                 onSave={saveField("location")}
                 onCancel={cancelQuickEdit}
               />
+            ) : groupSlug && commodity.area_id ? (
+              <Link
+                to={commodityListHref(groupSlug, {
+                  areaId: commodity.area_id,
+                  includeInactive: true,
+                })}
+                className="hover:underline"
+                data-testid="commodity-detail-area-link"
+              >
+                {areaText(isSheetVariant)}
+              </Link>
             ) : (
-              (isSheetVariant ? areaLabel : areaName) || noValue
+              areaText(isSheetVariant)
             )
           }
           variant={variant}
@@ -1550,13 +1593,7 @@ function DetailsTab({
               onCancel={cancelQuickEdit}
             />
           ) : commodity.tags && commodity.tags.length > 0 ? (
-            <div className={cn("flex flex-wrap gap-1.5", isSheet && "mt-0.5")}>
-              {commodity.tags.map((tag) => (
-                <Badge key={tag} variant="secondary">
-                  {tagLabel(tag)}
-                </Badge>
-              ))}
-            </div>
+            <div className={cn("flex flex-wrap gap-1", isSheet && "mt-0.5")}>{tagPills}</div>
           ) : (
             noValue
           )}

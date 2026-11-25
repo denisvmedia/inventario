@@ -372,6 +372,15 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return filtered[start:end], total, nil
 }
 
+// CountTags counts the tags of the commodities opts selects.
+func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return registry.CommodityTagCounts{}, err
+	}
+	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
+}
+
 // filterCommodities applies the predicate fields of opts in-memory. Empty
 // slice/string fields are no-ops, matching the documented "zero-value =
 // no filter" contract.

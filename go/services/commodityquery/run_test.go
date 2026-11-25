@@ -120,6 +120,35 @@ func TestList_PagesKeepTheTotal(t *testing.T) {
 	c.Check(page.Matches, qt.HasLen, 1)
 }
 
+func TestTagCounts_SetsTheTagFilterAside(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	seedItem(c, ctx, set, "Red drill", "red", "tools")
+	seedItem(c, ctx, set, "Red lamp", "red")
+	seedItem(c, ctx, set, "Red rag")
+	seedItem(c, ctx, set, "Blue saw", "tools")
+
+	q := commodityquery.Query{
+		Text:            "red",
+		IncludeInactive: true,
+		Tags:            registry.CommodityTagFilter{Include: []string{"tools"}},
+	}
+	counts, err := commodityquery.TagCounts(ctx, set, q)
+	c.Assert(err, qt.IsNil)
+	// The search applies; the tag filter does not, so "red" counts both
+	// red items although the query asks for "tools".
+	c.Check(counts, qt.DeepEquals, registry.CommodityTagCounts{
+		Tags:     map[string]int{"red": 2, "tools": 1},
+		Untagged: 1,
+	})
+
+	// Each count is what the list shows with that tag alone selected.
+	q.Tags = registry.CommodityTagFilter{Include: []string{"red"}}
+	page, err := commodityquery.List(ctx, set, q, 0, 10)
+	c.Assert(err, qt.IsNil)
+	c.Check(page.Total, qt.Equals, counts.Tags["red"])
+}
+
 func TestResolve_LentOutOnTheMemoryBackend(t *testing.T) {
 	c := qt.New(t)
 	ctx, set := newMemorySet(c)
