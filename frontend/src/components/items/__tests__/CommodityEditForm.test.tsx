@@ -81,7 +81,10 @@ function renderForm(
           <GroupProvider>
             <CommodityEditForm
               commodity={{ ...commodity, ...overrides }}
-              areas={[{ id: "a1", name: "Study", location_id: "l1" }]}
+              areas={[
+                { id: "a1", name: "Study", location_id: "l1" },
+                { id: "a2", name: "Hallway", location_id: "l1" },
+              ]}
               locations={[{ id: "l1", name: "Home" }]}
               groupCurrency="USD"
               nav={noList}
@@ -198,6 +201,25 @@ describe("<CommodityEditForm />", () => {
     await user.click(screen.getByTestId("commodity-edit-save"))
     expect(await screen.findByText("is already taken")).toBeInTheDocument()
     expect(screen.queryByTestId("commodity-edit-hidden-error")).toBeNull()
+  })
+
+  it("drops a server message on the area once another area is picked", async () => {
+    const user = userEvent.setup()
+    renderForm(
+      {},
+      {
+        onSubmit: async () => {
+          throw validationError({ area_id: "area not found" })
+        },
+      }
+    )
+    await user.type(await screen.findByLabelText(/serial number/i), "SN-1")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    expect(await screen.findByText("area not found")).toBeInTheDocument()
+
+    await user.click(screen.getByRole("combobox", { name: /^area/i }))
+    await user.click(await screen.findByRole("option", { name: "Hallway" }))
+    await waitFor(() => expect(screen.queryByText("area not found")).toBeNull())
   })
 
   it("creates a location from the picker without saving or dropping edits", async () => {

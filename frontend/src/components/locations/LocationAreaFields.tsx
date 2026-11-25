@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type DragEvent,
   type KeyboardEvent,
   type ReactNode,
   type RefObject,
@@ -94,17 +95,32 @@ export function LocationAreaFields({
   }, [areas, areaId, locationId])
   const visibleAreas = locationId ? allAreas.filter((a) => a.location_id === locationId) : []
 
-  // The create dialog asked for in the select that is closing, and the one
-  // that is open. Closing a dialog returns the focus to the select it was
-  // opened from.
+  // The select whose list is open, the create dialog asked for in that list
+  // while it closes, and the dialog that is open. Closing a dialog returns
+  // the focus to the select it was opened from.
+  const listOpen = useRef<CreateKind | null>(null)
   const requested = useRef<CreateKind | null>(null)
   const [creating, setCreating] = useState<CreateKind | null>(null)
   const locationTrigger = useRef<HTMLButtonElement>(null)
   const areaTrigger = useRef<HTMLButtonElement>(null)
 
+  // A pick from the open list waits for the list to close (openRequested),
+  // so the dialog never opens under it. Typing a letter on a closed select
+  // picks the matching entry without opening the list, and then nothing
+  // would close it; the dialog opens at once.
+  function request(kind: CreateKind) {
+    if (listOpen.current === kind) requested.current = kind
+    else setCreating(kind)
+  }
+
+  function trackOpen(kind: CreateKind, open: boolean) {
+    listOpen.current = open ? kind : null
+    if (open) requested.current = null
+  }
+
   function pickLocation(next: string) {
     if (next === CREATE_VALUE) {
-      requested.current = "location"
+      request("location")
       return
     }
     if (next === locationId) return
@@ -114,14 +130,13 @@ export function LocationAreaFields({
 
   function pickArea(next: string) {
     if (next === CREATE_VALUE) {
-      requested.current = "area"
+      request("area")
       return
     }
     onAreaChange(next)
   }
 
-  // Runs as the select closes, after the pick, so the dialog never opens
-  // under a select that is still open.
+  // Runs as a list closes, after its pick.
   function openRequested() {
     const kind = requested.current
     requested.current = null
@@ -162,7 +177,11 @@ export function LocationAreaFields({
         {/* An empty string, not undefined, keeps the select controlled while
             it shows the placeholder, so the create entry never sticks as its
             value. */}
-        <Select value={locationId} onValueChange={pickLocation}>
+        <Select
+          value={locationId}
+          onValueChange={pickLocation}
+          onOpenChange={(open) => trackOpen("location", open)}
+        >
           <SelectTrigger id={`${idPrefix}-location`} ref={locationTrigger} className="w-full">
             <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
           </SelectTrigger>
@@ -190,6 +209,7 @@ export function LocationAreaFields({
           key={locationId || "no-location"}
           value={areaId}
           onValueChange={pickArea}
+          onOpenChange={(open) => trackOpen("area", open)}
           disabled={!locationId}
         >
           <SelectTrigger
@@ -329,9 +349,19 @@ function CreateDialogs({
   return (
     // The dialogs render in a portal, outside the form in the page, but React
     // still bubbles their events through the components around this picker.
-    // A submit would reach the item form and save the item, and Enter would
-    // reach the step-by-step dialog and move it to the next step.
-    <div role="presentation" className="contents" onSubmit={stopEvent} onKeyDown={stopEnter}>
+    // A submit would reach the item form and save the item, Enter would reach
+    // the step-by-step dialog and move it to the next step, and a file dropped
+    // on a dialog would reach the item page, which takes it as an attachment.
+    <div
+      role="presentation"
+      className="contents"
+      onSubmit={stopEvent}
+      onKeyDown={stopEnter}
+      onDragEnter={refuseFileDrag}
+      onDragOver={refuseFileDrag}
+      onDragLeave={refuseFileDrag}
+      onDrop={refuseFileDrag}
+    >
       <LocationFormDialog
         open={creating === "location"}
         onOpenChange={closeOnDismiss}
@@ -358,4 +388,13 @@ function stopEvent(event: { stopPropagation: () => void }) {
 
 function stopEnter(event: KeyboardEvent) {
   if (event.key === "Enter") event.stopPropagation()
+}
+
+// The default is prevented too, or the browser would open the dropped file
+// in place of the page and drop the form with it.
+function refuseFileDrag(event: DragEvent) {
+  if (!Array.from(event.dataTransfer?.types ?? []).includes("Files")) return
+  event.stopPropagation()
+  event.preventDefault()
+  event.dataTransfer.dropEffect = "none"
 }

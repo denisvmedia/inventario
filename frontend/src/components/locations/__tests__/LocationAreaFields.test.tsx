@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
@@ -37,7 +37,8 @@ interface RenderOptions {
 }
 
 // Mounts the picker inside a form of its own, as the item forms do, with a
-// notes field standing for the rest of the form's input.
+// notes field standing for the rest of the form's input. The form sits in a
+// file drop zone, as the item page is one.
 function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}) {
   setAccessToken("good-token")
   server.use(
@@ -47,24 +48,27 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
   )
   const onAreaChange = vi.fn()
   const onOuterSubmit = vi.fn((e: FormEvent) => e.preventDefault())
+  const onOuterDrop = vi.fn()
 
   function Host() {
     const [areaId, setAreaId] = useState(initialAreaId)
     return (
-      <form onSubmit={onOuterSubmit} aria-label="Item">
-        <label htmlFor="notes">Notes</label>
-        <input id="notes" />
-        <LocationAreaFields
-          areas={areas}
-          locations={locations}
-          areaId={areaId}
-          onAreaChange={(next) => {
-            setAreaId(next)
-            onAreaChange(next)
-          }}
-          idPrefix="test"
-        />
-      </form>
+      <div onDragOver={onOuterDrop} onDrop={onOuterDrop}>
+        <form onSubmit={onOuterSubmit} aria-label="Item">
+          <label htmlFor="notes">Notes</label>
+          <input id="notes" />
+          <LocationAreaFields
+            areas={areas}
+            locations={locations}
+            areaId={areaId}
+            onAreaChange={(next) => {
+              setAreaId(next)
+              onAreaChange(next)
+            }}
+            idPrefix="test"
+          />
+        </form>
+      </div>
     )
   }
 
@@ -82,7 +86,7 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
       />
     ),
   })
-  return { ...utils, onAreaChange, onOuterSubmit }
+  return { ...utils, onAreaChange, onOuterSubmit, onOuterDrop }
 }
 
 async function openSelect(user: ReturnType<typeof userEvent.setup>, name: RegExp) {
@@ -207,5 +211,54 @@ describe("<LocationAreaFields />", () => {
     await waitFor(() => expect(screen.queryByTestId("area-form-dialog")).toBeNull())
     expect(screen.getByRole("combobox", { name: /^area/i })).toHaveTextContent("Study")
     expect(onAreaChange).not.toHaveBeenCalled()
+  })
+
+  it("opens the dialog when typing picks the entry on a closed select", async () => {
+    const user = userEvent.setup()
+    renderPicker({ initialAreaId: "a1" })
+    // The entry shows once the role is in.
+    const listbox = await openSelect(user, /^location/i)
+    await within(listbox).findByRole("option", { name: /new location/i })
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
+
+    // Radix picks the entry starting with the typed letter without opening
+    // the list.
+    screen.getByRole("combobox", { name: /^location/i }).focus()
+    await user.keyboard("n")
+    const dialog = await screen.findByTestId("location-form-dialog")
+    await user.click(within(dialog).getByTestId("location-form-cancel"))
+    await waitFor(() => expect(screen.queryByTestId("location-form-dialog")).toBeNull())
+
+    // Nothing is left waiting to open with the next list that closes.
+    const areaList = await openSelect(user, /^area/i)
+    await user.click(within(areaList).getByRole("option", { name: "Study" }))
+    await waitFor(() => expect(screen.queryByRole("listbox")).toBeNull())
+    await expect(
+      screen.findByTestId("location-form-dialog", {}, { timeout: 300 })
+    ).rejects.toThrow()
+  })
+
+  it("keeps a file dropped on the dialog from the page around it", async () => {
+    const user = userEvent.setup()
+    const { onOuterDrop } = renderPicker({ initialAreaId: "a1" })
+    const listbox = await openSelect(user, /^location/i)
+    await user.click(await within(listbox).findByRole("option", { name: /new location/i }))
+    const dialog = await screen.findByTestId("location-form-dialog")
+
+    const dataTransfer = {
+      types: ["Files"],
+      files: [new File(["x"], "receipt.pdf", { type: "application/pdf" })],
+      dropEffect: "copy",
+    }
+    const over = fireEvent.dragOver(dialog, { dataTransfer })
+    const dropped = fireEvent.drop(dialog, { dataTransfer })
+
+    expect(onOuterDrop).not.toHaveBeenCalled()
+    // Prevented, so the browser does not open the file in place of the page.
+    expect(over).toBe(false)
+    expect(dropped).toBe(false)
+    expect(dataTransfer.dropEffect).toBe("none")
+    expect(screen.getByTestId("location-form-dialog")).toBeInTheDocument()
   })
 })

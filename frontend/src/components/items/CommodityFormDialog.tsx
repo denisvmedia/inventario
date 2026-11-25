@@ -1272,7 +1272,10 @@ function BasicsStep(props: any) {
           areas={areas}
           locations={locations}
           areaId={watch("area_id") ?? ""}
-          onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
+          // Validating drops a server error left on the area by the last save.
+          onAreaChange={(next) =>
+            setValue("area_id", next, { shouldDirty: true, shouldValidate: true })
+          }
           idPrefix="commodity"
           areaError={errors.area_id}
           renderLabel={(htmlFor, text) => <FieldLabel htmlFor={htmlFor}>{text}</FieldLabel>}

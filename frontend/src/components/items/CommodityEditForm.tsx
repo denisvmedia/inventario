@@ -361,7 +361,10 @@ export function CommodityEditForm({
               areas={areas}
               locations={locations}
               areaId={watch("area_id") ?? ""}
-              onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
+              // Validating drops a server error left on the area by the last save.
+              onAreaChange={(next) =>
+                setValue("area_id", next, { shouldDirty: true, shouldValidate: true })
+              }
               idPrefix="edit"
               areaError={errors.area_id}
             />
