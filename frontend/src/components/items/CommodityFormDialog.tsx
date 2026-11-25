@@ -383,7 +383,8 @@ export function CommodityFormDialog({
   // The resume notices describe why the form opened empty; once the form
   // holds the draft, a later refetch (after promoting it here, say) must
   // not raise them.
-  const resumeFailed = !!resumeId && resumedQuery.isError && !serverDraft
+  const resumeFailed =
+    !!resumeId && (resumedQuery.isError || resumed?.status === "closed") && !serverDraft
   const resumePromoted = resumed?.status === "promoted" && !serverDraft
   const [draftSave, setDraftSave] = useState<DraftSaveState>({ kind: "idle" })
   // True when the form opened with input kept on this device that the
@@ -402,7 +403,8 @@ export function CommodityFormDialog({
   // at a time even before the disabled buttons render.
   const savingRef = useRef(false)
   // The draft whose saved files a "save as a new draft" links to the new
-  // one, kept until a save has linked them all.
+  // one, kept until a save has linked them all. It belongs to one visit of
+  // the form: opening or discarding the form forgets it.
   const carryFromRef = useRef<string | null>(null)
   const navigate = useNavigate()
 
@@ -444,6 +446,7 @@ export function CommodityFormDialog({
   useEffect(() => {
     if (!open) {
       seededRef.current = null
+      carryFromRef.current = null
       return
     }
     if (resumeId) {
@@ -471,6 +474,7 @@ export function CommodityFormDialog({
       }
     }
     reset(starting)
+    carryFromRef.current = null
     shortNameEdited.current =
       mode === "edit" ||
       (starting.short_name.trim() !== "" && starting.short_name !== suggestShortName(starting.name))
@@ -679,6 +683,7 @@ export function CommodityFormDialog({
       void clearPendingFiles(localKey)
       clearDraftSession(localKey)
     }
+    carryFromRef.current = null
     setCloseConfirmOpen(false)
     onOpenChange(false)
   }

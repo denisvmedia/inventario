@@ -174,6 +174,7 @@ describe("saveDraftWithFiles", () => {
       { id: "d1", values: {}, status: "promoted", promoted_commodity_id: "item-9" },
       { id: "d2", values: {}, status: "discarding" },
       { id: "d3", client_key: "form:done", values: {}, status: "promoted" },
+      { id: "d4", client_key: "form:odd", values: {}, status: "archived" },
     ])
     server.use(...fake.handlers)
     const save = (draft: { id: string; revision: number } | null, clientKey = "form:x") =>
@@ -186,6 +187,9 @@ describe("saveDraftWithFiles", () => {
     expect(discardedConflict(await save({ id: "d2", revision: 1 }))).toBe(true)
     // A retried create that finds its draft already finished.
     expect(promotedConflict(await save(null, "form:done"))).not.toBeNull()
+    // A state this client does not know is never saved over.
+    expect(discardedConflict(await save(null, "form:odd"))).toBe(true)
+    expect(fake.drafts[3].values).toEqual({})
   })
 
   it("attaches a file an earlier attempt uploaded instead of uploading it again", async () => {

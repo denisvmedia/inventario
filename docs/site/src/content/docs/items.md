@@ -226,8 +226,9 @@ yours does not overwrite theirs. The dialog says that the draft changed and
 offers **Load the newer version** or **Save as a new draft**. A new draft gets
 the files saved with the old one too; the old draft keeps them as well.
 
-If the draft was finished or discarded on another device after you opened it,
-**Save draft** and **Add item** do not save to it, and the dialog says so.
+If the draft was finished or discarded after you opened it, on another device
+or in another tab, **Save draft** and **Add item** do not save to it, and the
+dialog says so.
 **Save as a new draft** keeps what you entered as a draft of its own. For a
 draft that became an item, **Open item** goes to that item instead and drops
 what you entered in the dialog. A finished draft does not come back in the

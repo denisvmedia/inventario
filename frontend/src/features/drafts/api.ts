@@ -27,7 +27,9 @@ export interface Draft {
   title: string
   values: DraftValues
   revision: number
-  status: "open" | "promoted"
+  // "closed" is any other state: a draft being discarded, or a state a newer
+  // server adds. The form never saves to or promotes such a draft.
+  status: "open" | "promoted" | "closed"
   promotedCommodityId?: string
   fileCount: number
   updatedAt: string
@@ -72,6 +74,11 @@ function metaOf(err: unknown): Record<string, string> | null {
   return getServerErrorMeta(err)
 }
 
+function toStatus(status: string | undefined): Draft["status"] {
+  if (status === "open" || status === "promoted") return status
+  return "closed"
+}
+
 function toDraft(id: string | undefined, view: DraftView | undefined): Draft {
   return {
     id: id ?? view?.id ?? "",
@@ -81,7 +88,7 @@ function toDraft(id: string | undefined, view: DraftView | undefined): Draft {
     // form's default instead of breaking the dialog.
     values: parseDraftValues(view?.values),
     revision: view?.revision ?? 0,
-    status: view?.status === "promoted" ? "promoted" : "open",
+    status: toStatus(view?.status),
     promotedCommodityId: view?.promoted_commodity_id || undefined,
     fileCount: view?.file_count ?? 0,
     updatedAt: view?.updated_at ?? "",

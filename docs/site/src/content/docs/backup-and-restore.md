@@ -103,9 +103,10 @@ A restore brings back the [drafts of new items](../items/#drafts-of-a-new-item)
 in the backup with the files saved with them, linked to the restored area and
 seller. The two merge strategies keep a draft your group already has (the same
 draft, saved again since the backup, for example) and say so in the restore
-log; a file that only such a draft used comes back as a standalone file. A
-backup made before drafts were included has none, so a merge leaves your
-drafts as they are.
+log; a file that only such a draft used comes back as a standalone file. So do
+the files of a draft that cannot be restored, which the restore log counts as
+an error. A backup made before drafts were included has none, so a merge
+leaves your drafts as they are.
 
 ### Sellers
 
