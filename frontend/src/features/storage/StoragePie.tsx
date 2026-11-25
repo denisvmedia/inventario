@@ -41,6 +41,7 @@ const FILLED_KEYS: ReadonlyArray<{
   { key: "documents", color: "#5c9d6c", testid: "storage-pie-documents" }, // green
   { key: "exports", color: "#5587b8", testid: "storage-pie-exports" }, // blue
   { key: "other", color: "#c66565", testid: "storage-pie-other" }, // red
+  { key: "trash", color: "#8c8279", testid: "storage-pie-trash" }, // warm gray
 ]
 const FREE_COLOR = "#d6d3d1" // neutral-300, visible against the card bg
 
@@ -63,7 +64,7 @@ export function StoragePie({ breakdown, usedBytes, quotaBytes }: StoragePieProps
   // "unlimited" case).
   const filled: PieSegment[] = FILLED_KEYS.map(({ key, color, testid }) => ({
     key,
-    bytes: breakdown[key],
+    bytes: breakdown[key] ?? 0,
     color,
     testid,
   }))

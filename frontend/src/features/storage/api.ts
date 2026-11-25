@@ -7,6 +7,9 @@ export interface StorageBreakdown {
   documents: number
   other: number
   exports: number
+  // Bytes of files in Trash. They count toward the total until the trash is
+  // emptied or the entries expire.
+  trash: number
 }
 
 export interface StorageUsage {

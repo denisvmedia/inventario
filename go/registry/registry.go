@@ -81,9 +81,14 @@ type ServiceRegistryFactory[T any, P Registry[T]] interface {
 	CreateServiceRegistry() P
 }
 
+// AreaRegistry stores areas. Delete refuses an area that still holds live
+// items (ErrCannotDelete) and, in the same transaction, clears the area of the
+// trashed items filed under it, so Trash never blocks deleting an area; those
+// items come back unassigned when restored.
 type AreaRegistry interface {
 	Registry[models.Area]
 
+	// GetCommodities returns the ids of the live items filed under the area.
 	GetCommodities(ctx context.Context, areaID string) ([]string, error)
 
 	// ListPaginated returns a paginated list of areas along with the total
@@ -211,6 +216,11 @@ type CommodityListOptions struct {
 	// the relationship in-database). Callers (the apiserver handler)
 	// populate this iff LentOut is non-nil.
 	OpenLoanCommodityIDs []string
+	// Trashed selects the items in Trash instead of the live ones; every
+	// other field filters them the same way. The loans of a trashed item
+	// are hidden, so a caller does not combine it with LentOut
+	// (services/commodityquery refuses the pair).
+	Trashed bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -295,8 +305,49 @@ func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
 	return n, true
 }
 
+// CommodityRegistry stores items.
+//
+// Trash: an item moved to Trash keeps its row with deleted_at set
+// (models.Commodity.IsTrashed). Every read of this interface returns live items
+// only — Get, List, Count, ListPaginated, GetMany — so a trashed item is absent
+// from lists, counts, search, reports, exports and reminders without each
+// caller filtering for it. The exceptions are named: ListByGroup and
+// BackfillAssetNumbers see trashed items too, and the *Trashed methods and
+// ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
+// queries the commodities table directly (a new worker, a report) has to apply
+// the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
+
+	// GetTrashed returns a trashed item by id; ErrNotFound when it does not
+	// exist or is live.
+	GetTrashed(ctx context.Context, id string) (*models.Commodity, error)
+
+	// ListTrashed returns a page of the group's trashed items, most recently
+	// deleted first, with the total.
+	ListTrashed(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error)
+
+	// ListTrashedBefore returns up to limit trashed items, in every tenant and
+	// group, that were deleted before cutoff, oldest first. Service mode only:
+	// it backs the purge of expired Trash.
+	ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.Commodity, error)
+
+	// Trash moves a live item to Trash: it stamps deleted_at with at,
+	// deleted_by with deletedBy and remembers the item's area. ErrNotFound when
+	// the item does not exist or is already in Trash.
+	Trash(ctx context.Context, id, deletedBy string, at time.Time) (*models.Commodity, error)
+
+	// Restore makes a trashed item live again and returns it. ErrNotFound when
+	// the item does not exist or is live.
+	Restore(ctx context.Context, id string) (*models.Commodity, error)
+
+	// PurgeTrashed deletes the row of a trashed item; its loans, service
+	// records, maintenance schedules, supply links and events go with it
+	// through ON DELETE CASCADE. It never deletes a live item, so a purge
+	// racing a restore loses. Reports whether a row was deleted. Like Delete,
+	// it leaves the item's file links alone: purging goes through
+	// services.TrashService.
+	PurgeTrashed(ctx context.Context, id string) (bool, error)
 
 	// BackfillAssetNumbers gives every commodity that has no asset number
 	// one, group by group, continuing after the group's highest number in
@@ -328,10 +379,11 @@ type CommodityRegistry interface {
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
-	// tuple, regardless of draft / status. Used by the currency-migration
-	// service (issue #202): the conversion needs to see all rows in the
-	// group, not just the user-visible "in_use, non-draft" subset that
-	// ListPaginated defaults to. Service-mode callers (the worker) bypass
+	// tuple, regardless of draft / status, trashed items included. Used by the
+	// currency-migration service (issue #202): the conversion needs to see all
+	// rows in the group, not just the user-visible "in_use, non-draft" subset
+	// that ListPaginated defaults to, and a trashed item restored later must
+	// carry prices in the group's current currency. Service-mode callers (the worker) bypass
 	// RLS via this; user-mode callers should use the registry's group
 	// context instead.
 	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.Commodity, error)
@@ -412,8 +464,74 @@ type ExportRegistry interface {
 	ClaimPending(ctx context.Context, id string) (bool, error)
 }
 
+// FileRegistry stores files and their links.
+//
+// Trash: a file moved to Trash keeps its row, links and blob with deleted_at
+// set (models.FileEntity.IsTrashed). The ordinary reads return live files
+// only — Get, List, Count, ListByType, ListByLinkedEntity,
+// ListByLinkedEntityAndMeta, ListByChecksum, Search, ListPaginated and
+// CountByCategory. The reads that guard bytes or sweep whole groups see
+// trashed files too, because a trashed file still owns its blob:
+// ListByGroup, ListByTenant, ListPendingChecksum, ListPendingSizeBackfill,
+// ExistingIDs and ListIDsByOriginalPath. ListOrphanCandidates returns live
+// files only: a trashed file is the Trash purge's to settle, and a link to a
+// trashed item counts as a link to an existing entity. The storage sums count
+// trashed bytes in their own Trash bucket. The *Trashed methods
+// see trashed files only. Update refuses a trashed file with ErrNotFound.
 type FileRegistry interface {
 	Registry[models.FileEntity]
+
+	// GetTrashed returns a trashed file by id; ErrNotFound when it does not
+	// exist or is live.
+	GetTrashed(ctx context.Context, id string) (*models.FileEntity, error)
+
+	// ListTrashed returns a page of the group's files that were deleted on
+	// their own (DeletedWithCommodityID is nil), most recently deleted first,
+	// with the total. Files that went to Trash with an item are listed under
+	// that item instead.
+	ListTrashed(ctx context.Context, offset, limit int) ([]*models.FileEntity, int, error)
+
+	// ListTrashedLinkedTo returns the trashed files linked to the entity,
+	// newest first.
+	ListTrashedLinkedTo(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// CountTrashedWith returns, for each item id, how many files went to Trash
+	// with it and their total size. Ids without such files are absent.
+	CountTrashedWith(ctx context.Context, commodityIDs []string) (map[string]TrashedFilesStats, error)
+
+	// ListTrashedBefore returns up to limit files, in every tenant and group,
+	// that were deleted on their own before cutoff. Oldest first. Service mode
+	// only: it backs the purge of expired Trash.
+	ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.FileEntity, error)
+
+	// ListStrandedTrashed returns up to limit trashed files that went to
+	// Trash with an item that is no longer in Trash: purged, or live again.
+	// Such a file is neither a Trash entry of its own nor listed under an
+	// item, so nothing shows it; an interrupted purge, restore or delete
+	// leaves it behind. services.TrashService settles it: restores it, hands
+	// it to another trashed item or deletes it. Oldest first, whatever the
+	// age. A user registry reads its group; a service registry reads every
+	// group.
+	ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error)
+
+	// Trash moves a live file to Trash. withCommodityID names the item whose
+	// deletion takes the file along, or is empty for a file deleted on its
+	// own. ErrNotFound when the file does not exist or is already in Trash.
+	Trash(ctx context.Context, id, deletedBy, withCommodityID string, at time.Time) error
+
+	// Restore makes a trashed file live again. ErrNotFound when the file does
+	// not exist or is live.
+	Restore(ctx context.Context, id string) error
+
+	// SetTrashedWith changes which item a trashed file went to Trash with
+	// (empty makes it a Trash entry of its own). Purging an item uses it to
+	// hand a shared file to another trashed item that still links it.
+	SetTrashedWith(ctx context.Context, id, commodityID string) error
+
+	// PurgeTrashed deletes the row of a trashed file and its links. It never
+	// deletes a live file. Like Delete, it does not touch the blob: callers go
+	// through services.FileService.PurgeTrashedFile.
+	PurgeTrashed(ctx context.Context, id string) (bool, error)
 
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
@@ -475,12 +593,17 @@ type FileRegistry interface {
 	MoveLegacyLinks(ctx context.Context, limit int) (int, error)
 
 	// ListByGroup returns every file belonging to the given (tenant_id,
-	// group_id) tuple. Used by the group purge worker to find physical blobs
-	// to delete before the row-level purge wipes the file table — avoids the
-	// O(tenant × total_files) scan that List() would perform. Only makes
-	// sense for service-mode callers: group-scoped user registries already
-	// see exactly the right slice via RLS.
+	// group_id) tuple, trashed files included. Used by the group purge worker
+	// to find physical blobs to delete before the row-level purge wipes the
+	// file table — avoids the O(tenant × total_files) scan that List() would
+	// perform. Only makes sense for service-mode callers: group-scoped user
+	// registries already see exactly the right slice via RLS.
 	ListByGroup(ctx context.Context, tenantID, groupID string) ([]*models.FileEntity, error)
+
+	// ListByTenant returns every file of the tenant, trashed files included.
+	// Service mode only: the tenant hard delete uses it to find the blobs to
+	// delete before the rows go.
+	ListByTenant(ctx context.Context, tenantID string) ([]*models.FileEntity, error)
 
 	// Search returns files matching the search criteria. Optional filters:
 	//   - fileCategory narrows by the user-meaningful tile category
@@ -644,17 +767,28 @@ func (c OrphanCandidateCursor) IsZero() bool {
 //
 // #1622 dropped the `invoices` bucket — legacy invoice rows are
 // reclassified into Documents and carry the `invoice` tag.
+//
+// Trash holds the bytes of trashed files, whatever their category. They still
+// occupy storage and count toward the total until they are purged, and the
+// separate bucket tells a user what emptying Trash frees.
 type StorageBreakdown struct {
 	Images    int64 `json:"images"`
 	Documents int64 `json:"documents"`
 	Other     int64 `json:"other"`
 	Exports   int64 `json:"exports"`
+	Trash     int64 `json:"trash"`
 }
 
 // Total returns the sum of every bucket. Convenience for callers that
 // want the headline number alongside the breakdown.
 func (b StorageBreakdown) Total() int64 {
-	return b.Images + b.Documents + b.Other + b.Exports
+	return b.Images + b.Documents + b.Other + b.Exports + b.Trash
+}
+
+// TrashedFilesStats counts the files that went to Trash with one item.
+type TrashedFilesStats struct {
+	Count int   `json:"count"`
+	Bytes int64 `json:"bytes"`
 }
 
 // TagSortField names the columns the tags list endpoint understands for
@@ -848,6 +982,11 @@ type LoanListOptions struct {
 // single open-loan row at most, enforced by the service layer via a
 // "fetch open + reject if exists" check rather than a partial-unique
 // constraint (the FE needs a domain 409, not a Postgres SQLState).
+// CommodityLoanRegistry stores loans. The loans of a trashed item stay in the
+// table and come back with the item; the group-wide reads (List, Count,
+// ListPaginated, ListPendingReminders) leave them out. The per-item reads
+// (ListByCommodity, GetOpenForCommodity, CountOpenByCommodity) answer for the
+// ids they are given.
 type CommodityLoanRegistry interface {
 	Registry[models.CommodityLoan]
 
@@ -969,6 +1108,9 @@ type ServiceListOptions struct {
 // "due_back_at") and the cost columns the loan table doesn't carry. See
 // the type-level comment on CommodityLoanRegistry for the cross-cutting
 // design notes (single open row, no DB-level uniqueness, etc.).
+// CommodityServiceRegistry stores service records. The records of a trashed
+// item stay in the table and come back with the item; the group-wide reads
+// (List, Count, ListPaginated) leave them out.
 type CommodityServiceRegistry interface {
 	Registry[models.CommodityService]
 
@@ -1036,6 +1178,10 @@ type MaintenanceListOptions struct {
 // maintenance_schedules. Schedules are simple row-based entities — the
 // service layer enforces the small set of invariants (positive interval,
 // next_due_at recompute on MarkDone) rather than the DB.
+// MaintenanceScheduleRegistry stores maintenance schedules. The schedules of a
+// trashed item stay in the table and come back with the item; the group-wide
+// reads (List, Count, ListPaginated) leave them out, which is what keeps the
+// maintenance reminder worker quiet about them.
 type MaintenanceScheduleRegistry interface {
 	Registry[models.MaintenanceSchedule]
 

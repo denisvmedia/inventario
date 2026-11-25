@@ -136,6 +136,9 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
+	// The trash fields belong to Trash and Restore; a new item is live.
+	commodity.ClearTrashState()
+
 	// The asset number is server-managed, as in the postgres registry: the
 	// caller's value is dropped and the number is picked while holding the
 	// lock that also covers storing the row.
@@ -220,7 +223,7 @@ func (r *CommodityRegistry) GetMany(_ context.Context, ids []string) ([]*models.
 		if !ok || item == nil {
 			continue
 		}
-		if !r.isItemVisible(item) {
+		if !r.isItemVisible(item) || item.IsTrashed() {
 			continue
 		}
 		cp := *item
@@ -270,9 +273,17 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 // the two backends behave identically.
 func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	// Pre-fetch so we know the parent area to untrack once the row is gone.
-	commodity, err := r.Registry.Get(ctx, id)
-	if err != nil {
-		return errxtrace.Wrap("failed to get commodity", err)
+	// Like the postgres row delete, this reaches a trashed item too.
+	r.lock.RLock()
+	stored, ok := r.items.Get(id)
+	visible := ok && r.isItemVisible(stored)
+	var commodity models.Commodity
+	if visible {
+		commodity = *stored
+	}
+	r.lock.RUnlock()
+	if !visible {
+		return errxtrace.Wrap("failed to get commodity", registry.ErrNotFound)
 	}
 
 	if err := r.Registry.Delete(ctx, id); err != nil {
@@ -326,6 +337,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
+	// The trash fields belong to Trash and Restore. The base update refuses a
+	// trashed item, as the postgres registry does.
+	commodity.ClearTrashState()
+
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)
 	if err != nil {
@@ -359,7 +374,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 // reflects the filtered count, not the raw row count, so the client can
 // build a correct paginator.
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	all, err := r.List(ctx)
+	all, err := r.listCandidates(ctx, opts)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -383,11 +398,20 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 
 // CountTags counts the tags of the commodities opts selects.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
-	all, err := r.List(ctx)
+	all, err := r.listCandidates(ctx, opts)
 	if err != nil {
 		return registry.CommodityTagCounts{}, err
 	}
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
+}
+
+// listCandidates returns the rows the filters of opts run over: the live
+// items, or with opts.Trashed the items in Trash.
+func (r *CommodityRegistry) listCandidates(ctx context.Context, opts registry.CommodityListOptions) ([]*models.Commodity, error) {
+	if opts.Trashed {
+		return r.trashedItems(func(*models.Commodity) bool { return true }), nil
+	}
+	return r.List(ctx)
 }
 
 // filterCommodities applies the predicate fields of opts in-memory. Empty

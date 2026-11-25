@@ -19,6 +19,7 @@ import {
   PackageCheck,
   Pencil,
   Plus,
+  RotateCcw,
   Tag,
   Trash2,
   Wrench,
@@ -194,6 +195,8 @@ function renderEventIcon(kind: CommodityEventKind, className: string) {
       return <Plus {...props} />
     case "deleted":
       return <Trash2 {...props} />
+    case "restored":
+      return <RotateCcw {...props} />
     case "status_changed":
       return <CheckCircle2 {...props} />
     case "moved":
@@ -238,6 +241,12 @@ function labelFor(
       return t("commodities:detail.historyEvent.createdLabel")
     case "deleted":
       return t("commodities:detail.historyEvent.deletedLabel")
+    case "restored":
+      // area_removed: the item's area was deleted while it was in Trash, so
+      // it came back without one.
+      return ev.after?.["area_removed"] === true
+        ? t("commodities:detail.historyEvent.restoredLabelUnassigned")
+        : t("commodities:detail.historyEvent.restoredLabel")
     case "status_changed": {
       const fromStatus = stringField(ev.before, "status")
       const toStatus = stringField(ev.after, "status")

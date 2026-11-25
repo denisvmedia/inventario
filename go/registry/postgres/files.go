@@ -82,26 +82,32 @@ func (r *FileRegistry) Get(ctx context.Context, id string) (*models.FileEntity, 
 	return r.get(ctx, id)
 }
 
+// List returns every live file.
 func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
 	reg := r.newSQLRegistry()
-
-	// Query the database for all files (atomic operation)
-	for file, err := range reg.Scan(ctx) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list files", err)
-		}
-		files = append(files, &file)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE %s`, r.tableNames.Files(), liveRow)
+		var err error
+		files, err = r.queryFiles(ctx, tx, query)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files", err)
 	}
-
-	return r.withLinks(ctx, files)
+	return files, nil
 }
 
+// Count returns the number of live files.
 func (r *FileRegistry) Count(ctx context.Context) (int, error) {
+	var cnt int
 	reg := r.newSQLRegistry()
-
-	cnt, err := reg.Count(ctx)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var err error
+		cnt, err = countRows(ctx, tx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, r.tableNames.Files(), liveRow))
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count files", err)
 	}
@@ -127,22 +133,31 @@ func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*mod
 func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	reg := r.newSQLRegistry()
 
-	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, _ models.FileEntity, next *models.FileEntity) error {
+	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, stored models.FileEntity, next *models.FileEntity) error {
 		var current struct {
 			LegacyType string `db:"linked_entity_type"`
 			LegacyID   string `db:"linked_entity_id"`
 			LegacyMeta string `db:"linked_entity_meta"`
 			SHA256     string `db:"sha256"`
+			Trashed    bool   `db:"trashed"`
 		}
 		lock := fmt.Sprintf(`
 			SELECT COALESCE(linked_entity_type, '') AS linked_entity_type,
 				COALESCE(linked_entity_id, '') AS linked_entity_id,
 				COALESCE(linked_entity_meta, '') AS linked_entity_meta,
-				sha256
+				sha256,
+				deleted_at IS NOT NULL AS trashed
 			FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Files())
 		if err := tx.QueryRowxContext(ctx, lock, next.ID).StructScan(&current); err != nil {
 			return errxtrace.Wrap("failed to lock file", err)
 		}
+		// A trashed file is read-only until it is restored. stored was read
+		// without a lock, so the check is made under this one. The trash
+		// columns themselves belong to Trash and Restore.
+		if current.Trashed {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", stored.ID))
+		}
+		next.ClearTrashState()
 		next.LegacyFileLink = models.LegacyFileLink{
 			LegacyLinkedEntityType: current.LegacyType,
 			LegacyLinkedEntityID:   current.LegacyID,
@@ -189,34 +204,46 @@ func (r *FileRegistry) newSQLRegistry() *store.RLSGroupRepository[models.FileEnt
 	return store.NewGroupAwareSQLRegistry[models.FileEntity](r.dbx, r.tenantID, r.groupID, r.createdByUserID, r.tableNames.Files())
 }
 
+// get returns a live file with its links.
 func (r *FileRegistry) get(ctx context.Context, id string) (*models.FileEntity, error) {
-	var file models.FileEntity
-	reg := r.newSQLRegistry()
+	return r.getInState(ctx, id, liveRow)
+}
 
-	err := reg.ScanOneByField(ctx, store.Pair("id", id), &file)
+// getInState returns a file with its links when its row matches state, which
+// is liveRow or trashedRow.
+func (r *FileRegistry) getInState(ctx context.Context, id, state string) (*models.FileEntity, error) {
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND %s LIMIT 1`, r.tableNames.Files(), state)
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, id)
+		return err
+	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get file", err)
 	}
-
-	files, err := r.withLinks(ctx, []*models.FileEntity{&file})
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to get file links", err)
+	if len(files) == 0 {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", id))
 	}
 	return files[0], nil
 }
 
+// ListByType returns the live files of one type.
 func (r *FileRegistry) ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
 	reg := r.newSQLRegistry()
-	for file, err := range reg.ScanByField(ctx, store.Pair("type", fileType)) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list files by type", err)
-		}
-		files = append(files, &file)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE type = $1 AND %s`, r.tableNames.Files(), liveRow)
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, fileType)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files by type", err)
 	}
-
-	return r.withLinks(ctx, files)
+	return files, nil
 }
 
 func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
@@ -226,7 +253,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT f.* FROM %s f
-			WHERE EXISTS (
+			WHERE f.deleted_at IS NULL AND EXISTS (
 				SELECT 1 FROM %s l
 				WHERE l.file_id = f.id AND l.entity_type = $1 AND l.entity_id = $2
 			)
@@ -243,7 +270,7 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 }
 
 // ListByGroup returns every file belonging to the given (tenant_id, group_id)
-// tuple. Used by GroupPurgeService to find physical blobs to delete before
+// tuple, trashed files included. Used by GroupPurgeService to find physical blobs to delete before
 // the dependent-row purge wipes the file table. Runs as a single indexed
 // query so purge cost scales with per-group files rather than with the full
 // tenant-wide file count (review comment on #1316).
@@ -278,6 +305,25 @@ func (r *FileRegistry) ListByGroup(ctx context.Context, tenantID, groupID string
 	return files, nil
 }
 
+// ListByTenant returns every file of the tenant, trashed files included.
+func (r *FileRegistry) ListByTenant(ctx context.Context, tenantID string) ([]*models.FileEntity, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE tenant_id = $1 ORDER BY created_at DESC`, r.tableNames.Files())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, tenantID)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list files by tenant", err)
+	}
+	return files, nil
+}
+
 func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error) {
 	var files []*models.FileEntity
 
@@ -285,7 +331,7 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT f.* FROM %s f
-			WHERE EXISTS (
+			WHERE f.deleted_at IS NULL AND EXISTS (
 				SELECT 1 FROM %s l
 				WHERE l.file_id = f.id AND l.entity_type = $1 AND l.entity_id = $2 AND l.meta = $3
 			)
@@ -302,15 +348,17 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 }
 
 // fileWhere assembles the WHERE clause shared by Search, ListPaginated, and
-// CountByCategory. Returns nil when no filter applies, so a caller can tell an
-// unfiltered query from an empty clause. The outer query selects from the
-// files table without an alias; the linked-entity filter refers to it by name.
+// CountByCategory. It always keeps trashed files out, so it is never empty. The
+// outer query selects from the files table without an alias; the linked-entity
+// filter refers to it by name.
 func fileWhere(tables store.TableNames, query string, fileType *models.FileType, fileCategory *models.FileCategory, tags []string, linkedEntityType, linkedEntityID *string) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	add := func(expr string) {
 		exprs = append(exprs, expr)
 	}
+
+	add(liveRow)
 
 	if fileType != nil {
 		add(cond.Equal("type", *fileType))
@@ -570,6 +618,8 @@ func orphanCandidatesQuery(tables store.TableNames, olderThan time.Time, after r
 
 	sb := newSelect().Select("f.*").From(string(tables.Files()) + " f")
 	sb.Where(
+		// A trashed file belongs to the Trash purge, not to this GC.
+		"f.deleted_at IS NULL",
 		sb.LessThan("f.created_at", olderThan),
 		sb.LessThan("f.updated_at", olderThan),
 	)
@@ -682,19 +732,21 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
 		sqlQuery := fmt.Sprintf(`
 			SELECT
-				COALESCE(SUM(CASE WHEN is_export THEN size_bytes ELSE 0 END), 0) AS exports,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND is_export THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other,
+				COALESCE(SUM(CASE WHEN is_trashed THEN size_bytes ELSE 0 END), 0) AS trash
 			FROM (
 				SELECT f.size_bytes, f.category, f.tenant_id, f.group_id,
+					f.deleted_at IS NOT NULL AS is_trashed,
 					EXISTS (SELECT 1 FROM %s l WHERE l.file_id = f.id AND l.entity_type = 'export') AS is_export
 				FROM %s f
 			) sized
 			WHERE tenant_id = $1 AND group_id = $2`, r.tableNames.FileLinks(), r.tableNames.Files())
 
 		row := tx.QueryRowxContext(ctx, sqlQuery, tenantID, groupID)
-		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other); err != nil {
+		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other, &breakdown.Trash); err != nil {
 			return errxtrace.Wrap("failed to scan storage breakdown by group", err)
 		}
 		return nil
@@ -709,8 +761,9 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 // (tenant, group) scope (#1388). RLS handles the tenant+group filter;
 // the SQL splits export bundles (files with an export link) out of
 // FileCategoryOther so the FE can render a distinct "exports" row in
-// the storage card without double-counting. A file attached to several
-// entities is one stored blob and counts once.
+// the storage card without double-counting, and trashed files out of every
+// other bucket into Trash. A file attached to several entities is one stored
+// blob and counts once.
 func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
 	var breakdown registry.StorageBreakdown
 
@@ -723,18 +776,20 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 		// migration, so we only count three category buckets here.
 		sqlQuery := fmt.Sprintf(`
 			SELECT
-				COALESCE(SUM(CASE WHEN is_export THEN size_bytes ELSE 0 END), 0) AS exports,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
-				COALESCE(SUM(CASE WHEN NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND is_export THEN size_bytes ELSE 0 END), 0) AS exports,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+				COALESCE(SUM(CASE WHEN NOT is_trashed AND NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other,
+				COALESCE(SUM(CASE WHEN is_trashed THEN size_bytes ELSE 0 END), 0) AS trash
 			FROM (
 				SELECT f.size_bytes, f.category, f.tenant_id, f.group_id,
+					f.deleted_at IS NOT NULL AS is_trashed,
 					EXISTS (SELECT 1 FROM %s l WHERE l.file_id = f.id AND l.entity_type = 'export') AS is_export
 				FROM %s f
 			) sized`, r.tableNames.FileLinks(), r.tableNames.Files())
 
 		row := tx.QueryRowxContext(ctx, sqlQuery)
-		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other); err != nil {
+		if err := row.Scan(&breakdown.Exports, &breakdown.Images, &breakdown.Documents, &breakdown.Other, &breakdown.Trash); err != nil {
 			return errxtrace.Wrap("failed to scan storage breakdown", err)
 		}
 		return nil
@@ -744,4 +799,224 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 	}
 
 	return breakdown, nil
+}
+
+// GetTrashed returns a trashed file with its links.
+func (r *FileRegistry) GetTrashed(ctx context.Context, id string) (*models.FileEntity, error) {
+	return r.getInState(ctx, id, trashedRow)
+}
+
+// ListTrashed returns a page of the files deleted on their own, most recently
+// deleted first.
+func (r *FileRegistry) ListTrashed(ctx context.Context, offset, limit int) ([]*models.FileEntity, int, error) {
+	var files []*models.FileEntity
+	var total int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		where := fmt.Sprintf("%s AND deleted_with_commodity_id IS NULL", trashedRow)
+		var err error
+		total, err = countRows(ctx, tx, fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, r.tableNames.Files(), where))
+		if err != nil {
+			return err
+		}
+		sb := newSelect().Select("*").From(string(r.tableNames.Files()))
+		sb.Where(where).OrderByDesc("deleted_at").OrderByDesc("id")
+		query, args := paginate(sb, offset, limit).Build()
+		files, err = r.queryFiles(ctx, tx, query, args...)
+		return err
+	})
+	if err != nil {
+		return nil, 0, errxtrace.Wrap("failed to list trashed files", err)
+	}
+	return files, total, nil
+}
+
+// ListTrashedLinkedTo returns the trashed files linked to the entity.
+func (r *FileRegistry) ListTrashedLinkedTo(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error) {
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT f.* FROM %s f
+			WHERE f.deleted_at IS NOT NULL AND EXISTS (
+				SELECT 1 FROM %s l
+				WHERE l.file_id = f.id AND l.entity_type = $1 AND l.entity_id = $2
+			)
+			ORDER BY f.created_at DESC, f.id DESC`, r.tableNames.Files(), r.tableNames.FileLinks())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, entityType, entityID)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list trashed files by linked entity", err)
+	}
+	return files, nil
+}
+
+// CountTrashedWith counts the files that went to Trash with each item.
+func (r *FileRegistry) CountTrashedWith(ctx context.Context, commodityIDs []string) (map[string]registry.TrashedFilesStats, error) {
+	out := make(map[string]registry.TrashedFilesStats, len(commodityIDs))
+	if len(commodityIDs) == 0 {
+		return out, nil
+	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT deleted_with_commodity_id, COUNT(*), COALESCE(SUM(size_bytes), 0)
+			FROM %s
+			WHERE %s AND deleted_with_commodity_id = ANY($1)
+			GROUP BY deleted_with_commodity_id`, r.tableNames.Files(), trashedRow)
+		rows, err := tx.QueryxContext(ctx, query, commodityIDs)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var id string
+			var stats registry.TrashedFilesStats
+			if err := rows.Scan(&id, &stats.Count, &stats.Bytes); err != nil {
+				return err
+			}
+			out[id] = stats
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count files trashed with items", err)
+	}
+	return out, nil
+}
+
+// ListTrashedBefore returns up to limit files deleted on their own before
+// cutoff, oldest first.
+func (r *FileRegistry) ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT f.* FROM %s f
+			WHERE f.deleted_at IS NOT NULL AND f.deleted_at < $1 AND f.deleted_with_commodity_id IS NULL
+			ORDER BY f.deleted_at ASC, f.id ASC
+			LIMIT $2`, r.tableNames.Files())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, cutoff.UTC(), limit)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list expired trashed files", err)
+	}
+	return files, nil
+}
+
+// ListStrandedTrashed returns up to limit trashed files whose item is no
+// longer in Trash, oldest first.
+func (r *FileRegistry) ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT f.* FROM %s f
+			WHERE f.deleted_at IS NOT NULL AND f.deleted_with_commodity_id IS NOT NULL
+				AND NOT EXISTS (
+					SELECT 1 FROM %s c
+					WHERE c.id = f.deleted_with_commodity_id AND c.deleted_at IS NOT NULL)
+			ORDER BY f.deleted_at ASC, f.id ASC
+			LIMIT $1`, r.tableNames.Files(), r.tableNames.Commodities())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, limit)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list stranded trashed files", err)
+	}
+	return files, nil
+}
+
+// Trash moves a live file to Trash in one conditional UPDATE.
+func (r *FileRegistry) Trash(ctx context.Context, id, deletedBy, withCommodityID string, at time.Time) error {
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = $2, deleted_by = $3, deleted_with_commodity_id = NULLIF($4, '')
+			 WHERE id = $1 AND %s`, r.tableNames.Files(), liveRow)
+		changed, err := execAffected(ctx, tx, query, id, at.UTC(), deletedBy, withCommodityID)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", id))
+		}
+		return nil
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to trash file", err, errx.Attrs("file_id", id))
+	}
+	return nil
+}
+
+// Restore makes a trashed file live again.
+func (r *FileRegistry) Restore(ctx context.Context, id string) error {
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = NULL, deleted_by = NULL, deleted_with_commodity_id = NULL
+			 WHERE id = $1 AND %s`, r.tableNames.Files(), trashedRow)
+		changed, err := execAffected(ctx, tx, query, id)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", id))
+		}
+		return nil
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to restore file", err, errx.Attrs("file_id", id))
+	}
+	return nil
+}
+
+// SetTrashedWith changes the item a trashed file went to Trash with.
+func (r *FileRegistry) SetTrashedWith(ctx context.Context, id, commodityID string) error {
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_with_commodity_id = NULLIF($2, '') WHERE id = $1 AND %s`,
+			r.tableNames.Files(), trashedRow)
+		changed, err := execAffected(ctx, tx, query, id, commodityID)
+		if err != nil {
+			return err
+		}
+		if !changed {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", id))
+		}
+		return nil
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to update trashed file", err, errx.Attrs("file_id", id))
+	}
+	return nil
+}
+
+// PurgeTrashed deletes a trashed file's row; its links go with it through ON
+// DELETE CASCADE. A concurrent restore wins and the purge deletes nothing.
+func (r *FileRegistry) PurgeTrashed(ctx context.Context, id string) (bool, error) {
+	var deleted bool
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND %s`, r.tableNames.Files(), trashedRow)
+		var err error
+		deleted, err = execAffected(ctx, tx, query, id)
+		return err
+	})
+	if err != nil {
+		return false, errxtrace.Wrap("failed to purge file", err, errx.Attrs("file_id", id))
+	}
+	return deleted, nil
 }

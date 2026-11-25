@@ -4092,6 +4092,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent */
                     lent_out?: boolean;
+                    /** @description true lists the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                 };
                 header?: never;
                 path: {
@@ -4176,8 +4178,8 @@ export type paths = {
         put?: never;
         /**
          * Bulk-delete commodities
-         * @description Delete every commodity whose id appears in the body. The
-         *     response lists succeeded vs. failed ids so the frontend
+         * @description Move every commodity whose id appears in the body to Trash.
+         *     The response lists succeeded vs. failed ids so the frontend
          *     can render partial-failure UX without parsing per-id HTTP
          *     statuses.
          */
@@ -4419,6 +4421,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Filter by current loan state */
                     lent_out?: boolean;
+                    /** @description Count the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                     /** @description Validated as for GET /commodities, then set aside for the counts */
                     tags?: string[];
                     /** @description Validated as for GET /commodities, then set aside for the counts */
@@ -4599,7 +4603,9 @@ export type paths = {
         post?: never;
         /**
          * Delete a commodity
-         * @description Delete a commodity by ID and all its linked files
+         * @description Move the commodity to Trash with the files no other item,
+         *     area or location uses. It can be restored from Trash until
+         *     the retention runs out.
          */
         delete: {
             parameters: {
@@ -6650,8 +6656,8 @@ export type paths = {
         put?: never;
         /**
          * Bulk-delete files
-         * @description Delete every file whose id appears in the body, including
-         *     the physical blob. The response lists succeeded vs.
+         * @description Move every file whose id appears in the body to Trash. The
+         *     response lists succeeded vs.
          *     failed ids so the frontend can render partial-failure UX
          *     without parsing per-id HTTP statuses.
          */
@@ -6851,7 +6857,9 @@ export type paths = {
         post?: never;
         /**
          * Delete a file
-         * @description delete file and its associated file
+         * @description Move the file to Trash. It keeps its links, so restoring it
+         *     puts it back where it was. An export bundle is deleted for
+         *     good.
          */
         delete: {
             parameters: {
@@ -7971,6 +7979,8 @@ export type paths = {
          * @description Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
          *     Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
          *     Drafts and inactive items are included unless include_inactive=false.
+         *     Locations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.
+         *     Tags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.
          */
         get: {
             parameters: {
@@ -7978,7 +7988,7 @@ export type paths = {
                     /** @description Search text; for commodities, white-space separated terms that must all match (see GET /commodities) */
                     q: string;
                     /** @description Entity type to search */
-                    type?: "commodities" | "files" | "areas" | "locations";
+                    type?: "commodities" | "files" | "areas" | "locations" | "tags";
                     /** @description Maximum number of results */
                     limit?: number;
                     /** @description Number of results to skip */
@@ -8005,6 +8015,8 @@ export type paths = {
                     warranty_expires_before?: string;
                     /** @description Commodities only: true = only items currently lent, false = only items not lent */
                     lent_out?: boolean;
+                    /** @description Commodities only: true searches the items in Trash instead of the live ones (default false); cannot be combined with lent_out */
+                    trashed?: boolean;
                     /** @description Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
                     sort?: string;
                 };
@@ -8703,6 +8715,626 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Empty Trash
+         * @description Deletes every item and file in the group's Trash for good.
+         *     Requires the admin or owner role.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description What was deleted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.EmptyTrashResponse"];
+                    };
+                };
+                /** @description Admin role required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/commodities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List items in Trash
+         * @description Items deleted in this group, most recently deleted first, with
+         *     who deleted them, when they expire and the files that went
+         *     with them.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TrashedCommoditiesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/commodities/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete items in Trash for good
+         * @description Requires the admin or owner role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["jsonapi.BulkIDsRequest"];
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Admin role required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/commodities/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore items from Trash
+         * @description Restores every item whose id appears in the body. The response
+         *     lists the restored ids, the failures, and the restored items
+         *     that came back without an area.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["jsonapi.BulkIDsRequest"];
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TrashBulkRestoreResponse"];
+                    };
+                };
+                /** @description Bad request body */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/commodities/{commodityID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete an item in Trash for good
+         * @description Deletes the item, its history and the files that went to Trash
+         *     with it. A file another item or place still uses is kept.
+         *     Requires the admin or owner role.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin role required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Item not in Trash */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/commodities/{commodityID}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore an item from Trash
+         * @description Brings the item back with its history, loans, service records,
+         *     maintenance schedules and the files that went to Trash with
+         *     it. An item whose area was deleted meanwhile comes back
+         *     without an area (meta.area_removed).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Restored item */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityRestoreResponse"];
+                    };
+                };
+                /** @description Item not in Trash */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/files": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List files in Trash
+         * @description Files deleted on their own in this group, most recently
+         *     deleted first. Files that went to Trash with an item are
+         *     listed with that item instead.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Items per page */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.TrashedFilesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/files/purge": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Delete files in Trash for good
+         * @description Requires the admin or owner role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["jsonapi.BulkIDsRequest2"];
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Admin role required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/files/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Restore files from Trash */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["jsonapi.BulkIDsRequest2"];
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Bad request body */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/files/{fileID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a file in Trash for good
+         * @description Requires the admin or owner role. A file that went to Trash
+         *     with an item is deleted with that item.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description File ID */
+                    fileID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Admin role required */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description File not in Trash */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description File went to Trash with an item */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/trash/files/{fileID}/restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a file from Trash
+         * @description Only a file deleted on its own can be restored here; a file
+         *     that went to Trash with an item comes back with that item.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description File ID */
+                    fileID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description File not in Trash */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description File went to Trash with an item */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/g/{groupSlug}/upcoming": {
@@ -11939,6 +12571,23 @@ export type components = {
         "jsonapi.CommodityResponseMeta": {
             cover?: components["schemas"]["jsonapi.CommodityCover"];
         };
+        "jsonapi.CommodityRestoreMeta": {
+            /**
+             * @description AreaRemoved is true when the item's area was deleted while the item
+             *     was in Trash; the item came back without an area.
+             */
+            area_removed?: boolean;
+            /**
+             * Format: int64
+             * @description FilesRestored counts the files that came back with the item.
+             * @example 2
+             */
+            files_restored?: number;
+        };
+        "jsonapi.CommodityRestoreResponse": {
+            data?: components["schemas"]["jsonapi.CommodityResponseData"];
+            meta?: components["schemas"]["jsonapi.CommodityRestoreMeta"];
+        };
         "jsonapi.CommodityScanAttributes": {
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
@@ -12239,6 +12888,30 @@ export type components = {
         };
         "jsonapi.CurrencyMigrationsResponse": {
             data?: components["schemas"]["jsonapi.CurrencyMigrationResponseData"][];
+        };
+        "jsonapi.EmptyTrashAttrs": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            commodities?: number;
+            /**
+             * Format: int64
+             * @example 1
+             */
+            files?: number;
+        };
+        "jsonapi.EmptyTrashData": {
+            attributes?: components["schemas"]["jsonapi.EmptyTrashAttrs"];
+            id?: string;
+            /**
+             * @example trash
+             * @enum {string}
+             */
+            type?: "trash";
+        };
+        "jsonapi.EmptyTrashResponse": {
+            data?: components["schemas"]["jsonapi.EmptyTrashData"];
         };
         "jsonapi.Error": {
             /**
@@ -13146,6 +13819,107 @@ export type components = {
             data?: components["schemas"]["jsonapi.TagListItem"][];
             meta?: components["schemas"]["jsonapi.TagsMeta"];
         };
+        "jsonapi.TrashBulkRestoreAttrs": {
+            /**
+             * @description AreaRemoved lists the restored items whose area was deleted while
+             *     they were in Trash; they came back without an area.
+             */
+            area_removed?: string[];
+            failed?: components["schemas"]["jsonapi.BulkResultFail"][];
+            succeeded?: string[];
+        };
+        "jsonapi.TrashBulkRestoreData": {
+            attributes?: components["schemas"]["jsonapi.TrashBulkRestoreAttrs"];
+            id?: string;
+            type?: string;
+        };
+        "jsonapi.TrashBulkRestoreResponse": {
+            data?: components["schemas"]["jsonapi.TrashBulkRestoreData"];
+        };
+        "jsonapi.TrashEntryMeta": {
+            /**
+             * @description DeletedByName is the name of the member who deleted the entry, empty
+             *     when that user no longer exists.
+             */
+            deleted_by_name?: string;
+            /** @description ExpiresAt is when the entry is deleted for good. */
+            expires_at?: string;
+        };
+        "jsonapi.TrashListMeta": {
+            /**
+             * Format: int64
+             * @example 1
+             */
+            page?: number;
+            /**
+             * Format: int64
+             * @example 50
+             */
+            per_page?: number;
+            /**
+             * Format: int64
+             * @description RetentionDays is how many days an entry stays in Trash.
+             * @example 30
+             */
+            retention_days?: number;
+            /**
+             * Format: int64
+             * @example 1
+             */
+            total?: number;
+            /**
+             * Format: int64
+             * @example 1
+             */
+            total_pages?: number;
+        };
+        "jsonapi.TrashedCommoditiesResponse": {
+            data?: components["schemas"]["jsonapi.TrashedCommodityData"][];
+            meta?: components["schemas"]["jsonapi.TrashListMeta"];
+        };
+        "jsonapi.TrashedCommodityData": {
+            attributes?: components["schemas"]["models.Commodity"];
+            id?: string;
+            meta?: components["schemas"]["jsonapi.TrashedCommodityMeta"];
+            /**
+             * @example commodities
+             * @enum {string}
+             */
+            type?: "commodities";
+        };
+        "jsonapi.TrashedCommodityMeta": {
+            /**
+             * @description DeletedByName is the name of the member who deleted the entry, empty
+             *     when that user no longer exists.
+             */
+            deleted_by_name?: string;
+            /** @description ExpiresAt is when the entry is deleted for good. */
+            expires_at?: string;
+            /**
+             * Format: int64
+             * @example 204800
+             */
+            file_bytes?: number;
+            /**
+             * Format: int64
+             * @example 2
+             */
+            file_count?: number;
+        };
+        "jsonapi.TrashedFileData": {
+            attributes?: components["schemas"]["models.FileEntity"];
+            id?: string;
+            meta?: components["schemas"]["jsonapi.TrashEntryMeta"];
+            /**
+             * @example files
+             * @enum {string}
+             */
+            type?: "files";
+        };
+        "jsonapi.TrashedFilesResponse": {
+            data?: components["schemas"]["jsonapi.TrashedFileData"][];
+            meta?: components["schemas"]["jsonapi.TrashListMeta"];
+        };
         "jsonapi.URLData": {
             /** @description signed URL that serves the file inline for in-browser viewing ("Open in new tab", #1962); empty when not available */
             inline_url?: string;
@@ -13344,6 +14118,17 @@ export type components = {
              *     otherwise the purchase price in the group currency stands in.
              */
             current_price?: number | null;
+            /**
+             * @description DeletedAt is when the item was moved to Trash, nil while it is live. A
+             *     trashed item keeps its id, asset number, history, loans, service
+             *     records, maintenance schedules and attachments, and is left out of every
+             *     ordinary read of the registries until it is restored or purged (see
+             *     registry.CommodityRegistry). Server-managed: only the registry's trash
+             *     operations write it; Create and Update ignore a caller's value.
+             */
+            readonly deleted_at?: string;
+            /** @description DeletedBy is the id of the user who moved the item to Trash. */
+            readonly deleted_by?: string;
             draft?: boolean;
             extra_serial_numbers?: string[];
             id?: string;
@@ -13400,7 +14185,7 @@ export type components = {
             warranty_notes?: string;
         };
         /** @enum {string} */
-        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "loan_reminder_sent" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted";
+        "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "loan_reminder_sent" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted" | "restored";
         "models.CommodityEventPayload": {
             [key: string]: unknown;
         };
@@ -13639,6 +14424,24 @@ export type components = {
             category?: components["schemas"]["models.FileCategory"];
             /** @description CreatedAt is when the file was created */
             created_at?: string;
+            /**
+             * @description DeletedAt is when the file was moved to Trash, nil while it is live. A
+             *     trashed file keeps its row, links and blob, and is left out of every
+             *     ordinary read of the file registry until it is restored or purged (see
+             *     registry.FileRegistry). Server-managed: only the registry's trash
+             *     operations write it.
+             */
+            readonly deleted_at?: string;
+            /** @description DeletedBy is the id of the user who moved the file to Trash. */
+            readonly deleted_by?: string;
+            /**
+             * @description DeletedWithCommodityID is set when the file went to Trash because the
+             *     item it was attached to was deleted, and names that item. Restoring the
+             *     item restores such files; a file deleted on its own has it nil, is a
+             *     Trash entry of its own and stays in Trash when an item it was attached
+             *     to is restored.
+             */
+            readonly deleted_with_commodity_id?: string;
             /** @description Description is an optional description of the file */
             description?: string;
             /**
@@ -14198,6 +15001,7 @@ export type components = {
             exports?: number;
             images?: number;
             other?: number;
+            trash?: number;
         };
         "registry.TagStats": {
             commodity_tags_total?: number;
@@ -14250,6 +15054,18 @@ export type components = {
         "jsonapi.LocationRequest": {
             content: {
                 "application/vnd.api+json": components["schemas"]["jsonapi.LocationRequest"];
+            };
+        };
+        /** @description Item IDs */
+        "jsonapi.BulkIDsRequest": {
+            content: {
+                "application/vnd.api+json": components["schemas"]["jsonapi.BulkIDsRequest"];
+            };
+        };
+        /** @description File IDs */
+        "jsonapi.BulkIDsRequest2": {
+            content: {
+                "application/vnd.api+json": components["schemas"]["jsonapi.BulkIDsRequest"];
             };
         };
         /** @description Group data */

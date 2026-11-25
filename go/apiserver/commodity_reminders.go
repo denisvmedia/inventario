@@ -41,6 +41,12 @@ func commodityReminderCtx() func(http.Handler) http.Handler {
 				renderEntityError(w, r, err)
 				return
 			}
+			// The reminder of an item in Trash is read-only until the item
+			// is restored, as the item's own routes answer 404 for it.
+			if _, err := regSet.CommodityRegistry.Get(r.Context(), reminder.CommodityID); err != nil {
+				renderEntityError(w, r, err)
+				return
+			}
 			ctx := context.WithValue(r.Context(), commodityReminderCtxKey, reminder)
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

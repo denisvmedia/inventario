@@ -33,6 +33,9 @@ function CommandDialog({
   className,
   showCloseButton = true,
   contentTestId,
+  filter,
+  onCloseAutoFocus,
+  onInteractOutside,
   ...props
 }: React.ComponentProps<typeof Dialog> & {
   title?: string
@@ -40,6 +43,12 @@ function CommandDialog({
   className?: string
   showCloseButton?: boolean
   contentTestId?: string
+  // Forwarded to cmdk: decides which items the typed search keeps.
+  filter?: React.ComponentProps<typeof CommandPrimitive>["filter"]
+  // Forwarded to the dialog content: where focus goes when it closes, and
+  // which outside clicks and focus moves leave it open.
+  onCloseAutoFocus?: React.ComponentProps<typeof DialogContent>["onCloseAutoFocus"]
+  onInteractOutside?: React.ComponentProps<typeof DialogContent>["onInteractOutside"]
 }) {
   return (
     <Dialog {...props}>
@@ -51,8 +60,13 @@ function CommandDialog({
         className={cn("overflow-hidden p-0", className)}
         showCloseButton={showCloseButton}
         data-testid={contentTestId}
+        onCloseAutoFocus={onCloseAutoFocus}
+        onInteractOutside={onInteractOutside}
       >
-        <Command className="**:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5">
+        <Command
+          filter={filter}
+          className="**:data-[slot=command-input-wrapper]:h-12 [&_[cmdk-group-heading]]:px-2 [&_[cmdk-group-heading]]:font-medium [&_[cmdk-group-heading]]:text-muted-foreground [&_[cmdk-group]]:px-2 [&_[cmdk-group]:not([hidden])_~[cmdk-group]]:pt-0 [&_[cmdk-input-wrapper]_svg]:h-5 [&_[cmdk-input-wrapper]_svg]:w-5 [&_[cmdk-input]]:h-12 [&_[cmdk-item]]:px-2 [&_[cmdk-item]]:py-3 [&_[cmdk-item]_svg]:h-5 [&_[cmdk-item]_svg]:w-5"
+        >
           {children}
         </Command>
       </DialogContent>

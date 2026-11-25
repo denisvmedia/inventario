@@ -449,3 +449,44 @@ func TestItemReminderWorker_SweepsOnStartAndHonorsThePause(t *testing.T) {
 		})
 	}
 }
+
+func TestItemReminderService_NoRemindersWhileTrashed(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	env.addReminder(c, models.CommodityReminder{
+		DueOn:            dateOffset(now, 10),
+		RemindDaysBefore: models.ValuerSlice[int]{30},
+	})
+	trash := services.NewTrashService(env.fs, "")
+	_, err := trash.TrashCommodity(env.ctx, env.commodity.ID)
+	c.Assert(err, qt.IsNil)
+
+	email := newRecordingItemReminderEmail()
+	svc := services.NewItemReminderService(env.fs, email, nil)
+	stats, err := svc.RemindOnce(context.Background(), now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Sent, qt.Equals, 0)
+	c.Assert(email.snapshot(), qt.HasLen, 0)
+
+	upcoming, err := services.NewUpcomingService().List(env.ctx, env.regSet, now, 30)
+	c.Assert(err, qt.IsNil)
+	c.Assert(upcoming, qt.HasLen, 0)
+
+	// Restored, the item gets the reminder it missed.
+	_, err = trash.RestoreCommodity(env.ctx, env.commodity.ID)
+	c.Assert(err, qt.IsNil)
+	stats, err = svc.RemindOnce(context.Background(), now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Sent, qt.Equals, 1)
+	upcoming, err = services.NewUpcomingService().List(env.ctx, env.regSet, now, 30)
+	c.Assert(err, qt.IsNil)
+	c.Assert(upcoming, qt.HasLen, 1)
+}
+
+func TestReminderTargetActive(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(services.ReminderTargetActive(nil), qt.IsFalse)
+	c.Assert(services.ReminderTargetActive(&models.Commodity{}), qt.IsTrue)
+	c.Assert(services.ReminderTargetActive(&models.Commodity{DeletedAt: new(time.Now())}), qt.IsFalse)
+}

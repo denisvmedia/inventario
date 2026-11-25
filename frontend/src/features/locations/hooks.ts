@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { areaKeys } from "@/features/areas/keys"
 import { commodityKeys } from "@/features/commodities/keys"
+import { trashKeys } from "@/features/trash/keys"
 
 import {
   createLocation,
@@ -161,6 +162,7 @@ export function useDeleteLocation() {
       if (vars.strategy) {
         qc.invalidateQueries({ queryKey: areaKeys.list(slug) })
         qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
+        qc.invalidateQueries({ queryKey: trashKeys.group(slug) })
       }
     },
   })

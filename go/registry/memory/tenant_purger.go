@@ -104,7 +104,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		}},
 		{"files", func() error {
 			reg := fs.FileRegistryFactory.CreateServiceRegistry()
-			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.FileEntity])
+			return purgeByTenant(ctx, tenantID, serviceRows(reg, reg.List), reg.Delete, tenantAware[models.FileEntity])
 		}},
 		{"commodity_events", func() error {
 			reg := fs.CommodityEventRegistryFactory.CreateServiceRegistry()
@@ -127,7 +127,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		// schedule (mirrors the group purger's DeleteBySchedule path).
 		{"maintenance_reminders", func() error {
 			scheduleReg := fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry()
-			schedules, listErr := scheduleReg.List(ctx)
+			schedules, listErr := serviceRows(scheduleReg, scheduleReg.List)(ctx)
 			if listErr != nil {
 				return listErr
 			}
@@ -143,7 +143,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		}},
 		{"maintenance_schedules", func() error {
 			reg := fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry()
-			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.MaintenanceSchedule])
+			return purgeByTenant(ctx, tenantID, serviceRows(reg, reg.List), reg.Delete, tenantAware[models.MaintenanceSchedule])
 		}},
 		// Item reminder sends before their reminders (#2805).
 		{"commodity_reminder_sends", func() error {
@@ -161,11 +161,11 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		}},
 		{"commodity_services", func() error {
 			reg := fs.CommodityServiceRegistryFactory.CreateServiceRegistry()
-			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityService])
+			return purgeByTenant(ctx, tenantID, serviceRows(reg, reg.List), reg.Delete, tenantAware[models.CommodityService])
 		}},
 		{"commodity_loans", func() error {
 			reg := fs.CommodityLoanRegistryFactory.CreateServiceRegistry()
-			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityLoan])
+			return purgeByTenant(ctx, tenantID, serviceRows(reg, reg.List), reg.Delete, tenantAware[models.CommodityLoan])
 		}},
 		{"currency_migrations", func() error {
 			reg := fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry()
@@ -173,7 +173,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 		}},
 		{"commodities", func() error {
 			reg := fs.CommodityRegistryFactory.CreateServiceRegistry()
-			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Commodity])
+			return purgeByTenant(ctx, tenantID, serviceRows(reg, reg.List), reg.Delete, tenantAware[models.Commodity])
 		}},
 		{"areas", func() error {
 			reg := fs.AreaRegistryFactory.CreateServiceRegistry()

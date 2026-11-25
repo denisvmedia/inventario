@@ -57,6 +57,8 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 		OrphanFileGCInterval:             "12h",
 		OrphanFileGCMinAge:               "48h",
 		OrphanFileGCMode:                 "report",
+		TrashRetention:                   "240h",
+		TrashPurgeInterval:               "15m",
 		ThumbnailPollInterval:            "7s",
 		ThumbnailCleanupInterval:         "6m",
 		ThumbnailJobRetentionPeriod:      "48h",
@@ -87,6 +89,8 @@ func TestParseWorkerDurations_Valid(t *testing.T) {
 	c.Assert(got.BusinessMetricsInterval, qt.Equals, 90*time.Second)
 	c.Assert(got.OrphanFileGCInterval, qt.Equals, 12*time.Hour)
 	c.Assert(got.OrphanFileGCMinAge, qt.Equals, 48*time.Hour)
+	c.Assert(got.TrashRetention, qt.Equals, 240*time.Hour)
+	c.Assert(got.TrashPurgeInterval, qt.Equals, 15*time.Minute)
 	c.Assert(got.ThumbnailPollInterval, qt.Equals, 7*time.Second)
 	c.Assert(got.ThumbnailCleanupInterval, qt.Equals, 6*time.Minute)
 	c.Assert(got.ThumbnailJobRetentionPeriod, qt.Equals, 48*time.Hour)
@@ -243,4 +247,28 @@ func TestParseWorkerDurations_OrphanFileGCMinAgeFloorIsInclusive(t *testing.T) {
 	got, err := bootstrap.ParseWorkerDurations(cfg)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.OrphanFileGCMinAge, qt.Equals, 24*time.Hour)
+}
+
+func TestParseWorkerDurations_TrashDefaults(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+
+	got, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.TrashRetention, qt.Equals, 30*24*time.Hour)
+	c.Assert(got.TrashPurgeInterval, qt.Equals, time.Hour)
+}
+
+func TestParseWorkerDurations_TrashRetentionMustBePositive(t *testing.T) {
+	c := qt.New(t)
+
+	cfg := &bootstrap.Config{}
+	cfg.SetDefaults()
+	cfg.TrashRetention = "0s"
+
+	_, err := bootstrap.ParseWorkerDurations(cfg)
+	c.Assert(err, qt.IsNotNil)
+	c.Assert(err.Error(), qt.Contains, "trash-retention")
 }

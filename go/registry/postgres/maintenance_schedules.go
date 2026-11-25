@@ -89,20 +89,35 @@ func (r *MaintenanceScheduleRegistry) Get(ctx context.Context, id string) (*mode
 	return &schedule, nil
 }
 
+// List returns the group's rows of live items; the rows of trashed items are
+// left out.
 func (r *MaintenanceScheduleRegistry) List(ctx context.Context) ([]*models.MaintenanceSchedule, error) {
-	var schedules []*models.MaintenanceSchedule
-	for schedule, err := range r.newSQLRegistry().Scan(ctx) {
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to list maintenance schedules", err)
-		}
-		s := schedule
-		schedules = append(schedules, &s)
+	var out []*models.MaintenanceSchedule
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.MaintenanceSchedules())
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		out, err = scanAll[models.MaintenanceSchedule](ctx, tx, query)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list maintenance schedules", err)
 	}
-	return schedules, nil
+	return out, nil
 }
 
+// Count counts the group's rows of live items.
 func (r *MaintenanceScheduleRegistry) Count(ctx context.Context) (int, error) {
-	cnt, err := r.newSQLRegistry().Count(ctx)
+	var cnt int
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		table := string(r.tableNames.MaintenanceSchedules())
+		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE %s`, table,
+			liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id"))
+		var err error
+		cnt, err = countRows(ctx, tx, query)
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count maintenance schedules", err)
 	}
@@ -168,14 +183,16 @@ func (r *MaintenanceScheduleRegistry) ListPaginated(ctx context.Context, offset,
 
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		countSB := newSelect().Select("COUNT(*)").From(string(r.tableNames.MaintenanceSchedules()))
-		countQuery, countArgs := addWhere(countSB, where).Build()
+		table := string(r.tableNames.MaintenanceSchedules())
+		live := liveCommodityOf(string(r.tableNames.Commodities()), table, "commodity_id")
+		countSB := newSelect().Select("COUNT(*)").From(table)
+		countQuery, countArgs := addWhere(countSB, where).Where(live).Build()
 		if err := tx.QueryRowContext(ctx, countQuery, countArgs...).Scan(&total); err != nil {
 			return errxtrace.Wrap("failed to count maintenance schedules", err)
 		}
 
-		dataSB := newSelect().Select("*").From(string(r.tableNames.MaintenanceSchedules()))
-		addWhere(dataSB, where).OrderByAsc("next_due_at").OrderByAsc("title")
+		dataSB := newSelect().Select("*").From(table)
+		addWhere(dataSB, where).Where(live).OrderByAsc("next_due_at").OrderByAsc("title")
 		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
 		rows, err := tx.QueryxContext(ctx, dataQuery, dataArgs...)
 		if err != nil {
