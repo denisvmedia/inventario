@@ -63,7 +63,7 @@ import { fileKeys } from "@/features/files/keys"
 import { useTagAutocomplete, useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
-import { currencyMeta } from "@/lib/currency-meta"
+import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
 import {
   COMMODITY_STATUSES,
   COMMODITY_TYPES,
@@ -258,11 +258,16 @@ export function CommodityFormDialog({
   // Tracks which form steps the user has already landed on, so the
   // segmented stepper bar lets them click back-and-forth between
   // already-seen surfaces without forcing a strict forward walk.
-  // Edit mode opens directly on Basics, so Basics is visited from
-  // mount; Create mode opens on the AI surface and form steps get
+  // Edit mode starts with every step visited: the record already has
+  // values on each of them, so any step can be opened from the start
+  // (#2795). Create mode opens on the AI surface and form steps get
   // added on first arrival.
+  const openingVisitedSteps = useMemo<FormStepKey[]>(
+    () => (mode === "edit" ? [...FORM_STEPS] : initialStep === "basics" ? ["basics"] : []),
+    [mode, initialStep]
+  )
   const [visitedSteps, setVisitedSteps] = useState<Set<FormStepKey>>(
-    () => new Set(mode === "create" ? [] : ["basics"])
+    () => new Set(openingVisitedSteps)
   )
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   // Save-as-draft confirmation. Open when the user dismisses the
@@ -414,8 +419,8 @@ export function CommodityFormDialog({
 
   useEffect(() => {
     if (!open) return
-    setVisitedSteps(new Set(initialStep === "basics" ? ["basics"] : []))
-  }, [open, initialStep])
+    setVisitedSteps(new Set(openingVisitedSteps))
+  }, [open, openingVisitedSteps])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
@@ -593,6 +598,16 @@ export function CommodityFormDialog({
       setServerError(classifyServerError(err, t("commodities:form.serverError")))
     }
   }
+
+  // Client-side validation failed on Save. In edit mode Save is offered on
+  // every step, so the failing field can sit on another one: open the
+  // first step that has an error.
+  function onInvalid(invalid: Record<string, unknown>) {
+    const failing = new Set(Object.keys(invalid))
+    const target = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
+    if (target && target !== step) setStep(target)
+  }
+  const submitForm = () => void handleSubmit(submit, onInvalid)()
 
   // Slug + currency list for the AI scan step. `useOptionalCurrentGroup`
   // returns undefined when the dialog is mounted outside a GroupProvider
@@ -795,7 +810,11 @@ export function CommodityFormDialog({
                           )}
                         />
                       </TooltipTrigger>
-                      <TooltipContent>{stepLabel}</TooltipContent>
+                      {/* The tooltip slides in over the thin bar; letting the
+                          pointer through keeps a quick click on the bar. Inside
+                          the modal, Radix sets an inline pointer-events: auto,
+                          so only an !important rule overrides it. */}
+                      <TooltipContent className="pointer-events-none!">{stepLabel}</TooltipContent>
                     </Tooltip>
                   </li>
                 )
@@ -895,7 +914,7 @@ export function CommodityFormDialog({
             e.preventDefault()
             if (step === "ai") return
             if (isLastStep) {
-              void handleSubmit(submit)()
+              submitForm()
             } else {
               void nextStep()
             }
@@ -954,7 +973,7 @@ export function CommodityFormDialog({
             // navigated away — the same payload is still in RHF state).
             // Only `network` / `unknown` kinds show the button; the
             // banner gates that internally via `isRetryableKind`.
-            onRetry={() => void handleSubmit(submit)()}
+            onRetry={submitForm}
             isRetrying={!!isPending}
             testId="commodity-form-error"
           />
@@ -995,10 +1014,24 @@ export function CommodityFormDialog({
               <ChevronLeft className="size-4" aria-hidden="true" />
               {t("commodities:form.back")}
             </Button>
-            {isLastStep ? (
+            {/* Edit mode offers Save on every step (#2795): changing one
+                field must not mean walking to the last step. Continue
+                stays as the secondary action. */}
+            {!isLastStep ? (
               <Button
                 type="button"
-                onClick={() => void handleSubmit(submit)()}
+                variant={mode === "edit" ? "outline" : "default"}
+                onClick={nextStep}
+                data-testid="commodity-form-next"
+              >
+                {t("commodities:form.continue")}
+                <ChevronRight className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            {isLastStep || mode === "edit" ? (
+              <Button
+                type="button"
+                onClick={submitForm}
                 disabled={isPending}
                 data-testid="commodity-form-submit"
               >
@@ -1013,12 +1046,7 @@ export function CommodityFormDialog({
                   t("commodities:form.submitEdit")
                 )}
               </Button>
-            ) : (
-              <Button type="button" onClick={nextStep} data-testid="commodity-form-next">
-                {t("commodities:form.continue")}
-                <ChevronRight className="size-4" aria-hidden="true" />
-              </Button>
-            )}
+            ) : null}
           </DialogFooter>
         )}
       </DialogContent>
@@ -1403,21 +1431,6 @@ function BasicsStep(props: any) {
       ) : null}
     </div>
   )
-}
-
-// Currency-prefix padding for the price inputs. The mock renders the
-// symbol absolutely-positioned at `left-3` and uses a static `pl-6`
-// for the input — that overlaps for any 2+ character symbol (`Kč`,
-// `NZ$`, `د.إ`). Pick a class derived from the symbol's character
-// count instead so even a 4-char prefix has space.
-function priceInputPaddingClass(symbol: string): string {
-  // Codepoint-aware length; emoji-style multi-byte symbols still
-  // count as one glyph.
-  const len = [...(symbol || "$")].length
-  if (len <= 1) return "pl-7"
-  if (len === 2) return "pl-9"
-  if (len === 3) return "pl-12"
-  return "pl-14"
 }
 
 // ---- Step 2: Purchase ---------------------------------------------------

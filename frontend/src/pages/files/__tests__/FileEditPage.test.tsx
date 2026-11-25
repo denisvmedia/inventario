@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, onTestFinished } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -40,8 +40,13 @@ function fileAttrs(id: string, attrs: Attrs = {}): Attrs {
 }
 
 // One mutable store behind list, detail and update, so a save is visible to
-// the list query that follows it — the way the server behaves.
-function serveFiles(rows: Attrs[], opts: { failUpdate?: boolean } = {}) {
+// the list query that follows it — the way the server behaves. With `gate`,
+// an update is recorded at once and answered when the gate resolves;
+// `rejectTitle` answers it with a 422 on the title.
+function serveFiles(
+  rows: Attrs[],
+  opts: { failUpdate?: boolean; gate?: Promise<void>; rejectTitle?: string } = {}
+) {
   const store = rows.map((r) => ({ ...r }))
   const puts: Array<{ id: string; attributes: Attrs }> = []
   server.use(
@@ -76,9 +81,23 @@ function serveFiles(rows: Attrs[], opts: { failUpdate?: boolean } = {}) {
       if (opts.failUpdate) {
         return HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
       }
+      if (opts.rejectTitle) {
+        return HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Unprocessable Entity",
+                error: { error: { data: { attributes: { title: opts.rejectTitle } } } },
+              },
+            ],
+          },
+          { status: 422 }
+        )
+      }
       const body = (await request.json()) as { data: { attributes: Attrs } }
       const id = params.id as string
       puts.push({ id, attributes: body.data.attributes })
+      await opts.gate
       const row = store.find((f) => f.id === id)!
       Object.assign(row, body.data.attributes)
       return HttpResponse.json({ id, type: "files", attributes: row })
@@ -138,6 +157,27 @@ beforeEach(() => {
   __resetGroupContextForTests()
   __resetHttpForTests()
 })
+
+// Answers the review page's wide-screen query (preview beside the form) for
+// the rest of the test. The shared test environment keeps window between
+// files, so the stub is swapped back rather than left to a mock reset.
+function wideScreen() {
+  const original = window.matchMedia
+  window.matchMedia = (query: string) =>
+    ({
+      matches: query === "(min-width: 1024px)",
+      media: query,
+      onchange: null,
+      addListener: () => {},
+      removeListener: () => {},
+      addEventListener: () => {},
+      removeEventListener: () => {},
+      dispatchEvent: () => false,
+    }) as MediaQueryList
+  onTestFinished(() => {
+    window.matchMedia = original
+  })
+}
 
 describe("<FileEditPage />", () => {
   it("loads metadata and lets the user save edited values", async () => {
@@ -344,6 +384,7 @@ describe("<FileEditPage />", () => {
   })
 
   it("keeps an unsupported file editable, with a download fallback", async () => {
+    wideScreen()
     serveFiles([fileAttrs("z1", { mime_type: "application/zip", ext: ".zip", type: "other" })])
     renderReview(reviewPath("z1", ""))
 
@@ -367,6 +408,60 @@ describe("<FileEditPage />", () => {
 
     await user.click(screen.getByTestId("file-review-tab-details"))
     expect(screen.getByTestId("file-edit-title")).toHaveValue("File p1 draft")
+  })
+
+  it("mounts the preview on a narrow screen only once its tab is opened", async () => {
+    const user = userEvent.setup()
+    serveFiles([fileAttrs("z1", { mime_type: "application/zip", ext: ".zip", type: "other" })])
+    renderReview(reviewPath("z1", ""))
+
+    await screen.findByTestId("file-edit-title")
+    // Behind the Details tab, a PDF would download for nothing.
+    expect(screen.queryByTestId("file-detail-no-preview")).toBeNull()
+    await user.click(screen.getByTestId("file-review-tab-preview"))
+    expect(screen.getByTestId("file-detail-no-preview")).toBeInTheDocument()
+    // It stays mounted once shown, so a PDF keeps its page and zoom.
+    await user.click(screen.getByTestId("file-review-tab-details"))
+    expect(screen.getByTestId("file-detail-no-preview")).toBeInTheDocument()
+  })
+
+  it("locks the form while a save is in flight", async () => {
+    const user = userEvent.setup()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const { puts } = serveFiles([fileAttrs("f1"), fileAttrs("f2"), fileAttrs("f3")], { gate })
+    renderReview(reviewPath("f2"))
+
+    const title = await screen.findByTestId("file-edit-title")
+    await waitFor(() => expect(screen.getByTestId("file-review-save-next")).toBeEnabled())
+    await user.type(title, " renamed")
+    await user.click(screen.getByTestId("file-review-save-next"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    // An edit typed now would miss the request and be dropped after it.
+    expect(title).toBeDisabled()
+    expect(screen.getByTestId("file-edit-description")).toBeDisabled()
+    expect(screen.getByTestId("file-review-save-next")).toBeDisabled()
+
+    release()
+    await waitFor(() => expect(whereParts().pathname).toBe(`/g/${SLUG}/files/f3/edit`))
+    expect(puts[0].attributes.title).toBe("File f2 renamed")
+  })
+
+  it("shows the server's reason when it rejects the title", async () => {
+    const user = userEvent.setup()
+    serveFiles([fileAttrs("f1")], { rejectTitle: "Title is too long." })
+    renderReview(reviewPath("f1", ""))
+
+    const title = await screen.findByTestId("file-edit-title")
+    await user.type(title, " edited")
+    await user.click(screen.getByTestId("file-edit-save"))
+
+    expect(await screen.findByText("Title is too long.")).toBeInTheDocument()
+    expect(title).toHaveAttribute("aria-invalid", "true")
+    expect(title).toBeEnabled()
+    expect(whereParts().pathname).toBe(`/g/${SLUG}/files/f1/edit`)
   })
 
   it("has no axe violations", async () => {
