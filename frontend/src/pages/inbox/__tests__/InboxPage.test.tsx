@@ -140,6 +140,8 @@ describe("<InboxPage />", () => {
     const user = userEvent.setup()
     renderPage()
     const scanning = await screen.findByTestId("inbox-row-intake_session-s1")
+    // The actions follow the member's role, which may answer after the list.
+    await screen.findByTestId("inbox-intake-remove-s3")
     expect(scanning).toHaveTextContent("Batch of 3 files")
     expect(scanning).toHaveTextContent("Scanning")
     expect(scanning).toHaveTextContent("1 of 3 scanned")
