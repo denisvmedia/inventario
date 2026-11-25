@@ -38,11 +38,37 @@ the section matching the tag and publishes it as the GitHub Release body. See
   names linked items in `meta.linked_items`, saved views keep both, and
   search reads text fields and option labels. AI
   scan fills the group's fields except money and links, after the member
-  reviews them, and promoting a draft checks and writes them with the new
-  item. Backups carry the fields, templates and values, also those of drafts
+  reviews them. A draft of a new item keeps the values typed in the Add item
+  dialog, and promoting it checks and writes them with the new item. Backups carry the fields, templates and values, also those of drafts
   (format 3.6), and a restore matches fields by name and type, creating the
   missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+
+- Save as draft in the Add item dialog saves the form and its files on the
+  server as a draft of the group, so an item started on one device can be
+  finished on another. Nothing is required to save a draft; a **Save draft**
+  button is on every step while the switch is on. The Items page lists the
+  group's drafts in a **Drafts** card with Continue and Discard. Finishing a
+  draft creates exactly one item and moves the draft's files to it, and a save
+  repeated after a lost response does not make a second draft. Discarding
+  sends the files nothing else uses to the Trash. A save made on another
+  device since the draft was opened is not overwritten: the dialog offers to
+  load it or save as a new draft, which gets the old draft's files too. A
+  draft finished or discarded on another device is not saved over: the dialog
+  offers to open the item or save as a new draft. Drafts stay out of item
+  lists, counts, search, reports, saved views and reminders. A draft's type
+  must be one of the group's item types. A whole-group backup carries the open
+  drafts with their files (format 3.5; a 3.4 reader restores it without them).
+  A restore links a draft to the restored area, seller and files and maps its
+  type as it maps an item's; a merge keeps a draft the group already has and
+  reports it in the restore log, and a full replace replaces the group's
+  drafts with the backup's. Deleting an account deletes the drafts its user started; files
+  other members saved with them stay as standalone files. The short name of a
+  new item follows the name until one is typed. The new API is `/drafts`
+  (list, create with a client key, save with a revision, discard, promote with
+  a promotion key that makes a retry return the same item). The dialog no
+  longer creates items flagged as drafts; editing an item keeps that switch
+  ([#2812](https://github.com/denisvmedia/inventario/issues/2812)).
 
 - An item has a brand and a model, both optional text of up to 100
   characters. Cards, list rows and the item page show "Brand · Model" under

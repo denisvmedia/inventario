@@ -6,11 +6,14 @@
  *   2. Deleting a field that an item has a value for asks to confirm that
  *      the values go too, then deletes the field and the value.
  *   3. The items list filters by a field's value through the Fields menu.
+ *   4. A value typed in the Add item dialog is kept by a server draft,
+ *      shows again when the draft is resumed, and lands on the item the
+ *      draft becomes.
  *
  * Field and item names carry a suffix unique to the run: field names are
  * unique in a group and the e2e group is shared between specs.
  */
-import { expect, type APIRequestContext } from "@playwright/test";
+import { expect, type APIRequestContext, type Page } from "@playwright/test";
 
 import { test } from "../fixtures/app-fixture.js";
 import {
@@ -72,6 +75,28 @@ async function createField(
   return { id: body.data.id, name };
 }
 
+async function listDrafts(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+): Promise<Array<{ id: string; title: string }>> {
+  const resp = await request.get(`/api/v1/g/${encodeURIComponent(slug)}/drafts?per_page=100`, {
+    headers: jsonHeaders(auth),
+  });
+  expect(resp.ok(), `GET /drafts → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as { data: Array<{ id: string; title: string }> };
+  return body.data;
+}
+
+// continueUntil presses Continue in the Add item dialog until target shows.
+async function continueUntil(page: Page, testId: string) {
+  const target = page.getByTestId(testId);
+  for (let i = 0; i < 5 && !(await target.isVisible()); i++) {
+    await page.getByTestId("commodity-form-next").click();
+  }
+  await expect(target).toBeVisible();
+}
+
 async function itemValues(
   request: APIRequestContext,
   auth: ApiAuth,
@@ -107,6 +132,14 @@ test.describe("Custom fields (#2803)", () => {
   test.afterEach(async ({ request }) => {
     for (const id of commodityIds.splice(0)) {
       await deleteCommodityViaAPI(request, auth, slug, id).catch(() => {});
+    }
+    for (const d of await listDrafts(request, auth, slug).catch(() => [])) {
+      if (!d.title.includes(run)) continue;
+      await request
+        .delete(`/api/v1/g/${encodeURIComponent(slug)}/drafts/${encodeURIComponent(d.id)}`, {
+          headers: jsonHeaders(auth),
+        })
+        .catch(() => {});
     }
     const names = new Set(fieldNames.splice(0));
     const fields = await listFields(request, auth, slug).catch(() => []);
@@ -269,5 +302,49 @@ test.describe("Custom fields (#2803)", () => {
     await expect(page).toHaveURL(/[?&]cf=/);
     await expect(card(match)).toBeVisible();
     await expect(card(other)).toBeHidden();
+  });
+
+  test("a value typed in the Add item dialog survives a draft and lands on the item", async ({
+    page,
+    request,
+  }) => {
+    const field = await createField(request, auth, slug, `Plate ${run}`);
+    fieldNames.push(field.name);
+    const name = `Van ${run}`;
+    const input = page.getByTestId(`custom-field-${field.id}-input`);
+
+    await page.goto(`/g/${encodeURIComponent(slug)}/commodities`);
+    await page.getByTestId("commodities-add-button").click();
+    await page.getByTestId("commodity-form-ai-fill-manually").click();
+    await page.locator("#commodity-name").fill(name);
+    await page.locator("#commodity-draft").click();
+    await continueUntil(page, "custom-field-add");
+    await page.getByTestId("custom-field-add").click();
+    await page.getByTestId(`custom-field-add-${field.id}`).click();
+    await input.fill("AB 123");
+    await page.getByTestId("commodity-form-save-draft").click();
+    await expect(page.locator("#commodity-name")).toBeHidden();
+
+    const saved = (await listDrafts(request, auth, slug)).filter((d) => d.title === name);
+    expect(saved).toHaveLength(1);
+    const draftId = saved[0].id;
+
+    await page.goto(`/g/${encodeURIComponent(slug)}/commodities`);
+    await page.getByTestId(`draft-resume-${draftId}`).click();
+    await expect(page.locator("#commodity-name")).toHaveValue(name);
+    // Finishing needs what any item needs: a type.
+    await page.locator("#commodity-type").click();
+    await page.getByRole("listbox").getByRole("option", { name: /Equipment/i }).click();
+    await continueUntil(page, "custom-field-add");
+    await expect(input).toHaveValue("AB 123");
+    await continueUntil(page, "commodity-form-files-step");
+    await page.getByTestId("commodity-form-submit").click();
+
+    await page.waitForURL(
+      (url) => /\/commodities\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith("/new"),
+    );
+    const itemId = new URL(page.url()).pathname.split("/").pop() ?? "";
+    commodityIds.push(itemId);
+    expect(await itemValues(request, auth, slug, itemId)).toEqual({ [field.id]: "AB 123" });
   });
 });

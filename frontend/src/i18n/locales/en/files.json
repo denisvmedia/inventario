@@ -122,6 +122,7 @@
     "title": "Files"
   },
   "links": {
+    "draftName": "Draft: {{name}}",
     "remove": "Remove attachment to {{name}}",
     "removed": "Removed from {{name}}",
     "removedLast": "Removed from {{name}}. The file stays on the Files page.",
@@ -132,6 +133,7 @@
     "type": {
       "area": "Area",
       "commodity": "Item",
+      "draft": "Draft",
       "location": "Location"
     }
   },

@@ -108,7 +108,8 @@ a **Custom fields** section after **Notes & Tags**:
 - The **×** next to a field clears its value when you save.
 
 The step-by-step form that **Add item** and **All fields** open has the same
-section on its **Extras** step.
+section on its **Extras** step. A [draft of a new item](../items/#drafts-of-a-new-item)
+keeps the values typed there, and the item the draft becomes gets them.
 
 A field that is not on an item has no value, which is not the same as an empty
 one: a number field can hold 0 and a yes/no field can hold "No". Clearing a

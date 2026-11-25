@@ -5495,7 +5495,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/drafts": {
             "get": {
-                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count\nor search. A whole-group backup carries the open drafts. When a member who can\nedit items lists the drafts, a discard that stopped more than ten minutes ago is\nfinished first.",
+                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count\nor search. A whole-group export in the .inb format (3.5 and later) carries the\nopen drafts; a selected-items export and the legacy XML export do not. When a\nmember who can edit items lists the drafts, the discards that stopped more than\nten minutes ago are finished first. That is best effort: at most 10 per request,\nand a failure is logged, not returned. A 200 therefore does not mean that every\nstopped discard finished or that the client_key of a discarded draft is free.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -5691,7 +5691,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete an open draft. Its files that nothing else uses go to Trash, where they\ncan be restored as standalone files until the Trash retention runs out; files\nattached elsewhere only lose the link to the draft. A promoted draft answers 409\ndraft.promoted. Once the discard has begun the draft can no longer be saved,\npromoted or given files; repeating a discard that did not finish completes it.",
+                "description": "Delete an open draft. Its files that nothing else uses go to Trash, where they\ncan be restored as standalone files until the Trash retention runs out; files\nattached elsewhere only lose the link to the draft. A file attached only to the\ndraft and to an item that is already in Trash goes to Trash with that item:\nrestoring the item brings the file back. A promoted draft answers 409\ndraft.promoted. Once the discard has begun the draft can no longer be saved,\npromoted or given files; repeating a discard that did not finish completes it.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -5844,7 +5844,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "create a new export",
+                "description": "Create a new export. A whole-group export in the .inb format (3.5 and later)\ncarries the group's open drafts and the files saved with them; a selected-items\nexport and the legacy XML export do not.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -13643,6 +13643,9 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftCreateAttributes": {
             "type": "object",
+            "required": [
+                "client_key"
+            ],
             "properties": {
                 "client_key": {
                     "type": "string",
@@ -13655,6 +13658,9 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftCreateRequest": {
             "type": "object",
+            "required": [
+                "data"
+            ],
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityDraftCreateRequestData"
@@ -13663,6 +13669,10 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftCreateRequestData": {
             "type": "object",
+            "required": [
+                "attributes",
+                "type"
+            ],
             "properties": {
                 "attributes": {
                     "$ref": "#/definitions/jsonapi.CommodityDraftCreateAttributes"
@@ -13681,6 +13691,10 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftPromoteMeta": {
             "type": "object",
+            "required": [
+                "promotion_key",
+                "revision"
+            ],
             "properties": {
                 "promotion_key": {
                     "type": "string",
@@ -13694,6 +13708,10 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftPromoteRequest": {
             "type": "object",
+            "required": [
+                "data",
+                "meta"
+            ],
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityData"
@@ -13731,6 +13749,9 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftSaveAttributes": {
             "type": "object",
+            "required": [
+                "revision"
+            ],
             "properties": {
                 "revision": {
                     "type": "integer",
@@ -13743,6 +13764,9 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftSaveRequest": {
             "type": "object",
+            "required": [
+                "data"
+            ],
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityDraftSaveRequestData"
@@ -13751,6 +13775,10 @@ const docTemplate = `{
         },
         "jsonapi.CommodityDraftSaveRequestData": {
             "type": "object",
+            "required": [
+                "attributes",
+                "type"
+            ],
             "properties": {
                 "attributes": {
                     "$ref": "#/definitions/jsonapi.CommodityDraftSaveAttributes"

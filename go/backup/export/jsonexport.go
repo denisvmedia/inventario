@@ -226,10 +226,24 @@ func (s *ExportService) writeContainerToBlob(
 // — both bounded by row count, not file bytes), then streamed; the heavy file
 // bytes go through writeFileMember which never buffers.
 func (b *inbBuilder) writeJSONMember(name string, v any) error {
+	data, err := encodeJSONMember(name, v)
+	if err != nil {
+		return err
+	}
+	return b.writeMember(name, data)
+}
+
+// encodeJSONMember encodes v as a JSON member is written.
+func encodeJSONMember(name string, v any) ([]byte, error) {
 	data, err := json.MarshalIndent(v, "", "  ")
 	if err != nil {
-		return errxtrace.Wrap("failed to marshal JSON member", err, errx.Attrs("member", name))
+		return nil, errxtrace.Wrap("failed to marshal JSON member", err, errx.Attrs("member", name))
 	}
+	return data, nil
+}
+
+// writeMember writes data as the inner-tar member name.
+func (b *inbBuilder) writeMember(name string, data []byte) error {
 	hdr := &tar.Header{
 		Name:     name,
 		Mode:     0o600,

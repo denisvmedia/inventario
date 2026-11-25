@@ -186,6 +186,38 @@ describe("<FileDetailSheet />", () => {
       expect(dialog).toHaveTextContent("Camera, Lens, Home")
       expect(dialog).toHaveTextContent(/remove that attachment instead/i)
     })
+
+    it("names an open draft as a draft, in the list and in the delete confirmation", async () => {
+      const user = userEvent.setup()
+      const photo = {
+        ...receipt,
+        links: [
+          {
+            id: "ld",
+            entity_type: "draft",
+            entity_id: "d1",
+            entity_name: "Half-done drill",
+            meta: "images",
+          },
+          { id: "lu", entity_type: "draft", entity_id: "d2", meta: "images" },
+        ],
+      }
+      server.use(...groupHandlers.list(groupFixture), ...fileHandlers.detail(SLUG, "f1", photo))
+      renderSheet("f1")
+      expect(await screen.findByRole("link", { name: "Draft: Half-done drill" })).toHaveAttribute(
+        "href",
+        `/g/${SLUG}/commodities/new?draft=d1`
+      )
+      // A draft without a name reads as its kind.
+      expect(screen.getByRole("link", { name: "Draft" })).toHaveAttribute(
+        "href",
+        `/g/${SLUG}/commodities/new?draft=d2`
+      )
+      await user.click(screen.getByTestId("file-detail-delete"))
+      expect(await screen.findByTestId("confirm-dialog")).toHaveTextContent(
+        "Draft: Half-done drill, Draft"
+      )
+    })
   })
 
   it("renders non-previewable files through the Sheet, not a separate dialog (#1962)", async () => {
