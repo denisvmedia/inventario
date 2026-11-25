@@ -7,6 +7,7 @@ import {
   FolderOpen,
   HandCoins,
   HardDriveDownload,
+  Inbox,
   LayoutDashboard,
   LogOut,
   MapPin,
@@ -37,6 +38,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -61,6 +63,7 @@ import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { useInboxCount } from "@/features/inbox/hooks"
 import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
 
@@ -81,6 +84,9 @@ interface NavEntry {
   // (#1543) can target it. Only the rows the tour walks through need
   // one.
   tourKey?: string
+  // A count shown at the end of the row. The inbox shows the server's
+  // count of what it holds.
+  badge?: "inbox"
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
@@ -99,6 +105,12 @@ const INVENTORY: NavEntry[] = [
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}` : null),
     icon: LayoutDashboard,
     tourKey: "nav-dashboard",
+  },
+  {
+    labelKey: "common:nav.inbox",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/inbox` : null),
+    icon: Inbox,
+    badge: "inbox",
   },
   {
     labelKey: "common:nav.locations",
@@ -271,8 +283,18 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
           <span>{label}</span>
         </NavLink>
       </SidebarMenuButton>
+      {entry.badge === "inbox" ? <InboxBadge /> : null}
     </SidebarMenuItem>
   )
+}
+
+// The inbox row's count (#2794), from the server's count of the group's
+// inbox. Hidden while the inbox is empty or the count is loading.
+function InboxBadge() {
+  const count = useInboxCount()
+  const total = count.data?.total ?? 0
+  if (total === 0) return null
+  return <SidebarMenuBadge data-testid="sidebar-inbox-count">{total}</SidebarMenuBadge>
 }
 
 interface AppSidebarProps {

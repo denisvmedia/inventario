@@ -6,6 +6,7 @@ import { commodityKeys } from "@/features/commodities/keys"
 import { fileKeys } from "@/features/files/keys"
 import type { ListedFile } from "@/features/files/api"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { inboxKeys } from "@/features/inbox/keys"
 import { tagKeys } from "@/features/tags/keys"
 import { useInvalidateTrash } from "@/features/trash/hooks"
 
@@ -62,8 +63,9 @@ export function useDraftFiles(id: string | null | undefined) {
   })
 }
 
-// useInvalidateDrafts refreshes the draft list and details, and the file
-// lists, which name the draft each file is attached to.
+// useInvalidateDrafts refreshes the draft list and details, the file lists,
+// which name the draft each file is attached to, and the inbox, which lists
+// the drafts.
 export function useInvalidateDrafts() {
   const qc = useQueryClient()
   const slug = useSlug()
@@ -71,6 +73,7 @@ export function useInvalidateDrafts() {
     Promise.all([
       qc.invalidateQueries({ queryKey: draftKeys.group(slug) }),
       qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+      qc.invalidateQueries({ queryKey: inboxKeys.all(slug) }),
     ])
 }
 

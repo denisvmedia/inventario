@@ -1,0 +1,275 @@
+import { beforeEach, describe, expect, it } from "vitest"
+import { Route, useLocation, type Location } from "react-router-dom"
+import { screen, waitFor, within } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
+import { axe } from "jest-axe"
+import { delay, http, HttpResponse } from "msw"
+
+import { AuthProvider } from "@/features/auth/AuthContext"
+import { GroupProvider } from "@/features/group/GroupContext"
+import { ConfirmProvider } from "@/hooks/useConfirm"
+import { clearAuth, setAccessToken } from "@/lib/auth-storage"
+import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
+import { __resetHttpForTests } from "@/lib/http"
+import { InboxPage } from "@/pages/inbox/InboxPage"
+import { toastSpies } from "@/test/global-mocks"
+import { apiUrl, authHandlers, groupHandlers, inboxHandlers } from "@/test/handlers"
+import { renderWithProviders } from "@/test/render"
+import { server } from "@/test/server"
+import type { Schema } from "@/types"
+
+const SLUG = "household"
+const groups: Schema<"models.LocationGroup">[] = [
+  { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
+]
+
+function members(role: "viewer" | "user" | "admin" | "owner") {
+  return http.get(apiUrl("/groups/g1/members"), () =>
+    HttpResponse.json({
+      data: [
+        {
+          id: "m1",
+          type: "memberships",
+          attributes: { group_id: "g1", member_user_id: "u1", role },
+        },
+      ],
+    })
+  )
+}
+
+function Probe() {
+  const loc = useLocation()
+  const background = (loc.state as { background?: Location } | null)?.background
+  return (
+    <div data-testid="loc" data-background={background?.pathname ?? ""}>
+      {`${loc.pathname}${loc.search}`}
+    </div>
+  )
+}
+
+function renderPage(path = `/g/${SLUG}/inbox`) {
+  return renderWithProviders({
+    initialPath: path,
+    routes: (
+      <>
+        <Route
+          path="/g/:groupSlug/inbox"
+          element={
+            <AuthProvider>
+              <ConfirmProvider>
+                <GroupProvider>
+                  <InboxPage />
+                </GroupProvider>
+              </ConfirmProvider>
+            </AuthProvider>
+          }
+        />
+        <Route path="/g/:groupSlug/commodities/new" element={<Probe />} />
+        <Route path="/g/:groupSlug/commodities/:id" element={<Probe />} />
+        <Route path="/g/:groupSlug/commodities" element={<Probe />} />
+      </>
+    ),
+  })
+}
+
+function seed(role: "viewer" | "user" | "admin" | "owner" = "user") {
+  const fake = inboxHandlers.backend(SLUG, [
+    inboxHandlers.draft("d1", "Cordless drill", { file_count: 2 }),
+    inboxHandlers.draft("d2", ""),
+    inboxHandlers.itemDraft("c1", "Bike"),
+  ])
+  server.use(
+    ...authHandlers.signedIn(),
+    ...groupHandlers.list(groups),
+    members(role),
+    ...fake.handlers
+  )
+  return fake
+}
+
+beforeEach(() => {
+  clearAuth()
+  __resetGroupContextForTests()
+  __resetHttpForTests()
+  setAccessToken("good-token")
+  setCurrentGroupSlug(SLUG)
+})
+
+describe("<InboxPage />", () => {
+  it("lists one row per record with its reason and counts each tab", async () => {
+    seed()
+    renderPage()
+    const list = await screen.findByTestId("inbox-list")
+    const drill = within(list).getByTestId("inbox-row-draft-d1")
+    expect(drill).toHaveTextContent("Cordless drill")
+    expect(within(drill).getByTestId("inbox-reason")).toHaveTextContent("Draft")
+    expect(drill).toHaveTextContent("2 files")
+    expect(within(list).getByTestId("inbox-row-draft-d2")).toHaveTextContent("Untitled draft")
+    const bike = within(list).getByTestId("inbox-row-commodity-c1")
+    expect(within(bike).getByTestId("inbox-reason")).toHaveTextContent("Marked as draft")
+
+    expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (3)")
+    expect(screen.getByTestId("inbox-tab-draft")).toHaveTextContent("Drafts (2)")
+    expect(screen.getByTestId("inbox-tab-item_draft")).toHaveTextContent("Items to review (1)")
+  })
+
+  it("has no axe violations", async () => {
+    seed()
+    const { container } = renderPage()
+    await screen.findByTestId("inbox-review-c1")
+    expect(await axe(container)).toHaveNoViolations()
+  })
+
+  it("filters by reason on the server and keeps the totals", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId("inbox-row-draft-d1")
+    await user.click(screen.getByTestId("inbox-tab-item_draft"))
+    await waitFor(() => expect(screen.queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument())
+    expect(screen.getByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+    expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (3)")
+  })
+
+  it("opens on the tab the address names", async () => {
+    seed()
+    renderPage(`/g/${SLUG}/inbox?reason=draft`)
+    expect(await screen.findByTestId("inbox-row-draft-d1")).toBeInTheDocument()
+    expect(screen.queryByTestId("inbox-row-commodity-c1")).not.toBeInTheDocument()
+    expect(screen.getByTestId("inbox-tab-draft")).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("continues a draft in the item dialog over the inbox", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-resume-d1"))
+    const loc = await screen.findByTestId("loc")
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/new?draft=d1`)
+    expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("discards a draft after confirmation", async () => {
+    const fake = seed()
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-discard-d1"))
+    const dialog = await screen.findByTestId("confirm-dialog")
+    expect(dialog).toHaveTextContent(/Trash/)
+    await user.click(within(dialog).getByTestId("confirm-accept"))
+    await waitFor(() => expect(screen.queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument())
+    expect(fake.entries.map((e) => e.id)).toEqual(["d2", "c1"])
+    expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (2)")
+  })
+
+  it("marks an item as reviewed and undoes it from the toast", async () => {
+    const fake = seed()
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-c1"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("inbox-row-commodity-c1")).not.toBeInTheDocument()
+    )
+    expect(fake.reviewed).toEqual(["c1"])
+    expect(toastSpies.success).toHaveBeenCalledWith(
+      "“Bike” marked as reviewed",
+      expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) })
+    )
+    const options = toastSpies.success.mock.calls[0]![1] as {
+      action: { onClick: () => void }
+    }
+    options.action.onClick()
+    expect(await screen.findByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+  })
+
+  it("says why an item could not be marked as reviewed", async () => {
+    const fake = seed()
+    fake.failReview = 422
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-c1"))
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
+    expect(toastSpies.error).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.objectContaining({ action: expect.objectContaining({ label: "Open item" }) })
+    )
+    expect(screen.getByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+  })
+
+  it("opens an item over the inbox", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-open-c1"))
+    const loc = await screen.findByTestId("loc")
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
+    expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("offers a viewer no actions", async () => {
+    seed("viewer")
+    renderPage()
+    const row = await screen.findByTestId("inbox-row-draft-d1")
+    await waitFor(() => expect(screen.queryByTestId("inbox-resume-d1")).not.toBeInTheDocument())
+    expect(within(row).queryByTestId("inbox-discard-d1")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("inbox-review-c1")).not.toBeInTheDocument()
+    // The item itself still opens.
+    expect(screen.getByTestId("inbox-open-c1")).toBeInTheDocument()
+  })
+
+  it("offers no actions while the member's role is loading", async () => {
+    const fake = inboxHandlers.backend(SLUG, [inboxHandlers.draft("d1", "Lamp")])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      http.get(apiUrl("/groups/g1/members"), async () => {
+        await delay("infinite")
+        return HttpResponse.json({ data: [] })
+      }),
+      ...fake.handlers
+    )
+    renderPage()
+    const row = await screen.findByTestId("inbox-row-draft-d1")
+    expect(within(row).queryByTestId("inbox-resume-d1")).not.toBeInTheDocument()
+  })
+
+  it("says when nothing needs attention and links the missing-detail lists", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...inboxHandlers.empty(SLUG)
+    )
+    renderPage()
+    expect(await screen.findByTestId("inbox-empty")).toHaveTextContent("Nothing needs attention")
+    expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (0)")
+    expect(screen.getByTestId("inbox-missing-no-location")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?unassigned=1`
+    )
+    expect(screen.getByTestId("inbox-missing-untagged")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?no_tags=1`
+    )
+  })
+
+  it("pages a long inbox", async () => {
+    const many = Array.from({ length: 51 }, (_, i) =>
+      inboxHandlers.draft(`d${i + 1}`, `Draft ${i + 1}`)
+    )
+    const fake = inboxHandlers.backend(SLUG, many)
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage()
+    expect(await screen.findByTestId("inbox-row-draft-d1")).toBeInTheDocument()
+    const pager = screen.getByTestId("inbox-pagination")
+    await user.click(within(pager).getByRole("button", { name: "2" }))
+    expect(await screen.findByTestId("inbox-row-draft-d51")).toBeInTheDocument()
+    expect(screen.queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument()
+  })
+})

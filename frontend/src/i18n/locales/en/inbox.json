@@ -1,0 +1,46 @@
+{
+  "dashboard": {
+    "title": "Needs attention: {{total}}"
+  },
+  "empty": {
+    "description": "Drafts you save and items still marked as draft wait here until you finish them.",
+    "filteredTitle": "Nothing here for this reason",
+    "title": "Nothing needs attention"
+  },
+  "itemDraftHint": "Check its details, then mark it as reviewed.",
+  "markReviewed": "Mark as reviewed",
+  "markReviewedLabel": "Mark {{title}} as reviewed",
+  "missing": {
+    "description": "Optional checks. An unknown detail does not make an item unfinished, so these lists stay out of the inbox and its count.",
+    "noLocation": "Items without a location",
+    "title": "Missing details",
+    "untagged": "Items without tags"
+  },
+  "openInbox": "Open inbox",
+  "openItem": "Open item",
+  "reason": {
+    "draft": "Draft",
+    "itemDraft": "Marked as draft",
+    "other": "Needs attention"
+  },
+  "reviewed": "“{{title}}” marked as reviewed",
+  "reviewFailed": "The item could not be marked as reviewed.",
+  "subtitle": "Unfinished work in this group. Each entry says why it is here and offers the step that clears it.",
+  "summary": {
+    "drafts_one": "{{count}} draft to finish",
+    "drafts_other": "{{count}} drafts to finish",
+    "review_one": "{{count}} item to review",
+    "review_other": "{{count}} items to review"
+  },
+  "tabs": {
+    "all": "All",
+    "allCount": "All ({{n}})",
+    "draft": "Drafts",
+    "draftCount": "Drafts ({{n}})",
+    "itemDraft": "Items to review",
+    "itemDraftCount": "Items to review ({{n}})"
+  },
+  "title": "Inbox",
+  "undo": "Undo",
+  "undoFailed": "The item could not be marked as draft again."
+}
