@@ -478,6 +478,38 @@ func TestTrashService_NoLoanRemindersWhileTrashed(t *testing.T) {
 	c.Assert(pending, qt.HasLen, 1)
 }
 
+func TestTrashService_NoWarrantyRemindersWhileTrashed(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	expires := models.Date(now.AddDate(0, 0, 30).Format("2006-01-02"))
+	kettle := must.Must(f.regs.CommodityRegistry.Create(f.ctx, models.Commodity{
+		Name:              "Kettle",
+		ShortName:         "kettle",
+		Type:              models.CommodityTypeOther,
+		Status:            models.CommodityStatusInUse,
+		Count:             1,
+		WarrantyExpiresAt: &expires,
+	}))
+	emails := &recordingEmailService{}
+	reminders := services.NewWarrantyReminderService(f.factorySet, emails, nil)
+
+	_, err := f.trash.TrashCommodity(f.ctx, kettle.ID)
+	c.Assert(err, qt.IsNil)
+	stats, err := reminders.RemindOnce(f.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Sent(), qt.Equals, 0)
+	c.Assert(emails.snapshot(), qt.HasLen, 0)
+
+	// Restored, the item is due its 60- and 30-day reminders again.
+	_, err = f.trash.RestoreCommodity(f.ctx, kettle.ID)
+	c.Assert(err, qt.IsNil)
+	stats, err = reminders.RemindOnce(f.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stats.Sent(), qt.Equals, 2)
+}
+
 func TestTrashService_NoMaintenanceRemindersWhileTrashed(t *testing.T) {
 	c := qt.New(t)
 	f := newTrashFixture(c)
