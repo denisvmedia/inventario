@@ -112,12 +112,15 @@ func TestCommodityDraftsAPI_Lifecycle(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 	var item jsonapi.CommodityResponse
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
+	c.Assert(item.Data, qt.IsNotNil)
 	itemID := item.Data.ID
 
 	rr = env.do(http.MethodPost, "/drafts/"+draftID+"/promote", draftPromoteBody("2", "Drill", areaID))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
-	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
-	c.Assert(item.Data.ID, qt.Equals, itemID)
+	var retried jsonapi.CommodityResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &retried), qt.IsNil)
+	c.Assert(retried.Data, qt.IsNotNil)
+	c.Assert(retried.Data.ID, qt.Equals, itemID)
 	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore+1)
 
 	// Another device that promotes with its own key learns that the draft
@@ -183,9 +186,28 @@ func TestCommodityDraftsAPI_DraftBeingDiscarded(t *testing.T) {
 	rr := env.do(http.MethodPost, "/drafts", draftCreateBody("key-1", "Drill"))
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 	draftID := decodeDraft(c, rr.Body.Bytes()).Data.ID
+	file := must.Must(regs.FileRegistry.Create(ctx, models.FileEntity{
+		Title:    "photo",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		File:     &models.File{Path: "photo", OriginalPath: "photo.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+		Links:    []models.FileLink{{EntityType: models.FileLinkDraft, EntityID: draftID, Meta: models.FileLinkMetaImages}},
+	}))
+	rr = env.do(http.MethodGet, "/files/"+file.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, `"entity_name":"Drill"`)
 	// A discard that stopped after its first step.
 	_, err := regs.CommodityDraftRegistry.MarkDiscarding(ctx, draftID)
 	c.Assert(err, qt.IsNil)
+
+	// The file no longer names the draft, or links to it.
+	for _, path := range []string{"/files/" + file.ID, "/files"} {
+		rr = env.do(http.MethodGet, path, "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("%s body=%s", path, rr.Body.String()))
+		c.Check(rr.Body.String(), qt.Contains, file.ID)
+		c.Check(rr.Body.String(), qt.Not(qt.Contains), `"entity_name":"Drill"`)
+		c.Check(rr.Body.String(), qt.Not(qt.Contains), draftID)
+	}
 
 	rr = env.do(http.MethodGet, "/drafts/"+draftID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("body=%s", rr.Body.String()))

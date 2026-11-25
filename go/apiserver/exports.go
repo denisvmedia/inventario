@@ -115,7 +115,9 @@ func (api *exportsAPI) apiGetExport(w http.ResponseWriter, r *http.Request) {
 
 // createExport creates a new export.
 // @Summary Create an export
-// @Description create a new export
+// @Description Create a new export. A whole-group export in the .inb format (3.5 and later)
+// @Description carries the group's open drafts and the files saved with them; a selected-items
+// @Description export and the legacy XML export do not.
 // @Tags exports
 // @Accept json-api
 // @Produce json-api

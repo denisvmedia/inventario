@@ -91,22 +91,22 @@ func (*CommodityDraftsResponse) Render(_ http.ResponseWriter, r *http.Request) e
 
 // CommodityDraftCreateRequest is the JSON:API payload for POST .../drafts.
 type CommodityDraftCreateRequest struct {
-	Data *CommodityDraftCreateRequestData `json:"data"`
+	Data *CommodityDraftCreateRequestData `json:"data" validate:"required"`
 }
 
 // CommodityDraftCreateRequestData wraps the attributes of a new draft.
 type CommodityDraftCreateRequestData struct {
 	ID         string                         `json:"id,omitempty"`
-	Type       string                         `json:"type" example:"commodity_drafts" enums:"commodity_drafts"`
-	Attributes CommodityDraftCreateAttributes `json:"attributes"`
+	Type       string                         `json:"type" example:"commodity_drafts" enums:"commodity_drafts" validate:"required"`
+	Attributes CommodityDraftCreateAttributes `json:"attributes" validate:"required"`
 }
 
 // CommodityDraftCreateAttributes carries the client key and the initial
 // values. The client key is the client's identity for the draft: a create
 // with a key the group already has returns that draft (200) instead of making
-// another one (201).
+// another one (201). The values may be left out; the draft then starts empty.
 type CommodityDraftCreateAttributes struct {
-	ClientKey string                      `json:"client_key" example:"5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"`
+	ClientKey string                      `json:"client_key" example:"5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11" validate:"required"`
 	Values    models.CommodityDraftValues `json:"values" swaggertype:"object"`
 }
 
@@ -143,21 +143,22 @@ func (cr *CommodityDraftCreateRequest) ValidateWithContext(ctx context.Context) 
 
 // CommodityDraftSaveRequest is the JSON:API payload for PUT .../drafts/{id}.
 type CommodityDraftSaveRequest struct {
-	Data *CommodityDraftSaveRequestData `json:"data"`
+	Data *CommodityDraftSaveRequestData `json:"data" validate:"required"`
 }
 
 // CommodityDraftSaveRequestData wraps the attributes of a save.
 type CommodityDraftSaveRequestData struct {
 	ID         string                       `json:"id,omitempty"`
-	Type       string                       `json:"type" example:"commodity_drafts" enums:"commodity_drafts"`
-	Attributes CommodityDraftSaveAttributes `json:"attributes"`
+	Type       string                       `json:"type" example:"commodity_drafts" enums:"commodity_drafts" validate:"required"`
+	Attributes CommodityDraftSaveAttributes `json:"attributes" validate:"required"`
 }
 
 // CommodityDraftSaveAttributes carries the values and the revision they were
 // based on. A save whose revision is not the draft's current one is refused
-// with 409, so a stale tab cannot overwrite newer input.
+// with 409, so a stale tab cannot overwrite newer input. Values left out
+// clear the draft's values.
 type CommodityDraftSaveAttributes struct {
-	Revision int                         `json:"revision" example:"3"`
+	Revision int                         `json:"revision" example:"3" validate:"required"`
 	Values   models.CommodityDraftValues `json:"values" swaggertype:"object"`
 }
 
@@ -194,8 +195,8 @@ func (cr *CommodityDraftSaveRequest) ValidateWithContext(ctx context.Context) er
 // POST .../commodities, the revision of the draft it finishes and the key of
 // this promotion.
 type CommodityDraftPromoteRequest struct {
-	Data *CommodityData            `json:"data"`
-	Meta CommodityDraftPromoteMeta `json:"meta"`
+	Data *CommodityData            `json:"data" validate:"required"`
+	Meta CommodityDraftPromoteMeta `json:"meta" validate:"required"`
 }
 
 // CommodityDraftPromoteMeta names the draft revision the item was based on
@@ -204,8 +205,8 @@ type CommodityDraftPromoteRequest struct {
 // retry with the key of the promotion that happened gets the item back, any
 // other key learns that the draft is already an item.
 type CommodityDraftPromoteMeta struct {
-	Revision     int    `json:"revision" example:"3"`
-	PromotionKey string `json:"promotion_key" example:"6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10"`
+	Revision     int    `json:"revision" example:"3" validate:"required"`
+	PromotionKey string `json:"promotion_key" example:"6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10" validate:"required"`
 }
 
 func (m CommodityDraftPromoteMeta) Validate() error {

@@ -1504,11 +1504,15 @@ definitions:
         type: string
       values:
         type: object
+    required:
+    - client_key
     type: object
   jsonapi.CommodityDraftCreateRequest:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityDraftCreateRequestData'
+    required:
+    - data
     type: object
   jsonapi.CommodityDraftCreateRequestData:
     properties:
@@ -1521,6 +1525,9 @@ definitions:
         - commodity_drafts
         example: commodity_drafts
         type: string
+    required:
+    - attributes
+    - type
     type: object
   jsonapi.CommodityDraftPromoteMeta:
     properties:
@@ -1530,6 +1537,9 @@ definitions:
       revision:
         example: 3
         type: integer
+    required:
+    - promotion_key
+    - revision
     type: object
   jsonapi.CommodityDraftPromoteRequest:
     properties:
@@ -1537,6 +1547,9 @@ definitions:
         $ref: '#/definitions/jsonapi.CommodityData'
       meta:
         $ref: '#/definitions/jsonapi.CommodityDraftPromoteMeta'
+    required:
+    - data
+    - meta
     type: object
   jsonapi.CommodityDraftResponse:
     properties:
@@ -1562,11 +1575,15 @@ definitions:
         type: integer
       values:
         type: object
+    required:
+    - revision
     type: object
   jsonapi.CommodityDraftSaveRequest:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityDraftSaveRequestData'
+    required:
+    - data
     type: object
   jsonapi.CommodityDraftSaveRequestData:
     properties:
@@ -1579,6 +1596,9 @@ definitions:
         - commodity_drafts
         example: commodity_drafts
         type: string
+    required:
+    - attributes
+    - type
     type: object
   jsonapi.CommodityDraftView:
     properties:
@@ -10319,9 +10339,12 @@ paths:
       description: |-
         The group's open drafts, most recently saved first. A draft is an unfinished
         item saved on the server; it is not an item and appears in no item list, count
-        or search. A whole-group backup carries the open drafts. When a member who can
-        edit items lists the drafts, a discard that stopped more than ten minutes ago is
-        finished first.
+        or search. A whole-group export in the .inb format (3.5 and later) carries the
+        open drafts; a selected-items export and the legacy XML export do not. When a
+        member who can edit items lists the drafts, the discards that stopped more than
+        ten minutes ago are finished first. That is best effort: at most 10 per request,
+        and a failure is logged, not returned. A 200 therefore does not mean that every
+        stopped discard finished or that the client_key of a discarded draft is free.
       parameters:
       - description: Group slug
         in: path
@@ -10394,7 +10417,9 @@ paths:
       description: |-
         Delete an open draft. Its files that nothing else uses go to Trash, where they
         can be restored as standalone files until the Trash retention runs out; files
-        attached elsewhere only lose the link to the draft. A promoted draft answers 409
+        attached elsewhere only lose the link to the draft. A file attached only to the
+        draft and to an item that is already in Trash goes to Trash with that item:
+        restoring the item brings the file back. A promoted draft answers 409
         draft.promoted. Once the discard has begun the draft can no longer be saved,
         promoted or given files; repeating a discard that did not finish completes it.
       parameters:
@@ -10590,7 +10615,10 @@ paths:
     post:
       consumes:
       - application/vnd.api+json
-      description: create a new export
+      description: |-
+        Create a new export. A whole-group export in the .inb format (3.5 and later)
+        carries the group's open drafts and the files saved with them; a selected-items
+        export and the legacy XML export do not.
       parameters:
       - description: Group slug
         in: path

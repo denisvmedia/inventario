@@ -196,7 +196,14 @@ func (r *CommodityDraftRegistry) CreateOrGet(ctx context.Context, draft models.C
 			return errxtrace.Wrap("failed to insert commodity draft", err)
 		}
 		existing := fmt.Sprintf(`SELECT * FROM %s WHERE group_id = $1 AND client_key = $2`, r.tableNames.CommodityDrafts())
-		if err := tx.QueryRowxContext(ctx, existing, r.groupID, draft.ClientKey).StructScan(&stored); err != nil {
+		err = tx.QueryRowxContext(ctx, existing, r.groupID, draft.ClientKey).StructScan(&stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			// The row the insert conflicted with is gone: a discard deleted
+			// it between the two statements. Only a discard deletes a
+			// draft, so the key belongs to a discarded draft.
+			return errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("client_key", draft.ClientKey))
+		}
+		if err != nil {
 			return errxtrace.Wrap("failed to read existing commodity draft", err)
 		}
 		return nil

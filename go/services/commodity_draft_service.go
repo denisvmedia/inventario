@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -68,20 +69,33 @@ func (s *CommodityDraftService) drafts(ctx context.Context) (registry.CommodityD
 // Create stores a new draft, or returns the group's draft with the same
 // client key unchanged (created=false). A repeated create after a lost
 // response therefore gives the client the draft it already made, never a
-// second one. A key whose draft is being discarded gets
-// registry.ErrDraftDiscarded.
+// second one, even when the type in its values was deleted since: the type
+// is checked for a new draft only. A key whose draft is being discarded
+// gets registry.ErrDraftDiscarded.
 func (s *CommodityDraftService) Create(ctx context.Context, clientKey string, values models.CommodityDraftValues) (*models.CommodityDraft, bool, error) {
 	draft := models.CommodityDraft{ClientKey: clientKey, Values: values}
 	if err := draft.ValidateFields(ctx); err != nil {
-		return nil, false, err
-	}
-	if err := s.checkValuesType(ctx, values); err != nil {
 		return nil, false, err
 	}
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return nil, false, err
 	}
+	existing, err := reg.GetByClientKey(ctx, clientKey)
+	switch {
+	case err == nil:
+		if existing.IsDiscarding() {
+			return nil, false, errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("entity_id", existing.ID))
+		}
+		return existing, false, nil
+	case !errors.Is(err, registry.ErrNotFound):
+		return nil, false, err
+	}
+	if err := s.checkValuesType(ctx, values); err != nil {
+		return nil, false, err
+	}
+	// A concurrent create with the same key can still win between the
+	// lookup and the insert; CreateOrGet then returns its draft.
 	stored, created, err := reg.CreateOrGet(ctx, draft)
 	if err != nil {
 		return nil, false, err
@@ -259,7 +273,9 @@ func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 // staleDiscardAfter ago and did not complete, at most staleDiscardBatch of
 // them, and returns how many it finished. Until then such a draft keeps its
 // files and its client key. A draft another discard finishes meanwhile
-// counts as finished.
+// counts as finished. A draft that fails is logged and the others are still
+// finished, so one draft that keeps failing does not hold them up; the first
+// failure is returned.
 func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, error) {
 	reg, err := s.drafts(ctx)
 	if err != nil {
@@ -270,11 +286,17 @@ func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, e
 		return 0, errxtrace.Wrap("failed to list stopped discards", err)
 	}
 	finished := 0
+	var firstErr error
 	for _, draft := range stale {
-		if err := s.Discard(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return finished, errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
+		err := s.Discard(ctx, draft.ID)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			slog.Error("Failed to finish a stopped draft discard", "draft_id", draft.ID, "error", err)
+			if firstErr == nil {
+				firstErr = errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
+			}
+			continue
 		}
 		finished++
 	}
-	return finished, nil
+	return finished, firstErr
 }

@@ -88,6 +88,19 @@ describe("pending-files-store", () => {
     expect(await loaded[0].file.text()).toBe("hello")
   })
 
+  it("keeps the server file a draft save uploaded for an entry", async () => {
+    await savePendingFiles("draft:uploaded", [
+      { ...entry("a.png"), uploadedFileId: "file-7" },
+      entry("b.png"),
+    ])
+
+    const loaded = await loadPendingFiles("draft:uploaded")
+    expect(loaded.map((e) => [e.file.name, e.uploadedFileId])).toEqual([
+      ["a.png", "file-7"],
+      ["b.png", undefined],
+    ])
+  })
+
   it("returns nothing for a key that was never written", async () => {
     expect(await loadPendingFiles("draft:never-written")).toEqual([])
   })
@@ -120,6 +133,7 @@ describe("pending-files-store", () => {
       { id: "no-file", tags: [] },
       { id: 42, file: new File(["x"], "bad-id.png"), tags: [] },
       { id: "no-tags", file: new File(["x"], "no-tags.png") },
+      { id: "bad-upload", file: new File(["x"], "bad-upload.png"), tags: [], uploadedFileId: 7 },
       null,
     ])
 
