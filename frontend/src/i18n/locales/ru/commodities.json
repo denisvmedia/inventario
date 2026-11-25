@@ -140,7 +140,8 @@
       "serialNumber": "Серийный номер",
       "status": "Статус",
       "tags": "Теги",
-      "urls": "Ссылки"
+      "urls": "Ссылки",
+      "source": "Источник"
     },
     "filesTab": {
       "browse": "обзор",
@@ -1116,5 +1117,9 @@
       "fileUploading": "загружается",
       "fileUploaded": "загружен"
     }
+  },
+  "delivered": {
+    "from": "Из {{name}}",
+    "newTab": "откроется в новой вкладке"
   }
 }

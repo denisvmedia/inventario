@@ -11,6 +11,7 @@ import {
   type IntakeSessionState,
   type IntakeSummary,
 } from "@/features/intake/api"
+import { toDocumentSource, type DocumentSource } from "@/features/intake/documents"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -41,6 +42,9 @@ export interface InboxEntry {
   fileCount: number
   // The progress of a batch of files; null for other kinds.
   intake: { state: IntakeSessionState; summary: IntakeSummary } | null
+  // The other system a draft came from (#2809); null for a draft made in
+  // the app and for other kinds.
+  source: DocumentSource | null
 }
 
 export interface InboxCounts {
@@ -89,6 +93,7 @@ export async function listInbox(
       intake: e.intake
         ? { state: toIntakeState(e.intake.state), summary: toIntakeSummary(e.intake.summary) }
         : null,
+      source: e.source ? toDocumentSource(e.source.name, null, e.source.url) : null,
     })),
     total: body.meta?.entries ?? 0,
     counts: toCounts(body.meta?.counts),

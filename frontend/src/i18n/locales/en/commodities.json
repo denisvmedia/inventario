@@ -77,6 +77,10 @@
     "description": "The item moves to the trash with the files only it uses. You can restore it from there.",
     "title": "Delete {{name}}?"
   },
+  "delivered": {
+    "from": "From {{name}}",
+    "newTab": "opens in a new tab"
+  },
   "detail": {
     "acquisitionPrice": "Originally purchased for {{price}}",
     "assetId": "Asset ID",
@@ -108,6 +112,7 @@
       "registeredDate": "Date Added",
       "seller": "Seller",
       "serialNumber": "Serial Number",
+      "source": "Source",
       "status": "Status",
       "tags": "Tags",
       "urls": "Links"
