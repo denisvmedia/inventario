@@ -1,6 +1,7 @@
 // Data-layer functions for the Trash. Hooks live in `./hooks.ts`.
 // Deleted items and files wait under /trash until they are restored, deleted
 // for good, or purged by the server once the retention runs out.
+import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -40,13 +41,18 @@ export interface TrashListOptions {
 
 export interface BulkTrashResult {
   succeeded: string[]
-  failed: { id: string; error: string }[]
+  // code is not_found when the item is not in Trash, and failed for any
+  // other error; it is empty when the server gives none.
+  failed: { id: string; error: string; code: string }[]
 }
 
 export interface BulkRestoreResult extends BulkTrashResult {
   // Restored items whose area was deleted while they were in Trash; they
   // came back unassigned.
   areaRemoved: string[]
+  // Items of a request that failed without an answer: the server may have
+  // restored some of them (sendInChunks).
+  unknown: string[]
 }
 
 export interface CommodityRestoreResult {
@@ -84,6 +90,7 @@ function bulkResult(body: BulkResultEnvelope): BulkTrashResult {
     failed: (body.data?.attributes?.failed ?? []).map((f) => ({
       id: f.id ?? "",
       error: f.error ?? "",
+      code: f.code ?? "",
     })),
   }
 }
@@ -136,15 +143,29 @@ export async function restoreCommodity(id: string): Promise<CommodityRestoreResu
   }
 }
 
+// The server restores at most this many items per request (jsonapi.MaxBulkIDs).
+const MAX_RESTORE_IDS = 100
+
+// Restores items from Trash. More ids than one request takes, as Undo after
+// a bulk delete of "all matching" items sends, go in several requests, all
+// to the group active when the restore started. When one fails without an
+// answer, what the earlier ones restored is kept, its ids are reported as
+// unknown, since the server may have restored some of them, and the ids
+// after it as failed (sendInChunks).
 export async function restoreCommodities(ids: string[]): Promise<BulkRestoreResult> {
-  const body = await http.post<BulkRestoreEnvelope>(
-    "/trash/commodities/restore",
-    bulkBody("commodities", ids)
+  const post = pinnedPost<BulkRestoreEnvelope>("/trash/commodities/restore")
+  const { parts, unknown, unsent } = await sendInChunks(ids, MAX_RESTORE_IDS, (chunk) =>
+    post(bulkBody("commodities", chunk))
   )
-  return {
-    ...bulkResult(body),
-    areaRemoved: body.data?.attributes?.area_removed ?? [],
+  const merged: BulkRestoreResult = { succeeded: [], failed: [], areaRemoved: [], unknown }
+  for (const body of parts) {
+    const part = bulkResult(body)
+    merged.succeeded.push(...part.succeeded)
+    merged.failed.push(...part.failed)
+    merged.areaRemoved.push(...(body.data?.attributes?.area_removed ?? []))
   }
+  for (const id of unsent) merged.failed.push({ id, error: "", code: "" })
+  return merged
 }
 
 export async function purgeCommodity(id: string): Promise<void> {

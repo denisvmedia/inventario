@@ -3,6 +3,7 @@ package memory_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -189,4 +190,71 @@ func TestItemTypes_MemberTypesGoToTheOwner_Memory(t *testing.T) {
 	gotField, err := fields.Get(ctx, plate.ID)
 	c.Assert(err, qt.IsNil)
 	c.Check(gotField.CreatedByUserID, qt.Equals, "owner")
+}
+
+// Without an owner, the types go to an admin before an earlier member; among
+// members of one rank the one who joined first takes them, and the user ID
+// breaks a tie.
+func TestItemTypes_HandoverPicksAdminThenJoinOrder_Memory(t *testing.T) {
+	t0 := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	type member struct {
+		user   string
+		role   models.GroupRole
+		joined time.Time
+	}
+	tests := []struct {
+		name    string
+		members []member
+		heir    string
+	}{
+		{"an admin before an earlier member", []member{
+			{"early", models.GroupRoleUser, t0},
+			{"admin", models.GroupRoleAdmin, t0.Add(time.Hour)},
+		}, "admin"},
+		{"the member who joined first", []member{
+			{"late", models.GroupRoleUser, t0.Add(time.Hour)},
+			{"early", models.GroupRoleViewer, t0},
+		}, "early"},
+		{"the lower user ID on the same join time", []member{
+			{"zed", models.GroupRoleUser, t0},
+			{"amy", models.GroupRoleUser, t0},
+		}, "amy"},
+		{"nobody: the creator keeps them", nil, "leaver"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			fs := memory.NewFactorySet()
+			g, err := fs.LocationGroupRegistry.Create(t.Context(), models.LocationGroup{
+				TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+				Name:                "Home",
+				Slug:                "home",
+				Status:              models.LocationGroupStatusActive,
+				CreatedBy:           "creator",
+				GroupCurrency:       "USD",
+			})
+			c.Assert(err, qt.IsNil)
+			members := append([]member{{"leaver", models.GroupRoleUser, t0.Add(-time.Hour)}}, tt.members...)
+			for _, m := range members {
+				_, err := fs.GroupMembershipRegistry.Create(t.Context(), models.GroupMembership{
+					TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+					GroupID:             g.ID,
+					MemberUserID:        m.user,
+					Role:                m.role,
+					JoinedAt:            m.joined,
+				})
+				c.Assert(err, qt.IsNil)
+			}
+			leaver := &models.User{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "leaver"}, TenantID: "tenant-1"}}
+			ctx := appctx.WithGroup(appctx.WithUser(t.Context(), leaver), g)
+			types := fs.ItemTypeRegistryFactory.MustCreateUserRegistry(ctx)
+			vehicle, err := types.Create(ctx, models.ItemType{Name: "Vehicle"})
+			c.Assert(err, qt.IsNil)
+
+			c.Assert(fs.UserPurger.PurgeUserDependents(t.Context(), "tenant-1", "leaver"), qt.IsNil)
+			got, err := types.Get(ctx, vehicle.ID)
+			c.Assert(err, qt.IsNil)
+			c.Check(got.CreatedByUserID, qt.Equals, tt.heir)
+		})
+	}
 }

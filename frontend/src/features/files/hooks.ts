@@ -9,6 +9,7 @@ import {
   attachFile,
   bulkDeleteFiles,
   bulkReclassifyFiles,
+  bulkUpdateFileTags,
   deleteFile,
   detachFile,
   getCategoryCounts,
@@ -19,6 +20,8 @@ import {
   uploadFile,
   type AttachFileRequest,
   type BulkDeleteResult,
+  type FileBulkResult,
+  type FileBulkTagsChange,
   type FileCategory,
   type FileCategoryCounts,
   type FileEntity,
@@ -152,6 +155,21 @@ export function useBulkReclassifyFiles() {
   return useMutation<BulkDeleteResult, Error, BulkReclassifyVars>({
     mutationFn: ({ ids, category }) => bulkReclassifyFiles(ids, category),
     onSuccess: () => invalidate.all(),
+  })
+}
+
+interface BulkUpdateFileTagsVars {
+  ids: string[]
+  change: FileBulkTagsChange
+}
+
+// Adds and removes tags on several files. The lists and the tag catalog are
+// refetched whatever the outcome, since part of the files may have changed.
+export function useBulkUpdateFileTags() {
+  const invalidate = useInvalidate()
+  return useMutation<FileBulkResult, Error, BulkUpdateFileTagsVars>({
+    mutationFn: ({ ids, change }) => bulkUpdateFileTags(ids, change),
+    onSettled: () => invalidate.all(),
   })
 }
 

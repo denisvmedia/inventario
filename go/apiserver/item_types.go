@@ -14,6 +14,7 @@ import (
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 const itemTypeCtxKey ctxValueKey = "itemType"
@@ -34,8 +35,9 @@ const (
 	// models.MaxItemTypesPerGroup types. Meta carries the limit.
 	itemTypeLimitCode = "item_type.limit"
 	// itemTypeUnknownFieldCode is the validation code on the type field of
-	// that 422, which the frontend localizes (errors:validation.*).
-	itemTypeUnknownFieldCode = "item_type_unknown"
+	// that 422, which the frontend localizes (errors:validation.*). A bulk
+	// patch with an unknown type carries the same code.
+	itemTypeUnknownFieldCode = services.ItemTypeUnknownCode
 )
 
 func itemTypeFromContext(ctx context.Context) *models.ItemType {

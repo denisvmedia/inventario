@@ -456,7 +456,7 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	if err != nil {
 		return err
 	}
-	if commodity.Type, err = resolver.resolve(ctx, commodity.Type); err != nil {
+	if commodity.Type, err = resolver.resolve(ctx, commodity.Type, stats); err != nil {
 		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("original_commodity_id", xmlCommodity.ID))
 	}
 
