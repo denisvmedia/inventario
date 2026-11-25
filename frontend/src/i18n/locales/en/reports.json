@@ -51,6 +51,7 @@
     },
     "selectItem": "Select item…",
     "selectLocation": "Select location…",
+    "sellerUnavailable": "Could not load the seller.",
     "title": "Insurance Report",
     "warranty": {
       "expires": "expires {{date}}",

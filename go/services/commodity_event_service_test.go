@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/appctx"
@@ -274,6 +275,57 @@ func TestCommodityEventService_EmitUpdated_SellerOnly(t *testing.T) {
 			c.Check(events[0].After["seller_id"], qt.Equals, tc.wantAfter)
 		})
 	}
+}
+
+func TestCommodityEventService_EmitUpdated_SnapshotCarriesEveryComparedField(t *testing.T) {
+	// The snapshot of a generic update carries every field the change check
+	// compares, so a seller change made together with a date or link change
+	// does not read as a seller-only edit in the timeline.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	seller := "seller-a"
+	purchased := models.Date("2024-05-01")
+	registered := models.Date("2024-05-02")
+	link := must.Must(models.URLParse("https://shop.example/kettle"))
+	before := makeCommodity("c1")
+	after := makeCommodity("c1", func(c *models.Commodity) {
+		c.SellerID = &seller
+		c.PurchaseDate = &purchased
+		c.RegisteredDate = &registered
+		c.URLs = models.ValuerSlice[*models.URL]{link}
+	})
+	svc.EmitUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindUpdated)
+	c.Check(events[0].Before["purchase_date"], qt.Equals, "")
+	c.Check(events[0].After["purchase_date"], qt.Equals, "2024-05-01")
+	c.Check(events[0].Before["registered_date"], qt.Equals, "")
+	c.Check(events[0].After["registered_date"], qt.Equals, "2024-05-02")
+	c.Check(events[0].Before["urls"], qt.IsNil)
+	c.Check(events[0].After["urls"], qt.DeepEquals, []string{"https://shop.example/kettle"})
+	c.Check(events[0].After["seller_id"], qt.Equals, seller)
+}
+
+func TestCommodityEventService_EmitUpdated_EmptyListsMatchMissingOnes(t *testing.T) {
+	// An empty list and a missing one are the same to the change check, and
+	// the snapshot stores both the same way.
+	c := qt.New(t)
+	ctx, svc, reg := newEventTestContext(c)
+
+	before := makeCommodity("c1", func(c *models.Commodity) { c.Tags = models.ValuerSlice[string]{} })
+	after := makeCommodity("c1", func(c *models.Commodity) { c.Name = "Renamed" })
+	svc.EmitUpdated(ctx, before, after)
+
+	events, err := reg.List(ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(events, qt.HasLen, 1)
+	c.Check(events[0].Before["tags"], qt.IsNil)
+	c.Check(events[0].After["tags"], qt.IsNil)
+	c.Check(events[0].Before["urls"], qt.IsNil)
 }
 
 func TestCommodityEventService_EmitUpdated_SameSeller(t *testing.T) {

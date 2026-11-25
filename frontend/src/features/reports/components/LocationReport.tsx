@@ -15,6 +15,7 @@ import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
+import { UnavailableNote } from "./UnavailableNote"
 import { aggregateLocationTotals } from "../aggregate"
 import { coverToPhotos } from "../photos"
 import { reportSubtitle } from "../subtitle"
@@ -36,8 +37,9 @@ interface LocationReportProps {
   covers: Record<string, CommodityCover>
   // "{Location} · {Area}" resolver for each item's area_id.
   areaLabelFor: (areaId?: string) => string
-  // The name of the seller an item was bought from, "" for none.
-  sellerNameFor?: (sellerId?: string) => string
+  // The name of the seller an item was bought from, "" for none, null when
+  // the sellers could not be loaded (the cell stays empty with a note).
+  sellerNameFor?: (sellerId?: string) => string | null
   imageSize: PhotoSize
   groupCurrency: string
   generatedDate: string
@@ -210,10 +212,11 @@ export function LocationReport({
                     item.purchase_date ? formatDate(item.purchase_date, { style: "long" }) : noValue
                   }
                 />
-                <ItemDetail
-                  icon={Store}
+                <SellerDetail
                   label={t("reports:insurance.fields.seller")}
-                  value={sellerNameFor(item.seller_id) || noValue}
+                  name={sellerNameFor(item.seller_id)}
+                  noValue={noValue}
+                  unavailable={t("reports:insurance.sellerUnavailable")}
                 />
               </div>
             </div>
@@ -292,11 +295,13 @@ function ItemDetail({
   label,
   value,
   mono,
+  note,
 }: {
   icon: typeof Package
   label: string
   value: string
   mono?: boolean
+  note?: string
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -305,8 +310,31 @@ function ItemDetail({
       </div>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={cn("text-sm font-medium", mono ? "font-mono tabular-nums" : "")}>{value}</p>
+        {value ? (
+          <p className={cn("text-sm font-medium", mono ? "font-mono tabular-nums" : "")}>{value}</p>
+        ) : null}
+        {note ? <UnavailableNote text={note} /> : null}
       </div>
     </div>
+  )
+}
+
+// SellerDetail is the seller cell of an item: its name, "—" for none, or
+// empty with a note when the sellers could not be loaded (name === null).
+function SellerDetail({
+  label,
+  name,
+  noValue,
+  unavailable,
+}: {
+  label: string
+  name: string | null
+  noValue: string
+  unavailable: string
+}) {
+  return name === null ? (
+    <ItemDetail icon={Store} label={label} value="" note={unavailable} />
+  ) : (
+    <ItemDetail icon={Store} label={label} value={name || noValue} />
   )
 }
