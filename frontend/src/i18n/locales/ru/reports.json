@@ -57,6 +57,7 @@
     },
     "selectItem": "Выберите предмет…",
     "selectLocation": "Выберите локацию…",
+    "sellerUnavailable": "Не удалось загрузить продавца.",
     "title": "Страховой отчёт",
     "warranty": {
       "expires": "истекает {{date}}",

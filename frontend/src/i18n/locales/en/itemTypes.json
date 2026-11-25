@@ -10,6 +10,8 @@
     "editTitle": "Edit item type",
     "errorGeneric": "Could not save the item type.",
     "iconLabel": "Icon",
+    "limit_one": "A group keeps at most {{count}} item type. Delete or merge types before you add another.",
+    "limit_other": "A group keeps at most {{count}} item types. Delete or merge types before you add another.",
     "nameLabel": "Name",
     "namePlaceholder": "e.g. Vehicle",
     "submitting": "Saving…",

@@ -59,6 +59,7 @@
     "invalid_tag_kind": "kind must be one of: commodity, file",
     "invalid_type": "invalid type",
     "invalid_warranty_threshold": "invalid warranty reminder threshold",
+    "item_type_unknown": "This type is not in the group.",
     "quantity_forbids_warranty": "warranty cannot be tracked on commodities with quantity greater than 1",
     "quantity_forbids_warranty_notes": "warranty notes cannot be set on commodities with quantity greater than 1",
     "sale_price_required_for_sold": "sale price is required when marking as sold",

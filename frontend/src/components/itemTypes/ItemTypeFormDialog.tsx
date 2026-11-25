@@ -17,7 +17,13 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { ITEM_TYPE_NAME_MAX, ITEM_TYPE_NAME_TAKEN, type ItemType } from "@/features/itemTypes/api"
+import {
+  ITEM_TYPE_LIMIT,
+  ITEM_TYPE_NAME_MAX,
+  ITEM_TYPE_NAME_TAKEN,
+  ITEM_TYPES_MAX,
+  type ItemType,
+} from "@/features/itemTypes/api"
 import {
   builtinItemTypeLabel,
   findItemTypeByName,
@@ -111,7 +117,7 @@ export function ItemTypeFormDialog({
   }, [open, itemType, defaultName, form])
 
   function clashingType(name: string): ItemType | undefined {
-    const found = findItemTypeByName(t, types, name)
+    const found = findItemTypeByName(types, name)
     return found && found.id !== itemType?.id ? found : undefined
   }
 
@@ -130,6 +136,13 @@ export function ItemTypeFormDialog({
       await onSubmit(values)
       onOpenChange(false)
     } catch (err) {
+      if (getServerErrorCode(err) === ITEM_TYPE_LIMIT) {
+        setServerError({
+          kind: "conflict",
+          message: t("itemTypes:dialog.limit", { count: ITEM_TYPES_MAX }),
+        })
+        return
+      }
       if (getServerErrorCode(err) === ITEM_TYPE_NAME_TAKEN) {
         form.setError("name", { type: "server", message: NAME_TAKEN_MESSAGE })
         setTakenName(values.name || (builtinSlug ? builtinItemTypeLabel(t, builtinSlug) : ""))

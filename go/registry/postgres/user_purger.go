@@ -108,6 +108,10 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 
 	// Weekly digest idempotency claims (#1391).
 	func(t store.TableNames) string { return string(t.WeeklyDigestSends()) },
+
+	// Where the member shows saved views, their own and the shared views of
+	// others.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
 }
 
 // PurgeUserDependents clears every user-scoped auth/identity row (and nulls the
@@ -154,6 +158,18 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			}
 		}
 
+		// Item types, custom fields and their template entries are group
+		// configuration, not the author's content: the ones the user created
+		// stay with their groups. Their NOT NULL created_by_user_id FK ->
+		// users(id) NO ACTION moves to another member, so it neither blocks
+		// the final delete nor the account deletion pre-check (which leaves
+		// these tables out).
+		for _, nameFn := range groupConfigurationTables {
+			if err := r.reattributeGroupConfiguration(ctx, tx, nameFn(r.tableNames), tenantID, userID); err != nil {
+				return err
+			}
+		}
+
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
 		// every membership row that names the user as the member. It lives here
@@ -180,6 +196,22 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// rides the tenant_id template as defense-in-depth.
 		if err := r.purgeGroupInvitesAudit(ctx, tx, tenantID, userID); err != nil {
 			return err
+		}
+
+		// Saved views are per-user settings that carry created_by_user_id
+		// rather than user_id: a member's views, shared ones included, go
+		// with the member, and with them every member's placements (ON
+		// DELETE CASCADE). The column is NOT NULL FK -> users(id) NO ACTION.
+		savedViews := string(r.tableNames.SavedViews())
+		savedViewQuery := fmt.Sprintf(
+			"DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", savedViews,
+		)
+		if _, err := tx.ExecContext(ctx, savedViewQuery, tenantID, userID); err != nil {
+			return errxtrace.Wrap(
+				"failed to purge user saved views",
+				err,
+				errx.Attrs("table", savedViews, "tenant_id", tenantID, "user_id", userID),
+			)
 		}
 
 		// Item reminders (#2805) email only the person who created them, so
@@ -319,5 +351,44 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 		)
 	}
 
+	return nil
+}
+
+// groupConfigurationTables lists the group-scoped tables whose rows are
+// group configuration: the user purge hands the rows a user created to
+// another member of the group instead of counting them as the user's content.
+var groupConfigurationTables = []func(t store.TableNames) store.TableName{
+	func(t store.TableNames) store.TableName { return t.ItemTypes() },
+	func(t store.TableNames) store.TableName { return t.CustomFieldDefinitions() },
+	func(t store.TableNames) store.TableName { return t.ItemTypeCustomFields() },
+}
+
+// reattributeGroupConfiguration gives each row of table the user created to
+// another member of its group: the owner first, then an admin, then the
+// member who joined first. It runs before the user's memberships are deleted,
+// though they are left out of the choice anyway. A row whose group has no
+// other member keeps its creator; such a group is private and is purged
+// before the user is.
+func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx.Tx, table store.TableName, tenantID, userID string) error {
+	memberships := string(r.tableNames.GroupMemberships())
+	query := fmt.Sprintf(`
+		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
+		FROM (
+			SELECT DISTINCT ON (group_id) group_id, member_user_id
+			FROM %[2]s
+			WHERE tenant_id = $1 AND member_user_id <> $2
+			ORDER BY group_id,
+				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+				joined_at, member_user_id
+		) heir
+		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id`,
+		string(table), memberships)
+	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		return errxtrace.Wrap(
+			"failed to hand over the user's group configuration",
+			err,
+			errx.Attrs("table", string(table), "tenant_id", tenantID, "user_id", userID),
+		)
+	}
 	return nil
 }

@@ -2,6 +2,8 @@ package registrytest
 
 import (
 	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"time"
 
@@ -145,6 +147,32 @@ func RunItemTypeContract(t *testing.T, newEnv func(t *testing.T) ItemTypeEnv) {
 		c.Check(err, qt.ErrorIs, registry.ErrAlreadyExists)
 	})
 
+	t.Run("a group keeps at most MaxItemTypesPerGroup types", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		count, err := env.TypesA.Count(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		if count == 0 {
+			_, err = env.TypesA.EnsureBuiltins(env.CtxA)
+			c.Assert(err, qt.IsNil)
+			count = len(models.BuiltinItemTypes)
+		}
+		for i := count; i < models.MaxItemTypesPerGroup; i++ {
+			_, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: fmt.Sprintf("Kind %d", i)})
+			c.Assert(err, qt.IsNil, qt.Commentf("type %d", i))
+		}
+		_, err = env.TypesA.Create(env.CtxA, models.ItemType{Name: "One too many"})
+		c.Check(err, qt.ErrorIs, registry.ErrItemTypeLimit)
+		count, err = env.TypesA.Count(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(count, qt.Equals, models.MaxItemTypesPerGroup)
+
+		// The limit is per group.
+		_, err = env.TypesB.Create(env.CtxB, models.ItemType{Name: "One too many"})
+		c.Check(err, qt.IsNil)
+	})
+
 	t.Run("update renames without changing the slug", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -277,6 +305,67 @@ func runItemTypeDeleteContract(t *testing.T, newEnv func(t *testing.T) ItemTypeE
 		moved, err = env.TypesA.DeleteReassigning(env.CtxA, clothes.ID, "")
 		c.Assert(err, qt.IsNil)
 		c.Check(moved, qt.Equals, 0)
+	})
+
+	t.Run("an update that keeps a type deleted meanwhile is refused", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		vehicle, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Vehicle"})
+		c.Assert(err, qt.IsNil)
+		created, err := env.CommoditiesA.Create(env.CtxA, itemTypeContractItem("Car", vehicle.Slug, env.AreaA))
+		c.Assert(err, qt.IsNil)
+		// The form loaded the item while it still had the type.
+		loaded, err := env.CommoditiesA.Get(env.CtxA, created.ID)
+		c.Assert(err, qt.IsNil)
+
+		other := mustTypeBySlug(c, env.TypesA, env.CtxA, models.CommodityTypeOther)
+		_, err = env.TypesA.DeleteReassigning(env.CtxA, vehicle.ID, other.ID)
+		c.Assert(err, qt.IsNil)
+
+		edit := *loaded
+		edit.Name = "Car (renamed)"
+		_, err = env.CommoditiesA.Update(env.CtxA, edit)
+		c.Check(err, qt.ErrorIs, registry.ErrUnknownItemType)
+		got, err := env.CommoditiesA.Get(env.CtxA, created.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Type, qt.Equals, models.CommodityTypeOther)
+		c.Check(got.Name, qt.Equals, "Car")
+	})
+
+	t.Run("an update racing a delete never leaves the deleted type", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		other := mustTypeBySlug(c, env.TypesA, env.CtxA, models.CommodityTypeOther)
+
+		for i := range 10 {
+			kind, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: fmt.Sprintf("Kind %d", i)})
+			c.Assert(err, qt.IsNil)
+			created, err := env.CommoditiesA.Create(env.CtxA, itemTypeContractItem("Thing", kind.Slug, env.AreaA))
+			c.Assert(err, qt.IsNil)
+			loaded, err := env.CommoditiesA.Get(env.CtxA, created.ID)
+			c.Assert(err, qt.IsNil)
+
+			var wg sync.WaitGroup
+			var deleteErr, updateErr error
+			wg.Go(func() {
+				_, deleteErr = env.TypesA.DeleteReassigning(env.CtxA, kind.ID, other.ID)
+			})
+			wg.Go(func() {
+				edit := *loaded
+				edit.Name = fmt.Sprintf("Thing %d", i)
+				_, updateErr = env.CommoditiesA.Update(env.CtxA, edit)
+			})
+			wg.Wait()
+
+			c.Assert(deleteErr, qt.IsNil)
+			if updateErr != nil {
+				c.Assert(updateErr, qt.ErrorIs, registry.ErrUnknownItemType)
+			}
+			got, err := env.CommoditiesA.Get(env.CtxA, created.ID)
+			c.Assert(err, qt.IsNil)
+			c.Assert(got.Type, qt.Equals, models.CommodityTypeOther, qt.Commentf("round %d", i))
+		}
 	})
 
 	t.Run("the last type stays", func(t *testing.T) {

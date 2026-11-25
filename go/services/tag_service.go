@@ -182,12 +182,20 @@ func (s *TagService) normalizeAndEnsureSlugs(ctx context.Context, kind models.Ta
 // which holds a per-(group, tag id) lock so two parallel renames of the
 // same tag serialize cleanly — the second re-reads the row inside its
 // lock and renames from whatever slug the first one settled on.
+//
+// Saved views name item tags by slug, so the rename rewrites the views of
+// the group that name the tag in the same transaction, under the locks of
+// the old and the new slug (see TagRegistry.RenameAtomic).
 func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create tag registry", err)
 	}
-	return tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor)
+	renamed, _, err := tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor, rewriteSavedViewTag)
+	if err != nil {
+		return nil, err
+	}
+	return renamed, nil
 }
 
 // DeleteTag removes a tag. When force=false and the tag has any reference

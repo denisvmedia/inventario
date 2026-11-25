@@ -5,6 +5,7 @@ import { Package, Plus, ShieldCheck, ShieldOff, Sparkles, TrendingUp } from "luc
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { StatCard } from "@/components/dashboard/StatCard"
 import { RecentlyAdded } from "@/components/dashboard/RecentlyAdded"
+import { SavedViewsSection } from "@/components/dashboard/SavedViewsSection"
 import { ExpiringWarranties } from "@/components/dashboard/ExpiringWarranties"
 import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -27,8 +28,10 @@ import { cn } from "@/lib/utils"
 //      grid carried are reachable from the sidebar nav and the matching
 //      list pages, so dropping them here trades one duplicated count for
 //      a cleaner mobile read (#1544 item 2 decision).
-//   4. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
-//   5. Full-width WarrantyHealth card.
+//   4. Saved views the member put on the dashboard, or ready-made ones
+//      to add while they keep none of their own (SavedViewsSection).
+//   5. Two-up grid: ExpiringWarranties (left) + RecentlyAdded (right).
+//   6. Full-width WarrantyHealth card.
 //
 // Note: the previous "Value by location" / "Value by area" stub cards
 // were removed — the design-mock dashboard has no per-place value
@@ -197,6 +200,8 @@ export function DashboardPage() {
                 testId="dashboard-total-value"
               />
             </div>
+
+            <SavedViewsSection />
 
             <div className="grid gap-6 lg:grid-cols-2">
               <ExpiringWarranties items={data.expiringWarranties} isLoading={data.isLoading} />

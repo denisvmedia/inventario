@@ -3459,6 +3459,240 @@ definitions:
           $ref: '#/definitions/jsonapi.RestoreOperationResponseData'
         type: array
     type: object
+  jsonapi.SavedViewAttributes:
+    properties:
+      can_delete:
+        type: boolean
+      can_edit:
+        type: boolean
+      created_at:
+        type: string
+      entity:
+        description: Entity is the list the view filters; only "commodities" exists.
+        enum:
+        - commodities
+        example: commodities
+        type: string
+      icon:
+        example: shield
+        type: string
+      layout:
+        description: |-
+          Layout is grid (photo cards), compact, list, or empty for the
+          viewer's default.
+        enum:
+        - ""
+        - grid
+        - compact
+        - list
+        example: list
+        type: string
+      name:
+        example: Expiring warranties
+        type: string
+      owned:
+        description: Owned is true for the views the requesting member created.
+        type: boolean
+      query:
+        description: |-
+          Query is the canonical query string of the view in the parameter
+          names of GET /commodities, without the leading "?".
+        example: warranty_status=expiring&sort=name
+        type: string
+      query_error:
+        allOf:
+        - $ref: '#/definitions/jsonapi.SavedViewQueryError'
+        description: |-
+          QueryError is set when the stored query cannot run; such a view has
+          no count and should be edited before it is opened.
+      query_version:
+        example: 1
+        type: integer
+      shared:
+        type: boolean
+      show_in_sidebar:
+        description: |-
+          ShowInSidebar and ShowOnDashboard are where the requesting member
+          shows the view. Each member places the views they see on their own.
+        type: boolean
+      show_on_dashboard:
+        type: boolean
+      sort_order:
+        example: 0
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  jsonapi.SavedViewCounts:
+    properties:
+      counts:
+        additionalProperties:
+          type: integer
+        type: object
+    type: object
+  jsonapi.SavedViewCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SavedViewCounts'
+    type: object
+  jsonapi.SavedViewData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SavedViewAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - saved_views
+        example: saved_views
+        type: string
+    type: object
+  jsonapi.SavedViewLimits:
+    properties:
+      can_share:
+        description: CanShare is true when the requesting member may share views.
+        type: boolean
+      max_name_length:
+        example: 60
+        type: integer
+      max_per_user:
+        example: 50
+        type: integer
+      max_shared:
+        example: 50
+        type: integer
+    type: object
+  jsonapi.SavedViewQueryError:
+    properties:
+      parameter:
+        example: warranty_expires_before
+        type: string
+      reason:
+        example: is not available in a saved view
+        type: string
+    type: object
+  jsonapi.SavedViewReorderRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SavedViewReorderRequestData'
+    type: object
+  jsonapi.SavedViewReorderRequestAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.SavedViewReorderRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SavedViewReorderRequestAttributes'
+      type:
+        enum:
+        - saved_views_reorder
+        example: saved_views_reorder
+        type: string
+    type: object
+  jsonapi.SavedViewRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SavedViewRequestDataWrapper'
+    type: object
+  jsonapi.SavedViewRequestData:
+    properties:
+      icon:
+        example: shield
+        type: string
+      layout:
+        enum:
+        - ""
+        - grid
+        - compact
+        - list
+        example: list
+        type: string
+      name:
+        example: Expiring warranties
+        type: string
+      query:
+        example: warranty_status=expiring
+        type: string
+      shared:
+        type: boolean
+      show_in_sidebar:
+        type: boolean
+      show_on_dashboard:
+        type: boolean
+    type: object
+  jsonapi.SavedViewRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SavedViewRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - saved_views
+        example: saved_views
+        type: string
+    type: object
+  jsonapi.SavedViewResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SavedViewData'
+    type: object
+  jsonapi.SavedViewUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SavedViewUpdateRequestDataWrapper'
+    type: object
+  jsonapi.SavedViewUpdateRequestData:
+    properties:
+      icon:
+        type: string
+      layout:
+        type: string
+      name:
+        type: string
+      query:
+        type: string
+      shared:
+        type: boolean
+      show_in_sidebar:
+        type: boolean
+      show_on_dashboard:
+        type: boolean
+    type: object
+  jsonapi.SavedViewUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SavedViewUpdateRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - saved_views
+        example: saved_views
+        type: string
+    type: object
+  jsonapi.SavedViewsMeta:
+    properties:
+      limits:
+        $ref: '#/definitions/jsonapi.SavedViewLimits'
+      total:
+        example: 3
+        format: int64
+        type: integer
+    type: object
+  jsonapi.SavedViewsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.SavedViewData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.SavedViewsMeta'
+    type: object
   jsonapi.SearchMeta:
     properties:
       entity_type:
@@ -10425,6 +10659,7 @@ paths:
       description: |-
         The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
         The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+        A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
       parameters:
       - description: Group slug
         in: path
@@ -10445,7 +10680,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.ItemTypeResponse'
         "409":
-          description: Another item type of the group has this name
+          description: Another item type of the group has this name, or the group
+            has 100 item types
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -11114,6 +11350,238 @@ paths:
       summary: Update a reminder
       tags:
       - commodity_reminders
+  /g/{groupSlug}/saved-views:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: The member's own saved views and every view shared with the group,
+        ordered by position, then name. meta.limits carries the limits the server
+        keeps.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SavedViewsResponse'
+      summary: List saved views
+      tags:
+      - saved_views
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.
+        show_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Saved view attributes
+        in: body
+        name: view
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SavedViewRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.SavedViewResponse'
+        "403":
+          description: Sharing needs the user role (saved_view.forbidden)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invalid attributes, an invalid query (query.invalid_parameter)
+            or a limit reached (saved_view.limit_reached)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a saved view
+      tags:
+      - saved_views
+  /g/{groupSlug}/saved-views/{savedViewID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Remove a saved view. A member may delete the views they created;
+        admins may delete any shared view.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Saved view ID
+        in: path
+        name: savedViewID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: Not allowed to delete this view (saved_view.forbidden)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Saved view not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a saved view
+      tags:
+      - saved_views
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: 'One saved view: the member''s own, or one shared with the group.
+        Another member''s personal view is a 404.'
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Saved view ID
+        in: path
+        name: savedViewID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SavedViewResponse'
+        "404":
+          description: Saved view not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a saved view
+      tags:
+      - saved_views
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.
+        The member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.
+        show_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Saved view ID
+        in: path
+        name: savedViewID
+        required: true
+        type: string
+      - description: Saved view attributes to change
+        in: body
+        name: view
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SavedViewUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SavedViewResponse'
+        "403":
+          description: Not allowed to change this view (saved_view.forbidden)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Saved view not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invalid attributes, an invalid query (query.invalid_parameter)
+            or a limit reached (saved_view.limit_reached)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a saved view
+      tags:
+      - saved_views
+  /g/{groupSlug}/saved-views/counts:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.
+        Each count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SavedViewCountsResponse'
+      summary: Count the items of saved views
+      tags:
+      - saved_views
+  /g/{groupSlug}/saved-views/reorder:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Put the listed views in the given order among the positions they
+        hold now; views left out keep their positions. Every view must be one the
+        member may edit.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Saved view IDs in the new order
+        in: body
+        name: order
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SavedViewReorderRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: A listed view may not be changed (saved_view.forbidden)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: A listed view was not found or is listed twice
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Invalid payload
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Reorder saved views
+      tags:
+      - saved_views
   /g/{groupSlug}/search:
     get:
       consumes:

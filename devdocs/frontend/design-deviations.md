@@ -35,6 +35,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — Views control on the items list toolbar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no saved views: its toolbar ends with the grid/list toggle.
+- **Reality**: `frontend/src/features/saved-views/SavedViewControl.tsx` sits in the toolbar before the grid/list buttons, an outline `Button size="sm"` with a `Bookmark` icon and **Views**, opening a `DropdownMenu` like the toolbar's filter menus and the menus catalogued in `UIShowcaseView`. It saves the current filter, sort and layout through `SaveViewDialog` (name, a 16-icon picker built on the Radix radio group, so it takes one tab stop and the arrow keys choose, Sidebar / Dashboard / Share checkboxes), lists the member's views and links to the manage page. While a view is open (`saved_view=<id>` in the page URL) the button turns `secondary` and shows the view's icon and name, a `bg-primary` dot when the list no longer matches the view, and a `text-status-expiring` warning icon when the view names a deleted area, tag or seller (sellers are checked only once the group's sellers have loaded); the menu then offers **Save changes**, **Revert to saved** and **Close view**, and a notice lists what no longer exists. A view whose stored query cannot run, or holds a parameter this client cannot read, is a disabled menu entry with a warning icon and is never opened, by the menu or by Revert; while the page URL names one, the menu explains it and offers only **Close view**, and the page shows a destructive `Alert` (title, the parameter, **Close view**) in place of the items, as it does for an invalid query. While the saved views fail to load and none are cached, a page URL that names a view shows a destructive `Alert` with **Try again** and **Close view** in place of the items. The page passes the control through one `savedViews` slot of its toolbar.
+- **Why**: not present in mock. #2793 asks for a Save view control on the items list; the changed marker, revert and the deleted-reference notice follow from the issue's "opening, editing and returning preserves context" and "show what no longer matches" requirements.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views.
+
+#### 2026-11-25 — Saved views page (`/g/:slug/views`)
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: none; the mock has no saved views.
+- **Reality**: `frontend/src/pages/saved-views/SavedViewsPage.tsx` is a `Page width="narrow"` with one `Card` of rows (the row pattern of the dashboard lists): icon tile, the view name as a link, a **Personal** / **Shared** badge, the item count, the conditions as outline badges (`features/saved-views/QueryConditions.tsx`, a condition naming something deleted in the `status-expiring` tone and saying so in its text: "Deleted area", "Deleted seller", or "(deleted)" after a tag or an item type the group no longer has; a seller reads "Seller <name>", an item type by the group's name for it), ghost icon toggles for Sidebar (`PanelLeft`) and Dashboard (`LayoutDashboard`) that set the member's own placement on every row, shared views of others included, and a `MoreHorizontal` menu with Edit, Move up, Move down and Delete for the views the member may change. Reached from the Views menu and the gear on the sidebar section; it is not in the sidebar's nav lists.
+- **Why**: not present in mock. A member needs one place to rename, reorder, unpin and delete views, including views that are on neither the sidebar nor the dashboard; the issue does not name the surface, so the page is agent-suggested.
+- **Approved by**: agent-suggested; listed in the PR for the owner (the feature itself is pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements).
+- **Reversion plan**: Follow the mock once `inventario-design` draws view management, or fold the page into Settings if the owner prefers.
+
 #### 2026-11-25 — Brand and model on the item: inputs, suggestions, cards, item page, search
 
 - **Issue/PR**: #2804 / PR #2840
@@ -55,9 +73,9 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Item type picker with New type, the group's types in the Type filter
 
-- **Issue/PR**: #2802 / PR (pending)
+- **Issue/PR**: #2802 / PR #2863
 - **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has a **Category** `Select` over the fixed `CATEGORIES` list (L1051–L1057), and `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) the same `Select` (L475–L481). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar filter lists `CATEGORIES` as `DropdownMenuCheckboxItem`s with an icon each (L250–L262). There is no way to add a category.
-- **Reality**: `frontend/src/components/itemTypes/ItemTypeField.tsx` keeps the mock's `Select`, filled from the group's item types (`GET /item-types`): each option shows the type's icon and its name, the built-in types by their translated default name until someone renames them. The list ends with a `SelectSeparator` and **New type** (a `Plus` icon), which opens `ItemTypeFormDialog` over the form and selects the type it created, the pattern of the Location and Seller pickers. When the name is taken, the dialog offers **Use {name}** to pick the existing type. A picked type that is no longer in the group's list (deleted by another member) gets a destructive line under the picker asking to pick another one; a save the server refuses with 422 `item_type.unknown` marks the field and refetches the list. Without a group (the item form on the public landing page) the picker offers the six built-in types and no **New type**. The items toolbar's Type filter and the area page's filter list the group's types with their icons; a slug from the URL that the group does not have stays in the menu, by its slug, so it can be cleared. The AI scan review shows the type's name.
+- **Reality**: `frontend/src/components/itemTypes/ItemTypeField.tsx` keeps the mock's `Select`, filled from the group's item types (`GET /item-types`): each option shows the type's icon and its name, the built-in types by their translated default name until someone renames them. The list ends with a `SelectSeparator` and **New type** (a `Plus` icon), which opens `ItemTypeFormDialog` over the form and selects the type it created, the pattern of the Location and Seller pickers. When the name is taken, the dialog offers **Use {name}** to pick the existing type. A picked type that is missing from the cached list makes the field fetch the list once more, and a destructive line under the picker asks to pick another one only when a list fetched after that still lacks it (deleted by another member); a save the server refuses with 422 `item_type.unknown` shows "This type is not in the group." on the field and runs the same check. Without a group (the item form on the public landing page) the picker offers the six built-in types and no **New type**. The items toolbar's Type filter and the area page's filter list the group's types with their icons; a slug from the URL that the group does not have stays in the menu, by its slug, so it can be cleared. The AI scan review shows the type's name.
 - **Why**: #2802 makes item types a per-group list with a name and an icon, created on the fly from the item form. The deleted-type line, the field error for an unknown type, the built-in types on the landing page and the unknown slug in the filter are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; deleted-type line, unknown-type field error, landing-page fallback and unknown filter slug agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers and a managed category list.
@@ -339,6 +357,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Dashboard / Overview
 
+#### 2026-11-25 — Saved view cards and suggested views on the dashboard
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) goes from the stat cards straight to Expiring Warranties and Recently Added; it has no user-defined cards.
+- **Reality**: `frontend/src/components/dashboard/SavedViewsSection.tsx` renders between the stat cards and the two-up grid. Each view the member put on their own dashboard gets a `Card` in a `lg:grid-cols-2` grid, built like Recently Added: icon and name as the title, the item count as the description (the rows' own total once they load, the counts endpoint's until then), an **Open** ghost button as `CardAction`, and the first five items as rows that open the item sheet. While the member keeps no view of their own other than these, a **Start with a saved view** card lists ready-made views (Expiring warranties, Lent out, Without a location, Untagged), each with an **Add** button that saves it to the sidebar and the dashboard, and an `X` that dismisses the card for the group (localStorage).
+- **Why**: not present in mock. #2793 asks for a dashboard widget whose count matches the sidebar and the opened list, and for a small useful initial set without dashboard building.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws dashboard widgets.
+
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
 
 - **Issue/PR**: #1544 / PR #1621
@@ -559,7 +586,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Item types page
 
-- **Issue/PR**: #2802 / PR (pending)
+- **Issue/PR**: #2802 / PR #2863
 - **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
 - **Reality**: `frontend/src/pages/itemTypes/ItemTypesListPage.tsx` at `/g/:slug/item-types` follows the Sellers page (#2804), which follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New type**, a search box that filters by the shown name on the client (`?q=`), and a card of `ItemTypeRow`s with the type's icon, its name (a link to the items list filtered by the type, inactive items shown), a secondary **Built-in** badge on the six built-in types, "N items · N in Trash", and edit / delete buttons on hover; the delete button is disabled on the group's last type. `ItemTypeFormDialog` takes a name and an icon from `ItemTypeIconPicker`, a grid of 38 Lucide icons as a radio group (`grid-cols-6 sm:grid-cols-8`, each a bordered icon tile, the selected one with a primary border and a `bg-primary/10` fill). A built-in type's name field starts empty with its translated name as the placeholder and a hint that an empty name keeps it. `ItemTypeDeleteDialog` replaces the confirm dialog: for a type no item has it confirms the delete; for a type items have, Trash included, it names the counts and asks, with a `Select` of the other types, where the items move, and its button reads **Move items and delete**. That is also how two types are merged.
 - **Why**: not present in mock. #2802 asks for types managed like tags (rename, merge, delete with an in-use check), each with a name and an icon. The icon set and its picker, the Built-in badge, the separate Trash count and the empty-name rule for built-in types are agent-suggested.
@@ -783,9 +810,18 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Navigation & App shell
 
+#### 2026-11-25 — Saved views section in the sidebar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has fixed groups (Inventory, Group, Reports, Personal) and no per-row counts.
+- **Reality**: `frontend/src/features/saved-views/SidebarSavedViews.tsx` adds a **Saved views** `SidebarGroup` between Inventory and Group, listing the views the member pinned to their own sidebar (placement is per member; sharing pins a view for nobody else) in the group's order, each with its icon and a `SidebarMenuBadge` count (the shadcn primitive the mock vendors in [`design-mocks/src/components/ui/sidebar.tsx`](../../design-mocks/src/components/ui/sidebar.tsx) but does not use). A `SidebarGroupAction` gear opens the saved views page. The row is active while the items list shows that view. A view whose stored query cannot run is an `aria-disabled` row with a warning icon instead of a link. The group is left out while no view is pinned.
+- **Why**: not present in mock. #2793 asks for views in the sidebar with a count that matches the opened list.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views in its sidebar.
+
 #### 2026-11-25 — Item types entry in the sidebar and the command palette
 
-- **Issue/PR**: #2802 / PR (pending)
+- **Issue/PR**: #2802 / PR #2863
 - **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Item types entry.
 - **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Item types** (`Shapes` icon) after Sellers in the Group section, linking to `/g/:slug/item-types`. `CommandPalette.tsx` lists the same entry after Sellers. Both resolve the label through `lib/nav-labels.ts` (`common:nav.itemTypes`).
 - **Why**: not present in mock. #2802 asks for a page that manages the group's item types.
@@ -1193,9 +1229,9 @@ _None yet._
 
 - **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
-- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
-- **Why**: not present in mock. #2804 asks for the seller in the insurance report.
-- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values. When the sellers cannot be loaded, the seller of an item that has one stays empty with a small muted "Could not load the seller." line (`UnavailableNote`, hidden in print), and the rest of the report renders.
+- **Why**: not present in mock. #2804 asks for the seller in the insurance report. A failed sellers request should not take the whole report down (review of #2844).
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; the empty cell with a note asked for in the #2844 review
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller to the report.
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so

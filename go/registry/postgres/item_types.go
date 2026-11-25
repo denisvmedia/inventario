@@ -175,6 +175,14 @@ func (r *ItemTypeRegistry) Create(ctx context.Context, itemType models.ItemType)
 		if _, err := ensureBuiltinItemTypesInTx(ctx, tx, r.tableNames, row.TenantID, row.GroupID); err != nil {
 			return err
 		}
+		var count int
+		countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE group_id = $1`, r.tableNames.ItemTypes())
+		if err := tx.GetContext(ctx, &count, countQuery, row.GroupID); err != nil {
+			return errxtrace.Wrap("failed to count item types", err)
+		}
+		if count >= models.MaxItemTypesPerGroup {
+			return errxtrace.Classify(registry.ErrItemTypeLimit, errx.Attrs("group_id", row.GroupID, "limit", models.MaxItemTypesPerGroup))
+		}
 		return r.assignSlugInTx(ctx, tx, row)
 	})
 	if err != nil {

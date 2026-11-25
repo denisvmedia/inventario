@@ -27,9 +27,8 @@ func TestCustomFieldContract_Postgres(t *testing.T) {
 }
 
 // The group purge drops a group's custom fields, their values and template
-// entries; the ownership check sees a field as its author's content until
-// its group is purged.
-func TestCustomFields_PurgeAndOwnership_Postgres(t *testing.T) {
+// entries and leaves other groups alone; the tenant purge drops the rest.
+func TestCustomFields_Purge_Postgres(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
 
@@ -53,10 +52,6 @@ func TestCustomFields_PurgeAndOwnership_Postgres(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	_, err = fx.groupBSet.CustomFieldRegistry.Create(fx.ctxB, models.CustomFieldDefinition{Name: "Serial", Type: models.CustomFieldTypeText})
 	c.Assert(err, qt.IsNil)
-
-	owns, err := fx.factorySet.UserContentOwnershipChecker.HasRetainedOwnedContent(t.Context(), fx.user.TenantID, fx.user.ID, nil)
-	c.Assert(err, qt.IsNil)
-	c.Check(owns, qt.IsTrue)
 
 	c.Assert(fx.factorySet.GroupPurger.PurgeGroupDependents(t.Context(), fx.user.TenantID, fx.groupAID), qt.IsNil)
 	countA, err := fx.groupASet.CustomFieldRegistry.Count(fx.ctxA)

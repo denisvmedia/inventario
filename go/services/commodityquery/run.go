@@ -77,6 +77,25 @@ func List(ctx context.Context, set *registry.Set, q Query, offset, limit int) (P
 	}, nil
 }
 
+// CountEach returns, for each query of qs, the number of items it selects in
+// the group of set: the Total that List reports for it, without reading any
+// rows. The counts are taken in one transaction.
+func CountEach(ctx context.Context, set *registry.Set, qs []Query) ([]int, error) {
+	opts := make([]registry.CommodityListOptions, 0, len(qs))
+	for _, q := range qs {
+		o, err := Resolve(ctx, set, q)
+		if err != nil {
+			return nil, err
+		}
+		opts = append(opts, o)
+	}
+	counts, err := set.CommodityRegistry.CountEach(ctx, opts)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count commodities", err)
+	}
+	return counts, nil
+}
+
 // TagCounts counts, per tag, the items q selects once its tag filter is set
 // aside, plus the items without tags among them. Setting the tag filter
 // aside keeps the counts of a tag picker stable while tags are picked, and

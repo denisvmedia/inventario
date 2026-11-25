@@ -99,18 +99,11 @@ function serverNameKey(type: Named): string {
   return nameKey(isBuiltinItemTypeSlug(slug) ? BUILTIN_DEFAULTS[slug].name : slug)
 }
 
-// findItemTypeByName returns the type that a new type named name would
-// clash with: one the server would refuse the name for, or one that shows
-// under that name in the app, such as "Elektronika" for the built-in
-// Electronics in Czech, which the server cannot know about.
-export function findItemTypeByName(
-  t: TFunction,
-  types: readonly ItemType[],
-  name: string
-): ItemType | undefined {
+// findItemTypeByName returns the type that a new type named name clashes
+// with: the one the server would refuse the name for. A built-in type that
+// keeps its default name holds its English name there.
+export function findItemTypeByName(types: readonly ItemType[], name: string): ItemType | undefined {
   const key = nameKey(name)
   if (!key) return undefined
-  return types.find(
-    (type) => serverNameKey(type) === key || nameKey(itemTypeLabel(t, type)) === key
-  )
+  return types.find((type) => serverNameKey(type) === key)
 }

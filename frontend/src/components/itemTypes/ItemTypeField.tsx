@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus } from "lucide-react"
 
@@ -69,21 +69,39 @@ export function ItemTypeField({
     .map((c) => c.type)
   const all = [...listed, ...pending]
 
-  // The selected type is not in the group's list: another member deleted
-  // it after the item was loaded, and its items moved to another type.
-  const gone =
-    !!value &&
-    types.isSuccess &&
-    !types.isPlaceholderData &&
-    !types.isFetching &&
-    !all.some((s) => s.slug === value)
+  // The selected type is missing from the group's list, which can be up to
+  // a minute old. The list is fetched once more, and the type counts as gone
+  // (another member deleted it and its items moved to another type) only
+  // when a list fetched after the doubt arose still lacks it. A failed fetch
+  // proves nothing, and a fetch started for an earlier value is ignored.
+  const absent =
+    !!value && types.isSuccess && !types.isPlaceholderData && !all.some((s) => s.slug === value)
+  const [checked, setChecked] = useState<{ slug: string; startedAt: number } | null>(null)
+  const gone = absent && checked?.slug === value && types.dataUpdatedAt >= checked.startedAt
+  const { refetch } = types
+  const checking = useRef("")
+  const check = useCallback(
+    (slug: string) => {
+      if (checking.current === slug) return
+      checking.current = slug
+      const startedAt = Date.now()
+      void refetch().then(() => {
+        if (checking.current === slug) checking.current = ""
+        setChecked({ slug, startedAt })
+      })
+    },
+    [refetch]
+  )
+  useEffect(() => {
+    if (absent && !gone) check(value)
+  }, [absent, gone, value, check])
 
   // The server refuses a type the group does not have with a 422 on the
-  // field. The list is fetched again, so the field can say the type is gone.
-  const { refetch } = types
+  // field, even when the list here still has it, so that is a reason to
+  // check as well.
   useEffect(() => {
-    if (errorMessage) void refetch()
-  }, [errorMessage, refetch])
+    if (errorMessage && value) check(value)
+  }, [errorMessage, value, check])
 
   // The list closes before the dialog opens, or the dialog would open under
   // it; a letter typed on the closed select picks without opening the list,

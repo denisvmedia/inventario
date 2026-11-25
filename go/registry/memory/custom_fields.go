@@ -236,6 +236,43 @@ func (f *CustomFieldRegistryFactory) dropLinksTo(itemID string) {
 	}
 }
 
+// groupsCreatedBy returns the groups of tenantID that have a field userID
+// created, for the user purge.
+func (f *CustomFieldRegistryFactory) groupsCreatedBy(tenantID, userID string) []string {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		d := pair.Value
+		if d.TenantID == tenantID && d.CreatedByUserID == userID && !seen[d.GroupID] {
+			seen[d.GroupID] = true
+			out = append(out, d.GroupID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the fields userID created in tenantID to the heir
+// of their group in heirs; a group without an heir keeps the creator. The
+// template entries live on the fields, so they move with them.
+func (f *CustomFieldRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.base.lock.Lock()
+	defer f.base.lock.Unlock()
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		d := pair.Value
+		heir := heirs[d.GroupID]
+		if d.TenantID != tenantID || d.CreatedByUserID != userID || heir == "" {
+			continue
+		}
+		cp := *d
+		cp.CreatedByUserID = heir
+		pair.Value = &cp
+	}
+}
+
 // purgeWhere removes the fields match selects, for the group and tenant
 // purgers, which drop the items first.
 func (f *CustomFieldRegistryFactory) purgeWhere(match func(*models.CustomFieldDefinition) bool) {

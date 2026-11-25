@@ -390,6 +390,46 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
+// CountEach runs one COUNT(*) per entry of opts, with the WHERE clause of
+// ListPaginated, in one transaction.
+func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+	counts := make([]int, len(opts))
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	table := string(r.tableNames.Commodities())
+	tables := r.listTables()
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its query is built.
+	now := time.Now()
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Under the default READ COMMITTED every COUNT would read its own
+		// snapshot, and an item trashed between two of them would count in
+		// both or in neither. The transaction has run only SET LOCAL so far,
+		// so its isolation level can still change.
+		if _, err := tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+			return errxtrace.Wrap("failed to set the count snapshot", err)
+		}
+		for i, o := range opts {
+			if o.WarrantyNow.IsZero() {
+				o.WarrantyNow = now
+			}
+			where := commodityWhere(o, tables)
+			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
+			n, err := countRows(ctx, tx, query, args...)
+			if err != nil {
+				return errxtrace.Wrap("failed to count commodities", err)
+			}
+			counts[i] = n
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count commodities", err)
+	}
+	return counts, nil
+}
+
 // CountTags counts the tags of the commodities opts selects in one query: a
 // LEFT JOIN LATERAL over the tags array yields one row per (commodity, tag),
 // and one row with a NULL slug for a commodity without tags, so grouping by
@@ -810,11 +850,19 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			return err
 		}
 		commodity.AssetNumber = row.AssetNumber
-		// A changed type must be one of the group's item types. The new
-		// type's row is locked after the item's, and a type delete locks
-		// the deleted type before the items it moves; an update never
-		// waits for the type it leaves, so the orders cannot deadlock.
-		if row.Type != stored.Type {
+		// A changed type must be one of the group's item types. "Changed"
+		// compares with the type the row holds under the lock, not with
+		// stored: a type delete may have moved the item to another type
+		// after stored was read, and an update that kept the old type would
+		// then write back a type the group no longer has. The new type's
+		// row is locked after the item's, and a type delete locks the
+		// deleted type before the items it moves; an update never waits for
+		// the type it leaves, so the orders cannot deadlock.
+		current, err := lockedCommodityType(ctx, tx, r.tableNames.Commodities(), stored.ID)
+		if err != nil {
+			return err
+		}
+		if row.Type != current {
 			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
 				return err
 			}
@@ -845,6 +893,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return &commodity, nil
+}
+
+// lockedCommodityType returns the type of the commodity id, which the
+// caller's transaction has already locked.
+func lockedCommodityType(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (models.CommodityType, error) {
+	var current models.CommodityType
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type FROM %s WHERE id = $1`, table), id); err != nil {
+		return "", errxtrace.Wrap("failed to read commodity type", err, errx.Attrs("commodity_id", id))
+	}
+	return current, nil
 }
 
 // clonePtrDecimal returns a heap-allocated copy of d (or nil). Used to

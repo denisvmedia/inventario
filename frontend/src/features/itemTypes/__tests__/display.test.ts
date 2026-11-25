@@ -69,16 +69,17 @@ describe("item type icons", () => {
 
 describe("findItemTypeByName", () => {
   it("matches names the way the server does", () => {
-    expect(findItemTypeByName(t, types, "  VEHICLE ")?.slug).toBe("vehicle")
+    expect(findItemTypeByName(types, "  VEHICLE ")?.slug).toBe("vehicle")
     // A built-in type keeps its English default name on the server.
-    expect(findItemTypeByName(t, types, "electronics")?.slug).toBe("electronics")
-    expect(findItemTypeByName(t, types, "Boat")).toBeUndefined()
-    expect(findItemTypeByName(t, types, "   ")).toBeUndefined()
+    expect(findItemTypeByName(types, "electronics")?.slug).toBe("electronics")
+    expect(findItemTypeByName(types, "Boat")).toBeUndefined()
+    expect(findItemTypeByName(types, "   ")).toBeUndefined()
   })
 
-  it("matches the translated default a member sees", () => {
-    expect(findItemTypeByName(czech, types, "elektronika")?.slug).toBe("electronics")
-    expect(findItemTypeByName(czech, types, "Electronics")?.slug).toBe("electronics")
+  it("leaves a built-in type's translated name free", () => {
+    // The server knows only the English default, so "Elektronika" can name
+    // a type of its own.
+    expect(findItemTypeByName(types, "elektronika")).toBeUndefined()
   })
 })
 

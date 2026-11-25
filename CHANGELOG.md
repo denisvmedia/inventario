@@ -45,7 +45,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   the group) and one of 38 icons, and counts the items of each type, Trash
   included. Deleting a type that items have moves them to a type the member
   picks, which is also how two types are merged; a group keeps at least one
-  type. The item forms pick from the group's types and create one with "New
+  type and at most 100 (409 `item_type.limit`). A type stays with the group
+  when the member who added it deletes their account. The item forms pick from the group's types and create one with "New
   type". Items keep their type: `commodities.type` stays the type's slug, so
   the `type` filter, saved views, the reports and the icons work as before.
   The API gains `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an
@@ -92,6 +93,19 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Saved views. **Views** on the items list keeps the current filters, search,
+  sort and layout under a name, in the sidebar with an item count, on the
+  Dashboard as a card with the count and the first items, or both. An open
+  view tells when the list no longer matches it and offers **Save changes**
+  and **Revert to saved**; a view naming a deleted area or tag still opens and
+  says what no longer exists. Views are personal unless shared with the group
+  (User role or higher), and sharing a view grants no access to items. Each
+  member chooses which views, their own or shared, show in their sidebar and on
+  their Dashboard. Warranty filters stay relative to the day the view is
+  opened. The Dashboard suggests a few views to start with, and **Saved views**
+  (`/g/:slug/views`) lists, edits, reorders and deletes them. New endpoints: `/g/{slug}/saved-views` and
+  `/g/{slug}/saved-views/counts`
+  ([#2793](https://github.com/denisvmedia/inventario/issues/2793)).
 - Your own lead times for warranty, maintenance and loan reminders. Under
   Settings → Notifications, the Warranty expiry and Maintenance reminders rows
   take up to five "days before" values from 1 to 365, and the Loan reminders

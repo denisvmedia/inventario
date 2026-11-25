@@ -5,9 +5,10 @@ One representation of an item filter is shared by every surface that lists, sear
 - the items list, `GET /g/{slug}/commodities`, and its `meta.commodities` total;
 - the item search, `GET /g/{slug}/search?type=commodities`, and its `meta.total`;
 - the tag counts, `GET /g/{slug}/commodities/tag-counts`, behind the items list's Tags menu;
+- saved views, `GET /g/{slug}/saved-views` and their counts, `GET /g/{slug}/saved-views/counts`;
 - every frontend link that opens a filtered items list.
 
-Features that select items (saved views, header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
+Features that select items (header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
 
 ## Where it lives
 
@@ -139,6 +140,18 @@ A parameter the endpoint does not know, a value it cannot read or decode, a cont
 ```
 
 Next to these members, `error` carries the message as for any API error. The items list page shows this as an alert that names the parameter, with a Clear filters button.
+
+## Saved views
+
+A saved view stores a query string of this contract, in the API names, without paging. `commodityquery.ParseSaved` reads it: `Parse` limited to `SavedParams`, the filters and the sort the items list shows and edits. It refuses `warranty_expires_before`, an absolute date that a view meant to stay current must not keep (`warranty_status` is computed on every run instead), and `lent_out=false`, which the list has no control for. A view opens as the items list, so a condition the list cannot show would either be dropped on the way, which broadens the view, or stay invisible to the person looking at it.
+
+The service validates the query on every write and stores `Query.Encode()`, the canonical form (sorted keys, and sorted values in the set-like lists: types, statuses, warranty statuses, included and excluded tags), with a query version (`models.SavedViewQueryVersion`). A stored query that no longer parses, or carries another version, is reported per view as `query_error` with the parameter and the reason; such a view has no count and is never run, so a contract change cannot silently broaden or change a view. The counts endpoint counts the views the requesting member placed in their sidebar or on their dashboard with `commodityquery.CountEach`: each query goes through `Resolve` and the WHERE clause of the items list (`CommodityRegistry.CountEach`), in one transaction and without reading rows, so the sidebar badge, the dashboard card and the opened list agree.
+
+Placement is per member: `saved_view_placements` holds, per view and member, `show_in_sidebar` and `show_on_dashboard`. Any member who sees a view may place it; sharing a view places it for nobody else, and unsharing drops the placements of everyone but the creator.
+
+Renaming an item tag's slug rewrites every view of the group that names it (`Query.RenameTag`). A deleted tag, area or location stays in the query: the view still applies the condition and shows what still matches, and the frontend names what no longer exists.
+
+On the frontend, `commodityQueryToApiQuery` writes the stored form (sort and `include_inactive` always written) and `commodityQueryFromApiQuery` reads it back, an absent `include_inactive` being the server default. `sameCommodityQuery` compares two queries in that form, which is how the items list tells that an open view was changed.
 
 ## Frontend: page URL and API
 

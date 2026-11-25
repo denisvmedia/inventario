@@ -125,6 +125,16 @@ func newAPITokenComponents(
 	return svc, NewAPITokenAuthenticator(svc, audit, limiter, params.GlobalRateTrustedProxyNets)
 }
 
+// emailServiceOrStub returns svc, or the stub email service when none is
+// configured.
+func emailServiceOrStub(svc services.EmailService) services.EmailService {
+	if svc != nil {
+		return svc
+	}
+	slog.Warn("EmailService not provided; falling back to stub email service")
+	return services.NewStubEmailService()
+}
+
 // newUsersMeParams wires the /users/me route group: sessions, login history
 // and personal API token management.
 func newUsersMeParams(
@@ -606,11 +616,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// Create a shared audit service for use across multiple routes.
 	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
 
-	emailSvc := params.EmailService
-	if emailSvc == nil {
-		slog.Warn("EmailService not provided; falling back to stub email service")
-		emailSvc = services.NewStubEmailService()
-	}
+	emailSvc := emailServiceOrStub(params.EmailService)
 
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
@@ -959,6 +965,9 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.Route("/storage-usage", StorageUsage())
 		r.Route("/plan", GroupPlan())
 		r.Route("/notifications", GroupNotifications(params.FactorySet))
+		// Saved views carry no write gate: viewers keep personal views too;
+		// the service checks who may share and edit.
+		r.Route("/saved-views", SavedViews(params, groupService))
 	}
 }
 

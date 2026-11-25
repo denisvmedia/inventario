@@ -10,7 +10,8 @@ gives the item its icon when it has no photo, and the **Type** filter on
 Item types belong to a group, like [tags](../tags/) and
 [sellers](../sellers/). Every member of the group sees the same types, and
 members who may edit items may add, rename, and delete types (see
-[Groups & sharing](../groups-and-sharing/)).
+[Groups & sharing](../groups-and-sharing/)). A type stays with the group when
+the member who added it leaves or deletes their account.
 
 A new group starts with six **built-in** types: **Appliance**,
 **Electronics**, **Equipment**, **Furniture**, **Clothes**, and **Other**.
@@ -35,10 +36,14 @@ and lower case don't matter.
 
 1. Click **New type**.
 2. Enter a **Name**, up to 50 characters. Each name is used once in the group:
-   "vehicle" and "Vehicle" count as the same name, and so does the name a
-   built-in type shows in your language.
+   "vehicle" and "Vehicle" count as the same name. A built-in type that keeps
+   its default name holds its English name, so "Electronics" is taken while
+   the built-in Electronics type is not renamed.
 3. Pick an **Icon**.
 4. Click **Create type**.
+
+A group keeps up to 100 item types. When it has that many, delete or merge
+types before you add another.
 
 You can also add a type while you fill in an item: open the **Type** picker
 and choose **New type** at the end of the list. The same dialog opens over the
