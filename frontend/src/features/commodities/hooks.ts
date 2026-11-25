@@ -25,6 +25,7 @@ import {
   type UpdateCommodityRequest,
 } from "./api"
 import { commodityKeys } from "./keys"
+import type { CommoditySearchMatch } from "./query"
 
 interface QueryOptions {
   // Gate the query — typically the caller wires this to
@@ -50,6 +51,7 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
     commodities: Commodity[]
     total: number
     covers: Record<string, CommodityCover>
+    matches: Record<string, CommoditySearchMatch[]>
   }>({
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),

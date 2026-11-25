@@ -453,7 +453,9 @@
     "headerStatus": "Stav",
     "headerValue": "Hodnota",
     "heading": "Položky",
-    "searchPlaceholder": "Hledat podle názvu, krátkého názvu nebo inventárního čísla…",
+    "invalidQueryDescription": "Odkaz žádá filtr, který seznam položek neumí použít ({{parameter}}). Vymažte filtry a zobrazte své položky.",
+    "invalidQueryTitle": "Tento filtr není podporován",
+    "searchPlaceholder": "Hledat podle názvu, sériového čísla, čísla dílu, štítku, poznámek nebo inventárního čísla…",
     "selectAll": "Vybrat vše viditelné",
     "subtitle_one": "{{count}} položka v této skupině",
     "subtitle_few": "{{count}} položky v této skupině",
@@ -476,6 +478,21 @@
     "sectionBasics": "Základní údaje",
     "sectionExtras": "Doplňky",
     "sectionPurchase": "Nákup"
+  },
+  "searchMatch": {
+    "field": {
+      "asset_id": "Inventární číslo",
+      "comments": "Poznámky",
+      "extra_serial_numbers": "Sériové číslo",
+      "name": "Název",
+      "part_numbers": "Číslo dílu",
+      "serial_number": "Sériové číslo",
+      "short_name": "Krátký název",
+      "status_note": "Poznámka ke stavu",
+      "tags": "Štítek",
+      "warranty_notes": "Poznámky k záruce"
+    },
+    "text": "{{field}}: {{value}}"
   },
   "sort": {
     "count": "Množství",

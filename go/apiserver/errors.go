@@ -13,6 +13,7 @@ import (
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	"go.5x5.cz/inventario/services/commodityquery"
 )
 
 var (
@@ -617,6 +618,24 @@ func badRequest(w http.ResponseWriter, r *http.Request, err error) error {
 		StatusText:     "Bad Request",
 	}
 	return render.Render(w, r, jsonapi.NewErrors(badRequestError))
+}
+
+// queryParamError renders a 400 for a query string the item query contract
+// refuses. A *commodityquery.Error carries the parameter name and the reason
+// under meta, with the code "query.invalid_parameter", so a client can point
+// at the offending condition.
+func queryParamError(w http.ResponseWriter, r *http.Request, err error) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusBadRequest,
+		StatusText:     "Bad Request",
+		Code:           "query.invalid_parameter",
+	}
+	if qErr, ok := errors.AsType[*commodityquery.Error](err); ok {
+		jsErr.Meta = map[string]any{"parameter": qErr.Param, "reason": qErr.Reason}
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) error {

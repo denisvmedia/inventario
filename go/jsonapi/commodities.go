@@ -9,6 +9,7 @@ import (
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // CommodityResponse is an object that holds commodity information.
@@ -94,6 +95,11 @@ type CommoditiesMeta struct {
 	// `created_at` ASC; option (B) `cover_file_id` override is filed as a
 	// follow-up sub-issue.
 	Covers map[string]CommodityCover `json:"covers,omitempty"`
+
+	// Matches maps commodity id → the fields the search text (`q`) was
+	// found in, so the list can say why an item matched. Omitted when the
+	// request has no `q`.
+	Matches map[string][]registry.CommoditySearchMatch `json:"matches,omitempty"`
 }
 
 // CommoditiesResponse is an object that holds a list of commodities information.
@@ -136,6 +142,14 @@ func NewCommoditiesResponseWithCovers(commodities []*models.Commodity, total, pa
 		Data: commodityData,
 		Meta: meta,
 	}
+}
+
+// WithMatches sets meta.matches; an empty map leaves it out.
+func (cr *CommoditiesResponse) WithMatches(matches map[string][]registry.CommoditySearchMatch) *CommoditiesResponse {
+	if len(matches) > 0 {
+		cr.Meta.Matches = matches
+	}
+	return cr
 }
 
 // Render renders the CommoditiesResponse as an HTTP response.

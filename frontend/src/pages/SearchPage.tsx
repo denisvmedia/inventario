@@ -18,9 +18,16 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Page, PageHeader } from "@/components/ui/page"
+import { searchMatchText } from "@/components/items/SearchMatchHint"
 import { formatAssetId } from "@/features/commodities/asset-id"
+import {
+  commodityListHref,
+  primarySearchMatch,
+  type CommoditySearchMatch,
+} from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSearch } from "@/features/search/hooks"
+import { useTagLabel } from "@/features/tags/hooks"
 import { clearRecent, getRecent, type RecentEntry } from "@/features/search/recent"
 import type {
   AreaAttrs,
@@ -241,6 +248,7 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
   // Fire all four searches in parallel — TanStack dedupes per cache key
   // so re-renders don't refetch.
   const commodities = useSearch<CommodityAttrs>(query, "commodities", { groupSlug })
+  const tagLabel = useTagLabel("commodity")
   const locations = useSearch<LocationAttrs>(query, "locations", { groupSlug })
   const areas = useSearch<AreaAttrs>(query, "areas", { groupSlug })
   const files = useSearch<FileAttrs>(query, "files", { groupSlug })
@@ -285,11 +293,19 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
         groupSlug={groupSlug}
         page={commodities.data}
         isLoading={commodities.isLoading}
-        renderItem={(r) => <CommodityCard key={r.id} resource={r} groupSlug={groupSlug} />}
+        renderItem={(r) => (
+          <CommodityCard
+            key={r.id}
+            resource={r}
+            groupSlug={groupSlug}
+            match={primarySearchMatch(commodities.data?.matches[r.id])}
+            tagLabel={tagLabel}
+          />
+        )}
+        // The search includes drafts and inactive items; so does the list
+        // it links to, or "see all" would show fewer items than counted.
         seeAllHref={
-          groupSlug
-            ? `/g/${encodeURIComponent(groupSlug)}/commodities?q=${encodeURIComponent(query)}`
-            : null
+          groupSlug ? commodityListHref(groupSlug, { text: query, includeInactive: true }) : null
         }
       />
       <ResultGroup
@@ -510,18 +526,23 @@ function CardShell({
 function CommodityCard({
   resource,
   groupSlug,
+  match,
+  tagLabel,
 }: {
   resource: SearchResource<CommodityAttrs>
   groupSlug: string | null
+  match: CommoditySearchMatch | undefined
+  tagLabel: (slug: string) => string
 }) {
   const { t } = useTranslation()
   const title = resource.attributes.name ?? resource.id
-  // The asset ID leads, so a search by the number on a label shows which
-  // result it matched.
-  const subtitle =
-    [formatAssetId(resource.attributes.asset_number), resource.attributes.short_name]
-      .filter(Boolean)
-      .join(" · ") || undefined
+  // Where the query was found, when the title does not already show it;
+  // otherwise the asset ID and short name.
+  const subtitle = match
+    ? searchMatchText(t, match, tagLabel)
+    : [formatAssetId(resource.attributes.asset_number), resource.attributes.short_name]
+        .filter(Boolean)
+        .join(" · ") || undefined
   return (
     <CardShell
       href={

@@ -66,10 +66,70 @@ func TestCommodityListSQL(t *testing.T) {
 			args: []any{false, "in_use", 24, 0},
 		},
 		{
-			name: "search folds the pattern and matches both name columns",
+			// One ILIKE against the generated column covers every text
+			// field; the trigram index on it serves the match.
+			name: "a search term is one ILIKE against search_text",
 			opts: registry.CommodityListOptions{Search: "  Drill  "},
-			want: selectPrefix + "draft = $1 AND status = $2 AND (LOWER(name) LIKE $3 OR LOWER(short_name) LIKE $4) ORDER BY LOWER(name) ASC, id ASC LIMIT $5 OFFSET $6",
-			args: []any{false, "in_use", "%drill%", "%drill%", 24, 0},
+			want: selectPrefix + "draft = $1 AND status = $2 AND (search_text ILIKE $3) ORDER BY LOWER(name) ASC, id ASC LIMIT $4 OFFSET $5",
+			args: []any{false, "in_use", "%Drill%", 24, 0},
+		},
+		{
+			// Terms are AND-ed; within a term the alternatives are OR-ed: a
+			// tag found by label, and the asset number when the term reads
+			// as an asset ID.
+			name: "every term is its own predicate with its own alternatives",
+			opts: registry.CommodityListOptions{
+				IncludeInactive: true,
+				Search:          `A-0042 "red drill"`,
+				SearchTagLabels: map[string][]string{"red drill": {"power-tools", "red"}},
+			},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+				"(search_text ILIKE $1 OR asset_number = $2) AND " +
+				"(search_text ILIKE $3 OR tags ?| $4::text[]) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $5 OFFSET $6",
+			args: []any{"%A-0042%", 42, "%red drill%", []string{"power-tools", "red"}, 24, 0},
+		},
+		{
+			// A % or _ the user typed matches itself, as strings.Contains
+			// does in the memory backend.
+			name: "LIKE wildcards in a term are escaped",
+			opts: registry.CommodityListOptions{IncludeInactive: true, Search: `50%_off\`},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE (search_text ILIKE $1) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $2 OFFSET $3",
+			args: []any{`%50\%\_off\\%`, 24, 0},
+		},
+		{
+			name: "tag filter: all, exclusion",
+			opts: registry.CommodityListOptions{
+				IncludeInactive: true,
+				Tags:            registry.CommodityTagFilter{Include: []string{"a", "b"}, Exclude: []string{"c"}},
+			},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+				"tags ?& $1::text[] AND NOT (COALESCE(tags, '[]'::jsonb) ?| $2::text[]) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $3 OFFSET $4",
+			args: []any{[]string{"a", "b"}, []string{"c"}, 24, 0},
+		},
+		{
+			name: "tag filter: any",
+			opts: registry.CommodityListOptions{
+				IncludeInactive: true,
+				Tags:            registry.CommodityTagFilter{Include: []string{"a", "b"}, Mode: registry.TagMatchAny},
+			},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE tags ?| $1::text[] " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $2 OFFSET $3",
+			args: []any{[]string{"a", "b"}, 24, 0},
+		},
+		{
+			// NULL and [] both read as "no tags".
+			name: "tag filter: untagged takes no argument",
+			opts: registry.CommodityListOptions{
+				IncludeInactive: true,
+				Tags:            registry.CommodityTagFilter{Untagged: true},
+			},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+				"jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0 " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $1 OFFSET $2",
+			args: []any{24, 0},
 		},
 		{
 			name: "types and statuses become IN lists",
@@ -174,7 +234,6 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 	countSQL, countArgs := countSB.Build()
 
 	c.Check(countSQL, qt.Equals,
-		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND "+
-			"(LOWER(name) LIKE $3 OR LOWER(short_name) LIKE $4)")
-	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%", "%drill%"})
+		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
+	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%"})
 }

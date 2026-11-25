@@ -12,6 +12,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- Item search covers serial numbers, extra serial numbers, part numbers, tags
+  (by slug and by name), notes, warranty notes and the status note, besides the
+  name, short name and asset ID. Every word of a search must match, in any
+  field, and double quotes keep a phrase together. A result that matched on
+  something other than its name says where ("Serial number: SN-1234"). The
+  items list, the area page and the search page use the same search, done in
+  SQL on an indexed column
+  ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
+
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
@@ -97,6 +106,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are written in INB format 3.0, which stores a shared file once; 2.x backups
   still restore
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+
+### Changed
+
+- `GET /commodities` and `GET /search?type=commodities` read one shared set of
+  filter parameters, including the new `tags`, `tag_mode`, `tags_exclude` and
+  `no_tags`. An unknown parameter, an unreadable value or a contradictory
+  combination is answered with 400 and the code `query.invalid_parameter`
+  instead of being ignored, and the `operator` parameter of `/search` is gone
+  (`tag_mode` replaces it). The search page's link to all matching items now
+  includes inactive items, as the search does
+  ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 ### Fixed
 
