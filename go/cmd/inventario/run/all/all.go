@@ -98,6 +98,9 @@ func (c *Command) run() error {
 	stopThumbnail := bootstrap.StartThumbnailWorker(ctx, rs, c.cfg)
 	defer stopThumbnail()
 
+	stopIntake := bootstrap.StartIntakeWorker(ctx, rs, c.cfg)
+	defer stopIntake()
+
 	stopRefreshTokenCleanup := bootstrap.StartRefreshTokenCleanupWorker(ctx, rs, c.cfg)
 	defer stopRefreshTokenCleanup()
 

@@ -7695,7 +7695,7 @@ export type paths = {
          *     is removed stays as a standalone file; deleting it is a separate
          *     call. Removing the attachment of an item's cover photo clears
          *     that item's cover choice. The link of a backup export file
-         *     cannot be removed.
+         *     and the link to a batch intake purchase cannot be removed.
          */
         delete: {
             parameters: {
@@ -7731,7 +7731,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Export link */
+                /** @description Export or intake link */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -7909,6 +7909,604 @@ export type paths = {
         };
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/limits": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get intake limits
+         * @description The limits of a new intake batch and how full the group's scan queue is.
+         *     enabled is false when no AI scan provider is configured.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeLimitsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List intake sessions
+         * @description The group's intake sessions with their counts, newest first.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Sessions per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create an intake session
+         * @description Queue uploaded files for the AI scan. Each source is one purchase: the files the
+         *     scan reads together. Files dropped together are separate purchases unless the
+         *     client puts them in one source with one_item set, which keeps a single product.
+         *     The files must be uploaded first (POST /g/{groupSlug}/uploads/files) and be of a
+         *     type and size the scan accepts; GET .../intake/limits gives the limits. client_key
+         *     is the client's identity for the batch: a key the group already has returns that
+         *     session with 200, so a retry after a lost response does not queue the files
+         *     twice. The replay does not compare the sources, so a client takes a new key for
+         *     every batch. Without an AI scan provider the request answers 503
+         *     commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Batch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description A session with this client key already exists */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Session created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description A file was not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The scan queue is full */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description No AI scan provider is configured */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get an intake session
+         * @description One session with its sources, their files and the products the scan detected.
+         *     Reading a session never calls the AI provider.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Session not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete an intake session
+         * @description Delete a session. Drafts made from it stay. Its files that nothing else uses go
+         *     to Trash; files a draft or an item uses only lose the link to the session.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Session not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}/cancel": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Cancel an intake session
+         * @description Stop the session's queued scans. Detected products and drafts already made stay;
+         *     a scan that is running still lands. Resume queues the canceled purchases again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Session not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}/candidates/{candidateID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Review a detected product
+         * @description Keep or leave out a detected product, choose the scanned fields that go into its
+         *     draft, and set the number of identical units it covers. Keeping a product that
+         *     was skipped puts it back among the products to create drafts for. A product that
+         *     has its draft answers 409 intake.candidate_finished.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                    /** @description Candidate ID */
+                    candidateID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Review */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.IntakeCandidateReviewRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeCandidateResponse"];
+                    };
+                };
+                /** @description Product not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The product is finished */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create drafts from an intake session
+         * @description Make one draft for every kept product of the session that has none yet, and mark
+         *     the products left out as skipped. Each draft gets the files of its purchase as
+         *     links, so one receipt serves every item made from it. Repeating the call, from
+         *     another device or after a lost response, makes nothing twice; after a partial
+         *     failure it finishes only what is left. meta counts the drafts made or found made,
+         *     the skipped products and the products whose draft failed.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Session not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}/resume": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Resume an intake session
+         * @description Queue the session's canceled and failed purchases again. A purchase canceled while
+         *     its scan runs goes back to that scan. Purchases that were scanned are not scanned
+         *     again.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Session not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description No AI scan provider is configured */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/sessions/{sessionID}/sources/{sourceID}/rescan": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Rescan a purchase
+         * @description Queue one purchase of the session for a new AI scan on the member's request. Its
+         *     detected products are replaced. A purchase being scanned, also one canceled while
+         *     its scan runs, answers 409 intake.source_busy; one with a product that has its
+         *     draft answers 409 intake.source_has_drafts.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Session ID */
+                    sessionID: string;
+                    /** @description Source ID */
+                    sourceID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeSessionResponse"];
+                    };
+                };
+                /** @description Purchase not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The purchase is being scanned or has drafts */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description No AI scan provider is configured */
+                503: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -15120,6 +15718,216 @@ export type components = {
             data?: components["schemas"]["jsonapi.InboxEntry"][];
             meta?: components["schemas"]["jsonapi.InboxMeta"];
         };
+        "jsonapi.IntakeCandidateResponse": {
+            data?: components["schemas"]["jsonapi.IntakeCandidateResponseData"];
+        };
+        "jsonapi.IntakeCandidateResponseData": {
+            attributes?: components["schemas"]["models.IntakeCandidate"];
+            id?: string;
+            /**
+             * @example intake_candidates
+             * @enum {string}
+             */
+            type?: "intake_candidates";
+        };
+        "jsonapi.IntakeCandidateReviewAttrs": {
+            accepted_fields?: string[];
+            /** @example 1 */
+            quantity?: number;
+            /** @example true */
+            selected?: boolean;
+        };
+        "jsonapi.IntakeCandidateReviewRequest": {
+            data?: components["schemas"]["jsonapi.IntakeCandidateReviewRequestData"];
+        };
+        "jsonapi.IntakeCandidateReviewRequestData": {
+            attributes?: components["schemas"]["jsonapi.IntakeCandidateReviewAttrs"];
+            /**
+             * @example intake_candidates
+             * @enum {string}
+             */
+            type?: "intake_candidates";
+        };
+        "jsonapi.IntakeDraftsMeta": {
+            /** @example 2 */
+            created?: number;
+            /** @example 0 */
+            failed?: number;
+            /** @example 1 */
+            skipped?: number;
+        };
+        "jsonapi.IntakeLimitsAttrs": {
+            /**
+             * @example [
+             *       "image/jpeg",
+             *       "image/png",
+             *       "application/pdf"
+             *     ]
+             */
+            accepted_mime_types?: string[];
+            /** @example true */
+            enabled?: boolean;
+            /** @example 10485760 */
+            max_file_bytes?: number;
+            /** @example 50 */
+            max_files_per_batch?: number;
+            /** @example 5 */
+            max_files_per_source?: number;
+            /** @example 200 */
+            max_queued_per_group?: number;
+            /** @example 3 */
+            queued?: number;
+            /** @example 30 */
+            rate_limit_per_hour?: number;
+        };
+        "jsonapi.IntakeLimitsData": {
+            attributes?: components["schemas"]["jsonapi.IntakeLimitsAttrs"];
+            /**
+             * @example intake_limits
+             * @enum {string}
+             */
+            type?: "intake_limits";
+        };
+        "jsonapi.IntakeLimitsResponse": {
+            data?: components["schemas"]["jsonapi.IntakeLimitsData"];
+        };
+        "jsonapi.IntakeSessionCreateAttributes": {
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            client_key?: string;
+            sources?: components["schemas"]["jsonapi.IntakeSourceCreateRequest"][];
+        };
+        "jsonapi.IntakeSessionCreateRequest": {
+            data?: components["schemas"]["jsonapi.IntakeSessionCreateRequestData"];
+        };
+        "jsonapi.IntakeSessionCreateRequestData": {
+            attributes?: components["schemas"]["jsonapi.IntakeSessionCreateAttributes"];
+            id?: string;
+            /**
+             * @example intake_sessions
+             * @enum {string}
+             */
+            type?: "intake_sessions";
+        };
+        "jsonapi.IntakeSessionDetailAttrs": {
+            candidates?: components["schemas"]["models.IntakeCandidate"][];
+            /**
+             * @description ClientKey identifies the session for the client that created it;
+             *     unique in the group.
+             */
+            client_key?: string;
+            created_at?: string;
+            id?: string;
+            /** @description Origin says how the files arrived. */
+            origin?: components["schemas"]["models.IntakeOrigin"];
+            sources?: components["schemas"]["jsonapi.IntakeSourceView"][];
+            /**
+             * @example review
+             * @enum {unknown}
+             */
+            state?: "processing" | "review" | "done";
+            summary?: components["schemas"]["models.IntakeSessionSummary"];
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.IntakeSessionResponse": {
+            data?: components["schemas"]["jsonapi.IntakeSessionResponseData"];
+            meta?: components["schemas"]["jsonapi.IntakeDraftsMeta"];
+        };
+        "jsonapi.IntakeSessionResponseData": {
+            attributes?: components["schemas"]["jsonapi.IntakeSessionDetailAttrs"];
+            id?: string;
+            /**
+             * @example intake_sessions
+             * @enum {string}
+             */
+            type?: "intake_sessions";
+        };
+        "jsonapi.IntakeSessionView": {
+            /**
+             * @description ClientKey identifies the session for the client that created it;
+             *     unique in the group.
+             */
+            client_key?: string;
+            created_at?: string;
+            id?: string;
+            /** @description Origin says how the files arrived. */
+            origin?: components["schemas"]["models.IntakeOrigin"];
+            /**
+             * @example review
+             * @enum {unknown}
+             */
+            state?: "processing" | "review" | "done";
+            summary?: components["schemas"]["models.IntakeSessionSummary"];
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.IntakeSessionsMeta": {
+            /** @example 4 */
+            sessions?: number;
+        };
+        "jsonapi.IntakeSessionsResponse": {
+            data?: components["schemas"]["jsonapi.IntakeSessionView"][];
+            meta?: components["schemas"]["jsonapi.IntakeSessionsMeta"];
+        };
+        "jsonapi.IntakeSourceCreateRequest": {
+            file_ids?: string[];
+            one_item?: boolean;
+        };
+        "jsonapi.IntakeSourceFile": {
+            ext?: string;
+            id?: string;
+            inline_url?: string;
+            mime_type?: string;
+            path?: string;
+            size_bytes?: number;
+            thumbnails?: {
+                [key: string]: string;
+            };
+            title?: string;
+            url?: string;
+        };
+        "jsonapi.IntakeSourceView": {
+            /**
+             * @description Attempts counts the scans started for the source. It never goes
+             *     down, so it also tells the result of the current scan from the late
+             *     result of an earlier one.
+             */
+            attempts?: number;
+            /** @description ClaimedAt is when the worker took a scanning source. */
+            claimed_at?: string;
+            created_at?: string;
+            /** @description ErrorCode says why a failed source could not be scanned. */
+            error_code?: string;
+            external_document_id?: string;
+            external_instance?: string;
+            external_system?: string;
+            files?: components["schemas"]["jsonapi.IntakeSourceFile"][];
+            id?: string;
+            /**
+             * @description NextAttemptAt is the earliest time the worker may scan a pending
+             *     source.
+             */
+            next_attempt_at?: string;
+            /**
+             * @description OneItem says that the files show one item, so the scan keeps one
+             *     product.
+             */
+            one_item?: boolean;
+            scanned_at?: string;
+            session_id?: string;
+            /** @description SortOrder orders the sources of a session as they were dropped. */
+            sort_order?: number;
+            status?: components["schemas"]["models.IntakeSourceStatus"];
+            updated_at?: string;
+            uuid?: string;
+            /**
+             * @description WaitReason says why a pending source waits (IntakeWait*), empty when
+             *     it simply has not had its turn.
+             */
+            wait_reason?: string;
+            /** @description Warnings are the notes of the stored scan. */
+            warnings?: components["schemas"]["models.IntakeWarning"][];
+        };
         "jsonapi.InviteInfoAttr": {
             expired?: boolean;
             group_icon?: string;
@@ -16866,6 +17674,73 @@ export type components = {
         };
         /** @enum {string} */
         "models.GroupRole": "viewer" | "user" | "admin" | "owner";
+        "models.IntakeCandidate": {
+            accepted_fields?: string[];
+            created_at?: string;
+            /**
+             * @description DraftID is the draft made for the candidate. The draft can be
+             *     discarded or promoted later, so there is no foreign key.
+             */
+            draft_id?: string;
+            /** @description ErrorCode says why the draft could not be made. */
+            error_code?: string;
+            fields?: components["schemas"]["models.IntakeFields"];
+            id?: string;
+            outcome?: components["schemas"]["models.IntakeCandidateOutcome"];
+            quantity?: number;
+            selected?: boolean;
+            session_id?: string;
+            /**
+             * @description SortOrder orders the candidates of a source as the scan listed them,
+             *     most prominent first.
+             */
+            sort_order?: number;
+            source_id?: string;
+            updated_at?: string;
+            uuid?: string;
+        };
+        /** @enum {string} */
+        "models.IntakeCandidateOutcome": "pending" | "created" | "skipped" | "failed";
+        "models.IntakeFieldGuess": {
+            confidence?: number;
+            value?: unknown;
+        };
+        "models.IntakeFields": {
+            [key: string]: components["schemas"]["models.IntakeFieldGuess"];
+        };
+        /** @enum {string} */
+        "models.IntakeOrigin": "upload" | "external";
+        /** @enum {string} */
+        "models.IntakeSessionState": "processing" | "review" | "done";
+        "models.IntakeSessionSummary": {
+            canceled?: number;
+            candidates?: number;
+            candidates_failed?: number;
+            drafts_created?: number;
+            failed?: number;
+            files?: number;
+            pending?: number;
+            rate_limited?: number;
+            scanned?: number;
+            scanning?: number;
+            selected?: number;
+            skipped?: number;
+            sources?: number;
+            /** @description Undecided counts the products with no outcome yet, kept or not. */
+            undecided?: number;
+            /**
+             * @description Unfinished counts the kept products creating the drafts acts on:
+             *     no draft yet, or a draft that failed.
+             */
+            unfinished?: number;
+        };
+        /** @enum {string} */
+        "models.IntakeSourceStatus": "pending" | "scanning" | "scanned" | "failed" | "canceled";
+        "models.IntakeWarning": {
+            code?: string;
+            detail?: string;
+            field?: string;
+        };
         "models.Location": {
             address?: string;
             /**

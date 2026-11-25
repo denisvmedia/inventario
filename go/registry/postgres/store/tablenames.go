@@ -47,6 +47,9 @@ type TableNames struct {
 	ItemTypes                func() TableName
 	CommodityReminderSends   func() TableName
 	CommodityDrafts          func() TableName
+	IntakeSessions           func() TableName
+	IntakeSources            func() TableName
+	IntakeCandidates         func() TableName
 	CurrencyMigrations       func() TableName
 	CurrencyMigrationAudit   func() TableName
 	CommodityScanAudits      func() TableName
@@ -103,6 +106,9 @@ var DefaultTableNames = TableNames{
 	ItemTypes:                func() TableName { return "item_types" },
 	CommodityReminderSends:   func() TableName { return "commodity_reminder_sends" },
 	CommodityDrafts:          func() TableName { return "commodity_drafts" },
+	IntakeSessions:           func() TableName { return "intake_sessions" },
+	IntakeSources:            func() TableName { return "intake_sources" },
+	IntakeCandidates:         func() TableName { return "intake_candidates" },
 	CurrencyMigrations:       func() TableName { return "currency_migrations" },
 	CurrencyMigrationAudit:   func() TableName { return "currency_migration_audit_rows" },
 	CommodityScanAudits:      func() TableName { return "commodity_scan_audits" },

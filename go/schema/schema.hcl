@@ -2347,6 +2347,308 @@ table "group_notification_prefs" {
   }
 }
 
+table "intake_candidates" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant intake candidate isolation"
+  }
+  column "session_id" {
+    type = TEXT
+  }
+  column "source_id" {
+    type = TEXT
+  }
+  column "sort_order" {
+    type = INTEGER
+    default = "0"
+  }
+  column "fields" {
+    type = JSONB
+  }
+  column "selected" {
+    type = BOOLEAN
+    default = "true"
+  }
+  column "accepted_fields" {
+    type = JSONB
+    null = true
+  }
+  column "quantity" {
+    type = INTEGER
+    default = "1"
+  }
+  column "outcome" {
+    type = TEXT
+    default = "pending"
+  }
+  column "draft_id" {
+    type = TEXT
+    null = true
+  }
+  column "error_code" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_intake_candidate_session" {
+    columns = [column.session_id]
+    ref_columns = [table.intake_sessions.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_intake_candidate_source" {
+    columns = [column.source_id]
+    ref_columns = [table.intake_sources.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_intake_candidates_session" {
+    columns = [column.session_id]
+  }
+  index "idx_intake_candidates_source_order" {
+    columns = [column.source_id, column.sort_order]
+  }
+  index "idx_intake_candidates_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_intake_candidates_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "intake_sessions" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant intake session isolation"
+  }
+  column "client_key" {
+    type = TEXT
+  }
+  column "origin" {
+    type = TEXT
+    default = "upload"
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_intake_sessions_group_client_key" {
+    unique = true
+    columns = [column.group_id, column.client_key]
+  }
+  index "idx_intake_sessions_group_created" {
+    columns = [column.group_id, column.created_at]
+  }
+  index "idx_intake_sessions_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_intake_sessions_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "intake_sources" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant intake source isolation"
+  }
+  column "session_id" {
+    type = TEXT
+  }
+  column "sort_order" {
+    type = INTEGER
+    default = "0"
+  }
+  column "one_item" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "status" {
+    type = TEXT
+    default = "pending"
+  }
+  column "attempts" {
+    type = INTEGER
+    default = "0"
+  }
+  column "retry_base" {
+    type = INTEGER
+    default = "0"
+  }
+  column "next_attempt_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "claimed_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "wait_reason" {
+    type = TEXT
+    default = ""
+  }
+  column "error_code" {
+    type = TEXT
+    default = ""
+  }
+  column "warnings" {
+    type = JSONB
+    null = true
+  }
+  column "scanned_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "external_system" {
+    type = TEXT
+    default = ""
+  }
+  column "external_instance" {
+    type = TEXT
+    default = ""
+  }
+  column "external_document_id" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_intake_source_session" {
+    columns = [column.session_id]
+    ref_columns = [table.intake_sessions.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_intake_sources_external" {
+    unique = true
+    where = "external_document_id <> ''"
+    columns = [column.group_id, column.external_system, column.external_instance, column.external_document_id]
+  }
+  index "idx_intake_sources_queue" {
+    where = "status IN ('pending', 'scanning')"
+    columns = [column.status, column.next_attempt_at]
+  }
+  index "idx_intake_sources_session_order" {
+    columns = [column.session_id, column.sort_order]
+  }
+  index "idx_intake_sources_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_intake_sources_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "item_types" {
   row_security {
     enabled = true
@@ -4786,6 +5088,60 @@ policy "group_notification_prefs_tenant_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != ''"
   comment = "Ensures per-group notification prefs are isolated by tenant; user-level filtering happens in application logic"
+}
+
+policy "intake_candidate_background_worker_access" {
+  on = table.intake_candidates
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the intake worker to store detected products across all groups"
+}
+
+policy "intake_candidate_isolation" {
+  on = table.intake_candidates
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures intake candidates can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "intake_session_background_worker_access" {
+  on = table.intake_sessions
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to read and purge intake sessions across all groups"
+}
+
+policy "intake_session_isolation" {
+  on = table.intake_sessions
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures intake sessions can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "intake_source_background_worker_access" {
+  on = table.intake_sources
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the intake worker to claim and update intake sources across all groups"
+}
+
+policy "intake_source_isolation" {
+  on = table.intake_sources
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures intake sources can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "item_type_background_worker_access" {

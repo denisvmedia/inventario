@@ -87,6 +87,9 @@ func TestAllFieldNames_Closed(t *testing.T) {
 		// the invoice/manual tag on attach (#1989). Every provider's canned or
 		// parsed result has to carry it, which is what this list is for.
 		"document_type",
+		// quantity is the number of identical units one product line covers
+		// (#2810); the line's amount stays in original_price.
+		"quantity",
 	}
 	c.Assert(aivision.AllFieldNames, qt.DeepEquals, expected)
 }

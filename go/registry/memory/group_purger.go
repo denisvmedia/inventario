@@ -39,6 +39,7 @@ type GroupPurger struct {
 	reminders            registry.CommodityReminderRegistryFactory
 	reminderSends        registry.CommodityReminderSendRegistry
 	drafts               registry.CommodityDraftRegistryFactory
+	intake               registry.IntakeRegistryFactory
 	currencyMigrations   registry.CurrencyMigrationRegistryFactory
 	notificationPrefs    registry.GroupNotificationPrefRegistry
 	memberships          registry.GroupMembershipRegistry
@@ -79,6 +80,7 @@ func NewGroupPurger(
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
 	drafts registry.CommodityDraftRegistryFactory,
+	intake registry.IntakeRegistryFactory,
 	currencyMigrations registry.CurrencyMigrationRegistryFactory,
 	notificationPrefs registry.GroupNotificationPrefRegistry,
 	memberships registry.GroupMembershipRegistry,
@@ -105,6 +107,7 @@ func NewGroupPurger(
 		reminders:            reminders,
 		reminderSends:        reminderSends,
 		drafts:               drafts,
+		intake:               intake,
 		currencyMigrations:   currencyMigrations,
 		notificationPrefs:    notificationPrefs,
 		memberships:          memberships,
@@ -203,6 +206,12 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// Drafts (#2812), as in the postgres purger.
 		{"commodity_drafts", func() error {
 			reg := r.drafts.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Intake sessions (#2810); deleting a session takes its sources,
+		// candidates and file links with it.
+		{"intake_sessions", func() error {
+			reg := r.intake.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Currency-migration audit rows (#2095) dropped before the migration

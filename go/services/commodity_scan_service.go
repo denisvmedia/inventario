@@ -194,6 +194,19 @@ func (s *CommodityScanService) SetClock(now func() time.Time) {
 	}
 }
 
+// Enabled reports whether a provider is configured, so a scan can succeed.
+func (s *CommodityScanService) Enabled() bool {
+	return s != nil && s.provider != nil
+}
+
+// Config returns the limits the service applies.
+func (s *CommodityScanService) Config() CommodityScanConfig {
+	if s == nil {
+		return CommodityScanConfig{}
+	}
+	return s.cfg
+}
+
 // ScanInput is the request shape passed into Scan. It deliberately
 // mirrors aivision.ScanRequest but in a service-friendly form (the
 // caller doesn't need to know about the aivision package).
@@ -211,6 +224,15 @@ type ScanInput struct {
 type ScanItemType struct {
 	Slug string
 	Name string
+}
+
+// ScanItemTypes turns a group's item types into the options a scan offers.
+func ScanItemTypes(types []*models.ItemType) []ScanItemType {
+	out := make([]ScanItemType, 0, len(types))
+	for _, t := range types {
+		out = append(out, ScanItemType{Slug: string(t.Slug), Name: t.DisplayName()})
+	}
+	return out
 }
 
 func (in ScanInput) itemTypeOptions() []aivision.ItemTypeOption {

@@ -47,6 +47,10 @@ const (
 	WorkerTypeItemReminder WorkerType = "item-reminder"
 	// WorkerTypeCurrencyMigration pauses the currency migration worker.
 	WorkerTypeCurrencyMigration WorkerType = "currency-migration"
+	// WorkerTypeIntake pauses the worker that scans the files of intake
+	// sessions (#2810). Pausing it keeps the sources queued; nothing is
+	// lost.
+	WorkerTypeIntake WorkerType = "intake"
 	// WorkerTypeWeeklyDigest pauses the weekly digest worker (#1391).
 	WorkerTypeWeeklyDigest WorkerType = "weekly-digest"
 	// WorkerTypeOrphanFileGC pauses the orphan-file GC sweeper (#2237).
@@ -82,6 +86,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeMaintenanceReminder,
 	WorkerTypeItemReminder,
 	WorkerTypeCurrencyMigration,
+	WorkerTypeIntake,
 	WorkerTypeWeeklyDigest,
 	WorkerTypeOrphanFileGC,
 	WorkerTypeTrashPurge,
@@ -116,6 +121,7 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeMaintenanceReminder,
 		WorkerTypeItemReminder,
 		WorkerTypeCurrencyMigration,
+		WorkerTypeIntake,
 		WorkerTypeWeeklyDigest,
 		WorkerTypeOrphanFileGC,
 		WorkerTypeTrashPurge:

@@ -186,4 +186,29 @@ var (
 	// or a create with its client key reaches a draft whose discard has
 	// begun (#2812).
 	ErrDraftDiscarded = errx.NewSentinel("the draft is being discarded")
+
+	// ErrIntakeSourceChanged is returned when the intake worker stores the
+	// outcome of a scan for a source that has moved on since it was claimed:
+	// it was put back in the queue by the stuck sweep and claimed again, or
+	// its session was deleted. The outcome is dropped (#2810).
+	ErrIntakeSourceChanged = errx.NewSentinel("the intake source changed while it was scanned")
+
+	// ErrIntakeSourceBusy is returned when a rescan reaches a source that is
+	// still waiting for or in a scan, also one canceled while its scan runs
+	// (#2810).
+	ErrIntakeSourceBusy = errx.NewSentinel("the intake source is waiting for a scan")
+
+	// ErrIntakeSourceHasDrafts is returned when a rescan reaches a source
+	// with a product that already has its draft: a rescan would replace the
+	// product and leave the draft without it (#2810).
+	ErrIntakeSourceHasDrafts = errx.NewSentinel("drafts were already made from the intake source")
+
+	// ErrIntakeCandidateFinished is returned when a review change reaches a
+	// detected product that already has its draft (#2810).
+	ErrIntakeCandidateFinished = errx.NewSentinel("the detected product already has its draft")
+
+	// ErrIntakeQueueFull is returned when a new intake session would put
+	// more of the group's sources in the scan queue than the limit allows
+	// (#2810).
+	ErrIntakeQueueFull = errx.NewSentinel("the scan queue of the group is full")
 )

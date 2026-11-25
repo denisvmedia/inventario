@@ -6616,7 +6616,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/files/{fileID}/links/{linkID}": {
             "delete": {
-                "description": "Removes the link and nothing else. A file whose last attachment\nis removed stays as a standalone file; deleting it is a separate\ncall. Removing the attachment of an item's cover photo clears\nthat item's cover choice. The link of a backup export file\ncannot be removed.",
+                "description": "Removes the link and nothing else. A file whose last attachment\nis removed stays as a standalone file; deleting it is a separate\ncall. Removing the attachment of an item's cover photo clears\nthat item's cover choice. The link of a backup export file\nand the link to a batch intake purchase cannot be removed.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6664,7 +6664,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Export link",
+                        "description": "Export or intake link",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6792,6 +6792,490 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.InboxCountResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/limits": {
+            "get": {
+                "description": "The limits of a new intake batch and how full the group's scan queue is.\nenabled is false when no AI scan provider is configured.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Get intake limits",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeLimitsResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions": {
+            "get": {
+                "description": "The group's intake sessions with their counts, newest first.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "List intake sessions",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Sessions per page (at most 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Queue uploaded files for the AI scan. Each source is one purchase: the files the\nscan reads together. Files dropped together are separate purchases unless the\nclient puts them in one source with one_item set, which keeps a single product.\nThe files must be uploaded first (POST /g/{groupSlug}/uploads/files) and be of a\ntype and size the scan accepts; GET .../intake/limits gives the limits. client_key\nis the client's identity for the batch: a key the group already has returns that\nsession with 200, so a retry after a lost response does not queue the files\ntwice. The replay does not compare the sources, so a client takes a new key for\nevery batch. Without an AI scan provider the request answers 503\ncommodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Create an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Batch",
+                        "name": "session",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "A session with this client key already exists",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "Session created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "A file was not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The scan queue is full",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "503": {
+                        "description": "No AI scan provider is configured",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}": {
+            "get": {
+                "description": "One session with its sources, their files and the products the scan detected.\nReading a session never calls the AI provider.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Get an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Delete a session. Drafts made from it stay. Its files that nothing else uses go\nto Trash; files a draft or an item uses only lose the link to the session.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Delete an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "Deleted"
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}/cancel": {
+            "post": {
+                "description": "Stop the session's queued scans. Detected products and drafts already made stay;\na scan that is running still lands. Resume queues the canceled purchases again.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Cancel an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}/candidates/{candidateID}": {
+            "patch": {
+                "description": "Keep or leave out a detected product, choose the scanned fields that go into its\ndraft, and set the number of identical units it covers. Keeping a product that\nwas skipped puts it back among the products to create drafts for. A product that\nhas its draft answers 409 intake.candidate_finished.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Review a detected product",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Candidate ID",
+                        "name": "candidateID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Review",
+                        "name": "review",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeCandidateReviewRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeCandidateResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Product not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The product is finished",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}/drafts": {
+            "post": {
+                "description": "Make one draft for every kept product of the session that has none yet, and mark\nthe products left out as skipped. Each draft gets the files of its purchase as\nlinks, so one receipt serves every item made from it. Repeating the call, from\nanother device or after a lost response, makes nothing twice; after a partial\nfailure it finishes only what is left. meta counts the drafts made or found made,\nthe skipped products and the products whose draft failed.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Create drafts from an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}/resume": {
+            "post": {
+                "description": "Queue the session's canceled and failed purchases again. A purchase canceled while\nits scan runs goes back to that scan. Purchases that were scanned are not scanned\nagain.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Resume an intake session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Session not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "503": {
+                        "description": "No AI scan provider is configured",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/sessions/{sessionID}/sources/{sourceID}/rescan": {
+            "post": {
+                "description": "Queue one purchase of the session for a new AI scan on the member's request. Its\ndetected products are replaced. A purchase being scanned, also one canceled while\nits scan runs, answers 409 intake.source_busy; one with a product that has its\ndraft answers 409 intake.source_has_drafts.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Rescan a purchase",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Session ID",
+                        "name": "sessionID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Source ID",
+                        "name": "sourceID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeSessionResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Purchase not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The purchase is being scanned or has drafts",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "503": {
+                        "description": "No AI scan provider is configured",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
                         }
                     }
                 }
@@ -15648,6 +16132,478 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.IntakeCandidateResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeCandidateResponseData"
+                }
+            }
+        },
+        "jsonapi.IntakeCandidateResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.IntakeCandidate"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_candidates"
+                    ],
+                    "example": "intake_candidates"
+                }
+            }
+        },
+        "jsonapi.IntakeCandidateReviewAttrs": {
+            "type": "object",
+            "properties": {
+                "accepted_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "quantity": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "selected": {
+                    "type": "boolean",
+                    "example": true
+                }
+            }
+        },
+        "jsonapi.IntakeCandidateReviewRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeCandidateReviewRequestData"
+                }
+            }
+        },
+        "jsonapi.IntakeCandidateReviewRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.IntakeCandidateReviewAttrs"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_candidates"
+                    ],
+                    "example": "intake_candidates"
+                }
+            }
+        },
+        "jsonapi.IntakeDraftsMeta": {
+            "type": "object",
+            "properties": {
+                "created": {
+                    "type": "integer",
+                    "example": 2
+                },
+                "failed": {
+                    "type": "integer",
+                    "example": 0
+                },
+                "skipped": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.IntakeLimitsAttrs": {
+            "type": "object",
+            "properties": {
+                "accepted_mime_types": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    },
+                    "example": [
+                        "image/jpeg",
+                        "image/png",
+                        "application/pdf"
+                    ]
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "max_file_bytes": {
+                    "type": "integer",
+                    "example": 10485760
+                },
+                "max_files_per_batch": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "max_files_per_source": {
+                    "type": "integer",
+                    "example": 5
+                },
+                "max_queued_per_group": {
+                    "type": "integer",
+                    "example": 200
+                },
+                "queued": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "rate_limit_per_hour": {
+                    "type": "integer",
+                    "example": 30
+                }
+            }
+        },
+        "jsonapi.IntakeLimitsData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.IntakeLimitsAttrs"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_limits"
+                    ],
+                    "example": "intake_limits"
+                }
+            }
+        },
+        "jsonapi.IntakeLimitsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeLimitsData"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionCreateAttributes": {
+            "type": "object",
+            "properties": {
+                "client_key": {
+                    "type": "string",
+                    "example": "5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.IntakeSourceCreateRequest"
+                    }
+                }
+            }
+        },
+        "jsonapi.IntakeSessionCreateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeSessionCreateRequestData"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionCreateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.IntakeSessionCreateAttributes"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_sessions"
+                    ],
+                    "example": "intake_sessions"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionDetailAttrs": {
+            "type": "object",
+            "properties": {
+                "candidates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.IntakeCandidate"
+                    }
+                },
+                "client_key": {
+                    "description": "ClientKey identifies the session for the client that created it;\nunique in the group.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "origin": {
+                    "description": "Origin says how the files arrived.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeOrigin"
+                        }
+                    ]
+                },
+                "sources": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.IntakeSourceView"
+                    }
+                },
+                "state": {
+                    "enum": [
+                        "processing",
+                        "review",
+                        "done"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeSessionState"
+                        }
+                    ],
+                    "example": "review"
+                },
+                "summary": {
+                    "$ref": "#/definitions/models.IntakeSessionSummary"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeSessionResponseData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.IntakeDraftsMeta"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.IntakeSessionDetailAttrs"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_sessions"
+                    ],
+                    "example": "intake_sessions"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionView": {
+            "type": "object",
+            "properties": {
+                "client_key": {
+                    "description": "ClientKey identifies the session for the client that created it;\nunique in the group.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "origin": {
+                    "description": "Origin says how the files arrived.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeOrigin"
+                        }
+                    ]
+                },
+                "state": {
+                    "enum": [
+                        "processing",
+                        "review",
+                        "done"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeSessionState"
+                        }
+                    ],
+                    "example": "review"
+                },
+                "summary": {
+                    "$ref": "#/definitions/models.IntakeSessionSummary"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.IntakeSessionsMeta": {
+            "type": "object",
+            "properties": {
+                "sessions": {
+                    "type": "integer",
+                    "example": 4
+                }
+            }
+        },
+        "jsonapi.IntakeSessionsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.IntakeSessionView"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.IntakeSessionsMeta"
+                }
+            }
+        },
+        "jsonapi.IntakeSourceCreateRequest": {
+            "type": "object",
+            "properties": {
+                "file_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "one_item": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.IntakeSourceFile": {
+            "type": "object",
+            "properties": {
+                "ext": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "inline_url": {
+                    "type": "string"
+                },
+                "mime_type": {
+                    "type": "string"
+                },
+                "path": {
+                    "type": "string"
+                },
+                "size_bytes": {
+                    "type": "integer"
+                },
+                "thumbnails": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "string"
+                    }
+                },
+                "title": {
+                    "type": "string"
+                },
+                "url": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.IntakeSourceView": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "description": "Attempts counts the scans started for the source. It never goes\ndown, so it also tells the result of the current scan from the late\nresult of an earlier one.",
+                    "type": "integer"
+                },
+                "claimed_at": {
+                    "description": "ClaimedAt is when the worker took a scanning source.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error_code": {
+                    "description": "ErrorCode says why a failed source could not be scanned.",
+                    "type": "string"
+                },
+                "external_document_id": {
+                    "type": "string"
+                },
+                "external_instance": {
+                    "type": "string"
+                },
+                "external_system": {
+                    "type": "string"
+                },
+                "files": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.IntakeSourceFile"
+                    }
+                },
+                "id": {
+                    "type": "string"
+                },
+                "next_attempt_at": {
+                    "description": "NextAttemptAt is the earliest time the worker may scan a pending\nsource.",
+                    "type": "string"
+                },
+                "one_item": {
+                    "description": "OneItem says that the files show one item, so the scan keeps one\nproduct.",
+                    "type": "boolean"
+                },
+                "scanned_at": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "description": "SortOrder orders the sources of a session as they were dropped.",
+                    "type": "integer"
+                },
+                "status": {
+                    "$ref": "#/definitions/models.IntakeSourceStatus"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "wait_reason": {
+                    "description": "WaitReason says why a pending source waits (IntakeWait*), empty when\nit simply has not had its turn.",
+                    "type": "string"
+                },
+                "warnings": {
+                    "description": "Warnings are the notes of the stored scan.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.IntakeWarning"
+                    }
+                }
+            }
+        },
         "jsonapi.InviteInfoAttr": {
             "type": "object",
             "properties": {
@@ -18843,6 +19799,196 @@ const docTemplate = `{
                 "GroupRoleAdmin",
                 "GroupRoleOwner"
             ]
+        },
+        "models.IntakeCandidate": {
+            "type": "object",
+            "properties": {
+                "accepted_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "draft_id": {
+                    "description": "DraftID is the draft made for the candidate. The draft can be\ndiscarded or promoted later, so there is no foreign key.",
+                    "type": "string"
+                },
+                "error_code": {
+                    "description": "ErrorCode says why the draft could not be made.",
+                    "type": "string"
+                },
+                "fields": {
+                    "$ref": "#/definitions/models.IntakeFields"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "outcome": {
+                    "$ref": "#/definitions/models.IntakeCandidateOutcome"
+                },
+                "quantity": {
+                    "type": "integer"
+                },
+                "selected": {
+                    "type": "boolean"
+                },
+                "session_id": {
+                    "type": "string"
+                },
+                "sort_order": {
+                    "description": "SortOrder orders the candidates of a source as the scan listed them,\nmost prominent first.",
+                    "type": "integer"
+                },
+                "source_id": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.IntakeCandidateOutcome": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "created",
+                "skipped",
+                "failed"
+            ],
+            "x-enum-varnames": [
+                "IntakeCandidatePending",
+                "IntakeCandidateCreated",
+                "IntakeCandidateSkipped",
+                "IntakeCandidateFailed"
+            ]
+        },
+        "models.IntakeFieldGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number"
+                },
+                "value": {}
+            }
+        },
+        "models.IntakeFields": {
+            "type": "object",
+            "additionalProperties": {
+                "$ref": "#/definitions/models.IntakeFieldGuess"
+            }
+        },
+        "models.IntakeOrigin": {
+            "type": "string",
+            "enum": [
+                "upload",
+                "external"
+            ],
+            "x-enum-varnames": [
+                "IntakeOriginUpload",
+                "IntakeOriginExternal"
+            ]
+        },
+        "models.IntakeSessionState": {
+            "type": "string",
+            "enum": [
+                "processing",
+                "review",
+                "done"
+            ],
+            "x-enum-varnames": [
+                "IntakeSessionProcessing",
+                "IntakeSessionReview",
+                "IntakeSessionDone"
+            ]
+        },
+        "models.IntakeSessionSummary": {
+            "type": "object",
+            "properties": {
+                "canceled": {
+                    "type": "integer"
+                },
+                "candidates": {
+                    "type": "integer"
+                },
+                "candidates_failed": {
+                    "type": "integer"
+                },
+                "drafts_created": {
+                    "type": "integer"
+                },
+                "failed": {
+                    "type": "integer"
+                },
+                "files": {
+                    "type": "integer"
+                },
+                "pending": {
+                    "type": "integer"
+                },
+                "rate_limited": {
+                    "type": "integer"
+                },
+                "scanned": {
+                    "type": "integer"
+                },
+                "scanning": {
+                    "type": "integer"
+                },
+                "selected": {
+                    "type": "integer"
+                },
+                "skipped": {
+                    "type": "integer"
+                },
+                "sources": {
+                    "type": "integer"
+                },
+                "undecided": {
+                    "description": "Undecided counts the products with no outcome yet, kept or not.",
+                    "type": "integer"
+                },
+                "unfinished": {
+                    "description": "Unfinished counts the kept products creating the drafts acts on:\nno draft yet, or a draft that failed.",
+                    "type": "integer"
+                }
+            }
+        },
+        "models.IntakeSourceStatus": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "scanning",
+                "scanned",
+                "failed",
+                "canceled"
+            ],
+            "x-enum-varnames": [
+                "IntakeSourcePending",
+                "IntakeSourceScanning",
+                "IntakeSourceScanned",
+                "IntakeSourceFailed",
+                "IntakeSourceCanceled"
+            ]
+        },
+        "models.IntakeWarning": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "type": "string"
+                },
+                "detail": {
+                    "type": "string"
+                },
+                "field": {
+                    "type": "string"
+                }
+            }
         },
         "models.Location": {
             "type": "object",

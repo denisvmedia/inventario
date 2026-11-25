@@ -580,11 +580,16 @@ func (b *inbBuilder) indexFiles() error {
 }
 
 // exportedFileLinks returns the links a backup carries: every link except
-// the links to drafts the backup does not contain.
+// the links to drafts the backup does not contain and the links to intake
+// sources. Intake sessions (#2810) are a work queue and stay out of backups;
+// a file only an intake source holds is exported as a standalone file.
 func (b *inbBuilder) exportedFileLinks(links []models.FileLink) []models.FileLink {
 	out := make([]models.FileLink, 0, len(links))
 	for _, link := range links {
-		if link.EntityType != models.FileLinkDraft || b.draftUUIDByDBID[link.EntityID] != "" {
+		switch {
+		case link.EntityType == models.FileLinkIntake:
+		case link.EntityType == models.FileLinkDraft && b.draftUUIDByDBID[link.EntityID] == "":
+		default:
 			out = append(out, link)
 		}
 	}

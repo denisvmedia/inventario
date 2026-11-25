@@ -319,7 +319,7 @@ func TestFileLinkService_Detach(t *testing.T) {
 		c.Assert(*gotB.CoverFileID, qt.Equals, photo.ID)
 	})
 
-	t.Run("refuses an export link and an unknown link", func(t *testing.T) {
+	t.Run("refuses an export link, an intake link and an unknown link", func(t *testing.T) {
 		c := qt.New(t)
 		fx := newFileLinkFixture(c)
 		svc := services.NewFileLinkService(fx.factorySet)
@@ -328,6 +328,14 @@ func TestFileLinkService_Detach(t *testing.T) {
 
 		_, err := svc.Detach(fx.ctx, export.ID, export.Links[0].ID)
 		c.Assert(err, qt.ErrorIs, services.ErrExportLinkNotRemovable)
+
+		receipt := fx.storedFile(c, "receipt.pdf", "application/pdf", models.FileCategoryDocuments,
+			models.FileLink{EntityType: models.FileLinkIntake, EntityID: "source-1", Meta: models.FileLinkMetaDocuments})
+		_, err = svc.Detach(fx.ctx, receipt.ID, receipt.Links[0].ID)
+		c.Assert(err, qt.ErrorIs, services.ErrIntakeLinkNotRemovable)
+		kept, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(kept.Links, qt.HasLen, 1)
 
 		_, err = svc.Detach(fx.ctx, export.ID, "no-such-link")
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
