@@ -10,7 +10,13 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests, HttpError } from "@/lib/http"
-import { apiUrl, draftHandlers, groupHandlers, sellerHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  customFieldHandlers,
+  draftHandlers,
+  groupHandlers,
+  sellerHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
@@ -179,6 +185,74 @@ describe("<CommodityFormDialog /> server drafts", () => {
       revision: 3,
       promotionKey: expect.stringMatching(/^promote:/),
     })
+  })
+
+  it("saves the custom field values typed in the form with the draft", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(
+      ...groupHandlers.list(groups),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+      ]),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    const { onOpenChange } = renderForm()
+    await user.type(await fillManually(user), "Van")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    for (const step of ["purchase", "warranty", "tags"]) {
+      await user.click(screen.getByTestId("commodity-form-next"))
+      if (step === "purchase") await screen.findByLabelText(/Purchase date/i)
+      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
+      if (step === "tags") await screen.findByTestId("commodity-tags-input")
+    }
+    await user.click(await screen.findByTestId("custom-field-add"))
+    await user.click(await screen.findByTestId("custom-field-add-cf-plate"))
+    await user.type(screen.getByLabelText(/^Plate$/), "AB 123")
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(1)
+    expect(fake.drafts[0].values.custom_fields).toEqual({
+      "cf-plate": { value: "AB 123", currency: "" },
+    })
+  })
+
+  it("resumes a draft's custom field values and promotes the item with them", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        revision: 2,
+        values: {
+          name: "Van",
+          short_name: "Van",
+          type: "furniture",
+          custom_fields: { "cf-plate": { value: "AB 123", currency: "" } },
+        },
+      },
+    ])
+    server.use(
+      ...groupHandlers.list(groups),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+      ]),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    const { onSubmit } = await openResumed("d1", "Van")
+    for (const step of ["purchase", "warranty", "tags"]) {
+      await user.click(screen.getByTestId("commodity-form-next"))
+      if (step === "purchase") await screen.findByLabelText(/Purchase date/i)
+      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
+      if (step === "tags") await screen.findByTestId("commodity-tags-input")
+    }
+    expect(await screen.findByLabelText(/^Plate$/)).toHaveValue("AB 123")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-files-step")
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(values.custom_fields).toEqual({ "cf-plate": "AB 123" })
+    expect(draft).toMatchObject({ id: "d1", revision: 2 })
   })
 
   it("shows a seller deleted while the draft was open on the Seller field", async () => {
