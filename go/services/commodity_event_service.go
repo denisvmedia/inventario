@@ -287,6 +287,8 @@ func priceChanged(before, after *models.Commodity) bool {
 func genericUpdateChanged(before, after *models.Commodity) bool {
 	if before.Name != after.Name ||
 		before.ShortName != after.ShortName ||
+		before.Brand != after.Brand ||
+		before.Model != after.Model ||
 		before.Type != after.Type ||
 		before.Count != after.Count ||
 		before.SerialNumber != after.SerialNumber ||
@@ -331,6 +333,8 @@ func snapshotForUpdate(c *models.Commodity) models.CommodityEventPayload {
 	return models.CommodityEventPayload{
 		"name":         c.Name,
 		"short_name":   c.ShortName,
+		"brand":        c.Brand,
+		"model":        c.Model,
 		"type":         string(c.Type),
 		"count":        c.Count,
 		"comments":     c.Comments,

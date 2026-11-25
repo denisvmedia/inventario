@@ -27,6 +27,8 @@ const (
 	CommoditySearchFieldAssetID            CommoditySearchField = "asset_id"
 	CommoditySearchFieldName               CommoditySearchField = "name"
 	CommoditySearchFieldShortName          CommoditySearchField = "short_name"
+	CommoditySearchFieldBrand              CommoditySearchField = "brand"
+	CommoditySearchFieldModel              CommoditySearchField = "model"
 	CommoditySearchFieldSerialNumber       CommoditySearchField = "serial_number"
 	CommoditySearchFieldExtraSerialNumbers CommoditySearchField = "extra_serial_numbers"
 	CommoditySearchFieldPartNumbers        CommoditySearchField = "part_numbers"
@@ -37,9 +39,26 @@ const (
 )
 
 // CommoditySearchFields lists the text fields a search term is matched
-// against, in the order the generated commodities.search_text column joins
-// them. The asset ID is matched separately, by number.
+// against, in the order a search result reports them. The asset ID is
+// matched separately, by number.
 var CommoditySearchFields = []CommoditySearchField{
+	CommoditySearchFieldName,
+	CommoditySearchFieldShortName,
+	CommoditySearchFieldBrand,
+	CommoditySearchFieldModel,
+	CommoditySearchFieldSerialNumber,
+	CommoditySearchFieldExtraSerialNumbers,
+	CommoditySearchFieldPartNumbers,
+	CommoditySearchFieldTags,
+	CommoditySearchFieldComments,
+	CommoditySearchFieldWarrantyNotes,
+	CommoditySearchFieldStatusNote,
+}
+
+// CommoditySearchTextFields are the fields of CommoditySearchFields that the
+// generated commodities.search_text column joins, in its order. The postgres
+// backend matches a term against that column in one ILIKE.
+var CommoditySearchTextFields = []CommoditySearchField{
 	CommoditySearchFieldName,
 	CommoditySearchFieldShortName,
 	CommoditySearchFieldSerialNumber,
@@ -49,6 +68,14 @@ var CommoditySearchFields = []CommoditySearchField{
 	CommoditySearchFieldComments,
 	CommoditySearchFieldWarrantyNotes,
 	CommoditySearchFieldStatusNote,
+}
+
+// CommodityColumnSearchFields are the fields of CommoditySearchFields that
+// search_text does not hold. The postgres backend matches each on its own
+// column, which is named like the field.
+var CommodityColumnSearchFields = []CommoditySearchField{
+	CommoditySearchFieldBrand,
+	CommoditySearchFieldModel,
 }
 
 // CommoditySearchMatch is one reason a commodity matched a search: the field
@@ -194,6 +221,8 @@ func matchTerm(c *models.Commodity, term string, labelSlugs []string) []Commodit
 
 	text(CommoditySearchFieldName, c.Name)
 	text(CommoditySearchFieldShortName, c.ShortName)
+	text(CommoditySearchFieldBrand, c.Brand)
+	text(CommoditySearchFieldModel, c.Model)
 	text(CommoditySearchFieldSerialNumber, c.SerialNumber)
 	list(CommoditySearchFieldExtraSerialNumbers, c.ExtraSerialNumbers)
 	list(CommoditySearchFieldPartNumbers, c.PartNumbers)
@@ -351,4 +380,50 @@ func CountCommodityTags(commodities []*models.Commodity) CommodityTagCounts {
 		}
 	}
 	return counts
+}
+
+// CommodityBrandCount is a brand the items of a group carry and how many
+// items carry it.
+type CommodityBrandCount struct {
+	Brand string `json:"brand"`
+	Count int    `json:"count"`
+}
+
+// CountCommodityBrands is the reference statement of
+// CommodityRegistry.ListBrands over commodities: the distinct non-empty
+// brands, compared exactly, that contain query as a case-insensitive literal
+// substring (an empty query keeps every brand), ordered by
+// SortCommodityBrands and cut to limit. A limit of zero or less returns
+// nothing.
+func CountCommodityBrands(commodities []*models.Commodity, query string, limit int) []CommodityBrandCount {
+	query = strings.TrimSpace(query)
+	counts := make(map[string]int)
+	for _, c := range commodities {
+		if c == nil || c.Brand == "" || !containsFold(c.Brand, query) {
+			continue
+		}
+		counts[c.Brand]++
+	}
+	out := make([]CommodityBrandCount, 0, len(counts))
+	for brand, n := range counts {
+		out = append(out, CommodityBrandCount{Brand: brand, Count: n})
+	}
+	SortCommodityBrands(out)
+	return out[:min(max(limit, 0), len(out))]
+}
+
+// SortCommodityBrands orders brands most used first, then alphabetically
+// without regard to case, then by the exact value. The order is computed in
+// Go by both backends, because a database collation would order the names
+// differently from the memory backend.
+func SortCommodityBrands(brands []CommodityBrandCount) {
+	slices.SortFunc(brands, func(a, b CommodityBrandCount) int {
+		if a.Count != b.Count {
+			return b.Count - a.Count
+		}
+		if c := strings.Compare(strings.ToLower(a.Brand), strings.ToLower(b.Brand)); c != 0 {
+			return c
+		}
+		return strings.Compare(a.Brand, b.Brand)
+	})
 }

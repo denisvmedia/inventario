@@ -42,6 +42,7 @@ import {
 import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { COMMODITY_TYPES, type CommodityTypeValue } from "@/features/commodities/constants"
+import { BRAND_MAX_LEN, MODEL_MAX_LEN } from "@/features/commodities/schemas"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
   ScanFieldGuess,
@@ -110,6 +111,8 @@ export interface ScanAcceptedValues {
   // urls. The parent caller spreads these into `setValue` calls.
   name?: string
   short_name?: string
+  brand?: string
+  model?: string
   type?: CommodityTypeValue
   original_price?: string
   original_price_currency?: string
@@ -371,6 +374,17 @@ export function AiScanStep({
             // validation on the Basics step. The prompt already steers the
             // model to ≤40; this is the defensive backstop.
             out.short_name = value.trim().slice(0, SHORT_NAME_MAX_LEN)
+          }
+          break
+        case "brand":
+          // Capped like short_name, at the form's limits.
+          if (typeof value === "string" && value.trim() !== "") {
+            out.brand = value.trim().slice(0, BRAND_MAX_LEN)
+          }
+          break
+        case "model":
+          if (typeof value === "string" && value.trim() !== "") {
+            out.model = value.trim().slice(0, MODEL_MAX_LEN)
           }
           break
         case "type":
@@ -919,6 +933,8 @@ function ReviewPanel({
   const fieldOrder: ScanFieldName[] = [
     "name",
     "short_name",
+    "brand",
+    "model",
     "type",
     "serial_number",
     "purchase_date",
@@ -1122,6 +1138,10 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "name"
     case "short_name":
       return "shortName"
+    case "brand":
+      return "brand"
+    case "model":
+      return "model"
     case "type":
       return "type"
     case "serial_number":

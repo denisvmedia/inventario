@@ -203,6 +203,48 @@ describe("<CommoditiesListPage />", () => {
     expect((withoutCover as HTMLElement).querySelector("svg")).not.toBeNull()
   })
 
+  it("shows brand · model under the name, the short name without either, and the area (#2804)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Dishwasher", brand: "Bosch", model: "SMV6ZCX42E" }),
+        commodityRes("c2", { name: "Kettle", brand: "Bosch", model: "" }),
+        commodityRes("c3", { name: "Coffee grinder", short_name: "Grinder" }),
+      ])
+    )
+    renderList()
+    const card = (id: string) =>
+      screen
+        .getAllByTestId("commodity-card")
+        .find((c) => c.getAttribute("data-commodity-id") === id)!
+    await screen.findAllByTestId("commodity-card")
+    // Photo cards show brand · model when the item has either, and nothing
+    // in its place otherwise: the photo and the name carry the card.
+    expect(within(card("c1")).getByTestId("commodity-card-subtitle")).toHaveTextContent(
+      /^Bosch · SMV6ZCX42E$/
+    )
+    expect(within(card("c2")).getByTestId("commodity-card-subtitle")).toHaveTextContent(/^Bosch$/)
+    expect(within(card("c3")).queryByTestId("commodity-card-subtitle")).toBeNull()
+
+    await user.click(screen.getByTestId("commodities-view-compact"))
+    await waitFor(() =>
+      expect(screen.getAllByTestId("commodity-card")[0]).toHaveAttribute("data-variant", "compact")
+    )
+    const subtitle = (id: string) => within(card(id)).getByTestId("commodity-card-subtitle")
+    expect(subtitle("c1")).toHaveTextContent(/^Bosch · SMV6ZCX42E$/)
+    expect(subtitle("c2")).toHaveTextContent(/^Bosch$/)
+    expect(subtitle("c3")).toHaveTextContent(/^Grinder$/)
+    for (const id of ["c1", "c2", "c3"]) {
+      expect(within(card(id)).getByTestId("commodity-card-area")).toBeInTheDocument()
+    }
+
+    await user.click(screen.getByTestId("commodities-view-list"))
+    const rows = await screen.findAllByTestId("commodity-row-subtitle")
+    expect(rows.map((r) => r.textContent)).toEqual(["Bosch · SMV6ZCX42E", "Bosch", "Grinder"])
+  })
+
   it("toggles between grid and list view", async () => {
     const user = userEvent.setup()
     server.use(

@@ -16,6 +16,7 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
+import { brandedName } from "@/features/commodities/brand"
 import { useAllCommodities, useCommodity } from "@/features/commodities/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -267,7 +268,7 @@ export function InsuranceReportPage() {
                 <SelectContent>
                   {withId(itemList).map((c) => (
                     <SelectItem key={c.id} value={c.id}>
-                      {c.name}
+                      {brandedName(c)}
                     </SelectItem>
                   ))}
                 </SelectContent>

@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity, CommodityCover } from "@/features/commodities/api"
+import { brandedName } from "@/features/commodities/brand"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
 import {
   commodityValue,
@@ -16,6 +17,7 @@ import { cn } from "@/lib/utils"
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
 import { aggregateLocationTotals } from "../aggregate"
 import { coverToPhotos } from "../photos"
+import { reportSubtitle } from "../subtitle"
 
 // LocationReport is the whole-location insurance report body (#1370).
 // Mirrors the design mock's LocationReport: a hero header, three summary
@@ -158,9 +160,9 @@ export function LocationReport({
                     {areaLabelFor(item.area_id)}
                   </span>
                 </div>
-                <h2 className="text-xl font-bold tracking-tight">{item.name}</h2>
-                {item.short_name && item.short_name !== item.name ? (
-                  <p className="text-sm text-muted-foreground">{item.short_name}</p>
+                <h2 className="text-xl font-bold tracking-tight">{brandedName(item)}</h2>
+                {reportSubtitle(item) ? (
+                  <p className="text-sm text-muted-foreground">{reportSubtitle(item)}</p>
                 ) : null}
               </div>
               <div

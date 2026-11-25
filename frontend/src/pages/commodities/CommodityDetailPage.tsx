@@ -73,6 +73,7 @@ import { useAreas } from "@/features/areas/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useLocations } from "@/features/locations/hooks"
 import { formatAssetId } from "@/features/commodities/asset-id"
+import { brandModelText } from "@/features/commodities/brand"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
@@ -792,6 +793,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                     data-testid="commodity-detail-short-name"
                   >
                     {commodity.short_name}
+                  </p>
+                ) : null}
+                {brandModelText(commodity) ? (
+                  <p
+                    className="text-sm text-muted-foreground mt-0.5"
+                    data-testid="commodity-detail-brand-model"
+                  >
+                    {brandModelText(commodity)}
                   </p>
                 ) : null}
                 {type ? (

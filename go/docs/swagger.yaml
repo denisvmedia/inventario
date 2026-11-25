@@ -1256,6 +1256,13 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.CommoditiesMeta'
     type: object
+  jsonapi.CommodityBrandsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/registry.CommodityBrandCount'
+        type: array
+    type: object
   jsonapi.CommodityCover:
     properties:
       file_id:
@@ -3875,6 +3882,12 @@ definitions:
           column until the runtime backfill numbers them.
         readOnly: true
         type: integer
+      brand:
+        description: |-
+          Brand is the maker of the item ("Bosch"), as plain text. The brand
+          input suggests the brands the group already uses (see
+          CommodityRegistry.ListBrands), and the item search matches it.
+        type: string
       comments:
         type: string
       converted_original_price:
@@ -3924,6 +3937,11 @@ definitions:
       id:
         type: string
       last_modified_date:
+        type: string
+      model:
+        description: |-
+          Model is the maker's model name or number ("SMV6ZCX42E"), as plain
+          text.
         type: string
       name:
         type: string
@@ -5247,11 +5265,20 @@ definitions:
       uuid:
         type: string
     type: object
+  registry.CommodityBrandCount:
+    properties:
+      brand:
+        type: string
+      count:
+        type: integer
+    type: object
   registry.CommoditySearchField:
     enum:
     - asset_id
     - name
     - short_name
+    - brand
+    - model
     - serial_number
     - extra_serial_numbers
     - part_numbers
@@ -5264,6 +5291,8 @@ definitions:
     - CommoditySearchFieldAssetID
     - CommoditySearchFieldName
     - CommoditySearchFieldShortName
+    - CommoditySearchFieldBrand
+    - CommoditySearchFieldModel
     - CommoditySearchFieldSerialNumber
     - CommoditySearchFieldExtraSerialNumbers
     - CommoditySearchFieldPartNumbers
@@ -7504,8 +7533,8 @@ paths:
         name: unassigned
         type: boolean
       - description: 'Search text: space-separated terms, quotes keep a phrase; every
-          term must match the name, short name, a serial or part number, a tag, a
-          note or the asset ID. At most 200 characters and 10 terms'
+          term must match the name, short name, brand, model, a serial or part number,
+          a tag, a note or the asset ID. At most 200 characters and 10 terms'
         in: query
         name: q
         type: string
@@ -8483,6 +8512,42 @@ paths:
       summary: Reorder supply links
       tags:
       - commodity_supply_links
+  /g/{groupSlug}/commodities/brands:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: The distinct brands of the group's items outside Trash, drafts
+        and inactive items included, with the number of items carrying each, most
+        used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Only brands that contain this text, without regard to case
+        in: query
+        name: q
+        type: string
+      - default: 20
+        description: At most this many brands (1 to 100)
+        in: query
+        name: limit
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityBrandsResponse'
+        "400":
+          description: Invalid limit
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List commodity brands
+      tags:
+      - commodities
   /g/{groupSlug}/commodities/bulk-delete:
     post:
       consumes:

@@ -4072,7 +4072,7 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
-                    /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
+                    /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
                     q?: string;
                     /** @description Only items with these tag slugs (comma-separated or repeated); see tag_mode */
                     tags?: string[];
@@ -4161,6 +4161,62 @@ export type paths = {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/brands": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List commodity brands
+         * @description The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Only brands that contain this text, without regard to case */
+                    q?: string;
+                    /** @description At most this many brands (1 to 100) */
+                    limit?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBrandsResponse"];
+                    };
+                };
+                /** @description Invalid limit */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -12236,6 +12292,9 @@ export type components = {
             data?: components["schemas"]["jsonapi.CommodityData"][];
             meta?: components["schemas"]["jsonapi.CommoditiesMeta"];
         };
+        "jsonapi.CommodityBrandsResponse": {
+            data?: components["schemas"]["registry.CommodityBrandCount"][];
+        };
         "jsonapi.CommodityCover": {
             file_id?: string;
             /**
@@ -14096,6 +14155,12 @@ export type components = {
              *     column until the runtime backfill numbers them.
              */
             readonly asset_number?: number;
+            /**
+             * @description Brand is the maker of the item ("Bosch"), as plain text. The brand
+             *     input suggests the brands the group already uses (see
+             *     CommodityRegistry.ListBrands), and the item search matches it.
+             */
+            brand?: string;
             comments?: string;
             /**
              * @description ConvertedOriginalPrice is the purchase price in the group currency, null
@@ -14133,6 +14198,11 @@ export type components = {
             extra_serial_numbers?: string[];
             id?: string;
             last_modified_date?: string;
+            /**
+             * @description Model is the maker's model name or number ("SMV6ZCX42E"), as plain
+             *     text.
+             */
+            model?: string;
             name?: string;
             /**
              * @description OriginalPrice is the purchase price in OriginalPriceCurrency, null when
@@ -14976,8 +15046,12 @@ export type components = {
             updated_at?: string;
             uuid?: string;
         };
+        "registry.CommodityBrandCount": {
+            brand?: string;
+            count?: number;
+        };
         /** @enum {string} */
-        "registry.CommoditySearchField": "asset_id" | "name" | "short_name" | "serial_number" | "extra_serial_numbers" | "part_numbers" | "tags" | "comments" | "warranty_notes" | "status_note";
+        "registry.CommoditySearchField": "asset_id" | "name" | "short_name" | "brand" | "model" | "serial_number" | "extra_serial_numbers" | "part_numbers" | "tags" | "comments" | "warranty_notes" | "status_note";
         "registry.CommoditySearchMatch": {
             field?: components["schemas"]["registry.CommoditySearchField"];
             value?: string;

@@ -39,6 +39,7 @@ import { Input } from "@/components/ui/input"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
+import { brandModelText } from "@/features/commodities/brand"
 import { useCommodities, useCommoditiesValue } from "@/features/commodities/hooks"
 import {
   COMMODITY_SORT_OPTIONS,
@@ -740,8 +741,10 @@ function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
                         </Badge>
                       ) : null}
                     </div>
-                    {row.short_name ? (
-                      <p className="truncate text-xs text-muted-foreground">{row.short_name}</p>
+                    {brandModelText(row) || row.short_name ? (
+                      <p className="truncate text-xs text-muted-foreground">
+                        {brandModelText(row) || row.short_name}
+                      </p>
                     ) : null}
                     <SearchMatchHint
                       match={primarySearchMatch(matches[row.id])}
@@ -849,8 +852,10 @@ function Grid({ rows, onPreview, currency, slug, matches }: RowListProps) {
                   <CardTitle className="mt-2 text-sm font-semibold leading-tight">
                     {row.name}
                   </CardTitle>
-                  {row.short_name ? (
-                    <p className="truncate text-xs text-muted-foreground">{row.short_name}</p>
+                  {brandModelText(row) || row.short_name ? (
+                    <p className="truncate text-xs text-muted-foreground">
+                      {brandModelText(row) || row.short_name}
+                    </p>
                   ) : null}
                   <SearchMatchHint
                     match={primarySearchMatch(matches[row.id])}

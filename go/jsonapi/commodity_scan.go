@@ -48,7 +48,7 @@ type CommodityScanItem struct {
 // rather than emitting a misleading `additionalProperties:{type:string}`
 // override (the value is not always an object, and not always strings):
 //
-//   - name, short_name, type, serial_number, comments,
+//   - name, short_name, brand, model, type, serial_number, comments,
 //     original_price_currency, purchase_date,
 //     warranty_expires_at (both YYYY-MM-DD): string
 //   - original_price: number (decimal)

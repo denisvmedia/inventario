@@ -217,6 +217,32 @@ describe("<CommodityDetailPage />", () => {
     expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
   })
 
+  it("shows brand · model under the name (#2804)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, brand: "Apple", model: "A2780" },
+      })
+    )
+    renderDetail()
+    expect(await screen.findByTestId("commodity-detail-brand-model")).toHaveTextContent(
+      /^Apple · A2780$/
+    )
+  })
+
+  it("leaves the brand line out for an item without a brand or model (#2804)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-name")
+    expect(screen.queryByTestId("commodity-detail-brand-model")).toBeNull()
+  })
+
   it("shows the asset ID and links to its label (#2807)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

@@ -14,7 +14,14 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { HttpError, __resetHttpForTests } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { apiUrl, authHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  authHandlers,
+  commodityHandlers,
+  groupHandlers,
+  memberHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 
 const SLUG = "household"
 
@@ -126,6 +133,34 @@ describe("<CommodityEditForm />", () => {
     expect(screen.getByLabelText(/purchase date/i)).toHaveValue("2024-03-01")
     expect(screen.getByRole("combobox", { name: /^location/i })).toHaveTextContent("Home")
     expect(screen.getByRole("combobox", { name: /^area/i })).toHaveTextContent("Study")
+  })
+
+  it("suggests the group's brands and saves the brand and model", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...commodityHandlers.brands(SLUG, [
+        { brand: "Philips", count: 3 },
+        { brand: "Philips Hue", count: 1 },
+        { brand: "IKEA", count: 2 },
+      ])
+    )
+    const { onSubmit } = renderForm({ brand: "", model: "" })
+    const brand = await screen.findByRole("combobox", { name: /^brand/i })
+    await user.type(brand, "phil")
+    const list = await screen.findByTestId("brand-suggestions")
+    expect(
+      within(list)
+        .getAllByRole("option")
+        .map((o) => o.textContent)
+    ).toEqual(["Philips", "Philips Hue"])
+    // The arrow keys and Enter pick a suggestion without submitting.
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(brand).toHaveValue("Philips")
+    expect(onSubmit).not.toHaveBeenCalled()
+    await user.type(screen.getByLabelText(/^model/i), "  Hue Go  ")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ brand: "Philips", model: "Hue Go" })
   })
 
   it("leaves at once when nothing changed", async () => {

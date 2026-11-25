@@ -136,6 +136,22 @@ describe("<InsuranceReportPage /> — item mode", () => {
     expect(within(report).getByText("Manufacturer 3-year")).toBeInTheDocument()
   })
 
+  it("titles the item with its brand and puts the model under it (#2804)", () => {
+    mockUseCommodity.mockReturnValue({
+      data: { commodity: { ...itemC1, brand: "Gaggia", model: "Classic Pro" }, meta: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCommodity>)
+    renderPage("?mode=item&item=c1")
+    const report = screen.getByTestId("report-item")
+    expect(within(report).getByRole("heading", { level: 1 })).toHaveTextContent(
+      "Gaggia Espresso Machine"
+    )
+    expect(within(report).getByText("Classic Pro")).toBeInTheDocument()
+    // The model replaces the short name as the subtitle.
+    expect(within(report).queryByText("Gaggia", { exact: true })).toBeNull()
+  })
+
   it("detail fetch honors the raw item param even when it is absent from the list", () => {
     // The active-only selector list (useAllCommodities) holds c1/c2, but the
     // URL deep-links a sold item `c9` that the list omits. The DETAIL fetch

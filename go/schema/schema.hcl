@@ -420,6 +420,14 @@ table "commodities" {
     type = TEXT
     null = true
   }
+  column "brand" {
+    type = TEXT
+    default = ""
+  }
+  column "model" {
+    type = TEXT
+    default = ""
+  }
   column "type" {
     type = TEXT
   }
@@ -594,6 +602,11 @@ table "commodities" {
     where = "draft = false"
     columns = [column.status, column.area_id]
   }
+  index "commodities_brand_trgm_idx" {
+    type = "GIN"
+    ops = "gin_trgm_ops"
+    columns = [column.brand]
+  }
   index "commodities_deleted_at_idx" {
     where = "deleted_at IS NOT NULL"
     columns = [column.deleted_at]
@@ -605,6 +618,11 @@ table "commodities" {
   index "commodities_extra_serial_numbers_gin_idx" {
     type = "GIN"
     columns = [column.extra_serial_numbers]
+  }
+  index "commodities_model_trgm_idx" {
+    type = "GIN"
+    ops = "gin_trgm_ops"
+    columns = [column.model]
   }
   index "commodities_name_trgm_idx" {
     type = "GIN"

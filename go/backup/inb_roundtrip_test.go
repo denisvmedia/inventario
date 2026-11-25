@@ -99,6 +99,8 @@ func newInbFixture(c *qt.C) *inbFixture {
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: group.ID, CreatedByUserID: user.ID},
 		Name:                     "TV",
 		ShortName:                "tv",
+		Brand:                    "Sony",
+		Model:                    "KD-55X85L",
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   new(area.ID),
 		Count:                    1,
@@ -472,6 +474,13 @@ func TestINBRoundTrip_FullReplace(t *testing.T) {
 	c.Assert(final.LocationCount >= 1, qt.IsTrue)
 	c.Assert(final.AreaCount >= 1, qt.IsTrue)
 	c.Assert(final.CommodityCount >= 1, qt.IsTrue, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	// The brand and the model (format 3.2) come back.
+	comReg := must.Must(src.fs.CommodityRegistryFactory.CreateUserRegistry(src.ctx))
+	commodities := must.Must(comReg.List(src.ctx))
+	c.Assert(commodities, qt.HasLen, 1)
+	c.Check(commodities[0].Brand, qt.Equals, "Sony")
+	c.Check(commodities[0].Model, qt.Equals, "KD-55X85L")
 }
 
 // addUnassignedCommodity creates an area-less commodity (issue #1986) in the

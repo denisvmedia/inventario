@@ -211,6 +211,8 @@ func DefaultResult() aivision.ScanResult {
 		Fields: map[string]aivision.FieldGuess{
 			aivision.FieldNameName:                  {Value: "Sample Wireless Headphones", Confidence: 0.92},
 			aivision.FieldNameShortName:             {Value: "WH-Sample", Confidence: 0.78},
+			aivision.FieldNameBrand:                 {Value: "Sample Audio", Confidence: 0.84},
+			aivision.FieldNameModel:                 {Value: "WH-100", Confidence: 0.72},
 			aivision.FieldNameType:                  {Value: "electronics", Confidence: 0.95},
 			aivision.FieldNameOriginalPrice:         {Value: 199.99, Confidence: 0.80},
 			aivision.FieldNameOriginalPriceCurrency: {Value: "USD", Confidence: 0.85},
@@ -247,6 +249,7 @@ func MultiItemResult() aivision.ScanResult {
 	espresso := map[string]aivision.FieldGuess{
 		aivision.FieldNameName:                  {Value: "Espresso Machine", Confidence: 0.93},
 		aivision.FieldNameShortName:             {Value: "Espresso", Confidence: 0.80},
+		aivision.FieldNameBrand:                 {Value: "Sample Brew", Confidence: 0.82},
 		aivision.FieldNameType:                  {Value: "white_goods", Confidence: 0.88},
 		aivision.FieldNameOriginalPrice:         {Value: 449.00, Confidence: 0.90},
 		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},

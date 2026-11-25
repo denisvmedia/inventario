@@ -11,6 +11,7 @@ import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagPill } from "@/components/tags/TagPill"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import type { Commodity } from "@/features/commodities/api"
+import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
   COMMODITY_STATUS_TONES,
@@ -103,6 +104,7 @@ export function CommodityPhotoCard({
   const status = row.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const area = areaName(row.area_id)
+  const brandModel = brandModelText(row)
   const purchaseDateShort = row.purchase_date
     ? formatDate(row.purchase_date, { style: "short" })
     : null
@@ -163,6 +165,15 @@ export function CommodityPhotoCard({
           >
             {row.name}
           </p>
+          {brandModel ? (
+            <p
+              className="mt-0.5 truncate text-xs text-muted-foreground"
+              title={brandModel}
+              data-testid="commodity-card-subtitle"
+            >
+              {brandModel}
+            </p>
+          ) : null}
           {area ? (
             <p className="mt-0.5 truncate text-xs text-muted-foreground" title={area}>
               {area}

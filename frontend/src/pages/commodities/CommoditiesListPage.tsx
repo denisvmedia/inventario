@@ -68,6 +68,7 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
 import { useLocations } from "@/features/locations/hooks"
+import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
 import {
@@ -1397,6 +1398,9 @@ function CommodityGridCard({
   const purchaseDateLabel = purchaseDateShort
     ? t("commodities:card.purchasedOn", { date: purchaseDateShort })
     : null
+  // The mock's "brand · model" line; an item with neither shows its short
+  // name there instead.
+  const subtitle = brandModelText(row) || row.short_name
   // Bare click opens the Sheet preview; ctrl/cmd/shift-click and
   // middle-click fall through to the underlying Link so the user can
   // open the canonical URL in a new tab. shiftKey/aux-button check
@@ -1495,15 +1499,20 @@ function CommodityGridCard({
         >
           {row.name}
         </CardTitle>
-        <CardDescription className="pointer-events-none text-xs">
-          {areaName(row.area_id)}
+        <CardDescription
+          className="pointer-events-none truncate text-xs"
+          data-testid="commodity-card-subtitle"
+        >
+          {subtitle}
         </CardDescription>
         <SearchMatchHint match={match} tagLabel={tagLabel} className="pointer-events-none" />
       </CardHeader>
       <CardContent className="pointer-events-none">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2">
-            {row.short_name ? <span className="truncate">{row.short_name}</span> : null}
+            <span className="truncate" data-testid="commodity-card-area">
+              {areaName(row.area_id)}
+            </span>
             {purchaseDateShort ? (
               <span
                 className="inline-flex shrink-0 items-center gap-1"
@@ -1651,8 +1660,13 @@ function CommoditiesTable({
                       </Badge>
                     ) : null}
                   </div>
-                  {row.short_name ? (
-                    <p className="text-xs text-muted-foreground truncate">{row.short_name}</p>
+                  {brandModelText(row) || row.short_name ? (
+                    <p
+                      className="text-xs text-muted-foreground truncate"
+                      data-testid="commodity-row-subtitle"
+                    >
+                      {brandModelText(row) || row.short_name}
+                    </p>
                   ) : null}
                   <SearchMatchHint match={primarySearchMatch(matches?.[id])} tagLabel={tagLabel} />
                 </div>

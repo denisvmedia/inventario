@@ -42,6 +42,20 @@ export function tagCounts(
   ]
 }
 
+// brands backs GET /commodities/brands: it returns the fixture brands that
+// contain the q parameter, ignoring case, up to the limit parameter.
+export function brands(slug: string, data: { brand: string; count: number }[]) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/brands`), ({ request }) => {
+      const params = new URL(request.url).searchParams
+      const q = (params.get("q") ?? "").toLowerCase()
+      const limit = Number(params.get("limit") ?? "20")
+      const matching = data.filter((b) => b.brand.toLowerCase().includes(q)).slice(0, limit)
+      return HttpResponse.json({ data: matching })
+    }),
+  ]
+}
+
 export function detail(slug: string, id: string, item: unknown, cover?: CoverFixture) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () => {

@@ -39,7 +39,7 @@ Use this when you need a detailed write-up of one thing — a laptop, a watch, a
 
 A single-item report shows:
 
-- **A header** with the item's name (and its short name, if different), labelled **Item Insurance Report**, plus the date it was generated.
+- **A header** with the item's brand and name, and under it the model (or, for an item without a model, its short name if different from the name), labelled **Item Insurance Report**, plus the date it was generated.
 - **Two value cards:**
   - **Purchase Price** — what you paid, in the currency you recorded the purchase in. The purchase date appears beneath it if you set one.
   - **Estimated Value** — the item's current value, in your group's currency. When you haven't entered one, the purchase price in your group's currency stands in for it.
@@ -53,7 +53,7 @@ Any field you haven't filled in shows a dash (—) rather than being left blank,
 :::
 
 :::tip
-To get the most out of a single-item report, fill in the item's price, purchase date, serial number, and warranty details, and attach a clear photo or two. See [Items](../items/) and [Warranties, loans & maintenance](../warranties-loans-maintenance/).
+To get the most out of a single-item report, fill in the item's brand, model, price, purchase date, serial number, and warranty details, and attach a clear photo or two. See [Items](../items/) and [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 :::
 
 ## Whole-location report
@@ -75,7 +75,7 @@ A location report shows:
   - **Est. Total Value** — the combined estimated value of the items, in your group's currency. An item's estimated value is its current value, or its purchase price when the current value is unknown, the same rule the dashboard uses.
 
   Each total adds up only the items whose amount is known. When it leaves items out, a line under it says how many, for example "Excludes 2 items without a purchase price".
-- **A section per item**, each with its type and area, name, warranty badge, purchase price, estimated value, serial number, purchase date, any warranty note, and the item's cover photo.
+- **A section per item**, each with its type and area, brand and name, model, warranty badge, purchase price, estimated value, serial number, purchase date, any warranty note, and the item's cover photo.
 
 Items are grouped by **location**, which is made up of its **areas**. An item only appears in the report if it's been placed in an area belonging to the selected location — see [Locations & areas](../locations-and-areas/). If a location has no items, the report says **No items found for this location.**
 

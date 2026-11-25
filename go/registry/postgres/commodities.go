@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -400,6 +401,45 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 	return counts, nil
 }
 
+// ListBrands returns the brands of the group's commodities, see
+// registry.CountCommodityBrands. The database groups and counts; the order
+// and the limit are applied in Go, so both backends sort alike.
+func (r *CommodityRegistry) ListBrands(ctx context.Context, query string, limit int) ([]registry.CommodityBrandCount, error) {
+	if limit <= 0 {
+		return []registry.CommodityBrandCount{}, nil
+	}
+	sb := newSelect().Select("brand", "COUNT(*)").From(string(r.tableNames.Commodities()))
+	// Items in Trash do not count, as on every other list.
+	where := []string{liveRow, sb.NotEqual("brand", "")}
+	if q := strings.TrimSpace(query); q != "" {
+		where = append(where, sb.ILike("brand", containsPattern(q)))
+	}
+	sb.Where(where...).GroupBy("brand")
+	sqlQuery, args := sb.Build()
+
+	brands := []registry.CommodityBrandCount{}
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, sqlQuery, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to list commodity brands", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var b registry.CommodityBrandCount
+			if err := rows.Scan(&b.Brand, &b.Count); err != nil {
+				return errxtrace.Wrap("failed to scan commodity brand", err)
+			}
+			brands = append(brands, b)
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity brands", err)
+	}
+	registry.SortCommodityBrands(brands)
+	return brands[:min(limit, len(brands))], nil
+}
+
 // commodityTagCountsSelect is the SELECT of CountTags without its WHERE.
 // COUNT(DISTINCT id) keeps a slug stored twice on one row from counting
 // twice.
@@ -474,14 +514,21 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 }
 
 // searchTermExpr is the SQL form of one term of registry.MatchCommoditySearch.
-// The generated search_text column joins every text field, tag slugs
-// included, with U+001F, and a term never holds a control character, so one
-// escaped ILIKE against it equals "some field contains the term"; the trigram
-// index commodities_search_text_trgm_idx serves it. A tag found by its label
-// arrives as a pre-resolved slug list, matched with ?| on the GIN-indexed
-// tags column, and a term that reads as an asset ID also matches the number.
+// The generated search_text column joins the text fields of
+// registry.CommoditySearchTextFields, tag slugs included, with U+001F, and a
+// term never holds a control character, so one escaped ILIKE against it
+// equals "one of those fields contains the term"; the trigram index
+// commodities_search_text_trgm_idx serves it. The fields of
+// registry.CommodityColumnSearchFields get an ILIKE each on their own
+// trigram-indexed column. A tag found by its label arrives as a pre-resolved
+// slug list, matched with ?| on the GIN-indexed tags column, and a term that
+// reads as an asset ID also matches the number.
 func searchTermExpr(cond *sqlb.Cond, term string, labelSlugs []string) string {
-	alternatives := []string{"search_text ILIKE " + cond.Var(containsPattern(term))}
+	pattern := containsPattern(term)
+	alternatives := []string{"search_text ILIKE " + cond.Var(pattern)}
+	for _, field := range registry.CommodityColumnSearchFields {
+		alternatives = append(alternatives, string(field)+" ILIKE "+cond.Var(pattern))
+	}
 	if len(labelSlugs) > 0 {
 		alternatives = append(alternatives, "tags ?| "+cond.Var(labelSlugs)+"::text[]")
 	}

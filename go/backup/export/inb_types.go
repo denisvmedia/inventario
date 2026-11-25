@@ -33,7 +33,10 @@ package export
 // released versions (v0.2.x) read at most 2.x and reject it, and a 3.0 reader
 // would read unknown prices as zero and skip the items its validation
 // rejects, such as a reviewed item without a purchase date.
-const INBFormatVersion = "3.1"
+//
+// 3.2 adds an item's brand and model (INBCommodity.Brand and .Model), both
+// optional. A 3.1 reader restores a 3.2 archive without them.
+const INBFormatVersion = "3.2"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -189,6 +192,8 @@ type INBCommodity struct {
 	ID                     string   `json:"id"`
 	Name                   string   `json:"name"`
 	ShortName              string   `json:"shortName,omitempty"`
+	Brand                  string   `json:"brand,omitempty"`
+	Model                  string   `json:"model,omitempty"`
 	Type                   string   `json:"type,omitempty"`
 	AreaID                 string   `json:"areaId"`
 	Count                  int      `json:"count"`

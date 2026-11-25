@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — Brand and model on the item: inputs, suggestions, cards, item page, search
+
+- **Issue/PR**: #2804 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step puts Brand and Model side by side under Short name (L1042–L1049). `BrandInput` (L916–L958) suggests up to six names from the fixed `ALL_BRANDS` list that start with the typed text, and `ModelInput` (L960–L1002) suggests models of the chosen brand from `BRAND_MODELS`. [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) shows `{brand} · {model}` as the sheet description (L658–L660) and plain Brand / Model inputs in `ItemEditForm` (L468–L473). [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid card: `{brand} · {model}` as `CardDescription`, then `area | value` in `CardContent` (L454–L466); list row subtitle `{brand} · {area}` (L507–L509); search placeholder "Search items, brands…" (L226).
+- **Reality**: `frontend/src/components/items/BrandModelFields.tsx` renders the two inputs, with the mock's grid, under Short name in the step dialog and under Name in the edit form, so the edit form now carries Brand and Model as the mock does, next to the Short name and Quantity it already had. `BrandInput.tsx` keeps the mock's popover classes but takes its suggestions from `GET /commodities/brands`: the brands the group's items carry that contain the typed text anywhere, ignoring case, most used first, at most six; it is a `combobox` with a `listbox`, and the arrow keys and Enter pick a suggestion. The edit form gets the same suggestions. Model has no suggestions. Grid cards follow the mock (brand · model as the description, area in the content row, with the existing purchase-date chip beside it); the items table, the area page's grid and list, and the item page header show brand · model as the line under the name. An item with neither shows its short name in that place; the photo cards of #2797 show the brand · model line above the area only when the item has either, and the item page keeps the short name and the type line around it. The search match line (#2800) now sits under the brand · model line. The items search placeholder reads "Search by name, brand, model, serial or part number, tag, notes or asset ID…". The AI scan review lists Brand and Model rows after Short name.
+- **Why**: The issue asks for the fields, for "brand · model" on cards, and for brand suggestions from the brands the group already uses (the mock's fixed list is placeholder data). Matching anywhere in the brand, the suggestions in the edit form, the short-name fallback and keeping the list row's subtitle as brand · model (the table has its own area column) are agent-suggested. Model suggestions are left out: the issue asks only for brand suggestions, and a per-brand model list would need a second endpoint.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; substring matching, edit-form suggestions, keyboard selection and the short-name fallback agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Add model suggestions if the mock's `ModelInput` is wanted with real data; otherwise permanent. The short-name fallback stays while brand and model are optional.
+
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
 
 - **Issue/PR**: #2797 / PR (pending)
@@ -236,6 +245,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The issue asks for the mock's form 1:1; the field mapping is a backend data reality. The issue also asks for Save and Cancel to stay visible on a long form, hence the sticky row. The agent-suggested parts keep every field of the record reachable from the form and let a user unassign an item or add a first tag without leaving it.
 - **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements; All fields, the hidden-field alert, Clear location and the new-tag input are agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds these fields or controls; the field mapping is permanent while the model has no brand or model.
+- **Resolved**: 2026-11-25, PR (pending) — in part: Brand and Model are on the form, next to Short name and Quantity (#2804).
 
 #### 2026-11-24 — Item page: Previous / Next and Save and next over the originating list
 
@@ -1119,6 +1129,7 @@ _None yet._
 - **Why**: Backend data-model constraints (no brand/model columns, `type` not `category`, per-group immutable currency from #202/#1550, covers-not-galleries on the list endpoint), missing shadcn primitives (`ToggleGroup`), and the established `CommodityPrintPage` precedent (Shell-mounted print route, chrome hidden via `@media print`). The issue's broader full-inventory / filtered scope was deliberately deferred to match the design mock's two-mode shape.
 - **Approved by**: agent-suggested-then-user-confirmed.
 - **Reversion plan**: Permanent for the data-model-bound divergences (brand/model, category→type, currency, covers). The `ToggleGroup` segmented-button substitution resolves to 1:1 if/when a `toggle-group.tsx` primitive is vendored. The issue's full-inventory / filtered report scope is a future follow-up if requested.
+- **Resolved**: 2026-11-25, PR (pending) — divergence (2) back to 1:1: the title is `{brand} {name}` (the name alone when it already starts with the brand) and the subtitle the model, falling back to the short name for an item without a model (#2804).
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so
 

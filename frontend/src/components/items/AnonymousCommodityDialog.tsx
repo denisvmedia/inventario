@@ -97,6 +97,8 @@ export function AnonymousCommodityDialog({
       writeDraft(ANON_DRAFT_KEY, {
         name: values.name,
         short_name: values.short_name,
+        brand: values.brand ?? "",
+        model: values.model ?? "",
         type: values.type,
         status: values.status,
         count: values.count !== undefined ? String(values.count) : "1",
