@@ -275,6 +275,26 @@ async function fillWarrantyStep(page: Page, c: TestCommodity) {
   }
 }
 
+// closeTagSuggestions closes the tag input's suggestion list, which can
+// cover the reveal buttons under it. The list opens again one render after
+// a chip is committed, so wait for it before pressing Escape: an Escape that
+// arrives first goes to the dialog instead, which then asks to save a draft
+// (create) or closes (edit). When no other tag in the group can be
+// suggested, the list stays closed and there is nothing to do.
+async function closeTagSuggestions(page: Page) {
+  const input = page.locator('[data-testid="commodity-tags-input"]');
+  const opened = await page
+    .locator('[data-testid="commodity-tags-input"][aria-expanded="true"]')
+    .waitFor({ timeout: 2000 })
+    .then(
+      () => true,
+      () => false,
+    );
+  if (!opened) return;
+  await input.press("Escape");
+  await expect(input).toHaveAttribute("aria-expanded", "false");
+}
+
 async function fillExtrasStep(
   page: Page,
   c: TestCommodity,
@@ -298,10 +318,7 @@ async function fillExtrasStep(
   // DOM and we'd hit a 2-minute locator timeout.
   if (c.tags && c.tags.length) {
     await fillChips(page, "commodity-tags", c.tags);
-    // The TagsInput popover (autocomplete dropdown) stays open after
-    // commit and can overlap the reveal buttons below it. Press
-    // Escape to close the dropdown before moving on.
-    await page.keyboard.press("Escape");
+    await closeTagSuggestions(page);
   }
   if (c.extraSerialNumbers && c.extraSerialNumbers.length) {
     await revealAndFillChips(
