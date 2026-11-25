@@ -9,6 +9,7 @@
 // the user scrolls items the system has had for years.
 
 import { useMemo, useState } from "react"
+import type { TFunction } from "i18next"
 import { useTranslation } from "react-i18next"
 import {
   CheckCircle2,
@@ -233,7 +234,7 @@ function renderEventIcon(kind: CommodityEventKind, className: string) {
 // throws on missing keys; falls back to a generic message instead.
 function labelFor(
   ev: CommodityEvent,
-  t: (key: string, opts?: Record<string, unknown>) => string,
+  t: TFunction,
   areaName: (id?: string) => string
 ): string {
   switch (ev.kind) {
