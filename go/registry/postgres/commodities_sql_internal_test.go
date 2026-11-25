@@ -74,12 +74,14 @@ func TestCommodityListSQL(t *testing.T) {
 			args: []any{false, "in_use", 24, 0},
 		},
 		{
-			// One ILIKE against the generated column covers every text
-			// field; the trigram index on it serves the match.
-			name: "a search term is one ILIKE against search_text",
+			// One ILIKE against the generated column covers most text
+			// fields; brand and model are matched on their own columns.
+			// A trigram index serves each of the three.
+			name: "a search term is an ILIKE against search_text, brand and model",
 			opts: registry.CommodityListOptions{Search: "  Drill  "},
-			want: selectPrefix + "draft = $1 AND status = $2 AND (search_text ILIKE $3) ORDER BY LOWER(name) ASC, id ASC LIMIT $4 OFFSET $5",
-			args: []any{false, "in_use", "%Drill%", 24, 0},
+			want: selectPrefix + "draft = $1 AND status = $2 AND (search_text ILIKE $3 OR brand ILIKE $4 OR model ILIKE $5) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $6 OFFSET $7",
+			args: []any{false, "in_use", "%Drill%", "%Drill%", "%Drill%", 24, 0},
 		},
 		{
 			// Terms are AND-ed; within a term the alternatives are OR-ed: a
@@ -92,19 +94,24 @@ func TestCommodityListSQL(t *testing.T) {
 				SearchTagLabels: map[string][]string{"red drill": {"power-tools", "red"}},
 			},
 			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
-				"(search_text ILIKE $1 OR asset_number = $2) AND " +
-				"(search_text ILIKE $3 OR tags ?| $4::text[]) " +
-				"ORDER BY LOWER(name) ASC, id ASC LIMIT $5 OFFSET $6",
-			args: []any{"%A-0042%", 42, "%red drill%", []string{"power-tools", "red"}, 24, 0},
+				"(search_text ILIKE $1 OR brand ILIKE $2 OR model ILIKE $3 OR asset_number = $4) AND " +
+				"(search_text ILIKE $5 OR brand ILIKE $6 OR model ILIKE $7 OR tags ?| $8::text[]) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $9 OFFSET $10",
+			args: []any{
+				"%A-0042%", "%A-0042%", "%A-0042%", 42,
+				"%red drill%", "%red drill%", "%red drill%", []string{"power-tools", "red"},
+				24, 0,
+			},
 		},
 		{
 			// A % or _ the user typed matches itself, as strings.Contains
 			// does in the memory backend.
 			name: "LIKE wildcards in a term are escaped",
 			opts: registry.CommodityListOptions{IncludeInactive: true, Search: `50%_off\`},
-			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE (search_text ILIKE $1) " +
-				"ORDER BY LOWER(name) ASC, id ASC LIMIT $2 OFFSET $3",
-			args: []any{`%50\%\_off\\%`, 24, 0},
+			want: "SELECT *, COUNT(*) OVER() AS total_count FROM commodities WHERE " +
+				"(search_text ILIKE $1 OR brand ILIKE $2 OR model ILIKE $3) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $4 OFFSET $5",
+			args: []any{`%50\%\_off\\%`, `%50\%\_off\\%`, `%50\%\_off\\%`, 24, 0},
 		},
 		{
 			name: "tag filter: all, exclusion",
@@ -242,8 +249,9 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 	countSQL, countArgs := countSB.Build()
 
 	c.Check(countSQL, qt.Equals,
-		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
-	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%"})
+		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND "+
+			"(search_text ILIKE $3 OR brand ILIKE $4 OR model ILIKE $5)")
+	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%", "%drill%", "%drill%"})
 }
 
 func TestCommodityTagCountsSQL(t *testing.T) {
@@ -256,6 +264,6 @@ func TestCommodityTagCountsSQL(t *testing.T) {
 	c.Check(query, qt.Equals,
 		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+
 			"LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(commodities.tags, '[]'::jsonb)) AS t(slug) ON true "+
-			"WHERE draft = $1 AND status = $2 AND (search_text ILIKE $3) GROUP BY t.slug")
-	c.Check(args, qt.DeepEquals, []any{false, "in_use", "%drill%"})
+			"WHERE draft = $1 AND status = $2 AND (search_text ILIKE $3 OR brand ILIKE $4 OR model ILIKE $5) GROUP BY t.slug")
+	c.Check(args, qt.DeepEquals, []any{false, "in_use", "%drill%", "%drill%", "%drill%"})
 }

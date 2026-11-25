@@ -48,6 +48,8 @@ export interface ScanWarning {
 export type ScanFieldName =
   | "name"
   | "short_name"
+  | "brand"
+  | "model"
   | "type"
   | "original_price"
   | "original_price_currency"
@@ -61,6 +63,8 @@ export type ScanFieldName =
 export interface ScanResultFields {
   name?: ScanFieldGuess<string>
   short_name?: ScanFieldGuess<string>
+  brand?: ScanFieldGuess<string>
+  model?: ScanFieldGuess<string>
   type?: ScanFieldGuess<string>
   original_price?: ScanFieldGuess<number>
   original_price_currency?: ScanFieldGuess<string>
@@ -203,6 +207,8 @@ function assignField(
   switch (key) {
     case "name":
     case "short_name":
+    case "brand":
+    case "model":
     case "type":
     case "original_price_currency":
     case "serial_number":

@@ -46,6 +46,8 @@ export const commodityKeys = {
     ] as const,
   tagCounts: (slug: string, opts?: ListCommoditiesOptions) =>
     [...commodityKeys.group(slug), "tag-counts", listKeySuffix(opts)] as const,
+  brands: (slug: string, query: string) =>
+    [...commodityKeys.group(slug), "brands", query.trim()] as const,
   detail: (slug: string, id: string) => [...commodityKeys.group(slug), "detail", id] as const,
   values: (slug: string) => [...commodityKeys.group(slug), "values"] as const,
   events: (

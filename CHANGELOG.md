@@ -12,6 +12,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- An item has a brand and a model, both optional text of up to 100
+  characters. Cards, list rows and the item page show "Brand · Model" under
+  the name, the insurance reports put the brand in the item's title and the
+  model under it, and search finds items by either. The brand input suggests
+  the brands the group already uses, most used first, from the new
+  `GET /commodities/brands` endpoint. AI scan fills both, and backups carry
+  them (format 3.2; a 3.1 archive restores with them empty)
+  ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 - Item reminders and an Upcoming page. The Reminders card on an item's
   Details tab takes a title, a date, up to five "remind me N days before"
   values and an optional repeat (daily, weekly, monthly or yearly, every N

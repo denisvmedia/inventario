@@ -264,9 +264,9 @@ item dialog.
    of the item plus its label (the plate with model and serial numbers) works
    well, and so does a receipt or invoice PDF.
 3. Click **Scan files**. AI reads them — you can **Cancel** while it works.
-4. On **Review extracted details**, each field (name, type, price, serial
-   number, purchase date, warranty expiry, tags, and more) shows what AI found,
-   with a confidence label. Untick anything that looks wrong.
+4. On **Review extracted details**, each field (name, brand, model, type,
+   price, serial number, purchase date, warranty expiry, tags, and more) shows
+   what AI found, with a confidence label. Untick anything that looks wrong.
 5. Click **Use these values** to pre-fill the form, then finish and save the
    item as usual.
 

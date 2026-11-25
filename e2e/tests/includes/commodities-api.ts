@@ -188,6 +188,8 @@ export interface CreateCommodityParams {
   /** Tag texts; the server creates missing tags with the text as label. */
   tags?: string[]
   comments?: string
+  brand?: string
+  model?: string
 }
 
 /**
@@ -236,6 +238,8 @@ export async function createCommodityViaAPI(
   if (params.partNumbers) attributes.part_numbers = params.partNumbers
   if (params.tags) attributes.tags = params.tags
   if (params.comments) attributes.comments = params.comments
+  if (params.brand) attributes.brand = params.brand
+  if (params.model) attributes.model = params.model
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),
     data: {

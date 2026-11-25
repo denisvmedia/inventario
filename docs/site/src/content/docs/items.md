@@ -83,6 +83,8 @@ The form is split across the five steps. Only a handful of fields are required
 | --- | --- |
 | **Name** * | The full name, e.g. "Bosch SMV6ZCX42E dishwasher". |
 | **Short name** * | A 1–40 character label used in compact lists. |
+| **Brand** | Who made it, e.g. "Bosch". Up to 100 characters. As you type, the brands already used in your group are suggested, most used first; pick one with a click or with the arrow keys and Enter. |
+| **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. |
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
 | **Type** * | **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, or **Other**. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
@@ -248,7 +250,9 @@ Click **Edit** on the item page, or in the side panel that opens from the
 **All Items** page. The details give way to an edit form in the same place,
 grouped into sections:
 
-- **Identity** — name, short name, quantity, type, and serial number.
+- **Identity** — name, brand, model, short name, quantity, type, and serial
+  number. The brand suggests the brands already used in your group, as in the
+  step-by-step form.
 - **Location** — location and area. **Clear location** leaves the item
   unassigned. If the place is not there yet, owners and administrators choose
   **New location** or **New area** at the end of the list (see
@@ -388,9 +392,9 @@ button so you can put it back into active use at any time.
 
 The **All Items** page lists every item in your group. Across the top you have:
 
-- **Search** — type in the search box to find items by name, short name, serial
-  number (including extra serial numbers), part number, tag, notes, warranty
-  notes, status note, or asset ID (`A-0042`). See [Searching for
+- **Search** — type in the search box to find items by name, short name, brand,
+  model, serial number (including extra serial numbers), part number, tag,
+  notes, warranty notes, status note, or asset ID (`A-0042`). See [Searching for
   items](#searching-for-items).
 - **Type** — filter by one or more item types.
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
@@ -431,8 +435,8 @@ all search items the same way:
 - A word that is an asset ID (`A-0042`, `#42`, `42`) also finds that item.
 
 When an item matched on something other than its name, a line under the name
-says where, for example **Serial number: SN-1234**, **Tag: Garage**, or a short
-piece of the notes.
+says where, for example **Serial number: SN-1234**, **Model: SMV6ZCX42E**,
+**Tag: Garage**, or a short piece of the notes.
 
 The **All Items** page hides inactive items unless **Show inactive** is on, so
 it can show fewer results than the search page, which includes them. The

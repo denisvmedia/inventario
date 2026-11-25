@@ -226,6 +226,8 @@ type FieldName = string
 const (
 	FieldNameName                  FieldName = "name"
 	FieldNameShortName             FieldName = "short_name"
+	FieldNameBrand                 FieldName = "brand"
+	FieldNameModel                 FieldName = "model"
 	FieldNameType                  FieldName = "type"
 	FieldNameOriginalPrice         FieldName = "original_price"
 	FieldNameOriginalPriceCurrency FieldName = "original_price_currency"
@@ -247,6 +249,8 @@ const (
 var AllFieldNames = []FieldName{
 	FieldNameName,
 	FieldNameShortName,
+	FieldNameBrand,
+	FieldNameModel,
 	FieldNameType,
 	FieldNameOriginalPrice,
 	FieldNameOriginalPriceCurrency,

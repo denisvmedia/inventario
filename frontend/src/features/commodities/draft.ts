@@ -137,6 +137,8 @@ export function buildDefaults(
   return {
     name: initial?.name ?? "",
     short_name: initial?.short_name ?? "",
+    brand: initial?.brand ?? "",
+    model: initial?.model ?? "",
     type: (initial?.type as string) ?? "",
     area_id: initial?.area_id ?? "",
     status: (initial?.status as string) ?? "in_use",
@@ -189,6 +191,8 @@ export function toRequest(
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
+    brand: values.brand.trim(),
+    model: values.model.trim(),
     type: values.type as CommodityTypeValue,
     // Omit when empty so the BE creates/leaves the item unassigned
     // (#1986) rather than rejecting "" as a missing area FK. An explicit

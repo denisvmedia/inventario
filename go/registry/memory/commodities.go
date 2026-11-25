@@ -390,6 +390,16 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
 }
 
+// ListBrands returns the brands of the group's commodities, see
+// registry.CountCommodityBrands.
+func (r *CommodityRegistry) ListBrands(ctx context.Context, query string, limit int) ([]registry.CommodityBrandCount, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return registry.CountCommodityBrands(all, query, limit), nil
+}
+
 // filterCommodities applies the predicate fields of opts in-memory. Empty
 // slice/string fields are no-ops, matching the documented "zero-value =
 // no filter" contract.

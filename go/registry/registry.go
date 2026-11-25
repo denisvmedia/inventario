@@ -327,6 +327,14 @@ type CommodityRegistry interface {
 	// not apply.
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
+	// ListBrands returns the brands the commodities of the group carry, with
+	// how many carry each, for the brand input's suggestions. Every
+	// commodity counts, drafts and inactive items included. A brand matches
+	// when it contains query as a case-insensitive literal substring; an
+	// empty query matches every brand. CountCommodityBrands states the rules
+	// and the order; at most limit brands are returned.
+	ListBrands(ctx context.Context, query string, limit int) ([]CommodityBrandCount, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status. Used by the currency-migration
 	// service (issue #202): the conversion needs to see all rows in the

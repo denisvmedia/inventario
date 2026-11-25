@@ -94,8 +94,10 @@ export function FirstItemResolver() {
           // readDraft returns Partial<CommodityFormInput>; the dialog only
           // ever persists a full input, so the cast is safe. A genuinely
           // partial draft still produces a request — the BE validates it
-          // and any 422 surfaces via the catch below (data preserved).
-          draft as Parameters<typeof toRequest>[0],
+          // and any 422 surfaces via the catch below (data preserved). A
+          // draft saved before the form had a brand and a model lacks
+          // them, so they default to empty.
+          { brand: "", model: "", ...draft } as Parameters<typeof toRequest>[0],
           group.group_currency ?? pending.currency
         )
         const created = await createCommodity(request)

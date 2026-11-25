@@ -202,6 +202,35 @@ describe("<CommoditiesListPage />", () => {
     expect((withoutCover as HTMLElement).querySelector("svg")).not.toBeNull()
   })
 
+  it("shows brand · model under the name, the short name without either, and the area (#2804)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Dishwasher", brand: "Bosch", model: "SMV6ZCX42E" }),
+        commodityRes("c2", { name: "Kettle", brand: "Bosch", model: "" }),
+        commodityRes("c3", { name: "Coffee grinder", short_name: "Grinder" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    const subtitle = (id: string) =>
+      within(cards.find((c) => c.getAttribute("data-commodity-id") === id)!).getByTestId(
+        "commodity-card-subtitle"
+      )
+    expect(subtitle("c1")).toHaveTextContent(/^Bosch · SMV6ZCX42E$/)
+    expect(subtitle("c2")).toHaveTextContent(/^Bosch$/)
+    expect(subtitle("c3")).toHaveTextContent(/^Grinder$/)
+    for (const card of cards) {
+      expect(within(card).getByTestId("commodity-card-area")).toBeInTheDocument()
+    }
+
+    await user.click(screen.getByTestId("commodities-view-list"))
+    const rows = await screen.findAllByTestId("commodity-row-subtitle")
+    expect(rows.map((r) => r.textContent)).toEqual(["Bosch · SMV6ZCX42E", "Bosch", "Grinder"])
+  })
+
   it("toggles between grid and list view", async () => {
     const user = userEvent.setup()
     server.use(

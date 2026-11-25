@@ -27,6 +27,7 @@ type CommoditySearchEnv struct {
 
 type searchSeed struct {
 	name, shortName, serial string
+	brand, model            string
 	extraSerials, parts     []string
 	tags                    []string
 	comments, warrantyNotes string
@@ -39,6 +40,7 @@ type searchSeed struct {
 var searchSeeds = []searchSeed{
 	{
 		name: "Cordless Drill", shortName: "Drill", serial: "SN-ABC-123",
+		brand: "Bosch", model: "GSR 12V-15",
 		extraSerials: []string{"XS-999"}, parts: []string{"PN-77"},
 		tags:          []string{"power-tools", "red"},
 		comments:      "Bought at the hardware store",
@@ -47,6 +49,7 @@ var searchSeeds = []searchSeed{
 	{
 		// "50% off" catches an unescaped % (the pattern 5%f would match).
 		name: "Kitchen Fridge", shortName: "Fridge", serial: "FR-2024",
+		brand: "Liebherr", model: "CNsfd 5023",
 		tags:     []string{"kitchen"},
 		comments: "Came with a 50% off sticker",
 	},
@@ -54,19 +57,21 @@ var searchSeeds = []searchSeed{
 		// GH_10 and "Hose" catch an unescaped _ (the pattern hos_ would
 		// match "Hose"). An empty tag list.
 		name: "Garden Hose", shortName: "Hose", parts: []string{"GH_10"},
+		brand:      "Gardena",
 		tags:       []string{},
 		statusNote: "Leaks at the tap",
 	},
 	{
-		// Sold, so the default view hides it.
-		name: "Old Phone", shortName: "Phone",
+		// Sold, so the default view hides it. Its brand differs from the
+		// drill's only in case, so the brand list keeps the two apart.
+		name: "Old Phone", shortName: "Phone", brand: "bosch",
 		tags:       []string{"red"},
 		statusNote: "Sold to a neighbor",
 		status:     models.CommodityStatusSold,
 	},
 	{
 		// "red" in the name only; no tag list at all (NULL in postgres).
-		name: "Red Toolbox", shortName: "Toolbox",
+		name: "Red Toolbox", shortName: "Toolbox", brand: "Bosch",
 	},
 }
 
@@ -201,6 +206,44 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 		}
 	})
 
+	t.Run("brands", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seedSearchGroup(c, env)
+
+		for _, tc := range []struct {
+			name  string
+			query string
+			limit int
+			want  []registry.CommodityBrandCount
+		}{
+			{
+				// The sold phone counts; "bosch" and "Bosch" stay apart.
+				name: "every brand", limit: 10,
+				want: []registry.CommodityBrandCount{
+					{Brand: "Bosch", Count: 2},
+					{Brand: "bosch", Count: 1},
+					{Brand: "Gardena", Count: 1},
+					{Brand: "Liebherr", Count: 1},
+				},
+			},
+			{name: "substring, any case", query: "EBH", limit: 10, want: []registry.CommodityBrandCount{{Brand: "Liebherr", Count: 1}}},
+			{name: "cut to the limit", query: "bos", limit: 1, want: []registry.CommodityBrandCount{{Brand: "Bosch", Count: 2}}},
+			{name: "% is literal", query: "%", limit: 10, want: []registry.CommodityBrandCount{}},
+			{name: "no limit, no brands", limit: 0, want: []registry.CommodityBrandCount{}},
+		} {
+			c.Run(tc.name, func(c *qt.C) {
+				got, err := env.Commodities.ListBrands(env.Ctx, tc.query, tc.limit)
+				c.Assert(err, qt.IsNil)
+				c.Check(got, qt.DeepEquals, tc.want)
+
+				all, err := env.Commodities.List(env.Ctx)
+				c.Assert(err, qt.IsNil)
+				c.Check(registry.CountCommodityBrands(all, tc.query, tc.limit), qt.DeepEquals, got)
+			})
+		}
+	})
+
 	t.Run("tag labels stay within their kind", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -271,6 +314,12 @@ func searchCases(hose *models.Commodity) []searchCase {
 		{name: "status note", opts: search("neighbor"), want: []string{"Old Phone"},
 			match: match(registry.CommoditySearchFieldStatusNote, "Sold to a neighbor")},
 		{name: "short name", opts: search("toolbox"), want: []string{"Red Toolbox"}},
+		{name: "brand, any case", opts: search("BOSCH"), want: []string{"Cordless Drill", "Old Phone", "Red Toolbox"}},
+		{name: "brand in the default view", opts: search("liebherr"), activeOnly: true, want: []string{"Kitchen Fridge"},
+			match: match(registry.CommoditySearchFieldBrand, "Liebherr")},
+		{name: "model", opts: search("12v-15"), want: []string{"Cordless Drill"},
+			match: match(registry.CommoditySearchFieldModel, "GSR 12V-15")},
+		{name: "brand and model AND-ed with another field", opts: search("gardena hose"), want: []string{"Garden Hose"}},
 		{name: "asset ID", opts: search(models.FormatAssetID(*hose.AssetNumber)), want: []string{"Garden Hose"},
 			match: match(registry.CommoditySearchFieldAssetID, models.FormatAssetID(*hose.AssetNumber))},
 		{name: "one term, several fields across items", opts: search("red"),
@@ -331,6 +380,8 @@ func seedSearchGroup(c *qt.C, env CommoditySearchEnv) *models.Commodity {
 		created, err := env.Commodities.Create(env.Ctx, models.Commodity{
 			Name:                  s.name,
 			ShortName:             s.shortName,
+			Brand:                 s.brand,
+			Model:                 s.model,
 			Type:                  models.CommodityTypeOther,
 			AreaID:                new(env.AreaID),
 			Count:                 1,

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { ArrowLeft, ChevronRight, ListChecks } from "lucide-react"
 
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
+import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { ListPager } from "@/components/ListPager"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import {
@@ -47,6 +48,8 @@ import { cn } from "@/lib/utils"
 // that "All fields" opens.
 const FORM_FIELDS = [
   "name",
+  "brand",
+  "model",
   "short_name",
   "count",
   "type",
@@ -280,6 +283,12 @@ export function CommodityEditForm({
             <EditField label={t("commodities:fields.name")} htmlFor="edit-name" error={errors.name}>
               <Input id="edit-name" {...register("name")} aria-invalid={!!errors.name} />
             </EditField>
+            <BrandModelFields
+              control={control}
+              register={register}
+              errors={errors}
+              idPrefix="edit"
+            />
             <div className="grid grid-cols-2 gap-3">
               <EditField
                 label={t("commodities:fields.shortName")}

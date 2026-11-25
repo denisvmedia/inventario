@@ -222,6 +222,27 @@ export async function getCommodityTagCounts(
   return { tags: body.data?.tags ?? {}, untagged: body.data?.untagged ?? 0 }
 }
 
+// A brand the group's items carry and how many carry it
+// (GET /commodities/brands).
+export type CommodityBrandCount = Schema<"registry.CommodityBrandCount">
+
+// listCommodityBrands returns the brands the group's items carry that
+// contain query (any case), most used first, at most limit of them.
+export async function listCommodityBrands(
+  query: string,
+  limit: number,
+  signal?: AbortSignal
+): Promise<CommodityBrandCount[]> {
+  const params = new URLSearchParams()
+  if (query.trim()) params.set("q", query.trim())
+  params.set("limit", String(limit))
+  const body = await http.get<{ data?: CommodityBrandCount[] }>(
+    `/commodities/brands?${params.toString()}`,
+    { signal }
+  )
+  return body.data ?? []
+}
+
 // normalizeCover folds a BE `meta.covers[id]` payload into the FE's
 // `CommodityCover` shape. Returns undefined when the payload is missing
 // or doesn't carry the minimum (`file_id` + at least one thumbnail) the

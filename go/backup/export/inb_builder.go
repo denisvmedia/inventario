@@ -833,6 +833,8 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 		ID:                     com.UUID,
 		Name:                   com.Name,
 		ShortName:              com.ShortName,
+		Brand:                  com.Brand,
+		Model:                  com.Model,
 		Type:                   string(com.Type),
 		AreaID:                 areaUUID,
 		Count:                  com.Count,

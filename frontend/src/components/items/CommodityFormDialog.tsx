@@ -88,6 +88,7 @@ import {
   type ScanAcceptedValues,
   type ScanAcceptMeta,
 } from "@/components/items/AiScanStep"
+import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
 
@@ -186,7 +187,18 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   // reachable in edit mode now) still maps back to Basics via the 422
   // handler — but it never blocks Next: area is optional (#1986/#1987) so
   // its schema is a bare z.string() that always passes step validation.
-  basics: ["name", "short_name", "urls", "type", "area_id", "status", "count", "draft"],
+  basics: [
+    "name",
+    "short_name",
+    "brand",
+    "model",
+    "urls",
+    "type",
+    "area_id",
+    "status",
+    "count",
+    "draft",
+  ],
   purchase: [
     "purchase_date",
     "original_price",
@@ -636,6 +648,8 @@ export function CommodityFormDialog({
     }
     if (values.name !== undefined) apply("name", values.name)
     if (values.short_name !== undefined) apply("short_name", values.short_name)
+    if (values.brand !== undefined) apply("brand", values.brand)
+    if (values.model !== undefined) apply("model", values.model)
     if (values.type !== undefined) apply("type", values.type)
     if (values.serial_number !== undefined) apply("serial_number", values.serial_number)
     if (values.purchase_date !== undefined) apply("purchase_date", values.purchase_date)
@@ -1169,6 +1183,8 @@ function BasicsStep(props: any) {
           <p className="text-xs text-muted-foreground">{t("commodities:fields.shortNameHelp")}</p>
         )}
       </div>
+
+      <BrandModelFields control={control} register={register} errors={errors} />
 
       <div className="flex flex-col gap-1">
         <UrlList

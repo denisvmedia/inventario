@@ -101,6 +101,8 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 
 	// Core fields.
 	c.Assert(restored.ShortName, qt.Equals, srcReloaded.ShortName)
+	c.Assert(restored.Brand, qt.Equals, "Leica")
+	c.Assert(restored.Model, qt.Equals, "M6 TTL")
 	c.Assert(restored.Type, qt.Equals, srcReloaded.Type)
 	c.Assert(restored.Count, qt.Equals, srcReloaded.Count)
 	c.Assert(restored.SerialNumber, qt.Equals, srcReloaded.SerialNumber)
@@ -207,6 +209,8 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: tenantID, GroupID: groupID, CreatedByUserID: userID},
 		Name:                     "Vintage Camera",
 		ShortName:                "camera",
+		Brand:                    "Leica",
+		Model:                    "M6 TTL",
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   new(area.ID),
 		Count:                    1,

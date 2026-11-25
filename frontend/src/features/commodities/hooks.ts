@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { tagKeys } from "@/features/tags/keys"
 
 import {
@@ -12,6 +12,7 @@ import {
   getCommodity,
   getCommodityTagCounts,
   listCommodities,
+  listCommodityBrands,
   listCommodityEvents,
   setCommodityCover,
   tagCountsOptions,
@@ -74,6 +75,24 @@ export function useCommodityTagCounts(opts: ListCommoditiesOptions, query: Query
     queryFn: ({ signal }) => getCommodityTagCounts({ ...keyOpts, signal }),
     enabled: (query.enabled ?? true) && slug.length > 0,
     placeholderData: (prev) => prev,
+  })
+}
+
+// How many brand suggestions the brand input shows.
+export const BRAND_SUGGESTION_LIMIT = 6
+
+// useCommodityBrands loads the brands the group's items carry that contain
+// query, most used first, for the brand input's suggestions. Pass
+// enabled=false while there is nothing to suggest for. Outside a group (the
+// anonymous first-item dialog) it suggests nothing.
+export function useCommodityBrands(query: string, options: QueryOptions = {}) {
+  const slug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+  return useQuery({
+    queryKey: commodityKeys.brands(slug, query),
+    queryFn: ({ signal }) => listCommodityBrands(query, BRAND_SUGGESTION_LIMIT, signal),
+    enabled: (options.enabled ?? true) && slug.length > 0,
+    placeholderData: (prev) => prev,
+    staleTime: 30_000,
   })
 }
 

@@ -649,6 +649,50 @@ func TestCommodity_ValidateWithContext_NameLength(t *testing.T) {
 	}
 }
 
+func TestCommodity_ValidateWithContext_BrandAndModel(t *testing.T) {
+	valid := func(mutate func(*models.Commodity)) models.Commodity {
+		cm := models.Commodity{
+			Name:                  "Dishwasher",
+			ShortName:             "Dishwasher",
+			Type:                  models.CommodityTypeWhiteGoods,
+			AreaID:                new("area1"),
+			Count:                 1,
+			OriginalPriceCurrency: "USD",
+			Status:                models.CommodityStatusInUse,
+		}
+		mutate(&cm)
+		return cm
+	}
+	for _, tc := range []struct {
+		name    string
+		mutate  func(*models.Commodity)
+		wantErr string
+	}{
+		{name: "both empty", mutate: func(*models.Commodity) {}},
+		{name: "at the limit, counted in runes", mutate: func(cm *models.Commodity) {
+			cm.Brand = strings.Repeat("é", models.MaxCommodityBrandRunes)
+			cm.Model = strings.Repeat("ß", models.MaxCommodityModelRunes)
+		}},
+		{name: "brand too long", mutate: func(cm *models.Commodity) {
+			cm.Brand = strings.Repeat("a", models.MaxCommodityBrandRunes+1)
+		}, wantErr: "brand: the length must be no more than 100"},
+		{name: "model too long", mutate: func(cm *models.Commodity) {
+			cm.Model = strings.Repeat("a", models.MaxCommodityModelRunes+1)
+		}, wantErr: "model: the length must be no more than 100"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			cm := valid(tc.mutate)
+			err := cm.ValidateWithContext(validationctx.WithGroupCurrency(context.Background(), "USD"))
+			if tc.wantErr == "" {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.ErrorMatches, ".*"+tc.wantErr+".*")
+		})
+	}
+}
+
 func TestCommodity_JSONMarshaling(t *testing.T) {
 	c := qt.New(t)
 

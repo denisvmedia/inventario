@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next"
 import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
+import { brandedName } from "@/features/commodities/brand"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
 import { commodityValue, formatPrice } from "@/features/commodities/price"
 import type { ListedFile } from "@/features/files/api"
@@ -12,12 +13,13 @@ import { cn } from "@/lib/utils"
 
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
 import { filesToPhotos } from "../photos"
+import { reportSubtitle } from "../subtitle"
 
 // ItemReport is the single-item insurance report body (#1370). Mirrors
-// the design mock's ItemReport, adapted to real fields: title uses the
-// commodity name + short_name (no brand/model in the BE), category →
-// `type` enum, currency via the group / purchase currencies, warranty via
-// the canonical WARRANTY_STATUS_CONFIG.
+// the design mock's ItemReport, adapted to real fields: the title is the
+// brand and the name, the subtitle the model (the short name for an item
+// without one), category → `type` enum, currency via the group / purchase
+// currencies, warranty via the canonical WARRANTY_STATUS_CONFIG.
 interface ItemReportProps {
   commodity: Commodity
   // Image-category files attached to the commodity (from the unified
@@ -49,6 +51,7 @@ export function ItemReport({
   const wConfig = WARRANTY_STATUS_CONFIG[status]
   const WarrantyIcon = wConfig.icon
   const photos = filesToPhotos(imageFiles, imageSize)
+  const subtitle = reportSubtitle(commodity)
 
   const purchasePrice = formatPrice(
     commodity.original_price,
@@ -102,10 +105,10 @@ export function ItemReport({
                 {t("reports:insurance.itemReportTitle")}
               </span>
             </div>
-            <h1 className="text-3xl font-bold leading-tight tracking-tight">{commodity.name}</h1>
-            {commodity.short_name && commodity.short_name !== commodity.name ? (
-              <p className="mt-1 text-sm opacity-70">{commodity.short_name}</p>
-            ) : null}
+            <h1 className="text-3xl font-bold leading-tight tracking-tight">
+              {brandedName(commodity)}
+            </h1>
+            {subtitle ? <p className="mt-1 text-sm opacity-70">{subtitle}</p> : null}
           </div>
           <div className="shrink-0 text-right">
             <div className="mb-1 text-xs uppercase tracking-widest opacity-60">
