@@ -68,20 +68,33 @@ func (s *CommodityDraftService) drafts(ctx context.Context) (registry.CommodityD
 // Create stores a new draft, or returns the group's draft with the same
 // client key unchanged (created=false). A repeated create after a lost
 // response therefore gives the client the draft it already made, never a
-// second one. A key whose draft is being discarded gets
-// registry.ErrDraftDiscarded.
+// second one, even when the type in its values was deleted since: the type
+// is checked for a new draft only. A key whose draft is being discarded
+// gets registry.ErrDraftDiscarded.
 func (s *CommodityDraftService) Create(ctx context.Context, clientKey string, values models.CommodityDraftValues) (*models.CommodityDraft, bool, error) {
 	draft := models.CommodityDraft{ClientKey: clientKey, Values: values}
 	if err := draft.ValidateFields(ctx); err != nil {
-		return nil, false, err
-	}
-	if err := s.checkValuesType(ctx, values); err != nil {
 		return nil, false, err
 	}
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return nil, false, err
 	}
+	existing, err := reg.GetByClientKey(ctx, clientKey)
+	switch {
+	case err == nil:
+		if existing.IsDiscarding() {
+			return nil, false, errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("entity_id", existing.ID))
+		}
+		return existing, false, nil
+	case !errors.Is(err, registry.ErrNotFound):
+		return nil, false, err
+	}
+	if err := s.checkValuesType(ctx, values); err != nil {
+		return nil, false, err
+	}
+	// A concurrent create with the same key can still win between the
+	// lookup and the insert; CreateOrGet then returns its draft.
 	stored, created, err := reg.CreateOrGet(ctx, draft)
 	if err != nil {
 		return nil, false, err

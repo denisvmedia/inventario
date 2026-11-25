@@ -2,12 +2,14 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
@@ -117,6 +119,37 @@ func TestCommodityDraftService_Create_AcceptsIncompleteValues(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(draft.Values.Title(), qt.Equals, "")
+}
+
+// TestCommodityDraftService_Create_ReplayAfterTheTypeWasDeleted: a repeated
+// create with a key the group already has returns that draft, even when the
+// type in its values was deleted since. A new draft with that type is
+// refused, and a key whose draft is being discarded stays refused.
+func TestCommodityDraftService_Create_ReplayAfterTheTypeWasDeleted(t *testing.T) {
+	c := qt.New(t)
+	f := newDraftFixture(c)
+	boat := must.Must(f.regs.ItemTypeRegistry.Create(f.ctx, models.ItemType{Name: "Boat"}))
+	values := models.CommodityDraftValues{"name": "Dinghy", "type": string(boat.Slug)}
+	first, created, err := f.drafts.Create(f.ctx, "replayed-key", values)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+
+	c.Assert(f.regs.ItemTypeRegistry.Delete(f.ctx, boat.ID), qt.IsNil)
+
+	replayed, created, err := f.drafts.Create(f.ctx, "replayed-key", values)
+	c.Assert(err, qt.IsNil)
+	c.Check(created, qt.IsFalse)
+	c.Check(replayed.ID, qt.Equals, first.ID)
+
+	_, _, err = f.drafts.Create(f.ctx, "new-key", values)
+	verr, ok := errors.AsType[validation.Errors](err)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("got %v", err))
+	c.Check(verr["values"], qt.IsNotNil)
+
+	_, err = f.regs.CommodityDraftRegistry.MarkDiscarding(f.ctx, first.ID)
+	c.Assert(err, qt.IsNil)
+	_, _, err = f.drafts.Create(f.ctx, "replayed-key", values)
+	c.Check(err, qt.ErrorIs, registry.ErrDraftDiscarded)
 }
 
 func TestCommodityDraftService_Promote(t *testing.T) {
