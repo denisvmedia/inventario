@@ -67,7 +67,7 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
 // settingsStub returns a GET /g/{slug}/settings handler with the given
 // body. The CommoditiesListPage always mounts `useUserSettings()` once
 // the group loads, and the suite's MSW server runs in
-// `onUnhandledRequest: "error"` mode (frontend/src/test/setup.ts) — so
+// `onUnhandledFrame: "error"` mode (frontend/src/test/setup.ts) — so
 // every render path through this page needs a stub registered. The
 // baseline below (empty SettingsObject) lets unrelated cases stay
 // silent on this endpoint; the three preference-driven tests override
