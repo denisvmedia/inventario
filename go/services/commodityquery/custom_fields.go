@@ -88,6 +88,9 @@ func parseCustomFieldCondition(raw string) (CustomFieldCondition, error) {
 	case utf8.RuneCountInString(cond.Operand) > MaxTextRunes:
 		return CustomFieldCondition{}, paramError(ParamCustomField, "", fmt.Sprintf("a value must be at most %d characters", MaxTextRunes))
 	}
+	if cond.Op == registry.CustomFieldOpIn && strings.Trim(cond.Operand, ", ") == "" {
+		return CustomFieldCondition{}, paramError(ParamCustomField, raw, "in needs one or more option IDs")
+	}
 	if cond.Op == registry.CustomFieldOpGte || cond.Op == registry.CustomFieldOpLte {
 		_, numErr := decimal.NewFromString(cond.Operand)
 		_, dateErr := time.Parse(time.DateOnly, cond.Operand)
@@ -148,6 +151,28 @@ func resolveCustomFields(ctx context.Context, set *registry.Set, q Query, opts *
 	}
 
 	opts.SearchCustomFields = customFieldSearch(defs, registry.SplitSearchTerms(q.Text))
+	return nil
+}
+
+// CheckCustomFields checks the cf conditions of q against defs, the fields
+// of the group, as Resolve does: a comparison the field's type does not
+// take, or an operand it cannot read, is an *Error. A condition on a field
+// defs lacks passes, since it keeps no item rather than failing. A saved
+// view runs it before it stores a query, so a stored view never fails to
+// resolve: a field's type cannot change.
+func CheckCustomFields(q Query, defs []*models.CustomFieldDefinition) error {
+	for _, cond := range q.CustomFields {
+		var def *models.CustomFieldDefinition
+		for _, d := range defs {
+			if d.ID == cond.FieldID {
+				def = d
+				break
+			}
+		}
+		if _, err := customFieldFilter(cond, def); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

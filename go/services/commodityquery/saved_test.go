@@ -48,6 +48,22 @@ func TestQuery_EncodeSortsListValues(t *testing.T) {
 	c.Assert(a.Tags.Include, qt.DeepEquals, []string{"red", "fragile"})
 }
 
+// A saved view keeps custom field conditions and a custom field sort. The
+// conditions are a set, and so are the options of an "in" condition, so
+// their order does not change the canonical form.
+func TestParseSaved_KeepsCustomFieldConditions(t *testing.T) {
+	c := qt.New(t)
+	a, err := commodityquery.ParseSaved("cf=f2:in:o2,o1,o2&cf=f1:gte:10&cf=f3:set&sort=-cf.f1")
+	c.Assert(err, qt.IsNil)
+	b, err := commodityquery.ParseSaved("sort=-cf.f1&cf=f3:set&cf=f1:gte:10&cf=f2:in:o1,o2")
+	c.Assert(err, qt.IsNil)
+	c.Assert(a.Encode(), qt.Equals, b.Encode())
+	c.Assert(a.Encode(), qt.Equals, "cf=f1%3Agte%3A10&cf=f2%3Ain%3Ao1%2Co2&cf=f3%3Aset&sort=-cf.f1")
+	again, err := commodityquery.ParseSaved(a.Encode())
+	c.Assert(err, qt.IsNil)
+	c.Assert(again.Encode(), qt.Equals, a.Encode())
+}
+
 func TestParseSaved_EmptyIsTheDefaultQuery(t *testing.T) {
 	c := qt.New(t)
 	q, err := commodityquery.ParseSaved("")
@@ -68,6 +84,8 @@ func TestParseSaved_Refuses(t *testing.T) {
 		{"an unknown status", "status=borrowed", "status"},
 		{"a contradicting tag filter", "tags=a&tags_exclude=a", "tags_exclude"},
 		{"a malformed escape", "q=%zz", "q"},
+		{"a custom field condition without a comparison", "cf=f1", "cf"},
+		{"an in condition without options", "cf=f1:in:,", "cf"},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

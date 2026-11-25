@@ -145,11 +145,13 @@ Next to these members, `error` carries the message as for any API error. The ite
 
 A saved view stores a query string of this contract, in the API names, without paging. `commodityquery.ParseSaved` reads it: `Parse` limited to `SavedParams`, the filters and the sort the items list shows and edits. It refuses `warranty_expires_before`, an absolute date that a view meant to stay current must not keep (`warranty_status` is computed on every run instead), and `lent_out=false`, which the list has no control for. A view opens as the items list, so a condition the list cannot show would either be dropped on the way, which broadens the view, or stay invisible to the person looking at it.
 
-The service validates the query on every write and stores `Query.Encode()`, the canonical form (sorted keys, and sorted values in the set-like lists: types, statuses, warranty statuses, included and excluded tags), with a query version (`models.SavedViewQueryVersion`). A stored query that no longer parses, or carries another version, is reported per view as `query_error` with the parameter and the reason; such a view has no count and is never run, so a contract change cannot silently broaden or change a view. The counts endpoint counts the views the requesting member placed in their sidebar or on their dashboard with `commodityquery.CountEach`: each query goes through `Resolve` and the WHERE clause of the items list (`CommodityRegistry.CountEach`), in one transaction and without reading rows, so the sidebar badge, the dashboard card and the opened list agree.
+The service validates the query on every write and stores `Query.Encode()`, the canonical form (sorted keys, and sorted values in the set-like lists: types, statuses, warranty statuses, included and excluded tags, custom field conditions and the options of an `in` condition), with a query version (`models.SavedViewQueryVersion`). A stored query that no longer parses, or carries another version, is reported per view as `query_error` with the parameter and the reason; such a view has no count and is never run, so a contract change cannot silently broaden or change a view. The counts endpoint counts the views the requesting member placed in their sidebar or on their dashboard with `commodityquery.CountEach`: each query goes through `Resolve` and the WHERE clause of the items list (`CommodityRegistry.CountEach`), in one transaction and without reading rows, so the sidebar badge, the dashboard card and the opened list agree.
 
 Placement is per member: `saved_view_placements` holds, per view and member, `show_in_sidebar` and `show_on_dashboard`. Any member who sees a view may place it; sharing a view places it for nobody else, and unsharing drops the placements of everyone but the creator.
 
 Renaming an item tag's slug rewrites every view of the group that names it (`Query.RenameTag`). A deleted tag, area or location stays in the query: the view still applies the condition and shows what still matches, and the frontend names what no longer exists.
+
+Custom field conditions name a field and its options by id, so renaming a field or an option changes no view. On a write the service also checks each condition against the group's fields with `commodityquery.CheckCustomFields`, which refuses what `Resolve` would refuse; a field's type never changes, so a stored view keeps resolving. A deleted field or option stays in the query and matches nothing, as described under [Custom fields](#custom-fields).
 
 On the frontend, `commodityQueryToApiQuery` writes the stored form (sort and `include_inactive` always written) and `commodityQueryFromApiQuery` reads it back, an absent `include_inactive` being the server default. `sameCommodityQuery` compares two queries in that form, which is how the items list tells that an open view was changed.
 
@@ -170,7 +172,8 @@ The items list page keeps its query in the page URL under names that predate the
 | `tags`, `tags_exclude` (comma-separated) | same |
 | `tag_mode=any` | same, sent only with `tags`; the page URL keeps it without tags so the mode picked before the first tag survives |
 | `no_tags=1` | `no_tags=true` |
-| `sort` | `sort` |
+| `cf` (repeated) | `cf`, kept as written |
+| `sort` | `sort`; `cf.<field id>` is kept in `CommodityQuery.customFieldSort` |
 
 `trashed` has no page-URL name: the items list page shows live items only. `ListCommoditiesOptions.trashed` sends it for a caller that lists Trash through the contract.
 

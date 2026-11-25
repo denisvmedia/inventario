@@ -4,6 +4,7 @@ package backup_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -178,4 +179,36 @@ func TestINBRestore_DryRunCreatesNoCustomFields(t *testing.T) {
 	c.Check(must.Must(fields.Count(f.ctx)), qt.Equals, 4)
 	_, err = fields.GetByName(f.ctx, "Idle")
 	c.Check(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A template entry for an item type the restore cannot create, because the
+// group already has the most item types it keeps, is left out: it would
+// otherwise land on the fallback type.
+func TestINBRestore_FullGroupLeavesOutTheTemplatesOfMissingTypes(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newCustomFieldFixture(c)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	vehicle := must.Must(itemTypes.Create(f.ctx, models.ItemType{Name: "Vehicle"}))
+	plate := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{
+		Name: "Plate", Type: models.CustomFieldTypeText,
+		Templates: []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID}},
+	}))
+	blobKey, _ := f.runExport(c, signer)
+
+	other := must.Must(itemTypes.GetBySlug(f.ctx, models.CommodityTypeOther))
+	must.Must(fields.DeleteWithValues(f.ctx, plate.ID))
+	must.Must(itemTypes.DeleteReassigning(f.ctx, vehicle.ID, other.ID))
+	for i := must.Must(itemTypes.Count(f.ctx)); i < models.MaxItemTypesPerGroup; i++ {
+		must.Must(itemTypes.Create(f.ctx, models.ItemType{Name: fmt.Sprintf("Kind %d", i)}))
+	}
+
+	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Check(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	restored, err := fields.GetByName(f.ctx, "Plate")
+	c.Assert(err, qt.IsNil)
+	c.Check(restored.Templates, qt.HasLen, 0)
 }

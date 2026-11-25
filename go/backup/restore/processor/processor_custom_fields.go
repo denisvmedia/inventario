@@ -300,7 +300,9 @@ func (w *inbWalker) commodityDBID(uuid string) string {
 }
 
 // typeID returns the ID of the destination item type of an archived slug,
-// or "" when the resolver writes nothing (a dry run).
+// or "" when the resolver writes nothing (a dry run) or the group was too
+// full to create the type: a template entry for that type would otherwise
+// land on the fallback type.
 func (r *itemTypeResolver) typeID(ctx context.Context, slug models.CommodityType) (string, error) {
 	if r.reg == nil || slug == "" {
 		return "", nil
@@ -308,6 +310,9 @@ func (r *itemTypeResolver) typeID(ctx context.Context, slug models.CommodityType
 	dest, err := r.resolve(ctx, slug)
 	if err != nil {
 		return "", err
+	}
+	if r.fellBack[slug] {
+		return "", nil
 	}
 	t, err := r.reg.GetBySlug(ctx, dest)
 	if err != nil {

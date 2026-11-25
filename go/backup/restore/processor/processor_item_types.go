@@ -26,6 +26,9 @@ import (
 type itemTypeResolver struct {
 	reg   registry.ItemTypeRegistry
 	slugs map[models.CommodityType]models.CommodityType
+	// fellBack holds the archived slugs whose type the group was too full
+	// to create, so their items got the fallback type.
+	fellBack map[models.CommodityType]bool
 }
 
 // itemTypeResolver returns the operation's resolver, creating it on first
@@ -35,7 +38,7 @@ func (l *RestoreOperationProcessor) itemTypeResolver(ctx context.Context, option
 	if l.itemTypes != nil {
 		return l.itemTypes, nil
 	}
-	r := &itemTypeResolver{slugs: map[models.CommodityType]models.CommodityType{}}
+	r := &itemTypeResolver{slugs: map[models.CommodityType]models.CommodityType{}, fellBack: map[models.CommodityType]bool{}}
 	if !options.DryRun && l.factorySet != nil && l.factorySet.ItemTypeRegistryFactory != nil {
 		reg, err := l.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(ctx)
 		if err != nil {
@@ -89,6 +92,7 @@ func (r *itemTypeResolver) importArchived(ctx context.Context, archived []types.
 			return err
 		}
 		if full {
+			r.fellBack[slug] = true
 			stats.ErrorCount++
 			stats.Errors = append(stats.Errors, fmt.Sprintf(
 				"item type %s: the group already has %d item types, the most it keeps; its items get the type %s",
@@ -127,8 +131,12 @@ func (r *itemTypeResolver) resolve(ctx context.Context, slug models.CommodityTyp
 			t.Slug = slug
 		}
 		t.Normalize()
-		if dest, _, err = r.create(ctx, t); err != nil {
+		var full bool
+		if dest, full, err = r.create(ctx, t); err != nil {
 			return "", err
+		}
+		if full {
+			r.fellBack[slug] = true
 		}
 	}
 	r.slugs[slug] = dest

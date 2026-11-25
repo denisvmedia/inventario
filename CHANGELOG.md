@@ -12,6 +12,24 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- Custom fields, on the API so far. A group keeps up to 200 fields of its
+  own, each with a name (unique in the group, ignoring case) and a type that
+  never changes: text, long text, number, money, date, yes/no, select, URL
+  or a link to another item of the group. Items store a value per field;
+  zero, `false` and empty text are values, distinct from no value. Renaming
+  a field or a select option keeps its values, and deleting a field that
+  items have values for needs `delete_values=true` (409
+  `custom_field.in_use` otherwise, with the item counts). An item type's
+  template names the fields its items are offered, with an optional default.
+  The API gains `/g/{slug}/custom-fields`; item writes take `custom_fields`
+  and refuse a value its field cannot hold with 422; the items list filters
+  with `cf=<field id>:<op>[:<value>]` and sorts with `sort=cf.<field id>`,
+  saved views keep both, and search reads text fields and option labels. AI
+  scan fills the group's fields except money and links. Backups carry the
+  fields, templates and values (format 3.5) and a restore matches fields by
+  name and type, creating the missing ones
+  ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+
 - An item has a brand and a model, both optional text of up to 100
   characters. Cards, list rows and the item page show "Brand · Model" under
   the name, the insurance reports put the brand in the item's title and the

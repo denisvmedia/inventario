@@ -2,8 +2,10 @@ package services_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"slices"
 	"sync"
 	"sync/atomic"
@@ -355,6 +357,67 @@ func TestSavedViewService_KeepsAndCountsTheSellerFilter(t *testing.T) {
 	page, err := commodityquery.List(ctx, set, q, 0, 50)
 	c.Assert(err, qt.IsNil)
 	c.Assert(page.Total, qt.Equals, 2)
+}
+
+// A view keeps custom field conditions in canonical form, refuses one its
+// field's type does not take, and counts what the list shows. Once the field
+// is deleted the view still runs and selects nothing.
+func TestSavedViewService_KeepsAndCountsTheCustomFieldFilter(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	ctx := savedViewCtx("alice")
+	alice := actor("alice", models.GroupRoleUser)
+	fields := f.factory.CustomFieldRegistryFactory.MustCreateUserRegistry(ctx)
+	watts, err := fields.Create(ctx, models.CustomFieldDefinition{Name: "Watts", Type: models.CustomFieldTypeNumber})
+	c.Assert(err, qt.IsNil)
+	color, err := fields.Create(ctx, models.CustomFieldDefinition{
+		Name: "Color", Type: models.CustomFieldTypeSelect,
+		Options: models.ValuerSlice[models.CustomFieldOption]{{Label: "Red"}, {Label: "Blue"}},
+	})
+	c.Assert(err, qt.IsNil)
+	red, blue := color.Options[0].ID, color.Options[1].ID
+	reg := f.factory.CommodityRegistryFactory.MustCreateUserRegistry(ctx)
+	for name, values := range map[string]models.CustomFieldValues{
+		"Drill": {watts.ID: json.RawMessage(`800`), color.ID: json.RawMessage(`"` + red + `"`)},
+		"Saw":   {watts.ID: json.RawMessage(`1200`), color.ID: json.RawMessage(`"` + blue + `"`)},
+		"Lamp":  nil,
+	} {
+		_, err := reg.Create(ctx, models.Commodity{
+			Name: name, ShortName: name, Type: models.CommodityTypeOther, Status: models.CommodityStatusInUse, Count: 1,
+			CustomFields: values,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
+	options := []string{red, blue}
+	slices.Sort(options)
+	view, err := f.svc.Create(ctx, alice, viewInput("Strong ones",
+		"sort=-cf."+watts.ID+"&cf="+watts.ID+":gte:1000&cf="+color.ID+":in:"+options[1]+","+options[0], false))
+	c.Assert(err, qt.IsNil)
+	conds := []string{watts.ID + ":gte:1000", color.ID + ":in:" + options[0] + "," + options[1]}
+	slices.Sort(conds)
+	want := url.Values{"cf": conds, "sort": {"-cf." + watts.ID}}
+	c.Assert(view.View.Query, qt.Equals, want.Encode())
+
+	_, err = f.svc.Create(ctx, alice, viewInput("Mismatched", "cf="+color.ID+":gte:5", false))
+	qErr, ok := errors.AsType[*commodityquery.Error](err)
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(qErr.Param, qt.Equals, "cf")
+
+	set, err := f.factory.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	counts, err := f.svc.Counts(ctx, set)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, map[string]int{view.View.ID: 1})
+
+	_, err = fields.DeleteWithValues(ctx, watts.ID)
+	c.Assert(err, qt.IsNil)
+	entry, err := f.svc.Get(ctx, alice, view.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entry.QueryError, qt.Equals, (*commodityquery.Error)(nil))
+	counts, err = f.svc.Counts(ctx, set)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, map[string]int{view.View.ID: 0})
 }
 
 // Renaming an item tag's slug carries every view of the group along,

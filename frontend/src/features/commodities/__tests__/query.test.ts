@@ -33,8 +33,10 @@ const FULL: CommodityQuery = {
   warrantyStatuses: ["active", "expired"],
   lentOut: true,
   tags: { include: ["red", "garage"], mode: "any", exclude: ["broken"], untagged: false },
+  customFields: ["f2:in:o2,o1", "f1:gte:10"],
   sort: "purchase_date",
   sortDesc: true,
+  customFieldSort: "",
   unreadable: {},
 }
 
@@ -46,6 +48,14 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
   it("round-trips every condition through the URL", () => {
     const params = writeCommodityQuery(new URLSearchParams(), FULL)
     expect(parseCommodityQuery(new URLSearchParams(params.toString()))).toEqual(FULL)
+  })
+
+  it("round-trips a custom field sort through the URL", () => {
+    const query = { ...DEFAULT_COMMODITY_QUERY, customFieldSort: "f1", sortDesc: true }
+    const params = writeCommodityQuery(new URLSearchParams(), query)
+    expect(params.get("sort")).toBe("-cf.f1")
+    expect(parseCommodityQuery(new URLSearchParams(params.toString()))).toEqual(query)
+    expect(parseCommodityQuery(new URLSearchParams("sort=cf.")).customFieldSort).toBe("")
   })
 
   it("leaves defaults out of the URL", () => {
@@ -257,6 +267,7 @@ describe("listOptionsToParams", () => {
       tags: ["garage,red"],
       tag_mode: ["any"],
       tags_exclude: ["broken"],
+      cf: ["f1:gte:10", "f2:in:o2,o1"],
     })
   })
 
@@ -327,6 +338,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       statuses: [...FULL.statuses].sort(),
       warrantyStatuses: [...FULL.warrantyStatuses].sort(),
       tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },
+      customFields: [...FULL.customFields].sort(),
     })
   })
 
@@ -373,6 +385,21 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       expect(unreadApiQueryParam("sort=name&tags=red%2Cblue")).toBeUndefined()
     })
 
+    // Go's canonical form escapes the colons and sorts the conditions and
+    // the options of an "in" condition.
+    it("reads custom field conditions and a custom field sort", () => {
+      expect(
+        unreadApiQueryParam("cf=f1%3Agte%3A10&cf=f2%3Ain%3Ao1%2Co2&cf=f3%3Aset&sort=-cf.f1")
+      ).toBeUndefined()
+      const q = commodityQueryFromApiQuery("cf=f1%3Agte%3A10&sort=-cf.f1")
+      expect(q.customFields).toEqual(["f1:gte:10"])
+      expect(q.customFieldSort).toBe("f1")
+      expect(q.sortDesc).toBe(true)
+      expect(listOptionsToParams(commodityQueryToListOptions(q)).getAll("cf")).toEqual([
+        "f1:gte:10",
+      ])
+    })
+
     it("names a parameter the list would drop", () => {
       expect(unreadApiQueryParam("item_type=abc&sort=name")).toBe("item_type")
     })
@@ -380,6 +407,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     it("names a value the list would read as something else", () => {
       expect(unreadApiQueryParam("sort=-unknown")).toBe("sort")
       expect(unreadApiQueryParam("sort=unknown")).toBe("sort")
+      expect(unreadApiQueryParam("sort=cf.")).toBe("sort")
     })
   })
 

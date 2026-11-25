@@ -24,7 +24,7 @@ describe("parseCommoditiesListParams", () => {
   it("reads the page and every filter the Items list writes to its URL", () => {
     const params = parseCommoditiesListParams(
       new URLSearchParams(
-        "page=3&q=lamp&type=electronics&type=furniture&status=sold&area=a1&seller=s1&warranty=expiring&lent_out=1&unassigned=1&inactive=1&tags=red,blue&tag_mode=any&sort=-purchase_date"
+        "page=3&q=lamp&type=electronics&type=furniture&status=sold&area=a1&seller=s1&warranty=expiring&lent_out=1&unassigned=1&inactive=1&tags=red,blue&tag_mode=any&cf=f1:set&sort=-purchase_date"
       )
     )
     expect(params).toEqual({
@@ -41,8 +41,10 @@ describe("parseCommoditiesListParams", () => {
         warrantyStatuses: ["expiring"],
         lentOut: true,
         tags: { include: ["red", "blue"], mode: "any", exclude: [], untagged: false },
+        customFields: ["f1:set"],
         sort: "purchase_date",
         sortDesc: true,
+        customFieldSort: "",
         unreadable: {},
       },
     })
