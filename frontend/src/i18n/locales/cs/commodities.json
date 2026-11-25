@@ -1028,7 +1028,9 @@
       "titleMore_few": "{{name}} a {{count}} další soubory",
       "titleMore_many": "{{name}} a {{count}} dalšího souboru",
       "titleMore_other": "{{name}} a {{count}} dalších souborů",
-      "untitled": "Nákup {{index}}"
+      "untitled": "Nákup {{index}}",
+      "rescanHasDrafts": "Znovu nenaskenováno: z tohoto souboru už byly vytvořeny koncepty. Stránka je nyní ukazuje.",
+      "rescanBusy": "Znovu nenaskenováno: soubor se ještě skenuje. Zkuste to znovu, až sken skončí."
     },
     "sourceError": {
       "authorUnavailable": "Nenaskenováno: člen, který soubor přidal, už v této skupině nemůže upravovat položky.",
@@ -1099,7 +1101,7 @@
       "rejectCount_many": "Neodesláno: dávka pojme {{count}} souboru.",
       "rejectCount_other": "Neodesláno: dávka pojme {{count}} souborů.",
       "rejectSize": "Neodesláno: větší než {{size}}.",
-      "rejectType": "Neodesláno: naskenovat lze jen obrázky a PDF.",
+      "rejectType": "Neodesláno: sken čte jen soubory {{types}}.",
       "remove": "Odebrat {{name}}",
       "retry": "Zkusit znovu",
       "separateHint": "Každý soubor je samostatný nákup. Z účtenky s několika produkty vznikne jeden koncept za každý ponechaný produkt.",
@@ -1109,7 +1111,10 @@
       "submit_other": "Naskenovat {{count}} souborů",
       "title": "Přidat položky ze souborů",
       "uploadFailed": "Soubor se nepodařilo nahrát.",
-      "uploading": "Nahrávám {{done}} z {{total}}…"
+      "uploading": "Nahrávám {{done}} z {{total}}…",
+      "rejectHeic": "Neodesláno: fotky HEIC sken nepřečte. Uložte fotku jako JPEG a přidejte ji znovu.",
+      "fileUploading": "nahrává se",
+      "fileUploaded": "nahráno"
     }
   }
 }

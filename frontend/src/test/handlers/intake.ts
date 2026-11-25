@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw"
+import { delay, http, HttpResponse } from "msw"
 
 import { apiUrl } from "."
 
@@ -63,9 +63,17 @@ export interface FakeIntakeBackend {
   reviews: { id: string; attributes: Record<string, unknown> }[]
   // How many times drafts were requested.
   draftRequests: number
+  // The reviews and draft requests the server finished, in order.
+  events: string[]
   // When set, the server applies the next create and the client never gets
   // the answer. Cleared once used.
   loseCreate: boolean
+  // How long each upload and each candidate review takes, in ms.
+  uploadDelayMs: number
+  reviewDelayMs: number
+  // When set, the next rescan is refused. "has_drafts" first records the
+  // drafts the client did not know of, as the server does.
+  refuseRescan: "busy" | "has_drafts" | null
   handlers: ReturnType<typeof http.get>[]
 }
 
@@ -77,7 +85,7 @@ export const DEFAULT_LIMITS: FakeIntakeLimits = {
   max_queued_per_group: 200,
   queued: 0,
   rate_limit_per_hour: 30,
-  accepted_mime_types: ["image/jpeg", "image/png", "application/pdf"],
+  accepted_mime_types: ["application/pdf", "image/jpeg", "image/png", "image/webp"],
 }
 
 function summary(s: FakeIntakeSession) {
@@ -159,7 +167,11 @@ export function backend(
     uploads: 0,
     reviews: [],
     draftRequests: 0,
+    events: [],
     loseCreate: false,
+    uploadDelayMs: 0,
+    reviewDelayMs: 0,
+    refuseRescan: null,
     handlers: [],
   }
   const find = (id: string) => state.sessions.find((s) => s.id === id)
@@ -180,7 +192,8 @@ export function backend(
       const s = find(String(params.id))
       return s ? detail(s) : notFound()
     }),
-    http.post(apiUrl(`${base}/uploads/file`), () => {
+    http.post(apiUrl(`${base}/uploads/file`), async () => {
+      if (state.uploadDelayMs > 0) await delay(state.uploadDelayMs)
       state.uploads++
       const id = `file-${++seq}`
       return HttpResponse.json(
@@ -230,6 +243,7 @@ export function backend(
         if (!s || !c) return notFound()
         const body = (await request.json()) as { data: { attributes: Record<string, unknown> } }
         const a = body.data.attributes
+        if (state.reviewDelayMs > 0) await delay(state.reviewDelayMs)
         state.reviews.push({ id: c.id, attributes: a })
         if (c.outcome === "created") {
           return HttpResponse.json(
@@ -243,6 +257,7 @@ export function backend(
         }
         if (Array.isArray(a.accepted_fields)) c.accepted_fields = a.accepted_fields as string[]
         if (typeof a.quantity === "number") c.quantity = a.quantity
+        state.events.push(`review ${c.id}`)
         return HttpResponse.json({
           data: { id: c.id, type: "intake_candidates", attributes: { ...c, session_id: s.id } },
         })
@@ -252,6 +267,7 @@ export function backend(
       const s = find(String(params.id))
       if (!s) return notFound()
       state.draftRequests++
+      state.events.push("drafts")
       let created = 0
       let skipped = 0
       for (const c of s.candidates) {
@@ -287,6 +303,19 @@ export function backend(
       const s = find(String(params.id))
       const src = s?.sources.find((x) => x.id === String(params.sid))
       if (!s || !src) return notFound()
+      const refusal = state.refuseRescan
+      state.refuseRescan = null
+      if (refusal === "has_drafts") {
+        for (const c of s.candidates) {
+          if (c.source_id !== src.id || !c.selected) continue
+          c.outcome = "created"
+          c.draft_id = `draft-${c.id}`
+        }
+      }
+      if (refusal) {
+        const code = refusal === "busy" ? "intake.source_busy" : "intake.source_has_drafts"
+        return HttpResponse.json({ errors: [{ status: "409", code }] }, { status: 409 })
+      }
       src.status = "pending"
       s.candidates = s.candidates.filter((c) => c.source_id !== src.id)
       return detail(s)

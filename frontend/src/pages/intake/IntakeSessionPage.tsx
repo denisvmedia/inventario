@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import {
   AlertCircle,
   ArrowLeft,
@@ -30,6 +31,9 @@ import {
   candidateText,
   INTAKE_MAX_QUANTITY,
   INTAKE_REVIEW_FIELDS,
+  INTAKE_SOURCE_BUSY,
+  INTAKE_SOURCE_HAS_DRAFTS,
+  isIntakeError,
   type IntakeCandidate,
   type IntakeReviewField,
   type IntakeSessionDetail,
@@ -41,6 +45,8 @@ import {
   useCancelIntakeSession,
   useCreateIntakeDrafts,
   useDeleteIntakeSession,
+  reviewsSettled,
+  useIntakeReviewsPending,
   useIntakeSession,
   useRescanIntakeSource,
   useResumeIntakeSession,
@@ -122,10 +128,12 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
   const summaryText = useIntakeSummaryText()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  const qc = useQueryClient()
   const createDrafts = useCreateIntakeDrafts()
   const cancel = useCancelIntakeSession()
   const resume = useResumeIntakeSession()
   const remove = useDeleteIntakeSession()
+  const reviewing = useIntakeReviewsPending()
 
   const s = session.summary
   const toCreate = session.candidates.filter(
@@ -137,6 +145,9 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
 
   async function handleCreateDrafts() {
     try {
+      // A choice still being saved would reach the server after the drafts
+      // were made from what it held before.
+      await reviewsSettled(qc, slug)
       const result = await createDrafts.mutateAsync(session.id)
       const text = summaryText(result.session.summary)
       if (result.failed > 0) toast.error(text)
@@ -288,7 +299,7 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
           <Button
             type="button"
             onClick={() => void handleCreateDrafts()}
-            disabled={busy}
+            disabled={busy || reviewing}
             className="gap-2"
             data-testid="intake-create-drafts"
           >
@@ -338,7 +349,13 @@ function SourceCard({ index, sessionId, source, candidates, canWrite }: SourceCa
       await rescan.mutateAsync({ sessionId, sourceId: source.id })
       toast.success(t("commodities:intake.source.rescanQueued"))
     } catch (err) {
-      toast.error(parseServerError(err, t("commodities:intake.page.actionFailed")))
+      if (isIntakeError(err, INTAKE_SOURCE_HAS_DRAFTS)) {
+        toast.error(t("commodities:intake.source.rescanHasDrafts"))
+      } else if (isIntakeError(err, INTAKE_SOURCE_BUSY)) {
+        toast.error(t("commodities:intake.source.rescanBusy"))
+      } else {
+        toast.error(parseServerError(err, t("commodities:intake.page.actionFailed")))
+      }
     }
   }
 

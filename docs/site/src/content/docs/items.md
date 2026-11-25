@@ -87,8 +87,10 @@ page, or continue on another device, while it works.
    who can edit items.
 2. The **Add items from files** dialog lists the files. It says how many files a
    batch takes, how large each may be, and how many scans run per hour. A file
-   it cannot send (not an image or PDF, too large, over the batch limit) stays
-   in the list with the reason and is left out.
+   it cannot send stays in the list with the reason and is left out: a type the
+   scan does not read (it reads JPEG, PNG, WebP and PDF), a file that is too
+   large, or one over the batch limit. A HEIC photo, the format iPhones use by
+   default, is not read either: save it as JPEG and add it again.
 3. By default each file is a separate purchase. A receipt that lists several
    products gives one product per line. If all the files show one item (a
    photo of the item, its label and its receipt, say), turn on **All files show
@@ -116,7 +118,8 @@ of the whole line.
   [Unknown is not zero](#unknown-is-not-zero).
 - Click **Create N drafts**. Each ticked product gets exactly one draft, and the
   products you did not tick are marked **Left out**. If none is ticked, the
-  button reads **Leave all out**.
+  button reads **Leave all out**. The button waits while a choice you just
+  made is being saved, so the drafts always get it.
 
 Each draft gets the files of its purchase, so one receipt is attached to every
 item made from it: the same file, not a copy. A seller the scan read and your
@@ -135,8 +138,12 @@ Other actions on the review page:
 - **Retry unfinished** puts the files that failed or were stopped back in the
   queue. Files already scanned are not scanned again, so opening the page or
   retrying never repeats a scan.
-- **Rescan** scans one file again and replaces its products. It is offered only
-  while none of that file's products has a draft.
+- **Rescan** scans one file again and replaces its products. It is offered
+  while the file is not waiting or being scanned and none of its products has
+  a draft. If a draft was made that the page did not show yet (the answer to
+  **Create N drafts** was lost), or the file is still being scanned after
+  **Stop scanning**, the page says so and scans nothing; it then shows the
+  drafts.
 - The trash button removes the batch. Drafts made from it stay; its files that
   nothing else uses go to the [Trash](../trash/).
 
@@ -144,6 +151,10 @@ Batches are listed in an **Added from files** card at the top of the **All
 Items** page, with a summary such as "2 drafts created, 1 file unreadable".
 **Review** opens a batch that waits for you, and the trash button removes a
 finished one.
+
+The [Inbox](../inbox/#finish-a-batch-of-files) lists every batch that is not
+finished: files still waiting or being scanned, products waiting for your
+decision or for their draft, or a file that could not be read.
 
 A file you dropped is an ordinary file of the group: you find it on the
 [Files](../files-and-photos/) page, where its detail says it was **Added from

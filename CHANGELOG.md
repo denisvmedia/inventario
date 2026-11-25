@@ -26,10 +26,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   the request after a lost response makes no second draft. Scans count against
   the member's hourly scan limit and wait in the queue when it is reached.
   Batches are listed in an **Added from files** card on the Items page with a
-  summary such as "2 drafts created, 1 file unreadable". Batches are not in
-  backups; a full replace removes them. The new API is `/intake` (limits,
-  sessions with a client key, candidate review, drafts, cancel, resume,
-  rescan, delete), and the AI scan now reports the quantity of a product line
+  summary such as "2 drafts created, 1 file unreadable", and the Inbox lists
+  every batch that is not finished, with its progress, until each file is
+  scanned and each product has a draft or is left out; a file that could not
+  be read keeps its batch there until it is retried or the batch is removed.
+  The dialog refuses a HEIC photo up front and says to save it as JPEG.
+  Batches are not in backups; a full replace removes them. The new API is
+  `/intake` (limits, sessions with a client key, candidate review, drafts,
+  cancel, resume, rescan, delete), `GET /inbox` lists the open batches
+  (reason `intake`, kind `intake_session`, with their progress in `intake`),
+  and the AI scan now reports the quantity of a product line
   ([#2810](https://github.com/denisvmedia/inventario/issues/2810)).
 
 - An Inbox page lists what in the group is still unfinished: the drafts of

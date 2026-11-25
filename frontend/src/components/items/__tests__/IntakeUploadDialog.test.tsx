@@ -83,14 +83,20 @@ describe("<IntakeUploadDialog />", () => {
         new File(["x"], "notes.txt", { type: "text/plain" }),
         big,
         jpg("tv.jpg"),
+        // Safari reports an iPhone photo as HEIC; a browser that reports
+        // nothing is judged by the extension.
+        new File(["heic"], "IMG_0001.HEIC", { type: "image/heic" }),
+        new File(["heic"], "IMG_0002.heif", { type: "" }),
       ],
       limits({ maxFileBytes: 10 })
     )
     const dialog = await screen.findByTestId("intake-upload-dialog")
     const rows = within(dialog).getAllByTestId("intake-upload-file")
-    expect(rows).toHaveLength(4)
-    expect(rows[1]).toHaveTextContent("only images and PDFs")
+    expect(rows).toHaveLength(6)
+    expect(rows[1]).toHaveTextContent("the scan reads PDF, JPEG, PNG, and WebP files only")
     expect(rows[2]).toHaveTextContent("larger than")
+    expect(rows[4]).toHaveTextContent("HEIC photos cannot be scanned")
+    expect(rows[5]).toHaveTextContent("HEIC photos cannot be scanned")
     const submit = within(dialog).getByTestId("intake-upload-submit")
     expect(submit).toHaveTextContent("Scan 2 files")
     await user.click(submit)
@@ -102,6 +108,24 @@ describe("<IntakeUploadDialog />", () => {
       { file_ids: ["file-2"], one_item: false },
     ])
     expect(onQueued.mock.calls[0]?.[0].id).toBe(fake.sessions[0]?.id)
+  })
+
+  it("tells a screen reader how far the upload is", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    fake.uploadDelayMs = 50
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onQueued } = renderDialog([jpg("a.jpg"), jpg("b.jpg")])
+    const progress = await screen.findByTestId("intake-upload-progress")
+    expect(progress).toHaveAttribute("role", "status")
+    expect(progress).toBeEmptyDOMElement()
+    await user.click(screen.getByTestId("intake-upload-submit"))
+    expect(await screen.findByText("Uploading 0 of 2…", { selector: "[role=status]" })).toBe(
+      progress
+    )
+    await waitFor(() => expect(progress).toHaveTextContent("Uploading 1 of 2…"))
+    expect(screen.getAllByTestId("intake-upload-file")[0]).toHaveTextContent("a.jpg uploaded")
+    await waitFor(() => expect(onQueued).toHaveBeenCalledTimes(1))
   })
 
   it("sends all files as one purchase of one item when asked", async () => {

@@ -151,7 +151,8 @@ export const INTAKE_SOURCE_BUSY = "intake.source_busy"
 export const INTAKE_SOURCE_HAS_DRAFTS = "intake.source_has_drafts"
 export const INTAKE_CANDIDATE_FINISHED = "intake.candidate_finished"
 
-function toSummary(s: SummaryView | undefined): IntakeSummary {
+// toIntakeSummary reads the counts of a batch; the inbox uses it too.
+export function toIntakeSummary(s: SummaryView | undefined): IntakeSummary {
   return {
     sources: s?.sources ?? 0,
     files: s?.files ?? 0,
@@ -171,7 +172,7 @@ function toSummary(s: SummaryView | undefined): IntakeSummary {
   }
 }
 
-function toState(state: string | undefined): IntakeSessionState {
+export function toIntakeState(state: string | undefined): IntakeSessionState {
   if (state === "processing" || state === "review") return state
   return "done"
 }
@@ -202,9 +203,9 @@ function toOutcome(outcome: string | undefined): IntakeCandidateOutcome {
 function toSession(id: string | undefined, view: SessionView | undefined): IntakeSession {
   return {
     id: id ?? view?.id ?? "",
-    state: toState(view?.state),
+    state: toIntakeState(view?.state),
     origin: view?.origin ?? "upload",
-    summary: toSummary(view?.summary),
+    summary: toIntakeSummary(view?.summary),
     createdAt: view?.created_at ?? "",
     updatedAt: view?.updated_at ?? "",
   }

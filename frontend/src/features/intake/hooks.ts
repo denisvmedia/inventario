@@ -1,8 +1,15 @@
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import {
+  useIsMutating,
+  useMutation,
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+} from "@tanstack/react-query"
 
 import { draftKeys } from "@/features/drafts/keys"
 import { fileKeys } from "@/features/files/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { inboxKeys } from "@/features/inbox/keys"
 import { useInvalidateTrash } from "@/features/trash/hooks"
 import type { GlobalErrorToastMeta } from "@/lib/global-error-toast"
 
@@ -74,7 +81,8 @@ export function useIntakeSession(id: string | null | undefined) {
 }
 
 // useInvalidateIntake refreshes the batches, the limits (the queue count
-// changes) and the file lists, which show the dropped files.
+// changes), the file lists, which show the dropped files, and the inbox,
+// which lists the open batches.
 export function useInvalidateIntake() {
   const qc = useQueryClient()
   const slug = useSlug()
@@ -82,11 +90,12 @@ export function useInvalidateIntake() {
     Promise.all([
       qc.invalidateQueries({ queryKey: intakeKeys.group(slug) }),
       qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+      qc.invalidateQueries({ queryKey: inboxKeys.all(slug) }),
     ]).then(() => undefined)
 }
 
 // useStoreSession puts a session a mutation returned into the cache, so the
-// page shows it at once, and refreshes the list.
+// page shows it at once, and refreshes the list and the inbox.
 function useStoreSession() {
   const qc = useQueryClient()
   const slug = useSlug()
@@ -95,6 +104,7 @@ function useStoreSession() {
     return Promise.all([
       qc.invalidateQueries({ queryKey: [...intakeKeys.group(slug), "list"] }),
       qc.invalidateQueries({ queryKey: intakeKeys.limits(slug) }),
+      qc.invalidateQueries({ queryKey: inboxKeys.all(slug) }),
     ]).then(() => undefined)
   }
 }
@@ -109,6 +119,7 @@ export function useReviewIntakeCandidate() {
   const slug = useSlug()
   return useMutation<IntakeCandidate, Error, ReviewCandidateInput>({
     meta: QUIET,
+    mutationKey: intakeKeys.review(slug),
     mutationFn: ({ sessionId, candidateId, ...review }) =>
       reviewIntakeCandidate(sessionId, candidateId, review),
     onSuccess: (candidate, { sessionId }) => {
@@ -122,6 +133,30 @@ export function useReviewIntakeCandidate() {
       )
       return qc.invalidateQueries({ queryKey: intakeKeys.group(slug) })
     },
+  })
+}
+
+// useIntakeReviewsPending reports whether a product review is still being
+// saved. The drafts take what the server holds, so creating them waits for
+// those saves.
+export function useIntakeReviewsPending(): boolean {
+  const slug = useSlug()
+  return useIsMutating({ mutationKey: intakeKeys.review(slug) }) > 0
+}
+
+// reviewsSettled resolves once no product review of the group is being
+// saved. A quantity is saved when its field loses focus, which happens on
+// the same click that creates the drafts, before the button can turn
+// disabled.
+export function reviewsSettled(qc: QueryClient, slug: string): Promise<void> {
+  const mutationKey = intakeKeys.review(slug)
+  if (qc.isMutating({ mutationKey }) === 0) return Promise.resolve()
+  return new Promise((resolve) => {
+    const unsubscribe = qc.getMutationCache().subscribe(() => {
+      if (qc.isMutating({ mutationKey }) > 0) return
+      unsubscribe()
+      resolve()
+    })
   })
 }
 
@@ -159,12 +194,20 @@ export function useResumeIntakeSession() {
   })
 }
 
+// useRescanIntakeSource scans one file again. The server refuses while the
+// file is still being scanned or has drafts made from it, which this page may
+// not know yet (a draft made by a request whose answer was lost); the session
+// is read again after a refusal, so the page shows why.
 export function useRescanIntakeSource() {
+  const qc = useQueryClient()
+  const slug = useSlug()
   const store = useStoreSession()
   return useMutation<IntakeSessionDetail, Error, { sessionId: string; sourceId: string }>({
     meta: QUIET,
     mutationFn: ({ sessionId, sourceId }) => rescanIntakeSource(sessionId, sourceId),
     onSuccess: (session) => store(session),
+    onError: (_err, { sessionId }) =>
+      qc.invalidateQueries({ queryKey: intakeKeys.detail(slug, sessionId) }),
   })
 }
 

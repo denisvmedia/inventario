@@ -131,6 +131,71 @@ describe("<IntakeSessionPage />", () => {
     expect(screen.getByTestId(`intake-rescan-${session.id}-photo`)).toBeInTheDocument()
   })
 
+  it("creates the drafts only once the choices being saved have reached the server", async () => {
+    const session = receiptSession()
+    const fake = intakeHandlers.backend(SLUG, [session])
+    fake.reviewDelayMs = 100
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage(session.id)
+    const machine = `${session.id}-c0`
+    const create = await screen.findByTestId("intake-create-drafts")
+
+    // While a choice is saved, the button waits.
+    await user.click(screen.getByTestId(`intake-keep-${session.id}-c1`))
+    await waitFor(() => expect(create).toBeDisabled())
+    await waitFor(() => expect(create).toBeEnabled())
+
+    // A quantity is saved when its field loses focus, which the click on
+    // the button does: the drafts are requested after that save.
+    const quantity = screen.getByTestId(`intake-quantity-${machine}`)
+    await user.clear(quantity)
+    await user.type(quantity, "3")
+    await user.click(create)
+    await waitFor(() => expect(fake.draftRequests).toBe(1))
+    expect(fake.events).toEqual([`review ${session.id}-c1`, `review ${machine}`, "drafts"])
+    expect(fake.sessions[0]?.candidates[0]?.quantity).toBe(3)
+  })
+
+  it("says why a file is not scanned again and shows the drafts it already has", async () => {
+    const session = receiptSession()
+    const fake = intakeHandlers.backend(SLUG, [session])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage(session.id)
+
+    // Drafts were made by a request whose answer this page never got.
+    fake.refuseRescan = "has_drafts"
+    await user.click(await screen.findByTestId(`intake-rescan-${session.id}-receipt`))
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith(
+        "Not scanned again: drafts were already made from this file. The page now shows them.",
+        undefined
+      )
+    )
+    expect(await screen.findByTestId(`intake-continue-${session.id}-c0`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`intake-rescan-${session.id}-receipt`)).not.toBeInTheDocument()
+
+    fake.refuseRescan = "busy"
+    await user.click(screen.getByTestId(`intake-rescan-${session.id}-photo`))
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith(
+        "Not scanned again: the file is still being scanned. Try again when the scan has finished.",
+        undefined
+      )
+    )
+  })
+
   it("saves which fields a draft takes", async () => {
     const session = receiptSession()
     const fake = intakeHandlers.backend(SLUG, [session])

@@ -25,12 +25,35 @@ import {
   type IntakeUploadTarget,
 } from "@/features/intake/api"
 import { useInvalidateIntake } from "@/features/intake/hooks"
-import { formatBytes } from "@/lib/intl"
+import { formatBytes, formatList } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 // Why a dropped file is not sent.
-type Rejection = "type" | "size" | "count"
+type Rejection = "heic" | "type" | "size" | "count"
+
+// HEIC and HEIF photos, which iPhones take by default. The scan cannot read
+// them, so they get a reason of their own that says what to do instead.
+const HEIC_TYPES = new Set([
+  "image/heic",
+  "image/heif",
+  "image/heic-sequence",
+  "image/heif-sequence",
+])
+
+// Short names of the file types the scan reads, for the reason a file is
+// not sent.
+const TYPE_LABELS: Record<string, string> = {
+  "application/pdf": "PDF",
+  "image/jpeg": "JPEG",
+  "image/png": "PNG",
+  "image/webp": "WebP",
+  "image/gif": "GIF",
+}
+
+function typeLabel(mime: string): string {
+  return TYPE_LABELS[mime] ?? (mime.split("/").pop() ?? mime).toUpperCase()
+}
 
 interface StagedFile {
   key: string
@@ -123,7 +146,7 @@ function IntakeUploadForm({
 
   function rejection(f: StagedFile, index: number): Rejection | null {
     const mime = mimeOf(f.file)
-    if (accepted.size > 0 && !accepted.has(mime)) return "type"
+    if (accepted.size > 0 && !accepted.has(mime)) return HEIC_TYPES.has(mime) ? "heic" : "type"
     if (limits.maxFileBytes > 0 && f.file.size > limits.maxFileBytes) return "size"
     if (maxFiles > 0 && index >= maxFiles) return "count"
     return null
@@ -207,8 +230,12 @@ function IntakeUploadForm({
 
   function reasonText(reason: Rejection): string {
     switch (reason) {
+      case "heic":
+        return t("commodities:intake.upload.rejectHeic")
       case "type":
-        return t("commodities:intake.upload.rejectType")
+        return t("commodities:intake.upload.rejectType", {
+          types: formatList(limits.acceptedMimeTypes.map(typeLabel)),
+        })
       case "size":
         return t("commodities:intake.upload.rejectSize", {
           size: formatBytes(limits.maxFileBytes),
@@ -250,6 +277,14 @@ function IntakeUploadForm({
                 <div className="min-w-0 flex-1">
                   <p className={cn("truncate text-sm", reason && "text-muted-foreground")}>
                     {f.file.name}
+                    {f.status === "uploading" || f.status === "uploaded" ? (
+                      <span className="sr-only">
+                        {" "}
+                        {f.status === "uploading"
+                          ? t("commodities:intake.upload.fileUploading")
+                          : t("commodities:intake.upload.fileUploaded")}
+                      </span>
+                    ) : null}
                   </p>
                   <p
                     className={cn(
@@ -328,6 +363,12 @@ function IntakeUploadForm({
         {oneItem
           ? t("commodities:intake.upload.oneItemHint")
           : t("commodities:intake.upload.separateHint")}
+      </p>
+
+      <p className="sr-only" role="status" aria-live="polite" data-testid="intake-upload-progress">
+        {busy
+          ? t("commodities:intake.upload.uploading", { done: uploaded, total: sendable.length })
+          : ""}
       </p>
 
       {queueFull ? (

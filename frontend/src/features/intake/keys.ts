@@ -17,4 +17,7 @@ export const intakeKeys = {
   list: (slug: string, opts?: IntakeListOptions) =>
     [...intakeKeys.group(slug), "list", listKeySuffix(opts)] as const,
   detail: (slug: string, id: string) => [...intakeKeys.group(slug), "detail", id] as const,
+  // The mutation key of a product review, so the review page can wait for
+  // the reviews in flight before it creates the drafts.
+  review: (slug: string) => [...intakeKeys.group(slug), "review"] as const,
 }

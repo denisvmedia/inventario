@@ -6,15 +6,16 @@
  * like a receipt as a purchase of an espresso machine, a milk frother and a
  * line of two espresso cups.
  *
- *   1. The member drops the receipt, leaves the frother out and creates the
- *      drafts. The answer to that request is lost on the way back, as on a
- *      dropped connection.
+ *   1. The member drops the receipt. While its products wait for a decision
+ *      the inbox lists the batch and leads back to its review. The member
+ *      leaves the frother out and creates the drafts. The answer to that
+ *      request is lost on the way back, as on a dropped connection.
  *   2. A second device (a fresh browser context) opens the batch and sees
  *      the outcome the server kept: two drafts created, the frother left
  *      out, nothing left to do.
  *   3. The first device repeats the request. The server makes no second
  *      draft for a product that has one, so the group ends with exactly two
- *      new drafts.
+ *      new drafts, and the finished batch has left the inbox.
  */
 import fs from "node:fs";
 import path from "node:path";
@@ -71,6 +72,22 @@ async function listCandidates(
   expect(resp.ok(), `GET /intake/sessions/{id} → ${resp.status()}`).toBe(true);
   return ((await resp.json()) as { data: { attributes: { candidates: CandidateRow[] } } }).data
     .attributes.candidates;
+}
+
+// inboxListsBatch reports whether the group's inbox lists the batch.
+async function inboxListsBatch(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  sessionId: string,
+): Promise<boolean> {
+  const resp = await request.get(
+    `/api/v1/g/${encodeURIComponent(slug)}/inbox?reason=intake&per_page=100`,
+    { headers: headers(auth) },
+  );
+  expect(resp.ok(), `GET /inbox → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as { data: { kind: string; id: string }[] };
+  return body.data.some((e) => e.kind === "intake_session" && e.id === sessionId);
 }
 
 // The drafts batch intake made for this session's products: their client
@@ -140,6 +157,15 @@ test.describe("Batch intake (#2810)", () => {
     await expect(page.getByText("Espresso Cups")).toBeVisible();
     await expect(page.getByTestId("intake-create-drafts")).toHaveText("Create 3 drafts");
 
+    // The inbox lists the batch while its products wait for a decision, and
+    // leads back to the review.
+    await page.goto(`/g/${encodeURIComponent(slug)}/inbox?reason=intake`);
+    const inboxRow = page.getByTestId(`inbox-row-intake_session-${sessionId}`);
+    await expect(inboxRow).toContainText("3 products to review");
+    await inboxRow.getByTestId(`inbox-intake-open-${sessionId}`).click();
+    await page.waitForURL((url) => url.pathname.endsWith(`/intake/${sessionId}`));
+    await expect(page.getByTestId("intake-create-drafts")).toHaveText("Create 3 drafts");
+
     // Leave the frother out. The choice is stored on the server.
     await page.getByRole("checkbox", { name: "Make a draft of Milk Frother" }).click();
     await expect(page.getByTestId("intake-create-drafts")).toHaveText("Create 2 drafts");
@@ -196,5 +222,7 @@ test.describe("Batch intake (#2810)", () => {
         .filter((id): id is string => !!id)
         .sort(),
     );
+    // Every product has its outcome, so the batch is no longer in the inbox.
+    expect(await inboxListsBatch(request, auth, slug, sessionId)).toBe(false);
   });
 });
