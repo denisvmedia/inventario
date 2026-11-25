@@ -465,7 +465,15 @@ describe("<CommodityEditForm /> custom fields", () => {
   })
 
   it("shows a value the server refused under its field", async () => {
-    server.use(...customFieldHandlers.list(SLUG, fields))
+    let listed = 0
+    server.use(
+      // Counts the reads and leaves the answer to the next handler.
+      http.get(apiUrl(`/g/${SLUG}/custom-fields`), () => {
+        listed++
+        return undefined
+      }),
+      ...customFieldHandlers.list(SLUG, fields)
+    )
     const user = userEvent.setup()
     renderForm(
       { custom_fields: stored },
@@ -485,6 +493,8 @@ describe("<CommodityEditForm /> custom fields", () => {
     expect(await screen.findByTestId("custom-field-cf-plate-error")).toHaveTextContent(
       "must be at most 200 characters"
     )
+    // The fields are read again, in case one changed meanwhile.
+    await waitFor(() => expect(listed).toBe(2))
   })
 
   it("names the currency picker of a money field and flags it with the amount", async () => {

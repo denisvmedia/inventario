@@ -50,6 +50,7 @@ import {
   type ClassifiedServerError,
   classifyServerError,
   extractFieldErrorCodes,
+  getServerErrorCode,
 } from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
@@ -87,7 +88,11 @@ import type {
 } from "@/features/commodities/api"
 import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
 import { useCustomFieldsBinding } from "@/components/customFields/useCustomFieldsBinding"
-import type { CustomField, CustomFieldValues } from "@/features/customFields/api"
+import {
+  CUSTOM_FIELD_INVALID_VALUE,
+  type CustomField,
+  type CustomFieldValues,
+} from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldsRequest } from "@/features/customFields/values"
 import {
@@ -964,6 +969,9 @@ export function CommodityFormDialog({
       // first failing field. Necessary even with FE schema mirrors —
       // BE rules can be stricter than what the FE schema models, and
       // we should never silently round-trip a 422.
+      // A refused custom field value often means a field or an option was
+      // deleted meanwhile; read the group's fields again.
+      if (getServerErrorCode(err) === CUSTOM_FIELD_INVALID_VALUE) void customFieldsQuery.refetch()
       const fieldResult = applyServerFieldErrors(err, setError, {
         fields: Object.values(STEP_FIELDS).flat(),
       })
