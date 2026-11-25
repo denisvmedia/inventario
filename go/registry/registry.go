@@ -308,6 +308,46 @@ func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
 	return n, true
 }
 
+// restoredDraftCtxKey keys the archived state of a draft that a backup
+// restore recreates (see WithRestoredDraft).
+type restoredDraftCtxKey struct{}
+
+// RestoredDraft is the archived revision and timestamps of a draft.
+type RestoredDraft struct {
+	Revision  int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// WithRestoredDraft marks ctx so a CommodityDraftRegistry.Create or
+// CreateOrGet that creates a draft keeps the archived revision and timestamps
+// instead of starting at revision 1 now, so a restored draft keeps its place
+// in the drafts list. It is the backup restore's seam, a context signal for
+// the same reason as WithRestoreAssetNumber: the API path never sets it.
+func WithRestoredDraft(ctx context.Context, d RestoredDraft) context.Context {
+	return context.WithValue(ctx, restoredDraftCtxKey{}, d)
+}
+
+// RestoredDraftFromContext returns the state set by WithRestoredDraft. A
+// revision below 1 or a zero timestamp is replaced by what a new draft gets:
+// revision 1 and now.
+func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft, bool) {
+	d, ok := ctx.Value(restoredDraftCtxKey{}).(RestoredDraft)
+	if !ok {
+		return RestoredDraft{}, false
+	}
+	if d.Revision < 1 {
+		d.Revision = 1
+	}
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = now
+	}
+	if d.UpdatedAt.IsZero() {
+		d.UpdatedAt = d.CreatedAt
+	}
+	return d, true
+}
+
 // CommodityRegistry stores items.
 //
 // Trash: an item moved to Trash keeps its row with deleted_at set
@@ -1304,7 +1344,8 @@ type CommodityDraftRegistry interface {
 	// CreateOrGet stores a new open draft unless the group already has a
 	// draft with the same ClientKey, which is returned unchanged with
 	// created=false. The registry sets the ids, tenant, group, author,
-	// status, revision and timestamps.
+	// status, revision and timestamps; a backup restore passes the archived
+	// revision and timestamps through WithRestoredDraft.
 	CreateOrGet(ctx context.Context, draft models.CommodityDraft) (stored *models.CommodityDraft, created bool, err error)
 
 	// GetByClientKey returns the group's draft with the key; ErrNotFound

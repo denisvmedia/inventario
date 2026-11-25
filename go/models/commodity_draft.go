@@ -255,7 +255,8 @@ func isDraftKey(key string) bool {
 //
 // A draft belongs to its group: every member can see it, members who can edit
 // content can save, discard and promote it. Drafts are not items, so no item
-// list, count, search, report, reminder or export sees them.
+// list, count, search, report or reminder sees them. A whole-group backup
+// carries the open ones in a document of their own.
 //
 // ClientKey is the client's identity for the draft. Creating a draft with a key
 // the group already has returns the existing draft, so a repeated create after
