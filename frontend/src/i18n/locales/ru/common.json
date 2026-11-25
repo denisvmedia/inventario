@@ -46,7 +46,8 @@
     "upcoming": "Предстоящие",
     "warranties": "Гарантии",
     "help": "Помощь",
-    "sellers": "Продавцы"
+    "sellers": "Продавцы",
+    "inbox": "Входящие"
   },
   "onboarding": {
     "ariaLabel": "Обзор продукта",

@@ -52,6 +52,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. The issue asks that drafts can be found and resumed on another device, with the inbox of #2794 as the later home; the card follows the `Card` anatomy in [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). The placement above the toolbar and the five-row cap are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; placement and the row cap agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Move the list into the inbox when #2794 lands.
+- **Resolved**: 2026-11-25, #2794 — the list moved to the inbox; the Items page keeps the notice described in "Inbox notice on the Items page instead of a Drafts filter".
 
 #### 2026-11-25 — Short name follows the name in the Add item dialog
 
@@ -391,7 +392,34 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds a reminders surface to the item page.
 
+#### 2026-11-25 — Inbox page
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: none. `design-mocks/src/views/` has no inbox, review queue or list of drafts.
+- **Reality**: `frontend/src/pages/inbox/InboxPage.tsx` at `/g/:slug/inbox`: a `PageHeader` ("Inbox", one line on what it holds), line `Tabs` **All (N)**, **Drafts (N)**, **Items to review (N)** whose counts come from the server and whose filter is the `reason` query parameter, and one `Card` list in the Upcoming page's row anatomy. A row has an icon (`FilePen` for a draft, `Package` for an item), the title, a secondary `Badge` per reason ("Draft", "Marked as draft"), muted meta text, and its action at the end. A draft row shows "Saved {relative time}" and the file count, with an outline small **Continue** that opens the Add item dialog over the inbox and a ghost `Trash2` icon button that discards after the confirm dialog. An item row's title opens the item sheet over the inbox; its outline small **Mark as reviewed** turns the item's draft switch off and shows a success toast with **Undo**; a refusal shows an error toast with **Open item**. Viewers see the rows without buttons. More than 50 rows page with the shared `Pagination`. The empty state is a muted `CircleCheck` with "Nothing needs attention". Under the list, a **Missing details** `Card` links **Items without a location** and **Items without tags** to the items list with those filters.
+- **Why**: not present in mock. #2794 asks for one place for unfinished work where each row states its reason and offers the action that clears it, and for missing data to stay a separate, optional view. The tabs, list and card follow [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) and the Upcoming and Trash pages. The Missing details section, Undo on Mark as reviewed and the 50-row page are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the Missing details section, Undo and the page size agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
+#### 2026-11-25 — Inbox notice on the Items page instead of a Drafts filter
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no draft filter and no notice above the toolbar. The issue text asks for a "Drafts" filter next to No location.
+- **Reality**: `frontend/src/components/items/InboxNotice.tsx` renders a bordered row between the page header and the toolbar, only while the inbox holds drafts or items marked as draft: an `Inbox` icon, the summary ("2 drafts to finish · 1 item to review") and an outline small **Open inbox** button. The button opens the inbox on the Drafts or Items to review tab when only one kind is waiting, otherwise on All. The toolbar has no Drafts filter.
+- **Why**: Since #2812 a draft of a new item is a server draft, not an item, so an item filter cannot list it, and a filter that showed only items marked as draft would disagree with the inbox's draft count. The inbox lists both kinds; the notice is the Items page's way there and replaces the Drafts card of #2812. Opening on the matching tab is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the tab choice agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Add a Drafts filter if the item query gains one that covers server drafts; otherwise permanent.
+
 ### Dashboard / Overview
+
+#### 2026-11-25 — Needs attention card on the dashboard
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) goes from the stat cards to Expiring Warranties and Recently Added; it has no inbox card.
+- **Reality**: `frontend/src/components/dashboard/NeedsAttentionCard.tsx` renders between the stat cards and the saved views, only while the inbox is not empty: a full-width bordered link row with an `Inbox` icon tile, "Needs attention: N" from the server's inbox count, the summary ("2 drafts to finish · 1 item to review") and "Open inbox" with a chevron. The four stat cards stay as the mock draws them.
+- **Why**: not present in mock. #2794 asks for a "Needs attention: N" card. It is a row rather than a fifth stat card so the mock's four-card grid stays intact. Hiding it while the inbox is empty and the summary line are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the placement, hiding at zero and the summary agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card.
 
 #### 2026-11-25 — Saved view cards and suggested views on the dashboard
 
@@ -863,6 +891,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
 ### Navigation & App shell
+
+#### 2026-11-25 — Inbox entry with a count in the sidebar
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Dashboard then Locations in the Inventory group, with no per-row counts.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Inbox** (`Inbox` icon) after Dashboard, linking to `/g/:slug/inbox`, with a `SidebarMenuBadge` holding the server's count of records that need attention (`GET /inbox/count`). The badge is hidden while the count is zero or loading, and in the collapsed icon rail, as the primitive does. The label resolves through `lib/nav-labels.ts` (`common:nav.inbox`).
+- **Why**: not present in mock. #2794 asks for an Inbox entry in the sidebar with a counter.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the position after Dashboard agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Move the row if `inventario-design` places the inbox elsewhere.
 
 #### 2026-11-25 — Saved views section in the sidebar
 

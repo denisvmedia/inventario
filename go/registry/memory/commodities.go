@@ -627,6 +627,9 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 	if !commodityMatchesDefaultView(c, opts) {
 		return false
 	}
+	if opts.DraftsOnly && !c.Draft {
+		return false
+	}
 	if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
 		return false
 	}

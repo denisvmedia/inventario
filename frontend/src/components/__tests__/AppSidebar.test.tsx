@@ -7,7 +7,13 @@ import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { apiUrl, authHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  authHandlers,
+  groupHandlers,
+  inboxHandlers,
+  savedViewHandlers,
+} from "@/test/handlers"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -48,8 +54,13 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  // The sidebar lists the group's saved views.
-  server.use(...savedViewHandlers.none("household"), ...savedViewHandlers.none("office"))
+  // The sidebar lists the group's saved views and counts its inbox.
+  server.use(
+    ...savedViewHandlers.none("household"),
+    ...savedViewHandlers.none("office"),
+    ...inboxHandlers.empty("household"),
+    ...inboxHandlers.empty("office")
+  )
 })
 
 describe("<AppSidebar /> — group-section gating (#1886)", () => {
@@ -228,5 +239,36 @@ describe("<AppSidebar /> — saved views", () => {
     renderSidebar("/g/household")
     await waitFor(() => expect(screen.getByTestId("sidebar-inventory-group")).toBeInTheDocument())
     expect(screen.queryByTestId("sidebar-saved-views")).not.toBeInTheDocument()
+  })
+})
+
+describe("<AppSidebar /> — inbox (#2794)", () => {
+  it("links the inbox after the dashboard and shows the server's count", async () => {
+    const fake = inboxHandlers.backend("household", [
+      inboxHandlers.draft("d1", "Drill"),
+      inboxHandlers.draft("d2", "Lamp"),
+      inboxHandlers.itemDraft("c1", "Bike"),
+    ])
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    // The rows render once the groups resolve.
+    // The count is part of the link's name; the badge itself is hidden
+    // from screen readers.
+    await within(inventory).findByRole("link", { name: "Inbox, 3 need attention" })
+    const links = within(inventory).getAllByRole("link")
+    expect(links[0]).toHaveTextContent("Dashboard")
+    expect(links[1]).toHaveTextContent("Inbox")
+    expect(links[1]).toHaveAttribute("href", "/g/household/inbox")
+    expect(await within(inventory).findByTestId("sidebar-inbox-count")).toHaveTextContent("3")
+  })
+
+  it("shows no count while the inbox is empty", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    expect(await within(inventory).findByRole("link", { name: "Inbox" })).toBeInTheDocument()
+    expect(within(inventory).queryByTestId("sidebar-inbox-count")).not.toBeInTheDocument()
   })
 })
