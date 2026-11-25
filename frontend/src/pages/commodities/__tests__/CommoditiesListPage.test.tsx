@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
+import { useState } from "react"
 import { http as msw, HttpResponse } from "msw"
-import { Route, useLocation } from "react-router-dom"
+import { Route, Routes, useLocation, type Location } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
@@ -789,12 +790,13 @@ describe("<CommoditiesListPage />", () => {
       return (
         <div>
           <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <span data-testid="nav-sentinel-search">{location.search}</span>
           <span data-testid="nav-sentinel-background">{background?.pathname ?? ""}</span>
         </div>
       )
     }
     renderWithProviders({
-      initialPath: `/g/${SLUG}/commodities`,
+      initialPath: `/g/${SLUG}/commodities?q=mac`,
       routes: (
         <>
           <Route
@@ -822,6 +824,80 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByTestId("nav-sentinel-background")).toHaveTextContent(
       `/g/${SLUG}/commodities`
     )
+    // The item carries the list it came from, so it can walk it and lead
+    // back to it (#2795).
+    expect(screen.getByTestId("nav-sentinel-search")).toHaveTextContent(
+      `?from=${encodeURIComponent(`/g/${SLUG}/commodities?q=mac`)}`
+    )
+  })
+
+  it("keeps an item opened right after the list loads open behind the search box", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "MacBook Pro" })])
+    )
+    setAccessToken("good-token")
+    // A remount brings the list back from the query cache at once, so the
+    // card can be clicked inside the search box's 300ms debounce, as a fast
+    // user (or a fast browser in e2e) does after a page load.
+    function RemountableList() {
+      const [mount, setMount] = useState(0)
+      return (
+        <>
+          <button type="button" onClick={() => setMount((n) => n + 1)}>
+            remount
+          </button>
+          <CommoditiesListPage key={mount} />
+        </>
+      )
+    }
+    function ItemSentinel() {
+      return <span data-testid="nav-sentinel-path">{useLocation().pathname}</span>
+    }
+    // As in app/router.tsx: the list stays mounted behind the item while
+    // `state.background` points at it, so its effects keep running.
+    function ModalRoutes() {
+      const location = useLocation()
+      const background = (location.state as { background?: Location } | null)?.background
+      return (
+        <>
+          <Routes location={background ?? location}>
+            <Route
+              path="/g/:groupSlug/commodities"
+              element={
+                <GroupProvider>
+                  <ConfirmProvider>
+                    <RemountableList />
+                  </ConfirmProvider>
+                </GroupProvider>
+              }
+            />
+            <Route path="/g/:groupSlug/commodities/:id" element={<ItemSentinel />} />
+          </Routes>
+          {background ? (
+            <Routes>
+              <Route path="/g/:groupSlug/commodities/:id" element={<ItemSentinel />} />
+            </Routes>
+          ) : null}
+        </>
+      )
+    }
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities?q=mac`,
+      routes: <Route path="*" element={<ModalRoutes />} />,
+    })
+    await screen.findByTestId("commodity-card")
+    await new Promise((resolve) => setTimeout(resolve, 350))
+    await user.click(screen.getByRole("button", { name: "remount" }))
+    const card = await screen.findByTestId("commodity-card")
+    await user.click(within(card).getByTestId("commodity-card-link"))
+    expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c1`
+    )
+    await new Promise((resolve) => setTimeout(resolve, 450))
+    expect(screen.getByTestId("nav-sentinel-path")).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
   })
 
   it("says where the search text matched when it is not the name (#2800)", async () => {

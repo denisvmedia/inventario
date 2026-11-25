@@ -6,7 +6,7 @@ description: Add, edit, and organise the things you own — fields, drafts, stat
 An **item** is anything you want to keep track of — an appliance, a laptop, a
 piece of furniture, a tool. This page covers everything about items: adding
 them (manually or with AI), every field on the form, the item detail page and
-its tabs, the status lifecycle, prices and currencies, the cover photo, and
+its tabs, editing an item, the status lifecycle, prices and currencies, the cover photo, and
 how to find, sort, and bulk-edit items on the **All Items** page.
 
 ![The All Items page showing a grid of inventory items with search and filter controls](../../assets/screenshots/items-list.png)
@@ -37,8 +37,13 @@ whenever you like, or leave it unassigned. See
 The dialog has five numbered steps, shown as a segmented progress bar at the
 top: **Basics → Purchase → Warranty → Extras → Files**. Use **Continue** and
 **Back** to move between them, or click a segment you've already visited to jump
-straight to it. The same dialog is used to edit an existing item — its title
-changes to **Edit item** and the final button reads **Save changes**.
+straight to it.
+
+The same dialog edits an existing item when you click **All fields** on the
+item's edit form (see [Edit an item](#edit-an-item)). Its title then reads
+**Edit item**, every segment can be clicked from the start, and **Save changes**
+is on every step, so you can change one field and save without going through
+the rest.
 
 ![The Add item dialog open on the Basics step with the segmented progress bar at the top](../../assets/screenshots/add-item-dialog.png)
 
@@ -189,7 +194,8 @@ row of tabs.
 
 The header also has:
 
-- **Edit** — reopens the form dialog.
+- **Edit** — turns the details into an edit form (see
+  [Edit an item](#edit-an-item)).
 - **Insurance Report** and **Print** — printable views (see [Reports](../reports/)).
 - **Print label** (the QR code button) — a label for this item (see
   [Asset IDs and QR labels](#asset-ids-and-qr-labels)).
@@ -205,6 +211,68 @@ status changes, price changes, moves, and cover-photo changes.
 Lending, service, and supplies tracking are only available on single-unit
 items, not bundles.
 :::
+
+## Edit an item
+
+Click **Edit** on the item page, or in the side panel that opens from the
+**All Items** page. The details give way to an edit form in the same place,
+grouped into sections:
+
+- **Identity** — name, short name, quantity, type, and serial number.
+- **Location** — location and area. **Clear location** leaves the item
+  unassigned.
+- **Purchase** — purchase date, original price and its currency, and current
+  value. For a price in another currency, the converted price in the group
+  currency is asked for too.
+- **Warranty** — expiry date and notes. A bundle has no warranty, so these stay
+  empty for it.
+- **Notes & Tags** — notes, and every tag in your group as a row of buttons.
+  Click a tag to add it, click it again to remove it. To add a tag the group
+  doesn't have yet, type it in the box under the tags and press Enter or
+  **Add**.
+
+**Save changes** and **Cancel** stay at the bottom of the view while you
+scroll. The arrow at the top also leaves the form. If you have unsaved changes,
+Inventario asks whether to **Save** them, **Discard** them, or **Keep editing**.
+Reloading or closing the tab asks your browser to confirm.
+
+:::caution
+The browser's own **Back** button does not ask first. Unsaved changes are lost
+if you use it.
+:::
+
+Links, extra serial numbers, part numbers, status, and the draft switch are not
+on this form. **All fields** opens the step-by-step dialog with everything you
+have typed so far.
+
+The edit form has its own address (the item's address followed by `/edit`), so
+reloading the page keeps you in it.
+
+### Quick edits
+
+To change only the location, the tags, or the notes, you don't need the edit
+form. On the **Details** tab, click the pencil next to **Location** (**Area** on
+the full page), **Tags**, or **Notes**. The field becomes editable right there;
+click **Save** to keep the change or **Cancel** to drop it. The rest of the item
+stays as it is.
+
+**Place in location** on the placement banner opens the same location quick
+edit.
+
+### Go through a list one item at a time
+
+When you open an item from the **All Items** page, it keeps the list you came
+from, with its search, filters, sort, and page:
+
+- The item page, the side panel, and the edit form show the item's place in
+  that list (for example, "4 of 17") and arrows to the previous and next item.
+- **Back to items** returns to that list, on the page you reached.
+- On the edit form, **Save and next** saves the item and opens the next item's
+  edit form. It moves on to the list's next page when needed.
+
+If an edit takes an item out of the list, for example because you renamed it so
+it no longer matches the search, the page says so. **Save and next** still opens
+the item that came after it.
 
 ## Asset IDs and QR labels
 

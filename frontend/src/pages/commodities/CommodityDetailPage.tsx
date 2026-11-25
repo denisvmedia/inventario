@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react"
+import { useEffect, useMemo, useState, type ReactNode } from "react"
 import {
   Link,
   useLocation,
@@ -48,7 +48,16 @@ import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { AssignLocationBanner } from "@/components/items/AssignLocationBanner"
+import {
+  CommodityEditForm,
+  LocationAreaFields,
+  type AreaOption,
+  type LocationOption,
+} from "@/components/items/CommodityEditForm"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { ListPager } from "@/components/ListPager"
+import { TagPalette } from "@/components/tags/TagPalette"
+import { Textarea } from "@/components/ui/textarea"
 import {
   StatusTransitionDialog,
   type StatusTransitionPayload,
@@ -105,10 +114,23 @@ import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import {
+  commodityHref,
+  commoditiesListSource,
+  isCommoditiesListContext,
+} from "@/features/commodities/listContext"
 import { useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
 import { formatCurrency, formatDate } from "@/lib/intl"
+import {
+  listContextHref,
+  readListContext,
+  withListContextPage,
+  type ListContext,
+} from "@/lib/list-context"
+import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 type TabKey = "details" | "warranty" | "files" | "lend" | "service" | "supplies" | "maintenance"
@@ -238,11 +260,21 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     else params.set("tab", next)
     setSearchParams(params, { replace: true })
   }
-  // /commodities/:id/edit deep-link: open the edit dialog immediately.
-  // Closing the dialog navigates back to /commodities/:id (sans /edit)
-  // so the URL stays meaningful.
+  // /commodities/:id/edit is the item's edit form, in place of the read
+  // view (the mock's ItemEditForm). Being a URL, it survives a reload and
+  // "Save and next" can land on the next item's form.
   const editMatch = useMatch({ path: "/g/:groupSlug/commodities/:id/edit", end: true })
-  const [editOpen, setEditOpen] = useState(false)
+  const editing = !!editMatch
+  // The step-by-step dialog, opened from the edit form's "All fields" with
+  // the values entered so far. Null while closed.
+  const [dialogDraft, setDialogDraft] = useState<Commodity | null>(null)
+  // The Details tab field being edited in place (#2795), if any, with the
+  // item it was opened on. Moving to another item, even one already loaded,
+  // closes it, so a draft never lands on the wrong item.
+  const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
+  const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
+  const setQuickEdit = (field: QuickEditField | null) =>
+    setQuickEditOn(field ? { id, field } : null)
   // #1448 quick-attach state. `pendingDropFiles` holds files seeded by
   // the page-level drop catcher; the upload dialog reads them on open
   // and queues them in the select step. The button-triggered open
@@ -265,19 +297,73 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     // the page wrapper.
     disabled: uploadOpen,
   })
-  useEffect(() => {
-    // Deep-link sync from URL → local edit-dialog state.
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one cascading render per nav is acceptable
-    if (editMatch && !editOpen) setEditOpen(true)
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on URL match changes; editOpen is read once
-  }, [editMatch?.pathname])
-  function handleEditOpenChange(open: boolean) {
-    setEditOpen(open)
-    if (!open && editMatch && slug && id) {
-      navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`, {
-        replace: true,
-      })
+
+  // Opened from the Items list, the item carries that list in `?from=`
+  // (lib/list-context.ts): Back returns to it, and Previous / Next / Save
+  // and next walk it in its filters and order (hooks/useListNavigation.ts).
+  // The list queries wait for the group, as the list page does, so both
+  // build the same query keys and share the cached pages.
+  const location = useLocation()
+  const groupReady = !!currentGroup?.slug
+  const from = useMemo(
+    () => (slug ? readListContext(searchParams, `/g/${encodeURIComponent(slug)}`) : null),
+    [searchParams, slug]
+  )
+  const itemsList = from && slug && isCommoditiesListContext(from, slug) ? from : null
+  const source = useMemo(
+    () => (itemsList && groupReady && slug ? commoditiesListSource(itemsList, slug) : null),
+    [itemsList, groupReady, slug]
+  )
+  const nav = useListNavigation({ source, currentId: id || undefined })
+  // The list context to carry: on the list page that holds the item.
+  const currentContext = itemsList ? withListContextPage(itemsList, nav.page) : from
+  const contextAt = (page: number) =>
+    itemsList ? withListContextPage(itemsList, page) : currentContext
+
+  // Navigates without leaving the sheet: the sheet's background (the list
+  // behind it) moves along to the list page the context now points at.
+  // `editEntered` marks an edit form opened with Edit from this item's read
+  // view, the entry just before it in the history.
+  function go(
+    to: string,
+    ctx: ListContext | null,
+    opts: { replace?: boolean; editEntered?: boolean } = {}
+  ) {
+    const state: Record<string, unknown> = { ...(location.state as object | null) }
+    delete state.editEntered
+    if (state.background && ctx) {
+      state.background = {
+        pathname: ctx.pathname,
+        search: ctx.search ? `?${ctx.search}` : "",
+        hash: "",
+      }
     }
+    if (opts.editEntered) state.editEntered = true
+    navigate(to, {
+      replace: opts.replace,
+      state: Object.keys(state).length > 0 ? state : undefined,
+    })
+  }
+  function itemHref(targetId: string, ctx: ListContext | null, edit = false) {
+    return slug ? commodityHref(slug, targetId, ctx, { edit }) : "#"
+  }
+  function startEditing() {
+    setQuickEdit(null)
+    go(itemHref(id, currentContext, true), currentContext, { editEntered: true })
+  }
+  function stopEditing() {
+    // Back to the read view the Edit button was pressed on, so the history
+    // holds the item once. A form reached by a link, a reload of a typed
+    // URL, or "Save and next" swaps itself for the item's read view.
+    if ((location.state as { editEntered?: boolean } | null)?.editEntered) {
+      navigate(-1)
+      return
+    }
+    go(itemHref(id, currentContext), currentContext, { replace: true })
+  }
+  function goToNeighbor(target: ListNeighbor, edit: boolean) {
+    const ctx = contextAt(target.page)
+    go(itemHref(target.id, ctx, edit), ctx)
   }
 
   const commodity = detail.data?.commodity
@@ -388,15 +474,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const purchaseCurrency = commodity.original_price_currency ?? groupCurrency
   const currency = groupCurrency // for the (deprecated) edit-dialog default
   const listHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : "#"
+  // Back goes to the list the item was opened from, as the user left it.
+  const backHref = currentContext ? listContextHref(currentContext) : listHref
   // Bare full-page detail href (no `state.background`). The sheet's
   // "View full details" CTA navigates here so the router mounts the
   // full-page <CommodityDetailPage> (all 7 tabs) rather than re-opening
   // the slim sheet overlay — see app/router.tsx. `null` until we have a
   // real id so the CTA hides on the (unreachable) sheet-without-id case.
-  const detailHref =
-    slug && commodity.id
-      ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}`
-      : null
+  const detailHref = slug && commodity.id ? itemHref(commodity.id, currentContext) : null
   const printHref =
     slug && commodity.id
       ? `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodity.id)}/print`
@@ -404,10 +489,32 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const labelHref = slug && commodity.id ? labelsPageHref(slug, { items: [commodity.id] }) : "#"
   const assetId = formatAssetId(commodity.asset_number)
 
-  async function handleSave(values: Parameters<typeof update.mutateAsync>[0]) {
+  // Save from the step-by-step dialog: closes it and the edit form under it.
+  async function handleDialogSave(values: Parameters<typeof update.mutateAsync>[0]) {
     await update.mutateAsync(values)
     toast.success(t("commodities:toast.updated"))
-    setEditOpen(false)
+    setDialogDraft(null)
+    stopEditing()
+  }
+
+  // A quick edit on the Details tab saves one field and keeps the rest of
+  // the record as it is. Resolves false when the save failed. On success it
+  // closes the editor that saved, and leaves alone one opened meanwhile.
+  async function handleQuickSave(
+    field: QuickEditField,
+    patch: Partial<Commodity>
+  ): Promise<boolean> {
+    if (!commodity) return false
+    const savedOn = id
+    try {
+      await update.mutateAsync({ ...commodity, ...patch })
+      toast.success(t("commodities:toast.updated"))
+      setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
+      return true
+    } catch (err) {
+      toast.error(parseServerError(err, t("commodities:quickEdit.error")))
+      return false
+    }
   }
 
   async function handleDelete() {
@@ -488,6 +595,64 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     }
   }
 
+  const pagerLabels = {
+    pager: t("commodities:listNav.label"),
+    previous: t("commodities:listNav.previous"),
+    next: t("commodities:listNav.next"),
+  }
+
+  const allFieldsDialog = (
+    <CommodityFormDialog
+      open={dialogDraft !== null}
+      onOpenChange={(open) => {
+        if (!open) setDialogDraft(null)
+      }}
+      mode="edit"
+      initialValues={dialogDraft ?? commodity}
+      areas={areas.data ?? []}
+      locations={locations.data ?? []}
+      defaultCurrency={currency}
+      onSubmit={handleDialogSave}
+      isPending={update.isPending}
+    />
+  )
+
+  if (editing && !migrationLock.locked) {
+    return (
+      <>
+        {isSheet ? null : <RouteTitle title={t("commodities:detail.documentTitle")} />}
+        <PageFrame
+          isSheet={isSheet}
+          className={mainWrapperClass}
+          data-testid={isSheet ? "sheet-commodity-detail" : "page-commodity-detail"}
+        >
+          <CommodityEditForm
+            // A fresh form per item: "Save and next" lands here with the
+            // next item's values.
+            key={commodity.id}
+            commodity={commodity}
+            areas={areas.data ?? []}
+            locations={locations.data ?? []}
+            groupCurrency={groupCurrency}
+            onSubmit={(req) => update.mutateAsync(req)}
+            isPending={update.isPending}
+            nav={nav}
+            hrefFor={(target) => itemHref(target.id, contextAt(target.page), true)}
+            onExit={stopEditing}
+            onGoTo={(target) => goToNeighbor(target, true)}
+            onAllFields={setDialogDraft}
+            // The mock's form is sized for the side panel; on the full page
+            // it keeps a readable column.
+            className={isSheet ? undefined : "mx-auto w-full max-w-2xl"}
+            // The sheet's close button sits over the header's right end.
+            headerClassName={isSheet ? "pr-8" : undefined}
+          />
+        </PageFrame>
+        {allFieldsDialog}
+      </>
+    )
+  }
+
   return (
     <>
       {/* Document title is owned by the full-page variant only — when
@@ -519,21 +684,54 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           // next mount"), not sticky across commodities.
           key={id}
           show={!commodity.area_id && (locations.data?.length ?? 0) > 0 && !migrationLock.locked}
-          onAssign={() => setEditOpen(true)}
+          onAssign={() => {
+            if (!isSheet) setTab("details")
+            setQuickEdit("location")
+          }}
         />
         {/* The Sheet variant renders its own X close button (top-right
             of the panel), so the explicit "Back to list" Link is
             page-only — clicking the X dismisses the overlay and lands
             the user back on the list URL the sheet opened over. */}
-        {isSheet ? null : (
-          <Link
-            to={listHref}
-            className="text-sm text-muted-foreground hover:underline inline-flex items-center gap-1"
-          >
-            <ArrowLeft className="size-3.5" aria-hidden="true" />
-            {t("commodities:detail.backToList")}
-          </Link>
+        {isSheet ? (
+          nav.active ? (
+            // The sheet's own close button sits top-right; Previous / Next
+            // go on the left of the same strip.
+            <div className="flex items-center gap-2 pt-4 pr-8">
+              <ListPager
+                nav={nav}
+                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                onNavigate={(target) => goToNeighbor(target, false)}
+                labels={pagerLabels}
+                testIdPrefix="commodity-detail"
+              />
+            </div>
+          ) : null
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <Link
+              to={backHref}
+              className="text-sm text-muted-foreground hover:underline inline-flex items-center gap-1"
+              data-testid="commodity-detail-back"
+            >
+              <ArrowLeft className="size-3.5" aria-hidden="true" />
+              {t("commodities:detail.backToList")}
+            </Link>
+            {nav.active ? (
+              <ListPager
+                nav={nav}
+                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                labels={pagerLabels}
+                testIdPrefix="commodity-detail"
+              />
+            ) : null}
+          </div>
         )}
+        {nav.active && !nav.loading && !nav.inList ? (
+          <p className="text-sm text-muted-foreground" data-testid="commodity-detail-not-in-list">
+            {t("commodities:listNav.notInList")}
+          </p>
+        ) : null}
 
         {/* Header (mock parity: `<SheetHeader pt-6 pb-4 px-0>`). The
             title block + status pills row both live inside the
@@ -646,7 +844,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             type="button"
             variant="outline"
             size="sm"
-            onClick={() => setEditOpen(true)}
+            onClick={startEditing}
             data-testid="commodity-detail-edit"
             className="flex-1 gap-1.5"
             disabled={migrationLock.locked}
@@ -856,12 +1054,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             // tabs) instead of re-opening this sheet — see app/router.tsx.
             <>
               <DetailsTab
+                key={commodity.id}
                 commodity={commodity}
                 groupCurrency={groupCurrency}
                 purchaseCurrency={purchaseCurrency}
                 areaName={areaName(commodity.area_id)}
                 areaLabel={areaLabel(commodity.area_id)}
                 variant={variant}
+                quickEdit={migrationLock.locked ? null : quickEdit}
+                onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
+                onQuickSave={handleQuickSave}
+                saving={update.isPending}
+                areas={areas.data ?? []}
+                locations={locations.data ?? []}
               />
               {detailHref ? (
                 <Button
@@ -880,12 +1085,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           ) : tab === "details" ? (
             <>
               <DetailsTab
+                key={commodity.id}
                 commodity={commodity}
                 groupCurrency={groupCurrency}
                 purchaseCurrency={purchaseCurrency}
                 areaName={areaName(commodity.area_id)}
                 areaLabel={areaLabel(commodity.area_id)}
                 variant={variant}
+                quickEdit={migrationLock.locked ? null : quickEdit}
+                onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
+                onQuickSave={handleQuickSave}
+                saving={update.isPending}
+                areas={areas.data ?? []}
+                locations={locations.data ?? []}
               />
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
             </>
@@ -965,17 +1177,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         </div>
       </PageFrame>
 
-      <CommodityFormDialog
-        open={editOpen}
-        onOpenChange={handleEditOpenChange}
-        mode="edit"
-        initialValues={commodity}
-        areas={areas.data ?? []}
-        locations={locations.data ?? []}
-        defaultCurrency={currency}
-        onSubmit={handleSave}
-        isPending={update.isPending}
-      />
+      {allFieldsDialog}
 
       <StatusTransitionDialog
         open={transitionTarget !== null}
@@ -1145,7 +1347,18 @@ interface DetailsTabProps {
   // staying readable inside the narrower Sheet panel); `"page"`
   // keeps the existing 2-col layout that fills the wider canvas.
   variant?: "page" | "sheet"
+  // Quick edits (#2795): the field being edited in place, a setter that
+  // opens or closes one (absent = quick edits are off, e.g. during a
+  // currency migration), and the save that patches one field.
+  quickEdit?: QuickEditField | null
+  onQuickEdit?: (field: QuickEditField | null) => void
+  onQuickSave?: (field: QuickEditField, patch: Partial<Commodity>) => Promise<boolean>
+  saving?: boolean
+  areas?: AreaOption[]
+  locations?: LocationOption[]
 }
+
+type QuickEditField = "location" | "tags" | "notes"
 
 function DetailsTab({
   commodity,
@@ -1154,6 +1367,12 @@ function DetailsTab({
   areaName,
   areaLabel,
   variant = "page",
+  quickEdit = null,
+  onQuickEdit,
+  onQuickSave,
+  saving = false,
+  areas = [],
+  locations = [],
 }: DetailsTabProps) {
   const { t } = useTranslation()
   const tagLabel = useTagLabel("commodity")
@@ -1163,14 +1382,30 @@ function DetailsTab({
   // the bare "Area" / area-name pair to match the existing column
   // layout where adjacent rows already carry their own context.
   const isSheetVariant = variant === "sheet"
+  const locationLabel = isSheetVariant
+    ? t("commodities:detail.fields.location")
+    : t("commodities:detail.fields.area")
+  const tagsLabel = t("commodities:detail.fields.tags")
+  const notesLabel = t("commodities:detail.fields.comments")
+  const cancelQuickEdit = () => onQuickEdit?.(null)
+  const saveField = (field: QuickEditField) => (patch: Partial<Commodity>) =>
+    onQuickSave?.(field, patch) ?? Promise.resolve(false)
+  // The pencil next to a field's label; hidden while that field is open.
+  const editButton = (field: QuickEditField, label: string) =>
+    onQuickEdit && quickEdit !== field ? (
+      <Button
+        type="button"
+        variant="ghost"
+        size="icon-xs"
+        className="text-muted-foreground"
+        onClick={() => onQuickEdit(field)}
+        aria-label={t("commodities:quickEdit.edit", { field: label })}
+        data-testid={`commodity-quick-edit-${field}`}
+      >
+        <Pencil aria-hidden="true" />
+      </Button>
+    ) : null
   const rows: { icon: typeof MapPin; label: string; value: React.ReactNode; testId?: string }[] = [
-    {
-      icon: MapPin,
-      label: isSheetVariant
-        ? t("commodities:detail.fields.location")
-        : t("commodities:detail.fields.area"),
-      value: (isSheetVariant ? areaLabel : areaName) || noValue,
-    },
     {
       icon: Package,
       label: t("commodities:detail.fields.count"),
@@ -1260,14 +1495,36 @@ function DetailsTab({
   return (
     <Outer data-testid="commodity-detail-details">
       <Inner className={containerClass}>
-        {rows.map((r, i) => (
+        <DetailRow
+          icon={MapPin}
+          label={locationLabel}
+          action={editButton("location", locationLabel)}
+          value={
+            quickEdit === "location" ? (
+              <LocationQuickEditor
+                commodity={commodity}
+                areas={areas}
+                locations={locations}
+                saving={saving}
+                onSave={saveField("location")}
+                onCancel={cancelQuickEdit}
+              />
+            ) : (
+              (isSheetVariant ? areaLabel : areaName) || noValue
+            )
+          }
+          variant={variant}
+          wide={quickEdit === "location"}
+          testId="commodity-detail-location"
+        />
+        {rows.map((r) => (
           <DetailRow
             key={r.label}
             icon={r.icon}
             label={r.label}
             value={r.value}
             variant={variant}
-            withDivider={isSheet && i > 0}
+            withDivider={isSheet}
           />
         ))}
         {/* Auxiliary fields (tags / urls / notes / extra serials /
@@ -1277,36 +1534,33 @@ function DetailsTab({
             uppercase tracking) and the icon-on-left layout is
             uniform. Page mode keeps the existing 2-col grid block
             with DetailLabel on top. */}
-        {commodity.tags && commodity.tags.length > 0 ? (
-          isSheet ? (
-            <DetailRow
-              icon={Tag}
-              label={t("commodities:detail.fields.tags")}
-              value={
-                <div className="flex flex-wrap gap-1.5 mt-0.5">
-                  {commodity.tags.map((tag) => (
-                    <Badge key={tag} variant="secondary">
-                      {tagLabel(tag)}
-                    </Badge>
-                  ))}
-                </div>
-              }
-              variant={variant}
-              withDivider
+        <FieldBlock
+          icon={Tag}
+          label={tagsLabel}
+          action={editButton("tags", tagsLabel)}
+          variant={variant}
+          className={fullWidthClass}
+          testId="commodity-detail-tags"
+        >
+          {quickEdit === "tags" ? (
+            <TagsQuickEditor
+              commodity={commodity}
+              saving={saving}
+              onSave={saveField("tags")}
+              onCancel={cancelQuickEdit}
             />
-          ) : (
-            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-              <DetailLabel icon={Tag} label={t("commodities:detail.fields.tags")} />
-              <div className="flex flex-wrap gap-1.5">
-                {commodity.tags.map((tag) => (
-                  <Badge key={tag} variant="secondary">
-                    {tagLabel(tag)}
-                  </Badge>
-                ))}
-              </div>
+          ) : commodity.tags && commodity.tags.length > 0 ? (
+            <div className={cn("flex flex-wrap gap-1.5", isSheet && "mt-0.5")}>
+              {commodity.tags.map((tag) => (
+                <Badge key={tag} variant="secondary">
+                  {tagLabel(tag)}
+                </Badge>
+              ))}
             </div>
-          )
-        ) : null}
+          ) : (
+            noValue
+          )}
+        </FieldBlock>
         {Array.isArray(commodity.urls) && commodity.urls.length > 0 ? (
           isSheet ? (
             <DetailRow
@@ -1351,24 +1605,30 @@ function DetailsTab({
             </div>
           )
         ) : null}
-        {commodity.comments ? (
-          isSheet ? (
-            <DetailRow
-              icon={FileText}
-              label={t("commodities:detail.fields.comments")}
-              value={
-                <p className="text-sm font-normal whitespace-pre-wrap">{commodity.comments}</p>
-              }
-              variant={variant}
-              withDivider
+        <FieldBlock
+          icon={isSheet ? FileText : Hash}
+          label={notesLabel}
+          action={editButton("notes", notesLabel)}
+          variant={variant}
+          className={fullWidthClass}
+          testId="commodity-detail-notes"
+        >
+          {quickEdit === "notes" ? (
+            <NotesQuickEditor
+              commodity={commodity}
+              label={notesLabel}
+              saving={saving}
+              onSave={saveField("notes")}
+              onCancel={cancelQuickEdit}
             />
+          ) : commodity.comments ? (
+            <p className={cn("text-sm whitespace-pre-wrap", isSheet && "font-normal")}>
+              {commodity.comments}
+            </p>
           ) : (
-            <div className={cn("flex flex-col gap-1.5", fullWidthClass)}>
-              <DetailLabel icon={Hash} label={t("commodities:detail.fields.comments")} />
-              <p className="text-sm whitespace-pre-wrap">{commodity.comments}</p>
-            </div>
-          )
-        ) : null}
+            noValue
+          )}
+        </FieldBlock>
         {commodity.extra_serial_numbers && commodity.extra_serial_numbers.length > 0 ? (
           isSheet ? (
             <DetailRow
@@ -1468,17 +1728,34 @@ interface DetailRowProps {
   // Sheet rows draw a top Separator unless they're first in the
   // list; the parent passes `false` for the leading row.
   withDivider?: boolean
+  // A control next to the label, such as the quick-edit pencil.
+  action?: ReactNode
+  // Spans both columns of the page grid (an open quick editor needs the room).
+  wide?: boolean
+  testId?: string
 }
 
-function DetailRow({ icon: Icon, label, value, variant = "page", withDivider }: DetailRowProps) {
+function DetailRow({
+  icon: Icon,
+  label,
+  value,
+  variant = "page",
+  withDivider,
+  action,
+  wide,
+  testId,
+}: DetailRowProps) {
   if (variant === "sheet") {
     return (
       <>
         {withDivider ? <Separator /> : null}
-        <div className="flex items-start gap-3 py-2.5">
+        <div className="flex items-start gap-3 py-2.5" data-testid={testId}>
           <Icon className="mt-0.5 size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
           <div className="flex-1 min-w-0">
-            <p className="text-xs text-muted-foreground mb-0.5">{label}</p>
+            <div className="mb-0.5 flex min-h-4 items-center justify-between gap-2">
+              <p className="text-xs text-muted-foreground">{label}</p>
+              {action}
+            </div>
             <div className="text-sm font-medium">{value}</div>
           </div>
         </div>
@@ -1486,9 +1763,186 @@ function DetailRow({ icon: Icon, label, value, variant = "page", withDivider }: 
     )
   }
   return (
-    <div className="flex flex-col gap-1">
-      <DetailLabel icon={Icon} label={label} />
-      <p className="text-sm">{value}</p>
+    <div className={cn("flex flex-col gap-1", wide && "sm:col-span-2")} data-testid={testId}>
+      <div className="flex min-h-4 items-center gap-1">
+        <DetailLabel icon={Icon} label={label} />
+        {action}
+      </div>
+      <div className="text-sm">{value}</div>
+    </div>
+  )
+}
+
+// A full-width field of the Details tab (tags, notes): a DetailRow in the
+// sheet, a labelled block across both columns on the page.
+function FieldBlock({
+  icon,
+  label,
+  action,
+  variant,
+  className,
+  testId,
+  children,
+}: {
+  icon: typeof MapPin
+  label: string
+  action?: ReactNode
+  variant: "page" | "sheet"
+  className?: string
+  testId?: string
+  children: ReactNode
+}) {
+  if (variant === "sheet") {
+    return (
+      <DetailRow
+        icon={icon}
+        label={label}
+        action={action}
+        value={children}
+        variant={variant}
+        withDivider
+        testId={testId}
+      />
+    )
+  }
+  return (
+    <div className={cn("flex flex-col gap-1.5", className)} data-testid={testId}>
+      <div className="flex min-h-4 items-center gap-1">
+        <DetailLabel icon={icon} label={label} />
+        {action}
+      </div>
+      <div className="text-sm">{children}</div>
+    </div>
+  )
+}
+
+interface QuickEditorProps {
+  commodity: Commodity
+  saving: boolean
+  onSave: (patch: Partial<Commodity>) => Promise<boolean>
+  onCancel: () => void
+}
+
+function QuickEditActions({
+  field,
+  saving,
+  dirty,
+  onSave,
+  onCancel,
+}: {
+  field: QuickEditField
+  saving: boolean
+  dirty: boolean
+  onSave: () => void
+  onCancel: () => void
+}) {
+  const { t } = useTranslation()
+  return (
+    <div className="flex gap-2">
+      <Button
+        type="button"
+        size="sm"
+        onClick={onSave}
+        disabled={saving || !dirty}
+        data-testid={`commodity-quick-${field}-save`}
+      >
+        {t("common:actions.save")}
+      </Button>
+      <Button
+        type="button"
+        variant="ghost"
+        size="sm"
+        onClick={onCancel}
+        disabled={saving}
+        data-testid={`commodity-quick-${field}-cancel`}
+      >
+        {t("common:actions.cancel")}
+      </Button>
+    </div>
+  )
+}
+
+function LocationQuickEditor({
+  commodity,
+  areas,
+  locations,
+  saving,
+  onSave,
+  onCancel,
+}: QuickEditorProps & { areas: AreaOption[]; locations: LocationOption[] }) {
+  const initial = commodity.area_id ?? ""
+  const [areaId, setAreaId] = useState(initial)
+  return (
+    <div className="flex flex-col gap-3 pt-1 font-normal" data-testid="commodity-quick-location">
+      <LocationAreaFields
+        areas={areas}
+        locations={locations}
+        areaId={areaId}
+        onAreaChange={setAreaId}
+        idPrefix="quick"
+      />
+      <QuickEditActions
+        field="location"
+        saving={saving}
+        dirty={areaId !== initial}
+        // An empty area leaves the item unassigned.
+        onSave={() => void onSave({ area_id: areaId || undefined })}
+        onCancel={onCancel}
+      />
+    </div>
+  )
+}
+
+function TagsQuickEditor({ commodity, saving, onSave, onCancel }: QuickEditorProps) {
+  const initial = commodity.tags ?? []
+  const [tags, setTags] = useState(initial)
+  const dirty = tags.length !== initial.length || tags.some((tag) => !initial.includes(tag))
+  return (
+    <div className="flex flex-col gap-3 pt-1 font-normal" data-testid="commodity-quick-tags">
+      <TagPalette
+        kind="commodity"
+        values={tags}
+        onChange={setTags}
+        inputId="quick-tags-input"
+        testId="commodity-quick-tags-palette"
+      />
+      <QuickEditActions
+        field="tags"
+        saving={saving}
+        dirty={dirty}
+        onSave={() => void onSave({ tags })}
+        onCancel={onCancel}
+      />
+    </div>
+  )
+}
+
+function NotesQuickEditor({
+  commodity,
+  label,
+  saving,
+  onSave,
+  onCancel,
+}: QuickEditorProps & { label: string }) {
+  const initial = commodity.comments ?? ""
+  const [notes, setNotes] = useState(initial)
+  return (
+    <div className="flex flex-col gap-3 pt-1 font-normal" data-testid="commodity-quick-notes">
+      <Textarea
+        rows={3}
+        className="resize-none"
+        value={notes}
+        onChange={(e) => setNotes(e.target.value)}
+        aria-label={label}
+        data-testid="commodity-quick-notes-input"
+      />
+      <QuickEditActions
+        field="notes"
+        saving={saving}
+        dirty={notes !== initial}
+        onSave={() => void onSave({ comments: notes })}
+        onCancel={onCancel}
+      />
     </div>
   )
 }

@@ -129,9 +129,12 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
   useEffect(() => {
+    const trimmed = searchInput.trim()
+    // Until the user types there is nothing to write, and a write after an
+    // item opened in its panel would navigate back here and close it.
+    if (trimmed === search) return
     const handle = window.setTimeout(() => {
       const live = new URLSearchParams(window.location.search)
-      const trimmed = searchInput.trim()
       if ((live.get("q") ?? "") === trimmed) return
       if (trimmed) {
         live.set("q", trimmed)
@@ -142,7 +145,7 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
       setSearchParamsRef.current(live, { replace: true })
     }, 300)
     return () => window.clearTimeout(handle)
-  }, [searchInput])
+  }, [searchInput, search])
 
   // ---- Data -------------------------------------------------------------
   const list = useCommodities(

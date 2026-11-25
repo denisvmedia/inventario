@@ -193,6 +193,23 @@
       "uploadReceipt": "Upload Receipt"
     }
   },
+  "editForm": {
+    "allFields": "All fields",
+    "editing": "Editing",
+    "hiddenFieldError": "A field this form does not show needs fixing. Open all fields to correct it.",
+    "save": "Save changes",
+    "saveAndNext": "Save and next",
+    "sections": {
+      "identity": "Identity",
+      "location": "Location",
+      "notesTags": "Notes & Tags",
+      "purchase": "Purchase",
+      "warranty": "Warranty"
+    },
+    "stopEditing": "Stop editing",
+    "warrantyExpiry": "Expiry date",
+    "warrantyExpiryHint": "Leave blank if no warranty"
+  },
   "fields": {
     "area": "Area",
     "areaPlaceholder": "Pick an area",
@@ -436,6 +453,12 @@
     "viewGrid": "Grid view",
     "viewList": "List view"
   },
+  "listNav": {
+    "label": "Items in this list",
+    "next": "Next item",
+    "notInList": "This item is not in the list's current results.",
+    "previous": "Previous item"
+  },
   "pagination": {
     "next": "Next page",
     "pageOf": "Page {{page}} of {{total}}",
@@ -449,6 +472,10 @@
     "sectionBasics": "Basics",
     "sectionExtras": "Extras",
     "sectionPurchase": "Purchase"
+  },
+  "quickEdit": {
+    "edit": "Edit {{field}}",
+    "error": "Couldn't save the change."
   },
   "searchMatch": {
     "field": {
