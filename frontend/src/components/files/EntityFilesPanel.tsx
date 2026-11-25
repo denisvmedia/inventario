@@ -1,8 +1,9 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useLocation, useNavigate } from "react-router-dom"
-import { Upload } from "lucide-react"
+import { Link2, Upload } from "lucide-react"
 
+import { AttachExistingFileDialog } from "@/components/files/AttachExistingFileDialog"
 import type { FileCardCoverState } from "@/components/files/FileCard"
 import { FileCollection } from "@/components/files/FileCollection"
 import { FileDetailSheet } from "@/components/files/FileDetailSheet"
@@ -38,14 +39,17 @@ import { Pagination, pageWithin } from "@/components/common/Pagination"
 //
 // `onAttachClick` (#1448): when provided, renders an "Attach files"
 // button in the header that opens an upload affordance with this
-// entity's linkage preselected. Without it, the panel stays read-only
-// — a generic "Add files" CTA would link to the global upload and
-// create an orphan file (no linked_entity_*), which would NOT show
-// up here. The detail page owns the dialog state because it also
-// hosts the page-level drag-drop catcher.
+// entity's linkage preselected, and an "Attach existing" button that
+// links a file the group already holds. Without it, the panel stays
+// read-only — a generic "Add files" CTA would link to the global upload
+// and create a standalone file, which would NOT show up here. The
+// detail page owns the upload dialog state because it also hosts the
+// page-level drag-drop catcher.
 export interface EntityFilesPanelProps {
   linkedEntityType: "commodity" | "location" | "area"
   linkedEntityId: string
+  // Shown in the "Attach an existing file" dialog title.
+  entityName?: string
   pageSize?: number
   onAttachClick?: () => void
   // Cover-photo wiring (issue #1451 option B). `coverState` flags which
@@ -64,6 +68,7 @@ const DEFAULT_PAGE_SIZE = 24
 export function EntityFilesPanel({
   linkedEntityType,
   linkedEntityId,
+  entityName,
   pageSize = DEFAULT_PAGE_SIZE,
   onAttachClick,
   coverState,
@@ -81,6 +86,7 @@ export function EntityFilesPanel({
   // The file whose detail sheet is open, kept locally so opening it never
   // leaves the entity-detail page (#1963 follow-up).
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [attachExistingOpen, setAttachExistingOpen] = useState(false)
 
   // The header shows the true total, so every file it counts has to be
   // reachable — the panel renders one page and the pager walks the rest
@@ -126,17 +132,35 @@ export function EntityFilesPanel({
             />
           ) : null}
           {onAttachClick ? (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={onAttachClick}
-              data-testid="entity-files-panel-attach"
-              className="gap-1.5 shrink-0"
-            >
-              <Upload className="size-3.5" aria-hidden="true" />
-              {t("files:entityPanel.attach")}
-            </Button>
+            <>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => setAttachExistingOpen(true)}
+                data-testid="entity-files-panel-attach-existing"
+                className="gap-1.5 shrink-0"
+                aria-label={t("files:entityPanel.attachExistingLabel", {
+                  defaultValue: "Attach an existing file",
+                })}
+              >
+                <Link2 className="size-3.5" aria-hidden="true" />
+                <span className="hidden sm:inline">
+                  {t("files:entityPanel.attachExisting", { defaultValue: "Attach existing" })}
+                </span>
+              </Button>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={onAttachClick}
+                data-testid="entity-files-panel-attach"
+                className="gap-1.5 shrink-0"
+              >
+                <Upload className="size-3.5" aria-hidden="true" />
+                {t("files:entityPanel.attach")}
+              </Button>
+            </>
           ) : null}
         </div>
       </CardHeader>
@@ -193,6 +217,13 @@ export function EntityFilesPanel({
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => setSelectedId(id)}
       />
+      {onAttachClick ? (
+        <AttachExistingFileDialog
+          open={attachExistingOpen}
+          onOpenChange={setAttachExistingOpen}
+          entity={{ type: linkedEntityType, id: linkedEntityId, name: entityName }}
+        />
+      ) : null}
     </Card>
   )
 }

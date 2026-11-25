@@ -183,25 +183,6 @@ func (frdw *FileRequestDataWrapper) ValidateWithContext(ctx context.Context) err
 		return errors.New("ID field not allowed in create requests")
 	}
 
-	// Prevent manual creation of export-linked files
-	if frdw.Attributes.LinkedEntityType == "export" {
-		return errors.New("export files cannot be manually created")
-	}
-
-	// Validate commodity linking
-	if frdw.Attributes.LinkedEntityType == "commodity" {
-		if frdw.Attributes.LinkedEntityID == "" {
-			return errors.New("linked entity ID is required for commodity files")
-		}
-		if frdw.Attributes.LinkedEntityMeta == "" {
-			return errors.New("linked entity meta is required for commodity files")
-		}
-		if frdw.Attributes.LinkedEntityMeta != "images" &&
-			frdw.Attributes.LinkedEntityMeta != "documents" {
-			return errors.New("linked entity meta must be one of: images, documents")
-		}
-	}
-
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields,
 		validation.Field(&frdw.Type, validation.Required, validation.In("files")),
@@ -234,13 +215,11 @@ func (fr *FileRequest) ValidateWithContext(ctx context.Context) error {
 // It is metadata-only: the blob path is never accepted from the client.
 // The physical blob key is populated server-side by the upload flow
 // (/uploads/file). See updateFile for the separate update request struct.
+// The new file is standalone; POST /files/{id}/links attaches it.
 type FileRequestData struct {
-	Title            string   `json:"title"`
-	Description      string   `json:"description"`
-	Tags             []string `json:"tags"`
-	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
-	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
-	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
 }
 
 // FileAttributes is an alias for FileRequestData for backward compatibility with tests
@@ -256,19 +235,8 @@ func (frd FileRequestData) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&frd.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&frd.Description, validation.Length(0, 1000)),
-		validation.Field(&frd.Tags, validation.Length(0, 100)),                  // Allow up to 100 tags
-		validation.Field(&frd.LinkedEntityType, validation.In("", "commodity")), // Only allow commodity for manual creation
-		validation.Field(&frd.LinkedEntityID, validation.Length(0, 255)),
-		validation.Field(&frd.LinkedEntityMeta, validation.Length(0, 255)),
+		validation.Field(&frd.Tags, validation.Length(0, 100)), // Allow up to 100 tags
 	)
-
-	// If linked entity type is specified, validate the linked entity ID and meta
-	if frd.LinkedEntityType == "commodity" {
-		fields = append(fields,
-			validation.Field(&frd.LinkedEntityID, validation.Required),
-			validation.Field(&frd.LinkedEntityMeta, validation.Required, validation.In("images", "documents")),
-		)
-	}
 
 	return validation.ValidateStructWithContext(ctx, &frd, fields...)
 }
@@ -319,8 +287,8 @@ func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 		// ValidatableWithContext on a POINTER receiver. ozzo's Field() dereferences
 		// the pointer to a value before type-asserting against
 		// ValidatableWithContext, so the nested validator would be silently
-		// skipped (issue #2033). Invoke it explicitly so the path / linked-entity
-		// rules actually run.
+		// skipped (issue #2033). Invoke it explicitly so the path rules actually
+		// run.
 		validation.Field(&fd.Attributes, validation.Required, validation.WithContext(
 			func(ctx context.Context, _ any) error {
 				return fd.Attributes.ValidateWithContext(ctx)
@@ -330,85 +298,107 @@ func (fd *FileUpdateRequestData) ValidateWithContext(ctx context.Context) error 
 	return validation.ValidateStructWithContext(ctx, fd, fields...)
 }
 
-// FileUpdateRequestFileData contains the attributes for updating a file.
+// FileUpdateRequestFileData contains the attributes for updating a file. The
+// file's attachments are not part of it: POST /files/{id}/links and
+// DELETE /files/{id}/links/{linkID} change them.
 type FileUpdateRequestFileData struct {
-	Title            string   `json:"title"`
-	Description      string   `json:"description"`
-	Tags             []string `json:"tags"`
-	Path             string   `json:"path"`                         // User-editable filename
-	LinkedEntityType string   `json:"linked_entity_type,omitempty"` // commodity, export, or empty
-	LinkedEntityID   string   `json:"linked_entity_id,omitempty"`   // ID of linked entity
-	LinkedEntityMeta string   `json:"linked_entity_meta,omitempty"` // metadata about the link
+	Title       string   `json:"title"`
+	Description string   `json:"description"`
+	Tags        []string `json:"tags"`
+	Path        string   `json:"path"` // User-editable filename
 }
 
 func (fur FileUpdateRequestFileData) Validate() error {
 	return models.ErrMustUseValidateWithContext
 }
 
-// ValidateWithContext validates the FileUpdateRequest with context.
-//
-// ENFORCED CONTRACT (#2033). This validator was previously dead — the parent
-// FileUpdateRequestData.ValidateWithContext passed Attributes by value, so
-// ozzo never invoked this pointer-receiver method (see that method's comment).
-// Now that it runs, the rules are deliberately calibrated so that bad values
-// are rejected WITHOUT breaking the live "attach uploaded file to commodity"
-// flow (#1983 Part A / PR #2032), which sends a metadata-only PUT carrying
-// NO `path` and NO `linked_entity_meta` and relies on the server preserving
-// the path (apiserver/files.go::updateFile) and deriving the bucket:
-//
-//   - `path` is NOT required. On a link-only PUT the client omits it; the
-//     handler preserves the persisted path instead of blanking it. We only
-//     bound its length here.
-//   - `linked_entity_meta` is validated against the per-type enum ONLY WHEN
-//     it is present (non-empty). It is NOT required, because the server
-//     derives the bucket from the file category / MIME when the client omits
-//     it. A non-empty bad value (e.g. "BOGUS") is still rejected.
-//   - `linked_entity_id` IS required whenever `linked_entity_type` is set —
-//     both live attach flows always send it, and a link without a target is
-//     meaningless.
-//
-// Note (#1989): the commodity meta enum here is still the legacy
-// images|invoices|manuals set. #1989 will migrate it to images|documents;
-// because this validator is now live, that swap can target this single spot.
+// ValidateWithContext validates the FileUpdateRequest with context. `path` is
+// not required: a client that edits only the title or tags omits it, and the
+// handler keeps the persisted path. Only its length is bounded.
 func (fur FileUpdateRequestFileData) ValidateWithContext(ctx context.Context) error {
-	fields := make([]*validation.FieldRules, 0)
-
-	fields = append(fields,
+	return validation.ValidateStructWithContext(ctx, &fur,
 		validation.Field(&fur.Title, validation.Length(0, 255)), // Title is now optional
 		validation.Field(&fur.Description, validation.Length(0, 1000)),
-		// Path is intentionally NOT Required: link-only PUTs omit it and the
-		// handler preserves the persisted path. Bound length only.
 		validation.Field(&fur.Path, validation.Length(0, 1024)),
-		validation.Field(&fur.Tags, validation.Length(0, 100)),                                                // Allow up to 100 tags
-		validation.Field(&fur.LinkedEntityType, validation.In("", "commodity", "export", "location", "area")), // Allow export/location/area for existing files
-		validation.Field(&fur.LinkedEntityID, validation.Length(0, 255)),
-		validation.Field(&fur.LinkedEntityMeta, validation.Length(0, 255)),
+		validation.Field(&fur.Tags, validation.Length(0, 100)), // Allow up to 100 tags
 	)
+}
 
-	// If a linked entity type is specified, require the ID and — WHEN PRESENT —
-	// validate the meta against the per-type enum. Meta is left optional so the
-	// server can derive the bucket; only a non-empty invalid value is rejected.
-	switch fur.LinkedEntityType {
-	case "commodity":
-		fields = append(fields,
-			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "documents")),
-		)
-	case "export":
-		fields = append(fields,
-			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.In("", "xml-1.0")),
-		)
-	case "location", "area":
-		// Same meta buckets for both ("images" / "files") — see the
-		// model-level validator in models.go for the rationale.
-		fields = append(fields,
-			validation.Field(&fur.LinkedEntityID, validation.Required),
-			validation.Field(&fur.LinkedEntityMeta, validation.In("", "images", "files")),
-		)
+// FileLinkRequest is the body of POST /files/{id}/links: the entity to attach
+// the file to.
+type FileLinkRequest struct {
+	Data *FileLinkRequestData `json:"data"`
+}
+
+var _ render.Binder = (*FileLinkRequest)(nil)
+
+// Bind validates the FileLinkRequest.
+func (fr *FileLinkRequest) Bind(r *http.Request) error {
+	return fr.ValidateWithContext(r.Context())
+}
+
+func (fr *FileLinkRequest) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext validates the FileLinkRequest.
+func (fr *FileLinkRequest) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, fr,
+		validation.Field(&fr.Data, validation.Required),
+	)
+}
+
+// FileLinkRequestData wraps the attributes of a FileLinkRequest.
+type FileLinkRequestData struct {
+	Type       string                    `json:"type" example:"file-links" enums:"file-links"`
+	Attributes FileLinkRequestAttributes `json:"attributes"`
+}
+
+func (fd *FileLinkRequestData) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext validates the type and, explicitly, the attributes (a
+// struct value, see FileUpdateRequestData for why the call is spelled out).
+func (fd *FileLinkRequestData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, fd,
+		validation.Field(&fd.Type, validation.Required, validation.In("file-links")),
+		validation.Field(&fd.Attributes, validation.Required, validation.WithContext(
+			func(ctx context.Context, _ any) error {
+				return fd.Attributes.ValidateWithContext(ctx)
+			},
+		)),
+	)
+}
+
+// FileLinkRequestAttributes names the entity to attach the file to. Meta is the
+// bucket on the entity's Files tab; when empty, the server picks "images" for
+// an image and the entity's document bucket for anything else. The first
+// attachment into a bucket given here sets the file's category from it.
+type FileLinkRequestAttributes struct {
+	EntityType string `json:"entity_type" example:"commodity" enums:"commodity,location,area"`
+	EntityID   string `json:"entity_id"`
+	Meta       string `json:"meta,omitempty" example:"documents" enums:"images,documents,files"`
+}
+
+func (fa FileLinkRequestAttributes) Validate() error {
+	return models.ErrMustUseValidateWithContext
+}
+
+// ValidateWithContext checks the entity type and, when a meta is given, that it
+// belongs to that type.
+func (fa FileLinkRequestAttributes) ValidateWithContext(ctx context.Context) error {
+	metas := []any{""}
+	for _, m := range models.FileLinkMetaValues(fa.EntityType) {
+		metas = append(metas, m)
 	}
-
-	return validation.ValidateStructWithContext(ctx, &fur, fields...)
+	return validation.ValidateStructWithContext(ctx, &fa,
+		validation.Field(&fa.EntityType, validation.Required, validation.In(
+			models.FileLinkCommodity, models.FileLinkLocation, models.FileLinkArea,
+		)),
+		validation.Field(&fa.EntityID, validation.Required, validation.Length(1, 255)),
+		validation.Field(&fa.Meta, validation.In(metas...)),
+	)
 }
 
 // SearchResponse represents a generic search response

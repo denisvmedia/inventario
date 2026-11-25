@@ -48,6 +48,11 @@ export function useUnsavedChangesGuard({
   const { t } = useTranslation()
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
+  // Each opening mounts a new dialog. Radix portals the overlay and the
+  // content separately; reopened while the last content is still animating
+  // out, it mounts only a new overlay, after the old content in <body>, and
+  // that overlay then takes the clicks meant for the buttons.
+  const [openings, setOpenings] = useState(0)
   const [saving, setSaving] = useState(false)
   const leaveRef = useRef<(() => void) | null>(null)
 
@@ -58,6 +63,7 @@ export function useUnsavedChangesGuard({
         return
       }
       leaveRef.current = leave
+      setOpenings((n) => n + 1)
       setOpen(true)
     },
     [dirty]
@@ -117,6 +123,7 @@ export function useUnsavedChangesGuard({
 
   const dialog = (
     <Dialog
+      key={openings}
       open={open}
       onOpenChange={(next) => {
         if (!next && !saving) finish(false)

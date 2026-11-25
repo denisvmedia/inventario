@@ -44,6 +44,7 @@ func NewUserContentOwnershipCheckerWithTableNames(dbx *sqlx.DB, tableNames store
 var contentTablesByCreatedByUserID = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Files()) },
+	func(t store.TableNames) string { return string(t.FileLinks()) },
 	func(t store.TableNames) string { return string(t.Areas()) },
 	func(t store.TableNames) string { return string(t.Locations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },

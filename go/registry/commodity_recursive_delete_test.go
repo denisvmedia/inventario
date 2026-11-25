@@ -55,15 +55,13 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	// Create an image file
 	imageFile := models.FileEntity{
-		Title:            "Test Image",
-		Description:      "A test image file",
-		Type:             models.FileTypeImage,
-		Tags:             []string{"test"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Image",
+		Description: "A test image file",
+		Type:        models.FileTypeImage,
+		Tags:        []string{"test"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "images"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-image",
 			OriginalPath: "test-image.jpg",
@@ -76,15 +74,13 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	// Create a manual file
 	manualFile := models.FileEntity{
-		Title:            "Test Manual",
-		Description:      "A test manual file",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{"test"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "manuals",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Manual",
+		Description: "A test manual file",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{"test"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "manuals"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-manual",
 			OriginalPath: "test-manual.pdf",
@@ -97,15 +93,13 @@ func TestEntityService_DeleteCommodityRecursive(t *testing.T) {
 
 	// Create an invoice file
 	invoiceFile := models.FileEntity{
-		Title:            "Test Invoice",
-		Description:      "A test invoice file",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{"test"},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   createdCommodity.ID,
-		LinkedEntityMeta: "invoices",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "Test Invoice",
+		Description: "A test invoice file",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{"test"},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: createdCommodity.ID, Meta: "invoices"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "test-invoice",
 			OriginalPath: "test-invoice.pdf",

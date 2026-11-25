@@ -58,12 +58,11 @@ type inbBuilder struct {
 	// written into the archive). #534 / #1451.
 	fileUUIDByDBID map[string]string
 
-	// locUUIDByDBID / areaUUIDByDBID resolve a file's volatile
-	// linked_entity_id (a DB key) to the linked entity's IMMUTABLE UUID, which
-	// is the only identity that round-trips across databases (issue #2235). A
-	// file whose linked id resolves to nothing (dangling link, out of RLS
-	// scope) is dropped rather than emitted with a reference restore cannot
-	// map.
+	// locUUIDByDBID / areaUUIDByDBID resolve a link's volatile entity id (a
+	// DB key) to the linked entity's IMMUTABLE UUID, which is the only
+	// identity that round-trips across databases (issue #2235). A link whose
+	// entity id resolves to nothing (dangling link, out of RLS scope) is
+	// dropped rather than emitted with a reference restore cannot map.
 	locUUIDByDBID  map[string]string
 	areaUUIDByDBID map[string]string
 	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
@@ -71,6 +70,20 @@ type inbBuilder struct {
 	// emitted in the dedicated files member, never nested under a commodity.
 	entityFiles     []*entityCandidateFile
 	standaloneFiles []*entityCandidateFile
+
+	// sizeByFileID caches the resolved size of every file probed so far, so a
+	// file attached to several entities is probed once.
+	sizeByFileID map[string]resolvedSize
+	// archivePathByFileID records the archive path of every file whose bytes
+	// are already planned. A later reference to the same file reuses the path
+	// and plans no second copy of the bytes.
+	archivePathByFileID map[string]string
+}
+
+// resolvedSize is a cached resolveFileSize result.
+type resolvedSize struct {
+	size    int64
+	present bool
 }
 
 // candidateFile is a commodity-attached file whose size has already been
@@ -82,15 +95,17 @@ type candidateFile struct {
 	size int64
 }
 
-// entityCandidateFile is a size-resolved NON-commodity file (issue #2235): one
-// linked to a location or an area, or a standalone (unlinked) file. linkedType is
-// "location", "area", or "" for standalone; entityUUID is the linked entity's
-// IMMUTABLE UUID (empty for standalone), already resolved from the row's volatile
-// linked_entity_id.
+// entityCandidateFile is one size-resolved NON-commodity reference (issue
+// #2235): a file's link to a location or an area, or a standalone (unlinked)
+// file. linkedType is "location", "area", or "" for standalone; entityUUID is
+// the linked entity's IMMUTABLE UUID (empty for standalone), already resolved
+// from the link's volatile entity id, which entityDBID keeps for scoping.
 type entityCandidateFile struct {
 	candidateFile
 	linkedType string
 	entityUUID string
+	entityDBID string
+	meta       string
 }
 
 // pendingFile records a commodity file whose bytes must be streamed into the tar
@@ -304,11 +319,12 @@ func (b *inbBuilder) loadCommodities() ([]*models.Commodity, error) {
 	return commodities, nil
 }
 
-// indexFiles lists the group's files ONCE and routes every row to its home:
+// indexFiles lists the group's files ONCE and routes every link to its home:
 // commodity attachments are grouped by commodity DB ID and bucket, while
 // location-/area-linked and standalone files are collected for the dedicated
-// files member (issue #2235). Export artifacts (linked_entity_type "export") are
-// skipped — a backup must never embed previous backups.
+// files member (issue #2235). A file with several links is routed once per
+// link. Export artifacts (files with an export link) are skipped — a backup
+// must never embed previous backups.
 //
 // Orphan rows (missing/unsized blob) are dropped in EVERY branch, so they never
 // reach a document or the statistics. That drop is mandatory: the restore side
@@ -325,37 +341,58 @@ func (b *inbBuilder) indexFiles() error {
 
 	b.filesByCommodityID = map[string]map[string][]*candidateFile{}
 	b.fileUUIDByDBID = make(map[string]string, len(files))
+	b.sizeByFileID = make(map[string]resolvedSize, len(files))
+	b.archivePathByFileID = make(map[string]string, len(files))
 	for _, file := range files {
-		if file == nil || file.File == nil {
+		if file == nil || file.File == nil || file.IsExportOwned() {
+			// An export bundle is not user inventory — skip it.
 			continue
 		}
 		// A blob probe that cannot determine a file's state aborts the export:
 		// an incomplete-but-successful backup is worse than a failed one.
-		var indexErr error
-		switch file.LinkedEntityType {
-		case "commodity":
-			indexErr = b.indexCommodityFile(file)
-		case "location", "area":
-			indexErr = b.indexEntityFile(file)
-		case "":
-			indexErr = b.indexStandaloneFile(file)
-		default:
-			// "export" (and any future type this build does not know) is not
-			// user inventory — skip it.
+		if len(file.Links) == 0 {
+			if err := b.indexStandaloneFile(file); err != nil {
+				return err
+			}
 			continue
 		}
-		if indexErr != nil {
-			return indexErr
+		for _, link := range file.Links {
+			var indexErr error
+			switch link.EntityType {
+			case models.FileLinkCommodity:
+				indexErr = b.indexCommodityFile(file, link)
+			case models.FileLinkLocation, models.FileLinkArea:
+				indexErr = b.indexEntityFile(file, link)
+			default:
+				// A link type this build does not know is not exported.
+				continue
+			}
+			if indexErr != nil {
+				return indexErr
+			}
 		}
 	}
 	return nil
 }
 
+// cachedFileSize resolves a file's size once per export.
+func (b *inbBuilder) cachedFileSize(file *models.FileEntity) (int64, bool, error) {
+	if cached, ok := b.sizeByFileID[file.ID]; ok {
+		return cached.size, cached.present, nil
+	}
+	size, present, err := b.resolveFileSize(file)
+	if err != nil {
+		return 0, false, err
+	}
+	b.sizeByFileID[file.ID] = resolvedSize{size: size, present: present}
+	return size, present, nil
+}
+
 // indexCommodityFile files one commodity attachment under its commodity + bucket.
-// A bucket outside images/invoices/manuals cannot pass model validation, so such
-// a row is skipped rather than emitted.
-func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) error {
-	bucket := file.LinkedEntityMeta
+// A bucket outside images/documents cannot pass model validation, so such a
+// link is skipped rather than emitted.
+func (b *inbBuilder) indexCommodityFile(file *models.FileEntity, link models.FileLink) error {
+	bucket := link.Meta
 	if !isCommodityFileBucket(bucket) {
 		return nil
 	}
@@ -367,7 +404,7 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) error {
 	// target file never lands).
 	b.fileUUIDByDBID[file.ID] = file.UUID
 
-	size, present, err := b.resolveFileSize(file)
+	size, present, err := b.cachedFileSize(file)
 	if err != nil {
 		return err
 	}
@@ -377,37 +414,37 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity) error {
 		return nil
 	}
 
-	byBucket := b.filesByCommodityID[file.LinkedEntityID]
+	byBucket := b.filesByCommodityID[link.EntityID]
 	if byBucket == nil {
 		byBucket = map[string][]*candidateFile{}
-		b.filesByCommodityID[file.LinkedEntityID] = byBucket
+		b.filesByCommodityID[link.EntityID] = byBucket
 	}
 	byBucket[bucket] = append(byBucket[bucket], &candidateFile{file: file, size: size})
 	return nil
 }
 
-// indexEntityFile collects one location-/area-linked file (issue #2235),
-// resolving the row's volatile linked_entity_id to the linked entity's immutable
-// UUID. A file whose linked entity does not resolve (dangling link, out of RLS
-// scope) or whose bucket is outside images/files is skipped rather than emitted
-// with a reference the restore side could not map.
-func (b *inbBuilder) indexEntityFile(file *models.FileEntity) error {
-	if !isEntityFileBucket(file.LinkedEntityMeta) {
+// indexEntityFile collects one location-/area link of a file (issue #2235),
+// resolving the link's volatile entity id to the linked entity's immutable
+// UUID. A link whose entity does not resolve (dangling link, out of RLS scope)
+// or whose bucket is outside images/files is skipped rather than emitted with a
+// reference the restore side could not map.
+func (b *inbBuilder) indexEntityFile(file *models.FileEntity, link models.FileLink) error {
+	if !isEntityFileBucket(link.Meta) {
 		return nil
 	}
 
 	var entityUUID string
-	switch file.LinkedEntityType {
-	case "location":
-		entityUUID = b.locUUIDByDBID[file.LinkedEntityID]
-	case "area":
-		entityUUID = b.areaUUIDByDBID[file.LinkedEntityID]
+	switch link.EntityType {
+	case models.FileLinkLocation:
+		entityUUID = b.locUUIDByDBID[link.EntityID]
+	case models.FileLinkArea:
+		entityUUID = b.areaUUIDByDBID[link.EntityID]
 	}
 	if entityUUID == "" {
 		return nil
 	}
 
-	size, present, err := b.resolveFileSize(file)
+	size, present, err := b.cachedFileSize(file)
 	if err != nil {
 		return err
 	}
@@ -416,17 +453,18 @@ func (b *inbBuilder) indexEntityFile(file *models.FileEntity) error {
 	}
 	b.entityFiles = append(b.entityFiles, &entityCandidateFile{
 		candidateFile: candidateFile{file: file, size: size},
-		linkedType:    file.LinkedEntityType,
+		linkedType:    link.EntityType,
 		entityUUID:    entityUUID,
+		entityDBID:    link.EntityID,
+		meta:          link.Meta,
 	})
 	return nil
 }
 
 // indexStandaloneFile collects one unlinked file (issue #2235). linkedType and
-// entityUUID stay empty — model validation requires all three link fields empty
-// for a standalone row.
+// entityUUID stay empty.
 func (b *inbBuilder) indexStandaloneFile(file *models.FileEntity) error {
-	size, present, err := b.resolveFileSize(file)
+	size, present, err := b.cachedFileSize(file)
 	if err != nil {
 		return err
 	}
@@ -621,28 +659,31 @@ func (b *inbBuilder) planUnassigned(scope *inbScope) plannedUnassigned {
 }
 
 // planFiles builds the in-memory plan for the non-commodity files member (issue
-// #2235): every location-/area-linked and standalone file in scope, each carrying
-// its own polymorphic link so restore recreates the row with the original
-// linked_entity_type / linked_entity_id / linked_entity_meta.
+// #2235): every location-/area link and standalone file in scope, each carrying
+// its own polymorphic link so restore recreates the link with the original
+// entity type, entity and meta.
 //
 // Scope (legacy XML parity): a whole-class export carries every entity file plus
 // the standalone files; a selected_items export carries only the files of the
 // locations/areas the user EXPLICITLY selected, and NO standalone files (they have
 // no parent that could imply them into the selection). See entityFileInScope.
 //
-// Statistics: these files bump FileCount + BinaryDataSize only. ImageCount /
-// InvoiceCount / ManualCount are legacy COMMODITY-scoped counters (see
-// export/types.ExportStats), so a location image must not inflate imageCount.
+// Statistics: these files bump FileCount + BinaryDataSize only, once per stored
+// file. ImageCount / InvoiceCount / ManualCount are legacy COMMODITY-scoped
+// counters (see export/types.ExportStats), so a location image must not inflate
+// imageCount.
 func (b *inbBuilder) planFiles(scope *inbScope) plannedFiles {
 	var doc INBFilesDoc
 	var pending []pendingFile
 
 	appendCandidate := func(cand *entityCandidateFile) {
-		ref, pf := b.buildEntityFileRef(cand)
+		ref, pf, fresh := b.buildEntityFileRef(cand)
 		doc.Files = append(doc.Files, ref)
-		pending = append(pending, pf)
-		b.stats.FileCount++
-		b.stats.BinaryDataSize += cand.size
+		if fresh {
+			pending = append(pending, pf)
+			b.stats.FileCount++
+			b.stats.BinaryDataSize += cand.size
+		}
 	}
 
 	for _, cand := range b.entityFiles {
@@ -681,14 +722,25 @@ func (*inbBuilder) entityFileInScope(cand *entityCandidateFile, scope *inbScope)
 	if scope.wholeClass {
 		return true
 	}
-	// The row's linked_entity_id is a DB key, and so are the selection sets.
+	// The link's entity id is a DB key, and so are the selection sets.
 	switch cand.linkedType {
-	case "location":
-		return scope.locationIDs[cand.file.LinkedEntityID]
-	case "area":
-		return scope.areaIDs[cand.file.LinkedEntityID]
+	case models.FileLinkLocation:
+		return scope.locationIDs[cand.entityDBID]
+	case models.FileLinkArea:
+		return scope.areaIDs[cand.entityDBID]
 	}
 	return false
+}
+
+// claimArchivePath returns the archive path for a file's bytes. The first
+// reference to a file claims candidate and reports fresh=true; every later one
+// gets the claimed path and fresh=false, because the bytes are written once.
+func (b *inbBuilder) claimArchivePath(file *models.FileEntity, candidate string) (archivePath string, fresh bool) {
+	if claimed, ok := b.archivePathByFileID[file.ID]; ok {
+		return claimed, false
+	}
+	b.archivePathByFileID[file.ID] = candidate
+	return candidate, true
 }
 
 // buildEntityFileRef builds a non-commodity file reference + its pending stream
@@ -696,7 +748,7 @@ func (*inbBuilder) entityFileInScope(cand *entityCandidateFile, scope *inbScope)
 // same anti-collision reason as the commodity layout (two files of one entity can
 // share a basename), and the whole path goes through SanitizeArchivePath — the
 // restore side rejects any member whose sanitized form differs from its raw name.
-func (b *inbBuilder) buildEntityFileRef(cand *entityCandidateFile) (INBEntityFileRef, pendingFile) {
+func (b *inbBuilder) buildEntityFileRef(cand *entityCandidateFile) (INBEntityFileRef, pendingFile, bool) {
 	file := cand.file
 	name := blobkeys.SanitizeArchivePath(fileMemberName(file))
 
@@ -705,9 +757,9 @@ func (b *inbBuilder) buildEntityFileRef(cand *entityCandidateFile) (INBEntityFil
 		archivePath = fmt.Sprintf("%s%s/%s", INBStandaloneFilesPrefix, file.UUID, name)
 	} else {
 		archivePath = fmt.Sprintf("%s%s/%s/%s/%s/%s",
-			INBEntityFilesPrefix, cand.linkedType, cand.entityUUID, file.LinkedEntityMeta, file.UUID, name)
+			INBEntityFilesPrefix, cand.linkedType, cand.entityUUID, cand.meta, file.UUID, name)
 	}
-	archivePath = blobkeys.SanitizeArchivePath(archivePath)
+	archivePath, fresh := b.claimArchivePath(file, blobkeys.SanitizeArchivePath(archivePath))
 
 	ref := INBEntityFileRef{
 		INBFileRef: INBFileRef{
@@ -725,18 +777,13 @@ func (b *inbBuilder) buildEntityFileRef(cand *entityCandidateFile) (INBEntityFil
 		},
 		LinkedEntityType: cand.linkedType,
 		LinkedEntityID:   cand.entityUUID,
-		LinkedEntityMeta: file.LinkedEntityMeta,
+		LinkedEntityMeta: cand.meta,
 		Type:             string(file.Type),
 		Category:         string(file.Category),
 	}
-	// A standalone file must carry NO link at all — model validation requires
-	// linked_entity_type/id/meta to be empty together.
-	if cand.linkedType == "" {
-		ref.LinkedEntityMeta = ""
-	}
 
 	pf := pendingFile{archivePath: archivePath, blobKey: file.OriginalPath, size: cand.size}
-	return ref, pf
+	return ref, pf, fresh
 }
 
 // planLocation builds the in-memory plan for one location: its JSON document
@@ -860,12 +907,15 @@ func (b *inbBuilder) planCommodityFiles(locSlug string, com *models.Commodity, i
 	// deterministic regardless of map iteration order.
 	for _, bucket := range commodityFileBuckets {
 		for _, cand := range byBucket[bucket] {
-			ref, pf := b.buildFileRef(locSlug, com, bucket, cand)
+			ref, pf, fresh := b.buildFileRef(locSlug, com, bucket, cand)
 			appendFileRef(inbCom, bucket, ref)
-			pending = append(pending, pf)
-
-			b.stats.BinaryDataSize += cand.size
-			b.stats.FileCount++
+			if fresh {
+				pending = append(pending, pf)
+				b.stats.BinaryDataSize += cand.size
+				b.stats.FileCount++
+			}
+			// The bucket counters count attachments, so a receipt attached to
+			// three items counts three times.
 			incBucketStat(b.stats, bucket, ref.Tags)
 		}
 	}
@@ -874,8 +924,9 @@ func (b *inbBuilder) planCommodityFiles(locSlug string, com *models.Commodity, i
 
 // buildFileRef builds a file reference + its pending stream entry from a
 // size-resolved candidate file. No probing happens here — the size was resolved
-// once in preload.
-func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket string, cand *candidateFile) (INBFileRef, pendingFile) {
+// once in preload. fresh is false when an earlier reference already planned the
+// file's bytes; the reference then names that earlier path.
+func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket string, cand *candidateFile) (INBFileRef, pendingFile, bool) {
 	file := cand.file
 	name := blobkeys.SanitizeArchivePath(fileMemberName(file))
 	// Disambiguate by the file's immutable UUID: two files attached to the same
@@ -884,9 +935,9 @@ func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket 
 	// restore would silently drop one file's bytes (and mis-assign the survivor's
 	// metadata) while still reporting Completed. The UUID guarantees uniqueness;
 	// the original filename is preserved in the ref's Name/OriginalPath.
-	archivePath := blobkeys.SanitizeArchivePath(
+	archivePath, fresh := b.claimArchivePath(file, blobkeys.SanitizeArchivePath(
 		fmt.Sprintf("%s%s/%s/%s/%s/%s", INBFilesPrefix, locSlug, com.UUID, bucket, file.UUID, name),
-	)
+	))
 
 	ref := INBFileRef{
 		ID:           file.UUID,
@@ -902,7 +953,7 @@ func (b *inbBuilder) buildFileRef(locSlug string, com *models.Commodity, bucket 
 		UpdatedAt:    file.UpdatedAt.UTC().Format(time.RFC3339),
 	}
 	pf := pendingFile{archivePath: archivePath, blobKey: file.OriginalPath, size: cand.size, bucket: bucket}
-	return ref, pf
+	return ref, pf, fresh
 }
 
 // run preloads the in-scope tree once, then makes two cheap in-memory passes:

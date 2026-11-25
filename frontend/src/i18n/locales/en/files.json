@@ -1,4 +1,19 @@
 {
+  "attachExisting": {
+    "alreadyAttached": "Attached",
+    "attach": "Attach",
+    "attached": "Attached {{title}}",
+    "attachedTo": "Attached {{title}} to {{name}}",
+    "attachLabel": "Attach {{title}}",
+    "description": "The file is linked, not copied: it stays one file wherever it is attached and uses no extra storage.",
+    "done": "Done",
+    "empty": "No files match.",
+    "more_one": "{{count}} more files — refine the search to find them.",
+    "more_other": "{{count}} more files — refine the search to find them.",
+    "searchPlaceholder": "Search files…",
+    "title": "Attach an existing file",
+    "titleWithName": "Attach an existing file to {{name}}"
+  },
   "bulk": {
     "delete": "Delete selected",
     "deleteConfirm": {
@@ -38,6 +53,8 @@
     "deleteConfirm": {
       "confirm": "Delete file",
       "description": "{{title}} will be removed permanently. This cannot be undone.",
+      "descriptionLinked_one": "{{title}} will be removed permanently, also from {{names}}. This cannot be undone. To take it off one of them only, remove that attachment instead.",
+      "descriptionLinked_other": "{{title}} will be removed permanently, also from {{names}}. This cannot be undone. To take it off one of them only, remove that attachment instead.",
       "title": "Delete this file?"
     },
     "deleteSuccess": "File deleted",
@@ -78,6 +95,8 @@
   },
   "entityPanel": {
     "attach": "Attach files",
+    "attachExisting": "Attach existing",
+    "attachExistingLabel": "Attach an existing file",
     "description_one": "{{count}} file attached",
     "description_other": "{{count}} files attached",
     "dropHint": "Release to attach",
@@ -88,6 +107,20 @@
     "errorDescription": "We couldn't load files for this entity. Try again in a moment.",
     "errorTitle": "Couldn't load files",
     "title": "Files"
+  },
+  "links": {
+    "remove": "Remove attachment to {{name}}",
+    "removed": "Removed from {{name}}",
+    "removedLast": "Removed from {{name}}. The file stays on the Files page.",
+    "removeShort": "Remove attachment",
+    "standalone": "Not attached to anything",
+    "summary_one": "{{first}} +{{count}}",
+    "summary_other": "{{first}} +{{count}}",
+    "type": {
+      "area": "Area",
+      "commodity": "Item",
+      "location": "Location"
+    }
   },
   "list": {
     "columnCategory": "Category",
@@ -131,6 +164,15 @@
     "attachTitleWithName": "Attach files to {{name}}",
     "back": "Back",
     "close": "Close",
+    "duplicate": {
+      "attached": "Attached the existing file “{{title}}” instead.",
+      "attachExisting": "Attach the existing file instead",
+      "failed": "Could not switch to the existing file. Both copies are kept.",
+      "found": "Already in your files as “{{title}}”.",
+      "keepBoth": "Keep both",
+      "removeCopy": "Remove this copy",
+      "removedCopy": "Removed this copy. “{{title}}” is kept."
+    },
     "errors": {
       "noFiles": "Select at least one file."
     },

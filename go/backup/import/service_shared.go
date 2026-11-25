@@ -143,16 +143,14 @@ func (s *ImportService) createImportFileEntity(ctx context.Context, export *mode
 
 	now := time.Now()
 	fileEntity := models.FileEntity{
-		Title:            fmt.Sprintf("Import: %s", description),
-		Description:      fmt.Sprintf("Imported backup file uploaded on %s", now.Format("2006-01-02 15:04:05")),
-		Type:             models.FileTypeDocument,
-		Category:         models.FileCategoryOther,
-		Tags:             meta.Tags,
-		LinkedEntityType: "export",
-		LinkedEntityID:   exportID,
-		LinkedEntityMeta: meta.LinkedEntityMeta,
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       fmt.Sprintf("Import: %s", description),
+		Description: fmt.Sprintf("Imported backup file uploaded on %s", now.Format("2006-01-02 15:04:05")),
+		Type:        models.FileTypeDocument,
+		Category:    models.FileCategoryOther,
+		Tags:        meta.Tags,
+		CreatedAt:   now,
+		UpdatedAt:   now,
+		Links:       []models.FileLink{{EntityType: models.FileLinkExport, EntityID: exportID, Meta: meta.LinkedEntityMeta}},
 		File: &models.File{
 			Path:         filename,
 			OriginalPath: filePath,

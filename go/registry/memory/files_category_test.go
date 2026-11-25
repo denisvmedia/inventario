@@ -100,9 +100,9 @@ func TestFileRegistry_Memory_FilterByCategory(t *testing.T) {
 }
 
 // TestFileRegistry_Memory_FilterByLinkedEntity exercises the
-// linked_entity_type + linked_entity_id filter introduced for the
-// commodity / location detail Files panel. Both must be supplied
-// together; either alone is treated as "no filter".
+// linked_entity_type + linked_entity_id list filter, matched through the
+// file's links, behind the commodity / location detail Files panel. Both
+// must be supplied together; either alone is treated as "no filter".
 func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 	c := qt.New(t)
 
@@ -139,8 +139,9 @@ func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 		c.Assert(total, qt.Equals, 3)
 		c.Assert(got, qt.HasLen, 3)
 		for _, f := range got {
-			c.Assert(f.LinkedEntityType, qt.Equals, "commodity")
-			c.Assert(f.LinkedEntityID, qt.Equals, "com-A")
+			c.Assert(f.Links, qt.HasLen, 1)
+			c.Assert(f.Links[0].EntityType, qt.Equals, "commodity")
+			c.Assert(f.Links[0].EntityID, qt.Equals, "com-A")
 		}
 	})
 
@@ -150,7 +151,8 @@ func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "loc-A")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "loc-A")
 	})
 
 	t.Run("ListPaginated combines linked entity + category", func(t *testing.T) {
@@ -161,7 +163,8 @@ func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
 		c.Assert(got[0].Category, qt.Equals, models.FileCategoryImages)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "com-A")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "com-A")
 	})
 
 	t.Run("Search applies linked-entity filter together with text query", func(t *testing.T) {
@@ -177,12 +180,14 @@ func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 		got, _, err := reg.ListPaginated(ctx, 0, 50, nil, nil, &commodityType, &commodityA)
 		c.Assert(err, qt.IsNil)
 		for _, f := range got {
-			c.Assert(f.LinkedEntityID, qt.Not(qt.Equals), "com-B")
+			c.Assert(f.Links, qt.HasLen, 1)
+			c.Assert(f.Links[0].EntityID, qt.Not(qt.Equals), "com-B")
 		}
 		got, _, err = reg.ListPaginated(ctx, 0, 50, nil, nil, &commodityType, &commodityB)
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "com-B")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "com-B")
 	})
 
 	t.Run("only-type or only-id is treated as no filter", func(t *testing.T) {
@@ -203,12 +208,10 @@ func TestFileRegistry_Memory_FilterByLinkedEntity(t *testing.T) {
 func linkedEntityTestFiles() []models.FileEntity {
 	mk := func(name, mime, ext string, cat models.FileCategory, linkedType, linkedID, linkedMeta string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeFromMIME(mime),
-			Category:         cat,
-			LinkedEntityType: linkedType,
-			LinkedEntityID:   linkedID,
-			LinkedEntityMeta: linkedMeta,
+			Title:    name,
+			Type:     models.FileTypeFromMIME(mime),
+			Category: cat,
+			Links:    fileLinks(linkedType, linkedID, linkedMeta),
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ext,
@@ -336,11 +339,10 @@ func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
 
 	mk := func(name, mime, ext string, cat models.FileCategory, size int64, linkedType, linkedMeta string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeFromMIME(mime),
-			Category:         cat,
-			LinkedEntityType: linkedType,
-			LinkedEntityMeta: linkedMeta,
+			Title:    name,
+			Type:     models.FileTypeFromMIME(mime),
+			Category: cat,
+			Links:    fileLinks(linkedType, "", linkedMeta),
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ext,
@@ -358,7 +360,7 @@ func TestFileRegistry_Memory_SumSizeBreakdown(t *testing.T) {
 		mk("d", "application/pdf", ".pdf", models.FileCategoryDocuments, 8192, "commodity", "manuals"),
 		mk("e", "video/mp4", ".mp4", models.FileCategoryOther, 16384, "", ""),
 		// Export bundles must split out of "other" — same FileCategoryOther
-		// row, but linked_entity_type='export' moves them to the Exports
+		// row, but the export link moves them to the Exports
 		// bucket so the storage card shows export storage as a distinct row.
 		mk("export-1", "application/xml", ".xml", models.FileCategoryOther, 32768, "export", "xml-1.0"),
 	}
@@ -401,11 +403,10 @@ func TestFileRegistry_Memory_CountByCategory_LinkedEntity(t *testing.T) {
 	reg := memory.NewFileRegistryFactory().MustCreateUserRegistry(ctx)
 	mk := func(name, mime, ext string, cat models.FileCategory, commodityID string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeFromMIME(mime),
-			Category:         cat,
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   commodityID,
+			Title:    name,
+			Type:     models.FileTypeFromMIME(mime),
+			Category: cat,
+			Links:    []models.FileLink{{EntityType: "commodity", EntityID: commodityID}},
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ext,
@@ -447,4 +448,13 @@ func TestFileRegistry_Memory_CountByCategory_LinkedEntity(t *testing.T) {
 	c.Check(all[models.FileCategoryImages], qt.Equals, 3)
 	c.Check(all[models.FileCategoryDocuments], qt.Equals, 1)
 	c.Check(all[models.FileCategoryOther], qt.Equals, 1)
+}
+
+// fileLinks is the link list of a seeded file: none for a standalone file
+// (empty entityType), otherwise the one link.
+func fileLinks(entityType, entityID, meta string) []models.FileLink {
+	if entityType == "" {
+		return nil
+	}
+	return []models.FileLink{{EntityType: entityType, EntityID: entityID, Meta: meta}}
 }

@@ -326,12 +326,10 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	areaRow, err := set.AreaRegistry.Get(ctx, areaID)
 	c.Assert(err, qt.IsNil)
 	areaLinkedFile, err := set.FileRegistry.Create(ctx, models.FileEntity{
-		Title:            "area-attachment",
-		Type:             models.FileTypeDocument,
-		Category:         models.FileCategoryDocuments,
-		LinkedEntityType: "area",
-		LinkedEntityID:   areaID,
-		LinkedEntityMeta: "images",
+		Title:    "area-attachment",
+		Type:     models.FileTypeDocument,
+		Category: models.FileCategoryDocuments,
+		Links:    []models.FileLink{{EntityType: "area", EntityID: areaID, Meta: "images"}},
 		File: &models.File{
 			Path:         "area-attachment",
 			OriginalPath: "area-attachment.pdf",
@@ -341,12 +339,10 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	locationLinkedFile, err := set.FileRegistry.Create(ctx, models.FileEntity{
-		Title:            "location-attachment",
-		Type:             models.FileTypeDocument,
-		Category:         models.FileCategoryDocuments,
-		LinkedEntityType: "location",
-		LinkedEntityID:   areaRow.LocationID,
-		LinkedEntityMeta: "images",
+		Title:    "location-attachment",
+		Type:     models.FileTypeDocument,
+		Category: models.FileCategoryDocuments,
+		Links:    []models.FileLink{{EntityType: "location", EntityID: areaRow.LocationID, Meta: "images"}},
 		File: &models.File{
 			Path:         "location-attachment",
 			OriginalPath: "location-attachment.pdf",

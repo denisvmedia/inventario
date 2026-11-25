@@ -56,18 +56,22 @@ func newSystemStatsFunc(dbx *sqlx.DB) registry.SystemStatsFunc {
 
 			// Storage breakdown. Same CASE/SUM logic as
 			// FileRegistry.SumSizeBreakdown, but installation-wide (no
-			// tenant/group WHERE clause): export bundles
-			// (linked_entity_type='export') are split out of the
-			// category buckets so "exports" is a distinct series and the
-			// other buckets don't double-count it. COALESCE keeps an
-			// empty table from returning NULL.
+			// tenant/group WHERE clause): export bundles (files with an
+			// export link) are split out of the category buckets so
+			// "exports" is a distinct series and the other buckets don't
+			// double-count it. A file counts once however many links it
+			// has. COALESCE keeps an empty table from returning NULL.
 			storageQuery := fmt.Sprintf(`
 				SELECT
-					COALESCE(SUM(CASE WHEN linked_entity_type = 'export' THEN size_bytes ELSE 0 END), 0) AS exports,
-					COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
-					COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
-					COALESCE(SUM(CASE WHEN linked_entity_type IS DISTINCT FROM 'export' AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
-				FROM %s`, tableNames.Files())
+					COALESCE(SUM(CASE WHEN is_export THEN size_bytes ELSE 0 END), 0) AS exports,
+					COALESCE(SUM(CASE WHEN NOT is_export AND category = 'images' THEN size_bytes ELSE 0 END), 0) AS images,
+					COALESCE(SUM(CASE WHEN NOT is_export AND category = 'documents' THEN size_bytes ELSE 0 END), 0) AS documents,
+					COALESCE(SUM(CASE WHEN NOT is_export AND category = 'other' THEN size_bytes ELSE 0 END), 0) AS other
+				FROM (
+					SELECT f.size_bytes, f.category,
+						EXISTS (SELECT 1 FROM %s l WHERE l.file_id = f.id AND l.entity_type = 'export') AS is_export
+					FROM %s f
+				) sized`, tableNames.FileLinks(), tableNames.Files())
 
 			row := tx.QueryRowxContext(ctx, storageQuery)
 			if err := row.Scan(

@@ -525,8 +525,7 @@ export function CommodityFormDialog({
       if (anonymous) return
       // Upload + link any pending Files-step attachments. The BE
       // accepts a two-step flow: POST /uploads/file (no link) →
-      // PUT /files/:id with `linked_entity_type` + `linked_entity_id`
-      // + `category`. Fire-and-forget so the caller's close +
+      // POST /files/:id/links. Fire-and-forget so the caller's close +
       // navigate path (which triggers immediately after this submit
       // resolves) doesn't race the upload loop — files-list
       // invalidation surfaces the uploads on whatever page the user

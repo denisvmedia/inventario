@@ -124,8 +124,9 @@ func TestFileRegistry_Postgres_LinkedEntityFilter(t *testing.T) {
 		c.Assert(total, qt.Equals, 3)
 		c.Assert(got, qt.HasLen, 3)
 		for _, f := range got {
-			c.Assert(f.LinkedEntityType, qt.Equals, "commodity")
-			c.Assert(f.LinkedEntityID, qt.Equals, "com-A")
+			c.Assert(f.Links, qt.HasLen, 1)
+			c.Assert(f.Links[0].EntityType, qt.Equals, "commodity")
+			c.Assert(f.Links[0].EntityID, qt.Equals, "com-A")
 		}
 	})
 
@@ -135,7 +136,8 @@ func TestFileRegistry_Postgres_LinkedEntityFilter(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "loc-A")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "loc-A")
 	})
 
 	t.Run("ListPaginated combines linked entity + category", func(t *testing.T) {
@@ -146,7 +148,8 @@ func TestFileRegistry_Postgres_LinkedEntityFilter(t *testing.T) {
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(got, qt.HasLen, 1)
 		c.Assert(got[0].Category, qt.Equals, models.FileCategoryImages)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "com-A")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "com-A")
 	})
 
 	t.Run("Search applies linked-entity filter together with text query", func(t *testing.T) {
@@ -162,12 +165,14 @@ func TestFileRegistry_Postgres_LinkedEntityFilter(t *testing.T) {
 		got, _, err := registrySet.FileRegistry.ListPaginated(ctx, 0, 50, nil, nil, &commodityType, &commodityA)
 		c.Assert(err, qt.IsNil)
 		for _, f := range got {
-			c.Assert(f.LinkedEntityID, qt.Not(qt.Equals), "com-B")
+			c.Assert(f.Links, qt.HasLen, 1)
+			c.Assert(f.Links[0].EntityID, qt.Not(qt.Equals), "com-B")
 		}
 		got, _, err = registrySet.FileRegistry.ListPaginated(ctx, 0, 50, nil, nil, &commodityType, &commodityB)
 		c.Assert(err, qt.IsNil)
 		c.Assert(got, qt.HasLen, 1)
-		c.Assert(got[0].LinkedEntityID, qt.Equals, "com-B")
+		c.Assert(got[0].Links, qt.HasLen, 1)
+		c.Assert(got[0].Links[0].EntityID, qt.Equals, "com-B")
 	})
 
 	t.Run("only-type or only-id is treated as no filter", func(t *testing.T) {
@@ -187,14 +192,12 @@ func linkedEntityPostgresSeed() []models.FileEntity {
 	now := time.Now()
 	mk := func(name, mime, ext string, cat models.FileCategory, linkedType, linkedID, linkedMeta string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeFromMIME(mime),
-			Category:         cat,
-			LinkedEntityType: linkedType,
-			LinkedEntityID:   linkedID,
-			LinkedEntityMeta: linkedMeta,
-			CreatedAt:        now,
-			UpdatedAt:        now,
+			Title:     name,
+			Type:      models.FileTypeFromMIME(mime),
+			Category:  cat,
+			Links:     []models.FileLink{{EntityType: linkedType, EntityID: linkedID, Meta: linkedMeta}},
+			CreatedAt: now,
+			UpdatedAt: now,
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ext,
@@ -206,7 +209,7 @@ func linkedEntityPostgresSeed() []models.FileEntity {
 	return []models.FileEntity{
 		mk("photo-A", "image/jpeg", ".jpg", models.FileCategoryImages, "commodity", "com-A", "images"),
 		// #1622: legacy `invoices` bucket folds into documents; the row
-		// still lives under linked_entity_meta="invoices".
+		// still lives under the link meta "invoices".
 		mk("invoice-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "invoices"),
 		mk("manual-A", "application/pdf", ".pdf", models.FileCategoryDocuments, "commodity", "com-A", "manuals"),
 		mk("photo-B", "image/png", ".png", models.FileCategoryImages, "commodity", "com-B", "images"),
@@ -260,13 +263,12 @@ func TestFileRegistry_Postgres_CountByCategory_LinkedEntity(t *testing.T) {
 	now := time.Now()
 	mk := func(name, mime, ext string, cat models.FileCategory, commodityID string) models.FileEntity {
 		return models.FileEntity{
-			Title:            name,
-			Type:             models.FileTypeFromMIME(mime),
-			Category:         cat,
-			LinkedEntityType: "commodity",
-			LinkedEntityID:   commodityID,
-			CreatedAt:        now,
-			UpdatedAt:        now,
+			Title:     name,
+			Type:      models.FileTypeFromMIME(mime),
+			Category:  cat,
+			Links:     []models.FileLink{{EntityType: "commodity", EntityID: commodityID}},
+			CreatedAt: now,
+			UpdatedAt: now,
 			File: &models.File{
 				Path:         name,
 				OriginalPath: name + ext,

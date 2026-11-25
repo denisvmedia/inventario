@@ -924,6 +924,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           ) : (
             <FilesTab
               commodityId={commodity?.id ?? id}
+              commodityName={commodity?.name}
               coverState={{
                 // Explicit override (issue #1451 option B) takes precedence;
                 // first_photo is the auto-pick when no override is set.
@@ -1503,6 +1504,7 @@ function DetailLabel({ icon: Icon, label }: { icon: typeof MapPin; label: string
 
 interface FilesTabProps {
   commodityId: string
+  commodityName?: string
   onAttachClick: () => void
   coverState?: { current?: string; auto?: string }
   onSetCover?: (fileId: string | null) => void
@@ -1511,6 +1513,7 @@ interface FilesTabProps {
 
 function FilesTab({
   commodityId,
+  commodityName,
   onAttachClick,
   coverState,
   onSetCover,
@@ -1530,6 +1533,7 @@ function FilesTab({
   return (
     <CommodityFilesTab
       commodityId={commodityId}
+      commodityName={commodityName}
       onAttachClick={onAttachClick}
       coverState={coverState}
       onSetCover={onSetCover}

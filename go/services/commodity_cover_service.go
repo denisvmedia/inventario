@@ -36,9 +36,12 @@ type ResolvedCover struct {
 //  1. Explicit `commodities.cover_file_id` (option B) — when set and the
 //     pointed-at file is still cover-eligible (linked to this commodity,
 //     `Type=image`, `Category=images`).
-//  2. Earliest cover-eligible file by `created_at` ASC under
-//     `linked_entity_type=commodity` / `linked_entity_meta=images`
-//     (option A).
+//  2. Earliest cover-eligible file by `created_at` ASC among the files
+//     linked to the commodity in its "images" bucket (option A).
+//
+// A file can be linked to several items, and each item resolves its cover
+// through its own link: removing one item's link leaves the cover of every
+// other item untouched.
 //
 // A stale or no-longer-eligible explicit override falls through to (2)
 // rather than blanking out the slot, so a deleted-image race never
@@ -139,8 +142,8 @@ func (s *CommodityCoverService) signCover(commodityID string, file *models.FileE
 }
 
 // isCoverEligible enforces the same write-side / read-side invariant the
-// PATCH endpoint applies: a cover photo is a `linked_entity_type=commodity`
-// row that's BOTH `Type=image` (MIME-derived behaviour gate — drives
+// PATCH endpoint applies: a cover photo is a file linked to the commodity
+// that's BOTH `Type=image` (MIME-derived behaviour gate — drives
 // thumbnail generation) AND categorised as `images` (the user-meaningful
 // bucket). Tightened from a Type-only check after the Copilot review on
 // #1504 — a JPEG mis-uploaded as `category=invoices` would otherwise
@@ -165,7 +168,7 @@ func fetchExplicitCover(ctx context.Context, fileReg registry.FileRegistry, comm
 	if err != nil || file == nil {
 		return nil
 	}
-	if file.LinkedEntityType != "commodity" || file.LinkedEntityID != commodityID {
+	if file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
 		return nil
 	}
 	if !isCoverEligible(file) {
@@ -175,13 +178,13 @@ func fetchExplicitCover(ctx context.Context, fileReg registry.FileRegistry, comm
 }
 
 // pickFirstPhoto picks the earliest cover-eligible file linked to the
-// commodity. The legacy `linked_entity_meta="images"` bucket scopes the
-// query (officially images-only); isCoverEligible enforces the actual
+// commodity. The link's "images" bucket scopes the query (officially
+// images-only); isCoverEligible enforces the actual
 // invariant in case a caller mis-classified an upload. Filtering happens
 // BEFORE the earliest-by-CreatedAt pick so a non-image row at the top of
 // the bucket can't shadow a valid photo uploaded a second later.
 func pickFirstPhoto(ctx context.Context, fileReg registry.FileRegistry, commodityID string) (*models.FileEntity, bool) {
-	files, err := fileReg.ListByLinkedEntityAndMeta(ctx, "commodity", commodityID, "images")
+	files, err := fileReg.ListByLinkedEntityAndMeta(ctx, models.FileLinkCommodity, commodityID, models.FileLinkMetaImages)
 	if err != nil || len(files) == 0 {
 		return nil, false
 	}

@@ -10,7 +10,7 @@
 //
 // Behaviour is identical to the in-dialog originals — this is a pure
 // move. The dialog re-imports every symbol below.
-import { uploadFile, updateFile } from "@/features/files/api"
+import { attachFile, uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import type { CommodityStatusValue, CommodityTypeValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
@@ -235,12 +235,11 @@ export function toRequest(
   }
 }
 
-// uploadPendingFiles uploads each staged file then links it to the
-// freshly-created commodity (two-step BE flow: POST /uploads/file then
-// PUT /files/:id with the entity link + category + tags). Per-file
-// failures are reported via `onError`; the commodity itself is already
-// persisted, so a failed attach is non-fatal (the user can retry from
-// the detail page).
+// uploadPendingFiles uploads each staged file, sets its tags, then attaches
+// it to the freshly-created commodity (POST /uploads/file, PUT /files/:id
+// for the tags, POST /files/:id/links). Per-file failures are reported via
+// `onError`; the commodity itself is already persisted, so a failed attach
+// is non-fatal (the user can retry from the detail page).
 export async function uploadPendingFiles(
   pending: PendingFile[],
   commodityId: string,
@@ -250,11 +249,14 @@ export async function uploadPendingFiles(
     try {
       const result = await uploadFile(entry.file)
       const category = categoryFromMime(entry.file.type)
-      await updateFile(result.file.id, {
-        linked_entity_type: "commodity",
-        linked_entity_id: commodityId,
-        category,
-        tags: entry.tags.length > 0 ? entry.tags : undefined,
+      if (entry.tags.length > 0) {
+        await updateFile(result.file.id, { tags: entry.tags })
+      }
+      await attachFile(result.file.id, {
+        entityType: "commodity",
+        entityId: commodityId,
+        // "other" names no bucket, so the file keeps its category.
+        meta: category === "other" ? undefined : category,
       })
     } catch (err) {
       onError(entry, err)

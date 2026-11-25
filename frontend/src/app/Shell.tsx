@@ -22,6 +22,7 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { useOnboardingTour } from "@/hooks/useOnboardingTour"
 import {
   OnboardingTourControlsProvider,
+  TOUR_BLOCKER_GRACE_MS,
   type OnboardingTourControls,
   type TourBlocker,
 } from "@/hooks/useOnboardingTourControls"
@@ -71,11 +72,20 @@ export function Shell() {
   )
   // A blocker can appear while the tour is open: the window narrows below
   // the mobile breakpoint and the sidebar turns into a closed sheet, so the
-  // highlights would point at elements that are no longer on screen. Close
-  // the tour without marking it seen; it can run again once it fits.
+  // highlights would point at elements that are no longer on screen. The
+  // tour hides at once, and closes without being marked seen only when the
+  // blocker lasts TOUR_BLOCKER_GRACE_MS; it can run again once it fits.
+  //
+  // The grace period is there because the window can cross the breakpoint
+  // for a moment only: Chromium shrinks the page to 1x1 while it takes a
+  // full-page screenshot, and a window dragged across the breakpoint and
+  // back passes it twice. When the blocker goes away in time, the tour
+  // comes back on the step it was on.
   const { isOpen: tourIsOpen, close: closeTour } = tour
   useEffect(() => {
-    if (tourIsOpen && tourBlocker) closeTour()
+    if (!tourIsOpen || !tourBlocker) return
+    const timer = window.setTimeout(closeTour, TOUR_BLOCKER_GRACE_MS)
+    return () => window.clearTimeout(timer)
   }, [tourIsOpen, tourBlocker, closeTour])
 
   return (
@@ -114,8 +124,11 @@ export function Shell() {
                 {/* Faint build-commit watermark, bottom-right, hidden on
                     mobile; renders nothing in dev/tests (#1972). */}
                 <CommitBadge />
-                {tour.isOpen && !tourBlocker ? (
+                {/* Stays mounted while hidden, so the steps it resolved
+                    from the sidebar survive a moment without the sidebar. */}
+                {tour.isOpen ? (
                   <OnboardingTour
+                    hidden={tourBlocker !== null}
                     step={tour.step}
                     onNext={tour.next}
                     onPrev={tour.prev}

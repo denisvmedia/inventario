@@ -314,7 +314,7 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		return errxtrace.Wrap("failed to load existing files", err)
 	}
 	for _, file := range files {
-		if file.LinkedEntityType == "export" {
+		if file.IsExportOwned() {
 			continue
 		}
 		entities.Files[file.UUID] = file
@@ -375,7 +375,7 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	}
 	fileService := services.NewFileService(l.factorySet, l.uploadLocation)
 	for _, file := range files {
-		if file.LinkedEntityType == "export" {
+		if file.IsExportOwned() {
 			continue
 		}
 		if err := fileService.DeleteFileWithPhysical(ctx, file.ID); err != nil {

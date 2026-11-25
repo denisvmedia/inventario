@@ -611,3 +611,56 @@ func StartAssetNumberBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 		wg.Wait()
 	}
 }
+
+// fileLinkMoveRetryInterval spaces the retries of a failed legacy file link
+// move.
+const fileLinkMoveRetryInterval = time.Minute
+
+// fileLinkMoveSyncTimeout bounds the synchronous first pass of the legacy file
+// link move, so a slow database cannot hold startup indefinitely.
+const fileLinkMoveSyncTimeout = 2 * time.Minute
+
+// StartFileLinkMove moves the file associations still stored in the legacy
+// files.linked_entity_* columns into file_links (see
+// services.MoveLegacyFileLinks). The first pass runs before it returns, so the
+// API does not serve item Files tabs that miss their attachments; when that
+// pass fails or times out, it keeps retrying in the background. The returned
+// stop function cancels the retries and waits for them to return.
+func StartFileLinkMove(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	syncCtx, cancelSync := context.WithTimeout(ctx, fileLinkMoveSyncTimeout)
+	moved, err := services.MoveLegacyFileLinks(syncCtx, rs.FactorySet)
+	cancelSync()
+	if err == nil {
+		if moved > 0 {
+			slog.Info("legacy file links moved", "files", moved)
+		}
+		return func() {}
+	}
+	slog.Warn("legacy file link move failed at startup; retrying in the background",
+		"error", err.Error(), "files", moved)
+
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.RunLegacyFileLinkMove(ctx, rs.FactorySet, fileLinkMoveRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
+// StartFileChecksumBackfill computes, in the background, the SHA-256 of the
+// files that have none yet (see services.BackfillFileChecksums) and returns a
+// stop function that cancels the pass and waits for it to return.
+func StartFileChecksumBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillFileChecksums(ctx, rs.FactorySet, rs.Params.UploadLocation)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
