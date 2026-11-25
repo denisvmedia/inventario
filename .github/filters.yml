@@ -11,10 +11,10 @@
 # `master` and pushes of `v*` tags always run the full pipeline (the
 # workflow `if:` clauses include `github.event_name != 'pull_request'`).
 #
-# Any change inside `.github/workflows/`, `.github/actions/`, or this file
-# itself sets `ci=true`, which every workflow ORs into its gate — when CI
-# itself is being edited we run everything (false-positive cost is preferred
-# over a silently-skipped check).
+# Any change inside `.github/workflows/` or `.github/actions/`, or to
+# `mise.toml` or this file sets `ci=true`, which every workflow ORs into its
+# gate — when CI itself is being edited we run everything (false-positive
+# cost is preferred over a silently-skipped check).
 #
 # A doc-only change inside one of these subtrees (e.g. `go/README.md`) will
 # match the ecosystem filter and trigger that ecosystem's checks. The
@@ -169,10 +169,12 @@ markdown:
   - '.markdownlint-cli2.jsonc'
 
 # ---- CI self-reference ---------------------------------------------------
-# Any change to a workflow file, a composite action, or this filter file
-# forces the full pipeline back on. Conservative on purpose — when CI is
-# being edited we want every check to confirm the edit didn't break it.
+# Any change to a workflow file, a composite action, the shared tool pins,
+# or this filter file forces the full pipeline back on. Conservative on
+# purpose — when CI is being edited we want every check to confirm the edit
+# didn't break it.
 ci:
   - '.github/workflows/**'
   - '.github/actions/**'
   - '.github/filters.yml'
+  - 'mise.toml'

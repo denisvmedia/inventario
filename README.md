@@ -298,8 +298,14 @@ canonical worker types, the equivalent admin REST API, and the
 ### Prerequisites
 
 - **Go**: Version 1.26 or higher
-- **Node.js**: Version 24.16.0 (managed via Volta)
+- **Node.js and npm**: Managed via [mise](https://mise.jdx.dev/), with versions
+  pinned in [`mise.toml`](mise.toml)
 - **Git**: For cloning the repository
+
+The root `mise.toml` applies to `frontend/`, `e2e/` and `docs/site/`.
+The commands below use `mise exec --` to select the pinned tools. For automatic
+selection in interactive shells, follow the
+[shell setup instructions in CONTRIBUTING.md](CONTRIBUTING.md#prerequisites).
 
 ### macOS
 
@@ -311,15 +317,17 @@ canonical worker types, the equivalent admin REST API, and the
    # Install Go
    brew install go
 
-   # Install Volta (Node.js version manager)
-   brew install volta
+   # Install mise (Node.js and npm version manager)
+   brew install mise
    ```
 
 2. **Clone and build the application**:
    ```bash
    git clone git@github.com:denisvmedia/inventario.git
    cd inventario
-   make all
+   mise trust
+   mise install
+   mise exec -- make all
    ```
 
 3. **Run the application** (`--enable-seed-endpoint` mounts the public
@@ -345,16 +353,18 @@ canonical worker types, the equivalent admin REST API, and the
    sudo apt update
    sudo apt install golang-go
 
-   # Install Volta (Node.js version manager)
-   curl https://get.volta.sh | bash
-   source ~/.bashrc  # or restart your terminal
+   # Install mise (Node.js and npm version manager)
+   curl -fsSL https://mise.run | sh
+   export PATH="$HOME/.local/bin:$PATH"
    ```
 
 2. **Clone and build the application**:
    ```bash
    git clone git@github.com:denisvmedia/inventario.git
    cd inventario
-   make all
+   mise trust
+   mise install
+   mise exec -- make all
    ```
 
 3. **Run the application** (`--enable-seed-endpoint` mounts the public
@@ -377,18 +387,21 @@ canonical worker types, the equivalent admin REST API, and the
 1. **Install prerequisites**:
    - Install Go from [golang.org](https://golang.org/dl/)
    - Install Git from [git-scm.com](https://git-scm.com/download/win)
-   - Install Volta using one of the following methods:
-     - [Official installer](https://volta.sh/)
-     - Using Scoop: `scoop install volta`
-     - Using winget: `winget install volta.volta`
+   - Install mise using one of the following methods:
+     - [Official installer](https://mise.jdx.dev/installing-mise.html#windows)
+     - Using Scoop: `scoop install mise`
+     - Using winget: `winget install jdx.mise`
+   - Install Make separately and use Git Bash or WSL for the build commands
+     below; the Makefile requires a POSIX shell.
 
 2. **Clone and build the application**:
-   ```powershell
+   ```bash
    git clone git@github.com:denisvmedia/inventario.git
    cd inventario
-   make all
+   mise trust
+   mise install
+   mise exec -- make all
    ```
-   Note: If you don't have Make installed, you can use Git Bash which includes Make.
 
 3. **Run the application** (`--enable-seed-endpoint` mounts the public
    `/api/v1/seed` route used by the next step — it is OFF by default and
