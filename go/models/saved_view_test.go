@@ -28,7 +28,9 @@ func TestSavedView_Validate_RejectsContextlessValidate(t *testing.T) {
 
 func TestSavedView_ValidateWithContext_HappyPath(t *testing.T) {
 	c := qt.New(t)
-	for _, layout := range []models.SavedViewLayout{models.SavedViewLayoutDefault, models.SavedViewLayoutGrid, models.SavedViewLayoutList} {
+	for _, layout := range []models.SavedViewLayout{
+		models.SavedViewLayoutDefault, models.SavedViewLayoutGrid, models.SavedViewLayoutCompact, models.SavedViewLayoutList,
+	} {
 		v := validSavedView()
 		v.Layout = layout
 		c.Assert(v.ValidateWithContext(context.Background()), qt.IsNil, qt.Commentf("layout %q", layout))

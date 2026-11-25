@@ -70,6 +70,61 @@ describe("CommodityThumb", () => {
     expect(img.src).toBe(sparseCover.thumbnails.small)
   })
 
+  it("offers every thumbnail size to the browser, by width", () => {
+    const fullCover: CommodityCover = {
+      ...cover,
+      thumbnails: { ...cover.thumbnails, large: "https://example.test/thumb/large.jpg" },
+    }
+    render(<CommodityThumb cover={fullCover} type="other" name="Box" size={96} testId="t" />)
+    const img = screen.getByRole("img") as HTMLImageElement
+    expect(img.getAttribute("srcset")).toBe(
+      "https://example.test/thumb/small.jpg 150w, https://example.test/thumb/medium.jpg 300w, https://example.test/thumb/large.jpg 600w"
+    )
+    expect(img.getAttribute("sizes")).toBe("96px")
+    expect(img.getAttribute("loading")).toBe("lazy")
+  })
+
+  it("fills its parent at the width the caller gives (#2797)", () => {
+    const fullCover: CommodityCover = {
+      ...cover,
+      thumbnails: { ...cover.thumbnails, large: "https://example.test/thumb/large.jpg" },
+    }
+    render(
+      <CommodityThumb
+        cover={fullCover}
+        type="other"
+        name="Box"
+        fill
+        sizes="(min-width: 1280px) 240px, 50vw"
+        testId="t"
+      />
+    )
+    const slot = screen.getByTestId("t")
+    expect(slot.style.width).toBe("")
+    expect(slot.className).toContain("size-full")
+    const img = screen.getByRole("img") as HTMLImageElement
+    expect(img.getAttribute("sizes")).toBe("(min-width: 1280px) 240px, 50vw")
+    expect(img.getAttribute("width")).toBeNull()
+    // Without srcset support the browser falls back to the medium size.
+    expect(img.src).toBe(fullCover.thumbnails.medium)
+  })
+
+  it("shows the type icon in a photo-less fill slot", () => {
+    render(<CommodityThumb type="furniture" name="Sofa" fill testId="t" />)
+    const slot = screen.getByTestId("t")
+    expect(slot.getAttribute("data-state")).toBe("fallback")
+    expect(screen.getByTestId("t-icon")).toHaveClass("size-10")
+  })
+
+  it("loads only the forced size when a variant is set", () => {
+    render(
+      <CommodityThumb cover={cover} type="other" name="Box" size={36} variant="medium" testId="t" />
+    )
+    const img = screen.getByRole("img") as HTMLImageElement
+    expect(img.src).toBe(cover.thumbnails.medium)
+    expect(img.getAttribute("srcset")).toBeNull()
+  })
+
   it("uses a generic alt when name is omitted (a11y safety net)", () => {
     render(<CommodityThumb cover={cover} type="other" size={36} testId="t" />)
     const img = screen.getByRole("img") as HTMLImageElement

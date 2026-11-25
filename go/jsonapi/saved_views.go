@@ -34,8 +34,9 @@ type SavedViewAttributes struct {
 	// names of GET /commodities, without the leading "?".
 	Query        string `json:"query" example:"warranty_status=expiring&sort=name"`
 	QueryVersion int    `json:"query_version" example:"1"`
-	// Layout is grid, list, or empty for the viewer's default.
-	Layout string `json:"layout" example:"list" enums:",grid,list"`
+	// Layout is grid (photo cards), compact, list, or empty for the
+	// viewer's default.
+	Layout string `json:"layout" example:"list" enums:",grid,compact,list"`
 	Shared bool   `json:"shared"`
 	// ShowInSidebar and ShowOnDashboard are where the requesting member
 	// shows the view. Each member places the views they see on their own.
@@ -209,7 +210,7 @@ type SavedViewRequestData struct {
 	Name            string `json:"name" example:"Expiring warranties"`
 	Icon            string `json:"icon,omitempty" example:"shield"`
 	Query           string `json:"query" example:"warranty_status=expiring"`
-	Layout          string `json:"layout,omitempty" example:"list" enums:",grid,list"`
+	Layout          string `json:"layout,omitempty" example:"list" enums:",grid,compact,list"`
 	Shared          bool   `json:"shared,omitempty"`
 	ShowInSidebar   bool   `json:"show_in_sidebar,omitempty"`
 	ShowOnDashboard bool   `json:"show_on_dashboard,omitempty"`

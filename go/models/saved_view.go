@@ -48,13 +48,15 @@ func (e SavedViewEntity) Validate() error {
 	return nil
 }
 
-// SavedViewLayout is how the list shows the items of a view. Empty means
-// the viewer's own default.
+// SavedViewLayout is how the list shows the items of a view, by the name the
+// items list uses for it: grid (photo cards), compact (compact cards) or
+// list. Empty means the viewer's own default.
 type SavedViewLayout string
 
 const (
 	SavedViewLayoutDefault SavedViewLayout = ""
 	SavedViewLayoutGrid    SavedViewLayout = "grid"
+	SavedViewLayoutCompact SavedViewLayout = "compact"
 	SavedViewLayoutList    SavedViewLayout = "list"
 )
 
@@ -62,7 +64,7 @@ const (
 // included.
 func (l SavedViewLayout) IsValid() bool {
 	switch l {
-	case SavedViewLayoutDefault, SavedViewLayoutGrid, SavedViewLayoutList:
+	case SavedViewLayoutDefault, SavedViewLayoutGrid, SavedViewLayoutCompact, SavedViewLayoutList:
 		return true
 	}
 	return false
@@ -71,7 +73,7 @@ func (l SavedViewLayout) IsValid() bool {
 // Validate makes SavedViewLayout a validation.Validatable.
 func (l SavedViewLayout) Validate() error {
 	if !l.IsValid() {
-		return validation.NewError("invalid_saved_view_layout", "layout must be grid, list or empty")
+		return validation.NewError("invalid_saved_view_layout", "layout must be grid, compact, list or empty")
 	}
 	return nil
 }

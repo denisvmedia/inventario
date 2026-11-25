@@ -7,7 +7,7 @@ import type { Schema } from "@/types"
 
 type Attributes = Schema<"jsonapi.SavedViewAttributes">
 
-export type SavedViewLayout = "" | "grid" | "list"
+export type SavedViewLayout = "" | "grid" | "compact" | "list"
 
 export interface SavedViewQueryError {
   parameter: string

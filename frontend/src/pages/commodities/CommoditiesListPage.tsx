@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -8,6 +8,7 @@ import {
   Eye,
   EyeOff,
   LayoutGrid,
+  LayoutList,
   List,
   ListFilter,
   MapPinOff,
@@ -44,8 +45,21 @@ import {
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import {
+  CommodityPhotoCard,
+  CommodityPhotoGrid,
+  CommodityPhotoGridSkeleton,
+  type CommodityCardProps,
+} from "@/components/items/CommodityPhotoCard"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
@@ -90,10 +104,14 @@ import {
   type CommodityTagFilter,
 } from "@/features/commodities/query"
 import {
-  COMMODITIES_PAGE_SIZE,
+  COMMODITIES_PAGE_SIZES,
+  COMMODITIES_PAGE_SIZE_PARAM,
   commodityHref,
   commoditiesListOptions,
+  parsePageSize,
   parseCommoditiesListParams,
+  storeCommoditiesPageSize,
+  type CommoditiesPageSize,
 } from "@/features/commodities/listContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -113,19 +131,25 @@ import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
 
-const PER_PAGE = COMMODITIES_PAGE_SIZE
 const VIEW_MODE_KEY = "commodities:viewMode"
 
-type ViewMode = "grid" | "list"
+// "grid" is the photo card grid, "compact" the cards with a small
+// thumbnail, "list" the table.
+type ViewMode = "grid" | "compact" | "list"
+
+function isViewMode(value: unknown): value is ViewMode {
+  return value === "grid" || value === "compact" || value === "list"
+}
 
 // /commodities — full Items list with server-side pagination, filter,
-// sort, search, bulk select + actions, grid/list toggle, and a
-// hide-inactive switch. URL state keeps everything refresh-survivable.
+// sort, search, bulk select + actions, a photo cards / compact cards / list
+// toggle, a page size choice, and a hide-inactive switch. URL state keeps
+// everything refresh-survivable.
 //
 // Filter dropdowns are checkbox-multi (Type, Status); area is single-
 // select. Sort is a radio dropdown that emits `field` or `-field` for
-// the BE. The grid/list toggle persists per-user via localStorage and
-// is also URL-syncable for shared links.
+// the BE. The layout toggle and the page size persist per device via
+// localStorage and are also URL-syncable for shared links.
 //
 // Bulk actions: delete + move-to-area, with confirm dialogs and toast.
 // Selection state is page-local (cleared when filters/page change) so
@@ -151,7 +175,7 @@ export function CommoditiesListPage() {
   // the same parser when it walks this list (features/commodities/listContext),
   // so both share the cache.
   const listParams = useMemo(() => parseCommoditiesListParams(searchParams), [searchParams])
-  const { page, query } = listParams
+  const { page, perPage, query } = listParams
   const search = query.text
   const types = query.types as CommodityTypeValue[]
   const statuses = query.statuses as CommodityStatusValue[]
@@ -167,7 +191,7 @@ export function CommoditiesListPage() {
   // Items opened from here carry this list in `?from=`, for Back and for
   // Previous / Next on the item page.
   const listContext = listContextFromLocation(listLocation)
-  const urlView = searchParams.get("view") as ViewMode | null
+  const urlView = searchParams.get("view")
   // Local override remembers a toolbar flip per-device. `null` means
   // "this device has never explicitly chosen" — in that case we fall
   // back to the user's Preferences default
@@ -177,7 +201,7 @@ export function CommoditiesListPage() {
   const [storedView, setStoredView] = useState<ViewMode | null>(() => {
     if (typeof window === "undefined") return null
     const raw = localStorage.getItem(VIEW_MODE_KEY)
-    return raw === "grid" || raw === "list" ? raw : null
+    return isViewMode(raw) ? raw : null
   })
   const settingsQuery = useUserSettings()
   // Validate the server value the same way we validate `urlView` and
@@ -186,14 +210,12 @@ export function CommoditiesListPage() {
   // (or stale row from a future enum) won't end up as `viewMode` and
   // break the toolbar/list rendering downstream.
   const rawPreferencesDefault = settingsQuery.data?.appearanceDefaultItemsView
-  const preferencesDefault: ViewMode | null =
-    rawPreferencesDefault === "grid" || rawPreferencesDefault === "list"
-      ? rawPreferencesDefault
-      : null
-  const viewMode: ViewMode =
-    urlView === "grid" || urlView === "list"
-      ? urlView
-      : (storedView ?? preferencesDefault ?? "grid")
+  const preferencesDefault: ViewMode | null = isViewMode(rawPreferencesDefault)
+    ? rawPreferencesDefault
+    : null
+  const viewMode: ViewMode = isViewMode(urlView)
+    ? urlView
+    : (storedView ?? preferencesDefault ?? "grid")
 
   // ---- Live search input (decoupled from URL) ---------------------------
   // Typing pushes the URL on a debounce; the URL still drives the query.
@@ -257,10 +279,10 @@ export function CommoditiesListPage() {
   // see the rows they had checked, so silently keeping them queued for a
   // bulk action would surprise them.
   useEffect(() => {
-    // Clear page-local selection on filter/page change.
+    // Clear page-local selection on filter/page/page size change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
-  }, [page, queryKey])
+  }, [page, perPage, queryKey])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -410,6 +432,19 @@ export function CommoditiesListPage() {
   function goToPage(p: number) {
     updateParams((params) => params.set("page", String(p)), { keepPage: true })
   }
+  // A new page size keeps the first item of the current page in view.
+  function setPageSize(size: CommoditiesPageSize) {
+    storeCommoditiesPageSize(size)
+    const firstPage = Math.floor(((page - 1) * perPage) / size) + 1
+    updateParams(
+      (params) => {
+        params.set(COMMODITIES_PAGE_SIZE_PARAM, String(size))
+        if (firstPage > 1) params.set("page", String(firstPage))
+        else params.delete("page")
+      },
+      { keepPage: true }
+    )
+  }
 
   // ---- Derived -----------------------------------------------------------
   const allRows = list.data?.commodities ?? []
@@ -429,7 +464,7 @@ export function CommoditiesListPage() {
   const serviceCountsQuery = useServiceCounts(commodityIDsForCounts)
   const serviceCounts = serviceCountsQuery.data ?? {}
   const total = list.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(total / perPage))
   // Select-all reflects the visible (post-warranty-filter) page only, so
   // the bulk bar's checkbox never silently queues rows the user can't
   // see. Mirrors the table-header checkbox state.
@@ -691,8 +726,9 @@ export function CommoditiesListPage() {
             onClear={clearFilters}
             onAdd={() => setCreateOpen(true)}
           />
-        ) : viewMode === "grid" ? (
+        ) : viewMode !== "list" ? (
           <CommoditiesGrid
+            variant={viewMode === "grid" ? "photo" : "compact"}
             rows={rows}
             slug={slug}
             listContext={listContext}
@@ -728,13 +764,20 @@ export function CommoditiesListPage() {
           />
         )}
 
-        {totalPages > 1 ? (
-          <Pagination
-            page={page}
-            totalPages={totalPages}
-            onChange={goToPage}
-            testId="commodities-pagination"
-          />
+        {/* The page size choice shows once there is more than the smallest
+            page to show. */}
+        {!isError && total > COMMODITIES_PAGE_SIZES[0] ? (
+          <div className="flex flex-col items-center gap-3 sm:flex-row sm:justify-between">
+            <PageSizeSelect value={perPage} onChange={setPageSize} />
+            {totalPages > 1 ? (
+              <Pagination
+                page={page}
+                totalPages={totalPages}
+                onChange={goToPage}
+                testId="commodities-pagination"
+              />
+            ) : null}
+          </div>
         ) : null}
       </Page>
 
@@ -1099,9 +1142,23 @@ function Toolbar(props: ToolbarProps) {
           className="size-8"
           onClick={() => props.onSetViewMode("grid")}
           aria-label={t("commodities:list.viewGrid")}
+          aria-pressed={props.viewMode === "grid"}
+          title={t("commodities:list.viewGrid")}
           data-testid="commodities-view-grid"
         >
           <LayoutGrid className="size-4" aria-hidden="true" />
+        </Button>
+        <Button
+          variant={props.viewMode === "compact" ? "secondary" : "ghost"}
+          size="icon"
+          className="size-8"
+          onClick={() => props.onSetViewMode("compact")}
+          aria-label={t("commodities:list.viewCompact")}
+          aria-pressed={props.viewMode === "compact"}
+          title={t("commodities:list.viewCompact")}
+          data-testid="commodities-view-compact"
+        >
+          <LayoutList className="size-4" aria-hidden="true" />
         </Button>
         <Button
           variant={props.viewMode === "list" ? "secondary" : "ghost"}
@@ -1109,6 +1166,8 @@ function Toolbar(props: ToolbarProps) {
           className="size-8"
           onClick={() => props.onSetViewMode("list")}
           aria-label={t("commodities:list.viewList")}
+          aria-pressed={props.viewMode === "list"}
+          title={t("commodities:list.viewList")}
           data-testid="commodities-view-list"
         >
           <List className="size-4" aria-hidden="true" />
@@ -1121,6 +1180,7 @@ function Toolbar(props: ToolbarProps) {
 // ---- Loading / Empty ----------------------------------------------------
 
 function ListLoading({ viewMode }: { viewMode: ViewMode }) {
+  if (viewMode === "grid") return <CommodityPhotoGridSkeleton />
   if (viewMode === "list") {
     return (
       <Card className="overflow-hidden p-0" data-testid="commodities-loading">
@@ -1236,6 +1296,7 @@ interface CommoditiesGridProps {
 }
 
 function CommoditiesGrid({
+  variant,
   rows,
   slug,
   listContext,
@@ -1250,47 +1311,46 @@ function CommoditiesGrid({
   loanCounts,
   serviceCounts,
   matches,
-}: CommoditiesGridProps) {
+}: CommoditiesGridProps & { variant: "photo" | "compact" }) {
+  const cards = rows.map((row) => {
+    const props: CommodityCardProps = {
+      row,
+      slug,
+      listContext,
+      selected: selected.has(row.id ?? ""),
+      onToggleSelected,
+      onPreview,
+      areaName,
+      tagLabel,
+      resolveTag,
+      tagHref,
+      currency,
+      lent: (loanCounts?.[row.id ?? ""] ?? 0) > 0,
+      inService: (serviceCounts?.[row.id ?? ""] ?? 0) > 0,
+      match: primarySearchMatch(matches?.[row.id ?? ""]),
+    }
+    return variant === "photo" ? (
+      <CommodityPhotoCard key={row.id} {...props} />
+    ) : (
+      <CommodityGridCard key={row.id} {...props} />
+    )
+  })
+  if (variant === "photo") {
+    return (
+      <CommodityPhotoGrid data-testid="commodities-grid" data-view="grid">
+        {cards}
+      </CommodityPhotoGrid>
+    )
+  }
   return (
-    <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
-      {rows.map((row) => (
-        <CommodityGridCard
-          key={row.id}
-          row={row}
-          slug={slug}
-          listContext={listContext}
-          selected={selected.has(row.id ?? "")}
-          onToggleSelected={onToggleSelected}
-          onPreview={onPreview}
-          areaName={areaName}
-          tagLabel={tagLabel}
-          resolveTag={resolveTag}
-          tagHref={tagHref}
-          currency={currency}
-          lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
-          inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
-          match={primarySearchMatch(matches?.[row.id ?? ""])}
-        />
-      ))}
+    <div
+      className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3"
+      data-testid="commodities-grid"
+      data-view="compact"
+    >
+      {cards}
     </div>
   )
-}
-
-interface CommodityCardProps {
-  row: Commodity
-  slug?: string
-  listContext: ListContext
-  selected: boolean
-  onToggleSelected: (id: string) => void
-  onPreview: (id: string) => void
-  areaName: (id?: string) => string
-  tagLabel: (slug: string) => string
-  resolveTag: (slug: string) => ResolvedTag
-  tagHref: (tagSlug: string) => string | undefined
-  currency: string
-  lent?: boolean
-  inService?: boolean
-  match?: CommoditySearchMatch
 }
 
 function CommodityGridCard({
@@ -1339,6 +1399,7 @@ function CommodityGridCard({
       )}
       data-testid="commodity-card"
       data-commodity-id={id}
+      data-variant="compact"
     >
       {/* Card-wide click target: an absolute overlay <Link>. Because it
           is a *positioned* sibling, it paints ON TOP of the (static)
@@ -1611,5 +1672,46 @@ function CommoditiesTable({
         })}
       </ul>
     </Card>
+  )
+}
+
+// ---- Page size -----------------------------------------------------------
+
+function PageSizeSelect({
+  value,
+  onChange,
+}: {
+  value: CommoditiesPageSize
+  onChange: (size: CommoditiesPageSize) => void
+}) {
+  const { t } = useTranslation()
+  const labelId = useId()
+  return (
+    <div className="flex items-center gap-2 text-sm text-muted-foreground">
+      <span id={labelId}>{t("commodities:list.pageSize")}</span>
+      <Select
+        value={String(value)}
+        onValueChange={(v) => {
+          const size = parsePageSize(v)
+          if (size) onChange(size)
+        }}
+      >
+        <SelectTrigger
+          size="sm"
+          className="w-20"
+          aria-labelledby={labelId}
+          data-testid="commodities-page-size"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {COMMODITIES_PAGE_SIZES.map((size) => (
+            <SelectItem key={size} value={String(size)}>
+              {size}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   )
 }

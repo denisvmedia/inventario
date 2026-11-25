@@ -45,7 +45,12 @@ func NewThumbnailGenerationService(factorySet *registry.FactorySet, uploadLocati
 	}
 }
 
-// RequestThumbnailGeneration requests thumbnail generation for a file with resource limiting
+// RequestThumbnailGeneration requests thumbnail generation for a file with resource limiting.
+//
+// It is called when a thumbnail of the file is missing. A pending or
+// processing job already covers that and is returned as it is. A failed job,
+// or a completed one, gets a new job: a completed job with a missing thumbnail
+// rendered fewer sizes than there are now, or its blobs are gone.
 func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error) {
 	jobRegistry := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
@@ -80,8 +85,7 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 		return nil, errxtrace.Wrap("failed to check for existing thumbnail job", err)
 	}
 
-	// If job exists and is not failed, return it
-	if existingJob != nil && existingJob.Status != models.ThumbnailStatusFailed {
+	if existingJob != nil && existingJob.Status.InFlight() {
 		slog.Debug("Thumbnail generation job already exists", "file_id", fileID, "job_id", existingJob.ID, "status", existingJob.Status)
 		return existingJob, nil
 	}

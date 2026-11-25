@@ -10,7 +10,7 @@ export interface SavedViewFixture {
   icon?: string
   query: string
   query_version?: number
-  layout?: "" | "grid" | "list"
+  layout?: "" | "grid" | "compact" | "list"
   shared?: boolean
   show_in_sidebar?: boolean
   show_on_dashboard?: boolean

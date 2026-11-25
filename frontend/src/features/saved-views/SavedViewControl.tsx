@@ -30,7 +30,7 @@ import { useAppToast } from "@/hooks/useAppToast"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
-import type { SavedView } from "./api"
+import type { SavedView, SavedViewLayout } from "./api"
 import { useCreateSavedView, useSavedViews, useUpdateSavedView } from "./hooks"
 import { SavedViewIcon } from "./SavedViewIcon"
 import { SaveViewDialog, type SaveViewValues } from "./SaveViewDialog"
@@ -48,7 +48,7 @@ export interface SavedViewControlProps {
   // The query the items list shows now.
   query: CommodityQuery
   // The layout the items list shows now.
-  layout: "grid" | "list"
+  layout: Exclude<SavedViewLayout, "">
 }
 
 // SavedViewControl is the items list's entry to saved views: it saves the

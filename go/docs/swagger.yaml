@@ -3157,10 +3157,13 @@ definitions:
         example: shield
         type: string
       layout:
-        description: Layout is grid, list, or empty for the viewer's default.
+        description: |-
+          Layout is grid (photo cards), compact, list, or empty for the
+          viewer's default.
         enum:
         - ""
         - grid
+        - compact
         - list
         example: list
         type: string
@@ -3284,6 +3287,7 @@ definitions:
         enum:
         - ""
         - grid
+        - compact
         - list
         example: list
         type: string
@@ -7441,6 +7445,7 @@ paths:
         enum:
         - small
         - medium
+        - large
         in: path
         name: size
         required: true

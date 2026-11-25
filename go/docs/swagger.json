@@ -2675,7 +2675,8 @@
                     {
                         "enum": [
                             "small",
-                            "medium"
+                            "medium",
+                            "large"
                         ],
                         "type": "string",
                         "description": "Thumbnail size",
@@ -14639,11 +14640,12 @@
                     "example": "shield"
                 },
                 "layout": {
-                    "description": "Layout is grid, list, or empty for the viewer's default.",
+                    "description": "Layout is grid (photo cards), compact, list, or empty for the\nviewer's default.",
                     "type": "string",
                     "enum": [
                         "",
                         "grid",
+                        "compact",
                         "list"
                     ],
                     "example": "list"
@@ -14817,6 +14819,7 @@
                     "enum": [
                         "",
                         "grid",
+                        "compact",
                         "list"
                     ],
                     "example": "list"

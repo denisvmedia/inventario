@@ -3709,7 +3709,7 @@ export type paths = {
                     /** @description File ID */
                     fileID: string;
                     /** @description Thumbnail size */
-                    size: "small" | "medium";
+                    size: "small" | "medium" | "large";
                 };
                 cookie?: never;
             };
@@ -13954,11 +13954,12 @@ export type components = {
             /** @example shield */
             icon?: string;
             /**
-             * @description Layout is grid, list, or empty for the viewer's default.
+             * @description Layout is grid (photo cards), compact, list, or empty for the
+             *     viewer's default.
              * @example list
              * @enum {string}
              */
-            layout?: "" | "grid" | "list";
+            layout?: "" | "grid" | "compact" | "list";
             /** @example Expiring warranties */
             name?: string;
             /** @description Owned is true for the views the requesting member created. */
@@ -14044,7 +14045,7 @@ export type components = {
              * @example list
              * @enum {string}
              */
-            layout?: "" | "grid" | "list";
+            layout?: "" | "grid" | "compact" | "list";
             /** @example Expiring warranties */
             name?: string;
             /** @example warranty_status=expiring */

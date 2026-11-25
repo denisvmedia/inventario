@@ -2682,7 +2682,8 @@ const docTemplate = `{
                     {
                         "enum": [
                             "small",
-                            "medium"
+                            "medium",
+                            "large"
                         ],
                         "type": "string",
                         "description": "Thumbnail size",
@@ -14646,11 +14647,12 @@ const docTemplate = `{
                     "example": "shield"
                 },
                 "layout": {
-                    "description": "Layout is grid, list, or empty for the viewer's default.",
+                    "description": "Layout is grid (photo cards), compact, list, or empty for the\nviewer's default.",
                     "type": "string",
                     "enum": [
                         "",
                         "grid",
+                        "compact",
                         "list"
                     ],
                     "example": "list"
@@ -14824,6 +14826,7 @@ const docTemplate = `{
                     "enum": [
                         "",
                         "grid",
+                        "compact",
                         "list"
                     ],
                     "example": "list"

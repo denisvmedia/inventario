@@ -62,6 +62,14 @@ describe("isSavedViewChanged", () => {
     expect(isSavedViewChanged(view, query, "list")).toBe(false)
     expect(isSavedViewChanged({ ...view, layout: "grid" }, query, "list")).toBe(true)
   })
+
+  it("tells the compact cards from the photo cards", () => {
+    const query = savedViewQuery(view)
+    const compact = { ...view, layout: "compact" as const }
+    expect(isSavedViewChanged(compact, query, "compact")).toBe(false)
+    expect(isSavedViewChanged(compact, query, "grid")).toBe(true)
+    expect(savedViewHref("household", { ...compact, id: "sv1" })).toContain("view=compact")
+  })
 })
 
 describe("staleReferences", () => {

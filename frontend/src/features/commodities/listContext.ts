@@ -15,26 +15,65 @@ import { listCommodities, type ListCommoditiesOptions } from "./api"
 import { commodityKeys } from "./keys"
 import { commodityQueryToListOptions, parseCommodityQuery, type CommodityQuery } from "./query"
 
-export const COMMODITIES_PAGE_SIZE = 24
+/** The page sizes the Items list offers, smallest first. */
+export const COMMODITIES_PAGE_SIZES = [24, 48, 96] as const
+export type CommoditiesPageSize = (typeof COMMODITIES_PAGE_SIZES)[number]
+/** The page size until the user picks one. */
+export const COMMODITIES_PAGE_SIZE: CommoditiesPageSize = 24
+
+// The page size is the `per_page` URL parameter. Without it, the size the
+// user last picked on this device applies, so the list page and an item
+// walking the same list URL agree on where the page breaks are.
+export const COMMODITIES_PAGE_SIZE_PARAM = "per_page"
+const PAGE_SIZE_STORAGE_KEY = "commodities:pageSize"
 
 // The filter half of the URL is the item query contract (./query); the page
-// belongs to the list.
+// and its size belong to the list.
 export interface CommoditiesListParams {
   page: number
+  perPage: CommoditiesPageSize
   query: CommodityQuery
 }
 
 export function parseCommoditiesListParams(params: URLSearchParams): CommoditiesListParams {
-  return { page: parsePageParam(params.get("page")), query: parseCommodityQuery(params) }
+  return {
+    page: parsePageParam(params.get("page")),
+    perPage: parsePageSize(params.get(COMMODITIES_PAGE_SIZE_PARAM)) ?? storedCommoditiesPageSize(),
+    query: parseCommodityQuery(params),
+  }
 }
 
 /** The list request for a parsed Items list URL. */
 export function commoditiesListOptions(params: CommoditiesListParams): ListCommoditiesOptions {
   return {
     page: params.page,
-    perPage: COMMODITIES_PAGE_SIZE,
+    perPage: params.perPage,
     ...commodityQueryToListOptions(params.query),
   }
+}
+
+/** Remembers the page size picked on the list page, for this device. */
+export function storeCommoditiesPageSize(size: CommoditiesPageSize): void {
+  try {
+    localStorage.setItem(PAGE_SIZE_STORAGE_KEY, String(size))
+  } catch {
+    // Storage can be unavailable (private mode, blocked site data); the URL
+    // still carries the size.
+  }
+}
+
+function storedCommoditiesPageSize(): CommoditiesPageSize {
+  try {
+    return parsePageSize(localStorage.getItem(PAGE_SIZE_STORAGE_KEY)) ?? COMMODITIES_PAGE_SIZE
+  } catch {
+    return COMMODITIES_PAGE_SIZE
+  }
+}
+
+/** A page size the list offers, or undefined for anything else. */
+export function parsePageSize(raw: string | null): CommoditiesPageSize | undefined {
+  const parsed = Number(raw)
+  return COMMODITIES_PAGE_SIZES.find((size) => size === parsed)
 }
 
 export function commoditiesListPath(slug: string): string {
@@ -50,7 +89,7 @@ export function isCommoditiesListContext(ctx: ListContext, slug: string): boolea
 export function commoditiesListSource(ctx: ListContext, slug: string): ListPageSource {
   const base = parseCommoditiesListParams(listContextParams(ctx))
   return {
-    pageSize: COMMODITIES_PAGE_SIZE,
+    pageSize: base.perPage,
     page: listContextPage(ctx),
     pageQuery: (page) => {
       const opts = commoditiesListOptions({ ...base, page })
