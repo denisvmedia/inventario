@@ -139,12 +139,15 @@ export function TrashedItemsTab({ permissions }: { permissions: TrashPermissions
     try {
       const result = await restoreMany.mutateAsync(ids)
       setSelected(new Set())
-      if (result.failed.length > 0) {
+      if (result.failed.length > 0 || result.unknown.length > 0) {
         toast.warning(
           t("trash:toast.bulkPartial", {
             succeeded: result.succeeded.length,
             failed: result.failed.length,
-          })
+          }),
+          result.unknown.length > 0
+            ? { description: t("trash:toast.restoreUnknown", { count: result.unknown.length }) }
+            : undefined
         )
       } else if (result.areaRemoved.length > 0) {
         toast.warning(t("trash:toast.itemsRestored", { count: result.succeeded.length }), {

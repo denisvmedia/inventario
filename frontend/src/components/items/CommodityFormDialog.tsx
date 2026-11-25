@@ -46,7 +46,11 @@ import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
-import { type ClassifiedServerError, classifyServerError } from "@/lib/server-error"
+import {
+  type ClassifiedServerError,
+  classifyServerError,
+  extractFieldErrorCodes,
+} from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -66,13 +70,8 @@ import { useTagAutocomplete, useTagLabel } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
 import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
-import {
-  COMMODITY_STATUSES,
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
-  warrantyStatus,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+import { COMMODITY_STATUSES, warrantyStatus } from "@/features/commodities/constants"
+import { ItemTypeField } from "@/components/itemTypes/ItemTypeField"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import {
   LocationAreaFields,
@@ -383,7 +382,8 @@ export function CommodityFormDialog({
   // The resume notices describe why the form opened empty; once the form
   // holds the draft, a later refetch (after promoting it here, say) must
   // not raise them.
-  const resumeFailed = !!resumeId && resumedQuery.isError && !serverDraft
+  const resumeFailed =
+    !!resumeId && (resumedQuery.isError || resumed?.status === "closed") && !serverDraft
   const resumePromoted = resumed?.status === "promoted" && !serverDraft
   const [draftSave, setDraftSave] = useState<DraftSaveState>({ kind: "idle" })
   // True when the form opened with input kept on this device that the
@@ -402,7 +402,8 @@ export function CommodityFormDialog({
   // at a time even before the disabled buttons render.
   const savingRef = useRef(false)
   // The draft whose saved files a "save as a new draft" links to the new
-  // one, kept until a save has linked them all.
+  // one, kept until a save has linked them all. It belongs to one visit of
+  // the form: opening or discarding the form forgets it.
   const carryFromRef = useRef<string | null>(null)
   const navigate = useNavigate()
 
@@ -444,6 +445,7 @@ export function CommodityFormDialog({
   useEffect(() => {
     if (!open) {
       seededRef.current = null
+      carryFromRef.current = null
       return
     }
     if (resumeId) {
@@ -471,6 +473,7 @@ export function CommodityFormDialog({
       }
     }
     reset(starting)
+    carryFromRef.current = null
     shortNameEdited.current =
       mode === "edit" ||
       (starting.short_name.trim() !== "" && starting.short_name !== suggestShortName(starting.name))
@@ -679,6 +682,7 @@ export function CommodityFormDialog({
       void clearPendingFiles(localKey)
       clearDraftSession(localKey)
     }
+    carryFromRef.current = null
     setCloseConfirmOpen(false)
     onOpenChange(false)
   }
@@ -780,6 +784,16 @@ export function CommodityFormDialog({
     }
     if (discardedConflict(err)) {
       setDraftSave({ kind: "discarded" })
+      return
+    }
+    // A type the group no longer has (deleted while the draft was open) is
+    // refused on values.type; it is shown on the type field, as an item
+    // save shows it.
+    if (extractFieldErrorCodes(err)?.["values.type"]) {
+      const message = t("errors:validation.item_type_unknown")
+      setError("type", { type: "server", message })
+      setStep("basics")
+      setDraftSave({ kind: "error", message, failedFiles: [] })
       return
     }
     setDraftSave({
@@ -1691,27 +1705,14 @@ function BasicsStep(props: any) {
             control={control}
             name="type"
             render={({ field }) => (
-              <Select value={field.value || undefined} onValueChange={field.onChange}>
-                <SelectTrigger
-                  id="commodity-type"
-                  className="w-full"
-                  aria-required
-                  aria-invalid={!!errors.type}
-                >
-                  <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
-                </SelectTrigger>
-                <SelectContent>
-                  {COMMODITY_TYPES.map((tp) => {
-                    const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
-                    return (
-                      <SelectItem key={tp} value={tp}>
-                        <Icon aria-hidden="true" />
-                        {t(`commodities:type.${tp}`)}
-                      </SelectItem>
-                    )
-                  })}
-                </SelectContent>
-              </Select>
+              <ItemTypeField
+                id="commodity-type"
+                value={field.value ?? ""}
+                onChange={field.onChange}
+                ariaRequired
+                invalid={!!errors.type}
+                errorMessage={errors.type?.message}
+              />
             )}
           />
           <FieldError error={errors.type} />

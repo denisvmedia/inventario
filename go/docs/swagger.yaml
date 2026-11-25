@@ -1158,10 +1158,19 @@ definitions:
     properties:
       area_id:
         type: string
+      expected_count:
+        example: 37
+        type: integer
+      expected_digest:
+        example: 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+        type: string
       ids:
         items:
           type: string
         type: array
+      query:
+        example: status=in_use&tags=garage&include_inactive=false
+        type: string
     type: object
   jsonapi.BulkMoveRequest:
     properties:
@@ -1181,6 +1190,20 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.BulkResultFail'
         type: array
+      notes:
+        description: |-
+          Notes adds to succeeded ids something the caller should know. Absent
+          when there is nothing to add.
+        items:
+          $ref: '#/definitions/jsonapi.BulkResultNote'
+        type: array
+      skipped:
+        description: |-
+          Skipped lists the ids the action left as they were because there was
+          nothing to change. Absent when there are none.
+        items:
+          $ref: '#/definitions/jsonapi.BulkResultSkip'
+        type: array
       succeeded:
         items:
           type: string
@@ -1197,15 +1220,76 @@ definitions:
     type: object
   jsonapi.BulkResultFail:
     properties:
+      code:
+        description: |-
+          Code classifies the failure: not_found (the item does not exist or is
+          in Trash), invalid (the change does not pass the item's validation;
+          Error says why) or failed (anything else).
+        enum:
+        - not_found
+        - invalid
+        - failed
+        type: string
       error:
         type: string
+      field:
+        description: |-
+          Field and Reason come with invalid: the field the validation refused
+          and the validator's code for why (for example short_name and
+          validation_required), so a client can say it in the user's language.
+          Error is the English message.
+        example: short_name
+        type: string
       id:
+        type: string
+      name:
+        description: Name is the item's name when the item could be read.
+        type: string
+      reason:
+        example: validation_required
+        type: string
+    type: object
+  jsonapi.BulkResultNote:
+    properties:
+      code:
+        description: |-
+          Code is files_kept: the item went to Trash, but moving its files there
+          failed, so some of them stayed live.
+        enum:
+        - files_kept
+        type: string
+      id:
+        type: string
+      name:
         type: string
     type: object
   jsonapi.BulkResultResponse:
     properties:
       data:
         $ref: '#/definitions/jsonapi.BulkResultData'
+    type: object
+  jsonapi.BulkResultSkip:
+    properties:
+      id:
+        type: string
+      name:
+        type: string
+      reason:
+        description: 'Reason is unchanged: the item already had what the action sets.'
+        enum:
+        - unchanged
+        type: string
+    type: object
+  jsonapi.BulkTagsPatch:
+    properties:
+      add:
+        items:
+          type: string
+        type: array
+      remove:
+        items:
+          type: string
+        type: array
     type: object
   jsonapi.CommoditiesMeta:
     properties:
@@ -1242,6 +1326,18 @@ definitions:
         example: 50
         format: int64
         type: integer
+      selection_digest:
+        description: |-
+          SelectionDigest names the set of items the query selects, on every
+          page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
+          bulk action on the query sends it back unchanged as expected_digest,
+          and is refused when the query no longer selects exactly these items.
+          Omitted when the query selects no items, more than a bulk action takes
+          (500), or items in Trash, and when the items changed while the list was
+          read or the lookup failed; a client then offers no bulk action on the
+          query.
+        example: 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+        type: string
       total_pages:
         example: 1
         format: int64
@@ -1262,6 +1358,97 @@ definitions:
         items:
           $ref: '#/definitions/registry.CommodityBrandCount'
         type: array
+    type: object
+  jsonapi.CommodityBulkDeleteRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityBulkDeleteRequestData'
+    type: object
+  jsonapi.CommodityBulkDeleteRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityBulkSelection'
+      type:
+        example: commodities
+        type: string
+    type: object
+  jsonapi.CommodityBulkPatch:
+    properties:
+      status:
+        allOf:
+        - $ref: '#/definitions/jsonapi.CommodityBulkStatusPatch'
+        description: |-
+          Status changes the status, with the date and note a single status
+          change records.
+      tags:
+        $ref: '#/definitions/jsonapi.BulkTagsPatch'
+      type:
+        description: Type sets the item type.
+        example: electronics
+        type: string
+    type: object
+  jsonapi.CommodityBulkSelection:
+    properties:
+      expected_count:
+        example: 37
+        type: integer
+      expected_digest:
+        example: 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+        type: string
+      ids:
+        items:
+          type: string
+        type: array
+      query:
+        example: status=in_use&tags=garage&include_inactive=false
+        type: string
+    type: object
+  jsonapi.CommodityBulkStatusPatch:
+    properties:
+      date:
+        example: "2026-11-25"
+        type: string
+      note:
+        type: string
+      value:
+        enum:
+        - in_use
+        - lost
+        - disposed
+        - written_off
+        example: disposed
+        type: string
+    type: object
+  jsonapi.CommodityBulkUpdateAttributes:
+    properties:
+      expected_count:
+        example: 37
+        type: integer
+      expected_digest:
+        example: 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+        type: string
+      ids:
+        items:
+          type: string
+        type: array
+      patch:
+        $ref: '#/definitions/jsonapi.CommodityBulkPatch'
+      query:
+        example: status=in_use&tags=garage&include_inactive=false
+        type: string
+    type: object
+  jsonapi.CommodityBulkUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityBulkUpdateRequestData'
+    type: object
+  jsonapi.CommodityBulkUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityBulkUpdateAttributes'
+      type:
+        example: commodities
+        type: string
     type: object
   jsonapi.CommodityCover:
     properties:
@@ -2467,6 +2654,33 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
     type: object
+  jsonapi.FileBulkPatch:
+    properties:
+      tags:
+        $ref: '#/definitions/jsonapi.BulkTagsPatch'
+    type: object
+  jsonapi.FileBulkUpdateAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+      patch:
+        $ref: '#/definitions/jsonapi.FileBulkPatch'
+    type: object
+  jsonapi.FileBulkUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileBulkUpdateRequestData'
+    type: object
+  jsonapi.FileBulkUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileBulkUpdateAttributes'
+      type:
+        example: files
+        type: string
+    type: object
   jsonapi.FileCategoryBytes:
     properties:
       all:
@@ -3120,6 +3334,131 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.InviteInfoData'
+    type: object
+  jsonapi.ItemTypeDeleteMeta:
+    properties:
+      reassigned_items:
+        example: 4
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemTypeDeleteResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/jsonapi.ItemTypeDeleteMeta'
+    type: object
+  jsonapi.ItemTypeRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeRequestDataWrapper'
+    type: object
+  jsonapi.ItemTypeRequestData:
+    properties:
+      icon:
+        example: car
+        type: string
+      name:
+        example: Vehicle
+        type: string
+    type: object
+  jsonapi.ItemTypeRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeResponseData'
+    type: object
+  jsonapi.ItemTypeResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeView'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeUpdateRequestDataWrapper'
+    type: object
+  jsonapi.ItemTypeUpdateRequestData:
+    properties:
+      icon:
+        type: string
+      name:
+        type: string
+    type: object
+  jsonapi.ItemTypeUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeUpdateRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeView:
+    properties:
+      builtin:
+        example: true
+        type: boolean
+      created_at:
+        type: string
+      icon:
+        example: laptop
+        type: string
+      item_count:
+        example: 3
+        format: int64
+        type: integer
+      name:
+        example: ""
+        type: string
+      slug:
+        example: electronics
+        type: string
+      trashed_item_count:
+        description: |-
+          TrashedItemCount is the number of items in Trash with this type.
+          Deleting the type moves them along with the others.
+        example: 0
+        format: int64
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  jsonapi.ItemTypesMeta:
+    properties:
+      item_types:
+        example: 6
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemTypesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.ItemTypeResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ItemTypesMeta'
     type: object
   jsonapi.LoanCommodityRef:
     properties:
@@ -4824,7 +5163,13 @@ definitions:
           type: string
         type: array
       type:
-        $ref: '#/definitions/models.CommodityType'
+        description: |-
+          Type is the slug of one of the group's item types (see ItemType). An
+          item keeps the slug, not the type's id: a slug never changes, so the
+          item query's type filter, saved views and backups that name it stay
+          valid when the type is renamed.
+        example: electronics
+        type: string
       urls:
         type: string
       uuid:
@@ -5035,22 +5380,6 @@ definitions:
     - CommodityStatusLost
     - CommodityStatusDisposed
     - CommodityStatusWrittenOff
-  models.CommodityType:
-    enum:
-    - white_goods
-    - electronics
-    - equipment
-    - furniture
-    - clothes
-    - other
-    type: string
-    x-enum-varnames:
-    - CommodityTypeWhiteGoods
-    - CommodityTypeElectronics
-    - CommodityTypeEquipment
-    - CommodityTypeFurniture
-    - CommodityTypeClothes
-    - CommodityTypeOther
   models.CurrencyMigration:
     properties:
       commodity_count:
@@ -9539,22 +9868,22 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Move every commodity whose id appears in the body to Trash.
-        The response lists succeeded vs. failed ids so the frontend
-        can render partial-failure UX without parsing per-id HTTP
-        statuses.
+        Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
+        The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+        The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
+        A retry sends the failed ids as `ids`, in batches of at most 100.
       parameters:
       - description: Group slug
         in: path
         name: groupSlug
         required: true
         type: string
-      - description: List of commodity IDs to delete
+      - description: The items to delete
         in: body
         name: body
         required: true
         schema:
-          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+          $ref: '#/definitions/jsonapi.CommodityBulkDeleteRequest'
       produces:
       - application/vnd.api+json
       responses:
@@ -9562,8 +9891,18 @@ paths:
           description: Per-id outcome
           schema:
             $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "400":
+          description: The query is not a valid item query, or selects items in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'bulk.selection_changed: the query selects at most 500 items,
+            but other ones than expected_count and expected_digest describe'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Bad request body
+          description: 'Bad request body, or bulk.too_many: the query selects more
+            than 500 items (checked before the 409)'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Bulk-delete commodities
@@ -9574,15 +9913,17 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Update every commodity whose id appears in the body to
-        belong to the supplied area_id.
+        Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
+        An area_id that is not an area of the group is refused with 422 before any item changes.
+        The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+        A retry sends the same area_id with the failed ids as `ids`, in batches of at most 100.
       parameters:
       - description: Group slug
         in: path
         name: groupSlug
         required: true
         type: string
-      - description: List of commodity IDs and the destination area_id
+      - description: The items and the destination area_id
         in: body
         name: body
         required: true
@@ -9595,11 +9936,87 @@ paths:
           description: Per-id outcome
           schema:
             $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "400":
+          description: The query is not a valid item query, or selects items in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'bulk.selection_changed: the query selects at most 500 items,
+            but other ones than expected_count and expected_digest describe'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Bad request body
+          description: 'Bad request body, an area_id that is not an area of the group,
+            or bulk.too_many: the query selects more than 500 items (checked before
+            the 409)'
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Bulk-move commodities to a new area
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/bulk-update:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:
+        a status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,
+        so a type or tag change in the same patch gets no event of its own.
+
+        The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
+        (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
+        `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
+        `in_use` takes neither: send it without `date` and `note` (a non-empty one is refused with 422), and it clears
+        the status date, note and sale price. `sold` is refused, since it needs a sale price for each item.
+        An item that already has the status keeps its status date and note: the patch does not change them,
+        even when it sends another date or note. The other parts of the patch still apply to that item.
+        A part left out of the patch is left unchanged.
+
+        The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
+        (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
+        `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
+        GET /commodities returned for it. The query is run when the request arrives and may select no items
+        in Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this
+        check comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items
+        within that limit (more, fewer, or as many with one swapped), the request fails with 409
+        bulk.selection_changed. Either way nothing changes.
+
+        The response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).
+        To retry, send the same patch again with the failed ids as `ids`, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: The items and the patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityBulkUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "400":
+          description: The query is not a valid item query, or selects items in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'bulk.selection_changed: the query selects at most 500 items,
+            but other ones than expected_count and expected_digest describe'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: 'Bad request body or patch, or bulk.too_many: the query selects
+            more than 500 items (checked before the 409)'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-update commodities
       tags:
       - commodities
   /g/{groupSlug}/commodities/scan:
@@ -9946,8 +10363,10 @@ paths:
     get:
       description: |-
         The group's open drafts, most recently saved first. A draft is an unfinished
-        item saved on the server; it is not an item and appears in no item list, count,
-        search or export.
+        item saved on the server; it is not an item and appears in no item list, count
+        or search. A whole-group backup carries the open drafts. When a member who can
+        edit items lists the drafts, a discard that stopped more than ten minutes ago is
+        finished first.
       parameters:
       - description: Group slug
         in: path
@@ -9983,7 +10402,8 @@ paths:
         is being discarded answers 409 draft.discarded. Known fields of the item form
         must have the type the form uses (text, a number or numeric text, a list of
         text, true or false); a field of another type is refused with 422 on
-        values.<field>.
+        values.<field>. A type in values.type must be one of the group's item types
+        (422 item_type_unknown on values.type otherwise).
       parameters:
       - description: Group slug
         in: path
@@ -10929,6 +11349,45 @@ paths:
       summary: Bulk-delete files
       tags:
       - files
+  /g/{groupSlug}/files/bulk-update:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:
+        unlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name
+        stay on each file, and the title, description and file name stay as they are.
+        `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
+        A tag cannot be in both lists, and each list holds at most 50 tags.
+
+        The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).
+        A retry sends the same patch with the failed ids, in batches of at most 100.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: The files and the patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileBulkUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body or patch
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-update files
+      tags:
+      - files
   /g/{groupSlug}/files/category-counts:
     get:
       consumes:
@@ -11333,6 +11792,185 @@ paths:
       summary: Rescan a purchase
       tags:
       - intake
+  /g/{groupSlug}/item-types:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The item types of the group: the built-in ones first in their fixed order, then the others by name.
+        Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypesResponse'
+      summary: List item types
+      tags:
+      - item-types
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
+        The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+        A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type object
+        in: body
+        name: itemType
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ItemTypeRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Item type created
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "409":
+          description: Another item type of the group has this name, or the group
+            has 100 item types
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an item type
+      tags:
+      - item-types
+  /g/{groupSlug}/item-types/{itemTypeID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
+        then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      - description: ID of the item type the deleted type's items move to
+        in: query
+        name: reassign_to
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Deleted; meta.reassigned_items counts the items moved
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeDeleteResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The type is in use and no reassign_to was given, or it is the
+            group's last type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: reassign_to names no other type of the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an item type
+      tags:
+      - item-types
+    get:
+      consumes:
+      - application/vnd.api+json
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an item type
+      tags:
+      - item-types
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Attributes left out keep their value. The slug never changes, so
+        items, filters and saved views keep working after a rename. An empty name
+        on a built-in type gives it back its default name.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      - description: Item type patch
+        in: body
+        name: itemType
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ItemTypeUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Another item type of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an item type
+      tags:
+      - item-types
   /g/{groupSlug}/loans:
     get:
       consumes:
@@ -13024,7 +13662,9 @@ paths:
       description: |-
         Restores every item whose id appears in the body. The response
         lists the restored ids, the failures, and the restored items
-        that came back without an area.
+        that came back without an area. A failure's code is not_found
+        when the item is not in Trash (restored already, never deleted,
+        or not in the group), and failed for any other error.
       parameters:
       - description: Group slug
         in: path

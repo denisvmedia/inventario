@@ -24,7 +24,7 @@ Before `prepareRestore` runs — i.e. before a `full_replace` wipes anything —
 
 ### Linked-entity resolution
 
-Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`) or, for a draft, through the drafts the walker restored; a standalone file resolves to no link at all (#2235). A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
+Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`) or, for a draft, through the drafts the walker restored; a standalone file resolves to no link at all (#2235), and so does a link to a draft the walker did not recreate. A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
 
 ## Key Features
 
@@ -127,7 +127,7 @@ types.RestoreStrategyMergeUpdate // "merge_update"
 
 ### Drafts
 
-`files/_drafts.json` (format 3.4) holds the group's open drafts of new items. The walker recreates each one with new ids and the archived revision and timestamps (through `registry.WithRestoredDraft`). Its `area_id` and `seller_id` values carry UUIDs and are mapped to the restored area and seller; one that maps to nothing is left out, and so is a `type` that is not an item type. Its tags are created in the group if missing, as for an item. In a merge, a draft whose client key the group already has is kept as it is; the restore log gets a skipped step for it, its links are left out without an error, and a file that only such drafts use is restored as a standalone file.
+`files/_drafts.json` (format 3.5) holds the group's open drafts of new items. The walker recreates each one with new ids and the archived revision and timestamps (through `registry.WithRestoredDraft`). Its `area_id` and `seller_id` values carry UUIDs and are mapped to the restored area and seller; one that maps to nothing is left out. Its `type` is mapped onto the group's item types as an item's is: the same slug, the type with the archived name, or a type the restore creates; a kept draft creates no type. Its tags are created in the group if missing, as for an item. In a merge, a draft whose client key the group already has is kept as it is, and the restore log gets a skipped step for it that says whether the group's draft is open, already an item, or being discarded. A draft that fails to restore is a counted error. A link to a draft the walker did not recreate (kept, failed, or not in the archive) is left out without an error, and a file that only such drafts use is restored as a standalone file.
 
 ## Data Flow
 

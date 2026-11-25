@@ -9,6 +9,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/internal/aivision"
@@ -116,21 +117,21 @@ func quantityFromGuess(guess models.IntakeFieldGuess) int {
 // the group.
 type intakeDraftInput struct {
 	sellers registry.SellerRegistry
-	// typeKnown reports whether the group has the item type.
-	typeKnown func(ctx context.Context, t string) bool
+	types   registry.ItemTypeRegistry
 }
 
 // intakeDraftValues builds the values of the draft made for a candidate from
 // the fields the member accepted, the way the single-item scan fills the
 // item form. A value the form could not use is left out, so the field stays
 // unknown rather than wrong: a date that is not YYYY-MM-DD, an unknown
-// currency or type, a price that is not a number. The price is the product's
+// currency, a type the group does not have (#2802), a price that is not a
+// number. The price is the product's
 // own line amount; nothing else is ever copied into it.
 func intakeDraftValues(ctx context.Context, in intakeDraftInput, cand *models.IntakeCandidate) (models.CommodityDraftValues, error) {
 	values := models.CommodityDraftValues{}
 	setTextValues(values, cand)
-	if s, ok := acceptedText(cand, aivision.FieldNameType); ok && in.typeKnown != nil && in.typeKnown(ctx, s) {
-		values["type"] = s
+	if err := setTypeValue(ctx, values, in.types, cand); err != nil {
+		return nil, err
 	}
 	setPriceValues(values, cand)
 	for _, name := range []string{aivision.FieldNamePurchaseDate, aivision.FieldNameWarrantyExpiresAt} {
@@ -207,6 +208,23 @@ func setPriceValues(values models.CommodityDraftValues, cand *models.IntakeCandi
 	if n, ok := cand.Fields[aivision.FieldNameOriginalPrice].Value.(float64); ok && !math.IsNaN(n) && !math.IsInf(n, 0) && n >= 0 {
 		values["original_price"] = decimal.NewFromFloat(n).StringFixed(2)
 	}
+}
+
+// setTypeValue copies the accepted type when the group has it.
+func setTypeValue(ctx context.Context, values models.CommodityDraftValues, types registry.ItemTypeRegistry, cand *models.IntakeCandidate) error {
+	s, ok := acceptedText(cand, aivision.FieldNameType)
+	if !ok {
+		return nil
+	}
+	err := CheckCommodityType(ctx, types, models.CommodityType(s))
+	if _, unknown := errors.AsType[validation.Error](err); unknown {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	values["type"] = s
+	return nil
 }
 
 // setSellerValue names the group's seller with the scanned name. When the

@@ -13,7 +13,7 @@
 import { attachFile, uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { HttpError } from "@/lib/http"
-import type { CommodityStatusValue, CommodityTypeValue } from "@/features/commodities/constants"
+import type { CommodityStatusValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
 import type {
@@ -198,7 +198,7 @@ export function toRequest(
     short_name: values.short_name.trim(),
     brand: values.brand.trim(),
     model: values.model.trim(),
-    type: values.type as CommodityTypeValue,
+    type: values.type,
     // Omit when empty so the BE creates/leaves the item unassigned
     // (#1986) rather than rejecting "" as a missing area FK. An explicit
     // clear in edit mode (area_id = "") therefore un-assigns the item.

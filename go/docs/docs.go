@@ -3289,7 +3289,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-delete": {
             "post": {
-                "description": "Move every commodity whose id appears in the body to Trash.\nThe response lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
+                "description": "Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nThe response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.\nA retry sends the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3309,12 +3309,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "List of commodity IDs to delete",
+                        "description": "The items to delete",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityBulkDeleteRequest"
                         }
                     }
                 ],
@@ -3325,8 +3325,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.BulkResultResponse"
                         }
                     },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
-                        "description": "Bad request body",
+                        "description": "Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -3336,7 +3348,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-move": {
             "post": {
-                "description": "Update every commodity whose id appears in the body to\nbelong to the supplied area_id.",
+                "description": "Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.\nAn area_id that is not an area of the group is refused with 422 before any item changes.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nA retry sends the same area_id with the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3356,7 +3368,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "List of commodity IDs and the destination area_id",
+                        "description": "The items and the destination area_id",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -3372,8 +3384,79 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.BulkResultResponse"
                         }
                     },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
-                        "description": "Bad request body",
+                        "description": "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/bulk-update": {
+            "post": {
+                "description": "Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:\na status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,\nso a type or tag change in the same patch gets no event of its own.\n\nThe patch: ` + "`" + `tags.add` + "`" + ` and ` + "`" + `tags.remove` + "`" + ` add and remove tags without touching the others\n(` + "`" + `add` + "`" + ` takes slugs or the text of a new tag, at most 50 per list); ` + "`" + `type` + "`" + ` sets the type;\n` + "`" + `status` + "`" + ` sets the status with ` + "`" + `date` + "`" + ` (required for every status but in_use) and an optional ` + "`" + `note` + "`" + `.\n` + "`" + `in_use` + "`" + ` takes neither: send it without ` + "`" + `date` + "`" + ` and ` + "`" + `note` + "`" + ` (a non-empty one is refused with 422), and it clears\nthe status date, note and sale price. ` + "`" + `sold` + "`" + ` is refused, since it needs a sale price for each item.\nAn item that already has the status keeps its status date and note: the patch does not change them,\neven when it sends another date or note. The other parts of the patch still apply to that item.\nA part left out of the patch is left unchanged.\n\nThe items are given as ` + "`" + `ids` + "`" + ` (at most 100) or as ` + "`" + `query` + "`" + `, a query string of the item query contract\n(the filter parameters of GET /commodities, without page and per_page), with ` + "`" + `expected_count` + "`" + ` and\n` + "`" + `expected_digest` + "`" + `: the number of items the caller saw it select and the ` + "`" + `meta.selection_digest` + "`" + `\nGET /commodities returned for it. The query is run when the request arrives and may select no items\nin Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this\ncheck comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items\nwithin that limit (more, fewer, or as many with one swapped), the request fails with 409\nbulk.selection_changed. Either way nothing changes.\n\nThe response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).\nTo retry, send the same patch again with the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-update commodities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The items and the patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityBulkUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -5140,7 +5223,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/drafts": {
             "get": {
-                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count,\nsearch or export.",
+                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count\nor search. A whole-group backup carries the open drafts. When a member who can\nedit items lists the drafts, a discard that stopped more than ten minutes ago is\nfinished first.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -5179,7 +5262,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe. A key whose draft\nis being discarded answers 409 draft.discarded. Known fields of the item form\nmust have the type the form uses (text, a number or numeric text, a list of\ntext, true or false); a field of another type is refused with 422 on\nvalues.\u003cfield\u003e.",
+                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe. A key whose draft\nis being discarded answers 409 draft.discarded. Known fields of the item form\nmust have the type the form uses (text, a number or numeric text, a list of\ntext, true or false); a field of another type is refused with 422 on\nvalues.\u003cfield\u003e. A type in values.type must be one of the group's item types\n(422 item_type_unknown on values.type otherwise).",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6154,6 +6237,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/files/bulk-update": {
+            "post": {
+                "description": "Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:\nunlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name\nstay on each file, and the title, description and file name stay as they are.\n` + "`" + `tags.add` + "`" + ` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; ` + "`" + `tags.remove` + "`" + ` takes slugs.\nA tag cannot be in both lists, and each list holds at most 50 tags.\n\nThe response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).\nA retry sends the same patch with the failed ids, in batches of at most 100.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Bulk-update files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The files and the patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileBulkUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body or patch",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/files/category-counts": {
             "get": {
                 "description": "Per-category file counts, respecting the same filters as GET /files",
@@ -7058,6 +7188,258 @@ const docTemplate = `{
                     },
                     "503": {
                         "description": "No AI scan provider is configured",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/item-types": {
+            "get": {
+                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "List item types",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.\nThe slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.\nA group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Create an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item type object",
+                        "name": "itemType",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Item type created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Another item type of the group has this name, or the group has 100 item types",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/item-types/{itemTypeID}": {
+            "get": {
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Get an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;\nthen every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Delete an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID of the item type the deleted type's items move to",
+                        "name": "reassign_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted; meta.reassigned_items counts the items moved",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeDeleteResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The type is in use and no reassign_to was given, or it is the group's last type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "reassign_to names no other type of the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Attributes left out keep their value. The slug never changes, so items, filters and saved views keep working after a rename. An empty name on a built-in type gives it back its default name.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Update an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item type patch",
+                        "name": "itemType",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Another item type of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -9405,7 +9787,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/trash/commodities/restore": {
             "post": {
-                "description": "Restores every item whose id appears in the body. The response\nlists the restored ids, the failures, and the restored items\nthat came back without an area.",
+                "description": "Restores every item whose id appears in the body. The response\nlists the restored ids, the failures, and the restored items\nthat came back without an area. A failure's code is not_found\nwhen the item is not in Trash (restored already, never deleted,\nor not in the group), and failed for any other error.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -13001,11 +13383,23 @@ const docTemplate = `{
                 "area_id": {
                     "type": "string"
                 },
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
+                "expected_digest": {
+                    "type": "string",
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
+                },
                 "ids": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
                 }
             }
         },
@@ -13037,6 +13431,20 @@ const docTemplate = `{
                         "$ref": "#/definitions/jsonapi.BulkResultFail"
                     }
                 },
+                "notes": {
+                    "description": "Notes adds to succeeded ids something the caller should know. Absent\nwhen there is nothing to add.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.BulkResultNote"
+                    }
+                },
+                "skipped": {
+                    "description": "Skipped lists the ids the action left as they were because there was\nnothing to change. Absent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.BulkResultSkip"
+                    }
+                },
                 "succeeded": {
                     "type": "array",
                     "items": {
@@ -13062,10 +13470,50 @@ const docTemplate = `{
         "jsonapi.BulkResultFail": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Code classifies the failure: not_found (the item does not exist or is\nin Trash), invalid (the change does not pass the item's validation;\nError says why) or failed (anything else).",
+                    "type": "string",
+                    "enum": [
+                        "not_found",
+                        "invalid",
+                        "failed"
+                    ]
+                },
                 "error": {
                     "type": "string"
                 },
+                "field": {
+                    "description": "Field and Reason come with invalid: the field the validation refused\nand the validator's code for why (for example short_name and\nvalidation_required), so a client can say it in the user's language.\nError is the English message.",
+                    "type": "string",
+                    "example": "short_name"
+                },
                 "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the item's name when the item could be read.",
+                    "type": "string"
+                },
+                "reason": {
+                    "type": "string",
+                    "example": "validation_required"
+                }
+            }
+        },
+        "jsonapi.BulkResultNote": {
+            "type": "object",
+            "properties": {
+                "code": {
+                    "description": "Code is files_kept: the item went to Trash, but moving its files there\nfailed, so some of them stayed live.",
+                    "type": "string",
+                    "enum": [
+                        "files_kept"
+                    ]
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
                     "type": "string"
                 }
             }
@@ -13075,6 +13523,41 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.BulkResultData"
+                }
+            }
+        },
+        "jsonapi.BulkResultSkip": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason is unchanged: the item already had what the action sets.",
+                    "type": "string",
+                    "enum": [
+                        "unchanged"
+                    ]
+                }
+            }
+        },
+        "jsonapi.BulkTagsPatch": {
+            "type": "object",
+            "properties": {
+                "add": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "remove": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
                 }
             }
         },
@@ -13113,6 +13596,11 @@ const docTemplate = `{
                     "format": "int64",
                     "example": 50
                 },
+                "selection_digest": {
+                    "description": "SelectionDigest names the set of items the query selects, on every\npage: the hex SHA-256 of their sorted ids (commodityquery.Digest). A\nbulk action on the query sends it back unchanged as expected_digest,\nand is refused when the query no longer selects exactly these items.\nOmitted when the query selects no items, more than a bulk action takes\n(500), or items in Trash, and when the items changed while the list was\nread or the lookup failed; a client then offers no bulk action on the\nquery.",
+                    "type": "string",
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
+                },
                 "total_pages": {
                     "type": "integer",
                     "format": "int64",
@@ -13142,6 +13630,138 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/registry.CommodityBrandCount"
                     }
+                }
+            }
+        },
+        "jsonapi.CommodityBulkDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkDeleteRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkDeleteRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkSelection"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "commodities"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkPatch": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "Status changes the status, with the date and note a single status\nchange records.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.CommodityBulkStatusPatch"
+                        }
+                    ]
+                },
+                "tags": {
+                    "$ref": "#/definitions/jsonapi.BulkTagsPatch"
+                },
+                "type": {
+                    "description": "Type sets the item type.",
+                    "type": "string",
+                    "example": "electronics"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkSelection": {
+            "type": "object",
+            "properties": {
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
+                "expected_digest": {
+                    "type": "string",
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkStatusPatch": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "example": "2026-11-25"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "in_use",
+                        "lost",
+                        "disposed",
+                        "written_off"
+                    ],
+                    "example": "disposed"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateAttributes": {
+            "type": "object",
+            "properties": {
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
+                "expected_digest": {
+                    "type": "string",
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "patch": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkPatch"
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkUpdateAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "commodities"
                 }
             }
         },
@@ -14808,6 +15428,48 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.FileBulkPatch": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "$ref": "#/definitions/jsonapi.BulkTagsPatch"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateAttributes": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "patch": {
+                    "$ref": "#/definitions/jsonapi.FileBulkPatch"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.FileBulkUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileBulkUpdateAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "files"
+                }
+            }
+        },
         "jsonapi.FileCategoryBytes": {
             "type": "object",
             "properties": {
@@ -15771,6 +16433,188 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.InviteInfoData"
+                }
+            }
+        },
+        "jsonapi.ItemTypeDeleteMeta": {
+            "type": "object",
+            "properties": {
+                "reassigned_items": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 4
+                }
+            }
+        },
+        "jsonapi.ItemTypeDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeDeleteMeta"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string",
+                    "example": "car"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Vehicle"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeResponseData"
+                }
+            }
+        },
+        "jsonapi.ItemTypeResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeView": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string",
+                    "example": "laptop"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "name": {
+                    "type": "string",
+                    "example": ""
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "electronics"
+                },
+                "trashed_item_count": {
+                    "description": "TrashedItemCount is the number of items in Trash with this type.\nDeleting the type moves them along with the others.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ItemTypesMeta": {
+            "type": "object",
+            "properties": {
+                "item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 6
+                }
+            }
+        },
+        "jsonapi.ItemTypesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemTypeResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemTypesMeta"
                 }
             }
         },
@@ -18040,7 +18884,9 @@ const docTemplate = `{
                     }
                 },
                 "type": {
-                    "$ref": "#/definitions/models.CommodityType"
+                    "description": "Type is the slug of one of the group's item types (see ItemType). An\nitem keeps the slug, not the type's id: a slug never changes, so the\nitem query's type filter, saved views and backups that name it stay\nvalid when the type is renamed.",
+                    "type": "string",
+                    "example": "electronics"
                 },
                 "urls": {
                     "type": "string"
@@ -18242,25 +19088,6 @@ const docTemplate = `{
                 "CommodityStatusLost",
                 "CommodityStatusDisposed",
                 "CommodityStatusWrittenOff"
-            ]
-        },
-        "models.CommodityType": {
-            "type": "string",
-            "enum": [
-                "white_goods",
-                "electronics",
-                "equipment",
-                "furniture",
-                "clothes",
-                "other"
-            ],
-            "x-enum-varnames": [
-                "CommodityTypeWhiteGoods",
-                "CommodityTypeElectronics",
-                "CommodityTypeEquipment",
-                "CommodityTypeFurniture",
-                "CommodityTypeClothes",
-                "CommodityTypeOther"
             ]
         },
         "models.CurrencyMigration": {

@@ -318,6 +318,31 @@ func runCommodityDraftLifecycleContract(t *testing.T, newEnv func(t *testing.T) 
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	})
 
+	t.Run("list the discards that began before a time", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		first := createContractDraft(c, env, "key-1", "Drill")
+		second := createContractDraft(c, env, "key-2", "Saw")
+		createContractDraft(c, env, "key-3", "Hammer")
+		before := time.Now()
+		_, err := env.Drafts.MarkDiscarding(env.Ctx, first.ID)
+		c.Assert(err, qt.IsNil)
+		_, err = env.Drafts.MarkDiscarding(env.Ctx, second.ID)
+		c.Assert(err, qt.IsNil)
+
+		none, err := env.Drafts.ListDiscarding(env.Ctx, before, 10)
+		c.Assert(err, qt.IsNil)
+		c.Assert(none, qt.HasLen, 0)
+
+		later := time.Now().Add(time.Minute)
+		both, err := env.Drafts.ListDiscarding(env.Ctx, later, 10)
+		c.Assert(err, qt.IsNil)
+		c.Assert(draftIDs(both), qt.DeepEquals, []string{first.ID, second.ID})
+		oldest, err := env.Drafts.ListDiscarding(env.Ctx, later, 1)
+		c.Assert(err, qt.IsNil)
+		c.Assert(draftIDs(oldest), qt.DeepEquals, []string{first.ID})
+	})
+
 	t.Run("a promoted draft cannot be discarded", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)

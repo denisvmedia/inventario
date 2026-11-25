@@ -353,6 +353,27 @@ func (r *CommodityDraftRegistry) MarkDiscarding(ctx context.Context, id string) 
 	return r.Update(ctx, *draft)
 }
 
+// ListDiscarding mirrors the postgres method.
+func (r *CommodityDraftRegistry) ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	stale := make([]*models.CommodityDraft, 0)
+	for _, d := range all {
+		if d.IsDiscarding() && d.UpdatedAt.Before(before) {
+			stale = append(stale, d)
+		}
+	}
+	slices.SortStableFunc(stale, func(a, b *models.CommodityDraft) int {
+		if c := a.UpdatedAt.Compare(b.UpdatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return stale[:min(len(stale), max(limit, 0))], nil
+}
+
 // DeleteDiscarding mirrors the postgres method.
 func (r *CommodityDraftRegistry) DeleteDiscarding(ctx context.Context, id string) error {
 	r.factory.writes.Lock()

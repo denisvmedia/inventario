@@ -171,7 +171,7 @@ func (s *ExportService) writePayload(
 		return nil, nil, err
 	}
 
-	// Then the drafts (format 3.4). After the location members, because a
+	// Then the drafts (format 3.5). After the location members, because a
 	// draft's area is resolved through the areas they restore, and before the
 	// files member, which links files to the drafts.
 	if err := builder.writeDrafts(plan.drafts); err != nil {
@@ -303,6 +303,7 @@ func (b *inbBuilder) writeManifest(plan *inbPlan) error {
 		DraftsFile:     draftsMember,
 		FilesFile:      filesMember,
 		Sellers:        plan.sellers,
+		ItemTypes:      plan.itemTypes,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

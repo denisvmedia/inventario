@@ -257,6 +257,34 @@ func (r *CommodityDraftRegistry) ListOpen(ctx context.Context, offset, limit int
 	return drafts, total, nil
 }
 
+// ListDiscarding returns the drafts whose discard stopped before the given
+// time; see the interface doc.
+func (r *CommodityDraftRegistry) ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error) {
+	var drafts []*models.CommodityDraft
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE status = $1 AND updated_at < $2 ORDER BY updated_at, id LIMIT $3`,
+			r.tableNames.CommodityDrafts())
+		rows, err := tx.QueryxContext(ctx, query, string(models.CommodityDraftDiscarding), before, max(limit, 0))
+		if err != nil {
+			return errxtrace.Wrap("failed to query commodity drafts being discarded", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var draft models.CommodityDraft
+			if err := rows.StructScan(&draft); err != nil {
+				return errxtrace.Wrap("failed to scan commodity draft", err)
+			}
+			drafts = append(drafts, new(draft))
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity drafts being discarded", err)
+	}
+	return drafts, nil
+}
+
 // lockDraft reads the draft and holds its row lock until tx ends, so a save
 // and a promotion of the same draft run one after the other.
 func (r *CommodityDraftRegistry) lockDraft(ctx context.Context, tx *sqlx.Tx, id string) (*models.CommodityDraft, error) {

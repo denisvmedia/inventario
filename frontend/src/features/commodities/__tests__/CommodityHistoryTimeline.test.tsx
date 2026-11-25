@@ -9,12 +9,19 @@ import { Route } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import { delay, http, HttpResponse } from "msw"
 
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, commodityHandlers, groupHandlers, sellerHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  areaHandlers,
+  commodityHandlers,
+  groupHandlers,
+  sellerHandlers,
+} from "@/test/handlers"
 import type { CommodityEventFixture } from "@/test/handlers/commodities"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -519,6 +526,93 @@ describe("<CommodityHistoryTimeline />", () => {
     expect(rows[1]).toHaveTextContent("Seller: a deleted seller → Corner Market")
     expect(rows[2]).toHaveTextContent("Removed the seller Corner Market")
     expect(rows[4]).toHaveTextContent("Seller set to Hardware Store")
+  })
+
+  it("keeps the generic copy when the seller changed along with a date or a link", async () => {
+    const rest = { name: "Kettle", tags: [], urls: [] }
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, [
+        {
+          id: "d3",
+          kind: "updated",
+          occurred_at: "2026-05-03T10:30:00Z",
+          before: { ...rest, seller_id: "", purchase_date: "" },
+          after: { ...rest, seller_id: "s1", purchase_date: "2026-05-01" },
+          meta: { actor },
+        },
+        {
+          id: "d2",
+          kind: "updated",
+          occurred_at: "2026-05-02T10:30:00Z",
+          before: { ...rest, seller_id: "s1", urls: [] },
+          after: { ...rest, seller_id: "s2", urls: ["https://shop.example/kettle"] },
+          meta: { actor },
+        },
+        {
+          // An empty list on one side and null on the other are no change.
+          id: "d1",
+          kind: "updated",
+          occurred_at: "2026-05-01T10:30:00Z",
+          before: { ...rest, seller_id: "", urls: null, registered_date: "" },
+          after: { ...rest, seller_id: "s1", urls: [], registered_date: "" },
+          meta: { actor },
+        },
+      ])
+    )
+    renderTimeline()
+    await waitFor(() => expect(screen.getAllByTestId("history-row-updated")).toHaveLength(3))
+    const rows = screen.getAllByTestId("history-row-updated")
+    await waitFor(() => expect(rows[2]).toHaveTextContent("Seller set to Hardware Store"))
+    expect(rows[0]).toHaveTextContent("Edited this item")
+    expect(rows[1]).toHaveTextContent("Edited this item")
+  })
+
+  function sellerOnlyEvent() {
+    return commodityHandlers.events(SLUG, COMMODITY_ID, [
+      {
+        id: "u1",
+        kind: "updated",
+        occurred_at: "2026-05-01T10:30:00Z",
+        before: { name: "Kettle", seller_id: "s1" },
+        after: { name: "Kettle", seller_id: "s2" },
+        meta: { actor },
+      },
+    ])
+  }
+
+  it("does not call a seller deleted while the sellers load", async () => {
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/sellers`), () => delay("infinite")),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...sellerOnlyEvent()
+    )
+    renderTimeline()
+    const row = await screen.findByTestId("history-row-updated")
+    expect(row).toHaveTextContent("Edited this item")
+    expect(row).not.toHaveTextContent("a deleted seller")
+  })
+
+  it("does not call a seller deleted when the sellers cannot be loaded", async () => {
+    const failed = { value: false }
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+        failed.value = true
+        return new HttpResponse(null, { status: 500 })
+      }),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...sellerOnlyEvent()
+    )
+    renderTimeline()
+    const row = await screen.findByTestId("history-row-updated")
+    await waitFor(() => expect(failed.value).toBe(true))
+    // Give the failed request time to settle into the query's error state.
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(row).toHaveTextContent("Edited this item")
+    expect(row).not.toHaveTextContent("a deleted seller")
   })
 
   it("is axe-clean when populated", async () => {

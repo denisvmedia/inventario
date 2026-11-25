@@ -435,6 +435,11 @@ type CommodityRegistry interface {
 	// and the order; at most limit brands are returned.
 	ListBrands(ctx context.Context, query string, limit int) ([]CommodityBrandCount, error)
 
+	// ListIDs returns the ids of at most limit commodities opts selects, in
+	// no particular order. It reads ids only, so a caller can tell which
+	// items a query selects without loading them. Sorting does not apply.
+	ListIDs(ctx context.Context, opts CommodityListOptions, limit int) ([]string, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status, trashed items included. Used by the
 	// currency-migration service (issue #202): the conversion needs to see all
@@ -1497,6 +1502,11 @@ type CommodityDraftRegistry interface {
 	// DeleteDiscarding deletes a draft whose discard has begun; ErrNotFound
 	// when there is no such draft.
 	DeleteDiscarding(ctx context.Context, id string) error
+
+	// ListDiscarding returns, oldest first, at most limit of the group's
+	// drafts whose discard began before the given time and did not finish.
+	// MarkDiscarding sets UpdatedAt, so it is the time the discard began.
+	ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error)
 }
 
 // IntakeSourceInput is one source of a new intake session: the files the AI
@@ -1667,6 +1677,68 @@ type SellerRegistry interface {
 	// at that seller, drafts and inactive items included and items in Trash
 	// left out. A seller without items is absent from the map.
 	ItemCounts(ctx context.Context) (map[string]int, error)
+}
+
+// ItemTypeUsage counts the items of a group that have one item type.
+type ItemTypeUsage struct {
+	// Live counts the items outside Trash, drafts and inactive items
+	// included.
+	Live int
+	// Trashed counts the items in Trash.
+	Trashed int
+}
+
+// Total is the number of items, in Trash or not, that have the type.
+func (u ItemTypeUsage) Total() int {
+	return u.Live + u.Trashed
+}
+
+// ItemTypeRegistry is the group-scoped registry of item types (#2802).
+//
+// Create and Update normalize the type (models.ItemType.Normalize) and fail
+// with ErrAlreadyExists when another type of the group has the same name
+// key. Create gives the type a slug made from its name, unique in the
+// group and never one of a built-in type, unless the caller sets one (the
+// backup restore keeps the archived slug when it is free). Update keeps the
+// stored slug. Create fails with ErrItemTypeLimit when the group already has
+// models.MaxItemTypesPerGroup types.
+//
+// A group with no item types has never been seeded: the user registry's
+// List, Create and the commodity registries' writes of a built-in slug seed
+// the built-in types into it first. Delete is DeleteReassigning without a
+// target.
+type ItemTypeRegistry interface {
+	Registry[models.ItemType]
+
+	// GetBySlug returns the type with the given slug, or ErrNotFound.
+	GetBySlug(ctx context.Context, slug models.CommodityType) (*models.ItemType, error)
+
+	// GetByName returns the type whose name key equals the key of name, or
+	// ErrNotFound. A built-in type with no name of its own is found by its
+	// English default name.
+	GetByName(ctx context.Context, name string) (*models.ItemType, error)
+
+	// ItemCounts returns, per type slug, how many items of the group have
+	// that type. A slug without items is absent from the map.
+	ItemCounts(ctx context.Context) (map[models.CommodityType]ItemTypeUsage, error)
+
+	// DeleteReassigning deletes the type with id. When items of the group,
+	// those in Trash included, have it, they are first given the type
+	// reassignTo, in the same transaction, and the count of moved items is
+	// returned; with an empty reassignTo the delete fails with
+	// ErrItemTypeInUse instead. A reassignTo that is not another type of
+	// the group fails with ErrInvalidInput. The last type of a group cannot
+	// be deleted (ErrLastItemType).
+	DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error)
+
+	// EnsureBuiltins seeds the built-in types into the registry's group when
+	// the group has no item types, and returns how many it created.
+	EnsureBuiltins(ctx context.Context) (int, error)
+
+	// BackfillBuiltins seeds the built-in types into every group that has
+	// no item types, one group per transaction, and returns how many types
+	// it created. Service registry only.
+	BackfillBuiltins(ctx context.Context) (int, error)
 }
 
 // CommodityReminderSendRegistry records which reminder emails the worker
@@ -3179,6 +3251,7 @@ type Set struct {
 	CommodityDraftRegistry         CommodityDraftRegistry
 	IntakeRegistry                 IntakeRegistry
 	SellerRegistry                 SellerRegistry
+	ItemTypeRegistry               ItemTypeRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -3276,6 +3349,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.CommodityDraftRegistry, validation.Required),
 		validation.Field(&s.IntakeRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
+		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

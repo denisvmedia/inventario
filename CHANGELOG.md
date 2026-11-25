@@ -24,12 +24,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   load it or save as a new draft, which gets the old draft's files too. A
   draft finished or discarded on another device is not saved over: the dialog
   offers to open the item or save as a new draft. Drafts stay out of item
-  lists, counts, search, reports, saved views and reminders. A whole-group
-  backup carries the open drafts with their files (format 3.4; a 3.3 reader
-  restores it without them). A restore links a draft to the restored area,
-  seller and files; a merge keeps a draft the group already has and reports it
-  in the restore log, and a full replace replaces the group's drafts with the
-  backup's. Deleting an account deletes the drafts its user started; files
+  lists, counts, search, reports, saved views and reminders. A draft's type
+  must be one of the group's item types. A whole-group backup carries the open
+  drafts with their files (format 3.5; a 3.4 reader restores it without them).
+  A restore links a draft to the restored area, seller and files and maps its
+  type as it maps an item's; a merge keeps a draft the group already has and
+  reports it in the restore log, and a full replace replaces the group's
+  drafts with the backup's. Deleting an account deletes the drafts its user started; files
   other members saved with them stay as standalone files. The short name of a
   new item follows the name until one is typed. The new API is `/drafts`
   (list, create with a client key, save with a revision, discard, promote with
@@ -61,6 +62,54 @@ the section matching the tag and publishes it as the GitHub Release body. See
   carry the sellers (format 3.3) and a restore links items to the group's
   sellers by name, creating the missing ones
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
+- Bulk edits on the items list. The bulk-action bar has an Edit menu that adds
+  and removes tags (an item keeps the tags the change does not name), sets the
+  type, and changes the status with the same date and note dialog as a single
+  change; sold is left out, since each item needs its own sale price. After the
+  whole page is selected, "Select all N matching items" selects every item the
+  search and filters match, on every page, for every bulk action but label
+  printing. It is offered when 1 to 500 items match and the list could tell
+  which items those are; otherwise a bulk action works on the items selected
+  one by one or a page at a time. Each item goes through the checks of a
+  single change and gets its own history event. When some items fail, a dialog
+  lists them with the reason, keeps them selected and offers a retry of those
+  items alone. The new
+  `POST /commodities/bulk-update` takes ids or a query of the item query
+  contract with the number and the digest of the items it was seen to match
+  (`meta.selection_digest` of `GET /commodities`), and refuses with 409 when
+  the query selects other items by then, even as many; `bulk-move` and
+  `bulk-delete` take the same selection, and all three answer with the items
+  that changed, were skipped as unchanged, or failed with a reason (a
+  validation failure names the field and the rule, so the app can say it in
+  the user's language). A query may select up to 500 items. `bulk-move` to an
+  area that does not exist is refused with 422 before any item changes.
+  `POST /trash/commodities/restore` gives each failure a code as well:
+  `not_found` for an item that is not in the trash, `failed` otherwise. The
+  Files page's bulk bar gains **Tags…**, which adds and removes tags on the
+  selected files the same way, through the new `POST /files/bulk-update`
+  ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).
+
+- Item types are a list each group keeps, instead of a fixed set of six. Every
+  group starts with the six built-in types, seeded at startup for existing
+  groups and on first use for new ones; members see their names in their own
+  language until someone renames them. A new Item types page adds, renames and
+  deletes types, each with a name (up to 50 characters, unique in the group)
+  and one of 38 icons, and counts the items of each type, Trash included.
+  Deleting a type that items have moves them to a type the member picks, which
+  is also how two types are merged; a group keeps at least one type and at
+  most 100 (409 `item_type.limit`). A type stays with the group when the
+  member who added it deletes their account. The item forms pick from the
+  group's types and create one with "New type". Items keep their type:
+  `commodities.type` stays the type's slug, so the `type` filter, saved views,
+  the reports and the icons work as before. The API gains
+  `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an item write
+  with a type the group does not have fails with 422 `item_type.unknown`; a
+  bulk type change picks from the group's types and refuses another with 422
+  on `type` before any item changes. AI scan offers the group's types. Backups
+  carry the types (format 3.4) and a restore matches them by slug, then by
+  name, creating the missing ones
+  ([#2802](https://github.com/denisvmedia/inventario/issues/2802)).
 
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,

@@ -4,7 +4,10 @@ package backup_test
 
 import (
 	"archive/tar"
+	"bytes"
+	"compress/gzip"
 	"encoding/json"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -13,11 +16,13 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/backup/restore/types"
+	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
 )
 
-// Open drafts of new items are in a whole-group backup (#2812, format 3.4),
+// Open drafts of new items are in a whole-group backup (#2812, format 3.5),
 // with the links of their files.
 
 // draftFixture is an inbFixture with an open draft that names the fixture's
@@ -103,7 +108,7 @@ func TestINBExport_Drafts(t *testing.T) {
 
 	var manifest types.INBManifest
 	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
-	c.Check(manifest.Version, qt.Equals, "3.4")
+	c.Check(manifest.Version, qt.Equals, export.INBFormatVersion)
 	c.Check(manifest.DraftsFile, qt.Equals, types.INBDraftsMember)
 
 	// After the location documents, before the files document.
@@ -287,8 +292,9 @@ func TestINBRestore_MergeKeepsTheGroupsDraft(t *testing.T) {
 	c.Check(skipped, qt.DeepEquals, []string{"Draft: Half-done drill"})
 }
 
-// TestINBRestore_DraftReferencesThatDoNotMap: an area, a seller or a type the
-// restore cannot map is left out of the draft, never stored as given.
+// TestINBRestore_DraftReferencesThatDoNotMap: an area or a seller the restore
+// cannot map is left out of the draft, never stored as given. A type the
+// group does not have is created, as for an item of that type.
 func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -308,7 +314,7 @@ func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 		},
 	}}}
 	archive := signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
-		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"3.4"}`))
+		writeMember(c, tw, &tar.Header{Name: "manifest.json", Mode: 0o600, Typeflag: tar.TypeReg}, []byte(`{"version":"3.5"}`))
 		writeMember(c, tw, &tar.Header{Name: "location-home.json", Mode: 0o600, Typeflag: tar.TypeReg}, must.Must(json.Marshal(inbLocationOnlyDoc(loc))))
 		writeMember(c, tw, &tar.Header{Name: types.INBDraftsMember, Mode: 0o600, Typeflag: tar.TypeReg}, must.Must(json.Marshal(draftsDoc)))
 	})
@@ -321,8 +327,45 @@ func TestINBRestore_DraftReferencesThatDoNotMap(t *testing.T) {
 
 	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
 	restored := must.Must(drafts.GetByClientKey(f.ctx, "hand-built"))
-	c.Check(restored.Values, qt.DeepEquals, models.CommodityDraftValues{"name": "Kettle", "status": "in_use"})
+	c.Check(restored.Values, qt.DeepEquals, models.CommodityDraftValues{"name": "Kettle", "type": "spaceship", "status": "in_use"})
 	c.Check(restored.Revision, qt.Equals, 4)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Check(must.Must(itemTypes.GetBySlug(f.ctx, "spaceship")).Name, qt.Equals, "spaceship")
+}
+
+// TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType: a draft's type is mapped
+// onto the group's item types as an item's is (#2802), here by name, because
+// the group replaced the type with one of the same name under another slug.
+// A dry run and a kept draft create no type.
+func TestINBRoundTrip_DraftTypeIsMappedLikeAnItemsType(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	boat := must.Must(itemTypes.Create(f.ctx, models.ItemType{Name: "Boat"}))
+	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+	values := models.CommodityDraftValues{"name": "Half-done dinghy", "type": string(boat.Slug)}
+	must.Must(drafts.SaveValues(f.ctx, f.draft.ID, f.draft.Revision, values))
+	blobKey, _ := f.runExport(c, signer)
+
+	c.Assert(itemTypes.Delete(f.ctx, boat.ID), qt.IsNil)
+	craft := must.Must(itemTypes.Create(f.ctx, models.ItemType{Slug: "watercraft", Name: "boat"}))
+	typesBefore := len(must.Must(itemTypes.List(f.ctx)))
+
+	// The group still has the draft: a merge keeps it and creates no type.
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(must.Must(itemTypes.List(f.ctx)), qt.HasLen, typesBefore)
+	c.Check(f.draftsByKey(c)["draft-in-backup"].Values["type"], qt.Equals, string(boat.Slug))
+
+	final, err = restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(must.Must(itemTypes.List(f.ctx)), qt.HasLen, typesBefore, qt.Commentf("the type was matched by name, not created"))
+	restored := f.draftsByKey(c)["draft-in-backup"]
+	c.Assert(restored, qt.IsNotNil)
+	c.Check(restored.Values["type"], qt.Equals, string(craft.Slug))
 }
 
 // TestINBRestore_DraftsIntoAnotherGroup restores a group's backup into another
@@ -422,4 +465,130 @@ func TestINBRestore_DryRunWritesNoDrafts(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestINBRestore_FailedDraftKeepsItsFiles: a draft that fails to restore
+// does not take its files with it. The photo only that draft used comes back
+// as a standalone file, and the receipt it shared with the TV stays on the
+// TV.
+func TestINBRestore_FailedDraftKeepsItsFiles(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	_, archive := f.runExport(c, signer)
+
+	broken := rewriteInnerMember(c, signer, archive, types.INBDraftsMember, func(body []byte) []byte {
+		var doc types.INBDraftsDoc
+		c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
+		c.Assert(doc.Drafts, qt.HasLen, 1)
+		doc.Drafts[0].ClientKey = "not a valid key"
+		return must.Must(json.Marshal(doc))
+	})
+	key := "t/tenant-a/restores/drafts-failed.inb"
+	writeArchive(c, f.inbFixture, key, broken)
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the draft itself is an error"))
+
+	c.Check(f.draftsByKey(c), qt.HasLen, 0)
+	photo := f.fileByUUID(c, f.photo)
+	c.Check(photo.Links, qt.HasLen, 0)
+	receipt := f.fileByUUID(c, f.receipt)
+	c.Assert(receipt.Links, qt.HasLen, 1)
+	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+}
+
+// TestINBRestore_MergeReportsWhyADraftWasKept: the restore log says what
+// became of the group's draft with the same client key, so a draft that is
+// already an item, or is being discarded, is not reported as kept.
+func TestINBRestore_MergeReportsWhyADraftWasKept(t *testing.T) {
+	cases := []struct {
+		name   string
+		before func(c *qt.C, f *draftFixture)
+		reason string
+	}{{
+		name:   "open",
+		before: func(*qt.C, *draftFixture) {},
+		reason: "The group already has a draft with the same client key, so it was kept and the backup's copy was not restored.",
+	}, {
+		name: "promoted",
+		before: func(c *qt.C, f *draftFixture) {
+			drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+			_, err := drafts.Promote(f.ctx, f.draft.ID, f.draft.Revision, "promotion-2", models.Commodity{
+				Name: "Drill", ShortName: "Drill", Type: models.CommodityTypeEquipment, Count: 1,
+				Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
+			})
+			c.Assert(err, qt.IsNil)
+		},
+		reason: "The group's draft with the same client key has already become an item, so the backup's copy was not restored.",
+	}, {
+		name: "discarding",
+		before: func(c *qt.C, f *draftFixture) {
+			drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+			_, err := drafts.MarkDiscarding(f.ctx, f.draft.ID)
+			c.Assert(err, qt.IsNil)
+		},
+		reason: "The group's draft with the same client key is being discarded, so the backup's copy was not restored.",
+	}}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			signer := testSigner(c)
+			f := newDraftFixture(c)
+			blobKey, _ := f.runExport(c, signer)
+			tc.before(c, f)
+
+			final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+			c.Assert(err, qt.IsNil)
+			c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+			steps := must.Must(f.fs.RestoreStepRegistryFactory.CreateServiceRegistry().ListByRestoreOperation(f.ctx, final.ID))
+			var reasons []string
+			for _, s := range steps {
+				if s.Name == "Draft: Half-done drill" {
+					reasons = append(reasons, s.Reason)
+				}
+			}
+			c.Check(reasons, qt.DeepEquals, []string{tc.reason})
+		})
+	}
+}
+
+// rewriteInnerMember returns archive with the body of the inner member name
+// replaced by edit(body), signed again with signer.
+func rewriteInnerMember(c *qt.C, signer *backupsign.Signer, archive []byte, name string, edit func([]byte) []byte) []byte {
+	c.Helper()
+	tr := tar.NewReader(bytes.NewReader(archive))
+	_ = must.Must(tr.Next()) // signature member
+	_ = must.Must(io.ReadAll(tr))
+	_ = must.Must(tr.Next()) // payload member
+	payload := must.Must(io.ReadAll(tr))
+	itr := tar.NewReader(must.Must(gzip.NewReader(bytes.NewReader(payload))))
+	type member struct {
+		hdr  *tar.Header
+		body []byte
+	}
+	var members []member
+	found := false
+	for {
+		hdr, err := itr.Next()
+		if err == io.EOF {
+			break
+		}
+		c.Assert(err, qt.IsNil)
+		body := must.Must(io.ReadAll(itr))
+		if hdr.Name == name {
+			body = edit(body)
+			found = true
+		}
+		members = append(members, member{hdr: hdr, body: body})
+	}
+	c.Assert(found, qt.IsTrue, qt.Commentf("member %s not in the archive", name))
+	return signedArchiveFromInnerTar(c, signer, func(tw *tar.Writer) {
+		for _, m := range members {
+			writeMember(c, tw, m.hdr, m.body)
+		}
+	})
 }

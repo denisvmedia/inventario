@@ -99,6 +99,40 @@ type ScanRequest struct {
 	// "EUR"). The prompt asks the model to prefer this code when a
 	// price is visible but the currency symbol is ambiguous.
 	PreferredCurrencyCode string
+	// ItemTypes are the item types of the group the scan is for. Their
+	// slugs are the values the schema allows for "type", and the prompt
+	// lists each slug with its name so the model can match a custom type
+	// by meaning. Empty means the built-in types (BuiltinItemTypes).
+	ItemTypes []ItemTypeOption
+}
+
+// ItemTypeOption is one item type the model may classify a product as.
+type ItemTypeOption struct {
+	// Slug is the value the item's type field stores.
+	Slug string
+	// Name is the type's name as the group sees it, in any language.
+	Name string
+}
+
+// BuiltinItemTypes are the item types every group starts with, used when a
+// request names none. They mirror models.BuiltinItemTypes; this leaf
+// package keeps no dependency on the domain models.
+var BuiltinItemTypes = []ItemTypeOption{
+	{Slug: "white_goods", Name: "Appliance"},
+	{Slug: "electronics", Name: "Electronics"},
+	{Slug: "equipment", Name: "Equipment"},
+	{Slug: "furniture", Name: "Furniture"},
+	{Slug: "clothes", Name: "Clothes"},
+	{Slug: "other", Name: "Other"},
+}
+
+// itemTypes returns the request's item types, or the built-in ones when it
+// names none.
+func (r ScanRequest) itemTypes() []ItemTypeOption {
+	if len(r.ItemTypes) == 0 {
+		return BuiltinItemTypes
+	}
+	return r.ItemTypes
 }
 
 // FieldGuess is a single extracted field value plus a 0..1 confidence

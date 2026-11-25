@@ -42,8 +42,8 @@ const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
 	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
-	// The manifest carries the group's sellers (format 3.3), so it gets the
-	// same room as any other JSON document.
+	// The manifest carries the group's sellers (format 3.3) and item types
+	// (3.4), so it gets the same room as any other JSON document.
 	maxInbManifestBytes = maxJSONDocBytes
 )
 
@@ -257,8 +257,7 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		delivered: map[string]string{},
 		parked:    map[string]bool{},
 
-		draftIDs:   map[string]string{},
-		keptDrafts: map[string]bool{},
+		draftIDs: map[string]string{},
 
 		priceReading: types.PricesOmitZero,
 	}
@@ -453,11 +452,10 @@ type inbWalker struct {
 	sellerIDs map[string]string
 
 	// draftIDs maps an archived draft's UUID to the restored draft's DB id.
-	// keptDrafts holds the archived drafts a merge did not restore because
-	// the group has a draft with the same client key; links to them are
-	// left out without an error.
-	draftIDs   map[string]string
-	keptDrafts map[string]bool
+	// A link to an archived draft that is not in it (a draft a merge kept,
+	// one that failed to restore, one the archive does not carry) is left
+	// out without an error.
+	draftIDs map[string]string
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -474,7 +472,7 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		// prefix, so it must be matched before the file-bytes case below.
 		return w.handleFilesMember(hdr, r)
 	case hdr.Name == types.INBDraftsMember:
-		// Drafts document (format 3.4), also under `files/`.
+		// Drafts document (format 3.5), also under `files/`.
 		return w.handleDraftsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
@@ -507,7 +505,20 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 		return errxtrace.Wrap("failed to decode manifest document", err)
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
+	if err := w.restoreItemTypes(manifest.ItemTypes); err != nil {
+		return err
+	}
 	return w.restoreSellers(manifest.Sellers)
+}
+
+// restoreItemTypes maps the archived item types onto the destination group's
+// before the first item names one (#2802).
+func (w *inbWalker) restoreItemTypes(archived []types.INBItemType) error {
+	resolver, err := w.proc.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	return resolver.importArchived(w.ctx, archived, w.stats)
 }
 
 // restoreSellers finds or creates the destination seller of each archived
@@ -707,6 +718,14 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 		commodity.SellerID = &sellerID
 	}
 
+	resolver, err := l.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	if commodity.Type, err = resolver.resolve(w.ctx, commodity.Type, w.stats); err != nil {
+		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("commodity_id", c.ID))
+	}
+
 	// Mirror the XML restore: when the commodity's original currency matches the
 	// group currency, a converted price does not apply (the validator rejects a
 	// non-zero one in that case), so it restores as unknown.
@@ -829,7 +848,7 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // reference that arrived after the file's bytes. The attach is idempotent, so a
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
-	if fileUUID == "" || link.linkedType == "" || w.isKeptDraft(link) {
+	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
 		// fileUUID is empty for bytes that arrived before any reference
 		// could use them; they were dropped with a counted error.
 		return nil
@@ -1127,9 +1146,9 @@ func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, li
 func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool, holderID string) {
 	live := false
 	for _, link := range pending.links {
-		if link.linkedType == "" || w.isKeptDraft(link) {
-			// A file the kept draft used, and nothing else of the archive,
-			// is restored as a standalone file rather than lost.
+		if link.linkedType == "" || w.isUnrestoredDraft(link) {
+			// A file only drafts the restore did not recreate used is
+			// restored as a standalone file rather than lost.
 			standalone = true
 			continue
 		}

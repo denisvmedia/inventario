@@ -18,8 +18,9 @@ export interface FakeDraft {
   values: Record<string, unknown>
   revision: number
   // "discarding" is a draft whose discard has started: hidden from the list
-  // and GET, refused by every write.
-  status: "open" | "promoted" | "discarding"
+  // and GET, refused by every write. "archived" stands for a state the
+  // client does not know, served like an open draft.
+  status: "open" | "promoted" | "discarding" | "archived"
   promoted_commodity_id?: string
   // The key of the promotion that finished the draft.
   promotion_key?: string

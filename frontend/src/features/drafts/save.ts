@@ -14,6 +14,7 @@ import { HttpError } from "@/lib/http"
 import {
   createDraft,
   discardedConflict,
+  DRAFT_DISCARDED,
   DRAFT_PROMOTED,
   DRAFT_REVISION_CONFLICT,
   DraftStateError,
@@ -31,6 +32,11 @@ import {
 // own; a reload keeps it, so a retry after a lost response still finds the
 // draft. The base revision, the one the slot last saved or loaded, lives in
 // localStorage with the values it belongs to.
+//
+// A known limit: a browser that duplicates a tab copies its sessionStorage,
+// so the copy starts with the same client key and promotion key. Its saves
+// then go to the same draft, and the revision check keeps either tab from
+// overwriting the other; it does not get a draft of its own.
 const CLIENT_KEY_SUFFIX = ":client-key"
 const BASE_REVISION_SUFFIX = ":base-revision"
 // The promotion key lives in sessionStorage next to the client key: a
@@ -254,6 +260,9 @@ async function createOrFind(input: SaveDraftInput): Promise<Draft> {
       commodity_id: draft.promotedCommodityId ?? "",
       draft_id: draft.id,
     })
+  }
+  if (draft.status !== "open") {
+    throw new DraftStateError(DRAFT_DISCARDED, { draft_id: draft.id })
   }
   if (sameDraftValues(draft.values, input.values)) return draft
   const expected = input.lastSavedRevision ?? 1

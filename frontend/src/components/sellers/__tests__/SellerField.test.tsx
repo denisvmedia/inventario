@@ -236,10 +236,56 @@ describe("<SellerField />", () => {
 
   it("says so when the picked seller is not in the group any more", async () => {
     seed()
+    const served = serveSellers([hardware, market])
     const user = userEvent.setup()
     renderField({ initial: "s9" })
     expect(await screen.findByTestId("seller-gone")).toBeVisible()
+    // The list was fetched once more before the seller was called gone.
+    expect(served.gets).toBe(2)
     await user.click(screen.getByTestId("seller-clear"))
+    expect(screen.queryByTestId("seller-gone")).toBeNull()
+  })
+
+  it("trusts a fresh list over an old one that lacks the seller", async () => {
+    seed()
+    // The first list predates the seller; the next one has it.
+    const garden = { id: "s3", name: "Garden Center", item_count: 1 }
+    const served = { gets: 0 }
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+        served.gets++
+        const sellers = served.gets === 1 ? [hardware] : [hardware, garden]
+        return HttpResponse.json({
+          data: sellers.map((x) => ({ id: x.id, type: "sellers", attributes: x })),
+          meta: { sellers: sellers.length },
+        })
+      })
+    )
+    renderField({ initial: "s3" })
+    const trigger = await screen.findByRole("combobox", { name: "Seller" })
+    await waitFor(() => expect(trigger).toHaveTextContent("Garden Center"))
+    expect(served.gets).toBe(2)
+    expect(screen.queryByTestId("seller-gone")).toBeNull()
+  })
+
+  it("does not call the seller gone when the fresh fetch fails", async () => {
+    seed()
+    const served = { gets: 0 }
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+        served.gets++
+        if (served.gets > 1) return new HttpResponse(null, { status: 500 })
+        return HttpResponse.json({
+          data: [{ id: hardware.id, type: "sellers", attributes: hardware }],
+          meta: { sellers: 1 },
+        })
+      })
+    )
+    renderField({ initial: "s9" })
+    await screen.findByRole("combobox", { name: "Seller" })
+    await waitFor(() => expect(served.gets).toBe(2))
+    // Give the failed fetch time to settle.
+    await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.queryByTestId("seller-gone")).toBeNull()
   })
 

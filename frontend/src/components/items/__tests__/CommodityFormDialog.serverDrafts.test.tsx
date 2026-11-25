@@ -1,6 +1,7 @@
+import { useEffect, useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
-import { fireEvent, screen, waitFor } from "@testing-library/react"
+import { act, fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
@@ -283,6 +284,45 @@ describe("<CommodityFormDialog /> server drafts", () => {
     expect(fake.drafts.map((d) => d.values.name)).toEqual(["Kettle"])
   })
 
+  it("shows a type the group no longer has on the type field", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Dinghy", short_name: "Dinghy", type: "boat" } },
+    ])
+    server.use(
+      ...groupHandlers.list(groups),
+      http.put(apiUrl(`/g/${SLUG}/drafts/d1`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Unprocessable Entity",
+                error: {
+                  error: { data: { attributes: { values: { type: "no item type" } } } },
+                  errorCodes: {
+                    data: { attributes: { values: { type: { code: "item_type_unknown" } } } },
+                  },
+                },
+              },
+            ],
+          },
+          { status: 422 }
+        )
+      ),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    const { onOpenChange, input } = await openResumed("d1", "Dinghy")
+    await user.type(input, " 2")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    expect(await screen.findByTestId("draft-save-error")).toHaveTextContent(
+      "This type is not in the group."
+    )
+    expect(screen.getAllByText("This type is not in the group.")).toHaveLength(2)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(fake.drafts[0].revision).toBe(1)
+  })
+
   it("finishes a save whose response was lost instead of reporting a conflict", async () => {
     const fake = draftHandlers.backend(SLUG, [
       { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
@@ -478,4 +518,106 @@ describe("<CommodityFormDialog /> server drafts", () => {
       expect.objectContaining({ entity_type: "draft", entity_id: fake.drafts[0].id }),
     ])
   })
+})
+
+// The files of a draft that "Save as a new draft" could not link belong to
+// that visit of the form. A form opened later for another item must not link
+// them to its own draft.
+describe("<CommodityFormDialog /> files carried to a new draft", () => {
+  let harness: { close: () => void; openNew: () => void } | null = null
+
+  // CarryHarness opens draft d1, and lets the test close the form and open
+  // it again for a new item, as the Items page does.
+  function CarryHarness() {
+    const [state, setState] = useState<{ open: boolean; resume?: string }>({
+      open: true,
+      resume: "d1",
+    })
+    useEffect(() => {
+      harness = {
+        close: () => setState({ open: false }),
+        openNew: () => setState({ open: true }),
+      }
+    }, [])
+    return (
+      <GroupProvider>
+        <CommodityFormDialog
+          open={state.open}
+          onOpenChange={(open) => setState((prev) => ({ ...prev, open }))}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={vi.fn().mockResolvedValue({ id: "new-item" }) as never}
+          draftKey={DRAFT_KEY}
+          serverDrafts
+          resumeDraftId={state.resume}
+        />
+      </GroupProvider>
+    )
+  }
+
+  it.each(["discarded", "closed by the page"])(
+    "forgets them once the form is %s",
+    async (closing) => {
+      const fake = draftHandlers.backend(SLUG, [
+        { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
+      ])
+      fake.files.push({
+        id: "file-photo",
+        path: "lamp",
+        ext: ".jpg",
+        size_bytes: 10,
+        category: "images",
+        tags: [],
+        links: [
+          {
+            id: "link-1",
+            file_id: "file-photo",
+            entity_type: "draft",
+            entity_id: "d1",
+            meta: "images",
+          },
+        ],
+      })
+      server.use(...groupHandlers.list(groups), ...fake.handlers)
+      setAccessToken("good-token")
+      const user = userEvent.setup()
+      renderWithProviders({
+        initialPath: `/g/${SLUG}/commodities/new`,
+        routes: <Route path="/g/:groupSlug/commodities/new" element={<CarryHarness />} />,
+      })
+      const name = await screen.findByLabelText(/^Name$/i)
+      await waitFor(() => expect(name).toHaveValue("Lamp"))
+
+      // A conflict, then a new draft whose link to the old photo fails.
+      fake.drafts[0].revision = 2
+      await user.type(name, " (mine)")
+      await user.click(screen.getByLabelText(/Save as draft/i))
+      await user.click(screen.getByTestId("commodity-form-save-draft"))
+      await screen.findByTestId("draft-save-conflict")
+      fake.failAttach = 500
+      await user.click(screen.getByTestId("draft-conflict-save-new"))
+      expect(await screen.findByTestId("draft-save-error")).toBeInTheDocument()
+      fake.failAttach = null
+
+      if (closing === "discarded") {
+        await user.click(screen.getByTestId("commodity-form-cancel"))
+        await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+      } else {
+        act(() => harness?.close())
+      }
+      await waitFor(() => expect(screen.queryByLabelText(/^Name$/i)).not.toBeInTheDocument())
+
+      act(() => harness?.openNew())
+      await user.type(await fillManually(user), "Chair")
+      await user.click(screen.getByLabelText(/Save as draft/i))
+      await user.click(screen.getByTestId("commodity-form-save-draft"))
+      await waitFor(() => expect(fake.drafts).toHaveLength(3))
+      await waitFor(() => expect(screen.queryByLabelText(/^Name$/i)).not.toBeInTheDocument())
+      const chair = fake.drafts[2]
+      expect(chair.values).toMatchObject({ name: "Chair" })
+      expect(fake.files[0].links.map((l) => l.entity_id)).not.toContain(chair.id)
+    }
+  )
 })

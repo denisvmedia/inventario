@@ -188,11 +188,28 @@ describe("<InsuranceReportPage /> — item mode", () => {
     expect(screen.queryByTestId("report-item")).toBeNull()
   })
 
-  it("shows the error when the sellers cannot be loaded", () => {
+  it("does not wait for the sellers when the item has none", () => {
+    mockSellers({ isLoading: true })
+    renderPage("?mode=item&item=c1")
+    expect(screen.queryByTestId("insurance-report-loading")).toBeNull()
+    expect(screen.getByTestId("report-item")).toBeInTheDocument()
+  })
+
+  it("leaves the seller empty with a note when the sellers cannot be loaded", () => {
+    mockUseCommodity.mockReturnValue({
+      data: { commodity: { ...itemC1, seller_id: "s1" }, meta: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCommodity>)
     mockSellers({ isError: true })
     renderPage("?mode=item&item=c1")
-    expect(screen.getByTestId("insurance-report-error")).toBeInTheDocument()
-    expect(screen.queryByTestId("report-item")).toBeNull()
+    expect(screen.queryByTestId("insurance-report-error")).toBeNull()
+    const report = screen.getByTestId("report-item")
+    expect(within(report).getByTestId("report-value-unavailable")).toHaveTextContent(
+      "Could not load the seller."
+    )
+    // The rest of the report is there.
+    expect(within(report).getByText("SN-12345")).toBeInTheDocument()
   })
 
   it("detail fetch honors the raw item param even when it is absent from the list", () => {
@@ -255,16 +272,36 @@ describe("<InsuranceReportPage /> — location mode", () => {
     expect(within(report).getByText("$690.00")).toBeInTheDocument()
   })
 
-  it("waits for the sellers and shows their error in location mode too", () => {
+  it("waits for the sellers only when an item of the location has one", () => {
     mockSellers({ isLoading: true })
     const { unmount } = renderPage("?mode=location&location=loc1")
-    expect(screen.getByTestId("insurance-report-loading")).toBeInTheDocument()
-    expect(screen.queryByTestId("report-location")).toBeNull()
+    expect(screen.queryByTestId("insurance-report-loading")).toBeNull()
+    expect(screen.getByTestId("report-location")).toBeInTheDocument()
     unmount()
 
+    mockUseAllCommodities.mockReturnValue({
+      data: { commodities: [{ ...itemC1, seller_id: "s1" }, itemC2], total: 2, covers: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAllCommodities>)
+    renderPage("?mode=location&location=loc1")
+    expect(screen.getByTestId("insurance-report-loading")).toBeInTheDocument()
+    expect(screen.queryByTestId("report-location")).toBeNull()
+  })
+
+  it("leaves the seller empty with a note in location mode when the sellers fail", () => {
+    mockUseAllCommodities.mockReturnValue({
+      data: { commodities: [{ ...itemC1, seller_id: "s9" }, itemC2], total: 2, covers: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAllCommodities>)
     mockSellers({ isError: true })
     renderPage("?mode=location&location=loc1")
-    expect(screen.getByTestId("insurance-report-error")).toBeInTheDocument()
+    expect(screen.queryByTestId("insurance-report-error")).toBeNull()
+    const report = screen.getByTestId("report-location")
+    // Only the item with a seller gets the note; the other one has none.
+    expect(within(report).getAllByTestId("report-value-unavailable")).toHaveLength(1)
+    expect(within(report).getAllByTestId("report-location-item")).toHaveLength(2)
   })
 
   it("leaves unknown prices out of the totals and says so, but shows a zero", () => {

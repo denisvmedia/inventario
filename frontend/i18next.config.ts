@@ -273,6 +273,13 @@ export default defineConfig({
       "tags:stats.*",
       "tags:color.*",
       "tags:validation.*",
+      // itemTypes:validation.* — zod messages in features/itemTypes/schemas.ts
+      //   and the required / taken messages ItemTypeFormDialog sets, surfaced
+      //   through <FieldError>. Same pattern as auth:validation.*. (#2802)
+      // itemTypes:icons.* — ItemTypeIconPicker labels each icon via
+      //   `t(\`itemTypes:icons.${key}\`)` over ITEM_TYPE_ICON_KEYS.
+      "itemTypes:validation.*",
+      "itemTypes:icons.*",
       "tags:list.usageItems*",
       "tags:list.usageFiles*",
       "tags:usage.items*",

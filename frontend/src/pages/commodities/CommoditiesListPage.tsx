@@ -13,26 +13,16 @@ import {
   ListFilter,
   MapPinOff,
   Plus,
-  QrCode,
   Search,
-  Trash2,
+  type LucideIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
-import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { Page, PageHeader } from "@/components/ui/page"
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
 import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
@@ -44,7 +34,6 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import {
   Select,
   SelectContent,
@@ -54,6 +43,7 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CommodityBulkActions } from "@/components/items/CommodityBulkActions"
 import {
   CommodityPhotoCard,
   CommodityPhotoGrid,
@@ -72,25 +62,22 @@ import { useLocations } from "@/features/locations/hooks"
 import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
-import {
-  useBulkDeleteCommodities,
-  useBulkMoveCommodities,
-  useCommodities,
-  useCommodityTagCounts,
-} from "@/features/commodities/hooks"
+import { useCommodities, useCommodityTagCounts } from "@/features/commodities/hooks"
 import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
 import {
   COMMODITY_SORT_OPTIONS,
   COMMODITY_STATUSES,
   COMMODITY_STATUS_TONES,
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_STATUSES,
   type CommoditySortOption,
   type CommodityStatusValue,
-  type CommodityTypeValue,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+import {
+  useItemTypeFilterOptions,
+  useItemTypeLookup,
+  type ItemTypeDisplay,
+} from "@/features/itemTypes/hooks"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import {
   DEFAULT_COMMODITY_QUERY,
@@ -117,11 +104,10 @@ import {
   storeCommoditiesPageSize,
   type CommoditiesPageSize,
 } from "@/features/commodities/listContext"
+import { useCommoditySelection } from "@/features/commodities/selection"
 import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
-import { labelsPageHref } from "@/features/labels/links"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
@@ -135,12 +121,10 @@ import {
   useOpenedSavedView,
 } from "@/features/saved-views/SavedViewControl"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { listContextFromLocation, type ListContext } from "@/lib/list-context"
 import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
-import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
 
 // "grid" is the photo card grid, "compact" the cards with a small
@@ -161,9 +145,9 @@ function isViewMode(value: unknown): value is ViewMode {
 // the BE. The layout toggle and the page size persist per device via
 // localStorage and are also URL-syncable for shared links.
 //
-// Bulk actions: delete + move-to-area, with confirm dialogs and toast.
-// Selection state is page-local (cleared when filters/page change) so
-// "Select all" never silently picks rows the user can't see.
+// Bulk actions (CommodityBulkActions): move, edit tags, type and status,
+// print labels and delete, on the picked rows or on every item the query
+// matches. A new query clears the selection.
 export function CommoditiesListPage() {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
@@ -187,7 +171,7 @@ export function CommoditiesListPage() {
   const listParams = useMemo(() => parseCommoditiesListParams(searchParams), [searchParams])
   const { page, perPage, query } = listParams
   const search = query.text
-  const types = query.types as CommodityTypeValue[]
+  const types = query.types
   const statuses = query.statuses as CommodityStatusValue[]
   const areaId = query.areaId
   const warrantyFilter = query.warrantyStatuses as CommodityWarrantyStatus[]
@@ -301,56 +285,17 @@ export function CommoditiesListPage() {
   // selects. The schema only carries area_id; location_id is UI-only.
   const locationsQuery = useLocations({ enabled })
 
-  const bulkDelete = useBulkDeleteCommodities()
-  const undoDelete = useUndoItemDelete()
-  const bulkMove = useBulkMoveCommodities()
   const create = useSubmitNewItem()
   const toast = useAppToast()
-  const confirm = useConfirm()
 
-  // ---- Selection (page-local) -------------------------------------------
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  // Reset selection whenever the visible page changes — the user can't
-  // see the rows they had checked, so silently keeping them queued for a
-  // bulk action would surprise them.
-  useEffect(() => {
-    // Clear page-local selection on filter/page/page size change.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setSelected(new Set())
-  }, [page, perPage, queryKey])
-
-  function toggleSelected(id: string) {
-    setSelected((prev) => {
-      const next = new Set(prev)
-      if (next.has(id)) next.delete(id)
-      else next.add(id)
-      return next
-    })
-  }
-  function toggleSelectAll(rows: Commodity[]) {
-    setSelected((prev) => {
-      const ids = rows.map((r) => r.id ?? "").filter(Boolean)
-      // Derive the action from the SAME "every visible row selected"
-      // predicate the checkbox renders with — not a `prev.size ===
-      // rows.length` compare. A size compare wedges the toggle whenever
-      // `selected` still holds ids outside the visible set (e.g. the
-      // client-side warranty filter narrows `rows` without clearing
-      // selection): you could no longer uncheck in one click. Add/remove
-      // only the visible ids so off-page selection is preserved too.
-      const allVisibleSelected = ids.length > 0 && ids.every((id) => prev.has(id))
-      const next = new Set(prev)
-      for (const id of ids) {
-        if (allVisibleSelected) next.delete(id)
-        else next.add(id)
-      }
-      return next
-    })
-  }
+  // ---- Selection ---------------------------------------------------------
+  // Picked rows, or every item the query matches ("Select all N matching").
+  // A new query clears it, and so does a new page or page size unless every
+  // matching item is selected; see features/commodities/selection.
+  const selection = useCommoditySelection(queryKey, `${page}/${perPage}`)
 
   // ---- Dialogs -----------------------------------------------------------
   const [createOpen, setCreateOpen] = useState(false)
-  const [moveOpen, setMoveOpen] = useState(false)
-  const [moveTargetArea, setMoveTargetArea] = useState<string>("")
   // /g/:slug/commodities/new mounts this same list page and is
   // expected to auto-open the create dialog (router comment, AppSidebar
   // Add-item entry, Dashboard mobile CTA all point here). Detect the
@@ -426,7 +371,7 @@ export function CommoditiesListPage() {
     return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
   }
 
-  function toggleType(type: CommodityTypeValue) {
+  function toggleType(type: string) {
     updateQuery({ types: toggled(query.types, type) })
   }
   function toggleStatus(status: CommodityStatusValue) {
@@ -505,10 +450,9 @@ export function CommoditiesListPage() {
   const serviceCounts = serviceCountsQuery.data ?? {}
   const total = list.data?.total ?? 0
   const totalPages = Math.max(1, Math.ceil(total / perPage))
-  // Select-all reflects the visible (post-warranty-filter) page only, so
-  // the bulk bar's checkbox never silently queues rows the user can't
-  // see. Mirrors the table-header checkbox state.
-  const allRowsSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
+  // The rows of this page the selection covers, for the row checkboxes.
+  const pageIds = rows.map((r) => r.id ?? "").filter(Boolean)
+  const checked = selection.checkedOn(pageIds)
   const isLoading = list.isLoading
   const isError = list.isError
   const isEmpty = !isLoading && !isError && rows.length === 0
@@ -529,6 +473,9 @@ export function CommoditiesListPage() {
     }
     return (id?: string) => (id ? (map.get(id) ?? "") : "")
   }, [areas.data])
+  const itemTypes = useItemTypeLookup()
+  const typeIcon = useCallback((type?: string) => itemTypes.get(type)?.Icon, [itemTypes])
+  const typeOptions = useItemTypeFilterOptions(types)
   const tagIndex = useTagIndex("commodity")
   const resolveTag = tagIndex.resolve
   const tagLabel = useCallback((slug: string) => resolveTag(slug).label, [resolveTag])
@@ -572,42 +519,6 @@ export function CommoditiesListPage() {
     }
   }
 
-  async function handleBulkDelete() {
-    const ids = [...selected]
-    if (ids.length === 0) return
-    const ok = await confirm({
-      title: t("commodities:bulk.deleteTitle", { count: ids.length }),
-      description: t("commodities:bulk.deleteDescription", { count: ids.length }),
-      confirmLabel: t("common:actions.delete"),
-      destructive: true,
-    })
-    if (!ok) return
-    try {
-      await bulkDelete.mutateAsync(ids)
-      toast.success(t("commodities:toast.bulkDeleted", { count: ids.length }), {
-        action: undoDelete(ids),
-      })
-      setSelected(new Set())
-    } catch {
-      toast.error(t("commodities:toast.bulkDeleteError"))
-    }
-  }
-
-  async function handleBulkMove() {
-    if (!moveTargetArea) return
-    const ids = [...selected]
-    if (ids.length === 0) return
-    try {
-      await bulkMove.mutateAsync({ ids, areaId: moveTargetArea })
-      toast.success(t("commodities:toast.bulkMoved", { count: ids.length }))
-      setSelected(new Set())
-      setMoveOpen(false)
-      setMoveTargetArea("")
-    } catch {
-      toast.error(t("commodities:toast.bulkMoveError"))
-    }
-  }
-
   return (
     <>
       <RouteTitle title={t("commodities:list.documentTitle")} />
@@ -638,6 +549,7 @@ export function CommoditiesListPage() {
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           types={types}
+          typeOptions={typeOptions}
           statuses={statuses}
           areaId={areaId}
           warrantyFilter={warrantyFilter}
@@ -671,80 +583,19 @@ export function CommoditiesListPage() {
           savedViews={<SavedViewControl query={query} layout={viewMode} />}
         />
 
-        {selected.size > 0 ? (
-          <BulkActionBar
-            label={t("commodities:bulk.selected", { count: selected.size })}
-            regionLabel={t("commodities:bulk.regionLabel")}
-            selectAll={{
-              checked: allRowsSelected,
-              onCheckedChange: () => toggleSelectAll(rows),
-              label: t("commodities:list.selectAll"),
-              "data-testid": "commodities-select-all",
-            }}
-            data-testid="commodities-bulk-bar"
-          >
-            <Button
-              variant="outline"
-              size="sm"
-              // Locked = aria-disabled + click-guard rather than the
-              // `disabled` attribute, so the "why" tooltip stays
-              // hover-discoverable (a real `disabled` button gets
-              // `pointer-events-none` and never shows its title).
-              onClick={() => {
-                if (!migrationLock.locked) setMoveOpen(true)
-              }}
-              aria-disabled={migrationLock.locked || undefined}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              // Neutralize the hover bg too: Button's `disabled:` styles
-              // don't apply under `aria-disabled`, so without this the
-              // locked button would still light up on hover.
-              className={
-                migrationLock.locked
-                  ? "cursor-not-allowed opacity-50 hover:bg-background hover:text-foreground"
-                  : undefined
-              }
-              data-testid="commodities-bulk-move"
-            >
-              {t("commodities:bulk.moveButton")}
-            </Button>
-            {/* Print labels (#2807): a label sheet for the selection. */}
-            {slug ? (
-              <Button asChild variant="outline" size="sm" className="gap-1.5">
-                <Link
-                  to={labelsPageHref(slug, { items: [...selected] })}
-                  data-testid="commodities-bulk-print-labels"
-                >
-                  <QrCode className="size-4" aria-hidden="true" />
-                  {t("commodities:bulk.printLabels")}
-                </Link>
-              </Button>
-            ) : null}
-            <Button
-              variant="destructive"
-              size="sm"
-              // `disabled` is reserved for the in-flight delete; the
-              // migration lock uses aria-disabled + click-guard so the
-              // tooltip remains discoverable (see Move button above).
-              onClick={() => {
-                if (!migrationLock.locked) handleBulkDelete()
-              }}
-              disabled={bulkDelete.isPending}
-              aria-disabled={migrationLock.locked || undefined}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              // Neutralize the hover bg under `aria-disabled` (Button's
-              // `disabled:` styles only key off the real attribute).
-              className={
-                migrationLock.locked
-                  ? "cursor-not-allowed opacity-50 hover:bg-destructive hover:text-white"
-                  : undefined
-              }
-              data-testid="commodities-bulk-delete"
-            >
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t("commodities:bulk.deleteButton")}
-            </Button>
-          </BulkActionBar>
-        ) : null}
+        <CommodityBulkActions
+          selection={selection}
+          rows={rows}
+          total={total}
+          // A placeholder is the previous query's page, whose digest names
+          // other items; "Select all matching" waits for the real one.
+          selectionDigest={list.isPlaceholderData ? "" : (list.data?.selectionDigest ?? "")}
+          query={query}
+          slug={slug}
+          areas={areas.data ?? []}
+          listContext={listContext}
+          locked={migrationLock.locked}
+        />
 
         {openedView.broken ? (
           <SavedViewQueryErrorAlert view={openedView.broken} />
@@ -783,10 +634,11 @@ export function CommoditiesListPage() {
             rows={rows}
             slug={slug}
             listContext={listContext}
-            selected={selected}
-            onToggleSelected={toggleSelected}
+            selected={checked}
+            onToggleSelected={(id) => selection.toggle(id, pageIds)}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            typeIcon={typeIcon}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
             tagHref={tagHref}
@@ -800,11 +652,12 @@ export function CommoditiesListPage() {
             rows={rows}
             slug={slug}
             listContext={listContext}
-            selected={selected}
-            onToggleSelected={toggleSelected}
-            onToggleSelectAll={() => toggleSelectAll(rows)}
+            selected={checked}
+            onToggleSelected={(id) => selection.toggle(id, pageIds)}
+            onToggleSelectAll={() => selection.togglePage(pageIds)}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            typeIcon={typeIcon}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
             tagHref={tagHref}
@@ -847,45 +700,6 @@ export function CommoditiesListPage() {
         resumeDraftId={resumeDraftId}
       />
 
-      <Dialog open={moveOpen} onOpenChange={setMoveOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>{t("commodities:bulk.moveTitle", { count: selected.size })}</DialogTitle>
-            <DialogDescription>{t("commodities:bulk.moveDescription")}</DialogDescription>
-          </DialogHeader>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="bulk-move-area">{t("commodities:bulk.moveTargetLabel")}</Label>
-            {/* eslint-disable-next-line no-restricted-syntax -- bulk move-to-area utility selector; native <select> retained, covered by native-select e2e (commodity-bulk-and-filter.spec.ts) */}
-            <select
-              id="bulk-move-area"
-              value={moveTargetArea}
-              onChange={(e) => setMoveTargetArea(e.target.value)}
-              className="border-input bg-transparent rounded-md border px-3 py-2 text-sm"
-              data-testid="bulk-move-area"
-            >
-              <option value="">{t("commodities:bulk.moveTargetPlaceholder")}</option>
-              {withId(areas.data).map((a) => (
-                <option key={a.id} value={a.id}>
-                  {a.name}
-                </option>
-              ))}
-            </select>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setMoveOpen(false)}>
-              {t("common:actions.cancel")}
-            </Button>
-            <Button
-              onClick={handleBulkMove}
-              disabled={!moveTargetArea || bulkMove.isPending}
-              data-testid="bulk-move-confirm"
-            >
-              {t("commodities:bulk.moveConfirm")}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
       {/*
         The dedicated preview Sheet that used to live here was
         replaced in #1546 by the modal-routes pattern: a row click
@@ -903,7 +717,9 @@ export function CommoditiesListPage() {
 interface ToolbarProps {
   searchInput: string
   onSearchInput: (v: string) => void
-  types: CommodityTypeValue[]
+  types: string[]
+  // The types the filter offers, in the order shown.
+  typeOptions: ItemTypeDisplay[]
   statuses: CommodityStatusValue[]
   areaId: string
   warrantyFilter: CommodityWarrantyStatus[]
@@ -917,7 +733,7 @@ interface ToolbarProps {
   sellerIds: string[]
   sellers: Seller[]
   hasFilters: boolean
-  onToggleType: (t: CommodityTypeValue) => void
+  onToggleType: (t: string) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
   onToggleSeller: (id: string) => void
@@ -979,19 +795,17 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuLabel>{t("commodities:filter.type")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {COMMODITY_TYPES.map((tp) => {
-            const Icon = COMMODITY_TYPE_ICONS[tp]
-            return (
-              <DropdownMenuCheckboxItem
-                key={tp}
-                checked={props.types.includes(tp)}
-                onCheckedChange={() => props.onToggleType(tp)}
-              >
-                <Icon aria-hidden="true" />
-                {t(`commodities:type.${tp}`)}
-              </DropdownMenuCheckboxItem>
-            )
-          })}
+          {props.typeOptions.map(({ slug, label, Icon }) => (
+            <DropdownMenuCheckboxItem
+              key={slug}
+              checked={props.types.includes(slug)}
+              onCheckedChange={() => props.onToggleType(slug)}
+              data-testid={`commodities-filter-type-${slug}`}
+            >
+              <Icon aria-hidden="true" />
+              {label}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -1376,10 +1190,12 @@ interface CommoditiesGridProps {
   slug?: string
   // The list the rows belong to; item links carry it in `?from=`.
   listContext: ListContext
-  selected: Set<string>
+  selected: ReadonlySet<string>
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
   areaName: (id?: string) => string
+  // The icon of an item type, by slug.
+  typeIcon: (type?: string) => LucideIcon | undefined
   // Resolves a stored tag slug to the tag's label (slug while unknown).
   tagLabel: (slug: string) => string
   // Resolves a stored tag slug to its label and color.
@@ -1411,6 +1227,7 @@ function CommoditiesGrid({
   onToggleSelected,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   resolveTag,
   tagHref,
@@ -1428,6 +1245,7 @@ function CommoditiesGrid({
       onToggleSelected,
       onPreview,
       areaName,
+      typeIcon,
       tagLabel,
       resolveTag,
       tagHref,
@@ -1468,6 +1286,7 @@ function CommodityGridCard({
   onToggleSelected,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   resolveTag,
   tagHref,
@@ -1539,7 +1358,8 @@ function CommodityGridCard({
             />
             <CommodityThumb
               cover={row.cover}
-              type={row.type as CommodityTypeValue | undefined}
+              type={row.type}
+              icon={typeIcon(row.type)}
               name={row.name}
               size={36}
               testId="commodity-card-thumb"
@@ -1657,6 +1477,7 @@ function CommoditiesTable({
   onToggleSelectAll,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   currency,
   loanCounts,
@@ -1721,7 +1542,8 @@ function CommoditiesTable({
                 <div className="pointer-events-none">
                   <CommodityThumb
                     cover={row.cover}
-                    type={row.type as CommodityTypeValue | undefined}
+                    type={row.type}
+                    icon={typeIcon(row.type)}
                     name={row.name}
                     size={36}
                     testId="commodity-row-thumb"

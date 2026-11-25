@@ -32,6 +32,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityDraftFactory := NewCommodityDraftRegistryFactory(commodityFactory, fileFactory)
 	intakeFactory := NewIntakeRegistryFactory(fileFactory)
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
+	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -75,6 +76,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityDraftRegistryFactory = commodityDraftFactory
 	fs.IntakeRegistryFactory = intakeFactory
 	fs.SellerRegistryFactory = sellerFactory
+	fs.ItemTypeRegistryFactory = itemTypeFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -125,6 +127,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.BackofficeUserMFASecretRegistry = NewBackofficeUserMFASecretRegistry()
 	groupReg := NewLocationGroupRegistry()
 	fs.LocationGroupRegistry = groupReg
+	itemTypeFactory.SetLocationGroupRegistry(groupReg)
 	membershipReg := NewGroupMembershipRegistry()
 	membershipReg.SetUserRegistry(fs.UserRegistry)
 	fs.GroupMembershipRegistry = membershipReg
@@ -147,7 +150,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
-	fs.GroupPurger = NewGroupPurger(
+	groupPurger := NewGroupPurger(
 		locationFactory,
 		areaFactory,
 		commodityFactory,
@@ -174,11 +177,13 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,
 	)
+	groupPurger.SetItemTypeFactory(itemTypeFactory)
+	fs.GroupPurger = groupPurger
 	// UserPurger (#2116): clears a single user's auth/identity rows during the
 	// admin user hard-delete (and, since #2147, the user's group_invites_audit
 	// references). Takes the plain singleton registries that own the shared
 	// in-memory maps; all are set above, so it can be wired here.
-	fs.UserPurger = NewUserPurger(
+	userPurger := NewUserPurger(
 		fs.RefreshTokenRegistry,
 		apiTokenReg,
 		fs.UserMFASecretRegistry,
@@ -196,6 +201,8 @@ func NewFactorySet() *registry.FactorySet {
 		fileFactory,
 		savedViewFactory,
 	)
+	userPurger.SetItemTypeFactory(itemTypeFactory)
+	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request
 	// context, with no cheap installation-wide roll-up. Rather than range

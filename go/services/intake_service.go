@@ -95,9 +95,6 @@ type IntakeService struct {
 	drafts     *CommodityDraftService
 	cfg        IntakeConfig
 	now        func() time.Time
-	// typeKnown reports whether the group has an item type; nil uses the
-	// built-in types.
-	typeKnown func(ctx context.Context, t string) bool
 }
 
 // NewIntakeService builds the service. scan may be nil or have no provider;
@@ -450,10 +447,7 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 			return nil, err
 		}
 	}
-	input := intakeDraftInput{sellers: set.SellerRegistry, typeKnown: s.typeKnown}
-	if input.typeKnown == nil {
-		input.typeKnown = func(_ context.Context, t string) bool { return models.CommodityType(t).IsValid() }
-	}
+	input := intakeDraftInput{sellers: set.SellerRegistry, types: set.ItemTypeRegistry}
 
 	result := &IntakeDraftsResult{}
 	for _, cand := range candidates {
