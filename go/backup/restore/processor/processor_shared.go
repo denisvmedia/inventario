@@ -418,7 +418,7 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 
 // clearExistingData removes all existing data for full replace strategy. The
 // group's Trash is emptied first: an item or file waiting there would otherwise
-// keep its UUID and collide with the archive's copy. Then three passes, in this
+// keep its UUID and collide with the archive's copy. Then four passes, in this
 // order:
 //
 //  1. PurgeLocationRecursive per location — cascades areas, their commodities,
@@ -436,7 +436,7 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 //     standalone files and any orphan. linked_entity_type='export' is skipped:
 //     that is the archive being restored plus the backup history, not inventory.
 //
-// Pass 2 sits BETWEEN the other two on purpose: DeleteCommodityRecursive cleans a
+// Pass 2 runs before the sweep on purpose: DeleteCommodityRecursive cleans a
 // commodity's own files (row + blob + thumbnails) instead of having them yanked
 // out from under a live row by the sweep.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
