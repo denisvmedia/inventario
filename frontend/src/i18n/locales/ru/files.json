@@ -255,6 +255,7 @@
     "titleWithName": "Привязать существующий файл к {{name}}"
   },
   "links": {
+    "draftName": "Черновик: {{name}}",
     "remove": "Отвязать от {{name}}",
     "removed": "Отвязан от {{name}}",
     "removedLast": "Отвязан от {{name}}. Файл остаётся на странице «Файлы».",
@@ -267,7 +268,8 @@
     "type": {
       "area": "Зона",
       "commodity": "Предмет",
-      "location": "Локация"
+      "location": "Локация",
+      "draft": "Черновик"
     }
   }
 }

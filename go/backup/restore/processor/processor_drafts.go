@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"math"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -20,6 +21,12 @@ import (
 
 // draftsStep is the restore log step of the drafts member.
 const draftsStep = "Drafts"
+
+// maxRestoredDraftRevision is the highest archived revision a restore
+// accepts. The revision column is a 32-bit INTEGER and every save or
+// promotion adds one, so a restored draft keeps at least as many saves of
+// room as the revision it starts with.
+const maxRestoredDraftRevision = math.MaxInt32 / 2
 
 // handleDraftsMember decodes the drafts document (format 3.5) and recreates
 // each draft. It comes after the location documents, so the areas the drafts
@@ -78,6 +85,9 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	createdAt, updatedAt, err := a.Timestamps()
 	if err != nil {
 		return false, errx.Classify(errxtrace.Wrap("failed to convert draft", err), ErrMalformedEntity)
+	}
+	if a.Revision > maxRestoredDraftRevision {
+		return false, fmt.Errorf("draft %s has revision %d; a restore accepts at most %d", a.ID, a.Revision, maxRestoredDraftRevision)
 	}
 	draft := models.CommodityDraft{ClientKey: a.ClientKey, Values: w.restoreDraftValues(a.Values)}
 	if err := draft.ValidateFields(w.ctx); err != nil {

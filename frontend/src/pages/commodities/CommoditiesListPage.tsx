@@ -51,6 +51,7 @@ import {
   type CommodityCardProps,
 } from "@/components/items/CommodityPhotoCard"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { DraftsCard } from "@/components/items/DraftsCard"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
 import { TagPill } from "@/components/tags/TagPill"
@@ -61,11 +62,8 @@ import { useLocations } from "@/features/locations/hooks"
 import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
-import {
-  useCommodities,
-  useCommodityTagCounts,
-  useCreateCommodity,
-} from "@/features/commodities/hooks"
+import { useCommodities, useCommodityTagCounts } from "@/features/commodities/hooks"
+import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
 import {
   COMMODITY_SORT_OPTIONS,
   COMMODITY_STATUSES,
@@ -287,7 +285,7 @@ export function CommoditiesListPage() {
   // selects. The schema only carries area_id; location_id is UI-only.
   const locationsQuery = useLocations({ enabled })
 
-  const create = useCreateCommodity()
+  const create = useSubmitNewItem()
   const toast = useAppToast()
 
   // ---- Selection ---------------------------------------------------------
@@ -306,6 +304,8 @@ export function CommoditiesListPage() {
   // /commodities so the URL doesn't stay pinned to /new after the
   // dialog dismisses without a successful submit.
   const isCreateRoute = listLocation.pathname.endsWith("/commodities/new")
+  // /commodities/new?draft=<id> opens a server draft to finish it (#2812).
+  const resumeDraftId = isCreateRoute ? new URLSearchParams(listLocation.search).get("draft") : null
   useEffect(() => {
     // Mirror the disabled state of the toolbar's Add button: while a
     // currency migration is running on this group, commodity writes
@@ -496,8 +496,8 @@ export function CommoditiesListPage() {
   // detail page. The Vue app did the same, and the design mock keeps
   // the just-created item front-and-centre so the user can immediately
   // attach files / fix typos. The list page is one back-button away.
-  async function handleCreate(values: CreateCommodityRequest) {
-    const created = await create.mutateAsync(values)
+  async function handleCreate(values: CreateCommodityRequest, draft?: DraftRef) {
+    const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
     setCreateOpen(false)
     if (slug && created?.id) {
@@ -542,6 +542,8 @@ export function CommoditiesListPage() {
             </Button>
           }
         />
+
+        <DraftsCard />
 
         <Toolbar
           searchInput={searchInput}
@@ -684,6 +686,7 @@ export function CommoditiesListPage() {
       </Page>
 
       <CommodityFormDialog
+        key={resumeDraftId ?? "new"}
         open={createOpen}
         onOpenChange={handleCreateOpenChange}
         mode="create"
@@ -693,6 +696,8 @@ export function CommoditiesListPage() {
         onSubmit={handleCreate}
         isPending={create.isPending}
         draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+        serverDrafts
+        resumeDraftId={resumeDraftId}
       />
 
       {/*

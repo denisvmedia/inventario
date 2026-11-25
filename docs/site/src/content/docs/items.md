@@ -82,7 +82,7 @@ The form is split across the five steps. Only a handful of fields are required
 | Field | Notes |
 | --- | --- |
 | **Name** * | The full name, e.g. "Bosch SMV6ZCX42E dishwasher". |
-| **Short name** * | A 1–40 character label used in compact lists. |
+| **Short name** * | A 1–40 character label used in compact lists. On a new item it follows the name as you type, cut to whole words of up to 20 characters, until you type a short name of your own. |
 | **Brand** | Who made it, e.g. "Bosch". Up to 100 characters. As you type, the brands already used in your group are suggested, most used first; pick one with a click or with the arrow keys and Enter. |
 | **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Compact cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. Photo cards show "Brand · Model" under the name when the item has either. |
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
@@ -190,16 +190,85 @@ totals; see [Reports](../reports/).
 
 ## Save as draft
 
-A **Save as draft** toggle sits above the steps on every form step. With it on,
-the item is kept as unfinished work so you can capture a few details now and
-finish later — drafts show a **Draft** badge in lists. A draft also skips the
+### Drafts of a new item
+
+When you add an item, turn on **Save as draft** to keep what you have so far
+and finish it later, on this or any other device. A **Save draft** button then
+appears on every step. It saves the form as it is: nothing is required, not
+even a name, and the files on the **Files** step are uploaded with the draft.
+A draft is saved for the whole group, so everyone in it can see it.
+
+Your drafts are listed in a **Drafts** card at the top of the **Items** page,
+with the time each was saved and how many files it has. The card is hidden
+while there are none.
+
+- **Continue** opens the draft in the **Add item** dialog with its values and
+  files. Turn **Save as draft** on and click **Save draft** to save your
+  changes, or finish the item and click **Add item** to create it. The draft's
+  files move to the new item, and the draft is gone. Clicking **Add item**
+  again after a lost connection does not create a second item.
+- **Discard** deletes the draft. Its files that nothing else uses go to the
+  [Trash](../trash/), where you can restore them as standalone files. Files
+  that are also attached to something else stay where they are.
+
+Members with the **Viewer** role see the card but cannot continue or discard a
+draft.
+
+A draft is not an item. It is not in item lists, counts, search results,
+reports, saved views or reminders, and it never expires. The files saved with
+a draft are ordinary files: you find them on the
+[Files](../files-and-photos/) page, attached to **Draft:** and the draft's
+name. A [backup](../backup-and-restore/) of the
+whole group includes the drafts and their files, and restoring it brings them
+back. [Deleting your account](../settings-and-account/) deletes the drafts
+you started; their files are kept as standalone files.
+
+If someone saves the same draft on another device after you opened it, saving
+yours does not overwrite theirs. The dialog says that the draft changed and
+offers **Load the newer version** or **Save as a new draft**. A new draft gets
+the files saved with the old one too; the old draft keeps them as well.
+
+If the draft was finished or discarded after you opened it, on another device
+or in another tab, **Save draft** and **Add item** do not save to it, and the
+dialog says so.
+**Save as a new draft** keeps what you entered as a draft of its own. For a
+draft that became an item, **Open item** goes to that item instead and drops
+what you entered in the dialog. A finished draft does not come back in the
+**Drafts** card.
+
+A draft keeps the [seller](../sellers/) you picked. If someone deletes that
+seller before you finish, the **Seller** field says so, and the item is not
+added until you pick another seller or clear the field.
+
+The same goes for the [item type](../item-types/). If someone deletes the type
+the draft names, **Save draft** and **Add item** say so on the **Type** field,
+and neither goes through until you pick another type.
+
+### Drafts of an existing item
+
+When you edit an item, the **Save as draft** switch marks the item itself as
+unfinished. Such an item shows a **Draft** badge in lists. It also skips the
 check that a price in another currency has an amount in the group currency.
 An unknown purchase date or price doesn't make an item a draft: you can leave
 those fields blank on a finished item too.
 
+### Saved on this device
+
+While the **Add item** dialog is open, what you type and the files you add are
+also kept in this browser, so a reload or a closed tab does not lose them. That
+copy stays on this device only; to continue on another device, save a draft.
+
+- If a draft cannot be saved, for example while you are offline, the dialog
+  says so and keeps your input on this device. Click **Retry** when you are
+  back online. A file that was already uploaded is not uploaded again.
+- When the dialog opens with input kept on this device that is not saved as a
+  draft yet, a **Restored from this device** note says so.
+
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
-**Save as draft**, **Discard**, or **Keep editing**.
+**Save as draft**, **Discard**, or **Keep editing**. **Save as draft** saves a
+draft as described above. When you continue a draft, **Discard changes**
+drops only what you changed since it was last saved.
 :::
 
 ## The item detail page

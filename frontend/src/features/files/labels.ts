@@ -86,9 +86,29 @@ export function useLinkTypeLabel(): (entityType: string | undefined) => string {
         return t("files:links.type.location", { defaultValue: "Location" })
       case "area":
         return t("files:links.type.area", { defaultValue: "Area" })
+      case "draft":
+        return t("files:links.type.draft", { defaultValue: "Draft" })
       default:
         return entityType ?? ""
     }
+  }
+}
+
+// useLinkName is the name a file's link shows: the entity's name, or its
+// kind when the name is unknown. A draft reads "Draft: <name>", so it is not
+// taken for an item with the same name. The server names an open draft only;
+// a link to a draft being discarded is left out of the file.
+export function useLinkName(): (link: { entity_type?: string; entity_name?: string }) => string {
+  const { t } = useTranslation()
+  const typeLabel = useLinkTypeLabel()
+  return (link) => {
+    if (link.entity_type === "draft" && link.entity_name) {
+      return t("files:links.draftName", {
+        name: link.entity_name,
+        defaultValue: "Draft: {{name}}",
+      })
+    }
+    return link.entity_name || typeLabel(link.entity_type)
   }
 }
 
@@ -99,10 +119,11 @@ export function useLinkSummary(): (
   links: { entity_type?: string; entity_name?: string }[]
 ) => string {
   const { t } = useTranslation()
-  const typeLabel = useLinkTypeLabel()
+  const linkName = useLinkName()
   return (links) => {
-    if (links.length === 0) return ""
-    const first = links[0]?.entity_name || typeLabel(links[0]?.entity_type)
+    const [head] = links
+    if (!head) return ""
+    const first = linkName(head)
     if (links.length === 1) return first
     return t("files:links.summary", {
       first,
