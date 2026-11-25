@@ -7,7 +7,7 @@ import { searchMatchText } from "@/components/items/SearchMatchHint"
 import { formatAssetId } from "@/features/commodities/asset-id"
 import {
   commodityListHref,
-  DEFAULT_COMMODITY_QUERY,
+  commodityTagHref,
   type CommoditySearchMatch,
 } from "@/features/commodities/query"
 
@@ -47,15 +47,14 @@ export function areaItemsHref(slug: string, areaId: string): string {
   return commodityListHref(slug, { areaId })
 }
 
-// The items carrying an item tag, or the files carrying a file tag.
+// The items carrying an item tag, or the files carrying a file tag, as the
+// Tags page links them.
 export function tagListHref(slug: string, tag: Pick<TagAttrs, "slug" | "kind">): string {
   const tagSlug = tag.slug ?? ""
   if (tag.kind === "file") {
-    return `${groupPath(slug)}/files?tags=${encodeURIComponent(tagSlug)}`
+    return `${groupPath(slug)}/files?${new URLSearchParams({ tags: tagSlug })}`
   }
-  return commodityListHref(slug, {
-    tags: { ...DEFAULT_COMMODITY_QUERY.tags, include: [tagSlug] },
-  })
+  return commodityTagHref(slug, tagSlug)
 }
 
 // The line under an item result: where the search text was found when the

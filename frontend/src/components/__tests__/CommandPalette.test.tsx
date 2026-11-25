@@ -197,7 +197,7 @@ describe("<CommandPalette /> from the TopBar", () => {
     await user.click(await within(palette).findByTestId("palette-tag-list-t1"))
     await waitFor(() =>
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/g/household/commodities?tags=garage"
+        "/g/household/commodities?inactive=1&tags=garage"
       )
     )
     // Showing a list is not opening a result: nothing is remembered.

@@ -228,7 +228,7 @@ describe("<SearchPage />", () => {
     expect(screen.getByTestId("result-tag-t1")).toHaveTextContent("Item tag")
     expect(screen.getByTestId("result-tag-list-t1")).toHaveAttribute(
       "href",
-      "/g/household/commodities?tags=garage"
+      "/g/household/commodities?inactive=1&tags=garage"
     )
     expect(screen.getByTestId("result-tag-t2")).toHaveTextContent("File tag")
     expect(screen.getByTestId("result-tag-list-t2")).toHaveAttribute(
