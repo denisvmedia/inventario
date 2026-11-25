@@ -117,6 +117,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   open. Before, an item clicked within a moment of the list loading closed
   again and the list came back
   ([#2825](https://github.com/denisvmedia/inventario/pull/2825)).
+- The Files page, opened on a page past the last one (for example after a save
+  took the last file off it), moves to the last page with files instead of an
+  empty page without pagination
+  ([#2825](https://github.com/denisvmedia/inventario/pull/2825)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
