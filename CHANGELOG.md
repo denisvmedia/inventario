@@ -98,7 +98,7 @@ the section matching the tag and publishes it as the GitHub Release body. See
   window is dragged across that width and back. The tour now hides while the
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
-  ([#PRNUM](https://github.com/denisvmedia/inventario/pull/PRNUM)).
+  ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
 
 ### Security
 
