@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import { Box, FilePen, MapPin, Package, X } from "lucide-react"
+import { Box, FilePen, MapPin, Package, ScanText, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ordinaryLinks, type FileEntity, type FileLink } from "@/features/files/api"
@@ -37,6 +37,8 @@ function LinkIcon({ entityType }: { entityType?: string }) {
       return <Box className={className} aria-hidden="true" />
     case "draft":
       return <FilePen className={className} aria-hidden="true" />
+    case "intake":
+      return <ScanText className={className} aria-hidden="true" />
     default:
       return <Package className={className} aria-hidden="true" />
   }
@@ -106,22 +108,26 @@ export function FileLinksList({ file }: FileLinksListProps) {
             ) : (
               <span className="min-w-0 truncate">{name}</span>
             )}
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="ml-auto size-6 shrink-0"
-              onClick={() => void remove(link)}
-              disabled={detach.isPending}
-              aria-label={t("files:links.remove", {
-                name,
-                defaultValue: "Remove attachment to {{name}}",
-              })}
-              title={t("files:links.removeShort", { defaultValue: "Remove attachment" })}
-              data-testid={`file-link-remove-${link.entity_type}-${link.entity_id}`}
-            >
-              <X className="size-3.5" aria-hidden="true" />
-            </Button>
+            {/* A batch of dropped files (#2810) holds its files until the
+                batch is removed; the link is not removed on its own. */}
+            {link.entity_type === "intake" ? null : (
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="ml-auto size-6 shrink-0"
+                onClick={() => void remove(link)}
+                disabled={detach.isPending}
+                aria-label={t("files:links.remove", {
+                  name,
+                  defaultValue: "Remove attachment to {{name}}",
+                })}
+                title={t("files:links.removeShort", { defaultValue: "Remove attachment" })}
+                data-testid={`file-link-remove-${link.entity_type}-${link.entity_id}`}
+              >
+                <X className="size-3.5" aria-hidden="true" />
+              </Button>
+            )}
           </li>
         )
       })}

@@ -133,6 +133,7 @@
       "area": "Area",
       "commodity": "Item",
       "draft": "Draft",
+      "intake": "Added from files",
       "location": "Location"
     }
   },
