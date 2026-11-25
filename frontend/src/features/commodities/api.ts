@@ -136,6 +136,10 @@ export interface ListCommoditiesOptions {
   tagMode?: TagMatchMode
   tagsExclude?: string[]
   noTags?: boolean
+  // true selects the items in Trash instead of the live ones. Not part of
+  // the page URL: the items list shows live items only. Cannot be combined
+  // with lentOut (the BE answers 400).
+  trashed?: boolean
   // Values the page URL carried for a boolean filter or tag_mode that could
   // not be read, by API parameter name. Sent as written so the BE answers
   // 400 query.invalid_parameter; see CommodityQuery.unreadable.
@@ -369,6 +373,7 @@ export type CommodityEventKind =
   | "back_from_service"
   | "service_updated"
   | "deleted"
+  | "restored"
 
 export interface CommodityEventActor {
   id: string

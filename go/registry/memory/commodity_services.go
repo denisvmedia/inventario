@@ -17,14 +17,16 @@ import (
 // with proper context. Stores the base registry so all per-request
 // registries share the same backing map (mirrors loans / tags / exports).
 type CommodityServiceRegistryFactory struct {
-	base *Registry[models.CommodityService, *models.CommodityService]
+	base    *Registry[models.CommodityService, *models.CommodityService]
+	trashed *trashedCommodities
 }
 
 // CommodityServiceRegistry is the context-aware in-memory registry of services.
 type CommodityServiceRegistry struct {
 	*Registry[models.CommodityService, *models.CommodityService]
 
-	userID string
+	userID  string
+	trashed *trashedCommodities
 }
 
 var (
@@ -59,6 +61,7 @@ func (f *CommodityServiceRegistryFactory) CreateUserRegistry(ctx context.Context
 	return &CommodityServiceRegistry{
 		Registry: userRegistry,
 		userID:   user.ID,
+		trashed:  f.trashed,
 	}, nil
 }
 
@@ -72,6 +75,7 @@ func (f *CommodityServiceRegistryFactory) CreateServiceRegistry() registry.Commo
 	return &CommodityServiceRegistry{
 		Registry: serviceRegistry,
 		userID:   "",
+		trashed:  f.trashed,
 	}
 }
 
@@ -98,7 +102,7 @@ func (r *CommodityServiceRegistry) Update(ctx context.Context, svc models.Commod
 // ListByCommodity returns services for a single commodity, most-recent-first
 // (sent_at desc, created_at desc as tiebreaker).
 func (r *CommodityServiceRegistry) ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityService, error) {
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -201,7 +205,7 @@ func (r *CommodityServiceRegistry) CountOpenByCommodity(ctx context.Context, com
 		wanted[id] = struct{}{}
 	}
 
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -215,4 +219,29 @@ func (r *CommodityServiceRegistry) CountOpenByCommodity(ctx context.Context, com
 		out[s.CommodityID]++
 	}
 	return out, nil
+}
+
+// SetCommodityFactory lets the group-wide reads leave out the rows of trashed
+// items, as the postgres registry does with a join on commodities. Called once
+// from NewFactorySet.
+func (f *CommodityServiceRegistryFactory) SetCommodityFactory(commodities *CommodityRegistryFactory) {
+	f.trashed = &trashedCommodities{factory: commodities}
+}
+
+// List returns the visible rows of live items.
+func (r *CommodityServiceRegistry) List(ctx context.Context) ([]*models.CommodityService, error) {
+	all, err := r.Registry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dropRowsOfTrashed(all, func(row *models.CommodityService) string { return row.CommodityID }, r.trashed), nil
+}
+
+// Count counts the visible rows of live items.
+func (r *CommodityServiceRegistry) Count(ctx context.Context) (int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(all), nil
 }

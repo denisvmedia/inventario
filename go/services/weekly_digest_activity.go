@@ -78,13 +78,18 @@ func (s *WeeklyDigestService) countItemActivity(ctx context.Context, window Week
 		if e == nil || !window.Contains(e.OccurredAt) {
 			continue
 		}
+		if _, live := commoditiesByID[e.CommodityID]; !live {
+			// The item is in Trash: there is nothing for the reader to look
+			// at until it is restored.
+			continue
+		}
 		entry := activity[e.GroupID]
 		switch e.Kind {
 		case models.CommodityEventKindCreated:
 			entry.counts.ItemsAdded++
 		case models.CommodityEventKindDeleted:
-			// A deletion is not activity worth reporting: the item is gone, so
-			// there is nothing for the reader to look at.
+			// A deletion is not activity worth reporting: the item went to
+			// Trash, so there is nothing for the reader to look at.
 		default:
 			set, ok := changed[e.GroupID]
 			if !ok {

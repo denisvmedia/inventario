@@ -6,6 +6,7 @@ import {
   Box,
   ChevronRight,
   FileText,
+  ListFilter,
   MapPin,
   Package,
   Search as SearchIcon,
@@ -18,8 +19,6 @@ import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Page, PageHeader } from "@/components/ui/page"
-import { searchMatchText } from "@/components/items/SearchMatchHint"
-import { formatAssetId } from "@/features/commodities/asset-id"
 import {
   commodityListHref,
   primarySearchMatch,
@@ -27,8 +26,18 @@ import {
 } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSearch } from "@/features/search/hooks"
+import {
+  areaHref,
+  areaItemsHref,
+  commodityHref,
+  commoditySubtitle,
+  fileHref,
+  locationHref,
+  tagHref,
+  tagListHref,
+} from "@/features/search/results"
 import { useTagLabel } from "@/features/tags/hooks"
-import { clearRecent, getRecent, type RecentEntry } from "@/features/search/recent"
+import { clearRecent, getRecent, pushRecent, type RecentEntry } from "@/features/search/recent"
 import type {
   AreaAttrs,
   CommodityAttrs,
@@ -37,6 +46,7 @@ import type {
   SearchableType,
   SearchPage as SearchPageData,
   SearchResource,
+  TagAttrs,
 } from "@/features/search/api"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { cn } from "@/lib/utils"
@@ -45,10 +55,8 @@ import { cn } from "@/lib/utils"
 // resources. URL holds the query (so refresh / share / browser-back
 // behaves naturally); the input mirrors `searchParams.get("q")`. We fire
 // one TanStack query per resource type in parallel; sections render as
-// soon as their slice resolves.
-//
-// Tags + Files are gated behind backend issues (#1400 + #1398); they
-// render as "coming soon" stubs today.
+// soon as their slice resolves. The command palette's "Search 'X'…" row
+// opens this page with its query.
 export function SearchPage() {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
@@ -207,7 +215,9 @@ function EmptyState({ groupSlug }: { groupSlug: string | null }) {
                   <RecentIcon type={entry.type} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-medium">{entry.title}</p>
-                    <p className="text-[11px] text-muted-foreground capitalize">{entry.type}</p>
+                    <p className="text-[11px] text-muted-foreground">
+                      {t(`search:kinds.${entry.type}`)}
+                    </p>
                   </div>
                   <ChevronRight
                     className="size-4 shrink-0 text-muted-foreground"
@@ -232,7 +242,15 @@ const HINT_KEYS = {
 
 function RecentIcon({ type }: { type: RecentEntry["type"] }) {
   const Icon =
-    type === "commodity" ? Package : type === "location" ? MapPin : type === "area" ? Box : FileText
+    type === "commodity"
+      ? Package
+      : type === "location"
+        ? MapPin
+        : type === "area"
+          ? Box
+          : type === "tag"
+            ? Tag
+            : FileText
   return (
     <div className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-muted/60">
       <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
@@ -245,15 +263,16 @@ function RecentIcon({ type }: { type: RecentEntry["type"] }) {
 function SearchResults({ query, groupSlug }: { query: string; groupSlug: string | null }) {
   const { t } = useTranslation()
 
-  // Fire all four searches in parallel — TanStack dedupes per cache key
+  // Fire all five searches in parallel — TanStack dedupes per cache key
   // so re-renders don't refetch.
   const commodities = useSearch<CommodityAttrs>(query, "commodities", { groupSlug })
   const tagLabel = useTagLabel("commodity")
   const locations = useSearch<LocationAttrs>(query, "locations", { groupSlug })
   const areas = useSearch<AreaAttrs>(query, "areas", { groupSlug })
   const files = useSearch<FileAttrs>(query, "files", { groupSlug })
+  const tags = useSearch<TagAttrs>(query, "tags", { groupSlug })
 
-  const sections = [commodities, locations, areas, files]
+  const sections = [commodities, locations, areas, files, tags]
 
   // "No matches across the board" only fires when every section actually
   // returned a usable result with total === 0. Errored sections and the
@@ -346,8 +365,18 @@ function SearchResults({ query, groupSlug }: { query: string; groupSlug: string 
         }
         unavailableTracker="#1398"
       />
-      {/* Tags is BE-blocked on #1400 and stays a stub regardless of query. */}
-      <UnavailableGroup type="tags" tracker="#1400" />
+      <ResultGroup
+        type="tags"
+        groupSlug={groupSlug}
+        page={tags.data}
+        isLoading={tags.isLoading}
+        renderItem={(r) => <TagCard key={r.id} resource={r} groupSlug={groupSlug} />}
+        seeAllHref={
+          groupSlug
+            ? `/g/${encodeURIComponent(groupSlug)}/tags?q=${encodeURIComponent(query)}`
+            : null
+        }
+      />
     </div>
   )
 }
@@ -427,27 +456,6 @@ function ResultGroup<TAttrs>({
   )
 }
 
-function UnavailableGroup({ type, tracker }: { type: "tags"; tracker: string }) {
-  const { t } = useTranslation()
-  const groupLabel = t(`search:groups.${type}`)
-  return (
-    <section
-      className="space-y-2 rounded-xl border border-dashed border-border bg-muted/20 p-4"
-      data-testid={`group-${type}`}
-    >
-      <div className="flex items-center gap-2">
-        <Tag className="size-4 text-muted-foreground" aria-hidden="true" />
-        <h2 className="text-sm font-semibold">
-          {t("search:groupUnavailableTitle", { group: groupLabel })}
-        </h2>
-      </div>
-      <p className="text-xs text-muted-foreground">
-        {t("search:groupUnavailableBody", { ref: tracker })}
-      </p>
-    </section>
-  )
-}
-
 function ResultSkeleton() {
   return (
     <div
@@ -466,6 +474,13 @@ function ResultSkeleton() {
 
 // --- Result cards ---------------------------------------------------------
 
+interface RelatedLink {
+  href: string
+  label: string
+  ariaLabel: string
+  testId: string
+}
+
 function CardShell({
   href,
   title,
@@ -473,6 +488,8 @@ function CardShell({
   icon,
   testId,
   ariaLabel,
+  recent,
+  related,
 }: {
   href: string | null
   title: string
@@ -480,6 +497,12 @@ function CardShell({
   icon: ReactNode
   testId: string
   ariaLabel: string
+  // Remembered when the card is opened, for the empty page and the empty
+  // command palette.
+  recent?: { scope: string; entry: Omit<RecentEntry, "visitedAt" | "url"> }
+  // A second link on the card: the items in an area, the items or files
+  // carrying a tag.
+  related?: RelatedLink | null
 }) {
   const inner = (
     <div className="flex items-center gap-3">
@@ -490,7 +513,9 @@ function CardShell({
         <p className="truncate text-sm font-medium">{title}</p>
         {subtitle ? <p className="truncate text-[11px] text-muted-foreground">{subtitle}</p> : null}
       </div>
-      <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      {related ? null : (
+        <ChevronRight className="size-4 shrink-0 text-muted-foreground" aria-hidden="true" />
+      )}
     </div>
   )
   if (!href) {
@@ -509,16 +534,39 @@ function CardShell({
       </li>
     )
   }
+  const onOpen = recent ? () => pushRecent(recent.scope, { ...recent.entry, url: href }) : undefined
+  if (!related) {
+    return (
+      <li>
+        <Link
+          to={href}
+          onClick={onOpen}
+          className="block rounded-xl border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
+          data-testid={testId}
+          aria-label={ariaLabel}
+        >
+          {inner}
+        </Link>
+      </li>
+    )
+  }
   return (
-    <li>
+    <li className="flex items-center gap-1 rounded-xl border border-border bg-card pr-2 hover:bg-muted/40 transition-colors">
       <Link
         to={href}
-        className="block rounded-xl border border-border bg-card p-3 hover:bg-muted/40 transition-colors"
+        onClick={onOpen}
+        className="min-w-0 flex-1 rounded-xl p-3"
         data-testid={testId}
         aria-label={ariaLabel}
       >
         {inner}
       </Link>
+      <Button asChild size="sm" variant="ghost" className="shrink-0 text-muted-foreground">
+        <Link to={related.href} aria-label={related.ariaLabel} data-testid={related.testId}>
+          <ListFilter aria-hidden="true" />
+          {related.label}
+        </Link>
+      </Button>
     </li>
   )
 }
@@ -536,25 +584,19 @@ function CommodityCard({
 }) {
   const { t } = useTranslation()
   const title = resource.attributes.name ?? resource.id
-  // Where the query was found, when the title does not already show it;
-  // otherwise the asset ID and short name.
-  const subtitle = match
-    ? searchMatchText(t, match, tagLabel)
-    : [formatAssetId(resource.attributes.asset_number), resource.attributes.short_name]
-        .filter(Boolean)
-        .join(" · ") || undefined
   return (
     <CardShell
-      href={
-        groupSlug
-          ? `/g/${encodeURIComponent(groupSlug)}/commodities/${encodeURIComponent(resource.id)}`
-          : null
-      }
+      href={groupSlug ? commodityHref(groupSlug, resource.id) : null}
       title={title}
-      subtitle={subtitle}
+      subtitle={commoditySubtitle(t, resource.attributes, match, tagLabel)}
       icon={<Package className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-commodity-${resource.id}`}
       ariaLabel={t("search:resultCard.openItem")}
+      recent={
+        groupSlug
+          ? { scope: groupSlug, entry: { type: "commodity", id: resource.id, title } }
+          : undefined
+      }
     />
   )
 }
@@ -568,19 +610,20 @@ function LocationCard({
 }) {
   const { t } = useTranslation()
   const title = resource.attributes.name ?? resource.id
-  const subtitle = resource.attributes.address ?? undefined
+  const subtitle = resource.attributes.address || undefined
   return (
     <CardShell
-      href={
-        groupSlug
-          ? `/g/${encodeURIComponent(groupSlug)}/locations/${encodeURIComponent(resource.id)}`
-          : null
-      }
+      href={groupSlug ? locationHref(groupSlug, resource.id) : null}
       title={title}
       subtitle={subtitle}
       icon={<MapPin className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-location-${resource.id}`}
       ariaLabel={t("search:resultCard.openLocation")}
+      recent={
+        groupSlug
+          ? { scope: groupSlug, entry: { type: "location", id: resource.id, title } }
+          : undefined
+      }
     />
   )
 }
@@ -596,15 +639,65 @@ function AreaCard({
   const title = resource.attributes.name ?? resource.id
   return (
     <CardShell
-      href={
-        groupSlug
-          ? `/g/${encodeURIComponent(groupSlug)}/areas/${encodeURIComponent(resource.id)}`
-          : null
-      }
+      href={groupSlug ? areaHref(groupSlug, resource.id) : null}
       title={title}
       icon={<Box className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-area-${resource.id}`}
       ariaLabel={t("search:resultCard.openArea")}
+      recent={
+        groupSlug
+          ? { scope: groupSlug, entry: { type: "area", id: resource.id, title } }
+          : undefined
+      }
+      related={
+        groupSlug
+          ? {
+              href: areaItemsHref(groupSlug, resource.id),
+              label: t("search:resultCard.showItems"),
+              ariaLabel: t("search:resultCard.showItemsInArea", { name: title }),
+              testId: `result-area-items-${resource.id}`,
+            }
+          : null
+      }
+    />
+  )
+}
+
+function TagCard({
+  resource,
+  groupSlug,
+}: {
+  resource: SearchResource<TagAttrs>
+  groupSlug: string | null
+}) {
+  const { t } = useTranslation()
+  const title = resource.attributes.label || resource.attributes.slug || resource.id
+  const isFileTag = resource.attributes.kind === "file"
+  return (
+    <CardShell
+      href={groupSlug ? tagHref(groupSlug, resource.attributes) : null}
+      title={title}
+      subtitle={isFileTag ? t("search:resultCard.fileTag") : t("search:resultCard.itemTag")}
+      icon={<Tag className="size-4 text-muted-foreground" aria-hidden="true" />}
+      testId={`result-tag-${resource.id}`}
+      ariaLabel={t("search:resultCard.openTag")}
+      recent={
+        groupSlug ? { scope: groupSlug, entry: { type: "tag", id: resource.id, title } } : undefined
+      }
+      related={
+        groupSlug
+          ? {
+              href: tagListHref(groupSlug, resource.attributes),
+              label: isFileTag
+                ? t("search:resultCard.showFiles")
+                : t("search:resultCard.showItems"),
+              ariaLabel: isFileTag
+                ? t("search:resultCard.showFilesTagged", { name: title })
+                : t("search:resultCard.showItemsTagged", { name: title }),
+              testId: `result-tag-list-${resource.id}`,
+            }
+          : null
+      }
     />
   )
 }
@@ -621,16 +714,17 @@ function FileCard({
   const subtitle = resource.attributes.path ?? undefined
   return (
     <CardShell
-      href={
-        groupSlug
-          ? `/g/${encodeURIComponent(groupSlug)}/files/${encodeURIComponent(resource.id)}`
-          : null
-      }
+      href={groupSlug ? fileHref(groupSlug, resource.id) : null}
       title={title}
       subtitle={subtitle}
       icon={<FileText className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-file-${resource.id}`}
       ariaLabel={t("search:resultCard.openFile")}
+      recent={
+        groupSlug
+          ? { scope: groupSlug, entry: { type: "file", id: resource.id, title } }
+          : undefined
+      }
     />
   )
 }

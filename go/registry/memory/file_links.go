@@ -113,6 +113,7 @@ func (r *FileRegistry) List(ctx context.Context) ([]*models.FileEntity, error) {
 func (r *FileRegistry) Create(ctx context.Context, file models.FileEntity) (*models.FileEntity, error) {
 	links := file.Links
 	file.Links = nil
+	file.ClearTrashState()
 	created, err := r.Registry.Create(ctx, file)
 	if err != nil {
 		return nil, err
@@ -143,6 +144,9 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 	}
 	r.lock.RUnlock()
 	file.Links = nil
+	// The trash fields belong to Trash and Restore. The base update refuses a
+	// trashed file, as the postgres registry does.
+	file.ClearTrashState()
 
 	updated, err := r.Registry.Update(ctx, file)
 	if err != nil {

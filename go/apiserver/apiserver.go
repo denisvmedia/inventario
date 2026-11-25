@@ -235,7 +235,11 @@ type Params struct {
 	// without this limit one user can exhaust the shared storage. Threaded
 	// into uploadsAPI and enforced in saveFile via http.MaxBytesReader; a
 	// breach renders 413. <= 0 disables the cap (back-compat / opt-out).
-	MaxUploadBytes             int64
+	MaxUploadBytes int64
+	// TrashRetention is how long a deleted item or file stays in Trash; the
+	// Trash list derives each entry's expiry from it. Zero means
+	// services.DefaultTrashRetention.
+	TrashRetention             time.Duration
 	DebugInfo                  *debug.Info
 	StartTime                  time.Time
 	JWTSecret                  []byte                             // JWT secret for user authentication
@@ -870,11 +874,11 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// Commodity write paths are guarded by requireGroupNotMigrating
 			// (issue #202 §3.2) so an in-flight currency migration locks
 			// concurrent edits with HTTP 423. The middleware is a no-op
-			// when the feature flag is off.
-			r.With(
-				requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration}),
-				contentWriteGate,
-			).Route("/commodities", Commodities(params))
+			// when the feature flag is off. Restoring from Trash writes
+			// items too, so the Trash routes wait the same way; reads there
+			// are viewer+, restores user+, deleting for good admin+.
+			migrationLock := requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})
+			r.With(migrationLock, contentWriteGate).Route("/commodities", Commodities(params))
 			r.With(contentWriteGate).Route("/files", Files(params))
 			r.With(contentWriteGate).Route("/tags", Tags(params))
 			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
@@ -883,6 +887,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
 			r.Route("/upcoming", Upcoming())
 			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
+			r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())
 			r.Route("/upload-slots", UploadSlots(params.FactorySet))

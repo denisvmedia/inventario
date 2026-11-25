@@ -11,10 +11,10 @@ import (
 
 // ReminderTargetActive reports whether reminders on the item may still be
 // sent and listed. Every path that sends or lists item reminders asks this
-// one function, so a future trash state (#2799) only has to be added here.
-// A nil commodity is a deleted one.
+// one function. A nil commodity is a deleted one; an item in Trash gets no
+// reminders until it is restored, and keeps them for when it is.
 func ReminderTargetActive(c *models.Commodity) bool {
-	return c != nil
+	return c != nil && !c.IsTrashed()
 }
 
 // CommodityReminderService holds the write rules for item reminders

@@ -16,6 +16,13 @@
   "groupUnavailableTitle": "{{group}} search isn't available yet",
   "inputLabel": "Search",
   "inputPlaceholder": "Search this group…",
+  "kinds": {
+    "area": "Area",
+    "commodity": "Item",
+    "file": "File",
+    "location": "Location",
+    "tag": "Tag"
+  },
   "loading": "Searching…",
   "noResultsBody": "Try a different keyword, or check that the item is in this group.",
   "noResultsTitle": "No matches for \"{{query}}\"",
@@ -30,15 +37,23 @@
   },
   "recent": {
     "clear": "Clear history",
-    "empty": "No recent items yet — open a few items, locations, or files and they'll appear here.",
-    "subtitle": "Pages you've opened in this group recently.",
+    "empty": "Nothing here yet. Results you open from search or the command palette appear here.",
+    "subtitle": "Search results you opened in this group recently.",
     "title": "Recently visited"
   },
   "resultCard": {
+    "fileTag": "File tag",
+    "itemTag": "Item tag",
     "openArea": "Open area",
     "openFile": "Open file",
     "openItem": "Open item",
-    "openLocation": "Open location"
+    "openLocation": "Open location",
+    "openTag": "Open tag",
+    "showFiles": "Show files",
+    "showFilesTagged": "Show files tagged {{name}}",
+    "showItems": "Show items",
+    "showItemsInArea": "Show items in {{name}}",
+    "showItemsTagged": "Show items tagged {{name}}"
   },
   "seeAll": "See all",
   "seeAllResults_one": "See all {{count}} match in {{group}}",

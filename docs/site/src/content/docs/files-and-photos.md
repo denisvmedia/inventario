@@ -202,18 +202,20 @@ The action row gives you:
 - **Open in new tab** — opens the file in your browser.
 - **Download** — saves a copy.
 - **Edit metadata** — opens the file's edit page, described below.
-- **Delete file** — removes the file permanently after a confirmation. The
-  confirmation names every place the file is attached to, because it disappears
-  from all of them.
+- **Delete file** — moves the file to the [Trash](../trash/) after a
+  confirmation. The confirmation names every place the file is attached to,
+  because it disappears from all of them.
 
-:::caution
-**Delete file** is permanent. The file is removed for good once you confirm. To
-take a file off one item only, remove that attachment instead.
+:::note
+A deleted file waits in the [Trash](../trash/) for 30 days, and restoring it
+brings back its attachments. To take a file off one item only, remove that
+attachment instead of deleting the file.
 :::
 
-Deleting an item, a location, or an area removes its attachments. A file that is
-attached only there is deleted with it; a file that is also attached somewhere
-else stays there.
+Deleting an item moves the files attached only to it to the trash with it, and
+restoring the item brings them back. A file that is also attached somewhere else
+stays there. Deleting a location or an area removes its attachments: a file
+attached only there is deleted with it.
 
 ### Edit a file's details
 

@@ -1,8 +1,8 @@
 {
   "bulk": {
     "deleteButton": "Delete",
-    "deleteDescription_one": "This permanently removes the selected item.",
-    "deleteDescription_other": "This permanently removes the {{count}} selected items.",
+    "deleteDescription_one": "The selected item moves to the trash with the files only it uses. You can restore it from there.",
+    "deleteDescription_other": "The {{count}} selected items move to the trash with the files only they use. You can restore them from there.",
     "deleteTitle_one": "Delete {{count}} item?",
     "deleteTitle_other": "Delete {{count}} items?",
     "moveButton": "Move…",
@@ -26,7 +26,7 @@
     "setSuccess": "Cover photo updated."
   },
   "delete": {
-    "description": "This permanently removes the item and any attached files.",
+    "description": "The item moves to the trash with the files only it uses. You can restore it from there.",
     "title": "Delete {{name}}?"
   },
   "detail": {
@@ -85,7 +85,7 @@
       "coverChangedLabelCleared": "Cleared cover photo",
       "coverChangedLabelSet": "Set cover photo",
       "createdLabel": "Added this item",
-      "deletedLabel": "Deleted this item",
+      "deletedLabel": "Moved this item to the trash",
       "lentOutLabel": "Lent out to {{borrower}}",
       "lentOutLabelDue": "Lent out to {{borrower}} (due back {{dueBack}})",
       "lentOutLabelGeneric": "Lent out",
@@ -99,6 +99,8 @@
       "loanUpdatedLabelFields": "Loan updated: {{fields}}",
       "movedLabel": "Moved to a new area",
       "priceChangedLabel": "Price changed",
+      "restoredLabel": "Restored this item from the trash",
+      "restoredLabelUnassigned": "Restored this item from the trash without a location; its area had been deleted",
       "returnedLabel": "Marked returned",
       "returnedLabelOn": "Marked returned on {{returnedAt}}",
       "sentForServiceLabel": "Sent for service to {{provider}}",
@@ -519,14 +521,14 @@
     "written_off": "Written Off"
   },
   "toast": {
-    "bulkDeleted_one": "{{count}} item deleted.",
-    "bulkDeleted_other": "{{count}} items deleted.",
+    "bulkDeleted_one": "{{count}} item moved to the trash.",
+    "bulkDeleted_other": "{{count}} items moved to the trash.",
     "bulkDeleteError": "Couldn't delete the selected items.",
     "bulkMoved_one": "{{count}} item moved.",
     "bulkMoved_other": "{{count}} items moved.",
     "bulkMoveError": "Couldn't move the selected items.",
     "created": "Item added.",
-    "deleted": "Item deleted.",
+    "deleted": "Item moved to the trash.",
     "deleteError": "Couldn't delete the item.",
     "statusUpdated": "Status updated.",
     "statusUpdateError": "Couldn't update the status.",

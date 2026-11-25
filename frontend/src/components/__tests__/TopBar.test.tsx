@@ -21,7 +21,7 @@ describe("TopBar", () => {
     expect(await screen.findByTestId("topbar-title")).toHaveTextContent("Test Page")
   })
 
-  it("includes the sidebar trigger and theme/density toggles", () => {
+  it("includes the sidebar trigger, the search entry and theme/density toggles", () => {
     renderWithProviders({
       children: (
         <RouteTitleProvider>
@@ -34,5 +34,8 @@ describe("TopBar", () => {
     expect(screen.getByRole("button", { name: /toggle sidebar/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /toggle theme/i })).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /toggle density/i })).toBeInTheDocument()
+    // The search field from sm up, the icon button below; CSS picks one.
+    expect(screen.getByTestId("header-search")).toHaveAccessibleName("Search")
+    expect(screen.getByTestId("header-search-compact")).toHaveAccessibleName("Search")
   })
 })

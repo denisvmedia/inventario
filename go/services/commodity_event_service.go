@@ -119,16 +119,36 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 	)
 }
 
-// EmitDeleted records a "deleted" event right before the hard delete.
-// after is null on this kind. The row CASCADES away when the parent
-// commodity is dropped — the event has audit value only within the same
-// request (or for a future cross-commodity feed once the table is lifted
-// to entity_events).
+// EmitDeleted records a "deleted" event when an item goes to Trash. after is
+// null on this kind. The event stays in the item's history, so a restored
+// item shows when it was deleted; purging the item drops it with the rest of
+// the history through ON DELETE CASCADE.
 func (s *CommodityEventService) EmitDeleted(ctx context.Context, before *models.Commodity) {
 	if s == nil || before == nil {
 		return
 	}
 	s.emit(ctx, before.ID, models.CommodityEventKindDeleted, snapshotCreated(before), nil)
+}
+
+// RestoreDetails describes how an item came back from Trash.
+type RestoreDetails struct {
+	// AreaRemoved is set when the item's area was deleted while the item was
+	// in Trash, so the item came back unassigned.
+	AreaRemoved bool
+}
+
+// EmitRestored records a "restored" event when an item comes back from Trash.
+// before is null. after carries the restored fields and, when the item's area
+// was deleted while it was in Trash, "area_removed": true.
+func (s *CommodityEventService) EmitRestored(ctx context.Context, after *models.Commodity, details RestoreDetails) {
+	if s == nil || after == nil {
+		return
+	}
+	payload := snapshotCreated(after)
+	if details.AreaRemoved {
+		payload["area_removed"] = true
+	}
+	s.emit(ctx, after.ID, models.CommodityEventKindRestored, nil, payload)
 }
 
 // EmitLoanStarted records a "lent_out" event when a new loan opens. The

@@ -117,6 +117,7 @@ import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import {
   commodityHref,
   commoditiesListSource,
@@ -239,6 +240,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const locations = useLocations({ enabled })
   const update = useUpdateCommodity(id)
   const remove = useDeleteCommodity()
+  const undoDelete = useUndoItemDelete()
   const setCover = useSetCommodityCover(id)
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -533,7 +535,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     if (!ok) return
     try {
       await remove.mutateAsync(commodity.id)
-      toast.success(t("commodities:toast.deleted"))
+      toast.success(t("commodities:toast.deleted"), { action: undoDelete([commodity.id]) })
       navigate(listHref)
     } catch {
       toast.error(t("commodities:toast.deleteError"))

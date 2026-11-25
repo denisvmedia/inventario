@@ -283,6 +283,28 @@ export async function deleteCommodityViaAPI(
 }
 
 /**
+ * DELETE a commodity from the trash for good. Silent on 404 so cleanup
+ * can run whether or not the commodity reached the trash.
+ */
+export async function purgeTrashedCommodityViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  id: string,
+): Promise<void> {
+  const resp = await request.delete(
+    `/api/v1/g/${encodeURIComponent(slug)}/trash/commodities/${encodeURIComponent(id)}`,
+    { headers: authHeaders(auth) },
+  )
+  if (resp.status() === 404) return
+  if (!resp.ok() && resp.status() !== 204) {
+    throw new Error(
+      `purgeTrashedCommodityViaAPI: DELETE /trash/commodities/${id} → ${resp.status()} ${await resp.text()}`,
+    )
+  }
+}
+
+/**
  * POST /areas. Used by bulk-move tests that need a second area on the
  * same location to move commodities into. Mirrors the AreaFormDialog
  * envelope (jsonapi/areas.go binds `AreaRequest`).

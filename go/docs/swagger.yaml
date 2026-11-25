@@ -1742,6 +1742,26 @@ definitions:
       cover:
         $ref: '#/definitions/jsonapi.CommodityCover'
     type: object
+  jsonapi.CommodityRestoreMeta:
+    properties:
+      area_removed:
+        description: |-
+          AreaRemoved is true when the item's area was deleted while the item
+          was in Trash; the item came back without an area.
+        type: boolean
+      files_restored:
+        description: FilesRestored counts the files that came back with the item.
+        example: 2
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CommodityRestoreResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityResponseData'
+      meta:
+        $ref: '#/definitions/jsonapi.CommodityRestoreMeta'
+    type: object
   jsonapi.CommodityScanAttributes:
     properties:
       fields:
@@ -2182,6 +2202,34 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.CurrencyMigrationResponseData'
         type: array
+    type: object
+  jsonapi.EmptyTrashAttrs:
+    properties:
+      commodities:
+        example: 3
+        format: int64
+        type: integer
+      files:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.EmptyTrashData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.EmptyTrashAttrs'
+      id:
+        type: string
+      type:
+        enum:
+        - trash
+        example: trash
+        type: string
+    type: object
+  jsonapi.EmptyTrashResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.EmptyTrashData'
     type: object
   jsonapi.Error:
     properties:
@@ -3452,6 +3500,138 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.TagsMeta'
     type: object
+  jsonapi.TrashBulkRestoreAttrs:
+    properties:
+      area_removed:
+        description: |-
+          AreaRemoved lists the restored items whose area was deleted while
+          they were in Trash; they came back without an area.
+        items:
+          type: string
+        type: array
+      failed:
+        items:
+          $ref: '#/definitions/jsonapi.BulkResultFail'
+        type: array
+      succeeded:
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.TrashBulkRestoreData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.TrashBulkRestoreAttrs'
+      id:
+        type: string
+      type:
+        type: string
+    type: object
+  jsonapi.TrashBulkRestoreResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.TrashBulkRestoreData'
+    type: object
+  jsonapi.TrashEntryMeta:
+    properties:
+      deleted_by_name:
+        description: |-
+          DeletedByName is the name of the member who deleted the entry, empty
+          when that user no longer exists.
+        type: string
+      expires_at:
+        description: ExpiresAt is when the entry is deleted for good.
+        type: string
+    type: object
+  jsonapi.TrashListMeta:
+    properties:
+      page:
+        example: 1
+        format: int64
+        type: integer
+      per_page:
+        example: 50
+        format: int64
+        type: integer
+      retention_days:
+        description: RetentionDays is how many days an entry stays in Trash.
+        example: 30
+        format: int64
+        type: integer
+      total:
+        example: 1
+        format: int64
+        type: integer
+      total_pages:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.TrashedCommoditiesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.TrashedCommodityData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.TrashListMeta'
+    type: object
+  jsonapi.TrashedCommodityData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.Commodity'
+      id:
+        type: string
+      meta:
+        $ref: '#/definitions/jsonapi.TrashedCommodityMeta'
+      type:
+        enum:
+        - commodities
+        example: commodities
+        type: string
+    type: object
+  jsonapi.TrashedCommodityMeta:
+    properties:
+      deleted_by_name:
+        description: |-
+          DeletedByName is the name of the member who deleted the entry, empty
+          when that user no longer exists.
+        type: string
+      expires_at:
+        description: ExpiresAt is when the entry is deleted for good.
+        type: string
+      file_bytes:
+        example: 204800
+        format: int64
+        type: integer
+      file_count:
+        example: 2
+        format: int64
+        type: integer
+    type: object
+  jsonapi.TrashedFileData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.FileEntity'
+      id:
+        type: string
+      meta:
+        $ref: '#/definitions/jsonapi.TrashEntryMeta'
+      type:
+        enum:
+        - files
+        example: files
+        type: string
+    type: object
+  jsonapi.TrashedFilesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.TrashedFileData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.TrashListMeta'
+    type: object
   jsonapi.URLData:
     properties:
       inline_url:
@@ -3727,6 +3907,20 @@ definitions:
           otherwise the purchase price in the group currency stands in.
         type: number
         x-nullable: "true"
+      deleted_at:
+        description: |-
+          DeletedAt is when the item was moved to Trash, nil while it is live. A
+          trashed item keeps its id, asset number, history, loans, service
+          records, maintenance schedules and attachments, and is left out of every
+          ordinary read of the registries until it is restored or purged (see
+          registry.CommodityRegistry). Server-managed: only the registry's trash
+          operations write it; Create and Update ignore a caller's value.
+        readOnly: true
+        type: string
+      deleted_by:
+        description: DeletedBy is the id of the user who moved the item to Trash.
+        readOnly: true
+        type: string
       draft:
         type: boolean
       extra_serial_numbers:
@@ -3828,6 +4022,7 @@ definitions:
     - back_from_service
     - service_updated
     - deleted
+    - restored
     type: string
     x-enum-varnames:
     - CommodityEventKindCreated
@@ -3844,6 +4039,7 @@ definitions:
     - CommodityEventKindBackFromService
     - CommodityEventKindServiceUpdated
     - CommodityEventKindDeleted
+    - CommodityEventKindRestored
   models.CommodityEventPayload:
     additionalProperties: {}
     type: object
@@ -4217,6 +4413,28 @@ definitions:
           semantic).
       created_at:
         description: CreatedAt is when the file was created
+        type: string
+      deleted_at:
+        description: |-
+          DeletedAt is when the file was moved to Trash, nil while it is live. A
+          trashed file keeps its row, links and blob, and is left out of every
+          ordinary read of the file registry until it is restored or purged (see
+          registry.FileRegistry). Server-managed: only the registry's trash
+          operations write it.
+        readOnly: true
+        type: string
+      deleted_by:
+        description: DeletedBy is the id of the user who moved the file to Trash.
+        readOnly: true
+        type: string
+      deleted_with_commodity_id:
+        description: |-
+          DeletedWithCommodityID is set when the file went to Trash because the
+          item it was attached to was deleted, and names that item. Restoring the
+          item restores such files; a file deleted on its own has it nil, is a
+          Trash entry of its own and stays in Trash when an item it was attached
+          to is restored.
+        readOnly: true
         type: string
       description:
         description: Description is an optional description of the file
@@ -5091,6 +5309,8 @@ definitions:
       images:
         type: integer
       other:
+        type: integer
+      trash:
         type: integer
     type: object
   registry.TagStats:
@@ -7349,6 +7569,11 @@ paths:
         in: query
         name: lent_out
         type: boolean
+      - description: true lists the items in Trash instead of the live ones (default
+          false); cannot be combined with lent_out
+        in: query
+        name: trashed
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:
@@ -7397,7 +7622,10 @@ paths:
     delete:
       consumes:
       - application/vnd.api+json
-      description: Delete a commodity by ID and all its linked files
+      description: |-
+        Move the commodity to Trash with the files no other item,
+        area or location uses. It can be restored from Trash until
+        the retention runs out.
       parameters:
       - description: Group slug
         in: path
@@ -8302,8 +8530,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Delete every commodity whose id appears in the body. The
-        response lists succeeded vs. failed ids so the frontend
+        Move every commodity whose id appears in the body to Trash.
+        The response lists succeeded vs. failed ids so the frontend
         can render partial-failure UX without parsing per-id HTTP
         statuses.
       parameters:
@@ -8484,6 +8712,11 @@ paths:
       - description: Filter by current loan state
         in: query
         name: lent_out
+        type: boolean
+      - description: Count the items in Trash instead of the live ones (default false);
+          cannot be combined with lent_out
+        in: query
+        name: trashed
         type: boolean
       - collectionFormat: multi
         description: Validated as for GET /commodities, then set aside for the counts
@@ -9147,7 +9380,10 @@ paths:
     delete:
       consumes:
       - application/vnd.api+json
-      description: delete file and its associated file
+      description: |-
+        Move the file to Trash. It keeps its links, so restoring it
+        puts it back where it was. An export bundle is deleted for
+        good.
       parameters:
       - description: Group slug
         in: path
@@ -9396,8 +9632,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: |-
-        Delete every file whose id appears in the body, including
-        the physical blob. The response lists succeeded vs.
+        Move every file whose id appears in the body to Trash. The
+        response lists succeeded vs.
         failed ids so the frontend can render partial-failure UX
         without parsing per-id HTTP statuses.
       parameters:
@@ -10023,6 +10259,8 @@ paths:
         Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
         Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
         Drafts and inactive items are included unless include_inactive=false.
+        Locations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.
+        Tags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.
       parameters:
       - description: Group slug
         in: path
@@ -10041,6 +10279,7 @@ paths:
         - files
         - areas
         - locations
+        - tags
         in: query
         name: type
         type: string
@@ -10117,6 +10356,11 @@ paths:
           only items not lent'
         in: query
         name: lent_out
+        type: boolean
+      - description: 'Commodities only: true searches the items in Trash instead of
+          the live ones (default false); cannot be combined with lent_out'
+        in: query
+        name: trashed
         type: boolean
       - description: 'Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count,
           prefix with ''-'' for descending'
@@ -10595,6 +10839,352 @@ paths:
       summary: Tag adoption stats
       tags:
       - tags
+  /g/{groupSlug}/trash:
+    delete:
+      description: |-
+        Deletes every item and file in the group's Trash for good.
+        Requires the admin or owner role.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: What was deleted
+          schema:
+            $ref: '#/definitions/jsonapi.EmptyTrashResponse'
+        "403":
+          description: Admin role required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Empty Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/commodities:
+    get:
+      description: |-
+        Items deleted in this group, most recently deleted first, with
+        who deleted them, when they expire and the files that went
+        with them.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TrashedCommoditiesResponse'
+      summary: List items in Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/commodities/{commodityID}:
+    delete:
+      description: |-
+        Deletes the item, its history and the files that went to Trash
+        with it. A file another item or place still uses is kept.
+        Requires the admin or owner role.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: Admin role required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Item not in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an item in Trash for good
+      tags:
+      - trash
+  /g/{groupSlug}/trash/commodities/{commodityID}/restore:
+    post:
+      description: |-
+        Brings the item back with its history, loans, service records,
+        maintenance schedules and the files that went to Trash with
+        it. An item whose area was deleted meanwhile comes back
+        without an area (meta.area_removed).
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Restored item
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityRestoreResponse'
+        "404":
+          description: Item not in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Restore an item from Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/commodities/purge:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Requires the admin or owner role.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "403":
+          description: Admin role required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete items in Trash for good
+      tags:
+      - trash
+  /g/{groupSlug}/trash/commodities/restore:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Restores every item whose id appears in the body. The response
+        lists the restored ids, the failures, and the restored items
+        that came back without an area.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.TrashBulkRestoreResponse'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Restore items from Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/files:
+    get:
+      description: |-
+        Files deleted on their own in this group, most recently
+        deleted first. Files that went to Trash with an item are
+        listed with that item instead.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Items per page
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.TrashedFilesResponse'
+      summary: List files in Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/files/{fileID}:
+    delete:
+      description: |-
+        Requires the admin or owner role. A file that went to Trash
+        with an item is deleted with that item.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: File ID
+        in: path
+        name: fileID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "403":
+          description: Admin role required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: File not in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: File went to Trash with an item
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a file in Trash for good
+      tags:
+      - trash
+  /g/{groupSlug}/trash/files/{fileID}/restore:
+    post:
+      description: |-
+        Only a file deleted on its own can be restored here; a file
+        that went to Trash with an item comes back with that item.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: File ID
+        in: path
+        name: fileID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: File not in Trash
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: File went to Trash with an item
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Restore a file from Trash
+      tags:
+      - trash
+  /g/{groupSlug}/trash/files/purge:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: Requires the admin or owner role.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: File IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "403":
+          description: Admin role required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete files in Trash for good
+      tags:
+      - trash
+  /g/{groupSlug}/trash/files/restore:
+    post:
+      consumes:
+      - application/vnd.api+json
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: File IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.BulkIDsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Restore files from Trash
+      tags:
+      - trash
   /g/{groupSlug}/upcoming:
     get:
       consumes:

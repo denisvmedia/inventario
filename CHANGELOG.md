@@ -20,6 +20,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `GET /commodities/brands` endpoint. AI scan fills both, and backups carry
   them (format 3.2; a 3.1 archive restores with them empty)
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
+- A search field in the top bar of every page, an icon button on phones,
+  opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
+  group's matching items, locations, areas, files and tags by kind. An area or
+  a tag offers "Show items" (a file tag "Show files"), the items group links to
+  the items list with the same search, and an empty search lists the results
+  opened recently. The search page lists tags too, has the same "Show items"
+  links, and fills its recent list. `GET /search` now accepts `type=locations`,
+  `type=areas` and `type=tags`
+  ([#2801](https://github.com/denisvmedia/inventario/issues/2801)).
+
 - Item reminders and an Upcoming page. The Reminders card on an item's
   Details tab takes a title, a date, up to five "remind me N days before"
   values and an optional repeat (daily, weekly, monthly or yearly, every N
@@ -36,7 +47,23 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
-
+- Trash. Deleting an item, alone or in bulk, moves it to the group's Trash
+  with the files attached only to it; deleting a file moves it there too, and
+  so does "Delete everything" on a location or area for the items inside. The
+  new Trash page in the sidebar restores entries under the same id and asset
+  ID, deletes them for good, or empties the trash. Viewers see it, users
+  restore, admins and owners delete. A restored item gets back its history,
+  loans, services, schedules and the files that went with it, but not a file
+  deleted on its own earlier; an item whose area was deleted in the meantime
+  comes back without a location. While in Trash an item is left out of lists,
+  search, reports, totals and reminders. Trashed files still count toward
+  storage, shown as a separate Trash share on the storage card. Entries are
+  deleted for good after `--trash-retention` (default 30 days) by the new
+  `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
+  toasts have an Undo button. Backups leave Trash out, a full-replace restore
+  empties it, and a merge restore skips what is in it and puts a backup file
+  that only trashed items use in Trash with them
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what
@@ -175,6 +202,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are written in INB format 3.0, which stores a shared file once; 2.x backups
   still restore
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+- `DELETE /commodities/{id}`, `POST /commodities/bulk-delete`,
+  `DELETE /files/{id}` and `POST /files/bulk-delete` move the entries to Trash
+  instead of removing them. Lists, search and the other live reads leave
+  trashed entries out; `GET /trash/commodities` and `GET /trash/files` list
+  them, with restore and purge endpoints under `/trash`. `GET /commodities`,
+  `GET /commodities/tag-counts` and `GET /search?type=commodities` take
+  `trashed=true` to apply the same filters to the items in Trash. The
+  maintenance schedules and reminders of an item in Trash answer 404 under
+  `/maintenance/{id}` and `/reminders/{id}` until the item is restored. The
+  storage usage breakdown gains a `trash` bucket
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 
 ### Changed
 
@@ -195,6 +233,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- The item delete dialog and the area delete dialog showed raw keys such as
+  "delete.title" instead of their text
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - The search page renders item results. It expected each result wrapped in
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item

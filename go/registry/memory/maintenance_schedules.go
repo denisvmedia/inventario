@@ -18,7 +18,8 @@ import (
 // per-request registries share the same backing map (mirrors the loan /
 // service pattern).
 type MaintenanceScheduleRegistryFactory struct {
-	base *Registry[models.MaintenanceSchedule, *models.MaintenanceSchedule]
+	base    *Registry[models.MaintenanceSchedule, *models.MaintenanceSchedule]
+	trashed *trashedCommodities
 }
 
 // MaintenanceScheduleRegistry is the context-aware in-memory registry
@@ -26,7 +27,8 @@ type MaintenanceScheduleRegistryFactory struct {
 type MaintenanceScheduleRegistry struct {
 	*Registry[models.MaintenanceSchedule, *models.MaintenanceSchedule]
 
-	userID string
+	userID  string
+	trashed *trashedCommodities
 }
 
 var (
@@ -61,6 +63,7 @@ func (f *MaintenanceScheduleRegistryFactory) CreateUserRegistry(ctx context.Cont
 	return &MaintenanceScheduleRegistry{
 		Registry: userRegistry,
 		userID:   user.ID,
+		trashed:  f.trashed,
 	}, nil
 }
 
@@ -74,6 +77,7 @@ func (f *MaintenanceScheduleRegistryFactory) CreateServiceRegistry() registry.Ma
 	return &MaintenanceScheduleRegistry{
 		Registry: serviceRegistry,
 		userID:   "",
+		trashed:  f.trashed,
 	}
 }
 
@@ -100,7 +104,7 @@ func (r *MaintenanceScheduleRegistry) Update(ctx context.Context, schedule model
 // ListByCommodity returns all schedules for the given commodity ordered
 // by next_due_at ascending (title as tiebreaker for stable ordering).
 func (r *MaintenanceScheduleRegistry) ListByCommodity(ctx context.Context, commodityID string) ([]*models.MaintenanceSchedule, error) {
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -168,7 +172,7 @@ func (r *MaintenanceScheduleRegistry) CountByCommodity(ctx context.Context, comm
 		wanted[id] = struct{}{}
 	}
 
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -179,4 +183,29 @@ func (r *MaintenanceScheduleRegistry) CountByCommodity(ctx context.Context, comm
 		out[s.CommodityID]++
 	}
 	return out, nil
+}
+
+// SetCommodityFactory lets the group-wide reads leave out the rows of trashed
+// items, as the postgres registry does with a join on commodities. Called once
+// from NewFactorySet.
+func (f *MaintenanceScheduleRegistryFactory) SetCommodityFactory(commodities *CommodityRegistryFactory) {
+	f.trashed = &trashedCommodities{factory: commodities}
+}
+
+// List returns the visible rows of live items.
+func (r *MaintenanceScheduleRegistry) List(ctx context.Context) ([]*models.MaintenanceSchedule, error) {
+	all, err := r.Registry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dropRowsOfTrashed(all, func(row *models.MaintenanceSchedule) string { return row.CommodityID }, r.trashed), nil
+}
+
+// Count counts the visible rows of live items.
+func (r *MaintenanceScheduleRegistry) Count(ctx context.Context) (int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(all), nil
 }

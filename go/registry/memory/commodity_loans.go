@@ -17,14 +17,16 @@ import (
 // with proper context. Stores the base registry so all per-request
 // registries share the same backing map (mirrors the tag/export pattern).
 type CommodityLoanRegistryFactory struct {
-	base *Registry[models.CommodityLoan, *models.CommodityLoan]
+	base    *Registry[models.CommodityLoan, *models.CommodityLoan]
+	trashed *trashedCommodities
 }
 
 // CommodityLoanRegistry is the context-aware in-memory registry of loans.
 type CommodityLoanRegistry struct {
 	*Registry[models.CommodityLoan, *models.CommodityLoan]
 
-	userID string
+	userID  string
+	trashed *trashedCommodities
 }
 
 var (
@@ -59,6 +61,7 @@ func (f *CommodityLoanRegistryFactory) CreateUserRegistry(ctx context.Context) (
 	return &CommodityLoanRegistry{
 		Registry: userRegistry,
 		userID:   user.ID,
+		trashed:  f.trashed,
 	}, nil
 }
 
@@ -72,6 +75,7 @@ func (f *CommodityLoanRegistryFactory) CreateServiceRegistry() registry.Commodit
 	return &CommodityLoanRegistry{
 		Registry: serviceRegistry,
 		userID:   "",
+		trashed:  f.trashed,
 	}
 }
 
@@ -98,7 +102,7 @@ func (r *CommodityLoanRegistry) Update(ctx context.Context, loan models.Commodit
 // ListByCommodity returns loans for a single commodity, most-recent-first
 // (lent_at desc, created_at desc as tiebreaker).
 func (r *CommodityLoanRegistry) ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityLoan, error) {
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -301,7 +305,7 @@ func (r *CommodityLoanRegistry) CountOpenByCommodity(ctx context.Context, commod
 		wanted[id] = struct{}{}
 	}
 
-	all, err := r.List(ctx)
+	all, err := r.Registry.List(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -315,4 +319,29 @@ func (r *CommodityLoanRegistry) CountOpenByCommodity(ctx context.Context, commod
 		out[l.CommodityID]++
 	}
 	return out, nil
+}
+
+// SetCommodityFactory lets the group-wide reads leave out the rows of trashed
+// items, as the postgres registry does with a join on commodities. Called once
+// from NewFactorySet.
+func (f *CommodityLoanRegistryFactory) SetCommodityFactory(commodities *CommodityRegistryFactory) {
+	f.trashed = &trashedCommodities{factory: commodities}
+}
+
+// List returns the visible rows of live items.
+func (r *CommodityLoanRegistry) List(ctx context.Context) ([]*models.CommodityLoan, error) {
+	all, err := r.Registry.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return dropRowsOfTrashed(all, func(row *models.CommodityLoan) string { return row.CommodityID }, r.trashed), nil
+}
+
+// Count counts the visible rows of live items.
+func (r *CommodityLoanRegistry) Count(ctx context.Context) (int, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return 0, err
+	}
+	return len(all), nil
 }

@@ -77,6 +77,16 @@ type ExistingEntities struct {
 	Areas       map[string]*models.Area       // XML UUID -> entity
 	Commodities map[string]*models.Commodity  // XML UUID -> entity
 	Files       map[string]*models.FileEntity // XML UUID -> entity (unified files table)
+
+	// TrashedCommodities maps the UUIDs of the group's items in Trash to their
+	// DB ids, and TrashedFiles holds the UUIDs of its files in Trash. A merge
+	// leaves them in Trash and skips the archive's copy; restoring the item
+	// from Trash brings it back. Trashed items stay out of IDMapping: an
+	// archive file that links one keeps that link, and a new file whose only
+	// links point at items in Trash is created in Trash with the first of
+	// them, as deleting the item would have left it.
+	TrashedCommodities map[string]string
+	TrashedFiles       map[string]bool
 }
 
 // XMLInventory represents the root element of the XML export

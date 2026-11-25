@@ -271,6 +271,23 @@ type Commodity struct {
 	// write, and the flag never leaves the server.
 	//ptah:schema:field name="legacy_zero_prices" type="BOOLEAN" not_null="true" default="true"
 	LegacyZeroPrices bool `json:"-" db:"legacy_zero_prices"`
+	// DeletedAt is when the item was moved to Trash, nil while it is live. A
+	// trashed item keeps its id, asset number, history, loans, service
+	// records, maintenance schedules and attachments, and is left out of every
+	// ordinary read of the registries until it is restored or purged (see
+	// registry.CommodityRegistry). Server-managed: only the registry's trash
+	// operations write it; Create and Update ignore a caller's value.
+	//ptah:schema:field name="deleted_at" type="TIMESTAMP"
+	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at" userinput:"false" readonly:"true"`
+	// DeletedBy is the id of the user who moved the item to Trash.
+	//ptah:schema:field name="deleted_by" type="TEXT"
+	DeletedBy *string `json:"deleted_by,omitempty" db:"deleted_by" userinput:"false" readonly:"true"`
+	// DeletedFromAreaID is the area the item was filed under when it was moved
+	// to Trash. Deleting that area clears AreaID of the trashed item (the
+	// foreign key allows nothing else) but keeps this column, so a restore can
+	// tell "was never in an area" from "its area is gone" and say so.
+	//ptah:schema:field name="deleted_from_area_id" type="TEXT"
+	DeletedFromAreaID *string `json:"-" db:"deleted_from_area_id" userinput:"false" readonly:"true"`
 }
 
 // PurchasePriceInGroupCurrency returns the purchase price in the group
@@ -366,6 +383,20 @@ func SamePrice(a, b *decimal.Decimal) bool {
 //ptah:schema:function name="commodity_search_text" params="name TEXT, short_name TEXT, serial_number TEXT, extra_serial_numbers JSONB, part_numbers JSONB, tags JSONB, comments TEXT, warranty_notes TEXT, status_note TEXT" returns="TEXT" language="sql" volatility="IMMUTABLE" body="SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')" comment="Builds commodities.search_text, the text the item search matches"
 type CommoditySearchFunctions struct {
 	_ int
+}
+
+// IsTrashed reports whether the item is in Trash.
+func (a *Commodity) IsTrashed() bool {
+	return a != nil && a.DeletedAt != nil
+}
+
+// ClearTrashState drops the trash columns. The registries call it on Create so
+// a caller (an API payload, a backup archive) cannot insert an item that is
+// already in Trash.
+func (a *Commodity) ClearTrashState() {
+	a.DeletedAt = nil
+	a.DeletedBy = nil
+	a.DeletedFromAreaID = nil
 }
 
 // assetIDPrefix and assetIDDigits define the display form of an asset
@@ -555,6 +586,11 @@ type CommodityIndexes struct {
 	// warranty date set are interesting for the worker scan and the
 	// "expiring soon" filter. Skips the bulk of rows (no warranty).
 	//ptah:schema:index name="commodities_warranty_expires_at_idx" fields="warranty_expires_at" condition="warranty_expires_at IS NOT NULL" table="commodities"
+	_ int
+
+	// Partial index for Trash: the group's trash list and the purge worker's
+	// scan for expired items read only trashed rows, ordered by deletion time.
+	//ptah:schema:index name="commodities_deleted_at_idx" fields="deleted_at" condition="deleted_at IS NOT NULL" table="commodities"
 	_ int
 }
 

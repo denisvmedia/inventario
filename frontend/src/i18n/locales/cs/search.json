@@ -18,6 +18,13 @@
   "groupUnavailableTitle": "Vyhledávání v sekci {{group}} zatím není k dispozici",
   "inputLabel": "Hledat",
   "inputPlaceholder": "Hledat v této skupině…",
+  "kinds": {
+    "area": "Oblast",
+    "commodity": "Položka",
+    "file": "Soubor",
+    "location": "Umístění",
+    "tag": "Štítek"
+  },
   "loading": "Hledání…",
   "noResultsBody": "Zkuste jiné klíčové slovo nebo zkontrolujte, zda je položka v této skupině.",
   "noResultsTitle": "Žádné shody pro „{{query}}“",
@@ -32,15 +39,23 @@
   },
   "recent": {
     "clear": "Vymazat historii",
-    "empty": "Zatím žádné nedávné položky — otevřete několik položek, umístění nebo souborů a objeví se zde.",
-    "subtitle": "Stránky, které jste v této skupině nedávno otevřeli.",
+    "empty": "Zatím nic. Objeví se zde výsledky, které otevřete z hledání nebo z palety příkazů.",
+    "subtitle": "Výsledky hledání, které jste v této skupině nedávno otevřeli.",
     "title": "Nedávno navštívené"
   },
   "resultCard": {
+    "fileTag": "Štítek souboru",
+    "itemTag": "Štítek položky",
     "openArea": "Otevřít oblast",
     "openFile": "Otevřít soubor",
     "openItem": "Otevřít položku",
-    "openLocation": "Otevřít umístění"
+    "openLocation": "Otevřít umístění",
+    "openTag": "Otevřít štítek",
+    "showFiles": "Zobrazit soubory",
+    "showFilesTagged": "Zobrazit soubory se štítkem {{name}}",
+    "showItems": "Zobrazit položky",
+    "showItemsInArea": "Zobrazit položky v oblasti {{name}}",
+    "showItemsTagged": "Zobrazit položky se štítkem {{name}}"
   },
   "seeAll": "Zobrazit vše",
   "seeAllResults_one": "Zobrazit {{count}} shodu v sekci {{group}}",

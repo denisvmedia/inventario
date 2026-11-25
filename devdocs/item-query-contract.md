@@ -40,11 +40,14 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `tag_mode` | `all` (default) or `any` | `all`: every tag in `tags`; `any`: at least one. |
 | `tags_exclude` | slugs, comma-separated or repeated, at most 50 | Item carries none of these tags. |
 | `no_tags` | `true`/`false` | Item has no tags. |
+| `trashed` | `true`/`false`, default `false` | `true` selects the items in Trash instead of the live ones; every other filter applies to them the same way. Cannot be combined with `lent_out`, because the loans of an item in Trash are hidden. |
 | `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. An unknown date or price (NULL) comes after every known one in both directions, and a known zero sorts as a value; `registrytest.RunCommoditySearchContract` holds both backends to it. |
 
 All conditions are combined with AND. Within a repeatable parameter the values are combined with OR, except `tags` with `tag_mode=all`.
 
 Boolean values are `true`/`false` or `1`/`0`, in any case. Tag values are normalized like a tag slug on write, so `tags=Fragile` finds the tag `fragile`.
+
+An item in Trash is never selected without `trashed=true`, and `trashed=true` never selects a live item. The Trash page itself reads `GET /g/{slug}/trash/commodities`, which adds what the page shows next to each entry: who deleted it, when it is deleted for good, and the number and size of the files that went with it.
 
 ## Free-text search
 
@@ -127,6 +130,8 @@ The items list page keeps its query in the page URL under names that predate the
 | `tag_mode=any` | same, sent only with `tags`; the page URL keeps it without tags so the mode picked before the first tag survives |
 | `no_tags=1` | `no_tags=true` |
 | `sort` | `sort` |
+
+`trashed` has no page-URL name: the items list page shows live items only. `ListCommoditiesOptions.trashed` sends it for a caller that lists Trash through the contract.
 
 `listOptionsToParams` is the only place that writes API parameters for the list. It sorts set-like lists, so two queries that select the same items produce the same string, which the TanStack Query key relies on. Links to a filtered list are built with `commodityListHref(slug, partialQuery)`.
 

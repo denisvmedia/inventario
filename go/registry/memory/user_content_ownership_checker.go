@@ -56,11 +56,11 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 		// TenantGroupAwareEntityID, so the generic created-by matcher applies.
 		{"commodities", func() (bool, error) {
 			reg := fs.CommodityRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Commodity])
+			return ownsRetainedContent(ctx, tenantID, userID, purged, serviceRows(reg, reg.List), createdByGroupAware[models.Commodity])
 		}},
 		{"files", func() (bool, error) {
 			reg := fs.FileRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.FileEntity])
+			return ownsRetainedContent(ctx, tenantID, userID, purged, serviceRows(reg, reg.List), createdByGroupAware[models.FileEntity])
 		}},
 		{"areas", func() (bool, error) {
 			reg := fs.AreaRegistryFactory.CreateServiceRegistry()

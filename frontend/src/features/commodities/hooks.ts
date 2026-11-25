@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { tagKeys } from "@/features/tags/keys"
+import { useInvalidateTrash } from "@/features/trash/hooks"
 
 import {
   bulkDeleteCommodities,
@@ -297,12 +298,16 @@ export function useUpdateCommodity(id: string) {
   })
 }
 
+// Deleting moves the item to Trash, so the Trash lists and the storage
+// breakdown change with it.
 export function useDeleteCommodity() {
   const invalidate = useInvalidate()
+  const invalidateTrash = useInvalidateTrash()
   return useMutation<void, Error, string>({
     mutationFn: (id) => deleteCommodity(id),
     onSuccess: () => {
       invalidate.all()
+      invalidateTrash()
     },
   })
 }
@@ -328,10 +333,12 @@ export function useSetCommodityCover(id: string) {
 
 export function useBulkDeleteCommodities() {
   const invalidate = useInvalidate()
+  const invalidateTrash = useInvalidateTrash()
   return useMutation<void, Error, string[]>({
     mutationFn: (ids) => bulkDeleteCommodities(ids),
     onSuccess: () => {
       invalidate.all()
+      invalidateTrash()
     },
   })
 }
