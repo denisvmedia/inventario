@@ -7695,7 +7695,7 @@ export type paths = {
          *     is removed stays as a standalone file; deleting it is a separate
          *     call. Removing the attachment of an item's cover photo clears
          *     that item's cover choice. The link of a backup export file
-         *     cannot be removed.
+         *     and the link to a batch intake purchase cannot be removed.
          */
         delete: {
             parameters: {
@@ -7731,7 +7731,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Export link */
+                /** @description Export or intake link */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -7794,6 +7794,121 @@ export type paths = {
                 };
             };
         };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the inbox
+         * @description The records of the group that still need attention, one entry per record with
+         *     every reason it is there for. The default inbox holds unfinished work only: open
+         *     drafts of new items (reason draft, kind draft) and items marked as draft, whose
+         *     review is not complete (reason item_draft, kind commodity). Missing information
+         *     such as no location, no photo or an unknown price does not put an item here.
+         *     Entries are ordered by their first reason in the order draft, item_draft; drafts
+         *     most recently saved first, items most recently added first. meta.entries counts
+         *     the entries the reason filter keeps; meta.counts describes the whole inbox and
+         *     counts each record once in total, whatever its number of reasons. Every member of
+         *     the group can read it. When a member who can edit items reads it, the draft
+         *     discards that stopped more than ten minutes ago are finished first, as for
+         *     GET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Keep the entries with this reason */
+                    reason?: "draft" | "item_draft";
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Entries per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxResponse"];
+                    };
+                };
+                /** @description Unknown reason (query.invalid_parameter) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/inbox/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the inbox
+         * @description How many records of the group need attention, for the sidebar and the dashboard.
+         *     total counts each record once, whatever its number of reasons; reasons counts,
+         *     per reason, the records that have it. The counts cover only what the group holds,
+         *     so they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished
+         *     first, as for GET /g/{groupSlug}/inbox.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxCountResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -7892,7 +8007,8 @@ export type paths = {
          *     type and size the scan accepts; GET .../intake/limits gives the limits. client_key
          *     is the client's identity for the batch: a key the group already has returns that
          *     session with 200, so a retry after a lost response does not queue the files
-         *     twice. Without an AI scan provider the request answers 503
+         *     twice. The replay does not compare the sources, so a client takes a new key for
+         *     every batch. Without an AI scan provider the request answers 503
          *     commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
          */
         post: {
@@ -8268,8 +8384,9 @@ export type paths = {
         put?: never;
         /**
          * Resume an intake session
-         * @description Queue the session's canceled and failed purchases again. Purchases that were
-         *     scanned are not scanned again.
+         * @description Queue the session's canceled and failed purchases again. A purchase canceled while
+         *     its scan runs goes back to that scan. Purchases that were scanned are not scanned
+         *     again.
          */
         post: {
             parameters: {
@@ -8332,9 +8449,9 @@ export type paths = {
         /**
          * Rescan a purchase
          * @description Queue one purchase of the session for a new AI scan on the member's request. Its
-         *     detected products are replaced. A purchase being scanned answers 409
-         *     intake.source_busy; one with a product that has its draft answers 409
-         *     intake.source_has_drafts.
+         *     detected products are replaced. A purchase being scanned, also one canceled while
+         *     its scan runs, answers 409 intake.source_busy; one with a product that has its
+         *     draft answers 409 intake.source_has_drafts.
          */
         post: {
             parameters: {
@@ -15553,6 +15670,54 @@ export type components = {
              */
             type?: "exports";
         };
+        "jsonapi.InboxCountResponse": {
+            data?: components["schemas"]["jsonapi.InboxCounts"];
+        };
+        "jsonapi.InboxCounts": {
+            reasons?: {
+                [key: string]: number;
+            };
+            /** @example 3 */
+            total?: number;
+        };
+        "jsonapi.InboxEntry": {
+            /**
+             * @description FileCount is the number of live files attached to a draft; 0 for an
+             *     item.
+             * @example 1
+             */
+            file_count?: number;
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            id?: string;
+            /**
+             * @example draft
+             * @enum {string}
+             */
+            kind?: "draft" | "commodity";
+            /**
+             * @description Reasons holds at least one reason, each once, in display order.
+             * @example [
+             *       "draft"
+             *     ]
+             */
+            reasons?: ("draft" | "item_draft")[];
+            /** @example Cordless drill */
+            title?: string;
+            /**
+             * @description UpdatedAt is when the record was last saved; drafts carry it, items
+             *     do not.
+             */
+            updated_at?: string | null;
+        };
+        "jsonapi.InboxMeta": {
+            counts?: components["schemas"]["jsonapi.InboxCounts"];
+            /** @example 2 */
+            entries?: number;
+        };
+        "jsonapi.InboxResponse": {
+            data?: components["schemas"]["jsonapi.InboxEntry"][];
+            meta?: components["schemas"]["jsonapi.InboxMeta"];
+        };
         "jsonapi.IntakeCandidateResponse": {
             data?: components["schemas"]["jsonapi.IntakeCandidateResponseData"];
         };
@@ -15723,8 +15888,9 @@ export type components = {
         };
         "jsonapi.IntakeSourceView": {
             /**
-             * @description Attempts counts the scans started for the source, a rate-limited wait
-             *     excepted.
+             * @description Attempts counts the scans started for the source. It never goes
+             *     down, so it also tells the result of the current scan from the late
+             *     result of an earlier one.
              */
             attempts?: number;
             /** @description ClaimedAt is when the worker took a scanning source. */

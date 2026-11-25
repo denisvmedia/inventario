@@ -75,6 +75,8 @@ const GROUP_SCOPED_PREFIXES = [
   "/trash",
   // /drafts: unfinished items saved on the server (#2812).
   "/drafts",
+  // /inbox and /inbox/count: the records that still need attention (#2794).
+  "/inbox",
 ] as const
 
 // Auth endpoints where a 401 is an application-level error (bad credentials,

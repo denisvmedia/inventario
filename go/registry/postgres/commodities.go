@@ -572,6 +572,9 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 			add(cond.Equal("status", string(models.CommodityStatusInUse)))
 		}
 	}
+	if opts.DraftsOnly {
+		add(cond.Equal("draft", true))
+	}
 
 	if len(opts.Types) > 0 {
 		add(cond.In("type", anyStrings(opts.Types)...))

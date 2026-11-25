@@ -35,17 +35,24 @@ const (
 // the server. Every member can read them; saving, discarding and promoting
 // need a role that can edit items (the route's write gate).
 type commodityDraftsAPI struct {
-	service      *services.CommodityDraftService
-	tagService   *services.TagService
-	groupService *services.GroupService
+	service    *services.CommodityDraftService
+	tagService *services.TagService
+	stale      staleDiscards
+}
+
+// newCommodityDraftService builds the draft service of the draft and inbox
+// routes.
+func newCommodityDraftService(params Params) *services.CommodityDraftService {
+	return services.NewCommodityDraftService(params.FactorySet, params.CommodityDraftServiceOptions...)
 }
 
 // Drafts mounts /g/{groupSlug}/drafts.
 func Drafts(params Params, groupService *services.GroupService) func(r chi.Router) {
+	drafts := newCommodityDraftService(params)
 	api := &commodityDraftsAPI{
-		service:      services.NewCommodityDraftService(params.FactorySet),
-		tagService:   services.NewTagService(params.FactorySet),
-		groupService: groupService,
+		service:    drafts,
+		tagService: services.NewTagService(params.FactorySet),
+		stale:      staleDiscards{drafts: drafts, groups: groupService},
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.list)
@@ -140,7 +147,7 @@ func (api *commodityDraftsAPI) list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
-	api.finishStaleDiscards(r)
+	api.stale.finish(r)
 	page, perPage := parsePagination(r.URL.Query().Get("page"), r.URL.Query().Get("per_page"))
 	drafts, total, err := regSet.CommodityDraftRegistry.ListOpen(r.Context(), (page-1)*perPage, perPage)
 	if err != nil {
@@ -310,7 +317,7 @@ func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
 func (api *commodityDraftsAPI) discard(w http.ResponseWriter, r *http.Request) {
 	// A client that goes away must not stop the discard half way: the draft
 	// would stay hidden with its files and its client key until
-	// finishStaleDiscards takes it up.
+	// staleDiscards takes it up.
 	if err := api.service.Discard(context.WithoutCancel(r.Context()), chi.URLParam(r, "draftID")); err != nil {
 		renderDraftError(w, r, err)
 		return
@@ -318,18 +325,25 @@ func (api *commodityDraftsAPI) discard(w http.ResponseWriter, r *http.Request) {
 	render.NoContent(w, r)
 }
 
-// finishStaleDiscards finishes the group's discards that stopped half way
-// (a server that died, a database error), when the member listing the
-// drafts may discard them. Such a draft is hidden but keeps its files and
-// its client key, and nothing else takes it up. A failure is logged and the
-// list is served anyway.
-func (api *commodityDraftsAPI) finishStaleDiscards(r *http.Request) {
+// staleDiscards finishes the draft discards of a group that stopped half way
+// (a server that died, a database error). Such a draft is hidden but keeps
+// its files and its client key until something finishes it. The routes that
+// list drafts call it: GET /drafts and the inbox.
+type staleDiscards struct {
+	drafts *services.CommodityDraftService
+	groups *services.GroupService
+}
+
+// finish finishes the stopped discards of the request's group when the
+// member may discard drafts (user and up). A failure is logged and the
+// request is served anyway.
+func (s staleDiscards) finish(r *http.Request) {
 	group := groupFromContext(r.Context())
 	user := GetUserFromRequest(r)
-	if group == nil || user == nil || api.groupService == nil {
+	if group == nil || user == nil || s.drafts == nil || s.groups == nil {
 		return
 	}
-	canWrite, _, err := api.groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
+	canWrite, _, err := s.groups.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
 	if err != nil {
 		slog.Error("Failed to check the role for finishing stopped draft discards", "group_id", group.ID, "user_id", user.ID, "error", err)
 		return
@@ -337,7 +351,7 @@ func (api *commodityDraftsAPI) finishStaleDiscards(r *http.Request) {
 	if !canWrite {
 		return
 	}
-	finished, err := api.service.FinishStaleDiscards(context.WithoutCancel(r.Context()))
+	finished, err := s.drafts.FinishStaleDiscards(context.WithoutCancel(r.Context()))
 	if err != nil {
 		slog.Error("Failed to finish stopped draft discards", "group_id", group.ID, "error", err)
 	}

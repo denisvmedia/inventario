@@ -6609,7 +6609,7 @@
         },
         "/g/{groupSlug}/files/{fileID}/links/{linkID}": {
             "delete": {
-                "description": "Removes the link and nothing else. A file whose last attachment\nis removed stays as a standalone file; deleting it is a separate\ncall. Removing the attachment of an item's cover photo clears\nthat item's cover choice. The link of a backup export file\ncannot be removed.",
+                "description": "Removes the link and nothing else. A file whose last attachment\nis removed stays as a standalone file; deleting it is a separate\ncall. Removing the attachment of an item's cover photo clears\nthat item's cover choice. The link of a backup export file\nand the link to a batch intake purchase cannot be removed.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6657,7 +6657,7 @@
                         }
                     },
                     "422": {
-                        "description": "Export link",
+                        "description": "Export or intake link",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6699,6 +6699,92 @@
                         "description": "File not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/inbox": {
+            "get": {
+                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft) and items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity). Missing information\nsuch as no location, no photo or an unknown price does not put an item here.\nEntries are ordered by their first reason in the order draft, item_draft; drafts\nmost recently saved first, items most recently added first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it. When a member who can edit items reads it, the draft\ndiscards that stopped more than ten minutes ago are finished first, as for\nGET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "inbox"
+                ],
+                "summary": "List the inbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "draft",
+                            "item_draft"
+                        ],
+                        "type": "string",
+                        "description": "Keep the entries with this reason",
+                        "name": "reason",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entries per page (at most 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InboxResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown reason (query.invalid_parameter)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/inbox/count": {
+            "get": {
+                "description": "How many records of the group need attention, for the sidebar and the dashboard.\ntotal counts each record once, whatever its number of reasons; reasons counts,\nper reason, the records that have it. The counts cover only what the group holds,\nso they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished\nfirst, as for GET /g/{groupSlug}/inbox.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "inbox"
+                ],
+                "summary": "Count the inbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InboxCountResponse"
                         }
                     }
                 }
@@ -6774,7 +6860,7 @@
                 }
             },
             "post": {
-                "description": "Queue uploaded files for the AI scan. Each source is one purchase: the files the\nscan reads together. Files dropped together are separate purchases unless the\nclient puts them in one source with one_item set, which keeps a single product.\nThe files must be uploaded first (POST /g/{groupSlug}/uploads/files) and be of a\ntype and size the scan accepts; GET .../intake/limits gives the limits. client_key\nis the client's identity for the batch: a key the group already has returns that\nsession with 200, so a retry after a lost response does not queue the files\ntwice. Without an AI scan provider the request answers 503\ncommodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.",
+                "description": "Queue uploaded files for the AI scan. Each source is one purchase: the files the\nscan reads together. Files dropped together are separate purchases unless the\nclient puts them in one source with one_item set, which keeps a single product.\nThe files must be uploaded first (POST /g/{groupSlug}/uploads/files) and be of a\ntype and size the scan accepts; GET .../intake/limits gives the limits. client_key\nis the client's identity for the batch: a key the group already has returns that\nsession with 200, so a retry after a lost response does not queue the files\ntwice. The replay does not compare the sources, so a client takes a new key for\nevery batch. Without an AI scan provider the request answers 503\ncommodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7081,7 +7167,7 @@
         },
         "/g/{groupSlug}/intake/sessions/{sessionID}/resume": {
             "post": {
-                "description": "Queue the session's canceled and failed purchases again. Purchases that were\nscanned are not scanned again.",
+                "description": "Queue the session's canceled and failed purchases again. A purchase canceled while\nits scan runs goes back to that scan. Purchases that were scanned are not scanned\nagain.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -7129,7 +7215,7 @@
         },
         "/g/{groupSlug}/intake/sessions/{sessionID}/sources/{sourceID}/rescan": {
             "post": {
-                "description": "Queue one purchase of the session for a new AI scan on the member's request. Its\ndetected products are replaced. A purchase being scanned answers 409\nintake.source_busy; one with a product that has its draft answers 409\nintake.source_has_drafts.",
+                "description": "Queue one purchase of the session for a new AI scan on the member's request. Its\ndetected products are replaced. A purchase being scanned, also one canceled while\nits scan runs, answers 409 intake.source_busy; one with a product that has its\ndraft answers 409 intake.source_has_drafts.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -15945,6 +16031,100 @@
                 }
             }
         },
+        "jsonapi.InboxCountResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.InboxCounts"
+                }
+            }
+        },
+        "jsonapi.InboxCounts": {
+            "type": "object",
+            "properties": {
+                "reasons": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.InboxEntry": {
+            "type": "object",
+            "properties": {
+                "file_count": {
+                    "description": "FileCount is the number of live files attached to a draft; 0 for an\nitem.",
+                    "type": "integer",
+                    "example": 1
+                },
+                "id": {
+                    "type": "string",
+                    "example": "5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "commodity"
+                    ],
+                    "example": "draft"
+                },
+                "reasons": {
+                    "description": "Reasons holds at least one reason, each once, in display order.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "item_draft"
+                        ]
+                    },
+                    "example": [
+                        "draft"
+                    ]
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Cordless drill"
+                },
+                "updated_at": {
+                    "description": "UpdatedAt is when the record was last saved; drafts carry it, items\ndo not.",
+                    "type": "string",
+                    "x-nullable": "true"
+                }
+            }
+        },
+        "jsonapi.InboxMeta": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "$ref": "#/definitions/jsonapi.InboxCounts"
+                },
+                "entries": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
+        "jsonapi.InboxResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.InboxEntry"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.InboxMeta"
+                }
+            }
+        },
         "jsonapi.IntakeCandidateResponse": {
             "type": "object",
             "properties": {
@@ -16345,7 +16525,7 @@
             "type": "object",
             "properties": {
                 "attempts": {
-                    "description": "Attempts counts the scans started for the source, a rate-limited wait\nexcepted.",
+                    "description": "Attempts counts the scans started for the source. It never goes\ndown, so it also tells the result of the current scan from the late\nresult of an earlier one.",
                     "type": "integer"
                 },
                 "claimed_at": {
