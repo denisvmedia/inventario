@@ -18,6 +18,7 @@ import {
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
 import { commodityHref } from "@/features/commodities/listContext"
+import { formatPrice } from "@/features/commodities/price"
 import type { CommoditySearchMatch } from "@/features/commodities/query"
 import type { ResolvedTag } from "@/features/tags/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -234,7 +235,7 @@ export function CommodityPhotoCard({
             <span />
           )}
           <span className="shrink-0 font-medium text-foreground">
-            {formatCurrency(Number(row.current_price ?? 0), currency)}
+            {formatPrice(row.current_price, currency, "—", formatCurrency)}
           </span>
         </div>
       </div>

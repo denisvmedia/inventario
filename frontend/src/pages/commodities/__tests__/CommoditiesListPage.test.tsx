@@ -244,6 +244,8 @@ describe("<CommoditiesListPage />", () => {
     const img = within(card).getByRole("img")
     expect(img.getAttribute("srcset")).toContain("https://example.test/c1-large.jpg 600w")
     expect(img).toHaveAttribute("loading", "lazy")
+    // An item without a known value shows a dash, not a zero.
+    expect(within(card).getByText("—")).toBeInTheDocument()
     expect(await axe(container)).toHaveNoViolations()
 
     await user.click(screen.getByTestId("commodities-view-compact"))
