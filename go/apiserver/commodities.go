@@ -92,12 +92,41 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	covers := api.resolveCoversForList(r, regSet.FileRegistry, result.Commodities)
 
+	digest, err := listSelectionDigest(r.Context(), regSet, query, offset, result)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+
 	resp := jsonapi.NewCommoditiesResponseWithCovers(result.Commodities, result.Total, page, perPage, covers).
-		WithMatches(result.Matches)
+		WithMatches(result.Matches).
+		WithSelectionDigest(digest)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// listSelectionDigest returns the digest of the items a list query selects,
+// for meta.selection_digest, or "" when a bulk action could not take them.
+// When the page holds every item the query selects, the digest comes from
+// the page; otherwise from one more query that reads ids only.
+func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commodityquery.Query, offset int, result commodityquery.Page) (string, error) {
+	if query.Trashed || result.Total == 0 || result.Total > services.MaxBulkQueryItems {
+		return "", nil
+	}
+	if offset == 0 && len(result.Commodities) == result.Total {
+		ids := make([]string, 0, len(result.Commodities))
+		for _, c := range result.Commodities {
+			ids = append(ids, c.ID)
+		}
+		return commodityquery.Digest(ids), nil
+	}
+	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, services.MaxBulkQueryItems)
+	if err != nil || !ok {
+		return "", err
+	}
+	return digest, nil
 }
 
 // countCommodityTags counts, per tag, the items a query selects with its tag

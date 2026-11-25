@@ -396,6 +396,23 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return filtered[start:end], total, nil
 }
 
+// ListIDs returns the ids of at most limit commodities opts selects.
+func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.CommodityListOptions, limit int) ([]string, error) {
+	all, err := r.listCandidates(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	filtered := filterCommodities(all, opts)
+	ids := make([]string, 0, min(len(filtered), max(limit, 0)))
+	for _, c := range filtered {
+		if len(ids) >= limit {
+			break
+		}
+		ids = append(ids, c.ID)
+	}
+	return ids, nil
+}
+
 // CountTags counts the tags of the commodities opts selects.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
 	all, err := r.listCandidates(ctx, opts)

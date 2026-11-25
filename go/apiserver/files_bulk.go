@@ -11,9 +11,11 @@ import (
 
 // bulkUpdateFiles adds tags to and removes tags from several files.
 // @Summary Bulk-update files
-// @Description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Each file is saved as PUT /files/{id} saves it.
-// @Description `tags.add` takes slugs or the text of a new tag, which is created as a single edit creates it; `tags.remove` takes slugs.
-// @Description Tags the patch does not name stay on each file. A tag cannot be in both lists, and each list holds at most 50 tags.
+// @Description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:
+// @Description unlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name
+// @Description stay on each file, and the title, description and file name stay as they are.
+// @Description `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
+// @Description A tag cannot be in both lists, and each list holds at most 50 tags.
 // @Description
 // @Description The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
 // @Tags files

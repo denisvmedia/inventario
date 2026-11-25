@@ -48,9 +48,10 @@ func (p FileTagPatch) Apply(f models.FileEntity) (models.FileEntity, bool) {
 	return f, changed
 }
 
-// FileBulkService changes the tags of many files. Each file is written as
-// saving it on its own writes it; a file that fails does not stop the
-// others, and the outcome says what happened to each.
+// FileBulkService changes the tags of many files. Only the tags of each file
+// change, through the same registry write a single edit uses; a file that
+// fails does not stop the others, and the outcome says what happened to
+// each.
 type FileBulkService struct {
 	tags *TagService
 }
@@ -81,7 +82,9 @@ func (s *FileBulkService) UpdateTags(ctx context.Context, files registry.FileReg
 	ids = uniqueIDs(ids)
 	for i, id := range ids {
 		if err := ctx.Err(); err != nil {
-			failRest(&out, ids[i:], err)
+			for _, rest := range ids[i:] {
+				out.fail(rest, "", err)
+			}
 			break
 		}
 		before, err := files.Get(ctx, id)

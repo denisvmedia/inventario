@@ -4,7 +4,9 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"maps"
 	"net/http"
+	"slices"
 	"strconv"
 
 	"github.com/go-chi/render"
@@ -26,8 +28,8 @@ import (
 // bulkDeleteCommodities moves several items to Trash.
 // @Summary Bulk-delete commodities
 // @Description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
-// @Description The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
-// @Description The response lists succeeded and failed ids.
+// @Description The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+// @Description The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -35,7 +37,7 @@ import (
 // @Param body body jsonapi.CommodityBulkDeleteRequest true "The items to delete"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects a different number of items than expected_count"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
 // @Failure 422 {object} jsonapi.Errors "Bad request body, or bulk.too_many: the query selects more than 500 items"
 // @Router /g/{groupSlug}/commodities/bulk-delete [post].
 func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.Request) {
@@ -51,17 +53,18 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ids, ok := resolveCommoditySelection(w, r, regSet, input.Data.Attributes)
+	targets, ok := resolveCommoditySelection(w, r, regSet, input.Data.Attributes)
 	if !ok {
 		return
 	}
-	renderBulkOutcome(w, r, "commodities", api.bulkService.Delete(r.Context(), ids))
+	renderBulkOutcome(w, r, "commodities", api.bulkService.Delete(r.Context(), targets))
 }
 
 // bulkMoveCommodities puts several items into one area.
 // @Summary Bulk-move commodities to a new area
 // @Description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
-// @Description The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+// @Description An area_id that is not an area of the group is refused with 422 before any item changes.
+// @Description The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -69,8 +72,8 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 // @Param body body jsonapi.BulkMoveRequest true "The items and the destination area_id"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects a different number of items than expected_count"
-// @Failure 422 {object} jsonapi.Errors "Bad request body, or bulk.too_many: the query selects more than 500 items"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
+// @Failure 422 {object} jsonapi.Errors "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items"
 // @Router /g/{groupSlug}/commodities/bulk-move [post].
 func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -85,12 +88,24 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	ids, ok := resolveCommoditySelection(w, r, regSet, &input.Data.Attributes.CommodityBulkSelection)
+	// A missing area is one error for the request, not a failure per item.
+	areaID := input.Data.Attributes.AreaID
+	if _, err := regSet.AreaRegistry.Get(r.Context(), areaID); err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			unprocessableEntityError(w, r, validation.Errors{
+				"area_id": validation.NewError("area_not_found", "the area does not exist"),
+			})
+			return
+		}
+		renderEntityError(w, r, err)
+		return
+	}
+
+	targets, ok := resolveCommoditySelection(w, r, regSet, &input.Data.Attributes.CommodityBulkSelection)
 	if !ok {
 		return
 	}
-	outcome := api.bulkService.Move(r.Context(), regSet.CommodityRegistry, ids, input.Data.Attributes.AreaID)
-	renderBulkOutcome(w, r, "commodities", outcome)
+	renderBulkOutcome(w, r, "commodities", api.bulkService.Move(r.Context(), regSet.CommodityRegistry, targets, areaID))
 }
 
 // bulkUpdateCommodities changes the tags, type or status of several items.
@@ -104,10 +119,11 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 // @Description A part left out of the patch is left unchanged.
 // @Description
 // @Description The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
-// @Description (the filter parameters of GET /commodities, without page and per_page), with `expected_count`,
-// @Description the number of items the caller saw it select. The query is run when the request arrives; when it
-// @Description selects a different number of items the request fails with 409 and changes nothing, and it may
-// @Description select at most 500 items and no items in Trash.
+// @Description (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
+// @Description `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
+// @Description GET /commodities returned for it. The query is run when the request arrives; when it selects
+// @Description other items (more, fewer, or as many with one swapped) the request fails with 409 and changes
+// @Description nothing. It may select at most 500 items and no items in Trash.
 // @Description
 // @Description The response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
 // @Tags commodities
@@ -117,7 +133,7 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 // @Param body body jsonapi.CommodityBulkUpdateRequest true "The items and the patch"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects a different number of items than expected_count"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
 // @Failure 422 {object} jsonapi.Errors "Bad request body or patch, or bulk.too_many: the query selects more than 500 items"
 // @Router /g/{groupSlug}/commodities/bulk-update [post].
 func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +168,7 @@ func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.
 		return
 	}
 
-	ids, ok := resolveCommoditySelection(w, r, regSet, &attrs.CommodityBulkSelection)
+	targets, ok := resolveCommoditySelection(w, r, regSet, &attrs.CommodityBulkSelection)
 	if !ok {
 		return
 	}
@@ -160,7 +176,7 @@ func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.
 		renderEntityError(w, r, err)
 		return
 	}
-	renderBulkOutcome(w, r, "commodities", api.bulkService.Update(r.Context(), regSet.CommodityRegistry, ids, patch))
+	renderBulkOutcome(w, r, "commodities", api.bulkService.Update(r.Context(), regSet.CommodityRegistry, targets, patch))
 }
 
 func commodityPatchInput(p *jsonapi.CommodityBulkPatch) services.CommodityPatchInput {
@@ -179,9 +195,9 @@ func commodityPatchInput(p *jsonapi.CommodityBulkPatch) services.CommodityPatchI
 	return in
 }
 
-// resolveCommoditySelection returns the ids sel names. When it cannot, it
+// resolveCommoditySelection returns the items sel names. When it cannot, it
 // writes the error response and returns false.
-func resolveCommoditySelection(w http.ResponseWriter, r *http.Request, regSet *registry.Set, sel *jsonapi.CommodityBulkSelection) ([]string, bool) {
+func resolveCommoditySelection(w http.ResponseWriter, r *http.Request, regSet *registry.Set, sel *jsonapi.CommodityBulkSelection) ([]services.BulkTarget, bool) {
 	selection := services.BulkSelection{IDs: sel.IDs}
 	if sel.Query != nil {
 		values, err := commodityquery.DecodeQuery(*sel.Query)
@@ -196,11 +212,12 @@ func resolveCommoditySelection(w http.ResponseWriter, r *http.Request, regSet *r
 		}
 		selection.Query = &query
 		selection.ExpectedCount = *sel.ExpectedCount
+		selection.ExpectedDigest = *sel.ExpectedDigest
 	}
 
-	ids, err := services.ResolveBulkSelection(r.Context(), regSet, selection)
+	targets, err := services.ResolveBulkSelection(r.Context(), regSet, selection)
 	if err == nil {
-		return ids, true
+		return targets, true
 	}
 	if _, ok := errors.AsType[*commodityquery.Error](err); ok {
 		queryParamError(w, r, err)
@@ -242,7 +259,11 @@ func renderBulkOutcome(w http.ResponseWriter, r *http.Request, resource string, 
 	for _, s := range outcome.Skipped {
 		skipped = append(skipped, jsonapi.BulkResultSkip{ID: s.ID, Name: s.Name, Reason: "unchanged"})
 	}
-	resp := jsonapi.NewBulkResultResponse(resource, outcome.Succeeded, failed).WithSkipped(skipped)
+	var notes []jsonapi.BulkResultNote
+	for _, n := range outcome.Notes {
+		notes = append(notes, jsonapi.BulkResultNote{ID: n.ID, Name: n.Name, Code: n.Code})
+	}
+	resp := jsonapi.NewBulkResultResponse(resource, outcome.Succeeded, failed).WithSkipped(skipped).WithNotes(notes)
 	render.Status(r, http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -259,11 +280,36 @@ func bulkResultFail(ctx context.Context, resource string, f services.BulkFailure
 		out.Code, out.Error = "not_found", "not found"
 	case isValidationError(f.Err):
 		out.Code, out.Error = "invalid", f.Err.Error()
+		out.Field, out.Reason = validationFieldReason(f.Err)
 	default:
 		out.Code, out.Error = "failed", "could not be changed"
 		slog.WarnContext(ctx, "bulk action: entity failed", "resource", resource, "id", f.ID, "err", f.Err)
 	}
 	return out
+}
+
+// validationFieldReason returns the first field a validation error names, in
+// field order, and the validator's code for it. A nested validation.Errors
+// gives its first field joined with a dot (for example extra.serial).
+func validationFieldReason(err error) (field, reason string) {
+	if errs, ok := errors.AsType[validation.Errors](err); ok {
+		keys := slices.Sorted(maps.Keys(errs))
+		for _, k := range keys {
+			if errs[k] == nil {
+				continue
+			}
+			sub, subReason := validationFieldReason(errs[k])
+			if sub != "" {
+				return k + "." + sub, subReason
+			}
+			return k, subReason
+		}
+		return "", ""
+	}
+	if ve, ok := errors.AsType[validation.Error](err); ok {
+		return "", ve.Code()
+	}
+	return "", ""
 }
 
 func isValidationError(err error) bool {

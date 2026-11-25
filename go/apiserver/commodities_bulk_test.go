@@ -36,6 +36,21 @@ func (e *trashAPIEnv) getItem(id string) *models.Commodity {
 	return must.Must(getRegistrySetFromParams(e.params, e.user).CommodityRegistry.Get(context.Background(), id))
 }
 
+// listDigest returns the meta.selection_digest the items list answers for
+// query, the value a client sends back as expected_digest.
+func (e *trashAPIEnv) listDigest(query string) string {
+	e.c.Helper()
+	rr := e.do(http.MethodGet, "/commodities?"+query, "")
+	e.c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	var body struct {
+		Meta struct {
+			SelectionDigest string `json:"selection_digest"`
+		} `json:"meta"`
+	}
+	e.c.Assert(json.Unmarshal(rr.Body.Bytes(), &body), qt.IsNil)
+	return body.Meta.SelectionDigest
+}
+
 // bulkBody builds a bulk request body from its attributes.
 func bulkBody(attributes map[string]any) string {
 	return string(must.Must(json.Marshal(map[string]any{
@@ -83,8 +98,10 @@ func TestCommodityBulkUpdate_ByQuery(t *testing.T) {
 	query := "tags=clear-out&include_inactive=false&sort=name"
 	disposed := map[string]any{"status": map[string]any{"value": "disposed", "date": "2026-11-25", "note": "clear-out"}}
 
+	digest := env.listDigest(query)
+	c.Assert(digest, qt.Not(qt.Equals), "")
 	rr := env.do(http.MethodPost, "/commodities/bulk-update", bulkBody(map[string]any{
-		"query": query, "expected_count": 2, "patch": disposed,
+		"query": query, "expected_count": 2, "expected_digest": digest, "patch": disposed,
 	}))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{chair.ID, lamp.ID})
@@ -96,7 +113,7 @@ func TestCommodityBulkUpdate_ByQuery(t *testing.T) {
 	// Disposed items are inactive, so the same query selects none of them
 	// now. The request is refused instead of acting on another set.
 	rr = env.do(http.MethodPost, "/commodities/bulk-update", bulkBody(map[string]any{
-		"query": query, "expected_count": 2, "patch": map[string]any{"type": "electronics"},
+		"query": query, "expected_count": 2, "expected_digest": digest, "patch": map[string]any{"type": "electronics"},
 	}))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "bulk.selection_changed")
@@ -117,10 +134,12 @@ func TestCommodityBulkUpdate_Refused(t *testing.T) {
 		status int
 		code   string
 	}{
-		{"a parameter the query contract does not know", map[string]any{"query": "page=2", "expected_count": 1, "patch": typePatch}, http.StatusBadRequest, "query.invalid_parameter"},
-		{"items in Trash", map[string]any{"query": "trashed=true", "expected_count": 1, "patch": typePatch}, http.StatusBadRequest, "query.invalid_parameter"},
-		{"ids and a query", map[string]any{"ids": []string{"a"}, "query": "", "expected_count": 1, "patch": typePatch}, http.StatusUnprocessableEntity, ""},
-		{"a query without expected_count", map[string]any{"query": "", "patch": typePatch}, http.StatusUnprocessableEntity, ""},
+		{"a parameter the query contract does not know", map[string]any{"query": "page=2", "expected_count": 1, "expected_digest": "x", "patch": typePatch}, http.StatusBadRequest, "query.invalid_parameter"},
+		{"items in Trash", map[string]any{"query": "trashed=true", "expected_count": 1, "expected_digest": "x", "patch": typePatch}, http.StatusBadRequest, "query.invalid_parameter"},
+		{"ids and a query", map[string]any{"ids": []string{"a"}, "query": "", "expected_count": 1, "expected_digest": "x", "patch": typePatch}, http.StatusUnprocessableEntity, ""},
+		{"a query without expected_count", map[string]any{"query": "", "expected_digest": "x", "patch": typePatch}, http.StatusUnprocessableEntity, ""},
+		{"a query without expected_digest", map[string]any{"query": "", "expected_count": 1, "patch": typePatch}, http.StatusUnprocessableEntity, ""},
+		{"ids with expected_digest", map[string]any{"ids": []string{"a"}, "expected_digest": "x", "patch": typePatch}, http.StatusUnprocessableEntity, ""},
 		{"more than 100 ids", map[string]any{"ids": ids101, "patch": typePatch}, http.StatusUnprocessableEntity, ""},
 		{"no patch", map[string]any{"ids": []string{"a"}}, http.StatusUnprocessableEntity, ""},
 		{"an empty patch", map[string]any{"ids": []string{"a"}, "patch": map[string]any{}}, http.StatusUnprocessableEntity, ""},
@@ -169,8 +188,9 @@ func TestCommodityBulkMoveAndDelete_ByQuery(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 
 	// The query selects both; the one already in the shed is skipped.
+	digest := env.listDigest("tags=shed")
 	rr = env.do(http.MethodPost, "/commodities/bulk-move", bulkBody(map[string]any{
-		"query": "tags=shed", "expected_count": 2, "area_id": area.ID,
+		"query": "tags=shed", "expected_count": 2, "expected_digest": digest, "area_id": area.ID,
 	}))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{b.ID})
@@ -178,15 +198,102 @@ func TestCommodityBulkMoveAndDelete_ByQuery(t *testing.T) {
 	c.Assert(*env.getItem(b.ID).AreaID, qt.Equals, area.ID)
 
 	rr = env.do(http.MethodPost, "/commodities/bulk-delete", bulkBody(map[string]any{
-		"query": "tags=shed", "expected_count": 3,
+		"query": "tags=shed", "expected_count": 3, "expected_digest": digest,
 	}))
 	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
 
 	rr = env.do(http.MethodPost, "/commodities/bulk-delete", bulkBody(map[string]any{
-		"query": "tags=shed", "expected_count": 2,
+		"query": "tags=shed", "expected_count": 2, "expected_digest": digest,
 	}))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{a.ID, b.ID})
 	_, err := regs.CommodityRegistry.GetTrashed(context.Background(), a.ID)
 	c.Assert(err, qt.IsNil)
+}
+
+// The same number of items is not the same items: when one item leaves the
+// query and another joins it, the digest the list gave no longer matches.
+func TestCommodityBulkUpdate_RefusesASwappedItem(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	a := env.bulkItem("Swap A", "sale")
+	b := env.bulkItem("Swap B", "sale")
+	joiner := env.bulkItem("Swap C")
+
+	query := "tags=sale"
+	digest := env.listDigest(query)
+
+	regs := getRegistrySetFromParams(env.params, env.user)
+	left := *env.getItem(b.ID)
+	left.Tags = nil
+	must.Must(regs.CommodityRegistry.Update(context.Background(), left))
+	joined := *env.getItem(joiner.ID)
+	joined.Tags = []string{"sale"}
+	must.Must(regs.CommodityRegistry.Update(context.Background(), joined))
+
+	rr := env.do(http.MethodPost, "/commodities/bulk-update", bulkBody(map[string]any{
+		"query": query, "expected_count": 2, "expected_digest": digest, "patch": map[string]any{"type": "electronics"},
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "bulk.selection_changed")
+	c.Assert(env.getItem(a.ID).Type, qt.Equals, models.CommodityTypeOther)
+	c.Assert(env.getItem(joiner.ID).Type, qt.Equals, models.CommodityTypeOther)
+
+	// The list's digest now names the new set, and the action goes through.
+	rr = env.do(http.MethodPost, "/commodities/bulk-update", bulkBody(map[string]any{
+		"query": query, "expected_count": 2, "expected_digest": env.listDigest(query), "patch": map[string]any{"type": "electronics"},
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{a.ID, joiner.ID})
+}
+
+// The digest covers every page, so a client on page 2 of a short list gets
+// the same one as on page 1; a query a bulk action cannot take gets none.
+func TestCommodityList_SelectionDigest(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	env.bulkItem("Digest A", "digest")
+	env.bulkItem("Digest B", "digest")
+	env.bulkItem("Digest C", "digest")
+
+	whole := env.listDigest("tags=digest")
+	c.Assert(whole, qt.Not(qt.Equals), "")
+	c.Assert(env.listDigest("tags=digest&page=2&per_page=2"), qt.Equals, whole)
+	c.Assert(env.listDigest("tags=digest&sort=-name"), qt.Equals, whole)
+	c.Assert(env.listDigest("tags=nothing-has-this"), qt.Equals, "")
+	c.Assert(env.listDigest("tags=digest&trashed=true"), qt.Equals, "")
+}
+
+func TestCommodityBulkMove_RefusesAMissingArea(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	item := env.bulkItem("Bulk Nowhere")
+
+	rr := env.do(http.MethodPost, "/commodities/bulk-move", bulkBody(map[string]any{
+		"ids": []string{item.ID}, "area_id": "no-such-area",
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "area_id")
+	c.Assert(env.getItem(item.ID).AreaID, qt.IsNil)
+}
+
+// A validation failure names the field and the validator's code, so the
+// client can say it in the user's language.
+func TestCommodityBulkUpdate_InvalidItemNamesFieldAndReason(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	item := env.bulkItem("Bulk Unnamed")
+	regs := getRegistrySetFromParams(env.params, env.user)
+	broken := *item
+	broken.ShortName = ""
+	must.Must(regs.CommodityRegistry.Update(context.Background(), broken))
+
+	rr := env.do(http.MethodPost, "/commodities/bulk-update", bulkBody(map[string]any{
+		"ids": []string{item.ID}, "patch": map[string]any{"type": "electronics"},
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	body := rr.Body.String()
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].code"), "invalid")
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].field"), "short_name")
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].reason"), "validation_is_empty")
 }

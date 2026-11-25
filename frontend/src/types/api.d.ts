@@ -4235,8 +4235,8 @@ export type paths = {
         /**
          * Bulk-delete commodities
          * @description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
-         *     The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
-         *     The response lists succeeded and failed ids.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
          */
         post: {
             parameters: {
@@ -4273,7 +4273,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -4311,7 +4311,8 @@ export type paths = {
         /**
          * Bulk-move commodities to a new area
          * @description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
-         *     The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     An area_id that is not an area of the group is refused with 422 before any item changes.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
          */
         post: {
             parameters: {
@@ -4348,7 +4349,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -4357,7 +4358,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items */
+                /** @description Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4394,10 +4395,11 @@ export type paths = {
          *     A part left out of the patch is left unchanged.
          *
          *     The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
-         *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count`,
-         *     the number of items the caller saw it select. The query is run when the request arrives; when it
-         *     selects a different number of items the request fails with 409 and changes nothing, and it may
-         *     select at most 500 items and no items in Trash.
+         *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
+         *     `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
+         *     GET /commodities returned for it. The query is run when the request arrives; when it selects
+         *     other items (more, fewer, or as many with one swapped) the request fails with 409 and changes
+         *     nothing. It may select at most 500 items and no items in Trash.
          *
          *     The response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
          */
@@ -4436,7 +4438,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -6894,9 +6896,11 @@ export type paths = {
         put?: never;
         /**
          * Bulk-update files
-         * @description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Each file is saved as PUT /files/{id} saves it.
-         *     `tags.add` takes slugs or the text of a new tag, which is created as a single edit creates it; `tags.remove` takes slugs.
-         *     Tags the patch does not name stay on each file. A tag cannot be in both lists, and each list holds at most 50 tags.
+         * @description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:
+         *     unlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name
+         *     stay on each file, and the title, description and file name stay as they are.
+         *     `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
+         *     A tag cannot be in both lists, and each list holds at most 50 tags.
          *
          *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
          */
@@ -12407,6 +12411,8 @@ export type components = {
             area_id?: string;
             /** @example 37 */
             expected_count?: number;
+            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            expected_digest?: string;
             ids?: string[];
             /** @example status=in_use&tags=garage&include_inactive=false */
             query?: string;
@@ -12420,6 +12426,11 @@ export type components = {
         };
         "jsonapi.BulkResultAttrs": {
             failed?: components["schemas"]["jsonapi.BulkResultFail"][];
+            /**
+             * @description Notes adds to succeeded ids something the caller should know. Absent
+             *     when there is nothing to add.
+             */
+            notes?: components["schemas"]["jsonapi.BulkResultNote"][];
             /**
              * @description Skipped lists the ids the action left as they were because there was
              *     nothing to change. Absent when there are none.
@@ -12441,8 +12452,28 @@ export type components = {
              */
             code?: "not_found" | "invalid" | "failed";
             error?: string;
+            /**
+             * @description Field and Reason come with invalid: the field the validation refused
+             *     and the validator's code for why (for example short_name and
+             *     validation_required), so a client can say it in the user's language.
+             *     Error is the English message.
+             * @example short_name
+             */
+            field?: string;
             id?: string;
             /** @description Name is the item's name when the item could be read. */
+            name?: string;
+            /** @example validation_required */
+            reason?: string;
+        };
+        "jsonapi.BulkResultNote": {
+            /**
+             * @description Code is files_kept: the item went to Trash, but moving its files there
+             *     failed, so some of them stayed live.
+             * @enum {string}
+             */
+            code?: "files_kept";
+            id?: string;
             name?: string;
         };
         "jsonapi.BulkResultResponse": {
@@ -12497,6 +12528,15 @@ export type components = {
              */
             per_page?: number;
             /**
+             * @description SelectionDigest names the set of items the query selects, on every
+             *     page (commodityquery.Digest). A bulk action on the query sends it back
+             *     as expected_digest, and is refused when the query no longer selects
+             *     exactly these items. Omitted when the query selects no items, more
+             *     than a bulk action takes (500), or items in Trash.
+             * @example 5d41402abc4b2a76b9719d911017c592
+             */
+            selection_digest?: string;
+            /**
              * Format: int64
              * @example 1
              */
@@ -12533,6 +12573,8 @@ export type components = {
         "jsonapi.CommodityBulkSelection": {
             /** @example 37 */
             expected_count?: number;
+            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            expected_digest?: string;
             ids?: string[];
             /** @example status=in_use&tags=garage&include_inactive=false */
             query?: string;
@@ -12550,6 +12592,8 @@ export type components = {
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
             expected_count?: number;
+            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            expected_digest?: string;
             ids?: string[];
             patch?: components["schemas"]["jsonapi.CommodityBulkPatch"];
             /** @example status=in_use&tags=garage&include_inactive=false */

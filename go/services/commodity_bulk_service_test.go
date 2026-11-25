@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -94,6 +95,23 @@ func (f *bulkFixture) eventKinds(c *qt.C, id string) []models.CommodityEventKind
 		}
 	}
 	return kinds
+}
+
+// byID names items by id only, as an ids selection does.
+func byID(ids ...string) []services.BulkTarget {
+	targets := make([]services.BulkTarget, 0, len(ids))
+	for _, id := range ids {
+		targets = append(targets, services.BulkTarget{ID: id})
+	}
+	return targets
+}
+
+func targetIDs(targets []services.BulkTarget) []string {
+	ids := make([]string, 0, len(targets))
+	for _, t := range targets {
+		ids = append(ids, t.ID)
+	}
+	return ids
 }
 
 func withTags(tags ...string) func(*models.Commodity) {
@@ -273,9 +291,9 @@ func TestCommodityPatch_Apply(t *testing.T) {
 func TestResolveBulkSelection_IDs(t *testing.T) {
 	c := qt.New(t)
 	f := newBulkFixture(c)
-	ids, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{IDs: []string{"b", "a", "b"}})
+	targets, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{IDs: []string{"b", "a", "b"}})
 	c.Assert(err, qt.IsNil)
-	c.Assert(ids, qt.DeepEquals, []string{"b", "a"})
+	c.Assert(targets, qt.DeepEquals, byID("b", "a"))
 }
 
 func TestResolveBulkSelection_Query(t *testing.T) {
@@ -290,24 +308,42 @@ func TestResolveBulkSelection_Query(t *testing.T) {
 
 	query := must.Must(commodityquery.Parse(map[string][]string{"tags": {"garage"}}))
 
-	c.Run("selects the live items the query lists, in its order", func(c *qt.C) {
-		ids, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &query, ExpectedCount: 2})
+	digest := commodityquery.Digest([]string{garageB.ID, garageA.ID})
+
+	c.Run("selects the live items the query lists, in its order, with their rows", func(c *qt.C) {
+		targets, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &query, ExpectedCount: 2, ExpectedDigest: digest})
 		c.Assert(err, qt.IsNil)
-		c.Assert(ids, qt.DeepEquals, []string{garageA.ID, garageB.ID})
+		c.Assert(targetIDs(targets), qt.DeepEquals, []string{garageA.ID, garageB.ID})
+		c.Assert(targets[0].Row.Name, qt.Equals, "Garage A")
+	})
+
+	c.Run("the list digest of the query is the one it expects", func(c *qt.C) {
+		listed, ok, err := commodityquery.SelectionDigest(f.ctx, f.set, query, services.MaxBulkQueryItems)
+		c.Assert(err, qt.IsNil)
+		c.Assert(ok, qt.IsTrue)
+		c.Assert(listed, qt.Equals, digest)
 	})
 
 	c.Run("refuses when the query selects a different number", func(c *qt.C) {
-		_, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &query, ExpectedCount: 1})
+		_, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &query, ExpectedCount: 1, ExpectedDigest: digest})
 		changed, ok := errors.AsType[*services.BulkSelectionChangedError](err)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
 		c.Assert(changed.Expected, qt.Equals, 1)
 		c.Assert(changed.Matched, qt.Equals, 2)
 	})
 
+	c.Run("refuses as many items with one swapped", func(c *qt.C) {
+		seen := commodityquery.Digest([]string{garageA.ID, "an-item-since-untagged"})
+		_, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &query, ExpectedCount: 2, ExpectedDigest: seen})
+		changed, ok := errors.AsType[*services.BulkSelectionChangedError](err)
+		c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+		c.Assert(changed.Matched, qt.Equals, 2)
+	})
+
 	c.Run("refuses items in Trash", func(c *qt.C) {
 		trashed := query
 		trashed.Trashed = true
-		_, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &trashed, ExpectedCount: 1})
+		_, err := services.ResolveBulkSelection(f.ctx, f.set, services.BulkSelection{Query: &trashed, ExpectedCount: 1, ExpectedDigest: digest})
 		qErr, ok := errors.AsType[*commodityquery.Error](err)
 		c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
 		c.Assert(qErr.Param, qt.Equals, "trashed")
@@ -337,7 +373,7 @@ func TestCommodityBulkService_UpdateTags(t *testing.T) {
 
 	patch := parsePatch(c, services.CommodityPatchInput{AddTags: []string{"Insured"}, RemoveTags: []string{"old"}})
 	c.Assert(f.svc.EnsureTags(f.ctx, &patch), qt.IsNil)
-	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, []string{drill.ID, saw.ID, insured.ID, "missing"}, patch)
+	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, byID(drill.ID, saw.ID, insured.ID, "missing"), patch)
 
 	c.Assert(out.Succeeded, qt.DeepEquals, []string{drill.ID, saw.ID})
 	c.Assert(out.Skipped, qt.DeepEquals, []services.BulkSkip{{ID: insured.ID, Name: "Insured"}})
@@ -371,7 +407,7 @@ func TestCommodityBulkService_UpdateStatus(t *testing.T) {
 	patch := parsePatch(c, services.CommodityPatchInput{
 		Status: &services.CommodityStatusInput{Value: "disposed", Date: "2026-11-25", Note: "clear-out"},
 	})
-	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, []string{lamp.ID, chair.ID, broken.ID}, patch)
+	out := f.svc.Update(f.ctx, f.set.CommodityRegistry, byID(lamp.ID, chair.ID, broken.ID), patch)
 
 	c.Assert(out.Succeeded, qt.DeepEquals, []string{lamp.ID, chair.ID})
 	c.Assert(out.Failed, qt.HasLen, 1)
@@ -390,7 +426,7 @@ func TestCommodityBulkService_UpdateStatus(t *testing.T) {
 
 	// Back to in use clears what the status change recorded.
 	revert := parsePatch(c, services.CommodityPatchInput{Status: &services.CommodityStatusInput{Value: "in_use"}})
-	out = f.svc.Update(f.ctx, f.set.CommodityRegistry, []string{lamp.ID}, revert)
+	out = f.svc.Update(f.ctx, f.set.CommodityRegistry, byID(lamp.ID), revert)
 	c.Assert(out.Succeeded, qt.DeepEquals, []string{lamp.ID})
 	got = f.get(c, lamp.ID)
 	c.Assert(got.Status, qt.Equals, models.CommodityStatusInUse)
@@ -406,21 +442,69 @@ func TestCommodityBulkService_MoveAndDelete(t *testing.T) {
 	there := f.item(c, "There", func(c *models.Commodity) { c.AreaID = new(area.ID) })
 	loose := f.item(c, "Loose")
 
-	out := f.svc.Move(f.ctx, f.set.CommodityRegistry, []string{there.ID, loose.ID}, area.ID)
+	out := f.svc.Move(f.ctx, f.set.CommodityRegistry, byID(there.ID, loose.ID), area.ID)
 	c.Assert(out.Succeeded, qt.DeepEquals, []string{loose.ID})
 	c.Assert(out.Skipped, qt.DeepEquals, []services.BulkSkip{{ID: there.ID, Name: "There"}})
 	c.Assert(*f.get(c, loose.ID).AreaID, qt.Equals, area.ID)
 	c.Assert(f.eventKinds(c, loose.ID), qt.DeepEquals, []models.CommodityEventKind{models.CommodityEventKindMoved})
 
-	out = f.svc.Delete(f.ctx, []string{there.ID, loose.ID})
+	out = f.svc.Delete(f.ctx, byID(there.ID, loose.ID))
 	c.Assert(out.Succeeded, qt.DeepEquals, []string{there.ID, loose.ID})
 	_, err := f.set.CommodityRegistry.GetTrashed(f.ctx, loose.ID)
 	c.Assert(err, qt.IsNil)
 
 	// Deleting again finds nothing to delete.
-	out = f.svc.Delete(f.ctx, []string{loose.ID})
+	out = f.svc.Delete(f.ctx, byID(loose.ID))
 	c.Assert(out.Failed, qt.HasLen, 1)
 	c.Assert(out.Failed[0].Err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// fileTrashFails is a file registry whose Trash always fails, as when the
+// database drops the connection between the item and its files.
+type fileTrashFails struct{ registry.FileRegistry }
+
+func (fileTrashFails) Trash(context.Context, string, string, string, time.Time) error {
+	return errors.New("connection lost")
+}
+
+type fileTrashFailsFactory struct{ registry.FileRegistryFactory }
+
+func (f fileTrashFailsFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	reg, err := f.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return fileTrashFails{reg}, nil
+}
+
+func TestCommodityBulkService_DeleteKeepsAnItemWhoseFilesStayed(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	item := f.item(c, "Camera")
+	must.Must(f.set.FileRegistry.Create(f.ctx, models.FileEntity{
+		Title:    "camera",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		Links:    []models.FileLink{{EntityType: models.FileLinkCommodity, EntityID: item.ID, Meta: models.FileLinkMetaImages}},
+		File:     &models.File{Path: "camera", OriginalPath: "blobs/camera.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	}))
+
+	fs := *f.fs
+	fs.FileRegistryFactory = fileTrashFailsFactory{f.fs.FileRegistryFactory}
+	svc := services.NewCommodityBulkService(
+		services.NewTagService(&fs),
+		services.NewCommodityEventService(&fs),
+		services.NewTrashService(&fs, "file://"+c.TempDir()),
+	)
+
+	// The item is in Trash, so the delete succeeded and Undo must offer it;
+	// the note says its file did not follow.
+	out := svc.Delete(f.ctx, byID(item.ID))
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{item.ID})
+	c.Assert(out.Failed, qt.HasLen, 0)
+	c.Assert(out.Notes, qt.DeepEquals, []services.BulkNote{{ID: item.ID, Name: "Camera", Code: services.BulkNoteFilesKept}})
+	_, err := f.set.CommodityRegistry.GetTrashed(f.ctx, item.ID)
+	c.Assert(err, qt.IsNil)
 }
 
 func TestCommodityBulkService_StopsWhenTheRequestEnds(t *testing.T) {
@@ -432,7 +516,7 @@ func TestCommodityBulkService_StopsWhenTheRequestEnds(t *testing.T) {
 	cancel()
 
 	patch := parsePatch(c, services.CommodityPatchInput{Type: new("electronics")})
-	out := f.svc.Update(ctx, f.set.CommodityRegistry, []string{a.ID, b.ID}, patch)
+	out := f.svc.Update(ctx, f.set.CommodityRegistry, byID(a.ID, b.ID), patch)
 	c.Assert(out.Succeeded, qt.HasLen, 0)
 	c.Assert(out.Failed, qt.HasLen, 2)
 	c.Assert(f.get(c, a.ID).Type, qt.Equals, models.CommodityTypeOther)

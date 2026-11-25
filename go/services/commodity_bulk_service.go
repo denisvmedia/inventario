@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"maps"
 	"slices"
 	"time"
@@ -32,24 +33,44 @@ const (
 )
 
 // BulkSelection names the items of a bulk action: the ids in IDs, or the
-// live items Query selects. With Query, ExpectedCount is the number of items
-// the caller saw it select.
+// live items Query selects. With Query, ExpectedCount and ExpectedDigest are
+// the number of items the caller saw it select and the commodityquery.Digest
+// of their ids.
 type BulkSelection struct {
-	IDs           []string
-	Query         *commodityquery.Query
-	ExpectedCount int
+	IDs            []string
+	Query          *commodityquery.Query
+	ExpectedCount  int
+	ExpectedDigest string
 }
 
-// BulkSelectionChangedError reports that a query selects a different number
-// of items than the caller saw, so the action would not act on what the user
-// confirmed.
+// BulkSelectionChangedError reports that a query selects other items than
+// the caller saw: a different number, or as many with at least one swapped.
+// Acting on them would not act on what the user confirmed.
 type BulkSelectionChangedError struct {
 	Expected int
 	Matched  int
 }
 
 func (e *BulkSelectionChangedError) Error() string {
+	if e.Matched == e.Expected {
+		return fmt.Sprintf("the query now selects other items than the %d the caller saw", e.Expected)
+	}
 	return fmt.Sprintf("the query now selects %d items, not %d", e.Matched, e.Expected)
+}
+
+// BulkTarget is one item of a bulk action. Row is the item as the selection
+// read it, nil when the selection named it by id only; the action then reads
+// it itself.
+type BulkTarget struct {
+	ID  string
+	Row *models.Commodity
+}
+
+func (t BulkTarget) name() string {
+	if t.Row == nil {
+		return ""
+	}
+	return t.Row.Name
 }
 
 // BulkTooManyError reports a query that selects more items than one bulk
@@ -63,14 +84,20 @@ func (e *BulkTooManyError) Error() string {
 	return fmt.Sprintf("the query selects %d items; a bulk action takes at most %d", e.Matched, e.Max)
 }
 
-// ResolveBulkSelection returns the ids sel names, each once. A query is run
+// ResolveBulkSelection returns the items sel names, each once. A query is run
 // through the item query contract (commodityquery), so it selects exactly the
-// items the items list shows for it, in its order; it may not select items in
-// Trash, and it fails with BulkTooManyError or BulkSelectionChangedError
-// instead of acting on a set the caller did not see.
-func ResolveBulkSelection(ctx context.Context, set *registry.Set, sel BulkSelection) ([]string, error) {
+// items the items list shows for it, in its order, and the targets carry the
+// rows it read. It may not select items in Trash, and it fails with
+// BulkTooManyError or BulkSelectionChangedError instead of acting on a set
+// the caller did not see. Ids are returned without rows.
+func ResolveBulkSelection(ctx context.Context, set *registry.Set, sel BulkSelection) ([]BulkTarget, error) {
 	if sel.Query == nil {
-		return uniqueIDs(sel.IDs), nil
+		ids := uniqueIDs(sel.IDs)
+		targets := make([]BulkTarget, 0, len(ids))
+		for _, id := range ids {
+			targets = append(targets, BulkTarget{ID: id})
+		}
+		return targets, nil
 	}
 	if sel.Query.Trashed {
 		return nil, &commodityquery.Error{
@@ -90,10 +117,15 @@ func ResolveBulkSelection(ctx context.Context, set *registry.Set, sel BulkSelect
 		return nil, &BulkSelectionChangedError{Expected: sel.ExpectedCount, Matched: page.Total}
 	}
 	ids := make([]string, 0, len(page.Commodities))
+	targets := make([]BulkTarget, 0, len(page.Commodities))
 	for _, c := range page.Commodities {
 		ids = append(ids, c.ID)
+		targets = append(targets, BulkTarget{ID: c.ID, Row: c})
 	}
-	return ids, nil
+	if commodityquery.Digest(ids) != sel.ExpectedDigest {
+		return nil, &BulkSelectionChangedError{Expected: sel.ExpectedCount, Matched: page.Total}
+	}
+	return targets, nil
 }
 
 func uniqueIDs(ids []string) []string {
@@ -111,8 +143,10 @@ func uniqueIDs(ids []string) []string {
 
 // CheckCommodityType reports whether an item may be given type t: nil, a
 // validation.Error saying why not, or the error that kept it from checking.
-// It is the one check of a type value outside the item model, so the item
-// types can become a per-group list by changing it.
+// It is the one check of a type value outside the item model. Making the item
+// types a per-group list (#2802) changes it together with
+// models.CommodityType.Validate, which every item save runs, the bulk path
+// included (Commodity.ValidateWithContext).
 func CheckCommodityType(_ context.Context, t models.CommodityType) error {
 	if !t.IsValid() {
 		return validation.NewError("invalid_type", "invalid type")
@@ -346,12 +380,26 @@ func (p CommodityPatch) Apply(c models.Commodity) (models.Commodity, bool) {
 }
 
 // BulkOutcome is the result of a bulk action, item by item. Every id of the
-// action is in exactly one of the lists.
+// action is in exactly one of Succeeded, Skipped and Failed; Notes adds to
+// succeeded ids.
 type BulkOutcome struct {
 	Succeeded []string
 	Skipped   []BulkSkip
 	Failed    []BulkFailure
+	Notes     []BulkNote
 }
+
+// BulkNote is something to know about an item a bulk action changed.
+type BulkNote struct {
+	ID   string
+	Name string
+	// Code is BulkNoteFilesKept.
+	Code string
+}
+
+// BulkNoteFilesKept: the item went to Trash, but moving its files there
+// failed, so some of them stayed live.
+const BulkNoteFilesKept = "files_kept"
 
 // BulkSkip is an item a bulk action left unchanged because it already had
 // what the action sets.
@@ -402,101 +450,113 @@ func (s *CommodityBulkService) EnsureTags(ctx context.Context, patch *CommodityP
 	return nil
 }
 
-// Update applies patch to every item in ids. An item the patch does not
-// change is skipped. The context must carry the group currency, which the
-// item validation reads.
-func (s *CommodityBulkService) Update(ctx context.Context, items registry.CommodityRegistry, ids []string, patch CommodityPatch) BulkOutcome {
+// Update applies patch to every target. An item the patch does not change
+// is skipped. The context must carry the group currency, which the item
+// validation reads.
+func (s *CommodityBulkService) Update(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, patch CommodityPatch) BulkOutcome {
 	var out BulkOutcome
-	for i, id := range ids {
+	for i, t := range targets {
 		if err := ctx.Err(); err != nil {
-			failRest(&out, ids[i:], err)
+			failRest(&out, targets[i:], err)
 			break
 		}
-		before, err := items.Get(ctx, id)
+		before, err := targetRow(ctx, items, t)
 		if err != nil {
-			out.fail(id, "", err)
+			out.fail(t.ID, "", err)
 			continue
 		}
 		after, changed := patch.Apply(*before)
 		if !changed {
-			out.Skipped = append(out.Skipped, BulkSkip{ID: id, Name: before.Name})
+			out.Skipped = append(out.Skipped, BulkSkip{ID: t.ID, Name: before.Name})
 			continue
 		}
 		if err := ValidateCommodityStatusTransition(before.Status, after.Status, after.StatusDate, after.SalePrice); err != nil {
-			out.fail(id, before.Name, err)
+			out.fail(t.ID, before.Name, err)
 			continue
 		}
 		if err := after.ValidateWithContext(ctx); err != nil {
-			out.fail(id, before.Name, err)
+			out.fail(t.ID, before.Name, err)
 			continue
 		}
 		updated, err := items.Update(ctx, after)
 		if err != nil {
-			out.fail(id, before.Name, err)
+			out.fail(t.ID, before.Name, err)
 			continue
 		}
 		s.events.EmitUpdated(ctx, before, updated)
-		out.Succeeded = append(out.Succeeded, id)
+		out.Succeeded = append(out.Succeeded, t.ID)
 	}
 	return out
 }
 
-// Move puts every item in ids into the area areaID. An item already there
-// is skipped.
-func (s *CommodityBulkService) Move(ctx context.Context, items registry.CommodityRegistry, ids []string, areaID string) BulkOutcome {
+// Move puts every target into the area areaID, which the caller has checked
+// exists. An item already there is skipped.
+func (s *CommodityBulkService) Move(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, areaID string) BulkOutcome {
 	var out BulkOutcome
-	for i, id := range ids {
+	for i, t := range targets {
 		if err := ctx.Err(); err != nil {
-			failRest(&out, ids[i:], err)
+			failRest(&out, targets[i:], err)
 			break
 		}
-		before, err := items.Get(ctx, id)
+		before, err := targetRow(ctx, items, t)
 		if err != nil {
-			out.fail(id, "", err)
+			out.fail(t.ID, "", err)
 			continue
 		}
 		if before.AreaID != nil && *before.AreaID == areaID {
-			out.Skipped = append(out.Skipped, BulkSkip{ID: id, Name: before.Name})
+			out.Skipped = append(out.Skipped, BulkSkip{ID: t.ID, Name: before.Name})
 			continue
 		}
 		after := *before
 		after.AreaID = new(areaID)
 		updated, err := items.Update(ctx, after)
 		if err != nil {
-			out.fail(id, before.Name, err)
+			out.fail(t.ID, before.Name, err)
 			continue
 		}
 		s.events.EmitUpdated(ctx, before, updated)
-		out.Succeeded = append(out.Succeeded, id)
+		out.Succeeded = append(out.Succeeded, t.ID)
 	}
 	return out
 }
 
-// Delete moves every item in ids to Trash, as deleting one item does: with
-// the files no other entity uses and a deleted event in its history.
-func (s *CommodityBulkService) Delete(ctx context.Context, ids []string) BulkOutcome {
+// Delete moves every target to Trash, as deleting one item does: with the
+// files no other entity uses and a deleted event in its history. An item
+// that went to Trash although moving its files failed is reported as
+// succeeded, with a BulkNoteFilesKept note, since restoring it is how the
+// user takes the delete back.
+func (s *CommodityBulkService) Delete(ctx context.Context, targets []BulkTarget) BulkOutcome {
 	var out BulkOutcome
-	for i, id := range ids {
+	for i, t := range targets {
 		if err := ctx.Err(); err != nil {
-			failRest(&out, ids[i:], err)
+			failRest(&out, targets[i:], err)
 			break
 		}
-		trashed, err := s.trash.TrashCommodity(ctx, id)
-		if err != nil {
-			name := ""
-			if trashed != nil {
-				name = trashed.Name
-			}
-			out.fail(id, name, err)
-			continue
+		trashed, err := s.trash.TrashCommodity(ctx, t.ID)
+		switch {
+		case err == nil:
+			out.Succeeded = append(out.Succeeded, t.ID)
+		case trashed != nil:
+			slog.WarnContext(ctx, "bulk delete: item went to Trash, its files did not", "commodity_id", t.ID, "err", err)
+			out.Succeeded = append(out.Succeeded, t.ID)
+			out.Notes = append(out.Notes, BulkNote{ID: t.ID, Name: trashed.Name, Code: BulkNoteFilesKept})
+		default:
+			out.fail(t.ID, t.name(), err)
 		}
-		out.Succeeded = append(out.Succeeded, id)
 	}
 	return out
 }
 
-func failRest(out *BulkOutcome, ids []string, err error) {
-	for _, id := range ids {
-		out.fail(id, "", err)
+// targetRow returns the row of t, reading it when the selection did not.
+func targetRow(ctx context.Context, items registry.CommodityRegistry, t BulkTarget) (*models.Commodity, error) {
+	if t.Row != nil {
+		return t.Row, nil
+	}
+	return items.Get(ctx, t.ID)
+}
+
+func failRest(out *BulkOutcome, targets []BulkTarget, err error) {
+	for _, t := range targets {
+		out.fail(t.ID, t.name(), err)
 	}
 }
