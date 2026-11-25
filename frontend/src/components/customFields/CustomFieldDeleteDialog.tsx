@@ -80,7 +80,13 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
     if (!shown || (inUse && !confirmed)) return
     setState((prev) => ({ ...prev, serverError: null }))
     try {
-      await deleteMutation.mutateAsync({ id: shown.id, deleteValues: inUse })
+      // The count the dialog shows: the server refuses the delete when
+      // another number of items has a value by now.
+      await deleteMutation.mutateAsync({
+        id: shown.id,
+        deleteValues: inUse,
+        expectedValues: inUse ? count : undefined,
+      })
       toast.success(t("customFields:toast.deleted"))
       onClose()
     } catch (err) {

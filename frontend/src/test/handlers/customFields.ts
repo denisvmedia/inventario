@@ -72,9 +72,10 @@ export function update(slug: string, response: CustomField, body = capture<unkno
   ]
 }
 
-// remove backs DELETE /custom-fields/{id}. Each request's delete_values (or
-// "") is pushed onto calls. A request without delete_values=true is refused
-// with the 409 of a field in use when counts are given.
+// remove backs DELETE /custom-fields/{id}. Each request's query string is
+// pushed onto calls. When counts are given, a request without
+// delete_values=true, or with an expected_values other than their sum, is
+// refused with the 409 of a field in use.
 export function remove(
   slug: string,
   fieldID: string,
@@ -83,9 +84,15 @@ export function remove(
 ) {
   return [
     http.delete(groupPath(slug, `/${encodeURIComponent(fieldID)}`), ({ request }) => {
-      const deleteValues = new URL(request.url).searchParams.get("delete_values") ?? ""
-      calls.push(deleteValues)
-      if (counts && deleteValues !== "true") {
+      const params = new URL(request.url).searchParams
+      calls.push(params.toString())
+      const expected = params.get("expected_values")
+      const total = counts ? counts.live + counts.trashed : 0
+      if (
+        counts &&
+        (params.get("delete_values") !== "true" ||
+          (expected !== null && Number(expected) !== total))
+      ) {
         return HttpResponse.json(
           {
             errors: [

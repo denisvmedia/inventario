@@ -38,9 +38,9 @@ export type CustomField = Omit<Schema<"jsonapi.CustomFieldView">, "type" | "temp
 
 // An item's values, by field id, in the API form of each type: a string
 // for text, long text, URL, date (YYYY-MM-DD), select (the option id) and
-// link (the item id); a number for number; a boolean for yes/no; and
-// { amount, currency } for money. A missing key leaves the stored value as
-// it is on a write; null clears it.
+// link (the item id); a decimal string for number; a boolean for yes/no;
+// and { amount, currency } for money. A missing key leaves the stored value
+// as it is on a write; null clears it.
 export type CustomFieldValues = Record<string, unknown>
 
 // Limits mirror go/models/custom_field.go and custom_field_value.go.
@@ -54,12 +54,13 @@ export const CUSTOM_FIELD_URL_MAX = 2048
 
 // JSON:API error codes of the custom field endpoints.
 export const CUSTOM_FIELD_NAME_TAKEN = "custom_field.name_taken"
-// A delete without delete_values of a field items have values for. The
-// error's meta carries item_count and trashed_item_count.
+// A delete without delete_values of a field items have values for, or one
+// whose expected_values is not the current count. The error's meta carries
+// item_count and trashed_item_count.
 export const CUSTOM_FIELD_IN_USE = "custom_field.in_use"
 export const CUSTOM_FIELD_LIMIT = "custom_field.limit_reached"
 // An item write with a value its field refuses; the field errors are under
-// custom_fields.<field id>.
+// data.attributes.custom_fields.<field id>.
 export const CUSTOM_FIELD_INVALID_VALUE = "custom_field.invalid_value"
 
 export interface CustomFieldInput {
@@ -133,10 +134,21 @@ export async function updateCustomField(
 }
 
 // deleteCustomField deletes a field. Without deleteValues the server
-// refuses a field that items have values for; with it the values go too.
+// refuses a field that items have values for; with it the values go too,
+// and expectedValues, the number of items the member confirmed to lose a
+// value, makes the server refuse the delete when another number has one.
 // Resolves with the number of values deleted.
-export async function deleteCustomField(id: string, deleteValues = false): Promise<number> {
-  const query = deleteValues ? "?delete_values=true" : ""
+export async function deleteCustomField(
+  id: string,
+  deleteValues = false,
+  expectedValues?: number
+): Promise<number> {
+  const params = new URLSearchParams()
+  if (deleteValues) params.set("delete_values", "true")
+  if (deleteValues && expectedValues !== undefined) {
+    params.set("expected_values", String(expectedValues))
+  }
+  const query = params.size > 0 ? `?${params.toString()}` : ""
   const body = await http.del<CustomFieldDeleteEnvelope | undefined>(
     `/custom-fields/${encodeURIComponent(id)}${query}`
   )
