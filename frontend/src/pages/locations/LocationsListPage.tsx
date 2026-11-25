@@ -53,6 +53,10 @@ interface LocationsListPageProps {
 // undercounting.
 const ITEM_COUNT_FETCH_CAP = 100
 
+// How long typing in the search box pauses before the query goes into the
+// URL; the list itself filters on every keystroke.
+const SEARCH_DEBOUNCE_MS = 250
+
 // /locations — list of every location in the active group. Each card is
 // a click-through tile (MapPin avatar + name + address + areas/items
 // stat chips + chevron) routed to the location detail. Per
@@ -90,10 +94,44 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   // Search filters locations + their areas client-side. The list is
   // typically small (single-digit) so paging / server-side search
-  // would be over-engineered. It starts from `?q=`, which the search
-  // page's "see all" link for locations carries.
-  const [searchParams] = useSearchParams()
-  const [query, setQuery] = useState(() => searchParams.get("q") ?? "")
+  // would be over-engineered. The query lives in `?q=`, which the search
+  // page's and the palette's links to the list carry.
+  //
+  // The input keeps its own state: the router applies URL changes in a
+  // transition, and a text input controlled by a lagging value loses
+  // keystrokes. A new `q` from a link or from back/forward replaces what
+  // is typed; the URL catching up with the input leaves it alone, so a
+  // trailing space being typed survives.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlQuery = searchParams.get("q") ?? ""
+  const [query, setQuery] = useState(urlQuery)
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery)
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery)
+    if (urlQuery !== query.trim()) setQuery(urlQuery)
+  }
+
+  // Write the typed query into the URL once typing pauses, so a reload,
+  // a shared link or back/forward keeps the filter.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed === urlQuery) return
+    const timer = window.setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (trimmed) {
+            next.set("q", trimmed)
+          } else {
+            next.delete("q")
+          }
+          return next
+        },
+        { replace: true }
+      )
+    }, SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [query, urlQuery, setSearchParams])
 
   // Target for the non-empty cascade/unlink delete dialog (#2137); null
   // when closed.
