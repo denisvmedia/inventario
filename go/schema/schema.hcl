@@ -2544,6 +2544,10 @@ table "intake_sources" {
     type = INTEGER
     default = "0"
   }
+  column "retry_base" {
+    type = INTEGER
+    default = "0"
+  }
   column "next_attempt_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")

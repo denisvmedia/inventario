@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-11-25T17:48:32+01:00
+-- Generated on: 2026-11-25T21:18:23+01:00
 -- Direction: UP
 -- +ptah lock_timeout=3s
 -- +ptah statement_timeout=30s
@@ -23,6 +23,7 @@ CREATE TABLE "intake_sources" (
   "one_item" BOOLEAN NOT NULL DEFAULT false,
   "status" TEXT NOT NULL DEFAULT 'pending',
   "attempts" INTEGER NOT NULL DEFAULT 0,
+  "retry_base" INTEGER NOT NULL DEFAULT 0,
   "next_attempt_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "claimed_at" TIMESTAMP,
   "wait_reason" TEXT NOT NULL DEFAULT '',
