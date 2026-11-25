@@ -14,6 +14,7 @@ import {
   apiUrl,
   areaHandlers,
   groupHandlers,
+  itemTypeHandlers,
   savedViewHandlers,
   sellerHandlers,
   tagHandlers,
@@ -137,6 +138,55 @@ describe("<SavedViewsPage />", () => {
       expect(within(row).getByText("Deleted seller")).toHaveAttribute("data-stale", "true")
     )
     expect(within(row).getByText("Seller Hardware shop")).not.toHaveAttribute("data-stale")
+  })
+
+  it("names each item type of a view by the group's name and marks a deleted one in words", async () => {
+    server.use(
+      ...itemTypeHandlers.list(SLUG, [
+        ...itemTypeHandlers.builtins(),
+        {
+          id: "type-vehicle",
+          slug: "vehicle",
+          name: "Vehicle",
+          icon: "car",
+          builtin: false,
+          item_count: 0,
+          trashed_item_count: 0,
+        },
+      ]),
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv6", name: "Kinds", query: "type=vehicle&type=boat&type=electronics" },
+      ]),
+      ...savedViewHandlers.counts(SLUG)
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() =>
+      expect(within(row).getByText("boat (deleted)")).toHaveAttribute("data-stale", "true")
+    )
+    expect(within(row).getByText("Vehicle")).not.toHaveAttribute("data-stale")
+    expect(within(row).getByText("Electronics")).not.toHaveAttribute("data-stale")
+    expect(within(row).getByText(/refer to something that was deleted/)).toBeInTheDocument()
+  })
+
+  it("marks no item type as deleted while the types fail to load", async () => {
+    let typeRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [{ id: "sv6", name: "Kinds", query: "type=boat" }]),
+      ...savedViewHandlers.counts(SLUG),
+      msw.get(apiUrl(`/g/${SLUG}/item-types`), () => {
+        typeRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() => expect(typeRequests).toBeGreaterThan(0))
+    await waitFor(() => expect(within(row).getByText("boat")).toBeInTheDocument())
+    expect(within(row).getByText("boat")).not.toHaveAttribute("data-stale")
+    expect(within(row).queryByText(/\(deleted\)/)).not.toBeInTheDocument()
   })
 
   it("marks no seller as deleted while the sellers fail to load", async () => {

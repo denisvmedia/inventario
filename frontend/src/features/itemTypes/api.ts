@@ -20,6 +20,10 @@ export const ITEM_TYPE_NAME_TAKEN = "item_type.name_taken"
 export const ITEM_TYPE_IN_USE = "item_type.in_use"
 // A delete of the group's last type.
 export const ITEM_TYPE_LAST = "item_type.last"
+// A create in a group that has ITEM_TYPES_MAX types.
+export const ITEM_TYPE_LIMIT = "item_type.limit"
+// Limit mirrors MaxItemTypesPerGroup in go/models/item_type.go.
+export const ITEM_TYPES_MAX = 100
 
 export interface ItemTypeInput {
   name: string

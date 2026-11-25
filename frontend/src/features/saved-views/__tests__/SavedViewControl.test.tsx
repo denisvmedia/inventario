@@ -303,6 +303,45 @@ describe("<SavedViewControl /> on the items list", () => {
     expect(screen.queryByTestId("saved-views-changed")).not.toBeInTheDocument()
   })
 
+  it("names an item type an open view still filters by that the group no longer has", async () => {
+    const user = userEvent.setup()
+    const kinds: SavedViewFixture = {
+      id: "sv7",
+      name: "Boats",
+      query: "include_inactive=false&sort=name&type=boat",
+    }
+    server.use(...savedViewHandlers.list(SLUG, [kinds]))
+    renderList("?type=boat&saved_view=sv7")
+
+    await user.click(await screen.findByTestId("saved-views-menu"))
+    const notice = await screen.findByTestId("saved-views-stale")
+    expect(notice).toHaveTextContent("An item type of this view was deleted.")
+    expect(screen.queryByTestId("saved-views-changed")).not.toBeInTheDocument()
+  })
+
+  it("names no deleted item type while the types fail to load", async () => {
+    const user = userEvent.setup()
+    let typeRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv7", name: "Boats", query: "include_inactive=false&sort=name&type=boat" },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/item-types`), () => {
+        typeRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderList("?type=boat&saved_view=sv7")
+
+    await waitFor(() =>
+      expect(screen.getByTestId("saved-views-menu-label")).toHaveTextContent("Boats")
+    )
+    await waitFor(() => expect(typeRequests).toBeGreaterThan(0))
+    await user.click(screen.getByTestId("saved-views-menu"))
+    await screen.findByTestId("saved-views-close")
+    expect(screen.queryByTestId("saved-views-stale")).not.toBeInTheDocument()
+  })
+
   it("names no deleted seller while the sellers fail to load", async () => {
     const user = userEvent.setup()
     let sellerRequests = 0

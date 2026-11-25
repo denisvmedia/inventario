@@ -92,7 +92,7 @@ describe("staleReferences", () => {
       tags: { include: ["red", "gone"], mode: "all" as const, exclude: ["old"], untagged: false },
     }
     const stale = staleReferences(query, new Set(["a1"]), new Set(["red"]))
-    expect(stale).toEqual({ area: true, tags: ["gone", "old"], sellers: [] })
+    expect(stale).toEqual({ area: true, tags: ["gone", "old"], sellers: [], types: [] })
     expect(hasStaleReferences(stale)).toBe(true)
   })
 
@@ -109,6 +109,16 @@ describe("staleReferences", () => {
     expect(hasStaleReferences(known)).toBe(true)
     const unknown = staleReferences(query, new Set(), new Set())
     expect(unknown.sellers).toEqual([])
+    expect(hasStaleReferences(unknown)).toBe(false)
+  })
+
+  it("names item types the group no longer has once the types are known, and none before", () => {
+    const query = { ...DEFAULT_COMMODITY_QUERY, types: ["electronics", "boat"] }
+    const known = staleReferences(query, new Set(), new Set(), undefined, new Set(["electronics"]))
+    expect(known.types).toEqual(["boat"])
+    expect(hasStaleReferences(known)).toBe(true)
+    const unknown = staleReferences(query, new Set(), new Set())
+    expect(unknown.types).toEqual([])
     expect(hasStaleReferences(unknown)).toBe(false)
   })
 })

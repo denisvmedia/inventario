@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo } from "react"
 
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useItemTypeLookup, useItemTypes } from "@/features/itemTypes/hooks"
 import { useSellers } from "@/features/sellers/hooks"
 
 import {
@@ -104,4 +105,27 @@ export function useSellerCatalog(): SellerCatalog {
     const names = new Map((sellers.data ?? []).map((s) => [s.id, s.name ?? ""]))
     return { names, ids: known ? new Set(names.keys()) : undefined }
   }, [sellers.data, known])
+}
+
+export interface ItemTypeCatalog {
+  // The label of a type slug: the group's name for it, the translated name
+  // of a built-in slug, otherwise the slug.
+  label: (slug: string) => string
+  // The group's type slugs once the types have loaded for this group;
+  // undefined while they load, after a failed load, and while the previous
+  // group's list stands in, as with the sellers.
+  slugs?: ReadonlySet<string>
+}
+
+export function useItemTypeCatalog(): ItemTypeCatalog {
+  const types = useItemTypes()
+  const lookup = useItemTypeLookup()
+  const known = types.isSuccess && !types.isPlaceholderData
+  return useMemo(
+    () => ({
+      label: (slug: string) => lookup.get(slug)?.label ?? slug,
+      slugs: known ? new Set(lookup.types.map((type) => type.slug ?? "")) : undefined,
+    }),
+    [lookup, known]
+  )
 }

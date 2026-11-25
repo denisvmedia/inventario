@@ -135,14 +135,14 @@ describe("<ItemTypesListPage />", () => {
     })
   })
 
-  it("refuses a name the group already shows before sending it", async () => {
+  it("refuses a name the group already has before sending it", async () => {
     seed()
     const user = userEvent.setup()
     renderPage()
     await screen.findByTestId("item-type-row-vehicle")
     await user.click(screen.getByTestId("item-types-create-button"))
     const dialog = await screen.findByTestId("item-type-form-dialog")
-    // The built-in Appliance, by the name the member sees.
+    // The built-in Appliance keeps its English name on the server.
     await user.type(within(dialog).getByTestId("item-type-name-input"), "  appliance ")
     await user.click(within(dialog).getByTestId("item-type-form-submit"))
     expect(await within(dialog).findByTestId("item-type-name-error")).toHaveTextContent(
@@ -164,6 +164,21 @@ describe("<ItemTypesListPage />", () => {
       "Another item type of this group has this name."
     )
     expect(screen.getByTestId("item-type-form-dialog")).toBeVisible()
+  })
+
+  it("says when the group has the most types it keeps", async () => {
+    seed()
+    server.use(...itemTypeHandlers.limit(SLUG))
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId("item-type-row-vehicle")
+    await user.click(screen.getByTestId("item-types-create-button"))
+    const dialog = await screen.findByTestId("item-type-form-dialog")
+    await user.type(within(dialog).getByTestId("item-type-name-input"), "Boat")
+    await user.click(within(dialog).getByTestId("item-type-form-submit"))
+    expect(await within(dialog).findByTestId("item-type-form-server-error")).toHaveTextContent(
+      "A group keeps at most 100 item types. Delete or merge types before you add another."
+    )
   })
 
   it("renames a built-in type and keeps its default name when left empty", async () => {

@@ -95,32 +95,36 @@ export function savedViewQueryString(query: CommodityQuery): string {
 }
 
 // What a view's query names that no longer exists: an area that was
-// deleted, tags without a tag row and the IDs of deleted sellers. Only
-// meaningful once the areas and tags have loaded.
+// deleted, tags without a tag row, the IDs of deleted sellers and the slugs
+// of item types the group no longer has. Only meaningful once the areas and
+// tags have loaded.
 export interface StaleReferences {
   area: boolean
   tags: string[]
   sellers: string[]
+  types: string[]
 }
 
-// sellerIds is undefined while the sellers are not known (loading or
-// failed): no seller is reported deleted then.
+// sellerIds and typeSlugs are undefined while the sellers or the item types
+// are not known (loading or failed): none of them is reported deleted then.
 export function staleReferences(
   query: CommodityQuery,
   areaIds: ReadonlySet<string>,
   tagSlugs: ReadonlySet<string>,
-  sellerIds?: ReadonlySet<string>
+  sellerIds?: ReadonlySet<string>,
+  typeSlugs?: ReadonlySet<string>
 ): StaleReferences {
   const named = [...query.tags.include, ...query.tags.exclude]
   return {
     area: query.areaId !== "" && !areaIds.has(query.areaId),
     tags: named.filter((slug) => !tagSlugs.has(slug)),
     sellers: sellerIds ? query.sellerIds.filter((id) => !sellerIds.has(id)) : [],
+    types: typeSlugs ? query.types.filter((slug) => !typeSlugs.has(slug)) : [],
   }
 }
 
 export function hasStaleReferences(stale: StaleReferences): boolean {
-  return stale.area || stale.tags.length > 0 || stale.sellers.length > 0
+  return stale.area || stale.tags.length > 0 || stale.sellers.length > 0 || stale.types.length > 0
 }
 
 // A view the dashboard offers to a member who has none yet. Each one runs a

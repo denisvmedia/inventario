@@ -187,6 +187,47 @@ describe("<ItemTypeField />", () => {
     expect(screen.getByRole("combobox", { name: "Type" })).toHaveAttribute("aria-invalid", "true")
   })
 
+  it("fetches the list again before it says a missing type was deleted", async () => {
+    seedGroup()
+    let calls = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/item-types`), () => {
+        calls += 1
+        // The first answer predates the type; the next one has it.
+        const types =
+          calls === 1 ? itemTypeHandlers.builtins() : [...itemTypeHandlers.builtins(), vehicle]
+        return HttpResponse.json({
+          data: types.map((t) => ({ id: t.id, type: "item_types", attributes: t })),
+          meta: { item_types: types.length },
+        })
+      })
+    )
+    renderField("vehicle")
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Type" })).toHaveTextContent("Vehicle")
+    )
+    expect(calls).toBe(2)
+    expect(screen.queryByTestId("type-gone")).not.toBeInTheDocument()
+  })
+
+  it("says a type missing from a fresh list was deleted", async () => {
+    seedGroup()
+    let calls = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/item-types`), () => {
+        calls += 1
+        const types = itemTypeHandlers.builtins()
+        return HttpResponse.json({
+          data: types.map((t) => ({ id: t.id, type: "item_types", attributes: t })),
+          meta: { item_types: types.length },
+        })
+      })
+    )
+    renderField("vehicle")
+    expect(await screen.findByTestId("type-gone")).toBeInTheDocument()
+    expect(calls).toBe(2)
+  })
+
   it("offers the built-in types and no new type without a group", async () => {
     const user = userEvent.setup()
     renderField("", false)

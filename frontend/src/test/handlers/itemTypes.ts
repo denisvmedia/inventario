@@ -89,6 +89,28 @@ export function nameTaken(slug: string) {
   ]
 }
 
+// limit answers POST /item-types with the 409 of a group that already has
+// the most types it keeps.
+export function limit(slug: string) {
+  return [
+    http.post(groupPath(slug), () =>
+      HttpResponse.json(
+        {
+          errors: [
+            {
+              status: "Conflict",
+              code: "item_type.limit",
+              error: { error: "a group keeps at most 100 item types", type: "*errors.errorString" },
+              meta: { limit: 100 },
+            },
+          ],
+        },
+        { status: 409 }
+      )
+    ),
+  ]
+}
+
 // update backs PATCH /item-types/{id}. The request body lands in `body.value`.
 export function update(slug: string, response: ItemTypeAttrs, body = capture<unknown>()) {
   return [
@@ -139,5 +161,32 @@ export function inUse(
         { status: 409 }
       )
     }),
+  ]
+}
+
+// UNKNOWN_TYPE_BODY is the 422 an item write gets for a type its group does
+// not have, byte for byte as the server sends it: the field error sits under
+// data.attributes.type with the item_type_unknown validation code.
+export const UNKNOWN_TYPE_BODY = {
+  errors: [
+    {
+      status: "Unprocessable Entity",
+      error: {
+        error: { data: { attributes: { type: "no item type with this slug in the group" } } },
+        errorCodes: { data: { attributes: { type: { code: "item_type_unknown" } } } },
+        type: "validation.Errors",
+      },
+      code: "item_type.unknown",
+    },
+  ],
+}
+
+// unknownOnUpdate answers PUT /commodities/{id} with UNKNOWN_TYPE_BODY.
+export function unknownOnUpdate(slug: string, commodityID: string) {
+  return [
+    http.put(
+      apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityID)}`),
+      () => HttpResponse.json(UNKNOWN_TYPE_BODY, { status: 422 })
+    ),
   ]
 }
