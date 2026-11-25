@@ -20,10 +20,8 @@ const TYPE_REQUIRED = "commodities:validation.typeRequired"
 const STATUS_REQUIRED = "commodities:validation.statusRequired"
 const COUNT_MIN = "commodities:validation.countMin"
 const CURRENCY_REQUIRED = "commodities:validation.currencyRequired"
-const PURCHASE_DATE_REQUIRED = "commodities:validation.purchaseDateRequired"
 const PURCHASE_DATE_FUTURE = "commodities:validation.purchaseDateFuture"
-const ORIGINAL_PRICE_REQUIRED = "commodities:validation.originalPriceRequired"
-const CONVERTED_PRICE_REQUIRED = "commodities:validation.convertedPriceRequired"
+const PRICE_NEGATIVE = "commodities:validation.priceNegative"
 const COMMENTS_TOO_LONG = "commodities:validation.commentsTooLong"
 const NOT_A_NUMBER = "commodities:validation.notANumber"
 // #1554: a Count > 1 commodity (a bundle of interchangeable units)
@@ -39,6 +37,19 @@ const URL_INVALID = "commodities:validation.urlInvalid"
 const optionalNumberString = z
   .string()
   .refine((v) => v === "" || !Number.isNaN(Number(v)), { message: NOT_A_NUMBER })
+
+// optionalPriceString is a price field: blank means the price is unknown,
+// "0" is a known zero (a gift, a free item). A known price can't be
+// negative, as on the BE.
+const optionalPriceString = optionalNumberString.refine((v) => v.trim() === "" || Number(v) >= 0, {
+  message: PRICE_NEGATIVE,
+})
+
+// isKnownPrice reports whether a price field holds an amount. Zero counts.
+function isKnownPrice(raw: string | undefined): boolean {
+  const v = (raw ?? "").trim()
+  return v !== "" && !Number.isNaN(Number(v))
+}
 
 // urlOrEmpty accepts a blank string (the user added the row but never
 // typed) OR a value that parses as an http(s) URL with a host —
@@ -69,8 +80,7 @@ const urlOrEmpty = z
 // skips the field entirely (AddItemDialog L1198 `isForeignCurrency`
 // branch) and so do we. Pass an empty string to skip the cross-field
 // check entirely (used by tests / boot states where the active group
-// hasn't loaded yet); per-field requireds on the inner price triad
-// still apply via the base schema's `superRefine`.
+// hasn't loaded yet).
 export function buildCommoditySchema(groupCurrency: string = "") {
   const groupCurrencyUpper = groupCurrency.trim().toUpperCase()
   return baseCommoditySchema.superRefine((vals, ctx) => {
@@ -79,18 +89,16 @@ export function buildCommoditySchema(groupCurrency: string = "") {
     const purchaseCurrencyUpper = (vals.original_price_currency ?? "").trim().toUpperCase()
     // Same currency ⇒ converted price is moot, skip the requirement.
     if (purchaseCurrencyUpper === groupCurrencyUpper) return
-    // Foreign currency. The converted-price field must either be
-    // filled OR the current-value field must carry a non-zero amount —
-    // mirrors PriceRule.ErrNoPriceInGroupCurrency on the BE
-    // (go/models/rules/price.go). Without this guard zod accepts
-    // both fields entered as "0" and we round-trip a 422 from the
-    // server, so the user's "Continue" sees no FE warning.
-    const convertedRaw = (vals.converted_original_price ?? "").trim()
-    const currentRaw = (vals.current_price ?? "").trim()
-    const convertedNum = convertedRaw === "" ? null : Number(convertedRaw)
-    const currentNum = currentRaw === "" ? null : Number(currentRaw)
-    const convertedSet = convertedNum !== null && !Number.isNaN(convertedNum) && convertedNum > 0
-    const currentSet = currentNum !== null && !Number.isNaN(currentNum) && currentNum > 0
+    // An unknown purchase price needs no conversion: there is no amount
+    // to convert, and the BE asks for none.
+    if (!isKnownPrice(vals.original_price)) return
+    // A known foreign-currency price needs an amount in the group
+    // currency: the converted price or the current value, a known zero
+    // included. Mirrors PriceRule.ErrNoPriceInGroupCurrency on the BE
+    // (go/models/rules/price.go), so the user sees the hint here instead
+    // of a 422 from the server.
+    const convertedSet = isKnownPrice(vals.converted_original_price)
+    const currentSet = isKnownPrice(vals.current_price)
     if (!convertedSet && !currentSet) {
       ctx.addIssue({
         path: ["converted_original_price"],
@@ -119,10 +127,10 @@ const baseCommoditySchema = z
     area_id: z.string(),
     status: z.string().min(1, STATUS_REQUIRED),
     count: z.string().refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
-    original_price: optionalNumberString,
+    original_price: optionalPriceString,
     original_price_currency: z.string().min(1, CURRENCY_REQUIRED),
-    converted_original_price: optionalNumberString,
-    current_price: optionalNumberString,
+    converted_original_price: optionalPriceString,
+    current_price: optionalPriceString,
     serial_number: z.string().trim(),
     extra_serial_numbers: z.array(z.string().trim()),
     part_numbers: z.array(z.string().trim()),
@@ -171,7 +179,8 @@ const baseCommoditySchema = z
       })
     }
     // Future-date guard. Surface the error on `purchase_date` directly
-    // so RHF puts it next to the input.
+    // so RHF puts it next to the input. A blank purchase date is an
+    // unknown one and is fine on any item, draft or reviewed.
     if (vals.purchase_date) {
       // Local components, not toISOString: the input is a local calendar date,
       // and comparing it against UTC's today rejected a same-day purchase for
@@ -188,43 +197,13 @@ const baseCommoditySchema = z
         })
       }
     }
-    // Non-draft commodities require purchase_date and original_price —
-    // see models.Commodity.ValidateWithContext's `whenNotDraft` block.
-    // Drafts skip these checks so the user can save partial state.
-    // current_price required-ness was dropped in #1625 (PriceRule is
-    // the single source of truth for cross-field price invariants).
-    // converted_original_price required-ness is currency-dependent and
-    // lives in `buildCommoditySchema(groupCurrency)` below.
-    if (vals.draft) return
-    if (!vals.purchase_date) {
-      ctx.addIssue({
-        path: ["purchase_date"],
-        code: z.ZodIssueCode.custom,
-        message: PURCHASE_DATE_REQUIRED,
-      })
-    }
-    if (vals.original_price === "") {
-      ctx.addIssue({
-        path: ["original_price"],
-        code: z.ZodIssueCode.custom,
-        message: ORIGINAL_PRICE_REQUIRED,
-      })
-    }
+    // No price or purchase date is required, on a draft or on a
+    // reviewed item: either may be unknown. The currency rule for a
+    // known foreign-currency price lives in buildCommoditySchema.
   })
 
-// Backwards-compat: `commoditySchema` (no group-currency context) keeps
-// the legacy "always require converted_original_price" behaviour for
-// callers that don't yet thread group currency through. New callers
-// should use `buildCommoditySchema(groupCurrency)`.
-export const commoditySchema = baseCommoditySchema.superRefine((vals, ctx) => {
-  if (vals.draft) return
-  if (vals.converted_original_price === "") {
-    ctx.addIssue({
-      path: ["converted_original_price"],
-      code: z.ZodIssueCode.custom,
-      message: CONVERTED_PRICE_REQUIRED,
-    })
-  }
-})
+// commoditySchema is the schema without the group-currency rule, for
+// callers that have no group currency to check against.
+export const commoditySchema = baseCommoditySchema
 
 export type CommodityFormInput = z.infer<typeof baseCommoditySchema>

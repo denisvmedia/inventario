@@ -62,12 +62,25 @@ func setupValuesTestData(c *qt.C) (*registry.FactorySet, *models.User) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  2,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPrice:          new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(0.00),
-		CurrentPrice:           decimal.NewFromFloat(0.00),
+		ConvertedOriginalPrice: nil,
+		CurrentPrice:           nil,
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
+	})
+	c.Assert(err, qt.IsNil)
+
+	// A gift: reviewed, but nothing known about its price. It adds nothing
+	// to the totals and is counted as unvalued.
+	_, err = registrySet.CommodityRegistry.Create(c.Context(), models.Commodity{
+		Name:                  "Gift",
+		ShortName:             "Gift",
+		Type:                  models.CommodityTypeOther,
+		AreaID:                new(area.ID),
+		Count:                 1,
+		OriginalPriceCurrency: "USD",
+		Status:                models.CommodityStatusInUse,
 	})
 	c.Assert(err, qt.IsNil)
 
@@ -103,6 +116,9 @@ func TestValuesAPI_GetValues(t *testing.T) {
 	expectedTotal := decimal.NewFromFloat(100.00) // Price already represents total value for all items
 	c.Assert(expectedTotal.Equal(response.Data.Attributes.GlobalTotal), qt.IsTrue,
 		qt.Commentf("Expected global total to be %s, got %s", expectedTotal, response.Data.Attributes.GlobalTotal))
+	c.Assert(response.Data.Attributes.ValuedCount, qt.Equals, 1)
+	c.Assert(response.Data.Attributes.UnvaluedCount, qt.Equals, 1)
+	c.Assert(w.Body.String(), qt.Contains, `"unvalued_count":1`)
 
 	// Check location totals
 	c.Assert(response.Data.Attributes.LocationTotals, qt.HasLen, 1)
@@ -132,6 +148,7 @@ func TestValuesAPI_GetValues(t *testing.T) {
 		qt.Commentf("Expected location entry to embed its name"))
 	c.Assert(expectedTotal.Equal(locationEntry.Value), qt.IsTrue,
 		qt.Commentf("Expected location total to be %s, got %s", expectedTotal, locationEntry.Value))
+	c.Assert(locationEntry.UnvaluedCount, qt.Equals, 1)
 
 	// Check area totals
 	c.Assert(response.Data.Attributes.AreaTotals, qt.HasLen, 1)
@@ -160,4 +177,5 @@ func TestValuesAPI_GetValues(t *testing.T) {
 		qt.Commentf("Expected area entry to embed its name"))
 	c.Assert(expectedTotal.Equal(areaEntry.Value), qt.IsTrue,
 		qt.Commentf("Expected area total to be %s, got %s", expectedTotal, areaEntry.Value))
+	c.Assert(areaEntry.UnvaluedCount, qt.Equals, 1)
 }

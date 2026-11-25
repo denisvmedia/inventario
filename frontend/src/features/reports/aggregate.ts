@@ -1,29 +1,32 @@
 import type { Commodity } from "@/features/commodities/api"
+import {
+  commodityValue,
+  purchasePriceInGroupCurrency,
+  sumKnown,
+  type KnownTotal,
+} from "@/features/commodities/price"
 
-// Location-report totals (#1370). All money sums are in the group
-// currency: `converted_original_price` is the per-row purchase price
-// converted to the group currency, and `current_price` is the live
-// value already denominated in the group currency. Values arrive from
-// the BE as decimal strings, so each is coerced via Number() and any
-// NaN / missing entry contributes 0.
+// Location-report totals (#1370), all in the group currency. The purchase
+// total sums what each item cost in the group currency (its purchase price
+// when paid in the group currency, otherwise the converted amount); the
+// value total sums each item's value by the rule the dashboard and the area
+// totals use (its current value, else its purchase price), so one item has
+// one estimated value everywhere. Each total covers only the items whose
+// amount is known and says how many it leaves out, so an unknown price never
+// passes for a zero.
 export interface LocationTotals {
   count: number
-  purchase: number
-  value: number
+  purchase: KnownTotal
+  value: KnownTotal
 }
 
-function toAmount(raw: unknown): number {
-  if (raw === null || raw === undefined || raw === "") return 0
-  const n = typeof raw === "string" ? Number(raw) : (raw as number)
-  return Number.isFinite(n) ? n : 0
-}
-
-export function aggregateLocationTotals(commodities: Commodity[]): LocationTotals {
-  let purchase = 0
-  let value = 0
-  for (const c of commodities) {
-    purchase += toAmount(c.converted_original_price)
-    value += toAmount(c.current_price)
+export function aggregateLocationTotals(
+  commodities: Commodity[],
+  groupCurrency: string
+): LocationTotals {
+  return {
+    count: commodities.length,
+    purchase: sumKnown(commodities.map((c) => purchasePriceInGroupCurrency(c, groupCurrency))),
+    value: sumKnown(commodities.map((c) => commodityValue(c, groupCurrency))),
   }
-  return { count: commodities.length, purchase, value }
 }

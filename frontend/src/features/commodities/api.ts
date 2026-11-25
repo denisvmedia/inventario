@@ -73,6 +73,13 @@ export interface CommodityMeta {
   invoices_error?: string
 }
 
+interface ValueResponseTotal {
+  id?: string
+  name?: string
+  value?: number
+  unvalued_count?: number
+}
+
 interface ValueResponse {
   data?: {
     // Mirrors jsonapi.NamedTotal in src/types/api.d.ts. The BE emits
@@ -80,9 +87,11 @@ interface ValueResponse {
     // consumers can match without relying on names — area names are
     // not unique on the BE (`uuid` is the only unique column).
     attributes?: {
-      area_totals?: { id?: string; name?: string; value?: number }[]
+      area_totals?: ValueResponseTotal[]
       global_total?: number
-      location_totals?: { id?: string; name?: string; value?: number }[]
+      location_totals?: ValueResponseTotal[]
+      unvalued_count?: number
+      valued_count?: number
     }
   }
 }
@@ -436,14 +445,21 @@ export async function bulkMoveCommodities(ids: string[], areaId: string): Promis
 // Each named total carries the area/location `id` alongside its name
 // + value, mirroring `jsonapi.NamedTotal` on the BE. Consumers should
 // match by `id` — area names are not unique (only `uuid` is).
+//
+// A total sums the items whose value is known (the current value, else
+// the purchase price in the group currency). Items with neither are left
+// out rather than counted as zero; `unvaluedCount` says how many.
 export interface NamedTotal {
   id: string
   name: string
   value: number
+  unvaluedCount: number
 }
 
 export interface CommoditiesValue {
   globalValue: number
+  valuedCount: number
+  unvaluedCount: number
   locationTotals: NamedTotal[]
   areaTotals: NamedTotal[]
 }
@@ -451,13 +467,16 @@ export interface CommoditiesValue {
 export async function getCommoditiesValue(signal?: AbortSignal): Promise<CommoditiesValue> {
   const body = await http.get<ValueResponse>("/commodities/values", { signal })
   const attrs = body.data?.attributes ?? {}
-  const mapEntry = (t: { id?: string; name?: string; value?: number }): NamedTotal => ({
+  const mapEntry = (t: ValueResponseTotal): NamedTotal => ({
     id: t.id ?? "",
     name: t.name ?? "",
     value: t.value ?? 0,
+    unvaluedCount: t.unvalued_count ?? 0,
   })
   return {
     globalValue: attrs.global_total ?? 0,
+    valuedCount: attrs.valued_count ?? 0,
+    unvaluedCount: attrs.unvalued_count ?? 0,
     locationTotals: (attrs.location_totals ?? []).map(mapEntry),
     areaTotals: (attrs.area_totals ?? []).map(mapEntry),
   }

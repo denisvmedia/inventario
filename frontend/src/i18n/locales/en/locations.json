@@ -11,7 +11,9 @@
       "errorTitle": "Unable to load items",
       "statsActiveWarranties": "Active warranties",
       "statsItems": "Items",
-      "statsValue": "Est. value"
+      "statsValue": "Est. value",
+      "statsValueExcludes_one": "Excludes {{count}} item without a value",
+      "statsValueExcludes_other": "Excludes {{count}} items without a value"
     },
     "printAreaAndItemLabels": "Labels for this area and its items",
     "printAreaLabel": "Label for this area",

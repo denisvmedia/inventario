@@ -30,18 +30,17 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		Kind: models.TagKindCommodity, Slug: "shed", Label: "Garden shed", Color: models.TagColorGreen,
 	}))
 	target := must.Must(commodityReg.Create(ctx, models.Commodity{
-		Name:                   "Hedge Trimmer",
-		ShortName:              "Trimmer",
-		Type:                   models.CommodityTypeOther,
-		OriginalPrice:          decimal.RequireFromString("10.00"),
-		OriginalPriceCurrency:  models.Currency("USD"),
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.RequireFromString("10.00"),
-		Count:                  1,
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           models.ToPDate("2023-01-01"),
-		SerialNumber:           "HT-778899",
-		Tags:                   models.ValuerSlice[string]{"shed"},
+		Name:                  "Hedge Trimmer",
+		ShortName:             "Trimmer",
+		Type:                  models.CommodityTypeOther,
+		OriginalPrice:         new(decimal.RequireFromString("10.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
+		CurrentPrice:          new(decimal.RequireFromString("10.00")),
+		Count:                 1,
+		Status:                models.CommodityStatusInUse,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
+		SerialNumber:          "HT-778899",
+		Tags:                  models.ValuerSlice[string]{"shed"},
 	}))
 
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})

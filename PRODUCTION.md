@@ -808,6 +808,21 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
 - [ ] A failed migration fails the setup Job, and `--wait --wait-for-jobs` fails with it,
   so the Deployment is never touched and the old release keeps serving. Read the Job logs,
   fix forward, re-run. Do not reach for `migrate down` in production — see Appendix D.
+- [ ] **Upgrading from v0.2.x.** Later versions store an unknown price as NULL, and
+  v0.2.x cannot read one. The chart rolls pods over one at a time
+  (`maxUnavailable: 0`, `maxSurge: 1`), so old and new pods overlap. While they do, an old
+  pod fails on every item the new pods' startup backfill has given an unknown price, and an
+  old pod that saves an item writes 0 into a price the backfill has already cleared, which
+  the new version then shows as a known zero. Avoid the overlap: scale the chart's
+  Deployments to zero, then run `helm upgrade`:
+
+  ```bash
+  kubectl -n <NAMESPACE> scale deploy -l app.kubernetes.io/instance=inventario --replicas=0
+  ```
+
+  If a few minutes of errors on item pages are acceptable, a plain rolling upgrade works
+  too, but an item saved on an old pod during the rollout may keep a zero price that
+  should be unknown.
 - [ ] Watch the rollout and the Grafana dashboard for error-rate / latency regressions.
 
 ## Appendix D — Rollback
@@ -822,6 +837,9 @@ If your Postgres roles are created out-of-band, also add `SETUP_SUPERUSER_DSN` (
   a down migration that drops a column drops the data in it, and if you followed
   expand-contract the old image runs against the new schema anyway, so rolling the image
   back is usually enough on its own.
+- [ ] ⚠️ Once an item has an unknown price, rolling the image back to v0.2.x is not
+  supported: v0.2.x cannot read it. Restore the Postgres backup taken before the upgrade
+  instead.
 
 ## Appendix E — Troubleshooting
 

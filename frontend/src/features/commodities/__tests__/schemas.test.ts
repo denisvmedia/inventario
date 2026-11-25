@@ -25,7 +25,7 @@ describe("commoditySchema — quantity-forbids-warranty (#1554)", () => {
     purchase_date: "",
     urls: [],
     comments: "",
-    draft: true, // skip purchase / price triad guards
+    draft: true,
     warranty_expires_at: "",
     warranty_notes: "",
   }

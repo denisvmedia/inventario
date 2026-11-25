@@ -27,18 +27,19 @@ var (
 	)
 )
 
-// PriceRule validates that when the original price is in the group currency,
-// the converted original price must be zero.
+// PriceRule checks the currency invariants between the three prices of a
+// commodity. A nil price is unknown, which is distinct from a known zero, and
+// the invariants only constrain known amounts.
 type PriceRule struct {
 	GroupCurrency    string
 	OriginalCurrency string
-	OriginalPrice    decimal.Decimal
-	ConvertedPrice   decimal.Decimal
-	CurrentPrice     decimal.Decimal
+	OriginalPrice    *decimal.Decimal
+	ConvertedPrice   *decimal.Decimal
+	CurrentPrice     *decimal.Decimal
 }
 
 // NewPriceRule creates a new PriceRule.
-func NewPriceRule(groupCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice decimal.Decimal) PriceRule {
+func NewPriceRule(groupCurrency, originalCurrency string, originalPrice, convertedPrice, currentPrice *decimal.Decimal) PriceRule {
 	return PriceRule{
 		GroupCurrency:    groupCurrency,
 		OriginalCurrency: originalCurrency,
@@ -50,23 +51,20 @@ func NewPriceRule(groupCurrency, originalCurrency string, originalPrice, convert
 
 // Validate implements the validation.Rule interface.
 // It checks the following conditions:
-// 1. If the original price is in the group currency, the converted original price must be zero.
-// 2. At least one of the prices (current, original, or converted original) must be set.
-// 3. If the original price is not in the group currency, either the converted original price or the current price must be set.
+//  1. If the original price is in the group currency, a known converted price
+//     must be zero: the original price already is the group-currency amount.
+//  2. If the original price is known and not in the group currency, the
+//     converted price or the current price must be known, so the item has an
+//     amount in the group currency.
+//
+// An unknown original price needs no conversion, and an item may have no
+// known price at all.
 func (r PriceRule) Validate(_ any) error {
-	// If original currency is the group currency and converted price is not zero, return error
-	if r.OriginalCurrency == r.GroupCurrency && !r.ConvertedPrice.IsZero() {
+	if r.OriginalCurrency == r.GroupCurrency && r.ConvertedPrice != nil && !r.ConvertedPrice.IsZero() {
 		return ErrConvertedPriceNotZero
 	}
 
-	// Allow all zeroes (the commodity is not counted as valuable)
-	// If all prices are zero, return error
-	// if r.CurrentPrice.IsZero() && r.OriginalPrice.IsZero() && r.ConvertedPrice.IsZero() {
-	//	return ErrAllPricesZero
-	// }
-
-	// If original currency is not the group currency and neither converted price nor current price is set, return error
-	if r.OriginalCurrency != r.GroupCurrency && r.ConvertedPrice.IsZero() && r.CurrentPrice.IsZero() {
+	if r.OriginalPrice != nil && r.OriginalCurrency != r.GroupCurrency && r.ConvertedPrice == nil && r.CurrentPrice == nil {
 		return ErrNoPriceInGroupCurrency
 	}
 

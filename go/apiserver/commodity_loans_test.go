@@ -122,7 +122,7 @@ func TestListGroupLoans_BatchedCommodityFetch(t *testing.T) {
 			Status:                models.CommodityStatusInUse,
 			Type:                  models.CommodityTypeElectronics,
 			Count:                 1,
-			OriginalPrice:         must.Must(decimal.NewFromString("100.00")),
+			OriginalPrice:         new(must.Must(decimal.NewFromString("100.00"))),
 			OriginalPriceCurrency: models.Currency("USD"),
 		}))
 	}

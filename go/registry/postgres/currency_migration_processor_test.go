@@ -51,10 +51,10 @@ func TestCurrencyMigrationProcessor_HappyPath_SmallGroup(t *testing.T) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(50.00),
+		OriginalPrice:          new(decimal.NewFromFloat(50.00)),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.NewFromFloat(60.00),
+		ConvertedOriginalPrice: nil,
+		CurrentPrice:           new(decimal.NewFromFloat(60.00)),
 		Status:                 models.CommodityStatusInUse,
 		PurchaseDate:           models.ToPDate("2023-01-01"),
 		RegisteredDate:         models.ToPDate("2023-01-02"),
@@ -212,7 +212,7 @@ func TestCurrencyMigrationProcessor_ForwardThenInverse(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(string(mid.OriginalPriceCurrency), qt.Equals, "EUR")
 	c.Assert(mid.AcquisitionPrice, qt.IsNotNil)
-	c.Assert(mid.AcquisitionPrice.Equal(startingOriginalPrice), qt.IsTrue)
+	c.Assert(mid.AcquisitionPrice.Equal(*startingOriginalPrice), qt.IsTrue)
 	c.Assert(string(*mid.AcquisitionCurrency), qt.Equals, string(startingCurrency))
 
 	// Inverse: EUR → USD @ 2.0 (1/0.5).
@@ -238,7 +238,7 @@ func TestCurrencyMigrationProcessor_ForwardThenInverse(t *testing.T) {
 	// Acquisition columns are still the originals — the second
 	// migration must NOT have overwritten them (write-once).
 	c.Assert(final.AcquisitionPrice, qt.IsNotNil)
-	c.Assert(final.AcquisitionPrice.Equal(startingOriginalPrice), qt.IsTrue)
+	c.Assert(final.AcquisitionPrice.Equal(*startingOriginalPrice), qt.IsTrue)
 	c.Assert(string(*final.AcquisitionCurrency), qt.Equals, string(startingCurrency))
 
 	// Group currency flipped back to USD.

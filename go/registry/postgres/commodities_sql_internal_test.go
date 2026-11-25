@@ -62,7 +62,15 @@ func TestCommodityListSQL(t *testing.T) {
 			// LOWER(name) alone.
 			name: "non-name sorts are not case-folded",
 			opts: registry.CommodityListOptions{SortField: registry.CommoditySortCurrentPrice},
-			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY current_price ASC, id ASC LIMIT $3 OFFSET $4",
+			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY current_price ASC NULLS LAST, id ASC LIMIT $3 OFFSET $4",
+			args: []any{false, "in_use", 24, 0},
+		},
+		{
+			// An unknown date or price sorts after every known one in both
+			// directions; PostgreSQL alone would put NULL first on DESC.
+			name: "descending sort on a nullable column keeps unknowns last",
+			opts: registry.CommodityListOptions{SortField: registry.CommoditySortPurchaseDate, SortDesc: true},
+			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY purchase_date DESC NULLS LAST, id DESC LIMIT $3 OFFSET $4",
 			args: []any{false, "in_use", 24, 0},
 		},
 		{

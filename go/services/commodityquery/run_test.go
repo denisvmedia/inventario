@@ -38,19 +38,18 @@ func newMemorySet(c *qt.C) (context.Context, *registry.Set) {
 func seedItem(c *qt.C, ctx context.Context, set *registry.Set, name string, tags ...string) *models.Commodity {
 	c.Helper()
 	created, err := set.CommodityRegistry.Create(ctx, models.Commodity{
-		Name:                   name,
-		ShortName:              name,
-		Type:                   models.CommodityTypeOther,
-		Count:                  1,
-		OriginalPrice:          decimal.NewFromInt(1),
-		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.NewFromInt(1),
-		Status:                 models.CommodityStatusInUse,
-		Tags:                   models.ValuerSlice[string](tags),
-		PurchaseDate:           models.ToPDate("2024-01-01"),
-		RegisteredDate:         models.ToPDate("2024-01-01"),
-		LastModifiedDate:       models.ToPDate("2024-01-01"),
+		Name:                  name,
+		ShortName:             name,
+		Type:                  models.CommodityTypeOther,
+		Count:                 1,
+		OriginalPrice:         new(decimal.NewFromInt(1)),
+		OriginalPriceCurrency: "USD",
+		CurrentPrice:          new(decimal.NewFromInt(1)),
+		Status:                models.CommodityStatusInUse,
+		Tags:                  models.ValuerSlice[string](tags),
+		PurchaseDate:          models.ToPDate("2024-01-01"),
+		RegisteredDate:        models.ToPDate("2024-01-01"),
+		LastModifiedDate:      models.ToPDate("2024-01-01"),
 	})
 	c.Assert(err, qt.IsNil)
 	return created

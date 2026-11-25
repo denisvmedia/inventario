@@ -93,9 +93,9 @@ The form is split across the five steps. Only a handful of fields are required
 
 | Field | Notes |
 | --- | --- |
-| **Purchase date** | When you bought it. Can't be in the future. |
-| **Original price** | What you paid, in the original purchase currency. |
-| **Current value** | Current resale / insurance value, in the group currency. |
+| **Purchase date** | When you bought it. Can't be in the future. Leave it blank if you don't know it. |
+| **Original price** | What you paid, in the original purchase currency. Leave it blank if you don't know it; enter **0** if it was free. |
+| **Current value** | Current resale / insurance value, in the group currency. Leave it blank if you don't know it. |
 | **Serial number** | Found on the device label or packaging. |
 
 If the original price is in a different currency from your group, an extra field
@@ -160,11 +160,38 @@ matters for [Reports](../reports/) and dashboards. Your group's currency is set
 in [Settings & account](../settings-and-account/).
 :::
 
+### Unknown is not zero
+
+Every price and the purchase date can be left blank, on a finished item as well
+as on a draft. A blank field means you don't know the value. **0** means you
+know it was zero.
+
+- A **gift** or an inherited object: leave the purchase date and the original
+  price blank. If you know what it is worth, enter only the **Current value**.
+- A **free** item: enter **0** as the original price.
+- A price in another currency asks for a converted price or a current value
+  only when the original price is known. **0** counts as an amount.
+
+On the item page, in lists, and in reports, an unknown price or date shows as
+**—** and a zero shows as a zero, for example **$0.00**. A list sorted by
+purchase date or by a price puts the items without one last, whichever way
+you sort.
+
+Totals add up the prices that are known and say how many items they leave out.
+An item's value is its current value, or its purchase price in the group
+currency when the current value is unknown. The **Estimated total value** card
+on the dashboard and the **Est. value** of an area read, for example,
+"Excludes 2 items without a value". The insurance report does the same for its
+totals; see [Reports](../reports/).
+
 ## Save as draft
 
 A **Save as draft** toggle sits above the steps on every form step. With it on,
-the required-field rules are relaxed so you can capture a few details now and
-finish later — drafts show a **Draft** badge in lists.
+the item is kept as unfinished work so you can capture a few details now and
+finish later — drafts show a **Draft** badge in lists. A draft also skips the
+check that a price in another currency has an amount in the group currency.
+An unknown purchase date or price doesn't make an item a draft: you can leave
+those fields blank on a finished item too.
 
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
@@ -373,7 +400,8 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Lent out** — show only items currently lent out.
 - **No location** — show only items not placed in any area.
 - **Sort by** — **Name**, **Date added**, **Purchase date**, **Current value**,
-  **Original price**, or **Quantity**.
+  **Original price**, or **Quantity**. Items with an unknown date or price
+  come last in either direction.
 - **Clear filters** — reset everything back to the default view.
 - **Show inactive / Hide inactive** — include or hide items in an end status.
 

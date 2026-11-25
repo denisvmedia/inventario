@@ -58,6 +58,7 @@ import type { Commodity } from "@/features/commodities/api"
 import { primarySearchMatch, type CommoditySearchMatch } from "@/features/commodities/query"
 import { useTagLabel } from "@/features/tags/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { formatPrice } from "@/features/commodities/price"
 import { formatCurrency } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -173,6 +174,8 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
     : values.isError || !areaValueEntry
       ? { value: "—", loading: false }
       : { value: formatCurrency(areaValueEntry.value, currency), loading: false }
+  // Items the area total leaves out because their value is unknown.
+  const unvaluedInArea = areaValueEntry?.unvaluedCount ?? 0
 
   // ---- Derived ----------------------------------------------------------
   const allRows = list.data?.commodities ?? []
@@ -324,6 +327,11 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
           label={t("locations:areaDetail.items.statsValue")}
           value={valueCell.value}
           loading={valueCell.loading}
+          note={
+            unvaluedInArea > 0
+              ? t("locations:areaDetail.items.statsValueExcludes", { count: unvaluedInArea })
+              : undefined
+          }
           testId="area-detail-items-value"
         />
       </div>
@@ -387,6 +395,8 @@ interface StatCellProps {
   label: string
   value: string
   loading?: boolean
+  // A second muted line under the label, e.g. what a total leaves out.
+  note?: string
   testId?: string
   valueClassName?: string
   iconClassName?: string
@@ -397,6 +407,7 @@ function StatCell({
   label,
   value,
   loading,
+  note,
   testId,
   valueClassName,
   iconClassName,
@@ -417,6 +428,11 @@ function StatCell({
           <p className={cn("text-sm font-semibold leading-tight", valueClassName)}>{value}</p>
         )}
         <p className="text-xs text-muted-foreground">{label}</p>
+        {note && !loading ? (
+          <p className="text-xs text-muted-foreground" data-testid={testId && `${testId}-note`}>
+            {note}
+          </p>
+        ) : null}
       </div>
     </div>
   )
@@ -745,7 +761,7 @@ function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
                     <WarrantyBadge status={wStatus} showIcon={false} className="shrink-0" />
                   )}
                   <p className="hidden w-20 shrink-0 text-right text-sm font-medium sm:block">
-                    {formatCurrency(Number(row.current_price ?? 0), currency)}
+                    {formatPrice(row.current_price, currency, "—", formatCurrency)}
                   </p>
                 </Link>
               </li>
@@ -843,7 +859,7 @@ function Grid({ rows, onPreview, currency, slug, matches }: RowListProps) {
                 </CardHeader>
                 <CardContent>
                   <p className="text-right text-sm font-medium">
-                    {formatCurrency(Number(row.current_price ?? 0), currency)}
+                    {formatPrice(row.current_price, currency, "—", formatCurrency)}
                   </p>
                 </CardContent>
               </Card>

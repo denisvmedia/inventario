@@ -172,7 +172,7 @@ func populateCommodityTestData(ctx context.Context, commodityRegistry registry.C
 		Type:                  models.CommodityTypeFurniture,
 		Status:                models.CommodityStatusInUse,
 		Count:                 10,
-		OriginalPrice:         must.Must(decimal.NewFromString("2000.00")),
+		OriginalPrice:         new(must.Must(decimal.NewFromString("2000.00"))),
 		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 
@@ -183,7 +183,7 @@ func populateCommodityTestData(ctx context.Context, commodityRegistry registry.C
 		Status:                models.CommodityStatusInUse,
 		Type:                  models.CommodityTypeElectronics,
 		Count:                 5,
-		OriginalPrice:         must.Must(decimal.NewFromString("1500.00")),
+		OriginalPrice:         new(must.Must(decimal.NewFromString("1500.00"))),
 		OriginalPriceCurrency: models.Currency("USD"),
 	}))
 }

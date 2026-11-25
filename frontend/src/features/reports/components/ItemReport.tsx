@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { commodityValue, formatPrice } from "@/features/commodities/price"
 import type { ListedFile } from "@/features/files/api"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -25,24 +26,11 @@ interface ItemReportProps {
   imageSize: PhotoSize
   // "{Location} · {Area}" breadcrumb for the item's area.
   areaLabel: string
-  // Group currency — `converted_original_price` / `current_price` live here.
+  // Group currency: the estimated value is in it.
   groupCurrency: string
   // Purchase currency — `original_price` lives here.
   purchaseCurrency: string
   generatedDate: string
-}
-
-// The BE marshals non-pointer decimals, so an unpriced item arrives as "0"
-// rather than undefined — the `!== undefined` guard was never false and every
-// such item rendered as a formatted zero (#2132).
-function priceOrNoValue(
-  raw: unknown,
-  currency: string,
-  noValue: string,
-  format: (n: number, c: string) => string
-): string {
-  const n = Number(raw)
-  return Number.isFinite(n) && n !== 0 ? format(n, currency) : noValue
 }
 
 export function ItemReport({
@@ -62,14 +50,16 @@ export function ItemReport({
   const WarrantyIcon = wConfig.icon
   const photos = filesToPhotos(imageFiles, imageSize)
 
-  const purchasePrice = priceOrNoValue(
+  const purchasePrice = formatPrice(
     commodity.original_price,
     purchaseCurrency,
     noValue,
     formatCurrency
   )
-  const estimatedValue = priceOrNoValue(
-    commodity.current_price,
+  // The value every total uses: the current value, else the purchase price
+  // in the group currency.
+  const estimatedValue = formatPrice(
+    commodityValue(commodity, groupCurrency),
     groupCurrency,
     noValue,
     formatCurrency

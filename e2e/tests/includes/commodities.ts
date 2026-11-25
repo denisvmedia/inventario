@@ -30,20 +30,20 @@ export interface TestCommodity {
    *  <option> via partial text match. */
   type: string;
   count: number;
-  originalPrice: number;
-  /** ISO-4217 code, e.g. "USD". The form input is a 3-char text. */
-  originalPriceCurrency: string;
-  /** Optional explicit converted-price override. Defaults to
-   *  `originalPrice` when not provided — the schema's
-   *  `superRefine` block requires a non-empty value for non-draft
-   *  commodities, but tests rarely care about FX nuance and just
-   *  need *something* to satisfy the gate. */
+  /** Left out, the purchase price stays blank: unknown. */
+  originalPrice?: number;
+  /** ISO-4217 code, e.g. "USD". Left out, the group currency stays. */
+  originalPriceCurrency?: string;
+  /** Converted-price override for a foreign-currency price. Defaults
+   *  to 0 when the field is shown and an original price is given:
+   *  a known foreign-currency price needs a group-currency amount,
+   *  and tests rarely care about FX nuance. */
   convertedOriginalPrice?: number;
-  /** Optional explicit current-price override. Same default as
-   *  `convertedOriginalPrice`. */
+  /** Current value. Defaults to `originalPrice` when that is given;
+   *  left out with no original price, it stays blank: unknown. */
   currentPrice?: number;
-  /** ISO date "YYYY-MM-DD". */
-  purchaseDate: string;
+  /** ISO date "YYYY-MM-DD". Left out, the purchase date stays unknown. */
+  purchaseDate?: string;
   serialNumber?: string;
   extraSerialNumbers?: string[];
   partNumbers?: string[];
@@ -224,18 +224,19 @@ async function fillPurchaseStep(page: Page, c: TestCommodity) {
 
   if (c.originalPrice !== undefined) {
     await page.fill("#commodity-original-price", String(c.originalPrice));
-    // PR #1621: when `original_price_currency === group_currency` the
-    // Purchase step now hides `#commodity-converted-price` entirely
-    // (mock AddItemDialog L1198-L1233 — same-currency drops the field
-    // because the BE rule already forces it to 0). The form's
-    // `toRequest` mirror writes 0 on save, so the helper has nothing
-    // to do in that branch. The foreign-currency variant still renders
-    // the input and we honor the `convertedOriginalPrice` override.
+    // When `original_price_currency === group_currency` the Purchase
+    // step hides `#commodity-converted-price` (mock AddItemDialog
+    // L1198-L1233): the purchase price already is the group-currency
+    // amount, so there is nothing to fill. The foreign-currency variant
+    // renders the input and we honor the `convertedOriginalPrice`
+    // override.
     if ((await page.locator("#commodity-converted-price").count()) > 0) {
       const converted = c.convertedOriginalPrice ?? 0;
       await page.fill("#commodity-converted-price", String(converted));
     }
-    const current = c.currentPrice ?? c.originalPrice;
+  }
+  const current = c.currentPrice ?? c.originalPrice;
+  if (current !== undefined) {
     await page.fill("#commodity-current-price", String(current));
   }
 
@@ -553,7 +554,9 @@ export async function verifyCommodityDetails(
   const details = detail.locator('[data-testid="commodity-detail-details"]');
   await details.waitFor({ state: "visible", timeout: 10000 });
   await expect(details).toContainText(String(testCommodity.count));
-  await expect(details).toContainText(String(testCommodity.originalPrice));
+  if (testCommodity.originalPrice !== undefined) {
+    await expect(details).toContainText(String(testCommodity.originalPrice));
+  }
 
   if (testCommodity.serialNumber) {
     await expect(details).toContainText(testCommodity.serialNumber);
