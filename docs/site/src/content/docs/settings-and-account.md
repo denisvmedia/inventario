@@ -68,9 +68,9 @@ A couple of things to know:
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
   and if you created anything inside a group someone else owns (items, files,
-  places, exports, tags or sellers), it needs to be removed first. This
-  includes a tag or a seller you added there, even when other members use it on
-  their own items. Item reminders you set in a shared group are deleted
+  places, exports, tags, sellers or item types), it needs to be removed first.
+  This includes a tag, a seller or an item type you added there, even when
+  other members use it on their own items. Item reminders you set in a shared group are deleted
   with your account, since they only ever emailed you. Once deletion succeeds
   you're signed out immediately.
 

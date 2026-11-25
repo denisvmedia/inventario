@@ -16,6 +16,7 @@ import {
   QrCode,
   Search,
   Trash2,
+  type LucideIcon,
 } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -82,14 +83,16 @@ import {
   COMMODITY_SORT_OPTIONS,
   COMMODITY_STATUSES,
   COMMODITY_STATUS_TONES,
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_STATUSES,
   type CommoditySortOption,
   type CommodityStatusValue,
-  type CommodityTypeValue,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+import {
+  useItemTypeFilterOptions,
+  useItemTypeLookup,
+  type ItemTypeDisplay,
+} from "@/features/itemTypes/hooks"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import {
   DEFAULT_COMMODITY_QUERY,
@@ -180,7 +183,7 @@ export function CommoditiesListPage() {
   const listParams = useMemo(() => parseCommoditiesListParams(searchParams), [searchParams])
   const { page, perPage, query } = listParams
   const search = query.text
-  const types = query.types as CommodityTypeValue[]
+  const types = query.types
   const statuses = query.statuses as CommodityStatusValue[]
   const areaId = query.areaId
   const warrantyFilter = query.warrantyStatuses as CommodityWarrantyStatus[]
@@ -412,7 +415,7 @@ export function CommoditiesListPage() {
     return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
   }
 
-  function toggleType(type: CommodityTypeValue) {
+  function toggleType(type: string) {
     updateQuery({ types: toggled(query.types, type) })
   }
   function toggleStatus(status: CommodityStatusValue) {
@@ -515,6 +518,9 @@ export function CommoditiesListPage() {
     }
     return (id?: string) => (id ? (map.get(id) ?? "") : "")
   }, [areas.data])
+  const itemTypes = useItemTypeLookup()
+  const typeIcon = useCallback((type?: string) => itemTypes.get(type)?.Icon, [itemTypes])
+  const typeOptions = useItemTypeFilterOptions(types)
   const tagIndex = useTagIndex("commodity")
   const resolveTag = tagIndex.resolve
   const tagLabel = useCallback((slug: string) => resolveTag(slug).label, [resolveTag])
@@ -622,6 +628,7 @@ export function CommoditiesListPage() {
           searchInput={searchInput}
           onSearchInput={setSearchInput}
           types={types}
+          typeOptions={typeOptions}
           statuses={statuses}
           areaId={areaId}
           warrantyFilter={warrantyFilter}
@@ -764,6 +771,7 @@ export function CommoditiesListPage() {
             onToggleSelected={toggleSelected}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            typeIcon={typeIcon}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
             tagHref={tagHref}
@@ -782,6 +790,7 @@ export function CommoditiesListPage() {
             onToggleSelectAll={() => toggleSelectAll(rows)}
             onPreview={openCommodityInSheet}
             areaName={areaName}
+            typeIcon={typeIcon}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
             tagHref={tagHref}
@@ -877,7 +886,9 @@ export function CommoditiesListPage() {
 interface ToolbarProps {
   searchInput: string
   onSearchInput: (v: string) => void
-  types: CommodityTypeValue[]
+  types: string[]
+  // The types the filter offers, in the order shown.
+  typeOptions: ItemTypeDisplay[]
   statuses: CommodityStatusValue[]
   areaId: string
   warrantyFilter: CommodityWarrantyStatus[]
@@ -891,7 +902,7 @@ interface ToolbarProps {
   sellerIds: string[]
   sellers: Seller[]
   hasFilters: boolean
-  onToggleType: (t: CommodityTypeValue) => void
+  onToggleType: (t: string) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
   onToggleSeller: (id: string) => void
@@ -951,19 +962,17 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuLabel>{t("commodities:filter.type")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {COMMODITY_TYPES.map((tp) => {
-            const Icon = COMMODITY_TYPE_ICONS[tp]
-            return (
-              <DropdownMenuCheckboxItem
-                key={tp}
-                checked={props.types.includes(tp)}
-                onCheckedChange={() => props.onToggleType(tp)}
-              >
-                <Icon aria-hidden="true" />
-                {t(`commodities:type.${tp}`)}
-              </DropdownMenuCheckboxItem>
-            )
-          })}
+          {props.typeOptions.map(({ slug, label, Icon }) => (
+            <DropdownMenuCheckboxItem
+              key={slug}
+              checked={props.types.includes(slug)}
+              onCheckedChange={() => props.onToggleType(slug)}
+              data-testid={`commodities-filter-type-${slug}`}
+            >
+              <Icon aria-hidden="true" />
+              {label}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -1351,6 +1360,8 @@ interface CommoditiesGridProps {
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
   areaName: (id?: string) => string
+  // The icon of an item type, by slug.
+  typeIcon: (type?: string) => LucideIcon | undefined
   // Resolves a stored tag slug to the tag's label (slug while unknown).
   tagLabel: (slug: string) => string
   // Resolves a stored tag slug to its label and color.
@@ -1382,6 +1393,7 @@ function CommoditiesGrid({
   onToggleSelected,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   resolveTag,
   tagHref,
@@ -1399,6 +1411,7 @@ function CommoditiesGrid({
       onToggleSelected,
       onPreview,
       areaName,
+      typeIcon,
       tagLabel,
       resolveTag,
       tagHref,
@@ -1439,6 +1452,7 @@ function CommodityGridCard({
   onToggleSelected,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   resolveTag,
   tagHref,
@@ -1510,7 +1524,8 @@ function CommodityGridCard({
             />
             <CommodityThumb
               cover={row.cover}
-              type={row.type as CommodityTypeValue | undefined}
+              type={row.type}
+              icon={typeIcon(row.type)}
               name={row.name}
               size={36}
               testId="commodity-card-thumb"
@@ -1628,6 +1643,7 @@ function CommoditiesTable({
   onToggleSelectAll,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   currency,
   loanCounts,
@@ -1692,7 +1708,8 @@ function CommoditiesTable({
                 <div className="pointer-events-none">
                   <CommodityThumb
                     cover={row.cover}
-                    type={row.type as CommodityTypeValue | undefined}
+                    type={row.type}
+                    icon={typeIcon(row.type)}
                     name={row.name}
                     size={36}
                     testId="commodity-row-thumb"

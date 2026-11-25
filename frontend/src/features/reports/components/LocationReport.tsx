@@ -5,7 +5,8 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity, CommodityCover } from "@/features/commodities/api"
 import { brandedName } from "@/features/commodities/brand"
-import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { warrantyStatus } from "@/features/commodities/constants"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import {
   commodityValue,
   formatPrice,
@@ -56,6 +57,7 @@ export function LocationReport({
   generatedDate,
 }: LocationReportProps) {
   const { t } = useTranslation()
+  const itemTypes = useItemTypeLookup()
   const noValue = t("reports:insurance.noValue")
   const totals = aggregateLocationTotals(commodities, groupCurrency)
 
@@ -122,7 +124,7 @@ export function LocationReport({
 
       {/* Per-item sections */}
       {commodities.map((item, idx) => {
-        const type = item.type as CommodityTypeValue | undefined
+        const typeLabel = itemTypes.get(item.type)?.label
         const status = warrantyStatus({ warranty_expires_at: item.warranty_expires_at })
         const wConfig = WARRANTY_STATUS_CONFIG[status]
         const WarrantyIcon = wConfig.icon
@@ -156,7 +158,7 @@ export function LocationReport({
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    {type ? t(`commodities:type.${type}`) : noValue}
+                    {typeLabel || noValue}
                   </span>
                   <span className="text-xs text-muted-foreground">·</span>
                   <span className="text-xs text-muted-foreground">

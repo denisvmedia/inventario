@@ -37,6 +37,24 @@ the section matching the tag and publishes it as the GitHub Release body. See
   sellers by name, creating the missing ones
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 
+- Item types are a list each group keeps, instead of a fixed set of six.
+  Every group starts with the six built-in types, seeded at startup for
+  existing groups and on first use for new ones; members see their names in
+  their own language until someone renames them. A new Item types page adds,
+  renames and deletes types, each with a name (up to 50 characters, unique in
+  the group) and one of 38 icons, and counts the items of each type, Trash
+  included. Deleting a type that items have moves them to a type the member
+  picks, which is also how two types are merged; a group keeps at least one
+  type. The item forms pick from the group's types and create one with "New
+  type". Items keep their type: `commodities.type` stays the type's slug, so
+  the `type` filter, saved views, the reports and the icons work as before.
+  The API gains `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an
+  item write with a type the group does not have fails with 422
+  `item_type.unknown`. AI scan offers the group's types. Backups carry the
+  types (format 3.4) and a restore matches them by slug, then by name,
+  creating the missing ones
+  ([#2802](https://github.com/denisvmedia/inventario/issues/2802)).
+
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,
   from two cards a row on a phone to six on a wide screen. The previous cards

@@ -28,7 +28,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | Parameter | Value | Meaning |
 | --------- | ----- | ------- |
 | `q` | text, at most 200 characters and 10 terms | Free-text search, see below. |
-| `type` | repeatable | Item type is one of the values. Any value is accepted: types become per group (#2802), and an unused value matches nothing. Not available on `/search`, where `type` names the entity type. |
+| `type` | repeatable | Item type slug is one of the values. Types are per group and a slug never changes when its type is renamed, so a saved view keeps working. Any value is accepted; an unknown slug matches nothing. Not available on `/search`, where `type` names the entity type. |
 | `status` | repeatable, a known status | Item status is one of the values. |
 | `area_id` | area id | Item is in that area. |
 | `unassigned` | `true`/`false` | Item has no area. Ignored when `area_id` is set. |

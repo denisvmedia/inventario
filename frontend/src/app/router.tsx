@@ -158,6 +158,9 @@ const TagsListPage = lazy(() =>
 const SellersListPage = lazy(() =>
   import("@/pages/sellers/SellersListPage").then((m) => ({ default: m.SellersListPage }))
 )
+const ItemTypesListPage = lazy(() =>
+  import("@/pages/itemTypes/ItemTypesListPage").then((m) => ({ default: m.ItemTypesListPage }))
+)
 const TrashPage = lazy(() =>
   import("@/pages/trash/TrashPage").then((m) => ({ default: m.TrashPage }))
 )
@@ -411,6 +414,7 @@ export function AppRoutes() {
               <Route path="files/:id/edit" element={<FileEditPage />} />
               <Route path="tags" element={<TagsListPage />} />
               <Route path="sellers" element={<SellersListPage />} />
+              <Route path="item-types" element={<ItemTypesListPage />} />
               <Route path="lent" element={<LoansListPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="in-service" element={<ServicesListPage />} />

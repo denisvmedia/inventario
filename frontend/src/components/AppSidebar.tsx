@@ -13,6 +13,7 @@ import {
   Package,
   Plus,
   Settings,
+  Shapes,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -148,6 +149,11 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.sellers",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/sellers` : null),
     icon: Store,
+  },
+  {
+    labelKey: "common:nav.itemTypes",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/item-types` : null),
+    icon: Shapes,
   },
   {
     labelKey: "common:nav.files",

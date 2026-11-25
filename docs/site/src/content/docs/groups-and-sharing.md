@@ -3,7 +3,7 @@ title: Groups and sharing
 description: Keep separate inventories in groups, set each one's currency, and invite people with the right role.
 ---
 
-Inventario organises everything you track into **groups**. A group is a complete, self-contained inventory — its own [locations and areas](../locations-and-areas/), [items](../items/), [files](../files-and-photos/), [tags](../tags/), [sellers](../sellers/), and [backups](../backup-and-restore/). You can belong to several groups at once (your home, a holiday flat, a small business), switch between them whenever you like, and invite other people into any group with a role that decides what they can do.
+Inventario organises everything you track into **groups**. A group is a complete, self-contained inventory — its own [locations and areas](../locations-and-areas/), [items](../items/), [files](../files-and-photos/), [tags](../tags/), [sellers](../sellers/), [item types](../item-types/), and [backups](../backup-and-restore/). You can belong to several groups at once (your home, a holiday flat, a small business), switch between them whenever you like, and invite other people into any group with a role that decides what they can do.
 
 ![The Members page showing the member list, role permissions card, and member stats](../../assets/screenshots/members.png)
 

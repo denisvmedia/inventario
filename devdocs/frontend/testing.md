@@ -20,6 +20,7 @@ frontend/src/test/
     ├── exports.ts
     ├── files.ts
     ├── groups.ts
+    ├── itemTypes.ts
     ├── loans.ts
     ├── locations.ts
     ├── maintenance.ts
@@ -81,7 +82,7 @@ expect(queryClient.getQueryData(authKeys.currentUser())).toMatchObject({ ... })
 
 ## MSW handler factories
 
-Tests register per-case handlers via `server.use(...)` — never edit `server.ts`'s base set. Handlers live under `src/test/handlers/<feature>.ts` and are namespace-imported from the index:
+Tests register per-case handlers via `server.use(...)`. Handlers live under `src/test/handlers/<feature>.ts` and are namespace-imported from the index:
 
 ```ts
 import { authHandlers, groupHandlers } from "@/test/handlers"
@@ -104,6 +105,8 @@ Each module exposes focused factories that take a fixture and return an array of
 | `groupHandlers.error(status?)` | `[GET /groups]` returning the given status code          |
 
 For ad-hoc handlers, import `apiUrl` from `@/test/handlers` and reach for `msw.http.*` directly — no need to add a module.
+
+`server.ts` passes a base set to `setupServer(...)`, which survives `server.resetHandlers()`. It holds only what nearly every surface that renders an item fetches: `GET /g/:groupSlug/item-types` answering with the six built-in types (`itemTypeHandlers.defaults()`, #2802), since an item's type label and icon come from the group's types. A test that cares about the types overrides it with `itemTypeHandlers.list(slug, types)`. Add to the base set only for an endpoint of that reach; everything else goes through `server.use(...)`.
 
 ## Driving Radix Select / portal-based primitives
 

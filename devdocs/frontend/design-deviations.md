@@ -53,6 +53,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner; the taken-name offer and the deleted-seller line asked for in the PR review.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller field.
 
+#### 2026-11-25 — Item type picker with New type, the group's types in the Type filter
+
+- **Issue/PR**: #2802 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has a **Category** `Select` over the fixed `CATEGORIES` list (L1051–L1057), and `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) the same `Select` (L475–L481). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar filter lists `CATEGORIES` as `DropdownMenuCheckboxItem`s with an icon each (L250–L262). There is no way to add a category.
+- **Reality**: `frontend/src/components/itemTypes/ItemTypeField.tsx` keeps the mock's `Select`, filled from the group's item types (`GET /item-types`): each option shows the type's icon and its name, the built-in types by their translated default name until someone renames them. The list ends with a `SelectSeparator` and **New type** (a `Plus` icon), which opens `ItemTypeFormDialog` over the form and selects the type it created, the pattern of the Location and Seller pickers. When the name is taken, the dialog offers **Use {name}** to pick the existing type. A picked type that is no longer in the group's list (deleted by another member) gets a destructive line under the picker asking to pick another one; a save the server refuses with 422 `item_type.unknown` marks the field and refetches the list. Without a group (the item form on the public landing page) the picker offers the six built-in types and no **New type**. The items toolbar's Type filter and the area page's filter list the group's types with their icons; a slug from the URL that the group does not have stays in the menu, by its slug, so it can be cleared. The AI scan review shows the type's name.
+- **Why**: #2802 makes item types a per-group list with a name and an icon, created on the fly from the item form. The deleted-type line, the field error for an unknown type, the built-in types on the landing page and the unknown slug in the filter are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; deleted-type line, unknown-type field error, landing-page fallback and unknown filter slug agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers and a managed category list.
+
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
 
 - **Issue/PR**: #2797 / PR (pending)
@@ -546,6 +555,17 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` adds a sellers view.
 
+### Item types
+
+#### 2026-11-25 — Item types page
+
+- **Issue/PR**: #2802 / PR (pending)
+- **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
+- **Reality**: `frontend/src/pages/itemTypes/ItemTypesListPage.tsx` at `/g/:slug/item-types` follows the Sellers page (#2804), which follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New type**, a search box that filters by the shown name on the client (`?q=`), and a card of `ItemTypeRow`s with the type's icon, its name (a link to the items list filtered by the type, inactive items shown), a secondary **Built-in** badge on the six built-in types, "N items · N in Trash", and edit / delete buttons on hover; the delete button is disabled on the group's last type. `ItemTypeFormDialog` takes a name and an icon from `ItemTypeIconPicker`, a grid of 38 Lucide icons as a radio group (`grid-cols-6 sm:grid-cols-8`, each a bordered icon tile, the selected one with a primary border and a `bg-primary/10` fill). A built-in type's name field starts empty with its translated name as the placeholder and a hint that an empty name keeps it. `ItemTypeDeleteDialog` replaces the confirm dialog: for a type no item has it confirms the delete; for a type items have, Trash included, it names the counts and asks, with a `Select` of the other types, where the items move, and its button reads **Move items and delete**. That is also how two types are merged.
+- **Why**: not present in mock. #2802 asks for types managed like tags (rename, merge, delete with an in-use check), each with a name and an icon. The icon set and its picker, the Built-in badge, the separate Trash count and the empty-name rule for built-in types are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; icon picker, Built-in badge, Trash count and empty-name rule agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
+
 ### Forms & Validation
 
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions
@@ -762,6 +782,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
 ### Navigation & App shell
+
+#### 2026-11-25 — Item types entry in the sidebar and the command palette
+
+- **Issue/PR**: #2802 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Item types entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Item types** (`Shapes` icon) after Sellers in the Group section, linking to `/g/:slug/item-types`. `CommandPalette.tsx` lists the same entry after Sellers. Both resolve the label through `lib/nav-labels.ts` (`common:nav.itemTypes`).
+- **Why**: not present in mock. #2802 asks for a page that manages the group's item types.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 #### 2026-11-25 — Sellers entry in the sidebar and the command palette
 
