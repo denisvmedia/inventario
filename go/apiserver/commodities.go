@@ -64,7 +64,11 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	values := r.URL.Query()
+	values, err := commodityquery.DecodeQuery(r.URL.RawQuery)
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
 	page, perPage := parsePagination(values.Get("page"), values.Get("per_page"))
 	offset := (page - 1) * perPage
 
@@ -111,6 +115,11 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state"
+// @Param tags query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
+// @Param tag_mode query string false "Validated as for GET /commodities, then set aside for the counts" Enums(all,any)
+// @Param tags_exclude query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
+// @Param no_tags query bool false "Validated as for GET /commodities, then set aside for the counts"
+// @Param sort query string false "Accepted and ignored"
 // @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/commodities/tag-counts [get].
@@ -121,7 +130,12 @@ func (*commoditiesAPI) countCommodityTags(w http.ResponseWriter, r *http.Request
 		return
 	}
 
-	query, err := commodityquery.Parse(r.URL.Query())
+	values, err := commodityquery.DecodeQuery(r.URL.RawQuery)
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
+	query, err := commodityquery.Parse(values)
 	if err != nil {
 		queryParamError(w, r, err)
 		return

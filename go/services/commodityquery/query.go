@@ -119,6 +119,11 @@ var filterParams = []string{
 	ParamSort,
 }
 
+// FilterParams returns the name of every parameter Parse understands.
+func FilterParams() []string {
+	return slices.Clone(filterParams)
+}
+
 // Parse reads a Query from a query string. reserved names the parameters the
 // endpoint handles itself (pagination, the entity type of /search); Parse
 // skips them, and a reserved name that is also a filter parameter is not
@@ -147,6 +152,33 @@ func Parse(values url.Values, reserved ...string) (Query, error) {
 		}
 	}
 	return q, nil
+}
+
+// DecodeQuery decodes a raw query string for Parse. url.URL.Query drops a
+// pair it cannot decode, which would run the query without that condition,
+// so a pair with a malformed escape or a semicolon separator is an Error
+// naming its parameter.
+func DecodeQuery(rawQuery string) (url.Values, error) {
+	values, err := url.ParseQuery(rawQuery)
+	if err == nil {
+		return values, nil
+	}
+	for pair := range strings.SplitSeq(rawQuery, "&") {
+		rawKey, rawValue, _ := strings.Cut(pair, "=")
+		if strings.Contains(pair, ";") {
+			name, _, _ := strings.Cut(rawKey, ";")
+			return nil, paramError(name, "", "contains a semicolon; separate parameters with &")
+		}
+		key, keyErr := url.QueryUnescape(rawKey)
+		if keyErr != nil {
+			return nil, paramError(rawKey, "", "is not a valid URL-encoded name")
+		}
+		if _, valueErr := url.QueryUnescape(rawValue); valueErr != nil {
+			return nil, paramError(key, rawValue, "is not a valid URL-encoded value")
+		}
+	}
+	// url.ParseQuery found an error the scan above does not know.
+	return nil, paramError("", "", err.Error())
 }
 
 type parser struct {
@@ -314,12 +346,15 @@ func (p parser) slugs(name string) ([]string, error) {
 		if slug == "" {
 			return nil, paramError(name, v, "is not a tag slug")
 		}
-		if !slices.Contains(out, slug) {
-			out = append(out, slug)
+		if slices.Contains(out, slug) {
+			continue
 		}
-	}
-	if len(out) > MaxTags {
-		return nil, paramError(name, "", fmt.Sprintf("must list at most %d tags", MaxTags))
+		out = append(out, slug)
+		// Checked per new slug, so a request with thousands of tags is
+		// refused after MaxTags+1 of them instead of after deduplicating all.
+		if len(out) > MaxTags {
+			return nil, paramError(name, "", fmt.Sprintf("must list at most %d tags", MaxTags))
+		}
 	}
 	return out, nil
 }

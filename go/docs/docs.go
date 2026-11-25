@@ -3486,6 +3486,48 @@ const docTemplate = `{
                         "description": "Filter by current loan state",
                         "name": "lent_out",
                         "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "any"
+                        ],
+                        "type": "string",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tag_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags_exclude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Accepted and ignored",
+                        "name": "sort",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -6813,6 +6855,78 @@ const docTemplate = `{
                         "type": "string",
                         "description": "Commodities only: how tags combine, all (default) or any",
                         "name": "tag_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Commodities only: only items with none of these tag slugs (comma-separated or repeated)",
+                        "name": "tags_exclude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: only items with no tags; cannot be combined with tags or tags_exclude",
+                        "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodities only: filter by exact area ID",
+                        "name": "area_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: only items with no area (ignored when area_id is set)",
+                        "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: include drafts and non-in_use items (default true; false hides them)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR",
+                        "name": "warranty_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodities only: restrict to items whose warranty expires strictly before YYYY-MM-DD",
+                        "name": "warranty_expires_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: true = only items currently lent, false = only items not lent",
+                        "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
+                        "name": "sort",
                         "in": "query"
                     }
                 ],

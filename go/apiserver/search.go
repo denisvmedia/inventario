@@ -2,6 +2,7 @@ package apiserver
 
 import (
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 
@@ -33,11 +34,25 @@ type searchAPI struct {
 // @Param offset query int false "Number of results to skip" default(0)
 // @Param tags query string false "Filter by tags (comma-separated); for commodities see tag_mode"
 // @Param tag_mode query string false "Commodities only: how tags combine, all (default) or any" Enums(all,any)
+// @Param tags_exclude query []string false "Commodities only: only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
+// @Param no_tags query bool false "Commodities only: only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
+// @Param area_id query string false "Commodities only: filter by exact area ID"
+// @Param unassigned query bool false "Commodities only: only items with no area (ignored when area_id is set)"
+// @Param include_inactive query bool false "Commodities only: include drafts and non-in_use items (default true; false hides them)"
+// @Param warranty_status query []string false "Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
+// @Param warranty_expires_before query string false "Commodities only: restrict to items whose warranty expires strictly before YYYY-MM-DD"
+// @Param lent_out query bool false "Commodities only: true = only items currently lent, false = only items not lent"
+// @Param sort query string false "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Success 200 {object} jsonapi.SearchResponse "Search results"
 // @Failure 400 {object} jsonapi.Errors "Missing q, unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/search [get]
 func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
-	values := r.URL.Query()
+	values, err := commodityquery.DecodeQuery(r.URL.RawQuery)
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
 	query := values.Get("q")
 	if strings.TrimSpace(query) == "" {
 		http.Error(w, "query parameter 'q' is required", http.StatusBadRequest)
@@ -71,7 +86,7 @@ func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 
 	switch entityType {
 	case "commodities":
-		api.searchCommodities(w, r, registrySet, limit, offset)
+		api.searchCommodities(w, r, registrySet, values, limit, offset)
 	case "files":
 		api.searchFiles(w, r, registrySet, query, limit, offset)
 	default:
@@ -82,8 +97,8 @@ func (api *searchAPI) search(w http.ResponseWriter, r *http.Request) {
 // searchCommodities answers /search?type=commodities through the item query
 // contract, so the search page and the items list select the same items for
 // the same query string.
-func (*searchAPI) searchCommodities(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, limit, offset int) {
-	query, err := commodityquery.Parse(r.URL.Query(), "type", "limit", "offset")
+func (*searchAPI) searchCommodities(w http.ResponseWriter, r *http.Request, registrySet *registry.Set, values url.Values, limit, offset int) {
+	query, err := commodityquery.Parse(values, "type", "limit", "offset")
 	if err != nil {
 		queryParamError(w, r, err)
 		return

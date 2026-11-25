@@ -127,6 +127,10 @@ export interface ListCommoditiesOptions {
   tagMode?: TagMatchMode
   tagsExclude?: string[]
   noTags?: boolean
+  // Values the page URL carried for a boolean filter or tag_mode that could
+  // not be read, by API parameter name. Sent as written so the BE answers
+  // 400 query.invalid_parameter; see CommodityQuery.unreadable.
+  unreadable?: Record<string, string>
   signal?: AbortSignal
 }
 
@@ -177,8 +181,14 @@ export async function listCommodities(options: ListCommoditiesOptions = {}): Pro
 export type CommodityTagCounts = Schema<"registry.CommodityTagCounts">
 
 // The options that reach the tag counts: the query without paging, sort
-// or tag filter, which the endpoint would ignore or set aside.
+// or tag filter, which the endpoint would ignore or set aside. An unreadable
+// tag_mode or no_tags is part of the tag filter and goes with it.
 export function tagCountsOptions(options: ListCommoditiesOptions): ListCommoditiesOptions {
+  const unreadable = Object.fromEntries(
+    Object.entries(options.unreadable ?? {}).filter(
+      ([name]) => name !== "tag_mode" && name !== "no_tags"
+    )
+  )
   return {
     ...options,
     page: undefined,
@@ -189,6 +199,7 @@ export function tagCountsOptions(options: ListCommoditiesOptions): ListCommoditi
     tagMode: undefined,
     tagsExclude: undefined,
     noTags: undefined,
+    unreadable: Object.keys(unreadable).length > 0 ? unreadable : undefined,
     signal: undefined,
   }
 }
