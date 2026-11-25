@@ -336,3 +336,16 @@ func TestReminders_ValidateRequiresContext(t *testing.T) {
 	c.Check((&models.MaintenanceReminder{}).Validate(), qt.ErrorIs, models.ErrMustUseValidateWithContext)
 	c.Check((&models.StorageQuotaReminder{}).Validate(), qt.ErrorIs, models.ErrMustUseValidateWithContext)
 }
+
+func TestReminderThreshold_MetricLabel(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(models.WarrantyReminder60Days.MetricLabel(), qt.Equals, "60")
+	c.Assert(models.WarrantyReminder7Days.MetricLabel(), qt.Equals, "7")
+	c.Assert(models.WarrantyReminderThreshold(90).MetricLabel(), qt.Equals, "custom")
+	c.Assert(models.WarrantyReminderThreshold(365).MetricLabel(), qt.Equals, "custom")
+
+	c.Assert(models.MaintenanceReminder14Days.MetricLabel(), qt.Equals, "14")
+	c.Assert(models.MaintenanceReminder1Day.MetricLabel(), qt.Equals, "1")
+	c.Assert(models.MaintenanceReminderOverdue.MetricLabel(), qt.Equals, "0")
+	c.Assert(models.MaintenanceReminderThreshold(21).MetricLabel(), qt.Equals, "custom")
+}

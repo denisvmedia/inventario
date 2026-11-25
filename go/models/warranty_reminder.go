@@ -2,6 +2,8 @@ package models
 
 import (
 	"context"
+	"slices"
+	"strconv"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -44,6 +46,21 @@ var WarrantyReminderThresholds = []WarrantyReminderThreshold{
 func (t WarrantyReminderThreshold) IsValid() bool {
 	return t >= 1 && int(t) <= ReminderMaxLeadDays
 }
+
+// MetricLabel returns the threshold label for the sent-reminders counter:
+// the number of days for a default lead time and "custom" for any other.
+// Lead times are user-chosen (#2805), and one label value per possible day
+// would give the counter hundreds of series.
+func (t WarrantyReminderThreshold) MetricLabel() string {
+	if slices.Contains(WarrantyReminderThresholds, t) {
+		return strconv.Itoa(int(t))
+	}
+	return ReminderMetricLabelCustom
+}
+
+// ReminderMetricLabelCustom is the threshold label for a lead time that is
+// not one of the defaults.
+const ReminderMetricLabelCustom = "custom"
 
 // DefaultWarrantyLeadTimes returns the default warranty lead times as
 // plain ints, largest first.

@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"slices"
 	"strconv"
 	"time"
 
@@ -64,6 +65,17 @@ func (t MaintenanceReminderThreshold) Label() string {
 		return ""
 	}
 	return strconv.Itoa(int(t)) + "-day"
+}
+
+// MetricLabel returns the threshold label for the sent-reminders counter:
+// the number of days for a default lead time or the overdue sentinel ("0"),
+// and "custom" for any other lead time. See
+// WarrantyReminderThreshold.MetricLabel.
+func (t MaintenanceReminderThreshold) MetricLabel() string {
+	if slices.Contains(MaintenanceReminderThresholds, t) {
+		return strconv.Itoa(int(t))
+	}
+	return ReminderMetricLabelCustom
 }
 
 // DefaultMaintenanceLeadTimes returns the default maintenance lead times

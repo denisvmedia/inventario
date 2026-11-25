@@ -11,7 +11,6 @@ package services
 import (
 	"context"
 	"log/slog"
-	"strconv"
 	"sync"
 	"time"
 
@@ -27,7 +26,9 @@ const defaultWarrantyReminderInterval = 1 * time.Hour
 // lazily at package init via promauto against the default registry.
 //
 // Labels:
-//   - threshold: "60", "30", or "7" — matches WarrantyReminderThreshold.
+//   - threshold: "60", "30" or "7" for the default lead times, "custom"
+//     for any lead time a user chose instead (#2805). See
+//     WarrantyReminderThreshold.MetricLabel.
 //
 // `…_failures_total` is unlabelled because every failure is logged with
 // the threshold tag and it is not useful to slice the counter by
@@ -35,7 +36,7 @@ const defaultWarrantyReminderInterval = 1 * time.Hour
 var (
 	warrantyRemindersSentTotal = promauto.NewCounterVec(prometheus.CounterOpts{
 		Name: "inventario_warranty_reminders_sent_total",
-		Help: "Number of warranty reminder emails enqueued, partitioned by threshold (60/30/7 days).",
+		Help: "Number of warranty reminder emails enqueued, partitioned by threshold (60/30/7 days for the defaults, custom for user-chosen lead times).",
 	}, []string{"threshold"})
 	warrantyReminderFailuresTotal = promauto.NewCounter(prometheus.CounterOpts{
 		Name: "inventario_warranty_reminder_failures_total",
@@ -181,7 +182,7 @@ func (w *WarrantyReminderWorker) tick(ctx context.Context) {
 	for threshold, count := range stats.SentByThreshold {
 		if count > 0 {
 			warrantyRemindersSentTotal.
-				WithLabelValues(strconv.Itoa(int(threshold))).
+				WithLabelValues(threshold.MetricLabel()).
 				Add(float64(count))
 		}
 	}
