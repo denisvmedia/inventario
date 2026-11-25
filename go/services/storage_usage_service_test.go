@@ -110,6 +110,10 @@ func (s *stubFileRegistry) DeleteIfUnlinked(context.Context, string, string, str
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) TrashUnlessHeld(context.Context, string, string, string, string, time.Time) (bool, error) {
+	panic("not implemented")
+}
+
 func (s *stubFileRegistry) ListByChecksum(context.Context, string) ([]*models.FileEntity, error) {
 	panic("not implemented")
 }

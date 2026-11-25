@@ -531,6 +531,16 @@ type FileRegistry interface {
 	// own. ErrNotFound when the file does not exist or is already in Trash.
 	Trash(ctx context.Context, id, deletedBy, withCommodityID string, at time.Time) error
 
+	// TrashUnlessHeld moves a live file to Trash unless a link other than
+	// the one to the entity named by entityType and entityID holds it live,
+	// and reports whether it did. Every link holds a file live except one to
+	// an item in Trash; when such links are all that is left, the file goes
+	// to Trash with the item linked first, so restoring that item brings the
+	// file back. The check and the update are one statement, so a link added
+	// concurrently keeps the file. Discarding a draft calls it for each of
+	// the draft's files.
+	TrashUnlessHeld(ctx context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error)
+
 	// Restore makes a trashed file live again. ErrNotFound when the file does
 	// not exist or is live.
 	Restore(ctx context.Context, id string) error
@@ -1308,21 +1318,43 @@ type CommodityDraftRegistry interface {
 	// SaveValues replaces the values of an open draft and increments its
 	// revision. revision is the revision the values were based on:
 	// ErrDraftRevisionConflict when it is not the current one,
-	// ErrDraftPromoted when the draft is promoted, ErrNotFound when it does
-	// not exist.
+	// ErrDraftPromoted when the draft is promoted, ErrDraftDiscarded when
+	// its discard has begun, ErrNotFound when it does not exist.
 	SaveValues(ctx context.Context, id string, revision int, values models.CommodityDraftValues) (*models.CommodityDraft, error)
 
 	// Promote turns an open draft into an item in one step: it creates the
 	// item from commodity the way CommodityRegistry.Create does, moves the
 	// draft's file links to the item, and marks the draft promoted with its
-	// values cleared. Either all of it happens or none of it.
+	// values cleared and promotionKey stored. Either all of it happens or
+	// none of it.
 	//
-	// It is idempotent: on a promoted draft it changes nothing and returns
-	// the draft with a nil Commodity, whatever revision says; the caller
-	// reads the item through PromotedCommodityID. On an open draft revision
-	// must be the current one (ErrDraftRevisionConflict). The caller
-	// validates the item and normalizes its tags beforehand.
-	Promote(ctx context.Context, id string, revision int, commodity models.Commodity) (DraftPromotion, error)
+	// A repeat with the same promotionKey changes nothing and returns the
+	// promoted draft with a nil Commodity, whatever revision says; the
+	// caller reads the item through PromotedCommodityID. Another key on a
+	// promoted draft gets ErrDraftPromoted. On an open draft revision must
+	// be the current one (ErrDraftRevisionConflict); a draft whose discard
+	// has begun gets ErrDraftDiscarded. The caller validates the item and
+	// normalizes its tags beforehand.
+	Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (DraftPromotion, error)
+
+	// AttachFile links a file to an open draft, holding the draft row so a
+	// promotion or a discard cannot happen between the check and the
+	// insert. It returns the existing link with created=false when the file
+	// is already attached; ErrDraftPromoted or ErrDraftDiscarded when the
+	// draft is not open, ErrNotFound when the draft or the file is not in
+	// the group.
+	AttachFile(ctx context.Context, draftID string, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// MarkDiscarding begins the discard of an open draft: from then on it
+	// cannot be saved, promoted or given files, and no list shows it. On a
+	// draft already being discarded it returns the draft unchanged, so a
+	// discard that stopped half way can be finished. ErrDraftPromoted when
+	// the draft is an item, ErrNotFound when it does not exist.
+	MarkDiscarding(ctx context.Context, id string) (*models.CommodityDraft, error)
+
+	// DeleteDiscarding deletes a draft whose discard has begun; ErrNotFound
+	// when there is no such draft.
+	DeleteDiscarding(ctx context.Context, id string) error
 }
 
 // DraftPromotion is the result of CommodityDraftRegistry.Promote.

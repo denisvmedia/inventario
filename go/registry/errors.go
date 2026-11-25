@@ -160,7 +160,13 @@ var (
 	// newer input (#2812).
 	ErrDraftRevisionConflict = errx.NewSentinel("the draft was changed by another save")
 
-	// ErrDraftPromoted is returned when a save or a discard reaches a draft
-	// that has already become an item (#2812).
+	// ErrDraftPromoted is returned when a save, a discard, an attachment or
+	// a promotion with another promotion key reaches a draft that has
+	// already become an item (#2812).
 	ErrDraftPromoted = errx.NewSentinel("the draft has already been turned into an item")
+
+	// ErrDraftDiscarded is returned when a save, a promotion, an attachment
+	// or a create with its client key reaches a draft whose discard has
+	// begun (#2812).
+	ErrDraftDiscarded = errx.NewSentinel("the draft is being discarded")
 )

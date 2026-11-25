@@ -117,6 +117,7 @@ func (a CommodityDraftCreateAttributes) Validate() error {
 func (a CommodityDraftCreateAttributes) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &a,
 		validation.Field(&a.ClientKey, validation.Required, validation.Length(1, models.CommodityDraftClientKeyMaxLength)),
+		validation.Field(&a.Values, models.CommodityDraftValuesRule),
 	)
 }
 
@@ -167,6 +168,7 @@ func (a CommodityDraftSaveAttributes) Validate() error {
 func (a CommodityDraftSaveAttributes) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &a,
 		validation.Field(&a.Revision, validation.Required, validation.Min(1)),
+		validation.Field(&a.Values, models.CommodityDraftValuesRule),
 	)
 }
 
@@ -189,15 +191,21 @@ func (cr *CommodityDraftSaveRequest) ValidateWithContext(ctx context.Context) er
 
 // CommodityDraftPromoteRequest is the JSON:API payload for
 // POST .../drafts/{id}/promote: the finished item, as for
-// POST .../commodities, and the revision of the draft it finishes.
+// POST .../commodities, the revision of the draft it finishes and the key of
+// this promotion.
 type CommodityDraftPromoteRequest struct {
 	Data *CommodityData            `json:"data"`
 	Meta CommodityDraftPromoteMeta `json:"meta"`
 }
 
-// CommodityDraftPromoteMeta names the draft revision the item was based on.
+// CommodityDraftPromoteMeta names the draft revision the item was based on
+// and the promotion key. The client makes a new key, such as a UUID, for a
+// promotion and sends the same key on every retry until one succeeds: a
+// retry with the key of the promotion that happened gets the item back, any
+// other key learns that the draft is already an item.
 type CommodityDraftPromoteMeta struct {
-	Revision int `json:"revision" example:"3"`
+	Revision     int    `json:"revision" example:"3"`
+	PromotionKey string `json:"promotion_key" example:"6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10"`
 }
 
 func (m CommodityDraftPromoteMeta) Validate() error {
@@ -207,6 +215,7 @@ func (m CommodityDraftPromoteMeta) Validate() error {
 func (m CommodityDraftPromoteMeta) ValidateWithContext(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, &m,
 		validation.Field(&m.Revision, validation.Required, validation.Min(1)),
+		validation.Field(&m.PromotionKey, models.PromotionKeyRule),
 	)
 }
 

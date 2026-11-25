@@ -27,14 +27,22 @@ const (
 	// promoted.
 	CommodityDraftOpen CommodityDraftStatus = "open"
 	// CommodityDraftPromoted is a draft that became an item. Its row stays,
-	// with the values cleared, so a repeated promotion returns the same item.
+	// with the values cleared, so a repeated promotion with the same
+	// promotion key returns the same item.
 	CommodityDraftPromoted CommodityDraftStatus = "promoted"
+	// CommodityDraftDiscarding is a draft whose discard has begun: its files
+	// are being sent to Trash or released, and the row is deleted last. It
+	// cannot be saved, promoted or given files, and no list shows it. A
+	// repeated discard finishes the work.
+	CommodityDraftDiscarding CommodityDraftStatus = "discarding"
 )
 
 // Limits on a draft's client-supplied values.
 const (
 	// CommodityDraftClientKeyMaxLength caps the idempotency key.
 	CommodityDraftClientKeyMaxLength = 128
+	// CommodityDraftPromotionKeyMaxLength caps the promotion key.
+	CommodityDraftPromotionKeyMaxLength = 128
 	// CommodityDraftValuesMaxBytes caps the encoded size of the form values.
 	// The item form produces a few kilobytes at most.
 	CommodityDraftValuesMaxBytes = 64 * 1024
@@ -96,9 +104,10 @@ func (v CommodityDraftValues) Title() string {
 	return name
 }
 
-// commodityDraftValuesRule checks the size and the number of fields of the
-// values.
-var commodityDraftValuesRule = validation.By(func(value any) error {
+// CommodityDraftValuesRule checks the size and the number of fields of the
+// values, and the type of each field the item form knows. The request
+// validation and the model share it.
+var CommodityDraftValuesRule = validation.By(func(value any) error {
 	v, ok := value.(CommodityDraftValues)
 	if !ok {
 		return nil
@@ -113,20 +122,131 @@ var commodityDraftValuesRule = validation.By(func(value any) error {
 	if len(encoded) > CommodityDraftValuesMaxBytes {
 		return validation.NewError("validation_draft_values_size", fmt.Sprintf("the draft values must not exceed %d bytes", CommodityDraftValuesMaxBytes))
 	}
-	return nil
+	return checkDraftValueTypes(v)
 })
+
+// draftValueKind is the JSON type a known field of the item form holds.
+type draftValueKind int
+
+const (
+	draftText draftValueKind = iota
+	draftNumber
+	draftList
+	draftFlag
+)
+
+// draftValueKinds lists the fields of the item form. A draft can hold other
+// fields too, within the size limits; these must have the type the form
+// reads, so a draft written through the API opens in the form. A number
+// field may be a JSON number or the string the form keeps while it is typed.
+var draftValueKinds = map[string]draftValueKind{
+	"name":                     draftText,
+	"short_name":               draftText,
+	"brand":                    draftText,
+	"model":                    draftText,
+	"type":                     draftText,
+	"area_id":                  draftText,
+	"seller_id":                draftText,
+	"status":                   draftText,
+	"original_price_currency":  draftText,
+	"serial_number":            draftText,
+	"purchase_date":            draftText,
+	"comments":                 draftText,
+	"warranty_expires_at":      draftText,
+	"warranty_notes":           draftText,
+	"count":                    draftNumber,
+	"original_price":           draftNumber,
+	"converted_original_price": draftNumber,
+	"current_price":            draftNumber,
+	"extra_serial_numbers":     draftList,
+	"part_numbers":             draftList,
+	"tags":                     draftList,
+	"urls":                     draftList,
+	"draft":                    draftFlag,
+}
+
+// checkDraftValueTypes returns the known fields whose value has the wrong
+// type, keyed by field.
+func checkDraftValueTypes(v CommodityDraftValues) error {
+	errs := validation.Errors{}
+	for key, value := range v {
+		kind, known := draftValueKinds[key]
+		if !known {
+			continue
+		}
+		if err := checkDraftValueKind(kind, value); err != nil {
+			errs[key] = err
+		}
+	}
+	if len(errs) == 0 {
+		return nil
+	}
+	return errs
+}
+
+func checkDraftValueKind(kind draftValueKind, value any) error {
+	switch kind {
+	case draftText:
+		if _, ok := value.(string); !ok {
+			return validation.NewError("validation_draft_value_text", "must be a string")
+		}
+	case draftNumber:
+		switch value.(type) {
+		case string, float64, json.Number:
+		default:
+			return validation.NewError("validation_draft_value_number", "must be a number or a string")
+		}
+	case draftList:
+		list, ok := value.([]any)
+		if !ok {
+			return validation.NewError("validation_draft_value_list", "must be a list of strings")
+		}
+		for _, item := range list {
+			if _, ok := item.(string); !ok {
+				return validation.NewError("validation_draft_value_list", "must be a list of strings")
+			}
+		}
+	case draftFlag:
+		if _, ok := value.(bool); !ok {
+			return validation.NewError("validation_draft_value_flag", "must be true or false")
+		}
+	}
+	return nil
+}
 
 // clientKeyRule accepts printable ASCII without spaces, so a key can be a
 // UUID or a composite such as "intake:<session>:<candidate>".
 var clientKeyRule = validation.By(func(value any) error {
 	key, _ := value.(string)
-	for _, r := range key {
-		if r <= ' ' || r > '~' {
-			return validation.NewError("validation_draft_client_key", "the client key must be printable ASCII without spaces")
-		}
+	if !isDraftKey(key) {
+		return validation.NewError("validation_draft_client_key", "the client key must be printable ASCII without spaces")
 	}
 	return nil
 })
+
+// PromotionKeyRule checks a promotion key: 1 to
+// CommodityDraftPromotionKeyMaxLength printable ASCII characters without
+// spaces, such as a UUID.
+var PromotionKeyRule = validation.By(func(value any) error {
+	key, _ := value.(string)
+	if key == "" {
+		return validation.NewError("validation_required", "cannot be blank")
+	}
+	if len(key) > CommodityDraftPromotionKeyMaxLength || !isDraftKey(key) {
+		return validation.NewError("validation_draft_promotion_key",
+			fmt.Sprintf("the promotion key must be at most %d printable ASCII characters without spaces", CommodityDraftPromotionKeyMaxLength))
+	}
+	return nil
+})
+
+func isDraftKey(key string) bool {
+	for _, r := range key {
+		if r <= ' ' || r > '~' {
+			return false
+		}
+	}
+	return true
+}
 
 // CommodityDraft is an unfinished item saved on the server (#2812). It holds
 // the form values as entered, which need not form a valid item, and the files
@@ -164,7 +284,7 @@ type CommodityDraft struct {
 	//ptah:schema:field name="revision" type="INTEGER" not_null="true" default="1"
 	Revision int `json:"revision" db:"revision" userinput:"false"`
 
-	// Status is open until the draft is promoted.
+	// Status is open until the draft is promoted or its discard begins.
 	//ptah:schema:field name="status" type="TEXT" not_null="true" default="open"
 	Status CommodityDraftStatus `json:"status" db:"status" userinput:"false"`
 
@@ -175,6 +295,13 @@ type CommodityDraft struct {
 
 	//ptah:schema:field name="promoted_at" type="TIMESTAMP"
 	PromotedAt *time.Time `json:"promoted_at,omitempty" db:"promoted_at" userinput:"false"`
+
+	// PromotionKey is the key the promotion was made with. Only a repeat with
+	// the same key gets the item back; any other caller learns that the
+	// draft is already an item, so a second device does not take the first
+	// one's item for its own.
+	//ptah:schema:field name="promotion_key" type="TEXT"
+	PromotionKey *string `json:"-" db:"promotion_key" userinput:"false"`
 
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
@@ -207,6 +334,11 @@ func (d *CommodityDraft) IsOpen() bool {
 	return d.Status == CommodityDraftOpen
 }
 
+// IsDiscarding reports whether the draft's discard has begun.
+func (d *CommodityDraft) IsDiscarding() bool {
+	return d.Status == CommodityDraftDiscarding
+}
+
 func (*CommodityDraft) Validate() error {
 	return ErrMustUseValidateWithContext
 }
@@ -215,7 +347,7 @@ func (*CommodityDraft) Validate() error {
 func (d *CommodityDraft) ValidateWithContext(ctx context.Context) error {
 	if err := validation.ValidateStructWithContext(ctx, d,
 		validation.Field(&d.TenantGroupAwareEntityID),
-		validation.Field(&d.Status, validation.Required, validation.In(CommodityDraftOpen, CommodityDraftPromoted)),
+		validation.Field(&d.Status, validation.Required, validation.In(CommodityDraftOpen, CommodityDraftPromoted, CommodityDraftDiscarding)),
 		validation.Field(&d.Revision, validation.Required, validation.Min(1)),
 	); err != nil {
 		return err
@@ -229,11 +361,15 @@ func (d *CommodityDraft) ValidateWithContext(ctx context.Context) error {
 func (d *CommodityDraft) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, d,
 		validation.Field(&d.ClientKey, rules.NotEmpty, validation.Length(1, CommodityDraftClientKeyMaxLength), clientKeyRule),
-		validation.Field(&d.Values, commodityDraftValuesRule),
+		validation.Field(&d.Values, CommodityDraftValuesRule),
 	)
 }
 
-// ValidateCommodityDraftValues checks values the way ValidateFields does.
+// ValidateCommodityDraftValues checks values the way ValidateFields does,
+// reporting the errors under "values" as ValidateFields does.
 func ValidateCommodityDraftValues(values CommodityDraftValues) error {
-	return validation.Validate(values, commodityDraftValuesRule)
+	if err := validation.Validate(values, CommodityDraftValuesRule); err != nil {
+		return validation.Errors{"values": err}
+	}
+	return nil
 }

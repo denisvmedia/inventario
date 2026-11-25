@@ -716,6 +716,10 @@ table "commodity_drafts" {
     type = TIMESTAMP
     null = true
   }
+  column "promotion_key" {
+    type = TEXT
+    null = true
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")

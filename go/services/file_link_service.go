@@ -77,19 +77,26 @@ func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entity
 		return nil, false, errxtrace.Classify(ErrFileLinkInvalid, errx.Attrs("meta", meta))
 	}
 
-	if err := s.requireTarget(ctx, entityType, entityID); err != nil {
-		return nil, false, err
-	}
-
 	firstPlacement := len(file.OrdinaryLinks()) == 0
-	_, created, err := fileReg.AddLink(ctx, models.FileLink{
+	link := models.FileLink{
 		FileID:     file.ID,
 		EntityType: entityType,
 		EntityID:   entityID,
 		Meta:       meta,
-	})
-	if err != nil {
-		return nil, false, errxtrace.Wrap("failed to attach file", err)
+	}
+	var created bool
+	if entityType == models.FileLinkDraft {
+		created, err = s.attachToDraft(ctx, link)
+		if err != nil {
+			return nil, false, err
+		}
+	} else {
+		if err := s.requireTarget(ctx, entityType, entityID); err != nil {
+			return nil, false, err
+		}
+		if _, created, err = fileReg.AddLink(ctx, link); err != nil {
+			return nil, false, errxtrace.Wrap("failed to attach file", err)
+		}
 	}
 
 	// The first attachment into a bucket the caller chose places the file: a
@@ -132,8 +139,6 @@ func (s *FileLinkService) requireTarget(ctx context.Context, entityType, entityI
 		if reg, err = s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx); err == nil {
 			_, err = reg.Get(ctx, entityID)
 		}
-	case models.FileLinkDraft:
-		err = s.requireOpenDraft(ctx, entityID)
 	}
 	if errors.Is(err, registry.ErrNotFound) {
 		return errxtrace.Classify(ErrFileLinkTargetNotFound, errx.Attrs("entity_type", entityType, "entity_id", entityID))
@@ -144,22 +149,24 @@ func (s *FileLinkService) requireTarget(ctx context.Context, entityType, entityI
 	return nil
 }
 
-// requireOpenDraft checks that the draft exists and has not been promoted.
-// A promoted draft has handed its files to the item, so a late attachment
-// would link a file to a draft nobody can open any more.
-func (s *FileLinkService) requireOpenDraft(ctx context.Context, id string) error {
+// attachToDraft links the file to an open draft. The draft registry checks
+// the draft and writes the link in one transaction holding the draft row, so
+// a promotion or a discard cannot slip in between. A promoted draft has
+// handed its files to the item and answers registry.ErrDraftPromoted; a
+// draft being discarded answers registry.ErrDraftDiscarded.
+func (s *FileLinkService) attachToDraft(ctx context.Context, link models.FileLink) (bool, error) {
 	reg, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return err
+		return false, errxtrace.Wrap("failed to create draft registry", err)
 	}
-	draft, err := reg.Get(ctx, id)
+	_, created, err := reg.AttachFile(ctx, link.EntityID, link)
+	if errors.Is(err, registry.ErrNotFound) {
+		return false, errxtrace.Classify(ErrFileLinkTargetNotFound, errx.Attrs("entity_type", link.EntityType, "entity_id", link.EntityID))
+	}
 	if err != nil {
-		return err
+		return false, errxtrace.Wrap("failed to attach file", err)
 	}
-	if !draft.IsOpen() {
-		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", models.FileLinkDraft, "entity_id", id))
-	}
-	return nil
+	return created, nil
 }
 
 // Detach removes one attachment of a file. The file stays, also when this was

@@ -13,6 +13,7 @@ import (
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 func draftCreateBody(key, name string) string {
@@ -24,7 +25,11 @@ func draftSaveBody(revision, name string) string {
 }
 
 func draftPromoteBody(revision, name, areaID string) string {
-	return `{"data":{"type":"commodities","attributes":{"name":"` + name + `","short_name":"` + name + `","type":"equipment","status":"in_use","count":1,"original_price_currency":"USD","area_id":"` + areaID + `"}},"meta":{"revision":` + revision + `}}`
+	return draftPromoteBodyWithKey(revision, name, areaID, "promotion-1")
+}
+
+func draftPromoteBodyWithKey(revision, name, areaID, key string) string {
+	return `{"data":{"type":"commodities","attributes":{"name":"` + name + `","short_name":"` + name + `","type":"equipment","status":"in_use","count":1,"original_price_currency":"USD","area_id":"` + areaID + `"}},"meta":{"revision":` + revision + `,"promotion_key":"` + key + `"}}`
 }
 
 func decodeDraft(c *qt.C, body []byte) jsonapi.CommodityDraftResponse {
@@ -112,6 +117,27 @@ func TestCommodityDraftsAPI_Lifecycle(t *testing.T) {
 	c.Assert(item.Data.ID, qt.Equals, itemID)
 	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore+1)
 
+	// Another device that promotes with its own key learns that the draft
+	// is already an item; it does not get this item as if it made it.
+	rr = env.do(http.MethodPost, "/drafts/"+draftID+"/promote", draftPromoteBodyWithKey("2", "Drill", areaID, "promotion-2"))
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), apiserver.DraftPromotedCode)
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].meta.commodity_id"), itemID)
+	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore+1)
+
+	// A file attached to the promoted draft is refused the same way.
+	lateFile := must.Must(regs.FileRegistry.Create(ctx, models.FileEntity{
+		Title:    "late",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		File:     &models.File{Path: "late", OriginalPath: "late.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	}))
+	rr = env.do(http.MethodPost, "/files/"+lateFile.ID+"/links",
+		`{"data":{"type":"file-links","attributes":{"entity_type":"draft","entity_id":"`+draftID+`"}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), apiserver.DraftPromotedCode)
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].meta.commodity_id"), itemID)
+
 	// The file is the item's now.
 	rr = env.do(http.MethodGet, "/files?linked_entity_type=commodity&linked_entity_id="+itemID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
@@ -144,6 +170,41 @@ func TestCommodityDraftsAPI_Discard(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 }
 
+func TestCommodityDraftsAPI_DraftBeingDiscarded(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+	areaID := must.Must(regs.AreaRegistry.List(ctx))[0].ID
+
+	rr := env.do(http.MethodPost, "/drafts", draftCreateBody("key-1", "Drill"))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	draftID := decodeDraft(c, rr.Body.Bytes()).Data.ID
+	// A discard that stopped after its first step.
+	_, err := regs.CommodityDraftRegistry.MarkDiscarding(ctx, draftID)
+	c.Assert(err, qt.IsNil)
+
+	rr = env.do(http.MethodGet, "/drafts/"+draftID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodGet, "/drafts", "")
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.meta.drafts"), float64(0))
+	for _, req := range []struct{ method, path, body string }{
+		{http.MethodPut, "/drafts/" + draftID, draftSaveBody("1", "Late")},
+		{http.MethodPost, "/drafts/" + draftID + "/promote", draftPromoteBody("1", "Drill", areaID)},
+		{http.MethodPost, "/drafts", draftCreateBody("key-1", "Drill")},
+	} {
+		rr = env.do(req.method, req.path, req.body)
+		c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("%s %s body=%s", req.method, req.path, rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), apiserver.DraftDiscardedCode)
+	}
+
+	// Discarding again finishes the work.
+	rr = env.do(http.MethodDelete, "/drafts/"+draftID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
+	_, err = regs.CommodityDraftRegistry.Get(ctx, draftID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
 func TestCommodityDraftsAPI_RejectsInvalidInput(t *testing.T) {
 	tests := []struct {
 		name   string
@@ -155,7 +216,11 @@ func TestCommodityDraftsAPI_RejectsInvalidInput(t *testing.T) {
 		{name: "wrong type", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodities","attributes":{"client_key":"k"}}}`},
 		{name: "client key with spaces", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"client_key":"a b"}}}`},
 		{name: "save without revision", method: http.MethodPut, path: "/drafts/DRAFT", body: `{"data":{"type":"commodity_drafts","attributes":{"values":{}}}}`},
-		{name: "promote without revision", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}}}`},
+		{name: "promote without revision", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}},"meta":{"promotion_key":"k"}}`},
+		{name: "promote without a promotion key", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}},"meta":{"revision":1}}`},
+		{name: "promotion key with spaces", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}},"meta":{"revision":1,"promotion_key":"a b"}}`},
+		{name: "create with a form field of the wrong type", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"client_key":"k","values":{"short_name":null}}}}`},
+		{name: "save with a form field of the wrong type", method: http.MethodPut, path: "/drafts/DRAFT", body: `{"data":{"type":"commodity_drafts","attributes":{"revision":1,"values":{"tags":"one"}}}}`},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -172,6 +237,21 @@ func TestCommodityDraftsAPI_RejectsInvalidInput(t *testing.T) {
 			c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
 		})
 	}
+}
+
+func TestCommodityDraftsAPI_NamesTheFieldOfTheWrongType(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	rr := env.do(http.MethodPost, "/drafts",
+		`{"data":{"type":"commodity_drafts","attributes":{"client_key":"k","values":{"name":"Drill","count":2,"short_name":7,"from_intake":{"any":"shape"}}}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.values.short_name"), "must be a string")
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.data.attributes.values.short_name.code"), "validation_draft_value_text")
+
+	// A number field takes a JSON number, and unknown fields are kept.
+	rr = env.do(http.MethodPost, "/drafts",
+		`{"data":{"type":"commodity_drafts","attributes":{"client_key":"k","values":{"name":"Drill","count":2,"from_intake":{"any":"shape"}}}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 }
 
 func TestCommodityDraftsAPI_ViewerCanReadOnly(t *testing.T) {
@@ -205,7 +285,7 @@ func TestCommodityDraftsAPI_PromoteChecksTheSeller(t *testing.T) {
 	promoteBody := func(revision, name, sellerID string) string {
 		return `{"data":{"type":"commodities","attributes":{"name":"` + name + `","short_name":"` + name +
 			`","type":"equipment","status":"in_use","count":1,"original_price_currency":"USD",` +
-			`"brand":"Bosch","model":"GSR 18V","seller_id":"` + sellerID + `"}},"meta":{"revision":` + revision + `}}`
+			`"brand":"Bosch","model":"GSR 18V","seller_id":"` + sellerID + `"}},"meta":{"revision":` + revision + `,"promotion_key":"key-` + name + `"}}`
 	}
 	createDraft := func(key, sellerID string) string {
 		rr := env.do(http.MethodPost, "/drafts",

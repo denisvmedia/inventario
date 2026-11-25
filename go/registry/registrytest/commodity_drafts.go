@@ -3,6 +3,7 @@ package registrytest
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -107,7 +108,7 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		a := createContractDraft(c, env, "a", "A")
 		b := createContractDraft(c, env, "b", "B")
 		promoted := createContractDraft(c, env, "p", "P")
-		_, err := env.Drafts.Promote(env.Ctx, promoted.ID, 1, contractItem(env, "P"))
+		_, err := env.Drafts.Promote(env.Ctx, promoted.ID, 1, "promotion-1", contractItem(env, "P"))
 		c.Assert(err, qt.IsNil)
 		// Saving a moves it to the top.
 		_, err = env.Drafts.SaveValues(env.Ctx, a.ID, 1, models.CommodityDraftValues{"name": "A2"})
@@ -141,10 +142,10 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		c.Assert(err, qt.IsNil)
 
 		// A stale revision promotes nothing.
-		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 7, contractItem(env, "Drill"))
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 7, "promotion-1", contractItem(env, "Drill"))
 		c.Assert(err, qt.ErrorIs, registry.ErrDraftRevisionConflict)
 
-		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, contractItem(env, "Drill"))
+		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
 		c.Assert(err, qt.IsNil)
 		result, item := promotion.Draft, promotion.Commodity
 		c.Assert(item, qt.IsNotNil)
@@ -174,11 +175,16 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		c.Assert(err, qt.IsNil)
 		c.Assert(counts, qt.HasLen, 0)
 
-		// A retry after a lost response creates nothing.
-		again, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, contractItem(env, "Drill"))
+		// A retry with the same key after a lost response creates nothing
+		// and finds the item; another key is told the draft is an item.
+		again, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
 		c.Assert(err, qt.IsNil)
 		c.Assert(again.Commodity, qt.IsNil)
 		c.Assert(*again.Draft.PromotedCommodityID, qt.Equals, item.ID)
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-2", contractItem(env, "Drill"))
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 2, "promotion-2", contractItem(env, "Drill"))
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
 		after, err := env.Commodities.Count(env.Ctx)
 		c.Assert(err, qt.IsNil)
 		c.Assert(after, qt.Equals, before+1)
@@ -200,7 +206,7 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		draft := createContractDraft(c, env, "key-1", "Drill")
 		item := contractItem(env, "Drill")
 		item.SellerID = new(seller.ID)
-		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, item)
+		promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", item)
 		c.Assert(err, qt.IsNil)
 		c.Assert(promotion.Commodity.SellerID, qt.IsNotNil)
 		c.Assert(*promotion.Commodity.SellerID, qt.Equals, seller.ID)
@@ -210,7 +216,7 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		stale := createContractDraft(c, env, "key-2", "Saw")
 		item = contractItem(env, "Saw")
 		item.SellerID = new("no-such-seller")
-		_, err = env.Drafts.Promote(env.Ctx, stale.ID, 1, item)
+		_, err = env.Drafts.Promote(env.Ctx, stale.ID, 1, "promotion-1", item)
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 		got, err := env.Drafts.Get(env.Ctx, stale.ID)
 		c.Assert(err, qt.IsNil)
@@ -223,7 +229,7 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 	t.Run("promote of an unknown draft", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
-		_, err := env.Drafts.Promote(env.Ctx, "missing", 1, contractItem(env, "Drill"))
+		_, err := env.Drafts.Promote(env.Ctx, "missing", 1, "promotion-1", contractItem(env, "Drill"))
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	})
 
@@ -250,6 +256,168 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		_, created, err := env.Drafts.CreateOrGet(env.Ctx, models.CommodityDraft{ClientKey: "key-1"})
 		c.Assert(err, qt.IsNil)
 		c.Assert(created, qt.IsTrue)
+	})
+
+	runCommodityDraftLifecycleContract(t, newEnv)
+}
+
+// runCommodityDraftLifecycleContract covers the promotion key, the two-step
+// discard, attaching files and the fate of a discarded draft's files.
+func runCommodityDraftLifecycleContract(t *testing.T, newEnv func(t *testing.T) DraftEnv) {
+	t.Helper()
+	t.Run("promote needs a promotion key", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		_, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "", contractItem(env, "Drill"))
+		c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+		got, err := env.Drafts.Get(env.Ctx, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.IsOpen(), qt.IsTrue)
+	})
+
+	t.Run("a discard shuts the draft before it is deleted", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		other := createContractDraft(c, env, "key-2", "Saw")
+		photo := contractFile(c, env, "photo.jpg")
+
+		// Only a draft being discarded can be deleted this way.
+		c.Assert(env.Drafts.DeleteDiscarding(env.Ctx, draft.ID), qt.ErrorIs, registry.ErrNotFound)
+
+		marked, err := env.Drafts.MarkDiscarding(env.Ctx, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(marked.Status, qt.Equals, models.CommodityDraftDiscarding)
+
+		page, total, err := env.Drafts.ListOpen(env.Ctx, 0, 10)
+		c.Assert(err, qt.IsNil)
+		c.Assert(total, qt.Equals, 1)
+		c.Assert(draftIDs(page), qt.DeepEquals, []string{other.ID})
+
+		_, err = env.Drafts.SaveValues(env.Ctx, draft.ID, 1, models.CommodityDraftValues{"name": "Late"})
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)
+		_, _, err = env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: photo.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)
+		count, err := env.Commodities.Count(env.Ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(count, qt.Equals, 0)
+
+		// A discard that stopped half way can be taken up again.
+		again, err := env.Drafts.MarkDiscarding(env.Ctx, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(again.Status, qt.Equals, models.CommodityDraftDiscarding)
+
+		c.Assert(env.Drafts.DeleteDiscarding(env.Ctx, draft.ID), qt.IsNil)
+		_, err = env.Drafts.Get(env.Ctx, draft.ID)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		c.Assert(env.Drafts.DeleteDiscarding(env.Ctx, draft.ID), qt.ErrorIs, registry.ErrNotFound)
+		_, err = env.Drafts.MarkDiscarding(env.Ctx, draft.ID)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	})
+
+	t.Run("a promoted draft cannot be discarded", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		_, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
+		c.Assert(err, qt.IsNil)
+		_, err = env.Drafts.MarkDiscarding(env.Ctx, draft.ID)
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
+		got, err := env.Drafts.Get(env.Ctx, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.Status, qt.Equals, models.CommodityDraftPromoted)
+	})
+
+	t.Run("attach a file to an open draft", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		photo := contractFile(c, env, "photo.jpg")
+
+		link, created, err := env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: photo.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.IsNil)
+		c.Assert(created, qt.IsTrue)
+		c.Assert(link.EntityType, qt.Equals, models.FileLinkDraft)
+		c.Assert(link.EntityID, qt.Equals, draft.ID)
+		_, created, err = env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: photo.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.IsNil)
+		c.Assert(created, qt.IsFalse)
+		onDraft, err := env.Files.ListByLinkedEntity(env.Ctx, models.FileLinkDraft, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(onDraft, qt.HasLen, 1)
+
+		_, _, err = env.Drafts.AttachFile(env.Ctx, "missing", models.FileLink{FileID: photo.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		_, _, err = env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: "missing", Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		binned := contractFile(c, env, "binned.jpg")
+		trashed, err := env.Files.TrashUnlessHeld(env.Ctx, binned.ID, models.FileLinkDraft, draft.ID, "someone", time.Now())
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed, qt.IsTrue)
+		_, _, err = env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: binned.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("a file in Trash takes no new links"))
+
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", contractItem(env, "Drill"))
+		c.Assert(err, qt.IsNil)
+		late := contractFile(c, env, "late.jpg")
+		_, _, err = env.Drafts.AttachFile(env.Ctx, draft.ID, models.FileLink{FileID: late.ID, Meta: models.FileLinkMetaImages})
+		c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
+	})
+
+	t.Run("a draft file goes to Trash unless something else holds it", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		draft := createContractDraft(c, env, "key-1", "Drill")
+		live, err := env.Commodities.Create(env.Ctx, contractItem(env, "Live"))
+		c.Assert(err, qt.IsNil)
+		gone, err := env.Commodities.Create(env.Ctx, contractItem(env, "Gone"))
+		c.Assert(err, qt.IsNil)
+		_, err = env.Commodities.Trash(env.Ctx, gone.ID, "someone", time.Now())
+		c.Assert(err, qt.IsNil)
+
+		link := func(file *models.FileEntity, entityType, entityID string) {
+			c.Helper()
+			_, _, err := env.Files.AddLink(env.Ctx, models.FileLink{FileID: file.ID, EntityType: entityType, EntityID: entityID, Meta: models.FileLinkMetaImages})
+			c.Assert(err, qt.IsNil)
+		}
+		only := contractFile(c, env, "only.jpg")
+		link(only, models.FileLinkDraft, draft.ID)
+		shared := contractFile(c, env, "shared.jpg")
+		link(shared, models.FileLinkDraft, draft.ID)
+		link(shared, models.FileLinkCommodity, live.ID)
+		withTrashed := contractFile(c, env, "with-trashed.jpg")
+		link(withTrashed, models.FileLinkDraft, draft.ID)
+		link(withTrashed, models.FileLinkCommodity, gone.ID)
+
+		now := time.Now()
+		trashed, err := env.Files.TrashUnlessHeld(env.Ctx, only.ID, models.FileLinkDraft, draft.ID, "someone", now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed, qt.IsTrue)
+		got, err := env.Files.GetTrashed(env.Ctx, only.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.DeletedWithCommodityID, qt.IsNil)
+
+		trashed, err = env.Files.TrashUnlessHeld(env.Ctx, shared.ID, models.FileLinkDraft, draft.ID, "someone", now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed, qt.IsFalse)
+		_, err = env.Files.Get(env.Ctx, shared.ID)
+		c.Assert(err, qt.IsNil)
+
+		trashed, err = env.Files.TrashUnlessHeld(env.Ctx, withTrashed.ID, models.FileLinkDraft, draft.ID, "someone", now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed, qt.IsTrue)
+		got, err = env.Files.GetTrashed(env.Ctx, withTrashed.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.DeletedWithCommodityID, qt.IsNotNil)
+		c.Assert(*got.DeletedWithCommodityID, qt.Equals, gone.ID)
+
+		// A file already in Trash is left as it is.
+		trashed, err = env.Files.TrashUnlessHeld(env.Ctx, only.ID, models.FileLinkDraft, draft.ID, "someone", now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(trashed, qt.IsFalse)
 	})
 }
 

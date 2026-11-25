@@ -429,7 +429,11 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 //     above, so before #2236 its row survived a full_replace while the file sweep
 //     below still deleted its attachments (a zombie item with no files) — and its
 //     preserved UUID then collided with the archive's own copy on re-create.
-//  3. A type-agnostic sweep of the remaining files (rows + blobs), which catches
+//  3. The group's drafts (#2812), in every state, with their file links. A
+//     backup holds no drafts, so after the restore the group has none, as the
+//     archive says. The files of a draft are files of the group: the archive
+//     carries them as standalone files.
+//  4. A type-agnostic sweep of the remaining files (rows + blobs), which catches
 //     standalone files and any orphan. linked_entity_type='export' is skipped:
 //     that is the archive being restored plus the backup history, not inventory.
 //
@@ -468,6 +472,10 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	if err != nil {
 		return errxtrace.Wrap("failed to create user file registry for clear", err)
 	}
+	if err := l.clearDrafts(ctx, fileReg); err != nil {
+		return err
+	}
+
 	files, err := fileReg.List(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to list files for deletion", err)
@@ -485,6 +493,29 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		}
 	}
 
+	return nil
+}
+
+// clearDrafts deletes every draft of the group, open, promoted or being
+// discarded, and the links of files to them. The files themselves are left
+// to the sweep that follows. RLS-scoped registry, as for the locations.
+func (l *RestoreOperationProcessor) clearDrafts(ctx context.Context, fileReg registry.FileRegistry) error {
+	draftReg, err := l.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user draft registry for clear", err)
+	}
+	drafts, err := draftReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list drafts for deletion", err)
+	}
+	for _, draft := range drafts {
+		if _, err := fileReg.RemoveLinksToEntity(ctx, models.FileLinkDraft, draft.ID); err != nil {
+			return errxtrace.Wrap("failed to remove draft file links", err, errx.Attrs("draft_id", draft.ID))
+		}
+		if err := draftReg.Delete(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete draft", err, errx.Attrs("draft_id", draft.ID))
+		}
+	}
 	return nil
 }
 
