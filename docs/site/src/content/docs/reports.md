@@ -42,7 +42,7 @@ A single-item report shows:
 - **A header** with the item's name (and its short name, if different), labelled **Item Insurance Report**, plus the date it was generated.
 - **Two value cards:**
   - **Purchase Price** — what you paid, in the currency you recorded the purchase in. The purchase date appears beneath it if you set one.
-  - **Estimated Value** — the current replacement estimate, in your group's currency.
+  - **Estimated Value** — the item's current value, in your group's currency. When you haven't entered one, the purchase price in your group's currency stands in for it.
 - **Item Details** — **Type**, **Serial Number**, **Purchase Date**, and **Location** (shown as "Location · Area").
 - **Warranty Status** — a coloured badge reading **Active**, **Expiring Soon**, **Expired**, or **No Warranty**, with the expiry date and any warranty notes you've added.
 - **Photographs** — the image files attached to the item (see [Files & photos](../files-and-photos/)).
@@ -71,8 +71,10 @@ A location report shows:
 - **A header** labelled **Location Insurance Report**, with the location name (and icon), your group name, the generation date, and the **Total Items** count.
 - **Three summary cards:**
   - **Total Items** — how many items are included.
-  - **Total Purchase** — the combined purchase price of every item, in your group's currency.
-  - **Est. Total Value** — the combined estimated replacement value, in your group's currency.
+  - **Total Purchase** — the combined purchase price of the items, in your group's currency. For an item bought in another currency it uses the converted purchase price.
+  - **Est. Total Value** — the combined estimated value of the items, in your group's currency. An item's estimated value is its current value, or its purchase price when the current value is unknown, the same rule the dashboard uses.
+
+  Each total adds up only the items whose amount is known. When it leaves items out, a line under it says how many, for example "Excludes 2 items without a purchase price".
 - **A section per item**, each with its type and area, name, warranty badge, purchase price, estimated value, serial number, purchase date, any warranty note, and the item's cover photo.
 
 Items are grouped by **location**, which is made up of its **areas**. An item only appears in the report if it's been placed in an area belonging to the selected location — see [Locations & areas](../locations-and-areas/). If a location has no items, the report says **No items found for this location.**
@@ -108,7 +110,8 @@ A few tips for a clean result:
 ## Good to know
 
 - **Currencies.** Totals and estimated values are shown in your **group currency**. An item's purchase price is shown in the currency you recorded it in. You set your group currency when you create a group, and change it later via **Group settings → Info** — see [Groups & sharing](../groups-and-sharing/).
-- **Estimated value** is the item's current replacement estimate, separate from what you originally paid. Keeping it up to date makes the report more useful at claim time.
+- **Estimated value** is the item's current value, separate from what you originally paid; the purchase price stands in only while the current value is unknown. Keeping it up to date makes the report more useful at claim time.
+- **Unknown prices.** An item whose price you don't know shows **—** for it, and a free item shows a zero. Totals leave out unknown prices instead of counting them as zero; see [Unknown is not zero](../items/#unknown-is-not-zero).
 - **Sold, lost, or disposed items** are left out of reports, which only cover items you currently own.
 - **Share a report.** Saving as a PDF (above) is the simplest way to hand a copy to an insurer. To export your underlying data instead, see [Backup & restore](../backup-and-restore/).
 - **More report types** can appear on the Reports page over time; the Insurance Report is the one available today.

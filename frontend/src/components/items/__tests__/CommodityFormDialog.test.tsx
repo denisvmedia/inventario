@@ -128,9 +128,8 @@ describe("<CommodityFormDialog />", () => {
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
     await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
-    // Tick the draft toggle so the schema's whenNotDraft block doesn't
-    // require purchase_date + the price triad — keeps this test focused
-    // on step navigation rather than every field.
+    // Save as a draft: this test is about step navigation, not about
+    // the rules a reviewed item has to meet.
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     // Purchase step: just advance — every purchase field is optional.

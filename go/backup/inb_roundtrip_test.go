@@ -320,7 +320,7 @@ func TestINBExport_ContainerStructure(t *testing.T) {
 	// Manifest records the format, signature info, and stats.
 	var manifest map[string]any
 	c.Assert(json.Unmarshal(manifestData, &manifest), qt.IsNil)
-	c.Assert(manifest["version"], qt.Equals, "3.0")
+	c.Assert(manifest["version"], qt.Equals, export.INBFormatVersion)
 	c.Assert(manifest["format"], qt.Equals, "json")
 	sigBlock := manifest["signature"].(map[string]any)
 	c.Assert(sigBlock["algorithm"], qt.Equals, backupsign.Algorithm)
@@ -884,7 +884,7 @@ func TestINBRestore_ValidPriceAndTimestampRoundTrip(t *testing.T) {
 	// the success path.
 	comReg := must.Must(f.fs.CommodityRegistryFactory.CreateUserRegistry(f.ctx))
 	com := must.Must(comReg.List(f.ctx))[0]
-	com.OriginalPrice = decimal.RequireFromString("199.99")
+	com.OriginalPrice = new(decimal.RequireFromString("199.99"))
 	must.Must(comReg.Update(f.ctx, *com))
 
 	blobKey, _ := f.runExport(c, signer)

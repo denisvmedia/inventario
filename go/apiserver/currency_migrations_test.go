@@ -305,9 +305,9 @@ func TestCurrencyMigrations_Start_StateDriftRejectedOn409(t *testing.T) {
 		Status:                models.CommodityStatusInUse,
 		AreaID:                new(areas[0].ID),
 		Count:                 1,
-		OriginalPrice:         decimal.RequireFromString("100"),
+		OriginalPrice:         new(decimal.RequireFromString("100")),
 		OriginalPriceCurrency: models.Currency("USD"),
-		CurrentPrice:          decimal.RequireFromString("100"),
+		CurrentPrice:          new(decimal.RequireFromString("100")),
 	}))
 
 	rr = doJSONAPIRequest(t, handler, http.MethodPost, "/api/v1/g/"+testGroup.Slug+"/currency-migrations", testUser.ID, startBody("USD", "EUR", "0.9", previewToken))

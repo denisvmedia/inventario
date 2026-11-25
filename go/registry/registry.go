@@ -307,6 +307,16 @@ type CommodityRegistry interface {
 	// for the service registry; a user registry only sees its own group.
 	BackfillAssetNumbers(ctx context.Context) (int, error)
 
+	// BackfillLegacyPrices rewrites the rows stored before a price could be
+	// unknown (models.Commodity.LegacyZeroPrices): a zero current price or
+	// converted price, which then meant "not set", becomes unknown, and the
+	// flag is cleared. The purchase price keeps its stored value, because a
+	// zero there may be a real free acquisition and nothing tells the two
+	// apart. It is idempotent and safe to run while the app serves requests:
+	// rows written since the flag existed are never touched. Returns how many
+	// rows it rewrote. Meant for the service registry.
+	BackfillLegacyPrices(ctx context.Context) (int, error)
+
 	// ListPaginated returns a paginated list of commodities along with the total count,
 	// optionally filtered and sorted via opts. Pass a zero CommodityListOptions for the
 	// previous "all rows, name+id ascending" behaviour.

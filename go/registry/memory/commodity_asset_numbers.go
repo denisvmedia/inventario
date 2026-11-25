@@ -65,3 +65,34 @@ func (r *CommodityRegistry) BackfillAssetNumbers(ctx context.Context) (int, erro
 	}
 	return numbered, nil
 }
+
+// BackfillLegacyPrices rewrites the rows flagged LegacyZeroPrices the way the
+// postgres registry does: a zero current or converted price becomes unknown
+// and the flag is cleared. Create and Update never store the flag, so in
+// practice there is nothing to rewrite here.
+func (r *CommodityRegistry) BackfillLegacyPrices(ctx context.Context) (int, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	rewritten := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		if err := ctx.Err(); err != nil {
+			return rewritten, err
+		}
+		c := pair.Value
+		if c == nil || !c.LegacyZeroPrices || !r.isItemVisible(c) {
+			continue
+		}
+		cp := *c
+		if cp.CurrentPrice != nil && cp.CurrentPrice.IsZero() {
+			cp.CurrentPrice = nil
+		}
+		if cp.ConvertedOriginalPrice != nil && cp.ConvertedOriginalPrice.IsZero() {
+			cp.ConvertedOriginalPrice = nil
+		}
+		cp.LegacyZeroPrices = false
+		r.items.Set(pair.Key, &cp)
+		rewritten++
+	}
+	return rewritten, nil
+}

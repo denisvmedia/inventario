@@ -56,9 +56,9 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPrice:          new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero,
+		ConvertedOriginalPrice: nil,
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 	}
@@ -73,9 +73,9 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPrice:          new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.NewFromFloat(100.00), // Non-zero value
+		ConvertedOriginalPrice: new(decimal.NewFromFloat(100.00)), // Non-zero value
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 	}
@@ -90,9 +90,9 @@ func TestCommodityRegistry_Create_PriceValidation(t *testing.T) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPrice:          new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency:  "EUR",
-		ConvertedOriginalPrice: decimal.NewFromFloat(110.00), // Non-zero value
+		ConvertedOriginalPrice: new(decimal.NewFromFloat(110.00)), // Non-zero value
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 	}
@@ -144,9 +144,9 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromFloat(100.00),
+		OriginalPrice:          new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency:  "EUR", // Different from group currency
-		ConvertedOriginalPrice: decimal.NewFromFloat(110.00),
+		ConvertedOriginalPrice: new(decimal.NewFromFloat(110.00)),
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 	}
@@ -157,7 +157,7 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	// Test case 1: Update to have original price in group currency (USD) and converted original price is zero - should pass
 	updatedCommodity1 := *createdCommodity
 	updatedCommodity1.OriginalPriceCurrency = "USD"
-	updatedCommodity1.ConvertedOriginalPrice = decimal.Zero
+	updatedCommodity1.ConvertedOriginalPrice = nil
 
 	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity1)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update when original price is in group currency and converted price is zero"))
@@ -165,7 +165,7 @@ func TestCommodityRegistry_Update_PriceValidation(t *testing.T) {
 	// Test case 2: Update to have original price in group currency (USD) and converted original price is not zero - should fail
 	updatedCommodity2 := *createdCommodity
 	updatedCommodity2.OriginalPriceCurrency = "USD"
-	updatedCommodity2.ConvertedOriginalPrice = decimal.NewFromFloat(110.00) // Non-zero value
+	updatedCommodity2.ConvertedOriginalPrice = new(decimal.NewFromFloat(110.00)) // Non-zero value
 
 	_, err = registrySet.CommodityRegistry.Update(ctx, updatedCommodity2)
 	c.Assert(err, qt.IsNil, qt.Commentf("Should allow update even when original price is in group currency and converted price is not zero (validation should be done in the API)"))

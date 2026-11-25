@@ -20,6 +20,7 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -768,16 +769,29 @@ func (s *ExportService) encodeBasicCommodityFields(encoder *xml.Encoder, commodi
 func (s *ExportService) encodeCommodityPricing(encoder *xml.Encoder, commodity *models.Commodity) error {
 	encodeTextElement := s.createTextElementEncoder(encoder)
 
-	if err := encodeTextElement("originalPrice", commodity.OriginalPrice.String()); err != nil {
+	// An unknown price is left out; encodeTextElement skips empty values. A
+	// known zero is written as "0", and the XML restore reads a zero current
+	// or converted price as unknown (XMLCommodity.ConvertToCommodity), so
+	// those two known zeros do not survive an XML round trip; a zero purchase
+	// price does. The format cannot tell the two apart; INB can.
+	if err := encodeTextElement("originalPrice", legacyXMLPrice(commodity.OriginalPrice)); err != nil {
 		return err
 	}
 	if err := encodeTextElement("originalPriceCurrency", string(commodity.OriginalPriceCurrency)); err != nil {
 		return err
 	}
-	if err := encodeTextElement("convertedOriginalPrice", commodity.ConvertedOriginalPrice.String()); err != nil {
+	if err := encodeTextElement("convertedOriginalPrice", legacyXMLPrice(commodity.ConvertedOriginalPrice)); err != nil {
 		return err
 	}
-	return encodeTextElement("currentPrice", commodity.CurrentPrice.String())
+	return encodeTextElement("currentPrice", legacyXMLPrice(commodity.CurrentPrice))
+}
+
+// legacyXMLPrice renders a price for the XML format, "" when it is unknown.
+func legacyXMLPrice(price *decimal.Decimal) string {
+	if price == nil {
+		return ""
+	}
+	return price.String()
 }
 
 // encodeCommodityStatus encodes commodity status and other simple fields

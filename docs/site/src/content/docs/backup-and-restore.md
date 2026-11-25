@@ -28,6 +28,8 @@ Backups download as `.inb` files — Inventario's own signed backup format. The 
 
 Because the file is signed, Inventario can verify it hasn't been tampered with or corrupted before it restores anything. You don't need to do anything special to benefit from this — it happens automatically when you import and restore.
 
+A backup keeps an unknown price or purchase date unknown and a zero price zero, and a restore brings them back the same way (see [Unknown is not zero](../items/#unknown-is-not-zero)). A backup made by Inventario 0.2 or earlier has no unknown prices: there, a missing original price restores as **0**, and a missing current value or converted price restores as unknown. The other way round does not work: a backup made by this version restores only into this version or a later one, and Inventario 0.2 refuses it.
+
 :::caution
 `.inb` is the format Inventario reads back, so keep the file as-is. It isn't a spreadsheet or a zip you're meant to open and edit by hand.
 :::

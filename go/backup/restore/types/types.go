@@ -302,20 +302,24 @@ func (xc *XMLCommodity) ConvertToCommodity() (*models.Commodity, error) {
 	// Convert commodity type
 	commodity.Type = models.CommodityType(xc.Type)
 
-	// Convert prices
+	// Convert prices. The XML format predates unknown prices and wrote every
+	// price, "0" included, where a zero current or converted price meant "not
+	// set". Those restore as unknown; a zero purchase price stays the zero it
+	// was stored as. That is the reading the runtime backfill gives rows of the
+	// same age in a database.
 	if xc.OriginalPrice != "" {
 		if price, err := decimal.NewFromString(xc.OriginalPrice); err == nil {
-			commodity.OriginalPrice = price
+			commodity.OriginalPrice = &price
 		}
 	}
 	if xc.ConvertedOriginalPrice != "" {
-		if price, err := decimal.NewFromString(xc.ConvertedOriginalPrice); err == nil {
-			commodity.ConvertedOriginalPrice = price
+		if price, err := decimal.NewFromString(xc.ConvertedOriginalPrice); err == nil && !price.IsZero() {
+			commodity.ConvertedOriginalPrice = &price
 		}
 	}
 	if xc.CurrentPrice != "" {
-		if price, err := decimal.NewFromString(xc.CurrentPrice); err == nil {
-			commodity.CurrentPrice = price
+		if price, err := decimal.NewFromString(xc.CurrentPrice); err == nil && !price.IsZero() {
+			commodity.CurrentPrice = &price
 		}
 	}
 

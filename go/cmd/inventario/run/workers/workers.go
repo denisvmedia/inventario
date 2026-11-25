@@ -141,6 +141,11 @@ func (c *Command) run() error {
 	// Like the pause controller it belongs to no group and always runs.
 	stopFileLinkMove := bootstrap.StartFileLinkMove(ctx, rs, c.cfg)
 
+	// Prices stored before an unknown price existed are rewritten before any
+	// worker group reads them (the currency migration converts prices). It
+	// belongs to no group and always runs.
+	stopLegacyPriceBackfill := bootstrap.StartLegacyPriceBackfill(ctx, rs, c.cfg)
+
 	// Group and starter order matches the historical `run all` / `run workers`
 	// sequence so LIFO shutdown is unchanged for the default (all-groups) case.
 	groups := []group{
@@ -180,6 +185,7 @@ func (c *Command) run() error {
 	// worker group — mirroring the defer ordering in `run all`.
 	stops = append(stops, stopPause)
 	stops = append(stops, stopFileLinkMove)
+	stops = append(stops, stopLegacyPriceBackfill)
 	defer func() {
 		// LIFO shutdown to mirror the deferred-stop ordering of `run all`.
 		for _, stop := range slices.Backward(stops) {

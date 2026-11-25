@@ -39,7 +39,11 @@
     "totalItems": "Celkem položek",
     "totalItemsSub": "Napříč všemi umístěními",
     "totalValue": "Odhadovaná celková hodnota",
-    "totalValueSub": "Součet aktuálních cen"
+    "totalValueExcludes_one": "Nezahrnuje {{count}} položku bez hodnoty",
+    "totalValueExcludes_few": "Nezahrnuje {{count}} položky bez hodnoty",
+    "totalValueExcludes_many": "Nezahrnuje {{count}} položky bez hodnoty",
+    "totalValueExcludes_other": "Nezahrnuje {{count}} položek bez hodnoty",
+    "totalValueSub": "Součet aktuálních hodnot nebo nákupních cen"
   },
   "tagline": "Vše, co vlastníte, na jednom místě.",
   "warrantyHealth": {

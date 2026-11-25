@@ -167,16 +167,17 @@ func (req *CurrencyMigrationPreviewRequest) Bind(r *http.Request) error {
 
 // CurrencyMigrationPreviewDiff is one entry in the preview response's
 // diff list. The FE uses these to render the "biggest individual
-// changes" table on the preview screen.
+// changes" table on the preview screen. A null price is unknown before and
+// after: the conversion leaves unknown prices unknown.
 type CurrencyMigrationPreviewDiff struct {
-	CommodityID            string          `json:"commodity_id"`
-	CommodityName          string          `json:"commodity_name"`
-	CurrentPriceBefore     decimal.Decimal `json:"current_price_before"`
-	CurrentPriceAfter      decimal.Decimal `json:"current_price_after"`
-	OriginalPriceBefore    decimal.Decimal `json:"original_price_before"`
-	OriginalPriceAfter     decimal.Decimal `json:"original_price_after"`
-	OriginalCurrencyBefore models.Currency `json:"original_currency_before"`
-	OriginalCurrencyAfter  models.Currency `json:"original_currency_after"`
+	CommodityID            string           `json:"commodity_id"`
+	CommodityName          string           `json:"commodity_name"`
+	CurrentPriceBefore     *decimal.Decimal `json:"current_price_before" extensions:"x-nullable=true"`
+	CurrentPriceAfter      *decimal.Decimal `json:"current_price_after" extensions:"x-nullable=true"`
+	OriginalPriceBefore    *decimal.Decimal `json:"original_price_before" extensions:"x-nullable=true"`
+	OriginalPriceAfter     *decimal.Decimal `json:"original_price_after" extensions:"x-nullable=true"`
+	OriginalCurrencyBefore models.Currency  `json:"original_currency_before"`
+	OriginalCurrencyAfter  models.Currency  `json:"original_currency_after"`
 }
 
 // CurrencyMigrationPreviewBody is the JSON:API attributes of the

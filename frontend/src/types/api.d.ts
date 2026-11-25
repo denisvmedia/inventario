@@ -4476,7 +4476,11 @@ export type paths = {
         };
         /**
          * Get total value of commodities
-         * @description Get the total value of commodities globally, by location, and by area
+         * @description Get the total value of commodities globally, by location, and by area.
+         *     Only in-use, non-draft items count. An item's value is its current price,
+         *     or its purchase price in the group currency when the current price is
+         *     unknown; a known zero counts. Items with no known value are not added as
+         *     zero: unvalued_count reports how many each total leaves out.
          */
         get: {
             parameters: {
@@ -12157,12 +12161,12 @@ export type components = {
         "jsonapi.CurrencyMigrationPreviewDiff": {
             commodity_id?: string;
             commodity_name?: string;
-            current_price_after?: number;
-            current_price_before?: number;
+            current_price_after?: number | null;
+            current_price_before?: number | null;
             original_currency_after?: string;
             original_currency_before?: string;
-            original_price_after?: number;
-            original_price_before?: number;
+            original_price_after?: number | null;
+            original_price_before?: number | null;
         };
         "jsonapi.CurrencyMigrationPreviewRequest": {
             data?: components["schemas"]["jsonapi.CurrencyMigrationPreviewRequestData"];
@@ -12863,6 +12867,13 @@ export type components = {
         "jsonapi.NamedTotal": {
             id?: string;
             name?: string;
+            /**
+             * Format: int64
+             * @description UnvaluedCount is the number of in-use items in this location or area
+             *     that have no known value and are therefore not part of Value.
+             * @example 0
+             */
+            unvalued_count?: number;
             value?: number;
         };
         "jsonapi.RestoreOperationCreateRequest": {
@@ -13231,6 +13242,19 @@ export type components = {
             area_totals?: components["schemas"]["jsonapi.NamedTotal"][];
             global_total?: number;
             location_totals?: components["schemas"]["jsonapi.NamedTotal"][];
+            /**
+             * Format: int64
+             * @description UnvaluedCount is the number of in-use items GlobalTotal leaves out
+             *     because neither their current value nor their purchase price is known.
+             * @example 2
+             */
+            unvalued_count?: number;
+            /**
+             * Format: int64
+             * @description ValuedCount is the number of in-use items that GlobalTotal includes.
+             * @example 12
+             */
+            valued_count?: number;
         };
         "jsonapi.ValueData": {
             attributes?: components["schemas"]["jsonapi.ValueAttrs"];
@@ -13292,7 +13316,12 @@ export type components = {
              */
             readonly asset_number?: number;
             comments?: string;
-            converted_original_price?: number;
+            /**
+             * @description ConvertedOriginalPrice is the purchase price in the group currency, null
+             *     when unknown. It applies only when OriginalPriceCurrency is a foreign
+             *     currency; for an item bought in the group currency it is always null.
+             */
+            converted_original_price?: number | null;
             count?: number;
             /**
              * @description CoverFileID is the user-picked cover photo for the commodity (issue
@@ -13302,16 +13331,28 @@ export type components = {
              *     override; the resolver's first-photo path takes over.
              */
             cover_file_id?: string;
-            current_price?: number;
+            /**
+             * @description CurrentPrice is the current value in the group currency, null when
+             *     unknown. When known, 0 included, it is the item's value in every total;
+             *     otherwise the purchase price in the group currency stands in.
+             */
+            current_price?: number | null;
             draft?: boolean;
             extra_serial_numbers?: string[];
             id?: string;
             last_modified_date?: string;
             name?: string;
-            original_price?: number;
+            /**
+             * @description OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+             *     unknown. Each of the three prices can be unknown on its own, and
+             *     unknown is not zero: a gift's price is unknown, a free item's is 0. A
+             *     reviewed item may leave any of them unknown.
+             */
+            original_price?: number | null;
             original_price_currency?: string;
             part_numbers?: string[];
-            purchase_date?: string;
+            /** @description PurchaseDate is nil when the date is unknown. */
+            purchase_date?: string | null;
             registered_date?: string;
             /**
              * @description SalePrice is the realised proceeds for a `sold` transition. NULL

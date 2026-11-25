@@ -11,20 +11,26 @@ import (
 	"go.5x5.cz/inventario/registry"
 )
 
-// CommodityValue represents the calculated value of a commodity.
-type CommodityValue struct {
-	CommodityID string          `json:"commodity_id"`
-	Name        string          `json:"name"`
-	AreaID      string          `json:"area_id"`
-	LocationID  string          `json:"location_id"` // Derived from Area
-	Value       decimal.Decimal `json:"value"`
+// Total is the value of a set of commodities in the group currency, with the
+// coverage behind it. Value sums the commodities whose value is known (a known
+// zero included); UnvaluedCount counts the commodities that were left out
+// because they have no usable value, so a reader can tell a total that covers
+// everything from one that covers part of the inventory.
+type Total struct {
+	Value         decimal.Decimal
+	ValuedCount   int
+	UnvaluedCount int
 }
 
-// TotalValue represents the total value of commodities, possibly grouped by location or area.
-type TotalValue struct {
-	ID    string          `json:"id"`   // ID of the entity (location, area, or "global" for global total)
-	Name  string          `json:"name"` // Name of the entity (location, area, or "Global" for global total)
-	Value decimal.Decimal `json:"value"`
+// Totals is the valuation of the active group: globally, by location and by
+// area. Only commodities that count towards the valuation are included: drafts
+// and commodities that are not in use are left out of every total and of the
+// coverage counts. A commodity without an area counts towards the global total
+// only.
+type Totals struct {
+	Global     Total
+	ByLocation map[string]Total
+	ByArea     map[string]Total
 }
 
 // Valuator provides methods for calculating commodity values.
@@ -60,216 +66,68 @@ func (v *Valuator) GetGroupCurrency() (string, error) {
 	return string(group.GroupCurrency), nil
 }
 
-// CalculateGlobalTotalValue calculates the total value of all commodities.
-// It follows these rules:
-// 1. Ignores draft commodities and commodities with status other than "in use"
-// 2. If groupCurrency is empty, considers all prices in USD
-// 3. Uses current price if available (which is in the group currency)
-// 4. If no current price, uses original price if it's in the group currency
-// 5. If no current price and original price is not in group currency, uses converted original price
-// 6. If none of the above conditions are met, the commodity is not counted
-func (v *Valuator) CalculateGlobalTotalValue() (decimal.Decimal, error) {
+// Calculate computes the valuation of the group in one pass over its
+// commodities. Each commodity's value comes from models.Commodity.Value: the
+// current price when known, otherwise the purchase price in the group
+// currency. A commodity with neither is counted in UnvaluedCount of every
+// total it belongs to instead of being added as zero. Prices already describe
+// the whole lot, so the count of units does not multiply them.
+func (v *Valuator) Calculate() (Totals, error) {
 	ctx := v.ctx
 
-	// Get group currency
 	groupCurrency, err := v.GetGroupCurrency()
 	if err != nil {
-		return decimal.Zero, err
+		return Totals{}, err
 	}
 
-	// Get all commodities
 	commodities, err := v.CommodityRegistry.List(ctx)
 	if err != nil {
-		return decimal.Zero, err
+		return Totals{}, err
 	}
 
-	// Get all areas
 	areas, err := v.AreaRegistry.List(ctx)
 	if err != nil {
-		return decimal.Zero, err
+		return Totals{}, err
 	}
-
-	// Create a map of area IDs to location IDs for quick lookup
-	areaToLocation := make(map[string]string)
+	areaToLocation := make(map[string]string, len(areas))
 	for _, area := range areas {
 		areaToLocation[area.ID] = area.LocationID
 	}
 
-	// Calculate the total value
-	total := decimal.NewFromInt(0)
-
+	totals := Totals{
+		ByLocation: make(map[string]Total),
+		ByArea:     make(map[string]Total),
+	}
 	for _, commodity := range commodities {
-		// Skip draft commodities
-		if commodity.Draft {
+		if commodity.Draft || commodity.Status != models.CommodityStatusInUse {
 			continue
 		}
 
-		// Skip commodities that are not in use
-		if commodity.Status != models.CommodityStatusInUse {
-			continue
+		value, known := commodity.Value(models.Currency(groupCurrency))
+		count := func(t Total) Total {
+			if !known {
+				t.UnvaluedCount++
+				return t
+			}
+			t.Value = t.Value.Add(value)
+			t.ValuedCount++
+			return t
 		}
+		totals.Global = count(totals.Global)
 
-		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, groupCurrency)
-		if value.IsZero() {
-			// Skip commodities with no valid price
-			continue
-		}
-
-		// Note: The price already represents the total value for all items in the lot
-
-		// Add to the total
-		total = total.Add(value)
-	}
-
-	return total, nil
-}
-
-// CalculateTotalValueByLocation calculates the total value of commodities grouped by location.
-func (v *Valuator) CalculateTotalValueByLocation() (map[string]decimal.Decimal, error) {
-	ctx := v.ctx
-
-	// Get group currency
-	groupCurrency, err := v.GetGroupCurrency()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get all commodities
-	commodities, err := v.CommodityRegistry.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Get all areas
-	areas, err := v.AreaRegistry.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Create a map of area IDs to location IDs for quick lookup
-	areaToLocation := make(map[string]string)
-	for _, area := range areas {
-		areaToLocation[area.ID] = area.LocationID
-	}
-
-	// Calculate the total value by location
-	locationTotals := make(map[string]decimal.Decimal)
-
-	for _, commodity := range commodities {
-		// Skip draft commodities
-		if commodity.Draft {
-			continue
-		}
-
-		// Skip commodities that are not in use
-		if commodity.Status != models.CommodityStatusInUse {
-			continue
-		}
-
-		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, groupCurrency)
-		if value.IsZero() {
-			// Skip commodities with no valid price
-			continue
-		}
-
-		// Note: The price already represents the total value for all items in the lot
-
-		// Get the location ID for this commodity. Area is optional
-		// (issue #1986): an unassigned commodity has no location to
-		// attribute its value to, so skip it.
+		// Area is optional (issue #1986): an unassigned commodity has no area
+		// or location bucket.
 		if commodity.AreaID == nil {
 			continue
 		}
+		totals.ByArea[*commodity.AreaID] = count(totals.ByArea[*commodity.AreaID])
+
 		locationID, ok := areaToLocation[*commodity.AreaID]
 		if !ok {
-			// Skip commodities with no valid location
 			continue
 		}
-
-		// Add to the location total
-		if _, ok := locationTotals[locationID]; !ok {
-			locationTotals[locationID] = decimal.NewFromInt(0)
-		}
-		locationTotals[locationID] = locationTotals[locationID].Add(value)
+		totals.ByLocation[locationID] = count(totals.ByLocation[locationID])
 	}
 
-	return locationTotals, nil
-}
-
-// CalculateTotalValueByArea calculates the total value of commodities grouped by area.
-func (v *Valuator) CalculateTotalValueByArea() (map[string]decimal.Decimal, error) {
-	ctx := v.ctx
-
-	// Get group currency
-	groupCurrency, err := v.GetGroupCurrency()
-	if err != nil {
-		return nil, err
-	}
-
-	// Get all commodities
-	commodities, err := v.CommodityRegistry.List(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	// Calculate the total value by area
-	areaTotals := make(map[string]decimal.Decimal)
-
-	for _, commodity := range commodities {
-		// Skip draft commodities
-		if commodity.Draft {
-			continue
-		}
-
-		// Skip commodities that are not in use
-		if commodity.Status != models.CommodityStatusInUse {
-			continue
-		}
-
-		// Calculate the value of the commodity
-		value := getCommodityValue(commodity, groupCurrency)
-		if value.IsZero() {
-			// Skip commodities with no valid price
-			continue
-		}
-
-		// Note: The price already represents the total value for all items in the lot
-
-		// Add to the area total. Area is optional (issue #1986): an
-		// unassigned commodity has no area bucket, so skip it.
-		if commodity.AreaID == nil {
-			continue
-		}
-		if _, ok := areaTotals[*commodity.AreaID]; !ok {
-			areaTotals[*commodity.AreaID] = decimal.NewFromInt(0)
-		}
-		areaTotals[*commodity.AreaID] = areaTotals[*commodity.AreaID].Add(value)
-	}
-
-	return areaTotals, nil
-}
-
-// getCommodityValue returns the value of a commodity based on the specified rules.
-// Returns zero decimal if the commodity has no valid price.
-func getCommodityValue(commodity *models.Commodity, groupCurrency string) decimal.Decimal {
-	// If we have current price, use it (the currency is our group currency)
-	if !commodity.CurrentPrice.IsZero() {
-		return commodity.CurrentPrice
-	}
-
-	// If no current price, check if the original price is in our group currency
-	if !commodity.OriginalPrice.IsZero() && string(commodity.OriginalPriceCurrency) == groupCurrency {
-		return commodity.OriginalPrice
-	}
-
-	// If still no price detected, check if we have converted original price
-	if !commodity.ConvertedOriginalPrice.IsZero() {
-		return commodity.ConvertedOriginalPrice
-	}
-
-	// If only original price set and the currency is not our group currency,
-	// the commodity state is invalid and we should not count it
-	return decimal.NewFromInt(0)
+	return totals, nil
 }

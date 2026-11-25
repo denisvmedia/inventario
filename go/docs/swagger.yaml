@@ -2072,16 +2072,20 @@ definitions:
         type: string
       current_price_after:
         type: number
+        x-nullable: "true"
       current_price_before:
         type: number
+        x-nullable: "true"
       original_currency_after:
         type: string
       original_currency_before:
         type: string
       original_price_after:
         type: number
+        x-nullable: "true"
       original_price_before:
         type: number
+        x-nullable: "true"
     type: object
   jsonapi.CurrencyMigrationPreviewRequest:
     properties:
@@ -3038,6 +3042,13 @@ definitions:
         type: string
       name:
         type: string
+      unvalued_count:
+        description: |-
+          UnvaluedCount is the number of in-use items in this location or area
+          that have no known value and are therefore not part of Value.
+        example: 0
+        format: int64
+        type: integer
       value:
         type: number
     type: object
@@ -3584,6 +3595,18 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.NamedTotal'
         type: array
+      unvalued_count:
+        description: |-
+          UnvaluedCount is the number of in-use items GlobalTotal leaves out
+          because neither their current value nor their purchase price is known.
+        example: 2
+        format: int64
+        type: integer
+      valued_count:
+        description: ValuedCount is the number of in-use items that GlobalTotal includes.
+        example: 12
+        format: int64
+        type: integer
     type: object
   jsonapi.ValueData:
     properties:
@@ -3668,7 +3691,12 @@ definitions:
       comments:
         type: string
       converted_original_price:
+        description: |-
+          ConvertedOriginalPrice is the purchase price in the group currency, null
+          when unknown. It applies only when OriginalPriceCurrency is a foreign
+          currency; for an item bought in the group currency it is always null.
         type: number
+        x-nullable: "true"
       count:
         type: integer
       cover_file_id:
@@ -3680,7 +3708,12 @@ definitions:
           override; the resolver's first-photo path takes over.
         type: string
       current_price:
+        description: |-
+          CurrentPrice is the current value in the group currency, null when
+          unknown. When known, 0 included, it is the item's value in every total;
+          otherwise the purchase price in the group currency stands in.
         type: number
+        x-nullable: "true"
       draft:
         type: boolean
       extra_serial_numbers:
@@ -3694,7 +3727,13 @@ definitions:
       name:
         type: string
       original_price:
+        description: |-
+          OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+          unknown. Each of the three prices can be unknown on its own, and
+          unknown is not zero: a gift's price is unknown, a free item's is 0. A
+          reviewed item may leave any of them unknown.
         type: number
+        x-nullable: "true"
       original_price_currency:
         type: string
       part_numbers:
@@ -3702,7 +3741,9 @@ definitions:
           type: string
         type: array
       purchase_date:
+        description: PurchaseDate is nil when the date is unknown.
         type: string
+        x-nullable: "true"
       registered_date:
         type: string
       sale_price:
@@ -8426,8 +8467,12 @@ paths:
     get:
       consumes:
       - application/json
-      description: Get the total value of commodities globally, by location, and by
-        area
+      description: |-
+        Get the total value of commodities globally, by location, and by area.
+        Only in-use, non-draft items count. An item's value is its current price,
+        or its purchase price in the group currency when the current price is
+        unknown; a known zero counts. Items with no known value are not added as
+        zero: unvalued_count reports how many each total leaves out.
       parameters:
       - description: Group slug
         in: path

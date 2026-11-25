@@ -6,9 +6,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/google/go-cmp/cmp"
 	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/validationctx"
 	"go.5x5.cz/inventario/internal/valuation"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -94,9 +96,9 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:             "C1",
 		AreaID:                new(area1.ID),
 		Count:                 2,
-		OriginalPrice:         decimal.NewFromFloat(100.00),
+		OriginalPrice:         new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency: models.Currency(groupCurrency),
-		CurrentPrice:          decimal.NewFromFloat(100.00), // 100
+		CurrentPrice:          new(decimal.NewFromFloat(100.00)), // 100
 		Status:                models.CommodityStatusInUse,
 		Draft:                 false,
 		Type:                  models.CommodityTypeElectronics,
@@ -109,9 +111,10 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:             "C2",
 		AreaID:                new(area1.ID),
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(200.00), // 0: invalid
+		OriginalPrice:         new(decimal.NewFromFloat(200.00)),
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
-		// no converted price and no current price, so it should not be counted
+		// No converted price and no current price: it has no value in the
+		// group currency and counts as unvalued.
 		Status:       models.CommodityStatusInUse,
 		Draft:        false,
 		Type:         models.CommodityTypeElectronics,
@@ -124,9 +127,9 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:              "C3",
 		AreaID:                 new(area2.ID),
 		Count:                  3,
-		OriginalPrice:          decimal.NewFromFloat(300.00), // 300
+		OriginalPrice:          new(decimal.NewFromFloat(300.00)), // 300
 		OriginalPriceCurrency:  models.Currency(groupCurrency),
-		ConvertedOriginalPrice: decimal.NewFromFloat(0),
+		ConvertedOriginalPrice: nil,
 		Status:                 models.CommodityStatusInUse,
 		Draft:                  false,
 		Type:                   models.CommodityTypeElectronics,
@@ -139,7 +142,7 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:             "C4",
 		AreaID:                new(area2.ID),
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(400.00),
+		OriginalPrice:         new(decimal.NewFromFloat(400.00)),
 		OriginalPriceCurrency: models.Currency(groupCurrency),
 		Status:                models.CommodityStatusInUse,
 		Draft:                 false,
@@ -153,9 +156,9 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:             "C5",
 		AreaID:                new(area3.ID),
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(500.00),
+		OriginalPrice:         new(decimal.NewFromFloat(500.00)),
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
-		CurrentPrice:          decimal.NewFromFloat(500.00),
+		CurrentPrice:          new(decimal.NewFromFloat(500.00)),
 		Status:                models.CommodityStatusSold, // Not in use
 		Draft:                 false,
 		Type:                  models.CommodityTypeElectronics,
@@ -168,9 +171,9 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 		ShortName:             "C6",
 		AreaID:                new(area3.ID),
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(600.00),
+		OriginalPrice:         new(decimal.NewFromFloat(600.00)),
 		OriginalPriceCurrency: models.Currency(nonGroupCurrency),
-		CurrentPrice:          decimal.NewFromFloat(600.00),
+		CurrentPrice:          new(decimal.NewFromFloat(600.00)),
 		Status:                models.CommodityStatusInUse,
 		Draft:                 true, // Value
 		Type:                  models.CommodityTypeElectronics,
@@ -181,141 +184,149 @@ func setupTestRegistry(c *qt.C, groupCurrency string) (*registry.Set, context.Co
 	return registrySet, ctx
 }
 
-func TestValuator_CalculateGlobalTotalValue(t *testing.T) {
-	c := qt.New(t)
+func TestValuator_Calculate(t *testing.T) {
+	for _, groupCurrency := range []string{"USD", "EUR"} {
+		t.Run(groupCurrency, func(t *testing.T) {
+			c := qt.New(t)
+			registrySet, ctx := setupTestRegistry(c, groupCurrency)
 
-	// Test with USD as group currency
-	c.Run("USD as group currency", func(c *qt.C) {
-		// Setup test registry with USD as group currency
-		registrySet, ctx := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(ctx, registrySet)
+			totals, err := valuation.NewValuator(ctx, registrySet).Calculate()
+			c.Assert(err, qt.IsNil)
 
-		// Calculate global total value
-		total, err := valuator.CalculateGlobalTotalValue()
-		c.Assert(err, qt.IsNil)
+			// 100 + 300 + 400: prices already describe the whole lot, so the
+			// count does not multiply them. Commodity 2 has no value in the
+			// group currency; the sold commodity and the draft are left out
+			// of the totals and of the counts.
+			c.Assert(totals.Global.Value.String(), qt.Equals, "800")
+			c.Assert(totals.Global.ValuedCount, qt.Equals, 3)
+			c.Assert(totals.Global.UnvaluedCount, qt.Equals, 1)
 
-		// Expected total: 100 + 300 + 400 = 800 (prices already represent total value for all items)
-		expectedTotal := decimal.NewFromFloat(800.00)
-		c.Assert(total.Equal(expectedTotal), qt.IsTrue, qt.Commentf("Expected total to be %s, got %s", expectedTotal, total))
-	})
+			locations, err := registrySet.LocationRegistry.List(ctx)
+			c.Assert(err, qt.IsNil)
+			locationIDs := make(map[string]string)
+			for _, l := range locations {
+				locationIDs[l.Name] = l.ID
+			}
+			areas, err := registrySet.AreaRegistry.List(ctx)
+			c.Assert(err, qt.IsNil)
+			areaIDs := make(map[string]string)
+			for _, a := range areas {
+				areaIDs[a.Name] = a.ID
+			}
 
-	// Test with EUR as group currency
-	c.Run("EUR as group currency", func(c *qt.C) {
-		// Setup test registry with EUR as group currency
-		registrySet, ctx := setupTestRegistry(c, "EUR")
-		valuator := valuation.NewValuator(ctx, registrySet)
+			c.Assert(totals.ByLocation, qt.HasLen, 2)
+			c.Assert(totals.ByLocation[locationIDs["Location 1"]], qt.CmpEquals(decimalCmp),
+				valuation.Total{Value: decimal.NewFromInt(100), ValuedCount: 1, UnvaluedCount: 1})
+			c.Assert(totals.ByLocation[locationIDs["Location 2"]], qt.CmpEquals(decimalCmp),
+				valuation.Total{Value: decimal.NewFromInt(700), ValuedCount: 2})
 
-		// Calculate global total value
-		total, err := valuator.CalculateGlobalTotalValue()
-		c.Assert(err, qt.IsNil)
-
-		// Expected total: 100 + 300 + 400 = 800 (prices already represent total value for all items)
-		expectedTotal := decimal.NewFromFloat(800.00)
-		c.Assert(total.Equal(expectedTotal), qt.IsTrue, qt.Commentf("Expected total to be %s, got %s", expectedTotal, total))
-	})
-}
-
-func TestValuator_CalculateTotalValueByLocation(t *testing.T) {
-	c := qt.New(t)
-
-	// Test with USD as group currency
-	c.Run("USD as group currency", func(c *qt.C) {
-		// Setup test registry with USD as group currency
-		registrySet, ctx := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(ctx, registrySet)
-
-		userCtx := appctx.WithUser(c.Context(), &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				TenantID: "test-tenant-id",
-				EntityID: models.EntityID{ID: "test-user-id"},
-			},
+			// Area 3 holds only the sold commodity and the draft.
+			c.Assert(totals.ByArea, qt.HasLen, 2)
+			c.Assert(totals.ByArea[areaIDs["Area 1"]], qt.CmpEquals(decimalCmp),
+				valuation.Total{Value: decimal.NewFromInt(100), ValuedCount: 1, UnvaluedCount: 1})
+			c.Assert(totals.ByArea[areaIDs["Area 2"]], qt.CmpEquals(decimalCmp),
+				valuation.Total{Value: decimal.NewFromInt(700), ValuedCount: 2})
 		})
-
-		locations, err := registrySet.LocationRegistry.List(userCtx)
-		c.Assert(err, qt.IsNil)
-
-		locationsByName := map[string]string{
-			locations[0].Name: locations[0].ID,
-			locations[1].Name: locations[1].ID,
-		}
-
-		_ = locationsByName
-
-		// Calculate total value by location
-		locationTotals, err := valuator.CalculateTotalValueByLocation()
-		c.Assert(err, qt.IsNil)
-
-		// Expected totals:
-		// Location 1: 100 + 200 = 300
-		// Location 2: 330 + 0 = 330 (Commodity 4 has no valid price in USD)
-		expectedTotals := map[string]decimal.Decimal{
-			"Location 1": decimal.NewFromFloat(100.00),
-			"Location 2": decimal.NewFromFloat(700.00),
-		}
-
-		// Check that we have the expected number of totals
-		c.Assert(locationTotals, qt.HasLen, len(expectedTotals), qt.Commentf("Expected %d location totals, got %d", len(expectedTotals), len(locationTotals)))
-
-		// Check values by location ID
-		for locationName, expectedValue := range expectedTotals {
-			locationID, ok := locationsByName[locationName]
-			c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with Name %s", locationName))
-
-			actualValue, ok := locationTotals[locationID]
-			c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find location with ID %s", locationID))
-
-			c.Assert(actualValue.Equal(expectedValue), qt.IsTrue,
-				qt.Commentf("Expected Location %s value to be %s, got %s", locationID, expectedValue, actualValue))
-		}
-	})
+	}
 }
 
-func TestValuator_CalculateTotalValueByArea(t *testing.T) {
+// TestValuator_Calculate_UnknownPrices covers the acquisitions whose price is
+// unknown or zero: a known zero is a value, an unknown price is not.
+func TestValuator_Calculate_UnknownPrices(t *testing.T) {
 	c := qt.New(t)
+	registrySet, ctx := setupEmptyGroup(c, "USD")
 
-	// Test with USD as group currency
-	c.Run("USD as group currency", func(c *qt.C) {
-		// Setup test registry with USD as group currency
-		registrySet, ctx := setupTestRegistry(c, "USD")
-		valuator := valuation.NewValuator(ctx, registrySet)
+	location, err := registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Home"})
+	c.Assert(err, qt.IsNil)
+	area, err := registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Hall", LocationID: location.ID})
+	c.Assert(err, qt.IsNil)
 
-		// Calculate total value by area
-		areaTotals, err := valuator.CalculateTotalValueByArea()
+	commodities := []models.Commodity{
+		{
+			// A gift: no purchase date, no price at all.
+			Name:                  "Gift",
+			OriginalPriceCurrency: "USD",
+		},
+		{
+			// A free acquisition: the price is known and it is zero.
+			Name:                  "Free",
+			OriginalPrice:         new(decimal.Zero),
+			OriginalPriceCurrency: "USD",
+			PurchaseDate:          models.ToPDate("2024-02-01"),
+		},
+		{
+			// Nothing known about the purchase, but it has a current value.
+			Name:                  "Appraised",
+			OriginalPriceCurrency: "USD",
+			CurrentPrice:          new(decimal.NewFromInt(250)),
+		},
+		{
+			// Bought abroad: a known foreign price with its conversion.
+			Name:                   "Imported",
+			OriginalPrice:          new(decimal.NewFromInt(100)),
+			OriginalPriceCurrency:  "EUR",
+			ConvertedOriginalPrice: new(decimal.NewFromInt(110)),
+			PurchaseDate:           models.ToPDate("2024-03-01"),
+		},
+		{
+			// No area: it counts towards the global total only.
+			Name:                  "Unassigned",
+			OriginalPrice:         new(decimal.NewFromInt(40)),
+			OriginalPriceCurrency: "USD",
+		},
+	}
+	for i := range commodities {
+		commodity := commodities[i]
+		commodity.ShortName = commodity.Name
+		commodity.Count = 1
+		commodity.Type = models.CommodityTypeOther
+		commodity.Status = models.CommodityStatusInUse
+		if commodity.Name != "Unassigned" {
+			commodity.AreaID = new(area.ID)
+		}
+		c.Assert(commodity.ValidateWithContext(validationContext(ctx, "USD")), qt.IsNil, qt.Commentf("%s", commodity.Name))
+		_, err := registrySet.CommodityRegistry.Create(ctx, commodity)
 		c.Assert(err, qt.IsNil)
+	}
 
-		// Get area IDs from the registry
-		areas, err := registrySet.AreaRegistry.List(c.Context())
-		c.Assert(err, qt.IsNil)
-		var area1ID, area2ID string
-		for _, area := range areas {
-			switch area.Name {
-			case "Area 1":
-				area1ID = area.ID
-			case "Area 2":
-				area2ID = area.ID
-			}
-		}
+	totals, err := valuation.NewValuator(ctx, registrySet).Calculate()
+	c.Assert(err, qt.IsNil)
 
-		// Expected totals:
-		// Area 1: 100 + 200 = 300
-		// Area 2: 330 = 330
-		// Area 3: (0) = 0 (No valid commodities in Area 3 with USD as group currency)
-		expectedTotals := map[string]decimal.Decimal{
-			area1ID: decimal.NewFromFloat(100.00),
-			area2ID: decimal.NewFromFloat(700.00),
-		}
+	// 0 + 250 + 110 + 40; the gift is the one unvalued item.
+	c.Assert(totals.Global.Value.String(), qt.Equals, "400")
+	c.Assert(totals.Global.ValuedCount, qt.Equals, 4)
+	c.Assert(totals.Global.UnvaluedCount, qt.Equals, 1)
 
-		// Check that we have the expected number of totals
-		c.Assert(areaTotals, qt.HasLen, len(expectedTotals), qt.Commentf("Expected %d area totals, got %d", len(expectedTotals), len(areaTotals)))
+	c.Assert(totals.ByArea[area.ID].Value.String(), qt.Equals, "360")
+	c.Assert(totals.ByArea[area.ID].ValuedCount, qt.Equals, 3)
+	c.Assert(totals.ByArea[area.ID].UnvaluedCount, qt.Equals, 1)
+	c.Assert(totals.ByLocation[location.ID], qt.CmpEquals(decimalCmp), totals.ByArea[area.ID])
+}
 
-		// Check values by area ID
-		for areaID, expectedValue := range expectedTotals {
-			actualValue, ok := areaTotals[areaID]
-			c.Assert(ok, qt.IsTrue, qt.Commentf("Expected to find area with ID %s", areaID))
-			if ok {
-				c.Assert(actualValue.Equal(expectedValue), qt.IsTrue,
-					qt.Commentf("Expected Area %s value to be %s, got %s", areaID, expectedValue, actualValue))
-			}
-		}
-	})
+var decimalCmp = cmp.Comparer(func(a, b decimal.Decimal) bool { return a.Equal(b) })
+
+// setupEmptyGroup returns a registry set for a fresh group with no data.
+func setupEmptyGroup(c *qt.C, groupCurrency string) (*registry.Set, context.Context) {
+	c.Helper()
+	factorySet := memory.NewFactorySet()
+	user := &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			TenantID: "test-tenant-id",
+			EntityID: models.EntityID{ID: "test-user-id"},
+		},
+	}
+	group := must.Must(factorySet.LocationGroupRegistry.Create(c.Context(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Unknown Prices Group",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           user.ID,
+		GroupCurrency:       models.Currency(groupCurrency),
+	}))
+	ctx := appctx.WithGroup(appctx.WithUser(c.Context(), user), group)
+	return must.Must(factorySet.CreateUserRegistrySet(ctx)), ctx
+}
+
+func validationContext(ctx context.Context, groupCurrency string) context.Context {
+	return validationctx.WithGroupCurrency(ctx, groupCurrency)
 }
