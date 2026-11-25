@@ -1,4 +1,4 @@
-h1:BXeE+NFQ/hZanxSfC2ibp4n+CQGvbPFlCHXUp0Nfvd0=
+h1:gK0lVLYGRTb2DbDzQHfDsJAUtmSHygQwY/Tarx0qd4s=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -37,7 +37,7 @@ h1:BXeE+NFQ/hZanxSfC2ibp4n+CQGvbPFlCHXUp0Nfvd0=
 1795604518_add_item_types.up.sql h1:Q/imAXYs4c3oVhLj8QY6lK3NUMNzP7hecknXNrp8wyc=
 1795610682_add_commodity_drafts.down.sql h1:t7r3LBEo6MzEw6H4k6HvGE5OapID2uvQd6yIW8bVKUI=
 1795610682_add_commodity_drafts.up.sql h1:1w8iXqh4ishz+uhKdiKufzsOgNEbvVtkbzXCZmVNbdI=
-1795620664_add_custom_fields.down.sql h1:pOH+GIjo9NC9tOrGdFn1gpeLSwhq4EXjHm5mQ3yHzrU=
-1795620664_add_custom_fields.up.sql h1:ibULTalAwoOX2Qk6D9lWdT9WZu7z9degrw7mLHhWxDY=
 1795640262_add_policy_and_function_comments.down.sql h1:gdwbT3qdPZSSg9mui91bOx9aIIlwm6ABwc8gJhMhIsE=
 1795640262_add_policy_and_function_comments.up.sql h1:GGiKCLytabbmPUbqTKozae4WMaA5XCkgnucVe97klWg=
+1795645338_add_custom_fields.down.sql h1:CF0KTSIAvydJX/+g4j7PQ132BarExPMObeKPMZnio+M=
+1795645338_add_custom_fields.up.sql h1:aFvk5zKR9omz4S1F5ulpcja9Iz+w5liVURTDo4HvXTg=
