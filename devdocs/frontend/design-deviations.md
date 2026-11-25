@@ -44,6 +44,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2796 by the 2026-11-24 goal to implement the open enhancements; toast and focus return agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers. Item types (#2802) and sellers (#2804) take the same pattern when their pickers land.
 
+#### 2026-11-25 — Delete confirmations say items and files go to the trash; Undo on the delete toast; restored event in the history
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx), [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx), [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx), [`FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) and [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) word every delete confirmation as "will be permanently deleted. This cannot be undone."
+- **Reality**: The item, bulk item, file, bulk file and "Delete everything" (location and area) confirmations say the entries move to the trash and can be restored; the success toasts say "moved to the trash". The item and bulk item delete toasts carry an **Undo** action that restores the items (`features/trash/useUndoItemDelete.ts`). The item history timeline labels the `deleted` event "Moved this item to the trash" and renders the new `restored` event with a `RotateCcw` icon, noting when the item came back without a location.
+- **Why**: Deleting no longer removes data at once, so the mock's wording would be false. The Undo action goes beyond the issue text and is agent-suggested: it answers the wrong-click case without a trip to the Trash page.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements; the Undo action agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent for the copy while deletes go to the trash. Drop the Undo action if the owner prefers the Trash page alone.
+
 #### 2026-11-24 — Label print page for items and areas (`/g/:slug/labels`)
 
 - **Issue/PR**: #2807 / PR (pending)
@@ -560,6 +569,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-25 — Storage card: Trash bucket and note
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (Data & Storage) shows used storage without a Trash share.
+- **Reality**: On the storage card (Group settings → Data & storage), `frontend/src/features/storage/StoragePie.tsx` adds a **Trash** slice and legend row (warm gray `#8c8279`). When the group has bytes in Trash, `StorageCard.tsx` adds a line "N of this is in the trash. It is freed when the trash is emptied or the entries expire." with an **Open trash** link.
+- **Why**: The issue asks to show the trash portion of storage so cleanup has a predictable effect. Trashed files still count toward the quota until they are purged.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock if `inventario-design` adds a storage breakdown with Trash.
+
 #### 2026-11-24 — Personal API tokens: Privacy & security row, `/profile/api-tokens` page, create dialog with one-time reveal
 
 - **Issue/PR**: #2808 / PR (pending)
@@ -679,6 +697,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Navigation & App shell
 
+#### 2026-11-25 — Trash entry in the sidebar and the command palette
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) have no Trash entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Trash** (`Trash2` icon) as the last row of the Group section, after Settings, linking to `/g/:slug/trash`. `CommandPalette.tsx` lists the same entry after Settings. Both resolve the label through `lib/nav-labels.ts` (`common:nav.trash`).
+- **Why**: not present in mock. The issue asks for a Trash page in the sidebar.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Move the row if `inventario-design` places Trash elsewhere.
+
 #### 2026-05-08 — Persistent "currency migration in progress" banner in Shell
 
 - **Issue/PR**: #1553 / PR #1604
@@ -781,6 +808,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-25 — Trash page (`/g/:slug/trash`)
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: Not present in mock. `design-mocks/` has no Trash or recycle-bin view; the issue notes that it needs a mock in `inventario-design` or a recorded deviation. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (Table in a bordered rounded container, line Tabs, Button, the empty-state block) and the shared `BulkActionBar`.
+- **Reality**: `frontend/src/pages/trash/TrashPage.tsx` uses the standard `PageHeader` (title, a subtitle that states the retention in days from the list response) with a destructive **Empty trash** button for admins and owners. Line tabs split **Items (n)** and **Files (n)**. Each tab (`components/trash/TrashedItemsTab.tsx`, `TrashedFilesTab.tsx`) is a table with a selection checkbox, the name, the files that went to Trash with the item (count and size) or the places a file was attached to, the deletion date with the member who deleted it, the date it is deleted for good, and per-row **Restore** and **Delete now** buttons (both outline, Delete now in the destructive color; an outline button keeps its own background, so the red text keeps its contrast on a hovered row). Selecting rows opens the `BulkActionBar` with the same two actions. Viewers see the lists without actions; users restore; admins and owners also delete for good. Restoring an item whose area is gone shows a warning toast with an **Open** action. An empty tab shows the empty-state block with a `Trash2` icon.
+- **Why**: not present in mock. The issue asks for restore, delete now and empty trash.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when `inventario-design` adds a Trash view; the data layer in `features/trash/` stays.
 
 #### 2026-05-20 — Admin Tenants list is a divide-y card list, not a `<Table>`
 

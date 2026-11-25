@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -119,6 +120,9 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	registry.NormalizeCommodityPrices(ctx, &commodity)
 	commodity.LegacyZeroPrices = false
 
+	// The trash columns belong to Trash and Restore; a new item is live.
+	commodity.ClearTrashState()
+
 	// The asset number is server-managed: whatever the caller sent is
 	// dropped and the number is assigned inside the insert transaction.
 	// Only the backup restore may ask for a specific (archived) number.
@@ -158,7 +162,10 @@ func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
 
-	err := reg.ScanOneByField(ctx, store.Pair("name", name), &commodity)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE name = $1 AND %s LIMIT 1", r.tableNames.Commodities(), liveRow)
+		return scanOne(ctx, tx, &commodity, query, name)
+	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get commodity", err)
 	}
@@ -174,7 +181,7 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 	// Query the database for all commodities ordered by purchase date descending (most recent first).
 	// NULL purchase dates are sorted last.
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf("SELECT * FROM %s ORDER BY purchase_date DESC NULLS LAST", r.tableNames.Commodities())
+		query := fmt.Sprintf("SELECT * FROM %s WHERE %s ORDER BY purchase_date DESC NULLS LAST", r.tableNames.Commodities(), liveRow)
 		rows, err := tx.QueryxContext(ctx, query)
 		if err != nil {
 			return errxtrace.Wrap("failed to list commodities", err)
@@ -214,8 +221,8 @@ func (r *CommodityRegistry) GetMany(ctx context.Context, ids []string) ([]*model
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`SELECT * FROM %s WHERE id = ANY($1)`,
-			r.tableNames.Commodities(),
+			`SELECT * FROM %s WHERE id = ANY($1) AND %s`,
+			r.tableNames.Commodities(), liveRow,
 		)
 		rows, qerr := tx.QueryxContext(ctx, query, ids)
 		if qerr != nil {
@@ -280,10 +287,15 @@ func (r *CommodityRegistry) ListByGroup(ctx context.Context, tenantID, groupID s
 	return commodities, nil
 }
 
+// Count returns the number of live items.
 func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
+	var cnt int
 	reg := r.newSQLRegistry()
-
-	cnt, err := reg.Count(ctx)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var err error
+		cnt, err = countRows(ctx, tx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", r.tableNames.Commodities(), liveRow))
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to count commodities", err)
 	}
@@ -414,6 +426,13 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 	var exprs []string
 	add := func(expr string) {
 		exprs = append(exprs, expr)
+	}
+
+	// Live items, or with opts.Trashed the items in Trash; never both.
+	if opts.Trashed {
+		add(trashedRow)
+	} else {
+		add(liveRow)
 	}
 
 	// Default view: hide drafts unless caller asked to see them.
@@ -666,7 +685,14 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 
 	reg := r.newSQLRegistry()
 
-	err := reg.UpdateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, _ models.Commodity, row *models.Commodity) error {
+	err := reg.UpdateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, stored models.Commodity, row *models.Commodity) error {
+		// A trashed item is read-only until it is restored. stored was read
+		// without a lock, so the check is made again under one. The trash
+		// columns themselves belong to Trash and Restore.
+		if err := lockLiveRow(ctx, tx, r.tableNames.Commodities(), "commodity", stored.ID); err != nil {
+			return err
+		}
+		row.ClearTrashState()
 		// The asset number is server-managed: carry the stored one over.
 		// Read under a row lock so a backfill numbering this row at the
 		// same moment is either seen or waits for this update to finish.
@@ -745,7 +771,10 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
 
-	err := reg.ScanOneByField(ctx, store.Pair("id", id), &commodity)
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND %s LIMIT 1", r.tableNames.Commodities(), liveRow)
+		return scanOne(ctx, tx, &commodity, query, id)
+	})
 	if err != nil {
 		// Add debug logging for RLS issues
 		slog.Debug("Commodity not found - possible RLS issue",
@@ -779,4 +808,139 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 type commodityPage struct {
 	models.Commodity
 	TotalCount int `db:"total_count"`
+}
+
+// GetTrashed returns a trashed item by id.
+func (r *CommodityRegistry) GetTrashed(ctx context.Context, id string) (*models.Commodity, error) {
+	var commodity models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND %s LIMIT 1", r.tableNames.Commodities(), trashedRow)
+		return scanOne(ctx, tx, &commodity, query, id)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get trashed commodity", err)
+	}
+	return &commodity, nil
+}
+
+// ListTrashed returns a page of the group's trashed items, most recently
+// deleted first.
+func (r *CommodityRegistry) ListTrashed(ctx context.Context, offset, limit int) ([]*models.Commodity, int, error) {
+	var commodities []*models.Commodity
+	var total int
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		dataSB := newSelect().Select("*", totalCountColumn).From(string(r.tableNames.Commodities()))
+		dataSB.Where(trashedRow).OrderByDesc("deleted_at").OrderByDesc("id")
+		dataQuery, dataArgs := paginate(dataSB, offset, limit).Build()
+		rows, err := scanAll[commodityPage](ctx, tx, dataQuery, dataArgs...)
+		if err != nil {
+			return errxtrace.Wrap("failed to list trashed commodities", err)
+		}
+		total = totalUnknown
+		for _, row := range rows {
+			commodities = append(commodities, &row.Commodity)
+			total = row.TotalCount
+		}
+		if total == totalUnknown {
+			total, err = countRows(ctx, tx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", r.tableNames.Commodities(), trashedRow))
+			if err != nil {
+				return errxtrace.Wrap("failed to count trashed commodities", err)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, 0, errxtrace.Wrap("failed to list trashed commodities", err)
+	}
+	return commodities, total, nil
+}
+
+// ListTrashedBefore returns up to limit items deleted before cutoff, oldest
+// first. On a service registry it spans every tenant and group.
+func (r *CommodityRegistry) ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.Commodity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var commodities []*models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT * FROM %s WHERE %s AND deleted_at < $1 ORDER BY deleted_at ASC, id ASC LIMIT $2`,
+			r.tableNames.Commodities(), trashedRow)
+		var err error
+		commodities, err = scanAll[models.Commodity](ctx, tx, query, cutoff.UTC(), limit)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list expired trashed commodities", err)
+	}
+	return commodities, nil
+}
+
+// Trash moves a live item to Trash in one conditional UPDATE, so two
+// concurrent deletes trash it once and the second one gets ErrNotFound.
+func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at time.Time) (*models.Commodity, error) {
+	var commodity models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = $2, deleted_by = $3, deleted_from_area_id = area_id
+			 WHERE id = $1 AND %s RETURNING *`,
+			r.tableNames.Commodities(), liveRow)
+		return scanOne(ctx, tx, &commodity, query, id, at.UTC(), deletedBy)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to trash commodity", err, errx.Attrs("commodity_id", id))
+	}
+	return &commodity, nil
+}
+
+// Restore makes a trashed item live again.
+func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Commodity, error) {
+	var commodity models.Commodity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`UPDATE %s SET deleted_at = NULL, deleted_by = NULL, deleted_from_area_id = NULL
+			 WHERE id = $1 AND %s RETURNING *`,
+			r.tableNames.Commodities(), trashedRow)
+		return scanOne(ctx, tx, &commodity, query, id)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to restore commodity", err, errx.Attrs("commodity_id", id))
+	}
+	return &commodity, nil
+}
+
+// PurgeTrashed deletes a trashed item's row. The condition on deleted_at lives
+// in the DELETE, so a concurrent restore wins and the purge deletes nothing.
+// It holds the group's currency-migration lock while it deletes: a running
+// migration lists every item of the group, trashed ones included, and then
+// updates each listed row, so a row deleted in between would fail it.
+func (r *CommodityRegistry) PurgeTrashed(ctx context.Context, id string) (bool, error) {
+	var deleted bool
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var groupID string
+		query := fmt.Sprintf(`SELECT group_id FROM %s WHERE id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
+		if err := tx.GetContext(ctx, &groupID, query, id); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if err := lockGroupCurrencyMigration(ctx, tx, groupID); err != nil {
+			return err
+		}
+		query = fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
+		var err error
+		deleted, err = execAffected(ctx, tx, query, id)
+		return err
+	})
+	if err != nil {
+		return false, errxtrace.Wrap("failed to purge commodity", err, errx.Attrs("commodity_id", id))
+	}
+	return deleted, nil
 }

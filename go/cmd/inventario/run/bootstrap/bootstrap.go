@@ -131,6 +131,10 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 		return nil, fmt.Errorf("initialising sentry: %w", err)
 	}
 
+	// The Trash list shows when each entry expires, so the API server needs
+	// the retention the purge worker applies.
+	serverSetup.params.TrashRetention = durations.TrashRetention
+
 	rs := &RuntimeSetup{
 		DSN:                       dsn,
 		FactorySet:                factorySet,

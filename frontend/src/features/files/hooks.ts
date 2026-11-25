@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { commodityKeys } from "@/features/commodities/keys"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { tagKeys } from "@/features/tags/keys"
+import { useInvalidateTrash } from "@/features/trash/hooks"
 
 import {
   attachFile,
@@ -121,19 +122,23 @@ export function useUpdateFile(id: string) {
   })
 }
 
+// Deleting moves the file to Trash, so the Trash lists and the storage
+// breakdown change with it.
 export function useDeleteFile() {
   const invalidate = useInvalidate()
+  const invalidateTrash = useInvalidateTrash()
   return useMutation<void, Error, string>({
     mutationFn: (id) => deleteFile(id),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => Promise.all([invalidate.all(), invalidateTrash()]),
   })
 }
 
 export function useBulkDeleteFiles() {
   const invalidate = useInvalidate()
+  const invalidateTrash = useInvalidateTrash()
   return useMutation<BulkDeleteResult, Error, string[]>({
     mutationFn: (ids) => bulkDeleteFiles(ids),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => Promise.all([invalidate.all(), invalidateTrash()]),
   })
 }
 

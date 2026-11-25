@@ -187,6 +187,12 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		return false, errxtrace.Wrap("maintenance reminder: lookup commodity", err)
 	}
 	if commodity == nil {
+		// The item went to Trash after the schedule list was read. Its
+		// reminders wait: no idempotency row, so a restore brings them
+		// back.
+		if s.commodityTrashed(ctx, m.CommodityID) {
+			return false, nil
+		}
 		// Schedule references a commodity that's gone (cross-tenant
 		// drift / mid-purge). Write the row so we stop revisiting,
 		// but do NOT count this as a sent reminder.
@@ -330,6 +336,13 @@ func (s *MaintenanceReminderService) lookupCommodity(ctx context.Context, commod
 		return nil, err
 	}
 	return c, nil
+}
+
+// commodityTrashed reports whether the item is in Trash. A lookup error reads
+// as "not trashed", which falls back to the missing-commodity handling.
+func (s *MaintenanceReminderService) commodityTrashed(ctx context.Context, commodityID string) bool {
+	_, err := s.factorySet.CommodityRegistryFactory.CreateServiceRegistry().GetTrashed(ctx, commodityID)
+	return err == nil
 }
 
 // recipientsForCommodity returns every group admin/owner that should

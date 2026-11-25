@@ -9,11 +9,13 @@ import (
 	"image/png"
 	"log/slog"
 	"strings"
+	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"gocloud.dev/blob"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/internal/mimekit"
 	"go.5x5.cz/inventario/models"
@@ -300,12 +302,8 @@ func blobDeleteBatch(files []*models.FileEntity) map[string]bool {
 // analogue of DeletePhysicalFilesForGroup, intended for the admin tenant
 // hard-delete flow (#2115), and likewise uses a service-mode file registry to
 // bypass tenant/group RLS. Database rows are NOT touched here — that is the
-// responsibility of the TenantPurger.
-//
-// Unlike the group variant there is no ListByGroup-style narrowing index for a
-// whole tenant, so this lists every file in service mode and filters by
-// TenantID in application code (the same O(total_files) scan the group purger
-// avoids, but acceptable for a one-shot administrative hard-delete).
+// responsibility of the TenantPurger. Trashed files are included: their
+// blobs are still in the bucket.
 //
 // The method is fail-fast: the first blob that fails to delete aborts the
 // entire sweep so the orchestration layer can leave the tenant intact and the
@@ -316,16 +314,17 @@ func (s *FileService) DeletePhysicalFilesForTenant(ctx context.Context, tenantID
 	}
 
 	fileReg := s.factorySet.FileRegistryFactory.CreateServiceRegistry()
-	files, err := fileReg.List(ctx)
+	files, err := fileReg.ListByTenant(ctx, tenantID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list files for tenant", err)
 	}
 
-	// Narrow to the rows this hard-delete actually removes BEFORE building the
-	// guard's batch: the listing is installation-wide, and a batch built from it
-	// would tell the guard that another tenant's row is "ours" and hand it that
-	// tenant's bytes to delete. Cross-tenant sharing is not hypothetical — legacy
-	// flat keys predate the #1793 tenant prefix.
+	// Keep only the rows this hard-delete actually removes BEFORE building the
+	// guard's batch: a batch that held another tenant's row would tell the
+	// guard that row is "ours" and hand it that tenant's bytes to delete.
+	// Cross-tenant sharing is not hypothetical — legacy flat keys predate the
+	// #1793 tenant prefix. ListByTenant already narrows; the check stays as a
+	// second line of defense.
 	owned := make([]*models.FileEntity, 0, len(files))
 	for _, file := range files {
 		if file == nil || file.TenantID != tenantID {
@@ -544,9 +543,82 @@ func (s *FileService) DetachEntityFiles(ctx context.Context, entityType, entityI
 		if _, err := fileReg.RemoveLink(ctx, file.ID, link.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errxtrace.Wrap("failed to remove file link", err, errx.Attrs("file_id", file.ID))
 		}
+		if err := s.followTrashedHolder(ctx, fileReg, file, link.ID); err != nil {
+			return err
+		}
+	}
+
+	// Trashed files keep their links while they wait in Trash. Their link to
+	// this entity goes too, so a restored file does not point at it.
+	if _, err := fileReg.RemoveLinksToEntity(ctx, entityType, entityID); err != nil {
+		return errxtrace.Wrap("failed to remove links of trashed files", err, errx.Attrs("entity_type", entityType, "entity_id", entityID))
 	}
 
 	return nil
+}
+
+// followTrashedHolder moves a live file to Trash when, after losing the link
+// removedLinkID, every link it has left points at an item in Trash. The file
+// then belongs to that item: restoring the item brings it back, purging the
+// item deletes it. A file with no links left stays live as a standalone file.
+func (s *FileService) followTrashedHolder(ctx context.Context, fileReg registry.FileRegistry, file *models.FileEntity, removedLinkID string) error {
+	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create commodity registry", err)
+	}
+	holder := ""
+	for _, l := range file.Links {
+		if l.ID == removedLinkID {
+			continue
+		}
+		if l.EntityType != models.FileLinkCommodity {
+			return nil // an area, location or export keeps the file live
+		}
+		if _, err := comReg.Get(ctx, l.EntityID); err == nil {
+			return nil
+		} else if !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to look up linked item", err, errx.Attrs("commodity_id", l.EntityID))
+		}
+		if holder == "" {
+			if _, err := comReg.GetTrashed(ctx, l.EntityID); err == nil {
+				holder = l.EntityID
+			}
+		}
+	}
+	if holder == "" {
+		return nil
+	}
+	deletedBy := ""
+	if user := appctx.UserFromContext(ctx); user != nil {
+		deletedBy = user.ID
+	}
+	if err := fileReg.Trash(ctx, file.ID, deletedBy, holder, time.Now()); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to move file to Trash with its item", err, errx.Attrs("file_id", file.ID))
+	}
+	return nil
+}
+
+// PurgeTrashedFile permanently deletes a trashed file: its thumbnail jobs, its
+// row and links, then, best effort, its blob and thumbnails. The blob stays
+// when another row, live or trashed, still references the key. Reports false
+// when the file was no longer in Trash (restored or purged concurrently).
+// fileReg decides the scope: a user registry for a request, a service
+// registry for the purge worker.
+func (s *FileService) PurgeTrashedFile(ctx context.Context, fileReg registry.FileRegistry, file *models.FileEntity) (bool, error) {
+	if err := s.deleteThumbnailGenerationChain(ctx, file.ID); err != nil {
+		return false, errxtrace.Wrap("failed to delete thumbnail generation chain", err)
+	}
+	deleted, err := fileReg.PurgeTrashed(ctx, file.ID)
+	if err != nil || !deleted {
+		return false, err
+	}
+	if file.File != nil && file.File.OriginalPath != "" {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, file.ID, file.File.OriginalPath, file.File.MIMEType, nil); err != nil {
+			slog.WarnContext(ctx, "failed to delete physical blob after purging a trashed file (best-effort)",
+				"file_id", file.ID, "tenant_id", file.TenantID, "error", err.Error())
+		}
+	}
+	return true, nil
 }
 
 // DeleteFileIfUnlinked deletes a file, row and blob, when no link other than

@@ -297,6 +297,7 @@ func (r *LocationRegistry) GetTotalCommodityCount(ctx context.Context, locationI
 			JOIN %s a ON c.area_id = a.id
 			WHERE a.location_id = $1
 			AND c.draft = false
+			AND c.deleted_at IS NULL
 		`, r.tableNames.Commodities(), r.tableNames.Areas())
 
 		err := tx.GetContext(ctx, &totalCount, sql, locationID)

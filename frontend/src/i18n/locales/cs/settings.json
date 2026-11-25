@@ -474,13 +474,16 @@
       "exports": "Exporty",
       "images": "Obrázky",
       "invoices": "Faktury",
-      "other": "Ostatní"
+      "other": "Ostatní",
+      "trash": "Koš"
     },
     "errorBody": "Využití úložiště se nyní nepodařilo načíst. Zkuste to za chvíli znovu.",
     "free": "Volné",
     "manageFiles": "Spravovat soubory",
     "noGroup": "Vyberte skupinu pro zobrazení jejího využití úložiště.",
+    "openTrash": "Otevřít koš",
     "title": "Využití úložiště",
+    "trashNote": "{{size}} z toho je v koši. Uvolní se po vysypání koše nebo po vypršení lhůty položek.",
     "unlimited": "{{used}} využito",
     "usageOfQuota": "{{used}} z {{quota}}",
     "usagePercent": "{{percent}} % kvóty skupiny"

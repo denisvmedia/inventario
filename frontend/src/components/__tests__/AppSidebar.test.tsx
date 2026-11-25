@@ -108,6 +108,17 @@ describe("<AppSidebar /> — group-section gating (#1886)", () => {
     expect(help.getAttribute("href")).toBe("/settings?section=help")
   })
 
+  it("links Trash as the last row of the Group section", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    const manage = await screen.findByTestId("sidebar-manage-group")
+    // The rows render once the group resolves.
+    const links = await within(manage).findAllByRole("link")
+    const trash = links[links.length - 1]
+    expect(trash).toHaveTextContent("Trash")
+    expect(trash.getAttribute("href")).toBe("/g/household/trash")
+  })
+
   it("offers Help to a user with no group", async () => {
     server.use(...authHandlers.signedIn(), ...groupHandlers.list([]))
     renderSidebar("/no-group")

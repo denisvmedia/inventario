@@ -3,6 +3,7 @@ package processor
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -29,6 +30,7 @@ type ownershipFixture struct {
 	// path keys ownership lookups on this UUID (originalXMLID), so it is set
 	// explicitly before Create and preserved by the memory registry.
 	commodityUUID string
+	commodityID   string
 }
 
 // newOwnershipFixture wires up two users (owner + attacker) in the same tenant,
@@ -112,6 +114,7 @@ func newOwnershipFixture(t *testing.T) *ownershipFixture {
 		attacker:      attacker,
 		ownerCtx:      ownerCtx,
 		commodityUUID: commodityUUID,
+		commodityID:   commodity.ID,
 	}
 }
 
@@ -184,4 +187,21 @@ func TestValidateCommodityOwnershipInDB_NoMatchingCommodity(t *testing.T) {
 	err := proc.validateCommodityOwnershipInDB(fx.ownerCtx, "no-such-uuid", fx.owner, emptyExisting(), stats)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.ErrorCount, qt.Equals, 0)
+}
+
+// Case 5: the owner's commodity is in Trash. It keeps its UUID, so a restore
+// by another user that carries the UUID is still refused.
+func TestValidateCommodityOwnershipInDB_TrashedOwnedByDifferentUser(t *testing.T) {
+	c := qt.New(t)
+	fx := newOwnershipFixture(t)
+	proc := newOwnershipProcessor(fx)
+
+	comReg := must.Must(fx.factorySet.CommodityRegistryFactory.CreateUserRegistry(fx.ownerCtx))
+	_, err := comReg.Trash(fx.ownerCtx, fx.commodityID, fx.owner.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+
+	stats := &types.RestoreStats{}
+	err = proc.validateCommodityOwnershipInDB(fx.ownerCtx, fx.commodityUUID, fx.attacker, emptyExisting(), stats)
+	c.Assert(err, qt.ErrorIs, security.ErrOwnershipViolation)
+	c.Assert(stats.ErrorCount, qt.Equals, 1)
 }

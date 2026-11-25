@@ -41,6 +41,7 @@ const (
 	ParamTagMode               = "tag_mode"
 	ParamTagsExclude           = "tags_exclude"
 	ParamNoTags                = "no_tags"
+	ParamTrashed               = "trashed"
 	ParamSort                  = "sort"
 )
 
@@ -79,6 +80,10 @@ type Query struct {
 	LentOut *bool
 	// Tags narrows by tag slugs; see registry.CommodityTagFilter.
 	Tags registry.CommodityTagFilter
+	// Trashed selects the items in Trash instead of the live ones. The
+	// loans of a trashed item are hidden, so LentOut cannot be combined
+	// with it.
+	Trashed bool
 	// SortField and SortDesc order the result. Sorting is not filtering:
 	// an unknown field falls back to name, see registry.CommoditySortField.
 	SortField registry.CommoditySortField
@@ -116,7 +121,7 @@ var filterParams = []string{
 	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
 	ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
 	ParamLentOut, ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
-	ParamSort,
+	ParamTrashed, ParamSort,
 }
 
 // FilterParams returns the name of every parameter Parse understands.
@@ -310,7 +315,18 @@ func (p parser) flags(q *Query) error {
 		q.IncludeInactive = *inactive
 	}
 	q.LentOut, err = p.flag(ParamLentOut)
-	return err
+	if err != nil {
+		return err
+	}
+	trashed, err := p.flag(ParamTrashed)
+	if err != nil {
+		return err
+	}
+	q.Trashed = trashed != nil && *trashed
+	if q.Trashed && q.LentOut != nil {
+		return paramError(ParamLentOut, "", "cannot be combined with trashed=true: the loans of an item in Trash are hidden")
+	}
+	return nil
 }
 
 func (p parser) warranty(q *Query) error {
@@ -451,6 +467,9 @@ func (q Query) Values() url.Values {
 	if q.Tags.Untagged {
 		v.Set(ParamNoTags, "true")
 	}
+	if q.Trashed {
+		v.Set(ParamTrashed, "true")
+	}
 	if q.SortField != "" {
 		sort := string(q.SortField)
 		if q.SortDesc {
@@ -477,5 +496,6 @@ func (q Query) ListOptions() registry.CommodityListOptions {
 		WarrantyStatuses:      q.WarrantyStatuses,
 		WarrantyExpiresBefore: q.WarrantyExpiresBefore,
 		LentOut:               q.LentOut,
+		Trashed:               q.Trashed,
 	}
 }

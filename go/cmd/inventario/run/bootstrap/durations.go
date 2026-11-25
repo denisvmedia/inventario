@@ -32,6 +32,8 @@ type WorkerDurations struct {
 	WorkerControlRefreshInterval     time.Duration
 	OrphanFileGCInterval             time.Duration
 	OrphanFileGCMinAge               time.Duration
+	TrashRetention                   time.Duration
+	TrashPurgeInterval               time.Duration
 	ThumbnailPollInterval            time.Duration
 	ThumbnailCleanupInterval         time.Duration
 	ThumbnailJobRetentionPeriod      time.Duration
@@ -81,6 +83,8 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"business-metrics-interval", cfg.BusinessMetricsInterval, &out.BusinessMetricsInterval},
 		{"orphan-file-gc-interval", cfg.OrphanFileGCInterval, &out.OrphanFileGCInterval},
 		{"orphan-file-gc-min-age", cfg.OrphanFileGCMinAge, &out.OrphanFileGCMinAge},
+		{"trash-retention", cfg.TrashRetention, &out.TrashRetention},
+		{"trash-purge-interval", cfg.TrashPurgeInterval, &out.TrashPurgeInterval},
 		{"thumbnail-poll-interval", cfg.ThumbnailPollInterval, &out.ThumbnailPollInterval},
 		{"thumbnail-cleanup-interval", cfg.ThumbnailCleanupInterval, &out.ThumbnailCleanupInterval},
 		{"thumbnail-job-retention-period", cfg.ThumbnailJobRetentionPeriod, &out.ThumbnailJobRetentionPeriod},

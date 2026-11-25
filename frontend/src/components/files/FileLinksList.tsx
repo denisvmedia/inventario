@@ -126,8 +126,8 @@ export function FileLinksList({ file }: FileLinksListProps) {
 }
 
 // useDeleteFileDescription is the body of the "Delete file" confirmation. A
-// file attached to several entities disappears from all of them, so the
-// confirmation names them and points at "Remove attachment" for the case
+// file attached to several entities goes to Trash and leaves all of them, so
+// the confirmation names them and points at "Remove attachment" for the case
 // where the user wants to take it off one entity only.
 export function useDeleteFileDescription(): (file: FileEntity, title: string) => string {
   const { t } = useTranslation()
@@ -143,7 +143,7 @@ export function useDeleteFileDescription(): (file: FileEntity, title: string) =>
       names,
       count: links.length,
       defaultValue:
-        "{{title}} will be removed permanently, also from {{names}}. This cannot be undone. To take it off one of them only, remove that attachment instead.",
+        "{{title}} moves to the trash and leaves {{names}}. Restoring it puts it back. To take it off one of them only, remove that attachment instead.",
     })
   }
 }

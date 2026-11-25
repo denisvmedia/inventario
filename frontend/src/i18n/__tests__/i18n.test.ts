@@ -13,6 +13,13 @@ describe("i18n boot", () => {
     expect(i18next.t("common:actions.goHome")).toBe("Go home")
   })
 
+  it("resolves top-level keys that are reserved words", () => {
+    expect(i18next.t("commodities:delete.title", { name: "Drill" })).toBe("Delete Drill?")
+    expect(i18next.t("locations:delete.areaTitle", { name: "Garage" })).not.toContain(
+      "delete.areaTitle"
+    )
+  })
+
   it("interpolates variables into common:trackedBy", () => {
     expect(i18next.t("common:trackedBy", { ref: "#1404" })).toBe("Tracked by #1404.")
   })

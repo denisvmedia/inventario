@@ -120,6 +120,50 @@ func (s *stubFileRegistry) MoveLegacyLinks(context.Context, int) (int, error) {
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) ListByTenant(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) GetTrashed(context.Context, string) (*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListTrashed(context.Context, int, int) ([]*models.FileEntity, int, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListTrashedLinkedTo(context.Context, string, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) CountTrashedWith(context.Context, []string) (map[string]registry.TrashedFilesStats, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListStrandedTrashed(context.Context, int) ([]*models.FileEntity, error) {
+	return nil, nil
+}
+
+func (s *stubFileRegistry) ListTrashedBefore(context.Context, time.Time, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) Trash(context.Context, string, string, string, time.Time) error {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) Restore(context.Context, string) error {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) SetTrashedWith(context.Context, string, string) error {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) PurgeTrashed(context.Context, string) (bool, error) {
+	panic("not implemented")
+}
+
 var _ registry.FileRegistry = (*stubFileRegistry)(nil)
 
 func TestStorageUsageService_TotalsAndQuota(t *testing.T) {
