@@ -1,11 +1,11 @@
 ---
 title: Items
-description: Add, edit, and organise the things you own — fields, drafts, status, prices, the detail page, and bulk actions.
+description: Add, edit, and organise the things you own — fields, adding from files, drafts, status, prices, the detail page, and bulk actions.
 ---
 
 An **item** is anything you want to keep track of — an appliance, a laptop, a
 piece of furniture, a tool. This page covers everything about items: adding
-them (manually or with AI), every field on the form, the item detail page and
+them (manually, with AI, or many at once from files), every field on the form, the item detail page and
 its tabs, editing an item, the status lifecycle, prices and currencies, the cover photo, and
 how to find, sort, and bulk-edit items on the **All Items** page.
 
@@ -24,6 +24,9 @@ how to find, sort, and bulk-edit items on the **All Items** page.
    - **Fill manually** — type the details yourself.
 4. Work through the steps and click **Add item** on the last step to save. Your
    new item opens so you can review it.
+
+To add several items from a pile of receipts or photos at once, see
+[Add items from files](#add-items-from-files).
 
 :::tip
 Items don't have to be placed in a location to be saved. If you skip the area,
@@ -71,6 +74,81 @@ A few things to know:
 - Scanning is rate-limited, so you may occasionally be asked to wait a moment.
 
 See [Files & photos](../files-and-photos/) for more on attachments.
+
+## Add items from files
+
+If AI vision is enabled on your server, you can hand it a batch of receipts,
+invoices and product photos and get a [draft](#drafts-of-a-new-item) for each
+product you want to keep. The scan runs on the server, so you can close the
+page, or continue on another device, while it works.
+
+1. On the **All Items** page, drag the files onto the page, or click **Add from
+   files** and pick them. The button and the drop target are there for members
+   who can edit items.
+2. The **Add items from files** dialog lists the files. It says how many files a
+   batch takes, how large each may be, and how many scans run per hour. A file
+   it cannot send (not an image or PDF, too large, over the batch limit) stays
+   in the list with the reason and is left out.
+3. By default each file is a separate purchase. A receipt that lists several
+   products gives one product per line. If all the files show one item (a
+   photo of the item, its label and its receipt, say), turn on **All files show
+   one item**: they are scanned together and give one product.
+4. Click **Scan N files**. The files are uploaded one by one, then the batch is
+   queued and its review page opens.
+
+### Review a batch
+
+The review page lists each purchase with its status: waiting in the queue,
+waiting for the hourly scan limit, scanning, the products found, or why the
+file could not be read. Scans over the hourly limit wait in the queue and start
+by themselves; they are not dropped.
+
+For each product the page shows the name, brand and model, and the amount of
+that product line on the receipt, never the receipt total. A line of several
+identical units (two cups for 24.00) shows a **Quantity** of 2 with the amount
+of the whole line.
+
+- Tick the products you want to keep. Every product starts ticked.
+- Change the **Quantity** if the scan read it wrong.
+- Open **N fields used** to see each value the scan read, with its confidence.
+  Untick a value to leave that field empty in the draft. A value the scan did
+  not read stays empty too: an unknown price is not a price of 0. See
+  [Unknown is not zero](#unknown-is-not-zero).
+- Click **Create N drafts**. Each ticked product gets exactly one draft, and the
+  products you did not tick are marked **Left out**. If none is ticked, the
+  button reads **Leave all out**.
+
+Each draft gets the files of its purchase, so one receipt is attached to every
+item made from it: the same file, not a copy. A seller the scan read and your
+group already has is set on the draft; any other seller is offered on the
+**Purchase** step of the draft, where you can create it. Click **Continue** next
+to a product to open its draft in the **Add item** dialog and finish the item.
+
+What you choose is saved on the server, so the review looks the same on every
+device. Clicking **Create N drafts** again, after a lost connection or on
+another device, never makes a second draft for a product that has one.
+
+Other actions on the review page:
+
+- **Stop scanning** stops the files still waiting in the queue. Drafts already
+  created stay.
+- **Retry unfinished** puts the files that failed or were stopped back in the
+  queue. Files already scanned are not scanned again, so opening the page or
+  retrying never repeats a scan.
+- **Rescan** scans one file again and replaces its products. It is offered only
+  while none of that file's products has a draft.
+- The trash button removes the batch. Drafts made from it stay; its files that
+  nothing else uses go to the [Trash](../trash/).
+
+Batches are listed in an **Added from files** card at the top of the **All
+Items** page, with a summary such as "2 drafts created, 1 file unreadable".
+**Review** opens a batch that waits for you, and the trash button removes a
+finished one.
+
+A file you dropped is an ordinary file of the group: you find it on the
+[Files](../files-and-photos/) page, where its detail says it was **Added from
+files**. A file uploaded before the batch was queued (if you closed the dialog
+after an upload failed, for example) stays there as a standalone file.
 
 ## All the fields
 
