@@ -35,6 +35,8 @@
     "backToList": "Back to items",
     "cover": {
       "open": "View photos of {{name}}",
+      "openWithCount_one": "View {{count}} photo of {{name}}",
+      "openWithCount_other": "View {{count}} photos of {{name}}",
       "photoCount_one": "{{count}} photo",
       "photoCount_other": "{{count}} photos"
     },
@@ -460,6 +462,7 @@
     "pageSize": "Items per page",
     "searchPlaceholder": "Search by name, serial or part number, tag, notes or asset ID…",
     "selectAll": "Select all visible",
+    "selectItem": "Select {{name}}",
     "subtitle_one": "{{count}} item in this group",
     "subtitle_other": "{{count}} items in this group",
     "viewCompact": "Compact cards",

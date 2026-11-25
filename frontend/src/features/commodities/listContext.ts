@@ -21,9 +21,13 @@ export type CommoditiesPageSize = (typeof COMMODITIES_PAGE_SIZES)[number]
 /** The page size until the user picks one. */
 export const COMMODITIES_PAGE_SIZE: CommoditiesPageSize = 24
 
-// The page size is the `per_page` URL parameter. Without it, the size the
-// user last picked on this device applies, so the list page and an item
-// walking the same list URL agree on where the page breaks are.
+// The page size is the `per_page` URL parameter, and a page number counts
+// pages of that size: 24 when the URL names none, so a link to page 3 shows
+// the same items on every device. The size the user last picked on this
+// device applies only where the list starts, at page 1, which begins with
+// the same item whatever the size. The list page then writes it into its
+// URL, so the list URL, and the list context an item opened from it
+// carries, names the size whenever it is not 24.
 export const COMMODITIES_PAGE_SIZE_PARAM = "per_page"
 const PAGE_SIZE_STORAGE_KEY = "commodities:pageSize"
 
@@ -35,10 +39,20 @@ export interface CommoditiesListParams {
   query: CommodityQuery
 }
 
-export function parseCommoditiesListParams(params: URLSearchParams): CommoditiesListParams {
+/**
+ * Reads an Items list URL. `remembered: false` ignores the size picked on
+ * this device, for a list context: the list page wrote its size into the
+ * URL, and another tab may have picked a different one since.
+ */
+export function parseCommoditiesListParams(
+  params: URLSearchParams,
+  { remembered = true }: { remembered?: boolean } = {}
+): CommoditiesListParams {
+  const page = parsePageParam(params.get("page"))
+  const fallback = remembered && page === 1 ? storedCommoditiesPageSize() : COMMODITIES_PAGE_SIZE
   return {
-    page: parsePageParam(params.get("page")),
-    perPage: parsePageSize(params.get(COMMODITIES_PAGE_SIZE_PARAM)) ?? storedCommoditiesPageSize(),
+    page,
+    perPage: parsePageSize(params.get(COMMODITIES_PAGE_SIZE_PARAM)) ?? fallback,
     query: parseCommodityQuery(params),
   }
 }
@@ -87,7 +101,7 @@ export function isCommoditiesListContext(ctx: ListContext, slug: string): boolea
 
 /** The Items list behind a context, as a source for useListNavigation. */
 export function commoditiesListSource(ctx: ListContext, slug: string): ListPageSource {
-  const base = parseCommoditiesListParams(listContextParams(ctx))
+  const base = parseCommoditiesListParams(listContextParams(ctx), { remembered: false })
   return {
     pageSize: base.perPage,
     page: listContextPage(ctx),

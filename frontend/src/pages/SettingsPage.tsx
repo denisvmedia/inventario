@@ -60,6 +60,7 @@ import {
   useUpdateProfile,
 } from "@/features/auth/hooks"
 import { makeDeleteAccountSchema, type DeleteAccountInput } from "@/features/auth/schemas"
+import { forgetCommoditiesViewMode } from "@/features/commodities/viewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
@@ -826,7 +827,12 @@ function AppearanceSection() {
         >
           <Select
             value={defaultItemsView}
-            onValueChange={(v) => onChangeRemote(SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW, v)}
+            onValueChange={(v) => {
+              // A layout picked from the Items list toolbar on this device
+              // would keep hiding the new default.
+              forgetCommoditiesViewMode()
+              onChangeRemote(SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW, v)
+            }}
             disabled={!settings}
           >
             <SelectTrigger

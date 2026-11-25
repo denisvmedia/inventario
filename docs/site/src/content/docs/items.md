@@ -374,8 +374,8 @@ cover to fall back to the first photo.
 
 Inventario keeps smaller copies of each photo for cards and the item page, and
 loads the one that fits your screen. A photo that has no copy at the size a
-card needs yet shows a short "generating" placeholder the first time, while
-Inventario makes the copy.
+card needs yet shows a "generating" placeholder while Inventario makes the
+copy. The photo replaces it when you come back to the list.
 
 ## Status lifecycle
 
@@ -431,8 +431,10 @@ Three buttons at the right of the toolbar switch the layout:
 
 When there are more than 24 items, **Items per page** under the list shows
 **24**, **48**, or **96** items per page. Inventario remembers the layout and
-the page size on this device; the Default view in [Settings](../settings-and-account/)
-picks the layout until you choose one here.
+the page size on this device. The Default view in [Settings](../settings-and-account/)
+picks the layout until you choose one here, and changing it in Settings drops
+that choice on the device you change it on. A page size other than 24 is part of
+the page URL, so a bookmarked or shared page shows the same items on any device.
 
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a

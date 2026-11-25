@@ -88,8 +88,8 @@ change applies immediately.
   **Русский**. This also sets the language Inventario uses for emails it sends
   you.
 - **Default view** — whether the Items list opens as **Photo cards**,
-  **Compact cards**, or a **List**. Once you pick a layout from the Items list
-  toolbar, that choice wins on this device.
+  **Compact cards**, or a **List**. A layout you pick from the Items list
+  toolbar wins on that device until you change this setting there.
 - **Preferred currency** — a saved preference for how currency should be
   displayed. It's stored on your account, but display conversion isn't wired up
   yet, so amounts still show in their stored currency for now.

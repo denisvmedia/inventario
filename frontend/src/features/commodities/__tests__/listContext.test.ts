@@ -61,7 +61,20 @@ describe("parseCommoditiesListParams", () => {
     )
     storeCommoditiesPageSize(48)
     expect(parseCommoditiesListParams(new URLSearchParams("")).perPage).toBe(48)
+    expect(parseCommoditiesListParams(new URLSearchParams("page=1")).perPage).toBe(48)
     expect(parseCommoditiesListParams(new URLSearchParams("per_page=24")).perPage).toBe(24)
+  })
+
+  it("counts pages of 24 past the first page when the URL names no size", () => {
+    storeCommoditiesPageSize(48)
+    expect(parseCommoditiesListParams(new URLSearchParams("page=3")).perPage).toBe(24)
+    expect(parseCommoditiesListParams(new URLSearchParams("page=3&per_page=48")).perPage).toBe(48)
+  })
+
+  it("ignores the size picked on this device when asked to", () => {
+    storeCommoditiesPageSize(96)
+    const params = new URLSearchParams("")
+    expect(parseCommoditiesListParams(params, { remembered: false }).perPage).toBe(24)
   })
 })
 
@@ -122,6 +135,13 @@ describe("commoditiesListSource", () => {
       parseCommoditiesListParams(new URLSearchParams("per_page=96&page=2"))
     )
     expect(source.pageQuery(2).queryKey).toEqual(commodityKeys.list(SLUG, listPageOpts))
+  })
+
+  it("reads the list's size from the context, not from this device", () => {
+    // Another tab may have picked a size since the list wrote its URL.
+    storeCommoditiesPageSize(96)
+    const ctx = parseListContext(`${SCOPE}/commodities?q=lamp`, SCOPE)!
+    expect(commoditiesListSource(ctx, SLUG).pageSize).toBe(24)
   })
 
   it("reduces a page to its ids and the list total", () => {

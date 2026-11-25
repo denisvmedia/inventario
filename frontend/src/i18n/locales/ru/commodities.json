@@ -43,6 +43,10 @@
     "backToList": "К списку предметов",
     "cover": {
       "open": "Посмотреть фотографии: {{name}}",
+      "openWithCount_one": "Посмотреть {{count}} фотографию: {{name}}",
+      "openWithCount_few": "Посмотреть {{count}} фотографии: {{name}}",
+      "openWithCount_many": "Посмотреть {{count}} фотографий: {{name}}",
+      "openWithCount_other": "Посмотреть {{count}} фотографии: {{name}}",
       "photoCount_one": "{{count}} фотография",
       "photoCount_few": "{{count}} фотографии",
       "photoCount_many": "{{count}} фотографий",
@@ -471,6 +475,7 @@
     "pageSize": "Предметов на странице",
     "searchPlaceholder": "Поиск по названию, серийному номеру, артикулу, тегу, заметкам или инвентарному номеру…",
     "selectAll": "Выбрать все видимые",
+    "selectItem": "Выбрать {{name}}",
     "subtitle_one": "{{count}} предмет в этой группе",
     "subtitle_few": "{{count}} предмета в этой группе",
     "subtitle_many": "{{count}} предметов в этой группе",

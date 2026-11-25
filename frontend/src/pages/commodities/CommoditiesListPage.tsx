@@ -104,15 +104,18 @@ import {
   type CommodityTagFilter,
 } from "@/features/commodities/query"
 import {
+  COMMODITIES_PAGE_SIZE,
   COMMODITIES_PAGE_SIZES,
   COMMODITIES_PAGE_SIZE_PARAM,
   commodityHref,
+  commoditiesListPath,
   commoditiesListOptions,
   parsePageSize,
   parseCommoditiesListParams,
   storeCommoditiesPageSize,
   type CommoditiesPageSize,
 } from "@/features/commodities/listContext"
+import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
@@ -129,8 +132,6 @@ import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
-
-const VIEW_MODE_KEY = "commodities:viewMode"
 
 // "grid" is the photo card grid, "compact" the cards with a small
 // thumbnail, "list" the table.
@@ -196,10 +197,11 @@ export function CommoditiesListPage() {
   // back to the user's Preferences default
   // (`appearance.default_items_view`) once it loads. Setting via the
   // toolbar writes to localStorage but NOT to user_preferences, so a
-  // per-session flip stays scoped to one device.
+  // toolbar flip stays scoped to one device. Changing the setting in
+  // Settings drops the flip on the device it is changed on.
   const [storedView, setStoredView] = useState<ViewMode | null>(() => {
     if (typeof window === "undefined") return null
-    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    const raw = localStorage.getItem(COMMODITIES_VIEW_MODE_KEY)
     return isViewMode(raw) ? raw : null
   })
   const settingsQuery = useUserSettings()
@@ -230,6 +232,24 @@ export function CommoditiesListPage() {
   const setSearchParamsRef = useRef(setSearchParams)
   // eslint-disable-next-line react-hooks/refs -- assigning the latest setter is the well-known "always-current ref" pattern; the ref isn't read during render below.
   setSearchParamsRef.current = setSearchParams
+  // The size remembered on this device applies at page 1 of a URL without
+  // one (features/commodities/listContext). Writing it into the URL keeps the
+  // page numbers, and the list context of an item opened from here, the
+  // same on any device and in any tab.
+  const urlPageSize = parsePageSize(searchParams.get(COMMODITIES_PAGE_SIZE_PARAM))
+  useEffect(() => {
+    if (urlPageSize !== undefined || perPage === COMMODITIES_PAGE_SIZE) return
+    // As the backdrop of an open item the list must not navigate.
+    if (!slug || window.location.pathname !== commoditiesListPath(slug)) return
+    setSearchParamsRef.current(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set(COMMODITIES_PAGE_SIZE_PARAM, String(perPage))
+        return next
+      },
+      { replace: true }
+    )
+  }, [urlPageSize, perPage, slug])
   // Re-seed input when URL search param changes (back/forward).
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
@@ -425,7 +445,7 @@ export function CommoditiesListPage() {
   }
   function setViewMode(mode: ViewMode) {
     setStoredView(mode)
-    if (typeof window !== "undefined") localStorage.setItem(VIEW_MODE_KEY, mode)
+    if (typeof window !== "undefined") localStorage.setItem(COMMODITIES_VIEW_MODE_KEY, mode)
     updateParams((p) => p.set("view", mode), { keepPage: true })
   }
   function goToPage(p: number) {
@@ -1418,7 +1438,7 @@ function CommodityGridCard({
             <Checkbox
               checked={selected}
               onCheckedChange={() => onToggleSelected(id)}
-              aria-label={`select ${row.name ?? ""}`}
+              aria-label={t("commodities:list.selectItem", { name: row.name ?? "" })}
               data-testid="commodity-select"
               className="relative z-10 pointer-events-auto"
             />
@@ -1594,7 +1614,7 @@ function CommoditiesTable({
                 <Checkbox
                   checked={selected.has(id)}
                   onCheckedChange={() => onToggleSelected(id)}
-                  aria-label={`select ${row.name ?? ""}`}
+                  aria-label={t("commodities:list.selectItem", { name: row.name ?? "" })}
                   data-testid="commodity-row-select"
                   className="relative z-10 pointer-events-auto"
                 />
