@@ -46,6 +46,8 @@ interface AreaFormDialogProps {
   defaultLocationId?: string
   onSubmit: (values: AreaFormInput) => Promise<unknown>
   isPending?: boolean
+  // Moves the focus when the dialog closes; see LocationFormDialog.
+  onCloseAutoFocus?: (event: Event) => void
 }
 
 export function AreaFormDialog({
@@ -56,6 +58,7 @@ export function AreaFormDialog({
   defaultLocationId,
   onSubmit,
   isPending = false,
+  onCloseAutoFocus,
 }: AreaFormDialogProps) {
   const { t } = useTranslation()
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
@@ -135,7 +138,11 @@ export function AreaFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="area-form-dialog">
+      <DialogContent
+        className="sm:max-w-md"
+        onCloseAutoFocus={onCloseAutoFocus}
+        data-testid="area-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t("locations:areaDialog.editTitle") : t("locations:areaDialog.createTitle")}
