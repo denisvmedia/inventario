@@ -276,6 +276,57 @@ export async function bulkReclassifyFiles(
   return { succeeded, failed }
 }
 
+// The server takes at most this many ids per bulk request.
+const MAX_BULK_FILE_IDS = 100
+
+// What a bulk tag change did to each file: changed its tags, left it as it
+// was because it already had them, or could not change it.
+export interface FileBulkResult {
+  succeeded: string[]
+  skipped: { id: string; name: string }[]
+  failed: { id: string; name: string; error: string }[]
+}
+
+export interface FileBulkTagsChange {
+  /** Tag slugs, or the text of a tag the group does not have yet. */
+  add: string[]
+  /** Tag slugs. */
+  remove: string[]
+}
+
+// Adds tags to and removes tags from the files; tags the change does not
+// name stay on each file. Sends at most 100 ids per request.
+export async function bulkUpdateFileTags(
+  ids: string[],
+  change: FileBulkTagsChange
+): Promise<FileBulkResult> {
+  const tags: NonNullable<Schema<"jsonapi.FileBulkPatch">["tags"]> = {}
+  if (change.add.length > 0) tags.add = change.add
+  if (change.remove.length > 0) tags.remove = change.remove
+  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [] }
+  for (let i = 0; i < ids.length; i += MAX_BULK_FILE_IDS) {
+    const body = await http.post<Schema<"jsonapi.BulkResultResponse">>(`/files/bulk-update`, {
+      data: {
+        type: "files",
+        attributes: { ids: ids.slice(i, i + MAX_BULK_FILE_IDS), patch: { tags } },
+      },
+    })
+    const attrs = body?.data?.attributes
+    merged.succeeded.push(...(attrs?.succeeded ?? []))
+    merged.skipped.push(
+      ...(attrs?.skipped ?? []).map((sk) => ({ id: sk.id ?? "", name: sk.name ?? "" }))
+    )
+    merged.failed.push(
+      ...(attrs?.failed ?? []).map((f) => ({
+        id: f.id ?? "",
+        name: f.name ?? "",
+        error: f.error ?? "",
+      }))
+    )
+  }
+  return merged
+}
+
 interface BulkDeleteEnvelope {
   data?: {
     attributes?: {

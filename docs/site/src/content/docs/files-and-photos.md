@@ -97,8 +97,14 @@ place. From here you can:
 Selecting a file opens its **details** panel on the right. The list keeps its
 search, filters, and page behind the panel, so closing the panel puts you back
 where you were. Tick the checkboxes on the cards (or the list rows) to select
-several at once — a bar appears letting you **Move to…** a different category
-or **Delete selected**.
+several at once — a bar appears letting you **Move to…** a different category,
+change their **Tags…**, or **Delete selected**.
+
+**Tags…** opens two tag lists: under **Add tags**, pick tags or type a new one
+to put on every selected file; under **Remove tags**, pick tags to take off.
+Tags you pick in neither list stay on each file as they are. Files whose tags
+could not be changed stay selected, so you can open **Tags…** again to retry
+just those.
 
 ## Categories and filters
 

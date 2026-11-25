@@ -30,7 +30,7 @@ type CommodityBulkUpdateAttributes struct {
 // Tags are added and removed, never replaced, so tags the patch does not
 // name stay on each item.
 type CommodityBulkPatch struct {
-	Tags *CommodityBulkTagsPatch `json:"tags,omitempty"`
+	Tags *BulkTagsPatch `json:"tags,omitempty"`
 	// Type sets the item type.
 	Type *string `json:"type,omitempty" example:"electronics"`
 	// Status changes the status, with the date and note a single status
@@ -38,10 +38,11 @@ type CommodityBulkPatch struct {
 	Status *CommodityBulkStatusPatch `json:"status,omitempty"`
 }
 
-// CommodityBulkTagsPatch adds and removes tags. Add takes tag slugs or the
-// text of a new tag, which is created as on a single item; Remove takes
-// slugs. A tag cannot be in both lists.
-type CommodityBulkTagsPatch struct {
+// BulkTagsPatch adds and removes tags, on items or on files. Add takes tag
+// slugs or the text of a new tag, which is created as a single edit creates
+// it; Remove takes slugs. A tag cannot be in both lists, and each list holds
+// at most 50 tags.
+type BulkTagsPatch struct {
 	Add    []string `json:"add,omitempty"`
 	Remove []string `json:"remove,omitempty"`
 }

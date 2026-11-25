@@ -57,6 +57,11 @@ bulk](../items/#select-and-change-items-in-bulk).
 2. Type a label and press **Enter** (or comma) to add it; **Backspace** on an empty field removes the last chip. Suggestions here are drawn from your file tags.
 3. Save your changes.
 
+**On several files at once:** select them on the Files page and choose
+**Tags…** in the bar that appears. As for items, you pick tags to add and tags
+to remove, and the files keep their other tags. See [Files &
+photos](../files-and-photos/#the-files-page).
+
 See [Items](../items/) and [Files & photos](../files-and-photos/) for the full add/edit flows.
 
 ## Tag names in any language

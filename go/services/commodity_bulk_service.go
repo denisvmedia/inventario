@@ -190,15 +190,9 @@ func ParseCommodityPatch(ctx context.Context, in CommodityPatchInput) (Commodity
 	var patch CommodityPatch
 	errs := validation.Errors{}
 
-	add, addErr := patchSlugs(in.AddTags)
-	remove, removeErr := patchSlugs(in.RemoveTags)
-	switch {
-	case addErr != nil:
-		errs["tags"] = addErr
-	case removeErr != nil:
-		errs["tags"] = removeErr
-	case slices.ContainsFunc(add, func(s string) bool { return slices.Contains(remove, s) }):
-		errs["tags"] = validation.NewError("tag_added_and_removed", "a tag cannot be both added and removed")
+	add, remove, err := parseTagLists(in.AddTags, in.RemoveTags)
+	if err != nil {
+		errs["tags"] = err
 	}
 	patch.AddTags, patch.RemoveTags, patch.addInput = add, remove, in.AddTags
 
@@ -223,6 +217,42 @@ func ParseCommodityPatch(ctx context.Context, in CommodityPatchInput) (Commodity
 		return CommodityPatch{}, errs
 	}
 	return patch, nil
+}
+
+// parseTagLists checks the add and remove lists of a tag patch and returns
+// them as unique slugs.
+func parseTagLists(addRaw, removeRaw []string) (add, remove []string, err error) {
+	if add, err = patchSlugs(addRaw); err != nil {
+		return nil, nil, err
+	}
+	if remove, err = patchSlugs(removeRaw); err != nil {
+		return nil, nil, err
+	}
+	if slices.ContainsFunc(add, func(s string) bool { return slices.Contains(remove, s) }) {
+		return nil, nil, validation.NewError("tag_added_and_removed", "a tag cannot be both added and removed")
+	}
+	return add, remove, nil
+}
+
+// applyTags removes the tags in remove from tags and appends those in add
+// that are not there yet, keeping the order of the tags already present. It
+// reports whether the list changed.
+func applyTags[S ~[]string](tags S, add, remove []string) (S, bool) {
+	out := make(S, 0, len(tags)+len(add))
+	for _, t := range tags {
+		if !slices.Contains(remove, t) && !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	for _, t := range add {
+		if !slices.Contains(out, t) {
+			out = append(out, t)
+		}
+	}
+	if slices.Equal(out, tags) {
+		return tags, false
+	}
+	return out, true
 }
 
 // patchSlugs normalizes a tag list of a patch into unique slugs. An entry
@@ -293,18 +323,7 @@ func parseStatusChange(in CommodityStatusInput) (*CommodityStatusChange, validat
 func (p CommodityPatch) Apply(c models.Commodity) (models.Commodity, bool) {
 	changed := false
 	if len(p.AddTags) > 0 || len(p.RemoveTags) > 0 {
-		tags := make(models.ValuerSlice[string], 0, len(c.Tags)+len(p.AddTags))
-		for _, t := range c.Tags {
-			if !slices.Contains(p.RemoveTags, t) && !slices.Contains(tags, t) {
-				tags = append(tags, t)
-			}
-		}
-		for _, t := range p.AddTags {
-			if !slices.Contains(tags, t) {
-				tags = append(tags, t)
-			}
-		}
-		if !slices.Equal(tags, c.Tags) {
+		if tags, tagsChanged := applyTags(c.Tags, p.AddTags, p.RemoveTags); tagsChanged {
 			c.Tags = tags
 			changed = true
 		}

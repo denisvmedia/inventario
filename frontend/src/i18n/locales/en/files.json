@@ -31,7 +31,16 @@
     "moveSuccess_one": "{{count}} file re-categorized",
     "moveSuccess_other": "{{count}} files re-categorized",
     "selected_one": "{{count}} selected",
-    "selected_other": "{{count}} selected"
+    "selected_other": "{{count}} selected",
+    "tagsButton": "Tags…",
+    "tagsDescription": "Add tags to the files or remove tags from them. Tags you do not pick stay as they are.",
+    "tagsError": "Could not change the tags.",
+    "tagsPartial": "Tags changed on {{succeeded}}, {{failed}} failed. The failed files stay selected, so you can try again.",
+    "tagsTitle_one": "Edit the tags of {{count}} file",
+    "tagsTitle_other": "Edit the tags of {{count}} files",
+    "tagsUnchanged": "The selected files already had these tags.",
+    "tagsUpdated_one": "Tags changed on {{count}} file.",
+    "tagsUpdated_other": "Tags changed on {{count}} files."
   },
   "categoryAll": "All",
   "categoryDocuments": "Documents",

@@ -1245,6 +1245,17 @@ definitions:
         - unchanged
         type: string
     type: object
+  jsonapi.BulkTagsPatch:
+    properties:
+      add:
+        items:
+          type: string
+        type: array
+      remove:
+        items:
+          type: string
+        type: array
+    type: object
   jsonapi.CommoditiesMeta:
     properties:
       commodities:
@@ -1323,7 +1334,7 @@ definitions:
           Status changes the status, with the date and note a single status
           change records.
       tags:
-        $ref: '#/definitions/jsonapi.CommodityBulkTagsPatch'
+        $ref: '#/definitions/jsonapi.BulkTagsPatch'
       type:
         description: Type sets the item type.
         example: electronics
@@ -1357,17 +1368,6 @@ definitions:
         - written_off
         example: disposed
         type: string
-    type: object
-  jsonapi.CommodityBulkTagsPatch:
-    properties:
-      add:
-        items:
-          type: string
-        type: array
-      remove:
-        items:
-          type: string
-        type: array
     type: object
   jsonapi.CommodityBulkUpdateAttributes:
     properties:
@@ -2461,6 +2461,33 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.ExportsMeta'
+    type: object
+  jsonapi.FileBulkPatch:
+    properties:
+      tags:
+        $ref: '#/definitions/jsonapi.BulkTagsPatch'
+    type: object
+  jsonapi.FileBulkUpdateAttributes:
+    properties:
+      ids:
+        items:
+          type: string
+        type: array
+      patch:
+        $ref: '#/definitions/jsonapi.FileBulkPatch'
+    type: object
+  jsonapi.FileBulkUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.FileBulkUpdateRequestData'
+    type: object
+  jsonapi.FileBulkUpdateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.FileBulkUpdateAttributes'
+      type:
+        example: files
+        type: string
     type: object
   jsonapi.FileCategoryBytes:
     properties:
@@ -9892,6 +9919,42 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Bulk-delete files
+      tags:
+      - files
+  /g/{groupSlug}/files/bulk-update:
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Add tags to and remove tags from the files whose ids (at most 100) the body lists. Each file is saved as PUT /files/{id} saves it.
+        `tags.add` takes slugs or the text of a new tag, which is created as a single edit creates it; `tags.remove` takes slugs.
+        Tags the patch does not name stay on each file. A tag cannot be in both lists, and each list holds at most 50 tags.
+
+        The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: The files and the patch
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.FileBulkUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Per-id outcome
+          schema:
+            $ref: '#/definitions/jsonapi.BulkResultResponse'
+        "422":
+          description: Bad request body or patch
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Bulk-update files
       tags:
       - files
   /g/{groupSlug}/files/category-counts:

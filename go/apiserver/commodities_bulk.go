@@ -55,7 +55,7 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 	if !ok {
 		return
 	}
-	renderBulkOutcome(w, r, api.bulkService.Delete(r.Context(), ids))
+	renderBulkOutcome(w, r, "commodities", api.bulkService.Delete(r.Context(), ids))
 }
 
 // bulkMoveCommodities puts several items into one area.
@@ -90,7 +90,7 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 		return
 	}
 	outcome := api.bulkService.Move(r.Context(), regSet.CommodityRegistry, ids, input.Data.Attributes.AreaID)
-	renderBulkOutcome(w, r, outcome)
+	renderBulkOutcome(w, r, "commodities", outcome)
 }
 
 // bulkUpdateCommodities changes the tags, type or status of several items.
@@ -160,7 +160,7 @@ func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.
 		renderEntityError(w, r, err)
 		return
 	}
-	renderBulkOutcome(w, r, api.bulkService.Update(r.Context(), regSet.CommodityRegistry, ids, patch))
+	renderBulkOutcome(w, r, "commodities", api.bulkService.Update(r.Context(), regSet.CommodityRegistry, ids, patch))
 }
 
 func commodityPatchInput(p *jsonapi.CommodityBulkPatch) services.CommodityPatchInput {
@@ -231,26 +231,28 @@ func resolveCommoditySelection(w http.ResponseWriter, r *http.Request, regSet *r
 	return nil, false
 }
 
-func renderBulkOutcome(w http.ResponseWriter, r *http.Request, outcome services.BulkOutcome) {
+// renderBulkOutcome answers a bulk action on resource (commodities, files)
+// with its outcome per entity.
+func renderBulkOutcome(w http.ResponseWriter, r *http.Request, resource string, outcome services.BulkOutcome) {
 	failed := make([]jsonapi.BulkResultFail, 0, len(outcome.Failed))
 	for _, f := range outcome.Failed {
-		failed = append(failed, bulkResultFail(r.Context(), f))
+		failed = append(failed, bulkResultFail(r.Context(), resource, f))
 	}
 	var skipped []jsonapi.BulkResultSkip
 	for _, s := range outcome.Skipped {
 		skipped = append(skipped, jsonapi.BulkResultSkip{ID: s.ID, Name: s.Name, Reason: "unchanged"})
 	}
-	resp := jsonapi.NewBulkResultResponse("commodities", outcome.Succeeded, failed).WithSkipped(skipped)
+	resp := jsonapi.NewBulkResultResponse(resource, outcome.Succeeded, failed).WithSkipped(skipped)
 	render.Status(r, http.StatusOK)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 	}
 }
 
-// bulkResultFail says why one item of a bulk action failed. A validation
+// bulkResultFail says why one entity of a bulk action failed. A validation
 // message is meant for the user and is passed on; any other error is logged
 // and reported without its internals.
-func bulkResultFail(ctx context.Context, f services.BulkFailure) jsonapi.BulkResultFail {
+func bulkResultFail(ctx context.Context, resource string, f services.BulkFailure) jsonapi.BulkResultFail {
 	out := jsonapi.BulkResultFail{ID: f.ID, Name: f.Name}
 	switch {
 	case errors.Is(f.Err, registry.ErrNotFound):
@@ -259,7 +261,7 @@ func bulkResultFail(ctx context.Context, f services.BulkFailure) jsonapi.BulkRes
 		out.Code, out.Error = "invalid", f.Err.Error()
 	default:
 		out.Code, out.Error = "failed", "could not be changed"
-		slog.WarnContext(ctx, "bulk action: item failed", "commodity_id", f.ID, "err", f.Err)
+		slog.WarnContext(ctx, "bulk action: entity failed", "resource", resource, "id", f.ID, "err", f.Err)
 	}
 	return out
 }

@@ -4,9 +4,9 @@ import { useTranslation } from "react-i18next"
 import { ChevronDown, QrCode, Trash2 } from "lucide-react"
 
 import { BulkResultDialog } from "@/components/items/BulkResultDialog"
-import { BulkTagsDialog, type BulkTagsChange } from "@/components/items/BulkTagsDialog"
 import { BulkTypeDialog } from "@/components/items/BulkTypeDialog"
 import { StatusTransitionDialog } from "@/components/items/StatusTransitionDialog"
+import { BulkTagsDialog, type BulkTagsChange } from "@/components/tags/BulkTagsDialog"
 import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import {
@@ -451,6 +451,7 @@ export function CommodityBulkActions({
       </Dialog>
 
       <BulkTagsDialog
+        kind="commodity"
         open={dialog === "tags"}
         onOpenChange={(open) => {
           if (!open) setDialog(null)

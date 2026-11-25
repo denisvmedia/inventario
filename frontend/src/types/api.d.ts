@@ -6883,6 +6883,66 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/files/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update files
+         * @description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Each file is saved as PUT /files/{id} saves it.
+         *     `tags.add` takes slugs or the text of a new tag, which is created as a single edit creates it; `tags.remove` takes slugs.
+         *     Tags the patch does not name stay on each file. A tag cannot be in both lists, and each list holds at most 50 tags.
+         *
+         *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The files and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.FileBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Bad request body or patch */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files/category-counts": {
         parameters: {
             query?: never;
@@ -12397,6 +12457,10 @@ export type components = {
              */
             reason?: "unchanged";
         };
+        "jsonapi.BulkTagsPatch": {
+            add?: string[];
+            remove?: string[];
+        };
         "jsonapi.CommoditiesMeta": {
             /**
              * Format: int64
@@ -12459,7 +12523,7 @@ export type components = {
              *     change records.
              */
             status?: components["schemas"]["jsonapi.CommodityBulkStatusPatch"];
-            tags?: components["schemas"]["jsonapi.CommodityBulkTagsPatch"];
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
             /**
              * @description Type sets the item type.
              * @example electronics
@@ -12482,10 +12546,6 @@ export type components = {
              * @enum {string}
              */
             value?: "in_use" | "lost" | "disposed" | "written_off";
-        };
-        "jsonapi.CommodityBulkTagsPatch": {
-            add?: string[];
-            remove?: string[];
         };
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
@@ -13248,6 +13308,21 @@ export type components = {
         "jsonapi.ExportsResponse": {
             data?: components["schemas"]["jsonapi.ExportResponseData"][];
             meta?: components["schemas"]["jsonapi.ExportsMeta"];
+        };
+        "jsonapi.FileBulkPatch": {
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
+        };
+        "jsonapi.FileBulkUpdateAttributes": {
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.FileBulkPatch"];
+        };
+        "jsonapi.FileBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.FileBulkUpdateRequestData"];
+        };
+        "jsonapi.FileBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.FileBulkUpdateAttributes"];
+            /** @example files */
+            type?: string;
         };
         "jsonapi.FileCategoryBytes": {
             /**

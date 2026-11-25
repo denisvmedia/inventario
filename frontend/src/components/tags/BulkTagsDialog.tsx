@@ -12,6 +12,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
+import type { TagKind } from "@/features/tags/api"
 
 export interface BulkTagsChange {
   /** Tag slugs, or the text of a tag the group does not have yet. */
@@ -23,14 +24,16 @@ export interface BulkTagsChange {
 export interface BulkTagsDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
-  /** How many items the change applies to. */
+  /** Whose tags change: items ("commodity") or files. */
+  kind: TagKind
+  /** How many items or files the change applies to. */
   count: number
   onSubmit: (change: BulkTagsChange) => Promise<void>
   isPending?: boolean
 }
 
-// Adds tags to and removes tags from several items. Tags the user picks in
-// neither palette stay on each item as they are; a tag cannot be in both.
+// Adds tags to and removes tags from several items or files. Tags the user
+// picks in neither palette stay on each as they are; a tag cannot be in both.
 export function BulkTagsDialog(props: BulkTagsDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -40,7 +43,13 @@ export function BulkTagsDialog(props: BulkTagsDialogProps) {
   )
 }
 
-function BulkTagsForm({ onOpenChange, count, onSubmit, isPending = false }: BulkTagsDialogProps) {
+function BulkTagsForm({
+  onOpenChange,
+  kind,
+  count,
+  onSubmit,
+  isPending = false,
+}: BulkTagsDialogProps) {
   const { t } = useTranslation()
   const [add, setAdd] = useState<string[]>([])
   const [remove, setRemove] = useState<string[]>([])
@@ -58,8 +67,16 @@ function BulkTagsForm({ onOpenChange, count, onSubmit, isPending = false }: Bulk
   return (
     <DialogContent className="sm:max-w-lg" data-testid="bulk-tags-dialog">
       <DialogHeader>
-        <DialogTitle>{t("commodities:bulk.tagsTitle", { count })}</DialogTitle>
-        <DialogDescription>{t("commodities:bulk.tagsDescription")}</DialogDescription>
+        <DialogTitle>
+          {kind === "file"
+            ? t("files:bulk.tagsTitle", { count })
+            : t("commodities:bulk.tagsTitle", { count })}
+        </DialogTitle>
+        <DialogDescription>
+          {kind === "file"
+            ? t("files:bulk.tagsDescription")
+            : t("commodities:bulk.tagsDescription")}
+        </DialogDescription>
       </DialogHeader>
       <form
         className="flex flex-col gap-4"
@@ -70,9 +87,9 @@ function BulkTagsForm({ onOpenChange, count, onSubmit, isPending = false }: Bulk
         }}
       >
         <div className="flex flex-col gap-1.5">
-          <Label htmlFor="bulk-tags-add-input">{t("commodities:bulk.tagsAdd")}</Label>
+          <Label htmlFor="bulk-tags-add-input">{t("tags:bulkEdit.add")}</Label>
           <TagPalette
-            kind="commodity"
+            kind={kind}
             values={add}
             onChange={changeAdd}
             inputId="bulk-tags-add-input"
@@ -80,11 +97,9 @@ function BulkTagsForm({ onOpenChange, count, onSubmit, isPending = false }: Bulk
           />
         </div>
         <div className="flex flex-col gap-1.5">
-          <span className="text-sm leading-none font-medium">
-            {t("commodities:bulk.tagsRemove")}
-          </span>
+          <span className="text-sm leading-none font-medium">{t("tags:bulkEdit.remove")}</span>
           <TagPalette
-            kind="commodity"
+            kind={kind}
             values={remove}
             onChange={changeRemove}
             inputId="bulk-tags-remove-input"
@@ -101,7 +116,7 @@ function BulkTagsForm({ onOpenChange, count, onSubmit, isPending = false }: Bulk
             disabled={isPending || (add.length === 0 && remove.length === 0)}
             data-testid="bulk-tags-confirm"
           >
-            {t("commodities:bulk.tagsConfirm")}
+            {t("tags:bulkEdit.confirm")}
           </Button>
         </DialogFooter>
       </form>

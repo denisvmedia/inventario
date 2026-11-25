@@ -225,6 +225,96 @@ test.describe('Files page', () => {
     ])
   })
 
+  test('bulk tags: adds a tag to the selected files and removes it again (#2798)', async ({ page }) => {
+    // Two uploads with a per-run suffix; `?q=<suffix>` narrows the list to
+    // them whatever else the shared database holds.
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const names = [`e2e-bulktags-a-${suffix}.jpg`, `e2e-bulktags-b-${suffix}.jpg`]
+    const tagLabel = `Bulk ${suffix}`
+    const tagSlug = `bulk-${suffix}`
+    const fixtureBuffer = fs.readFileSync(path.join('fixtures', 'files', 'image.jpg'))
+
+    await gotoFiles(page)
+    for (const name of names) {
+      await page.getByTestId('files-upload-cta').click()
+      await page.getByTestId('files-upload-input').setInputFiles({
+        name,
+        mimeType: 'image/jpeg',
+        buffer: fixtureBuffer,
+      })
+      await page.getByTestId('files-upload-next').click()
+      await Promise.all([
+        page.waitForResponse(
+          (resp) => resp.url().includes('/uploads/file') && resp.request().method() === 'POST',
+          { timeout: 30000 },
+        ),
+        page.getByTestId('files-upload-start').click(),
+      ])
+      await page.getByTestId('files-upload-close').click()
+      await expect(page.getByTestId('files-upload-dialog')).toBeHidden()
+    }
+
+    await navigateWithAuth(page, `/files?view=grid&q=${encodeURIComponent(suffix)}`)
+    const cards = page.locator('[data-testid^="file-card-"][data-category]')
+    await expect(cards).toHaveCount(2, { timeout: 15000 })
+    const selectAll = async () => {
+      for (const card of await cards.all()) {
+        await card.getByTestId(/file-card-checkbox-/).click()
+      }
+    }
+
+    // Add a new tag to both.
+    await selectAll()
+    const bar = page.getByTestId('files-bulk-bar')
+    await bar.getByTestId('files-bulk-tags').click()
+    const dialog = page.getByTestId('bulk-tags-dialog')
+    await expect(dialog).toContainText('Edit the tags of 2 files')
+    await dialog.getByTestId('bulk-tags-add-input').fill(tagLabel)
+    await dialog.getByTestId('bulk-tags-add-input').press('Enter')
+    const [added] = await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.url().includes('/files/bulk-update') && resp.request().method() === 'POST',
+        { timeout: 30000 },
+      ),
+      dialog.getByTestId('bulk-tags-confirm').click(),
+    ])
+    expect(added.status()).toBe(200)
+    const addedBody = (await added.json()) as { data: { attributes: { succeeded: string[] } } }
+    expect(addedBody.data.attributes.succeeded).toHaveLength(2)
+    await expect(dialog).toBeHidden()
+    await expect(bar).toBeHidden()
+
+    // Both files now carry the tag: the tag filter lists them.
+    await navigateWithAuth(page, `/files?view=grid&tags=${encodeURIComponent(tagSlug)}`)
+    await expect(cards).toHaveCount(2, { timeout: 15000 })
+
+    // Remove it again, then move both files to Trash.
+    await selectAll()
+    await bar.getByTestId('files-bulk-tags').click()
+    await dialog.getByTestId(`bulk-tags-remove-option-${tagSlug}`).click()
+    const [removed] = await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.url().includes('/files/bulk-update') && resp.request().method() === 'POST',
+        { timeout: 30000 },
+      ),
+      dialog.getByTestId('bulk-tags-confirm').click(),
+    ])
+    expect(removed.status()).toBe(200)
+    await expect(cards).toHaveCount(0, { timeout: 15000 })
+
+    await navigateWithAuth(page, `/files?view=grid&q=${encodeURIComponent(suffix)}`)
+    await expect(cards).toHaveCount(2, { timeout: 15000 })
+    await selectAll()
+    await bar.getByTestId('files-bulk-delete').click()
+    await Promise.all([
+      page.waitForResponse(
+        (resp) => resp.url().includes('/files/bulk-delete') && resp.request().method() === 'POST',
+        { timeout: 15000 },
+      ),
+      page.getByTestId('confirm-accept').click(),
+    ])
+  })
+
   test('per-category filter narrows the visible cards by category', async ({ page }) => {
     // This proves the BE /files?category=… filter wires through end
     // to end: an uploaded image must surface on All + Images tiles

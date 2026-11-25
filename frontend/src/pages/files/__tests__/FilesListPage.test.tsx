@@ -1,9 +1,11 @@
-import { beforeEach, describe, expect, it } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
+// test/setup.ts mocks sonner with one spy per variant.
+import { toast } from "sonner"
 
 import { FilesListPage } from "@/pages/files/FilesListPage"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -252,6 +254,79 @@ describe("<FilesListPage />", () => {
     await user.selectOptions(moveSelect, "documents")
     // After bulk move, selection is cleared and the bar disappears.
     await waitFor(() => expect(screen.queryByTestId("files-bulk-bar")).not.toBeInTheDocument())
+  })
+
+  it("adds and removes tags on the selected files without replacing the others", async () => {
+    const user = userEvent.setup()
+    vi.mocked(toast.success).mockClear()
+    const requests: unknown[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1"), fileRow("f2")]),
+      ...fileHandlers.counts(SLUG, { all: 2, images: 2 }),
+      ...tagHandlers.list(SLUG, [
+        { id: "t1", slug: "receipt", label: "Receipt", color: "blue" },
+        { id: "t2", slug: "old", label: "Old", color: "muted" },
+      ]),
+      ...fileHandlers.bulkUpdate(SLUG, { onRequest: (a) => requests.push(a) })
+    )
+    renderPage()
+    await screen.findByTestId("file-row-f2")
+    await user.click(screen.getAllByLabelText(/select file f1/i)[0])
+    await user.click(screen.getAllByLabelText(/select file f2/i)[0])
+    await user.click(await screen.findByTestId("files-bulk-tags"))
+
+    const dialog = await screen.findByTestId("bulk-tags-dialog")
+    expect(within(dialog).getByText("Edit the tags of 2 files")).toBeInTheDocument()
+    await user.click(await within(dialog).findByTestId("bulk-tags-add-option-receipt"))
+    await user.type(within(dialog).getByTestId("bulk-tags-add-input"), "Tax 2026{Enter}")
+    await user.click(within(dialog).getByTestId("bulk-tags-remove-option-old"))
+    expect(await axe(dialog)).toHaveNoViolations()
+    await user.click(within(dialog).getByTestId("bulk-tags-confirm"))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0]).toEqual({
+      ids: ["f1", "f2"],
+      patch: { tags: { add: ["receipt", "Tax 2026"], remove: ["old"] } },
+    })
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("Tags changed on 2 files.", undefined)
+    )
+    await waitFor(() => expect(screen.queryByTestId("files-bulk-bar")).not.toBeInTheDocument())
+  })
+
+  it("keeps the files whose tags could not change selected for a retry", async () => {
+    const user = userEvent.setup()
+    vi.mocked(toast.warning).mockClear()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1"), fileRow("f2")]),
+      ...fileHandlers.counts(SLUG, { all: 2, images: 2 }),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "receipt", label: "Receipt", color: "blue" }]),
+      ...fileHandlers.bulkUpdate(SLUG, {
+        respond: () => ({
+          succeeded: ["f1"],
+          failed: [{ id: "f2", name: "File f2", code: "failed", error: "could not be changed" }],
+        }),
+      })
+    )
+    renderPage()
+    await screen.findByTestId("file-row-f2")
+    await user.click(screen.getAllByLabelText(/select file f1/i)[0])
+    await user.click(screen.getAllByLabelText(/select file f2/i)[0])
+    await user.click(await screen.findByTestId("files-bulk-tags"))
+    const dialog = await screen.findByTestId("bulk-tags-dialog")
+    await user.click(await within(dialog).findByTestId("bulk-tags-add-option-receipt"))
+    await user.click(within(dialog).getByTestId("bulk-tags-confirm"))
+
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith(
+        "Tags changed on 1, 1 failed. The failed files stay selected, so you can try again.",
+        undefined
+      )
+    )
+    const bar = await screen.findByTestId("files-bulk-bar")
+    expect(within(bar).getByText("1 selected")).toBeInTheDocument()
   })
 
   it("reflects the active tag filter from the URL on the matching pill", async () => {

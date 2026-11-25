@@ -37,6 +37,7 @@ type filesAPI struct {
 	trashService       *services.TrashService
 	fileSigningService *services.FileSigningService
 	tagService         *services.TagService
+	bulkService        *services.FileBulkService
 	linkService        *services.FileLinkService
 	factorySet         *registry.FactorySet
 	thumbnailConfig    services.ThumbnailGenerationConfig
@@ -845,12 +846,14 @@ func (api *filesAPI) bulkDeleteFiles(w http.ResponseWriter, r *http.Request) {
 
 func Files(params Params) func(r chi.Router) {
 	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
+	tagService := services.NewTagService(params.FactorySet)
 	api := &filesAPI{
 		uploadLocation:     params.UploadLocation,
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		trashService:       services.NewTrashService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
-		tagService:         services.NewTagService(params.FactorySet),
+		tagService:         tagService,
+		bulkService:        services.NewFileBulkService(tagService),
 		linkService:        services.NewFileLinkService(params.FactorySet),
 		factorySet:         params.FactorySet,
 		thumbnailConfig:    params.ThumbnailConfig,
@@ -866,6 +869,7 @@ func Files(params Params) func(r chi.Router) {
 		// Bulk endpoint (#1330 PR 5.5). Mounted before `/{fileID}` so chi
 		// routes `/bulk-delete` here rather than treating the slug as an id.
 		r.Post("/bulk-delete", api.bulkDeleteFiles) // POST /files/bulk-delete
+		r.Post("/bulk-update", api.bulkUpdateFiles) // POST /files/bulk-update
 		r.Route("/{fileID}", func(r chi.Router) {
 			r.Get("/", api.apiGetFile)                   // GET /files/123
 			r.Put("/", api.updateFile)                   // PUT /files/123

@@ -421,6 +421,13 @@ func TestAPITokens_ReadOnlyTokenCannotWrite(t *testing.T) {
 				"patch": map[string]any{"type": "electronics"},
 			},
 		}}},
+		{http.MethodPost, "/files/bulk-update", map[string]any{"data": map[string]any{
+			"type": "files",
+			"attributes": map[string]any{
+				"ids":   []string{"any"},
+				"patch": map[string]any{"tags": map[string]any{"add": []string{"receipt"}}},
+			},
+		}}},
 	}
 	for _, w := range writes {
 		rr := env.withToken(tok.Secret, w.method, env.groupPath(env.group, w.path), w.body)

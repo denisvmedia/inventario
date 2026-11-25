@@ -34,7 +34,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
   contract with the number of items it was seen to match, and refuses with 409
   when that number changed; `bulk-move` and `bulk-delete` take the same
   selection, and all three answer with the items that changed, were skipped as
-  unchanged, or failed with a reason. A query may select up to 500 items
+  unchanged, or failed with a reason. A query may select up to 500 items. The
+  Files page's bulk bar gains **Tags…**, which adds and removes tags on the
+  selected files the same way, through the new `POST /files/bulk-update`
   ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).
 
 - Item photos large enough to recognize an item by. The items list opens on

@@ -5904,6 +5904,53 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/files/bulk-update": {
+            "post": {
+                "description": "Add tags to and remove tags from the files whose ids (at most 100) the body lists. Each file is saved as PUT /files/{id} saves it.\n` + "`" + `tags.add` + "`" + ` takes slugs or the text of a new tag, which is created as a single edit creates it; ` + "`" + `tags.remove` + "`" + ` takes slugs.\nTags the patch does not name stay on each file. A tag cannot be in both lists, and each list holds at most 50 tags.\n\nThe response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "files"
+                ],
+                "summary": "Bulk-update files",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The files and the patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.FileBulkUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body or patch",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/files/category-counts": {
             "get": {
                 "description": "Per-category file counts, respecting the same filters as GET /files",
@@ -11811,6 +11858,23 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.BulkTagsPatch": {
+            "type": "object",
+            "properties": {
+                "add": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "remove": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
         "jsonapi.CommoditiesMeta": {
             "type": "object",
             "properties": {
@@ -11910,7 +11974,7 @@ const docTemplate = `{
                     ]
                 },
                 "tags": {
-                    "$ref": "#/definitions/jsonapi.CommodityBulkTagsPatch"
+                    "$ref": "#/definitions/jsonapi.BulkTagsPatch"
                 },
                 "type": {
                     "description": "Type sets the item type.",
@@ -11957,23 +12021,6 @@ const docTemplate = `{
                         "written_off"
                     ],
                     "example": "disposed"
-                }
-            }
-        },
-        "jsonapi.CommodityBulkTagsPatch": {
-            "type": "object",
-            "properties": {
-                "add": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
-                },
-                "remove": {
-                    "type": "array",
-                    "items": {
-                        "type": "string"
-                    }
                 }
             }
         },
@@ -13473,6 +13520,48 @@ const docTemplate = `{
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.ExportsMeta"
+                }
+            }
+        },
+        "jsonapi.FileBulkPatch": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "$ref": "#/definitions/jsonapi.BulkTagsPatch"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateAttributes": {
+            "type": "object",
+            "properties": {
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "patch": {
+                    "$ref": "#/definitions/jsonapi.FileBulkPatch"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.FileBulkUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.FileBulkUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.FileBulkUpdateAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "files"
                 }
             }
         },
