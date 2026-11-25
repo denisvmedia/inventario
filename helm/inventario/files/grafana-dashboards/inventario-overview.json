@@ -15,6 +15,21 @@
         "query": "prometheus",
         "current": { "text": "Prometheus", "value": "inventario-prometheus" },
         "hide": 0
+      },
+      {
+        "name": "job",
+        "label": "Job",
+        "description": "The scrape jobs that report Inventario's metrics. The compose stack names its job inventario; under the Prometheus Operator the job is named after the Service or the PodMonitor. Used by the \"Scrape target up\" panel.",
+        "type": "query",
+        "datasource": { "type": "prometheus", "uid": "${datasource}" },
+        "definition": "label_values(inventario_http_requests_in_flight, job)",
+        "query": { "query": "label_values(inventario_http_requests_in_flight, job)", "refId": "job" },
+        "refresh": 2,
+        "sort": 1,
+        "multi": true,
+        "includeAll": true,
+        "current": { "text": "All", "value": "$__all" },
+        "hide": 2
       }
     ]
   },
@@ -213,7 +228,7 @@
       },
       "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background", "graphMode": "none", "textMode": "value_and_name", "orientation": "horizontal" },
       "targets": [
-        { "refId": "A", "expr": "up{job=\"inventario\"}", "legendFormat": "{{instance}}" }
+        { "refId": "A", "expr": "up{job=~\"$job\"}", "legendFormat": "{{instance}}" }
       ]
     }
   ]
