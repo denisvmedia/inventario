@@ -110,6 +110,8 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
+import type { Seller } from "@/features/sellers/api"
+import { useSellers } from "@/features/sellers/hooks"
 import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -266,6 +268,7 @@ export function CommoditiesListPage() {
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
   const tagCounts = useCommodityTagCounts(listOptions, { enabled: enabled && tagMenuOpen })
   const areas = useAreas({ enabled })
+  const sellers = useSellers()
   // Locations populate the create-dialog's Location → Area paired
   // selects. The schema only carries area_id; location_id is UI-only.
   const locationsQuery = useLocations({ enabled })
@@ -362,6 +365,9 @@ export function CommoditiesListPage() {
   }
   function setAreaFilter(id: string) {
     updateQuery({ areaId: id })
+  }
+  function toggleSeller(id: string) {
+    updateQuery({ sellerIds: toggled(query.sellerIds, id) })
   }
   function toggleWarranty(status: CommodityWarrantyStatus) {
     updateQuery({ warrantyStatuses: toggled(query.warrantyStatuses, status) })
@@ -534,10 +540,13 @@ export function CommoditiesListPage() {
           sortDesc={sortDesc}
           viewMode={viewMode}
           areas={areas.data ?? []}
+          sellerIds={query.sellerIds}
+          sellers={sellers.data ?? []}
           hasFilters={hasFilters}
           onToggleType={toggleType}
           onToggleStatus={toggleStatus}
           onSetArea={setAreaFilter}
+          onToggleSeller={toggleSeller}
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
           onToggleUnassigned={toggleUnassigned}
@@ -687,10 +696,13 @@ interface ToolbarProps {
   sortDesc: boolean
   viewMode: ViewMode
   areas: { id?: string; name?: string }[]
+  sellerIds: string[]
+  sellers: Seller[]
   hasFilters: boolean
   onToggleType: (t: CommodityTypeValue) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
+  onToggleSeller: (id: string) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
   onToggleUnassigned: () => void
@@ -824,6 +836,56 @@ function Toolbar(props: ToolbarProps) {
           </DropdownMenuRadioGroup>
         </DropdownMenuContent>
       </DropdownMenu>
+
+      {/* Shown once the group has a seller, or while the URL filters by
+          one (a deleted seller's link), so the filter can be cleared. */}
+      {props.sellers.length > 0 || props.sellerIds.length > 0 ? (
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button
+              variant={props.sellerIds.length > 0 ? "default" : "outline"}
+              size="sm"
+              className="gap-1.5"
+              data-testid="commodities-filter-seller"
+            >
+              <ListFilter className="size-3.5" aria-hidden="true" />
+              {t("commodities:filter.seller")}
+              {props.sellerIds.length > 0 ? (
+                <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-xs">
+                  {props.sellerIds.length}
+                </Badge>
+              ) : null}
+              <ChevronDown className="size-3.5" aria-hidden="true" />
+            </Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="start" className="max-h-80 w-56 overflow-y-auto">
+            <DropdownMenuLabel>{t("commodities:filter.seller")}</DropdownMenuLabel>
+            <DropdownMenuSeparator />
+            {props.sellers.map((s) => (
+              <DropdownMenuCheckboxItem
+                key={s.id}
+                checked={props.sellerIds.includes(s.id)}
+                onCheckedChange={() => props.onToggleSeller(s.id)}
+              >
+                <span className="truncate">{s.name}</span>
+              </DropdownMenuCheckboxItem>
+            ))}
+            {props.sellerIds
+              .filter((id) => !props.sellers.some((s) => s.id === id))
+              .map((id) => (
+                <DropdownMenuCheckboxItem
+                  key={id}
+                  checked
+                  onCheckedChange={() => props.onToggleSeller(id)}
+                >
+                  <span className="truncate italic text-muted-foreground">
+                    {t("commodities:filter.sellerUnknown")}
+                  </span>
+                </DropdownMenuCheckboxItem>
+              ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
+      ) : null}
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

@@ -19,7 +19,7 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"product line. Do NOT collapse them into one and do NOT pick just one — enumerate EVERY product on the document.\n" +
 	"EXCLUDE non-product lines: subtotals, taxes/VAT, shipping/postage, discounts, vouchers, fees, deposits, and totals.\n" +
 	"For each product, from a receipt/invoice read its own purchase price, currency, and purchase date; " +
-	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
+	"put the seller/vendor/store name into \"seller\", not into \"comments\".\n" +
 	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
 	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
 	"Put the manufacturer's name into \"brand\" and the model name or number, as printed on the product, label, or document, into \"model\"; " +
@@ -87,7 +87,7 @@ func ResponseSchema() map[string]any {
 	// fieldGuessStringMax mirrors fieldGuessString but caps the value
 	// length, steering the model toward the form's limit (the FE still
 	// truncates defensively). Used for short_name (40 chars) and for the
-	// brand and model (100 each).
+	// brand, the model and the seller (100 each).
 	fieldGuessStringMax := func(maxLen int) map[string]any {
 		return map[string]any{
 			"type": "object",
@@ -132,6 +132,7 @@ func ResponseSchema() map[string]any {
 		FieldNameShortName:             fieldGuessStringMax(40),
 		FieldNameBrand:                 fieldGuessStringMax(100),
 		FieldNameModel:                 fieldGuessStringMax(100),
+		FieldNameSeller:                fieldGuessStringMax(100),
 		FieldNameType:                  fieldGuessEnum(commodityTypes),
 		FieldNameOriginalPrice:         fieldGuessNumber,
 		FieldNameOriginalPriceCurrency: fieldGuessString,

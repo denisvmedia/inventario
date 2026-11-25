@@ -639,8 +639,8 @@ func TestINBRestore_RejectsOversizedManifest(t *testing.T) {
 	signer := testSigner(c)
 	f := newInbFixture(c)
 
-	// A syntactically valid manifest padded past the 4 MiB pre-scan cap.
-	manifest := `{"version":"4.0","pad":"` + strings.Repeat("A", 5<<20) + `"}`
+	// A syntactically valid manifest padded past the 32 MiB pre-scan cap.
+	manifest := `{"version":"4.0","pad":"` + strings.Repeat("A", 33<<20) + `"}`
 	key := versionGateArchive(c, f, signer, manifest)
 
 	final, err := restoreInb(c, f, signer, key)

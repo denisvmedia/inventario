@@ -50,6 +50,7 @@ export type ScanFieldName =
   | "short_name"
   | "brand"
   | "model"
+  | "seller"
   | "type"
   | "original_price"
   | "original_price_currency"
@@ -65,6 +66,7 @@ export interface ScanResultFields {
   short_name?: ScanFieldGuess<string>
   brand?: ScanFieldGuess<string>
   model?: ScanFieldGuess<string>
+  seller?: ScanFieldGuess<string>
   type?: ScanFieldGuess<string>
   original_price?: ScanFieldGuess<number>
   original_price_currency?: ScanFieldGuess<string>
@@ -209,6 +211,7 @@ function assignField(
     case "short_name":
     case "brand":
     case "model":
+    case "seller":
     case "type":
     case "original_price_currency":
     case "serial_number":

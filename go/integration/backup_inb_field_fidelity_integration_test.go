@@ -103,6 +103,10 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c.Assert(restored.ShortName, qt.Equals, srcReloaded.ShortName)
 	c.Assert(restored.Brand, qt.Equals, "Leica")
 	c.Assert(restored.Model, qt.Equals, "M6 TTL")
+	// full_replace keeps the group's sellers, so the item points at the same
+	// seller again (format 3.3).
+	c.Assert(restored.SellerID, qt.IsNotNil, qt.Commentf("seller must round-trip"))
+	c.Assert(*restored.SellerID, qt.Equals, *srcReloaded.SellerID)
 	c.Assert(restored.Type, qt.Equals, srcReloaded.Type)
 	c.Assert(restored.Count, qt.Equals, srcReloaded.Count)
 	c.Assert(restored.SerialNumber, qt.Equals, srcReloaded.SerialNumber)
@@ -194,6 +198,9 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 		LocationID:               loc.ID,
 	}))
 
+	sellerReg := must.Must(fs.SellerRegistryFactory.CreateUserRegistry(uctx))
+	seller := must.Must(sellerReg.Create(uctx, models.Seller{Name: "Camera Shop", Website: "https://camera.example"}))
+
 	comReg := must.Must(fs.CommodityRegistryFactory.CreateUserRegistry(uctx))
 	salePrice := decimal.RequireFromString("120.00")
 	// Acquisition pair (#202) is server-managed; the source row gets it the same
@@ -211,6 +218,7 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 		ShortName:                "camera",
 		Brand:                    "Leica",
 		Model:                    "M6 TTL",
+		SellerID:                 &seller.ID,
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   new(area.ID),
 		Count:                    1,

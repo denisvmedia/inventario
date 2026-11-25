@@ -3076,6 +3076,16 @@
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by seller ID; repeat for several (OR)",
+                        "name": "seller_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms",
                         "name": "q",
@@ -3591,6 +3601,16 @@
                         "type": "boolean",
                         "description": "Only commodities with no area",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by seller ID; repeat for several (OR)",
+                        "name": "seller_id",
                         "in": "query"
                     },
                     {
@@ -7275,6 +7295,16 @@
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Commodities only: filter by seller ID; repeat for several (OR)",
+                        "name": "seller_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
                         "description": "Commodities only: include drafts and non-in_use items (default true; false hides them)",
                         "name": "include_inactive",
@@ -7324,6 +7354,243 @@
                     },
                     "400": {
                         "description": "Missing q, unsupported parameter or invalid value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/sellers": {
+            "get": {
+                "description": "The sellers of the group sorted by name, each with the number of items bought from it (drafts and inactive items included, items in Trash left out).",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "sellers"
+                ],
+                "summary": "List sellers",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Keep sellers whose name contains this text, ignoring case",
+                        "name": "q",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellersResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The name is required and unique in the group, ignoring case and runs of spaces. The website, when set, is an absolute http(s) URL.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "sellers"
+                ],
+                "summary": "Create a seller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Seller object",
+                        "name": "seller",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellerRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Seller created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellerResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Another seller of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/sellers/{sellerID}": {
+            "get": {
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "sellers"
+                ],
+                "summary": "Get a seller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Seller ID",
+                        "name": "sellerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellerResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Seller not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the seller. The items bought from it are kept and no longer name a seller.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "sellers"
+                ],
+                "summary": "Delete a seller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Seller ID",
+                        "name": "sellerID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "Seller not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Attributes left out keep their value. The merged seller is validated as on create.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "sellers"
+                ],
+                "summary": "Update a seller",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Seller ID",
+                        "name": "sellerID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Seller patch",
+                        "name": "seller",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellerUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.SellerResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Seller not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Another seller of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -14798,6 +15065,182 @@
                 }
             }
         },
+        "jsonapi.SellerRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SellerRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SellerRequestData": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "string",
+                    "example": "orders@hardware.example"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Hardware Store"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "website": {
+                    "type": "string",
+                    "example": "https://hardware.example"
+                }
+            }
+        },
+        "jsonapi.SellerRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SellerRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "sellers"
+                    ],
+                    "example": "sellers"
+                }
+            }
+        },
+        "jsonapi.SellerResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SellerResponseData"
+                }
+            }
+        },
+        "jsonapi.SellerResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SellerView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "sellers"
+                    ],
+                    "example": "sellers"
+                }
+            }
+        },
+        "jsonapi.SellerUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.SellerUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.SellerUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "website": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SellerUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.SellerUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "sellers"
+                    ],
+                    "example": "sellers"
+                }
+            }
+        },
+        "jsonapi.SellerView": {
+            "type": "object",
+            "properties": {
+                "contact": {
+                    "description": "Contact is free text: an email address, a phone number, a person.",
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "name": {
+                    "description": "Name is the seller as shown on items and in the sellers list.",
+                    "type": "string"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                },
+                "website": {
+                    "description": "Website is an absolute http(s) URL, or empty.",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.SellersMeta": {
+            "type": "object",
+            "properties": {
+                "sellers": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 12
+                }
+            }
+        },
+        "jsonapi.SellersResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.SellerResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.SellersMeta"
+                }
+            }
+        },
         "jsonapi.ServiceCommodityRef": {
             "type": "object",
             "properties": {
@@ -15830,6 +16273,10 @@
                 "sale_price": {
                     "description": "SalePrice is the realised proceeds for a `sold` transition. NULL\nfor any other status. Stored in the commodity's original purchase\ncurrency — sale-side currency reporting is out of scope for #1611.",
                     "type": "number"
+                },
+                "seller_id": {
+                    "description": "SellerID is the seller the item was bought from (#2804), or nil.\nDeleting the seller leaves the item without one. The seller must be in\nthe item's group: the postgres registry looks it up under the group's\nrow-level security before every write, since the foreign key alone\nwould accept a seller of any group.",
+                    "type": "string"
                 },
                 "serial_number": {
                     "type": "string"

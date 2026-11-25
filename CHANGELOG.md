@@ -21,6 +21,22 @@ the section matching the tag and publishes it as the GitHub Release body. See
   them (format 3.2; a 3.1 archive restores with them empty)
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 
+- Sellers. A group keeps the shops and people it buys from, each with a name
+  (unique in the group, ignoring case and extra spaces), a website, a contact
+  and a note, on a new Sellers page that counts the items bought from each
+  and links to them. An item names its seller in the Purchase step and the
+  edit form, where "New seller" creates one without leaving the form. The
+  items list filters by one or more sellers (`seller_id` on
+  `GET /commodities`), the item page and the insurance reports show the
+  seller, and deleting a seller keeps its items without a seller. The item
+  History records a change of seller. AI scan fills the seller when the group
+  has one with the name it read and otherwise offers to create it, instead of
+  writing the name into the comments; a draft from the public landing page,
+  which has no group yet, still gets the seller in its comments. Backups
+  carry the sellers (format 3.3) and a restore links items to the group's
+  sellers by name, creating the missing ones
+  ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
 - Bulk edits on the items list. The bulk-action bar has an Edit menu that adds
   and removes tags (an item keeps the tags the change does not name), sets the
   type, and changes the status with the same date and note dialog as a single

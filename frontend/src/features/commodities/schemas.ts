@@ -134,6 +134,8 @@ const baseCommoditySchema = z
     // location, and an item can be left unassigned (#1986). Edit mode
     // still exposes the picker but never requires it.
     area_id: z.string(),
+    // The seller the item was bought from (#2804), "" for none.
+    seller_id: z.string(),
     status: z.string().min(1, STATUS_REQUIRED),
     count: z.string().refine((v) => /^\d+$/.test(v) && Number(v) >= 1, { message: COUNT_MIN }),
     original_price: optionalPriceString,

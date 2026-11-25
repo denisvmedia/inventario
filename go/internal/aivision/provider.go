@@ -224,10 +224,14 @@ type FieldName = string
 // keeping the set in one place catches typos at compile time when the
 // service marshals.
 const (
-	FieldNameName                  FieldName = "name"
-	FieldNameShortName             FieldName = "short_name"
-	FieldNameBrand                 FieldName = "brand"
-	FieldNameModel                 FieldName = "model"
+	FieldNameName      FieldName = "name"
+	FieldNameShortName FieldName = "short_name"
+	FieldNameBrand     FieldName = "brand"
+	FieldNameModel     FieldName = "model"
+	// FieldNameSeller is the shop or person the item was bought from, read
+	// from a receipt or invoice. The FE matches it to the group's sellers
+	// by name.
+	FieldNameSeller                FieldName = "seller"
 	FieldNameType                  FieldName = "type"
 	FieldNameOriginalPrice         FieldName = "original_price"
 	FieldNameOriginalPriceCurrency FieldName = "original_price_currency"
@@ -251,6 +255,7 @@ var AllFieldNames = []FieldName{
 	FieldNameShortName,
 	FieldNameBrand,
 	FieldNameModel,
+	FieldNameSeller,
 	FieldNameType,
 	FieldNameOriginalPrice,
 	FieldNameOriginalPriceCurrency,

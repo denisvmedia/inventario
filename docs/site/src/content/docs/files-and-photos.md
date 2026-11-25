@@ -278,7 +278,7 @@ item dialog.
    well, and so does a receipt or invoice PDF.
 3. Click **Scan files**. AI reads them — you can **Cancel** while it works.
 4. On **Review extracted details**, each field (name, brand, model, type,
-   price, serial number, purchase date, warranty expiry, tags, and more) shows
+   price, serial number, purchase date, seller, warranty expiry, tags, and more) shows
    what AI found, with a confidence label. Untick anything that looks wrong.
 5. Click **Use these values** to pre-fill the form, then finish and save the
    item as usual.
@@ -290,8 +290,10 @@ A few things to know:
 - If AI finds **more than one product** (for example, on a multi-item receipt),
   it asks you to **Choose which item to add** and pre-fills that one — you can
   add the others separately afterwards.
-- When a receipt or invoice is read, the seller's name is put into the item's
-  **comments** (there's no separate seller field).
+- When a receipt or invoice names the seller, the item names your group's
+  seller with that name. If your group has no such seller, the **Purchase**
+  step offers to create it; nothing is created until you agree (see
+  [Sellers read by AI](../sellers/#sellers-read-by-ai)).
 - If a price's currency isn't on the server's supported list, it won't be
   pre-filled, and the review step tells you so.
 - Scanning is **rate-limited** to keep usage fair, so you may occasionally be

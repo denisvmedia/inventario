@@ -48,6 +48,7 @@ type commoditiesAPI struct {
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
+// @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
 // @Param tags query []string false "Only items with these tag slugs (comma-separated or repeated); see tag_mode" collectionFormat(multi)
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
@@ -147,6 +148,7 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 // @Param status query []string false "Filter by status, as for GET /commodities" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area"
+// @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true)"
 // @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Warranty expires strictly before YYYY-MM-DD"
@@ -378,6 +380,11 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		commodity.Tags = models.ValuerSlice[string](slugs)
 	}
 
+	if err := validateCommoditySeller(r.Context(), registrySet.SellerRegistry, commodity.SellerID); err != nil {
+		renderSellerWriteError(w, r, err)
+		return
+	}
+
 	// Use standardized registry access
 	commodityReg := registrySet.CommodityRegistry
 
@@ -524,6 +531,11 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 			renderQuantityBumpBlockers(w, r, blockers)
 			return
 		}
+	}
+
+	if err := validateCommoditySeller(r.Context(), registrySet.SellerRegistry, updateData.SellerID); err != nil {
+		renderSellerWriteError(w, r, err)
+		return
 	}
 
 	// Use UpdateWithUser to ensure proper user context and validation

@@ -141,6 +141,7 @@ export function buildDefaults(
     model: initial?.model ?? "",
     type: (initial?.type as string) ?? "",
     area_id: initial?.area_id ?? "",
+    seller_id: initial?.seller_id ?? "",
     status: (initial?.status as string) ?? "in_use",
     count: initial?.count !== undefined ? String(initial.count) : "1",
     original_price: priceToFormValue(initial?.original_price),
@@ -198,6 +199,9 @@ export function toRequest(
     // (#1986) rather than rejecting "" as a missing area FK. An explicit
     // clear in edit mode (area_id = "") therefore un-assigns the item.
     area_id: values.area_id || undefined,
+    // Omitted when empty, which the BE stores as no seller, so clearing the
+    // picker unlinks the seller.
+    seller_id: values.seller_id || undefined,
     status: values.status as CommodityStatusValue,
     count: Number(values.count),
     original_price: formValueToPrice(values.original_price),

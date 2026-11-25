@@ -36,7 +36,14 @@ package export
 //
 // 3.2 adds an item's brand and model (INBCommodity.Brand and .Model), both
 // optional. A 3.1 reader restores a 3.2 archive without them.
-const INBFormatVersion = "3.2"
+//
+// 3.3 adds the group's sellers to the manifest (INBManifest.Sellers) and the
+// seller an item was bought from (INBCommodity.SellerID), both optional. The
+// sellers ride in the manifest because it is the first member, so a restore
+// knows them before the first item names one, and because a new top-level
+// member would reach an older reader's location handler. A 3.2 reader
+// restores a 3.3 archive without sellers.
+const INBFormatVersion = "3.3"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -118,8 +125,22 @@ type INBManifest struct {
 	// area-linked or standalone file (then the member is absent entirely).
 	// Restore keys off member names, so a 2.0 archive without this field
 	// round-trips unchanged.
-	FilesFile  string           `json:"filesFile,omitempty"`
+	FilesFile string `json:"filesFile,omitempty"`
+	// Sellers are the group's sellers (format 3.3): every seller in a
+	// whole-group export, and the sellers the exported items name in a
+	// selected-items export. Omitted when there is none.
+	Sellers    []INBSeller      `json:"sellers,omitempty"`
 	Statistics INBManifestStats `json:"statistics"`
+}
+
+// INBSeller is a seller keyed by its immutable UUID, which
+// INBCommodity.SellerID refers to.
+type INBSeller struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Website string `json:"website,omitempty"`
+	Contact string `json:"contact,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 // INBSignatureInfo records the signing algorithm + the public key (base64) and
@@ -194,6 +215,7 @@ type INBCommodity struct {
 	ShortName              string   `json:"shortName,omitempty"`
 	Brand                  string   `json:"brand,omitempty"`
 	Model                  string   `json:"model,omitempty"`
+	SellerID               string   `json:"sellerId,omitempty"`
 	Type                   string   `json:"type,omitempty"`
 	AreaID                 string   `json:"areaId"`
 	Count                  int      `json:"count"`

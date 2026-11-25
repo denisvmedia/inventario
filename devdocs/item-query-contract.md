@@ -32,6 +32,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `status` | repeatable, a known status | Item status is one of the values. |
 | `area_id` | area id | Item is in that area. |
 | `unassigned` | `true`/`false` | Item has no area. Ignored when `area_id` is set. |
+| `seller_id` | seller ids, repeatable, at most 50 | Item was bought from one of the sellers. An id no seller of the group has matches nothing, so a link to a deleted seller lists no items instead of failing. |
 | `include_inactive` | `true`/`false`, default `true` | `false` hides drafts and, unless `status` is set, items that are not in use. |
 | `warranty_status` | repeatable: `active`, `expiring`, `expired`, `none` | Computed warranty status is one of the values. |
 | `warranty_expires_before` | `YYYY-MM-DD` | Warranty ends before that day. |
@@ -123,6 +124,7 @@ The items list page keeps its query in the page URL under names that predate the
 | `type`, `status` (repeated) | `type`, `status` |
 | `area` | `area_id` |
 | `unassigned=1` | `unassigned=true` |
+| `seller` (repeated) | `seller_id` |
 | `inactive=1` | `include_inactive=true`; absent sends `include_inactive=false` |
 | `warranty` (repeated) | `warranty_status` |
 | `lent_out=1` | `lent_out=true` |
@@ -139,7 +141,7 @@ Filter values are kept as written when the page URL is parsed, so a value the se
 
 The item page walks the list it was opened from (`?from=`) through `features/commodities/listContext.ts`, which parses that list URL with `parseCommodityQuery` too, so the page and the walk ask the same question under the same query key.
 
-The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items. For the same reason the links that open the list for one tag (`commodityTagHref`, used on the item page and the Tags page) and the item page's area and type links carry `inactive=1`: the tag's usage count includes inactive items, and the item the link sits on may be inactive itself. A tag pill on an item card in the list is different: it adds the tag to the list's current query with `withIncludedTag`, keeping every other condition.
+The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items. For the same reason the links that open the list for one tag (`commodityTagHref`, used on the item page and the Tags page) or one seller (`commoditySellerHref`, used on the item page and the Sellers page) and the item page's area and type links carry `inactive=1`: the usage count of a tag or a seller includes inactive items, and the item the link sits on may be inactive itself. A tag pill on an item card in the list is different: it adds the tag to the list's current query with `withIncludedTag`, keeping every other condition.
 
 ## Bulk actions on a query
 
