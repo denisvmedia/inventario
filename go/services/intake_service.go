@@ -482,13 +482,20 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 
 // finishCandidate marks a product left out as skipped, or makes the draft
 // of a kept product that has none, and counts the outcome in result.
+//
+// A rescan of the source can replace the products while the call runs: the
+// rescan is refused once a product has a draft, but it can land between the
+// read of the products and the making of a draft. A product that is gone
+// when its outcome is stored is left out of result, and the draft this call
+// made for it is discarded: the new scan offers the product again, and
+// keeping the draft would give it a second one.
 func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.IntakeRegistry, set *registry.Set, input intakeDraftInput,
 	cand *models.IntakeCandidate, files []*models.FileEntity, result *IntakeDraftsResult,
 ) error {
 	if !cand.Selected && cand.Outcome != models.IntakeCandidateCreated {
 		if cand.Outcome != models.IntakeCandidateSkipped {
 			if _, err := reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateSkipped, nil, ""); err != nil {
-				return err
+				return ignoreReplaced(err)
 			}
 		}
 		result.Skipped++
@@ -497,22 +504,42 @@ func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.Intake
 	if !cand.IsUnfinished() {
 		return nil
 	}
-	draftID, failure, err := s.createDraft(ctx, set, input, cand, files)
+	made, err := s.createDraft(ctx, set, input, cand, files)
 	if err != nil {
 		return err
 	}
-	if failure != "" {
-		if _, err := reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateFailed, nil, failure); err != nil {
-			return err
+	if made.failure != "" {
+		if _, err := reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateFailed, nil, made.failure); err != nil {
+			return ignoreReplaced(err)
 		}
 		result.Failed++
 		return nil
 	}
-	if _, err := reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateCreated, &draftID, ""); err != nil {
+	_, err = reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateCreated, &made.id, "")
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		if !made.created {
+			// Another call made the draft and discards it in turn.
+			return nil
+		}
+		if err := s.drafts.Discard(ctx, made.id); err != nil && !errors.Is(err, registry.ErrDraftPromoted) {
+			return errxtrace.Wrap("failed to discard the draft of a replaced product", err)
+		}
+		return nil
+	case err != nil:
 		return err
 	}
 	result.Created++
 	return nil
+}
+
+// ignoreReplaced drops the not-found error of a product that a rescan
+// replaced since it was read.
+func ignoreReplaced(err error) error {
+	if errors.Is(err, registry.ErrNotFound) {
+		return nil
+	}
+	return err
 }
 
 // Error codes of a product whose draft could not be made.
@@ -525,23 +552,32 @@ const (
 	IntakeDraftInvalid = "invalid_values"
 )
 
+// madeDraft is what createDraft did for a candidate.
+type madeDraft struct {
+	id string
+	// created reports that this call stored the draft.
+	created bool
+	// failure is the code of a problem with this candidate only.
+	failure string
+}
+
 // createDraft makes or finds the draft of a candidate and links the source
 // files to it. It returns a failure code for a problem with this candidate
 // only, and an error for one that stops the whole call.
-func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, cand *models.IntakeCandidate, files []*models.FileEntity) (draftID, failure string, err error) {
+func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, cand *models.IntakeCandidate, files []*models.FileEntity) (madeDraft, error) {
 	values, err := intakeDraftValues(ctx, input, cand)
 	if err != nil {
-		return "", "", err
+		return madeDraft{}, err
 	}
-	draft, _, err := s.drafts.Create(ctx, cand.DraftClientKey(), values)
+	draft, created, err := s.drafts.Create(ctx, cand.DraftClientKey(), values)
 	switch {
 	case errors.Is(err, registry.ErrDraftDiscarded):
-		return "", IntakeDraftDiscarded, nil
+		return madeDraft{failure: IntakeDraftDiscarded}, nil
 	case err != nil:
 		if _, ok := errors.AsType[validation.Errors](err); ok {
-			return "", IntakeDraftInvalid, nil
+			return madeDraft{failure: IntakeDraftInvalid}, nil
 		}
-		return "", "", err
+		return madeDraft{}, err
 	}
 	for _, file := range files {
 		meta := models.DefaultFileLinkMeta(models.FileLinkDraft, file.Category)
@@ -552,18 +588,18 @@ func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, inpu
 			// The draft became an item on another device after an earlier
 			// attempt made it; the item gets the file instead.
 			if linkErr := s.linkToPromoted(ctx, set, draft.ID, file); linkErr != nil {
-				return "", "", linkErr
+				return madeDraft{}, linkErr
 			}
 		case errors.Is(attachErr, registry.ErrDraftDiscarded):
-			return "", IntakeDraftDiscarded, nil
+			return madeDraft{failure: IntakeDraftDiscarded}, nil
 		case errors.Is(attachErr, registry.ErrNotFound):
 			// The file was deleted since the scan; the draft goes on
 			// without it.
 		default:
-			return "", "", attachErr
+			return madeDraft{}, attachErr
 		}
 	}
-	return draft.ID, "", nil
+	return madeDraft{id: draft.ID, created: created}, nil
 }
 
 func (s *IntakeService) linkToPromoted(ctx context.Context, set *registry.Set, draftID string, file *models.FileEntity) error {
