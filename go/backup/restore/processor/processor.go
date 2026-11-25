@@ -41,7 +41,7 @@ import (
 const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
-	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
+	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member; the export checks the drafts document against the same limit (backup/export defaultMaxJSONDocBytes)
 	// The manifest carries the group's sellers (format 3.3) and item types
 	// (3.4), so it gets the same room as any other JSON document.
 	maxInbManifestBytes = maxJSONDocBytes
@@ -849,8 +849,9 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
 	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
-		// fileUUID is empty for bytes that arrived before any reference
-		// could use them; they were dropped with a counted error.
+		// fileUUID is empty, in a dry run only, for bytes that arrived
+		// before any reference could use them; they were dropped with a
+		// counted error.
 		return nil
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
@@ -994,13 +995,19 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	pending, ok := w.fileRefs[hdr.Name]
 	if !ok {
 		// A file member with no matching reference is rejected — restoring it
-		// would create an orphan blob with no owning row. It still counts as
-		// delivered: the document that referenced it first may have failed
-		// (an item that did not validate, or any item in a dry run), and a
-		// later reference to the same file must not fail the whole restore
-		// as a missing member.
+		// would create an orphan blob with no owning row.
 		_, _ = io.Copy(io.Discard, r)
-		w.delivered[hdr.Name] = ""
+		if w.options.DryRun {
+			// A dry run of a full replace restores no item, so the bytes of
+			// an item's file match no reference. They still count as
+			// delivered there, so a later reference to the same file (a
+			// draft's) does not fail the run as a missing member. A real
+			// restore leaves them out: a later reference then waits for
+			// bytes that never come and fails the restore with
+			// ErrMissingFileMembers, rather than restoring that entity
+			// without its file.
+			w.delivered[hdr.Name] = ""
+		}
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file member %s has no matching reference", hdr.Name))
 		return nil

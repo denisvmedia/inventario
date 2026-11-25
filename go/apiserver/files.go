@@ -612,21 +612,22 @@ func renderFileLinkError(w http.ResponseWriter, r *http.Request, err error) {
 // to" list. Each entity is read once through the caller's group-scoped
 // registries; an entity that cannot be read keeps an empty name. A link to an
 // item in Trash is left out: the item is hidden everywhere until it is
-// restored, and the link comes back with it.
+// restored, and the link comes back with it. So is a link to a draft that is
+// no longer open: a discard has begun and removes the link when it finishes.
 func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*models.FileEntity) {
 	if registrySet == nil {
 		return
 	}
 	names := map[string]string{}
-	trashed := map[string]bool{}
+	hidden := map[string]bool{}
 	lookup := func(entityType, entityID string) string {
 		key := entityType + "/" + entityID
 		if name, ok := names[key]; ok {
 			return name
 		}
-		name, inTrash := linkEntityName(ctx, registrySet, entityType, entityID)
-		if inTrash {
-			trashed[key] = true
+		name, hide := linkEntityName(ctx, registrySet, entityType, entityID)
+		if hide {
+			hidden[key] = true
 		}
 		names[key] = name
 		return name
@@ -638,7 +639,7 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		kept := f.Links[:0]
 		for _, l := range f.Links {
 			l.EntityName = lookup(l.EntityType, l.EntityID)
-			if trashed[l.EntityType+"/"+l.EntityID] {
+			if hidden[l.EntityType+"/"+l.EntityID] {
 				continue
 			}
 			kept = append(kept, l)
@@ -647,9 +648,10 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 	}
 }
 
-// linkEntityName reads the display name of a link's entity. inTrash reports
-// an item that is in Trash; its name stays empty.
-func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, entityID string) (name string, inTrash bool) {
+// linkEntityName reads the display name of a link's entity. hidden reports an
+// item in Trash or a draft that is not open; its name stays empty, so a
+// draft being discarded is never named.
+func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, entityID string) (name string, hidden bool) {
 	switch entityType {
 	case models.FileLinkCommodity:
 		c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
@@ -673,6 +675,9 @@ func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, 
 			return "", false
 		}
 		if d, err := registrySet.CommodityDraftRegistry.Get(ctx, entityID); err == nil {
+			if !d.IsOpen() {
+				return "", true
+			}
 			return d.Values.Title(), false
 		}
 	}

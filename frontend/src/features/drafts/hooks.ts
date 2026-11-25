@@ -63,7 +63,7 @@ export function useDraftFiles(id: string | null | undefined) {
 }
 
 // useInvalidateDrafts refreshes the draft list and details, and the file
-// lists, which show draft files as standalone files.
+// lists, which name the draft each file is attached to.
 export function useInvalidateDrafts() {
   const qc = useQueryClient()
   const slug = useSlug()

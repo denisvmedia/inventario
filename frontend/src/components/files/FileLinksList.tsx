@@ -5,7 +5,7 @@ import { Box, FilePen, MapPin, Package, X } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { ordinaryLinks, type FileEntity, type FileLink } from "@/features/files/api"
 import { useDetachFile } from "@/features/files/hooks"
-import { useLinkTypeLabel } from "@/features/files/labels"
+import { useLinkName, useLinkTypeLabel } from "@/features/files/labels"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 
@@ -47,14 +47,16 @@ export interface FileLinksListProps {
 }
 
 // FileLinksList is the "Linked to" list of the file detail sheet: every item,
-// location and area the file is attached to, each with a link to its page and
-// a "Remove attachment" action. Removing an attachment never deletes the file;
+// location, area and open draft the file is attached to, each with a link to
+// its page (a draft's opens it in the Add item dialog) and a "Remove
+// attachment" action. Removing an attachment never deletes the file;
 // after the last one it stays as a standalone file on the Files page.
 export function FileLinksList({ file }: FileLinksListProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const { currentGroup } = useCurrentGroup()
   const typeLabel = useLinkTypeLabel()
+  const linkName = useLinkName()
   const detach = useDetachFile()
   const links = ordinaryLinks(file)
   const slug = currentGroup?.slug ?? ""
@@ -69,7 +71,7 @@ export function FileLinksList({ file }: FileLinksListProps) {
 
   async function remove(link: FileLink) {
     if (!link.id) return
-    const name = link.entity_name || typeLabel(link.entity_type)
+    const name = linkName(link)
     try {
       const updated = await detach.mutateAsync({ fileId: file.id, linkId: link.id })
       const left = ordinaryLinks(updated).length
@@ -89,7 +91,7 @@ export function FileLinksList({ file }: FileLinksListProps) {
   return (
     <ul className="flex flex-col gap-1" data-testid="file-links">
       {links.map((link) => {
-        const name = link.entity_name || typeLabel(link.entity_type)
+        const name = linkName(link)
         const path = entityPath(slug, link)
         return (
           <li
@@ -98,7 +100,10 @@ export function FileLinksList({ file }: FileLinksListProps) {
             data-testid={`file-link-${link.entity_type}-${link.entity_id}`}
           >
             <LinkIcon entityType={link.entity_type} />
-            <span className="sr-only">{typeLabel(link.entity_type)}:</span>
+            {link.entity_type !== "draft" && (
+              // A draft's name already says what it is.
+              <span className="sr-only">{typeLabel(link.entity_type)}:</span>
+            )}
             {path ? (
               <Link to={path} className="min-w-0 truncate underline-offset-4 hover:underline">
                 {name}
@@ -135,13 +140,13 @@ export function FileLinksList({ file }: FileLinksListProps) {
 // where the user wants to take it off one entity only.
 export function useDeleteFileDescription(): (file: FileEntity, title: string) => string {
   const { t } = useTranslation()
-  const typeLabel = useLinkTypeLabel()
+  const linkName = useLinkName()
   return (file, title) => {
     const links = ordinaryLinks(file)
     if (links.length === 0) {
       return t("files:detail.deleteConfirm.description", { title })
     }
-    const names = links.map((l) => l.entity_name || typeLabel(l.entity_type)).join(", ")
+    const names = links.map(linkName).join(", ")
     return t("files:detail.deleteConfirm.descriptionLinked", {
       title,
       names,

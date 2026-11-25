@@ -515,6 +515,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2806 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` models a file with several attachments.
 
+#### 2026-11-25 — Files name the draft they are saved with
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) "Attached to" names an item, a location or an area; the mock has no drafts.
+- **Reality**: A link to an open draft reads "Draft: {name}" ("Draft" when the draft has no name) everywhere a file's attachments are named: the "Linked to" list of `FileLinksList.tsx`, where it has the `FilePen` icon and links to `/commodities/new?draft={id}`, the summary on file cards, list rows and the Attach existing file dialog, the Files tab of the Trash, and the Delete confirmation. The label comes from `useLinkName` in `frontend/src/features/files/labels.ts`. The server leaves out a link to a draft being discarded, so such a file reads "Not attached to anything" until the discard finishes.
+- **Why**: not present in mock. A file saved with a draft is in the Files list; naming the draft lets the user find and continue it, and tells them that deleting the file takes it off the draft. The "Draft:" prefix keeps a draft from being taken for an item of the same name. Showing the draft rather than "Not attached to anything" is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the label agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws draft attachments.
+
 #### 2026-11-25 — "Attach an existing file" on the item Files tab and the location/area files panel
 
 - **Issue/PR**: #2806 / PR #2827

@@ -24,7 +24,7 @@ Before `prepareRestore` runs — i.e. before a `full_replace` wipes anything —
 
 ### Linked-entity resolution
 
-Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`) or, for a draft, through the drafts the walker restored; a standalone file resolves to no link at all (#2235), and so does a link to a draft the walker did not recreate. A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
+Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`) or, for a draft, through the drafts the walker restored; a standalone file resolves to no link at all (#2235), and so does a link to a draft the walker did not recreate. A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. A link to a draft is the exception: when the archive does not carry the draft, or the walker kept the group's draft with that client key, the link is dropped without an error, and a file with no other link is restored as a standalone file. A draft that fails to restore counts one error of its own, and its links are dropped the same way. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
 
 ## Key Features
 

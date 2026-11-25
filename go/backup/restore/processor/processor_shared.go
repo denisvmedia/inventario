@@ -507,8 +507,12 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 
 // clearDrafts deletes every draft of the group, open, promoted or being
 // discarded, and the links of files to them. The files themselves are left
-// to the sweep that follows. RLS-scoped registry, as for the locations.
+// to the sweep that follows. RLS-scoped registry, as for the locations. A
+// factory set without a draft registry has no drafts to delete.
 func (l *RestoreOperationProcessor) clearDrafts(ctx context.Context, fileReg registry.FileRegistry) error {
+	if l.factorySet.CommodityDraftRegistryFactory == nil {
+		return nil
+	}
 	draftReg, err := l.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create user draft registry for clear", err)

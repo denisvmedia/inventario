@@ -255,6 +255,7 @@
     "titleWithName": "Připojit existující soubor k {{name}}"
   },
   "links": {
+    "draftName": "Koncept: {{name}}",
     "remove": "Odebrat přílohu z {{name}}",
     "removed": "Odebráno z {{name}}",
     "removedLast": "Odebráno z {{name}}. Soubor zůstává na stránce Soubory.",
