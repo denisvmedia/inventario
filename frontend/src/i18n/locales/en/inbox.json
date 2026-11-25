@@ -1,4 +1,5 @@
 {
+  "continueLabel": "Continue: {{title}}",
   "dashboard": {
     "title": "Needs attention: {{total}}"
   },
@@ -9,7 +10,7 @@
   },
   "itemDraftHint": "Check its details, then mark it as reviewed.",
   "markReviewed": "Mark as reviewed",
-  "markReviewedLabel": "Mark {{title}} as reviewed",
+  "markReviewedLabel": "Mark as reviewed: {{title}}",
   "missing": {
     "description": "Optional checks. An unknown detail does not make an item unfinished, so these lists stay out of the inbox and its count.",
     "noLocation": "Items without a location",
@@ -25,6 +26,8 @@
   },
   "reviewed": "“{{title}}” marked as reviewed",
   "reviewFailed": "The item could not be marked as reviewed.",
+  "sidebarCount_one": "{{count}} needs attention",
+  "sidebarCount_other": "{{count}} need attention",
   "subtitle": "Unfinished work in this group. Each entry says why it is here and offers the step that clears it.",
   "summary": {
     "drafts_one": "{{count}} draft to finish",

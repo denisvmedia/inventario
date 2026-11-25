@@ -1,4 +1,4 @@
-import { http, HttpResponse } from "msw"
+import { http, HttpResponse, type JsonBodyType } from "msw"
 
 import { apiUrl } from "."
 
@@ -23,8 +23,9 @@ export interface FakeInboxBackend {
   entries: FakeInboxEntry[]
   // Ids of the items whose review was completed, in order.
   reviewed: string[]
-  // When set, PUT /commodities/{id} answers with this status.
-  failReview: number | null
+  // When set, PUT /commodities/{id} answers with this status and body; see
+  // refusedReview for the server's 422.
+  failReview: { status: number; body: JsonBodyType } | null
   // How many times GET /inbox/count was served.
   countCalls: number
   handlers: ReturnType<typeof http.get>[]
@@ -44,6 +45,38 @@ export function draft(id: string, title: string, extra: Partial<FakeInboxEntry> 
 
 export function itemDraft(id: string, title: string, extra: Partial<FakeInboxEntry> = {}) {
   return { kind: "commodity", id, title, reasons: ["item_draft"], updated_at: null, ...extra }
+}
+
+// refusedReview is the server's answer to a review of an item priced in
+// another currency without an amount in the group currency: a 422 with the
+// tree of field errors and codes, and no detail or title.
+export function refusedReview(): { status: number; body: JsonBodyType } {
+  return {
+    status: 422,
+    body: {
+      errors: [
+        {
+          status: "Unprocessable Entity",
+          error: {
+            error: {
+              data: {
+                attributes: {
+                  original_price:
+                    "if original price is not in the group currency, converted original price or current price must be set",
+                },
+              },
+            },
+            errorCodes: {
+              data: {
+                attributes: { original_price: { code: "validation_no_price_in_group_currency" } },
+              },
+            },
+            type: "validation.Errors",
+          },
+        },
+      ],
+    },
+  }
 }
 
 function counts(entries: FakeInboxEntry[]) {
@@ -101,10 +134,7 @@ export function backend(slug: string, seed: FakeInboxEntry[] = []): FakeInboxBac
     }),
     http.put(apiUrl(`${base}/commodities/:id`), async ({ params, request }) => {
       if (state.failReview !== null) {
-        return HttpResponse.json(
-          { errors: [{ status: String(state.failReview), detail: "Name is required" }] },
-          { status: state.failReview }
-        )
+        return HttpResponse.json(state.failReview.body, { status: state.failReview.status })
       }
       const id = String(params.id)
       const item = items.get(id)

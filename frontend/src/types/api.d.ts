@@ -7818,7 +7818,9 @@ export type paths = {
          *     most recently saved first, items most recently added first. meta.entries counts
          *     the entries the reason filter keeps; meta.counts describes the whole inbox and
          *     counts each record once in total, whatever its number of reasons. Every member of
-         *     the group can read it.
+         *     the group can read it. When a member who can edit items reads it, the draft
+         *     discards that stopped more than ten minutes ago are finished first, as for
+         *     GET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.
          */
         get: {
             parameters: {
@@ -7879,7 +7881,8 @@ export type paths = {
          * @description How many records of the group need attention, for the sidebar and the dashboard.
          *     total counts each record once, whatever its number of reasons; reasons counts,
          *     per reason, the records that have it. The counts cover only what the group holds,
-         *     so they agree with GET /g/{groupSlug}/inbox.
+         *     so they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished
+         *     first, as for GET /g/{groupSlug}/inbox.
          */
         get: {
             parameters: {

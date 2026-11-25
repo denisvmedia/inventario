@@ -10,16 +10,7 @@ import { inboxKeys } from "@/features/inbox/keys"
 import { tagKeys } from "@/features/tags/keys"
 import { useInvalidateTrash } from "@/features/trash/hooks"
 
-import {
-  discardDraft,
-  getDraft,
-  listDraftFiles,
-  listDrafts,
-  promoteDraft,
-  type Draft,
-  type DraftListOptions,
-  type DraftsPage,
-} from "./api"
+import { discardDraft, getDraft, listDraftFiles, promoteDraft, type Draft } from "./api"
 import { draftKeys } from "./keys"
 
 // The current group's slug, or "" outside a group. The item dialog also
@@ -27,16 +18,6 @@ import { draftKeys } from "./keys"
 // optional context and stay disabled without a slug.
 function useSlug(): string {
   return useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
-}
-
-export function useDrafts(opts: DraftListOptions = {}) {
-  const slug = useSlug()
-  return useQuery<DraftsPage>({
-    queryKey: draftKeys.list(slug, opts),
-    queryFn: ({ signal }) => listDrafts(opts, signal),
-    enabled: !!slug,
-    placeholderData: (prev) => prev,
-  })
 }
 
 // useDraft reads one draft. Always fetched fresh: another device may have

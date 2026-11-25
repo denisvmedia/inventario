@@ -1,4 +1,5 @@
 {
+  "continueLabel": "Pokračovat: {{title}}",
   "dashboard": {
     "title": "Vyžaduje pozornost: {{total}}"
   },
@@ -8,8 +9,8 @@
     "title": "Nic nevyžaduje pozornost"
   },
   "itemDraftHint": "Zkontrolujte její údaje a označte ji jako zkontrolovanou.",
-  "markReviewed": "Označit jako zkontrolované",
-  "markReviewedLabel": "Označit {{title}} jako zkontrolované",
+  "markReviewed": "Označit jako zkontrolovanou",
+  "markReviewedLabel": "Označit jako zkontrolovanou: {{title}}",
   "missing": {
     "description": "Volitelné kontroly. Neznámý údaj neznamená, že položka není dokončená, proto tyto seznamy nejsou součástí schránky ani jejího počtu.",
     "noLocation": "Položky bez umístění",
@@ -25,6 +26,10 @@
   },
   "reviewed": "„{{title}}“ označeno jako zkontrolované",
   "reviewFailed": "Položku se nepodařilo označit jako zkontrolovanou.",
+  "sidebarCount_few": "{{count}} vyžadují pozornost",
+  "sidebarCount_many": "{{count}} vyžaduje pozornost",
+  "sidebarCount_one": "{{count}} vyžaduje pozornost",
+  "sidebarCount_other": "{{count}} vyžaduje pozornost",
   "subtitle": "Nedokončená práce v této skupině. U každé položky je uvedeno, proč tu je, a krok, který ji vyřeší.",
   "summary": {
     "drafts_one": "{{count}} koncept k dokončení",

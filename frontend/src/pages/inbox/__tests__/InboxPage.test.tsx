@@ -131,6 +131,38 @@ describe("<InboxPage />", () => {
     expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (3)")
   })
 
+  it("shows no rows of the previous tab while the new tab loads", async () => {
+    seed()
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async ({ request }) => {
+        if (new URL(request.url).searchParams.get("reason") === "item_draft") {
+          await delay("infinite")
+        }
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId("inbox-row-draft-d1")
+    await user.click(screen.getByTestId("inbox-tab-item_draft"))
+    const panel = screen.getByRole("tabpanel")
+    expect(within(panel).getByTestId("inbox-loading")).toBeInTheDocument()
+    expect(within(panel).queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument()
+    expect(within(panel).queryByTestId("inbox-resume-d1")).not.toBeInTheDocument()
+    // The tabs keep their counts meanwhile.
+    expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (3)")
+  })
+
+  it("names the record in the label of each row action", async () => {
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("inbox-resume-d1")).toHaveAccessibleName(
+      "Continue: Cordless drill"
+    )
+    expect(screen.getByTestId("inbox-resume-d2")).toHaveAccessibleName("Continue: Untitled draft")
+    expect(screen.getByTestId("inbox-review-c1")).toHaveAccessibleName("Mark as reviewed: Bike")
+  })
+
   it("opens on the tab the address names", async () => {
     seed()
     renderPage(`/g/${SLUG}/inbox?reason=draft`)
@@ -184,16 +216,62 @@ describe("<InboxPage />", () => {
 
   it("says why an item could not be marked as reviewed", async () => {
     const fake = seed()
-    fake.failReview = 422
+    fake.failReview = inboxHandlers.refusedReview()
     const user = userEvent.setup()
     renderPage()
     await user.click(await screen.findByTestId("inbox-review-c1"))
     await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
-    expect(toastSpies.error).toHaveBeenCalledWith(
-      expect.any(String),
-      expect.objectContaining({ action: expect.objectContaining({ label: "Open item" }) })
-    )
+    expect(toastSpies.error).toHaveBeenCalledWith("The item could not be marked as reviewed.", {
+      description:
+        "Enter at least one of converted price or current value so the item is reportable in group currency.",
+      action: expect.objectContaining({ label: "Open item" }),
+    })
     expect(screen.getByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+  })
+
+  it("names the field and the rule the server refused", async () => {
+    const fake = seed()
+    fake.failReview = {
+      status: 422,
+      body: {
+        errors: [
+          {
+            status: "Unprocessable Entity",
+            error: {
+              error: { data: { attributes: { count: "must be no less than 1" } } },
+              errorCodes: {
+                data: {
+                  attributes: {
+                    count: {
+                      code: "validation_min_greater_equal_than_required",
+                      params: { threshold: 1 },
+                    },
+                  },
+                },
+              },
+              type: "validation.Errors",
+            },
+          },
+        ],
+      },
+    }
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-c1"))
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
+    expect(toastSpies.error.mock.calls[0]![1]).toMatchObject({
+      description: "Quantity must be at least 1.",
+    })
+  })
+
+  it("falls back to the server's message when the refusal names no field", async () => {
+    const fake = seed()
+    fake.failReview = { status: 409, body: { errors: [{ status: "409", detail: "Busy" }] } }
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-c1"))
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
+    expect(toastSpies.error.mock.calls[0]![0]).toBe("Busy")
   })
 
   it("opens an item over the inbox", async () => {

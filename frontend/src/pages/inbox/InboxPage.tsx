@@ -38,7 +38,8 @@ import {
   type InboxEntry,
   type InboxReason,
 } from "@/features/inbox/api"
-import { useInbox, useSetItemDraft } from "@/features/inbox/hooks"
+import { useInbox, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
+import { reviewRefusal } from "@/features/inbox/reviewRefusal"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatRelative } from "@/lib/intl"
@@ -83,8 +84,10 @@ export function InboxPage() {
     perPage: PER_PAGE,
   })
   // Every page carries the counts of the whole inbox, so the tabs read
-  // them from the page on screen.
-  const counts = inbox.data?.counts
+  // them from the page on screen. While the page of a newly selected tab
+  // loads there is none, so the tabs keep the sidebar's count.
+  const count = useInboxCount()
+  const counts = inbox.data?.counts ?? count.data
 
   function setReason(next: string) {
     const params = new URLSearchParams(searchParams)
@@ -344,6 +347,7 @@ function DraftRow({ entry, slug, canWrite }: RowProps) {
               variant="outline"
               size="sm"
               onClick={resume}
+              aria-label={t("inbox:continueLabel", { title })}
               data-testid={`inbox-resume-${entry.id}`}
             >
               {t("commodities:drafts.resume")}
@@ -390,9 +394,10 @@ function ItemRow({ entry, slug, canWrite }: RowProps) {
     try {
       await setDraft.mutateAsync({ id: entry.id, draft: false })
     } catch (err) {
-      toast.error(parseServerError(err, t("inbox:reviewFailed")), {
-        action: { label: t("inbox:openItem"), onClick: openItem },
-      })
+      const action = { label: t("inbox:openItem"), onClick: openItem }
+      const problems = reviewRefusal(t, err)
+      if (problems) toast.error(t("inbox:reviewFailed"), { description: problems, action })
+      else toast.error(parseServerError(err, t("inbox:reviewFailed")), { action })
       return
     }
     toast.success(t("inbox:reviewed", { title }), {

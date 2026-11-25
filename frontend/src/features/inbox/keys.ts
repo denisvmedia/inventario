@@ -21,3 +21,14 @@ export const inboxKeys = {
     [...inboxKeys.all(slug), "list", listKeySuffix(opts)] as const,
   count: (slug: string) => [...inboxKeys.all(slug), "count"] as const,
 }
+
+// sameInboxList reports whether two list keys name pages of the same list:
+// the same group and reason, whatever the page.
+export function sameInboxList(a: readonly unknown[], b: readonly unknown[]): boolean {
+  const strip = (key: readonly unknown[]) => {
+    const params = new URLSearchParams(String(key[key.length - 1] ?? ""))
+    params.delete("page")
+    return JSON.stringify([...key.slice(0, -1), params.toString()])
+  }
+  return strip(a) === strip(b)
+}

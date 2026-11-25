@@ -254,7 +254,9 @@ describe("<AppSidebar /> — inbox (#2794)", () => {
 
     const inventory = await screen.findByTestId("sidebar-inventory-group")
     // The rows render once the groups resolve.
-    await within(inventory).findByRole("link", { name: "Inbox" })
+    // The count is part of the link's name; the badge itself is hidden
+    // from screen readers.
+    await within(inventory).findByRole("link", { name: "Inbox, 3 need attention" })
     const links = within(inventory).getAllByRole("link")
     expect(links[0]).toHaveTextContent("Dashboard")
     expect(links[1]).toHaveTextContent("Inbox")

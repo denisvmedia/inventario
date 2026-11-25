@@ -12,7 +12,7 @@ import {
   type InboxListOptions,
   type InboxPage,
 } from "./api"
-import { inboxKeys } from "./keys"
+import { inboxKeys, sameInboxList } from "./keys"
 
 interface QueryOptions {
   enabled?: boolean
@@ -24,13 +24,18 @@ function useSlug(): string {
   return useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
 }
 
+// A page of the inbox. While the next page of the same reason loads, the
+// page before stays on screen; a page of another reason does not, since its
+// rows and their buttons do not belong under the newly selected tab.
 export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryOptions = {}) {
   const slug = useSlug()
+  const queryKey = inboxKeys.list(slug, opts)
   return useQuery<InboxPage>({
-    queryKey: inboxKeys.list(slug, opts),
+    queryKey,
     queryFn: ({ signal }) => listInbox(opts, signal),
     enabled: enabled && !!slug,
-    placeholderData: (prev) => prev,
+    placeholderData: (prev, prevQuery) =>
+      prevQuery && sameInboxList(prevQuery.queryKey, queryKey) ? prev : undefined,
   })
 }
 

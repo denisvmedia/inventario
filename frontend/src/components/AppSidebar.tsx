@@ -281,6 +281,7 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
         <NavLink to={target} end={navLinkEnd} onClick={onNavigate} data-tour={entry.tourKey}>
           <Icon className="size-4" />
           <span>{label}</span>
+          {entry.badge === "inbox" ? <InboxCountName /> : null}
         </NavLink>
       </SidebarMenuButton>
       {entry.badge === "inbox" ? <InboxBadge /> : null}
@@ -289,12 +290,26 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
 }
 
 // The inbox row's count (#2794), from the server's count of the group's
-// inbox. Hidden while the inbox is empty or the count is loading.
+// inbox. Hidden while the inbox is empty or the count is loading. The badge
+// sits outside the link, so screen readers hear the count through
+// InboxCountName, inside the link's name, and the badge is hidden from them.
 function InboxBadge() {
   const count = useInboxCount()
   const total = count.data?.total ?? 0
   if (total === 0) return null
-  return <SidebarMenuBadge data-testid="sidebar-inbox-count">{total}</SidebarMenuBadge>
+  return (
+    <SidebarMenuBadge aria-hidden="true" data-testid="sidebar-inbox-count">
+      {total}
+    </SidebarMenuBadge>
+  )
+}
+
+function InboxCountName() {
+  const { t } = useTranslation("inbox")
+  const count = useInboxCount()
+  const total = count.data?.total ?? 0
+  if (total === 0) return null
+  return <span className="sr-only">{`, ${t("inbox:sidebarCount", { count: total })}`}</span>
 }
 
 interface AppSidebarProps {
