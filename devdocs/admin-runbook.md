@@ -532,10 +532,13 @@ Trash longer than the retention. It runs in the `housekeeping` worker group,
 sweeps once at startup and then on every interval, in rounds of 100 items
 and 100 files until a round finds nothing.
 
-Purging an item first moves to Trash with it any live file that only it
-uses (one its delete missed), then deletes its row (the history, loans,
-services and maintenance schedules go with it through their foreign keys)
-and settles every file that went to Trash with it:
+Purging an item deletes its row (the history, loans, services and
+maintenance schedules go with it through their foreign keys), removes every
+file link to it, and settles every file that went to Trash with it. A purge
+never moves a live file to Trash or deletes one: a live file linked to the
+item (restored on its own, linked by a merge restore, or missed by the
+delete) loses the link and stays, as a standalone file if that was its only
+link. The files that went to Trash with the item are settled like this:
 
 - a file also linked to another item in Trash moves to that item;
 - a file linked to a live item, location or area comes back as live, and so
@@ -554,10 +557,11 @@ trash" settles them for its group as well.
 
 Every step re-reads its state, so a sweep that stops halfway (crash,
 deploy, DB error) is finished by the next one. An entry that fails is
-skipped and the sweep goes on with the rest; the round then logs
-`Failed to purge expired Trash entries` with every error and the sweep
-stops until the next interval. A sweep that deleted something logs
-`Purged expired Trash entries` with the counts.
+skipped and the sweep goes on with the rest; the round logs
+`Failed to purge expired Trash entries` with every error, and the sweep
+keeps running rounds while they delete something. An entry that keeps
+failing is retried on the next interval. A sweep that deleted something
+logs `Purged expired Trash entries` with the counts.
 
 ### Knobs
 

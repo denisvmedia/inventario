@@ -682,7 +682,7 @@ func TestTrashService_EmptyTrashSettlesFilesOfAPurgedItem(t *testing.T) {
 	c.Assert(f.blobExists(c, "drill-manual.pdf"), qt.IsFalse)
 }
 
-func TestTrashService_PurgeTakesFilesTheDeleteMissed(t *testing.T) {
+func TestTrashService_PurgeLeavesLiveFilesLive(t *testing.T) {
 	c := qt.New(t)
 	f := newTrashFixture(c)
 
@@ -698,16 +698,44 @@ func TestTrashService_PurgeTakesFilesTheDeleteMissed(t *testing.T) {
 
 	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
 
-	_, err = f.regs.FileRegistry.Get(f.ctx, late.ID)
-	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
-	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, late.ID)
-	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
-	c.Assert(f.blobExists(c, "late.pdf"), qt.IsFalse)
-
-	// The file the saw still uses stays, without the link to the purged item.
-	got := must.Must(f.regs.FileRegistry.Get(f.ctx, shared.ID))
+	// Both stay live and lose only the link to the purged item.
+	got, err := f.regs.FileRegistry.Get(f.ctx, late.ID)
+	c.Assert(err, qt.IsNil, qt.Commentf("a live file must survive the purge"))
+	c.Assert(got.Links, qt.HasLen, 0)
+	c.Assert(f.blobExists(c, "late.pdf"), qt.IsTrue)
+	got = must.Must(f.regs.FileRegistry.Get(f.ctx, shared.ID))
 	c.Assert(got.Links, qt.HasLen, 1)
 	c.Assert(got.Links[0].EntityID, qt.Equals, saw.ID)
+}
+
+func TestTrashService_FileRestoredOnItsOwnSurvivesTheItemPurge(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	manual := f.file(c, "manual.pdf", drill.ID)
+
+	// The manual is deleted on its own, then the drill; the manual comes
+	// back by itself while the drill stays in Trash.
+	c.Assert(f.trash.TrashFile(f.ctx, manual.ID), qt.IsNil)
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(f.trash.RestoreFile(f.ctx, manual.ID), qt.IsNil)
+
+	// The drill expires.
+	cutoff := time.Now().Add(31*24*time.Hour - services.DefaultTrashRetention)
+	items, files, err := f.trash.PurgeExpired(f.ctx, cutoff, 100)
+	c.Assert(err, qt.IsNil)
+	c.Assert(items, qt.Equals, 1)
+	c.Assert(files, qt.Equals, 0)
+
+	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, drill.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	got, err := f.regs.FileRegistry.Get(f.ctx, manual.ID)
+	c.Assert(err, qt.IsNil, qt.Commentf("the manual restored on its own must stay live"))
+	c.Assert(got.IsTrashed(), qt.IsFalse)
+	c.Assert(got.Links, qt.HasLen, 0)
+	c.Assert(f.blobExists(c, "manual.pdf"), qt.IsTrue)
 }
 
 func TestTrashService_UnknownLinkedItemKeepsTheFile(t *testing.T) {

@@ -103,8 +103,8 @@ func actorID(ctx context.Context) (string, error) {
 // TrashCommodity moves a live item to Trash with the files no live entity
 // still uses, and records a "deleted" event in its history. The item row goes
 // first: if moving a file fails, the item is in Trash and the file stays live
-// with a link to it. Purging the item takes such a file along first (see
-// takeLeftoverFiles), so it is settled with the others.
+// with a link to it. Purging the item removes that link and leaves the file
+// live, as a standalone file.
 func (s *TrashService) TrashCommodity(ctx context.Context, id string) (*models.Commodity, error) {
 	regs, err := s.userRegistries(ctx)
 	if err != nil {
@@ -267,13 +267,14 @@ func (s *TrashService) PurgeCommodity(ctx context.Context, id string) error {
 	return s.purgeCommodity(ctx, regs, id)
 }
 
+// purgeCommodity deletes a trashed item and settles the files that went to
+// Trash with it. It never moves a live file to Trash or deletes one: a live
+// file linked to the item (restored on its own while the item was in Trash,
+// linked by a merge restore, or missed by the delete) only loses its link to
+// the item and stays live.
 func (s *TrashService) purgeCommodity(ctx context.Context, regs trashRegistries, id string) error {
-	item, err := regs.commodities.GetTrashed(ctx, id)
-	if err != nil {
+	if _, err := regs.commodities.GetTrashed(ctx, id); err != nil {
 		return errxtrace.Wrap("failed to get trashed item", err)
-	}
-	if err := s.takeLeftoverFiles(ctx, regs, item); err != nil {
-		return err
 	}
 	// Read before the links go: afterwards nothing ties the files to the item
 	// but deleted_with_commodity_id.
@@ -297,42 +298,6 @@ func (s *TrashService) purgeCommodity(ctx context.Context, regs trashRegistries,
 		}
 		if _, err := s.settleTrashedFile(ctx, regs, file.ID); err != nil {
 			return err
-		}
-	}
-	return nil
-}
-
-// takeLeftoverFiles moves to Trash, with the trashed item, the live files
-// linked to it that no live entity uses: the files its delete missed, because
-// moving one failed or a link was added while the item was being deleted.
-//
-// It reads file_links only. The legacy linked_entity_* columns are moved into
-// file_links before the API serves requests; a link that a failed startup
-// move leaves there is not seen, and once moved it points at a purged item,
-// which the orphan file collection reports.
-func (s *TrashService) takeLeftoverFiles(ctx context.Context, regs trashRegistries, item *models.Commodity) error {
-	files, err := regs.files.ListByLinkedEntity(ctx, models.FileLinkCommodity, item.ID)
-	if err != nil {
-		return errxtrace.Wrap("failed to list item files", err, errx.Attrs("commodity_id", item.ID))
-	}
-	deletedBy := ""
-	if item.DeletedBy != nil {
-		deletedBy = *item.DeletedBy
-	}
-	at := s.now().UTC()
-	if item.DeletedAt != nil {
-		at = *item.DeletedAt
-	}
-	for _, file := range files {
-		keep, err := hasLiveLinkBesides(ctx, regs.commodities, file, item.ID)
-		if err != nil {
-			return err
-		}
-		if keep {
-			continue
-		}
-		if err := regs.files.Trash(ctx, file.ID, deletedBy, item.ID, at); err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return errxtrace.Wrap("failed to move item file to Trash", err, errx.Attrs("file_id", file.ID))
 		}
 	}
 	return nil

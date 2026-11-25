@@ -98,7 +98,8 @@ Each of these asks you to confirm first.
 
 Deleting an item for good also deletes its history and the files that went to
 the trash with it. A file that another item, location, or area still uses is
-kept there.
+kept there. A file that is not in the trash, such as one you restored on its
+own while the item was there, is never deleted with the item.
 
 :::caution
 Deleting for good cannot be undone. If you might need something later, leave
