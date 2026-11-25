@@ -2769,6 +2769,332 @@ definitions:
         example: exports
         type: string
     type: object
+  jsonapi.IntakeCandidateResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeCandidateResponseData'
+    type: object
+  jsonapi.IntakeCandidateResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/models.IntakeCandidate'
+      id:
+        type: string
+      type:
+        enum:
+        - intake_candidates
+        example: intake_candidates
+        type: string
+    type: object
+  jsonapi.IntakeCandidateReviewAttrs:
+    properties:
+      accepted_fields:
+        items:
+          type: string
+        type: array
+      quantity:
+        example: 1
+        type: integer
+      selected:
+        example: true
+        type: boolean
+    type: object
+  jsonapi.IntakeCandidateReviewRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeCandidateReviewRequestData'
+    type: object
+  jsonapi.IntakeCandidateReviewRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.IntakeCandidateReviewAttrs'
+      type:
+        enum:
+        - intake_candidates
+        example: intake_candidates
+        type: string
+    type: object
+  jsonapi.IntakeDraftsMeta:
+    properties:
+      created:
+        example: 2
+        type: integer
+      failed:
+        example: 0
+        type: integer
+      skipped:
+        example: 1
+        type: integer
+    type: object
+  jsonapi.IntakeLimitsAttrs:
+    properties:
+      accepted_mime_types:
+        example:
+        - image/jpeg
+        - image/png
+        - application/pdf
+        items:
+          type: string
+        type: array
+      enabled:
+        example: true
+        type: boolean
+      max_file_bytes:
+        example: 10485760
+        type: integer
+      max_files_per_batch:
+        example: 50
+        type: integer
+      max_files_per_source:
+        example: 5
+        type: integer
+      max_queued_per_group:
+        example: 200
+        type: integer
+      queued:
+        example: 3
+        type: integer
+      rate_limit_per_hour:
+        example: 30
+        type: integer
+    type: object
+  jsonapi.IntakeLimitsData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.IntakeLimitsAttrs'
+      type:
+        enum:
+        - intake_limits
+        example: intake_limits
+        type: string
+    type: object
+  jsonapi.IntakeLimitsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeLimitsData'
+    type: object
+  jsonapi.IntakeSessionCreateAttributes:
+    properties:
+      client_key:
+        example: 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11
+        type: string
+      sources:
+        items:
+          $ref: '#/definitions/jsonapi.IntakeSourceCreateRequest'
+        type: array
+    type: object
+  jsonapi.IntakeSessionCreateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeSessionCreateRequestData'
+    type: object
+  jsonapi.IntakeSessionCreateRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.IntakeSessionCreateAttributes'
+      id:
+        type: string
+      type:
+        enum:
+        - intake_sessions
+        example: intake_sessions
+        type: string
+    type: object
+  jsonapi.IntakeSessionDetailAttrs:
+    properties:
+      candidates:
+        items:
+          $ref: '#/definitions/models.IntakeCandidate'
+        type: array
+      client_key:
+        description: |-
+          ClientKey identifies the session for the client that created it;
+          unique in the group.
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      origin:
+        allOf:
+        - $ref: '#/definitions/models.IntakeOrigin'
+        description: Origin says how the files arrived.
+      sources:
+        items:
+          $ref: '#/definitions/jsonapi.IntakeSourceView'
+        type: array
+      state:
+        allOf:
+        - $ref: '#/definitions/models.IntakeSessionState'
+        enum:
+        - processing
+        - review
+        - done
+        example: review
+      summary:
+        $ref: '#/definitions/models.IntakeSessionSummary'
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.IntakeSessionResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeSessionResponseData'
+      meta:
+        $ref: '#/definitions/jsonapi.IntakeDraftsMeta'
+    type: object
+  jsonapi.IntakeSessionResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.IntakeSessionDetailAttrs'
+      id:
+        type: string
+      type:
+        enum:
+        - intake_sessions
+        example: intake_sessions
+        type: string
+    type: object
+  jsonapi.IntakeSessionView:
+    properties:
+      client_key:
+        description: |-
+          ClientKey identifies the session for the client that created it;
+          unique in the group.
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      origin:
+        allOf:
+        - $ref: '#/definitions/models.IntakeOrigin'
+        description: Origin says how the files arrived.
+      state:
+        allOf:
+        - $ref: '#/definitions/models.IntakeSessionState'
+        enum:
+        - processing
+        - review
+        - done
+        example: review
+      summary:
+        $ref: '#/definitions/models.IntakeSessionSummary'
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.IntakeSessionsMeta:
+    properties:
+      sessions:
+        example: 4
+        type: integer
+    type: object
+  jsonapi.IntakeSessionsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.IntakeSessionView'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.IntakeSessionsMeta'
+    type: object
+  jsonapi.IntakeSourceCreateRequest:
+    properties:
+      file_ids:
+        items:
+          type: string
+        type: array
+      one_item:
+        type: boolean
+    type: object
+  jsonapi.IntakeSourceFile:
+    properties:
+      ext:
+        type: string
+      id:
+        type: string
+      inline_url:
+        type: string
+      mime_type:
+        type: string
+      path:
+        type: string
+      size_bytes:
+        type: integer
+      thumbnails:
+        additionalProperties:
+          type: string
+        type: object
+      title:
+        type: string
+      url:
+        type: string
+    type: object
+  jsonapi.IntakeSourceView:
+    properties:
+      attempts:
+        description: |-
+          Attempts counts the scans started for the source, a rate-limited wait
+          excepted.
+        type: integer
+      claimed_at:
+        description: ClaimedAt is when the worker took a scanning source.
+        type: string
+      created_at:
+        type: string
+      error_code:
+        description: ErrorCode says why a failed source could not be scanned.
+        type: string
+      external_document_id:
+        type: string
+      external_instance:
+        type: string
+      external_system:
+        type: string
+      files:
+        items:
+          $ref: '#/definitions/jsonapi.IntakeSourceFile'
+        type: array
+      id:
+        type: string
+      next_attempt_at:
+        description: |-
+          NextAttemptAt is the earliest time the worker may scan a pending
+          source.
+        type: string
+      one_item:
+        description: |-
+          OneItem says that the files show one item, so the scan keeps one
+          product.
+        type: boolean
+      scanned_at:
+        type: string
+      session_id:
+        type: string
+      sort_order:
+        description: SortOrder orders the sources of a session as they were dropped.
+        type: integer
+      status:
+        $ref: '#/definitions/models.IntakeSourceStatus'
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      wait_reason:
+        description: |-
+          WaitReason says why a pending source waits (IntakeWait*), empty when
+          it simply has not had its turn.
+        type: string
+      warnings:
+        description: Warnings are the notes of the stored scan.
+        items:
+          $ref: '#/definitions/models.IntakeWarning'
+        type: array
+    type: object
   jsonapi.InviteInfoAttr:
     properties:
       expired:
@@ -5168,6 +5494,146 @@ definitions:
     - GroupRoleUser
     - GroupRoleAdmin
     - GroupRoleOwner
+  models.IntakeCandidate:
+    properties:
+      accepted_fields:
+        items:
+          type: string
+        type: array
+      created_at:
+        type: string
+      draft_id:
+        description: |-
+          DraftID is the draft made for the candidate. The draft can be
+          discarded or promoted later, so there is no foreign key.
+        type: string
+      error_code:
+        description: ErrorCode says why the draft could not be made.
+        type: string
+      fields:
+        $ref: '#/definitions/models.IntakeFields'
+      id:
+        type: string
+      outcome:
+        $ref: '#/definitions/models.IntakeCandidateOutcome'
+      quantity:
+        type: integer
+      selected:
+        type: boolean
+      session_id:
+        type: string
+      sort_order:
+        description: |-
+          SortOrder orders the candidates of a source as the scan listed them,
+          most prominent first.
+        type: integer
+      source_id:
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  models.IntakeCandidateOutcome:
+    enum:
+    - pending
+    - created
+    - skipped
+    - failed
+    type: string
+    x-enum-varnames:
+    - IntakeCandidatePending
+    - IntakeCandidateCreated
+    - IntakeCandidateSkipped
+    - IntakeCandidateFailed
+  models.IntakeFieldGuess:
+    properties:
+      confidence:
+        type: number
+      value: {}
+    type: object
+  models.IntakeFields:
+    additionalProperties:
+      $ref: '#/definitions/models.IntakeFieldGuess'
+    type: object
+  models.IntakeOrigin:
+    enum:
+    - upload
+    - external
+    type: string
+    x-enum-varnames:
+    - IntakeOriginUpload
+    - IntakeOriginExternal
+  models.IntakeSessionState:
+    enum:
+    - processing
+    - review
+    - done
+    type: string
+    x-enum-varnames:
+    - IntakeSessionProcessing
+    - IntakeSessionReview
+    - IntakeSessionDone
+  models.IntakeSessionSummary:
+    properties:
+      canceled:
+        type: integer
+      candidates:
+        type: integer
+      candidates_failed:
+        type: integer
+      drafts_created:
+        type: integer
+      failed:
+        type: integer
+      files:
+        type: integer
+      pending:
+        type: integer
+      rate_limited:
+        type: integer
+      scanned:
+        type: integer
+      scanning:
+        type: integer
+      selected:
+        type: integer
+      skipped:
+        type: integer
+      sources:
+        type: integer
+      undecided:
+        description: Undecided counts the products with no outcome yet, kept or not.
+        type: integer
+      unfinished:
+        description: |-
+          Unfinished counts the kept products creating the drafts acts on:
+          no draft yet, or a draft that failed.
+        type: integer
+    type: object
+  models.IntakeSourceStatus:
+    enum:
+    - pending
+    - scanning
+    - scanned
+    - failed
+    - canceled
+    type: string
+    x-enum-varnames:
+    - IntakeSourcePending
+    - IntakeSourceScanning
+    - IntakeSourceScanned
+    - IntakeSourceFailed
+    - IntakeSourceCanceled
+  models.IntakeWarning:
+    properties:
+      code:
+        type: string
+      detail:
+        type: string
+      field:
+        type: string
+    type: object
   models.Location:
     properties:
       address:
@@ -10511,6 +10977,362 @@ paths:
       summary: File category counts
       tags:
       - files
+  /g/{groupSlug}/intake/limits:
+    get:
+      description: |-
+        The limits of a new intake batch and how full the group's scan queue is.
+        enabled is false when no AI scan provider is configured.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeLimitsResponse'
+      summary: Get intake limits
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions:
+    get:
+      description: The group's intake sessions with their counts, newest first.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Sessions per page (at most 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionsResponse'
+      summary: List intake sessions
+      tags:
+      - intake
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Queue uploaded files for the AI scan. Each source is one purchase: the files the
+        scan reads together. Files dropped together are separate purchases unless the
+        client puts them in one source with one_item set, which keeps a single product.
+        The files must be uploaded first (POST /g/{groupSlug}/uploads/files) and be of a
+        type and size the scan accepts; GET .../intake/limits gives the limits. client_key
+        is the client's identity for the batch: a key the group already has returns that
+        session with 200, so a retry after a lost response does not queue the files
+        twice. Without an AI scan provider the request answers 503
+        commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Batch
+        in: body
+        name: session
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.IntakeSessionCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: A session with this client key already exists
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "201":
+          description: Session created
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: A file was not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The scan queue is full
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "503":
+          description: No AI scan provider is configured
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an intake session
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}:
+    delete:
+      description: |-
+        Delete a session. Drafts made from it stay. Its files that nothing else uses go
+        to Trash; files a draft or an item uses only lose the link to the session.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: Deleted
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an intake session
+      tags:
+      - intake
+    get:
+      description: |-
+        One session with its sources, their files and the products the scan detected.
+        Reading a session never calls the AI provider.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an intake session
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}/cancel:
+    post:
+      description: |-
+        Stop the session's queued scans. Detected products and drafts already made stay;
+        a scan that is running still lands. Resume queues the canceled purchases again.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Cancel an intake session
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}/candidates/{candidateID}:
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Keep or leave out a detected product, choose the scanned fields that go into its
+        draft, and set the number of identical units it covers. Keeping a product that
+        was skipped puts it back among the products to create drafts for. A product that
+        has its draft answers 409 intake.candidate_finished.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      - description: Candidate ID
+        in: path
+        name: candidateID
+        required: true
+        type: string
+      - description: Review
+        in: body
+        name: review
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.IntakeCandidateReviewRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeCandidateResponse'
+        "404":
+          description: Product not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The product is finished
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Review a detected product
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}/drafts:
+    post:
+      description: |-
+        Make one draft for every kept product of the session that has none yet, and mark
+        the products left out as skipped. Each draft gets the files of its purchase as
+        links, so one receipt serves every item made from it. Repeating the call, from
+        another device or after a lost response, makes nothing twice; after a partial
+        failure it finishes only what is left. meta counts the drafts made or found made,
+        the skipped products and the products whose draft failed.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create drafts from an intake session
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}/resume:
+    post:
+      description: |-
+        Queue the session's canceled and failed purchases again. Purchases that were
+        scanned are not scanned again.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: Session not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "503":
+          description: No AI scan provider is configured
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Resume an intake session
+      tags:
+      - intake
+  /g/{groupSlug}/intake/sessions/{sessionID}/sources/{sourceID}/rescan:
+    post:
+      description: |-
+        Queue one purchase of the session for a new AI scan on the member's request. Its
+        detected products are replaced. A purchase being scanned answers 409
+        intake.source_busy; one with a product that has its draft answers 409
+        intake.source_has_drafts.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Session ID
+        in: path
+        name: sessionID
+        required: true
+        type: string
+      - description: Source ID
+        in: path
+        name: sourceID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeSessionResponse'
+        "404":
+          description: Purchase not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The purchase is being scanned or has drafts
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "503":
+          description: No AI scan provider is configured
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Rescan a purchase
+      tags:
+      - intake
   /g/{groupSlug}/loans:
     get:
       consumes:
