@@ -3,7 +3,6 @@ import { Outlet } from "react-router-dom"
 
 import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar"
 import { AppSidebar } from "@/components/AppSidebar"
-import { CommandPalette } from "@/components/CommandPalette"
 import { CommitBadge } from "@/components/CommitBadge"
 import { CurrencyMigrationBanner } from "@/components/CurrencyMigrationBanner"
 import { ImpersonationBanner } from "@/components/ImpersonationBanner"
@@ -42,9 +41,10 @@ import { RouteTitleProvider } from "@/components/routing/RouteTitle"
 //        </main>
 //      </SidebarInset>
 //
-// ConfirmProvider, Toaster, and the global Cmd+K palette mount here so
-// every authenticated page has them without duplicating providers per
-// route.
+// ConfirmProvider and Toaster mount here so every authenticated page has
+// them without duplicating providers per route. The global command palette
+// mounts with the TopBar, whose search entry opens it as well as
+// Cmd/Ctrl+K.
 //
 // RouteTitleProvider sits at the shell root so the TopBar can read the
 // translated title that RouteTitle (inside each page) broadcasts.
@@ -119,7 +119,6 @@ export function Shell() {
                     </div>
                   </main>
                 </SidebarInset>
-                <CommandPalette />
                 <Toaster />
                 {/* Faint build-commit watermark, bottom-right, hidden on
                     mobile; renders nothing in dev/tests (#1972). */}

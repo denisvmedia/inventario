@@ -1,0 +1,83 @@
+{
+  "actions": {
+    "empty": "Empty trash",
+    "purge": "Delete now",
+    "purgeNamed": "Delete now: {{name}}",
+    "restore": "Restore",
+    "restoreNamed": "Restore: {{name}}"
+  },
+  "bulk": {
+    "selectedFiles_one": "{{count}} file selected",
+    "selectedFiles_other": "{{count}} files selected",
+    "selectedItems_one": "{{count}} item selected",
+    "selectedItems_other": "{{count}} items selected"
+  },
+  "confirm": {
+    "emptyBody": "Every item and file in the trash is deleted for good, with the history of the items. This cannot be undone.",
+    "emptyTitle": "Empty the trash?",
+    "purgeFileBody": "The file is deleted for good. This cannot be undone.",
+    "purgeFilesBody_one": "The selected file is deleted for good. This cannot be undone.",
+    "purgeFilesBody_other": "The {{count}} selected files are deleted for good. This cannot be undone.",
+    "purgeFilesTitle_one": "Delete {{count}} file now?",
+    "purgeFilesTitle_other": "Delete {{count}} files now?",
+    "purgeFileTitle": "Delete {{name}} now?",
+    "purgeItemBody": "The item and its history are deleted for good. This cannot be undone.",
+    "purgeItemBodyFiles_one": "The item, its history and the file that went to the trash with it are deleted for good. A file another item still uses is kept. This cannot be undone.",
+    "purgeItemBodyFiles_other": "The item, its history and the {{count}} files that went to the trash with it are deleted for good. A file another item still uses is kept. This cannot be undone.",
+    "purgeItemsBody_one": "The selected item, its history and its files are deleted for good. This cannot be undone.",
+    "purgeItemsBody_other": "The {{count}} selected items, their history and their files are deleted for good. This cannot be undone.",
+    "purgeItemsTitle_one": "Delete {{count}} item now?",
+    "purgeItemsTitle_other": "Delete {{count}} items now?",
+    "purgeItemTitle": "Delete {{name}} now?"
+  },
+  "empty": {
+    "body": "Deleted items and files wait here until they are restored or deleted for good.",
+    "title": "The trash is empty"
+  },
+  "subtitle_one": "Deleted items and files stay here for {{count}} day. After that they are deleted for good.",
+  "subtitle_other": "Deleted items and files stay here for {{count}} days. After that they are deleted for good.",
+  "subtitleNoRetention": "Deleted items and files stay here for a while. After that they are deleted for good.",
+  "table": {
+    "actions": "Actions",
+    "attachedTo": "Was attached to",
+    "deleted": "Deleted",
+    "deletedBy": "by {{name}}",
+    "expires": "Deleted for good on",
+    "file": "File",
+    "files": "Files",
+    "fileSummary_one": "{{count}} file, {{size}}",
+    "fileSummary_other": "{{count}} files, {{size}}",
+    "item": "Item",
+    "notAttached": "Not attached",
+    "selectAll": "Select all on this page",
+    "selectRow": "Select {{name}}"
+  },
+  "tabs": {
+    "files": "Files ({{n}})",
+    "items": "Items ({{n}})"
+  },
+  "title": "Trash",
+  "toast": {
+    "bulkPartial": "{{succeeded}} done, {{failed}} failed.",
+    "emptied_one": "Trash emptied. {{count}} entry deleted for good.",
+    "emptied_other": "Trash emptied. {{count}} entries deleted for good.",
+    "filePurged": "{{name}} deleted for good.",
+    "fileRestored": "{{name}} restored.",
+    "filesPurged_one": "{{count}} file deleted for good.",
+    "filesPurged_other": "{{count}} files deleted for good.",
+    "filesRestored_one": "{{count}} file restored.",
+    "filesRestored_other": "{{count}} files restored.",
+    "itemPurged": "{{name}} deleted for good.",
+    "itemRestored": "{{name}} restored.",
+    "itemRestoredUnassigned": "{{name}} restored without a location.",
+    "itemRestoredUnassignedBody": "Its area was deleted while the item was in the trash. Open the item to file it somewhere.",
+    "itemsPurged_one": "{{count}} item deleted for good.",
+    "itemsPurged_other": "{{count}} items deleted for good.",
+    "itemsRestored_one": "{{count}} item restored.",
+    "itemsRestored_other": "{{count}} items restored.",
+    "itemsRestoredUnassigned_one": "{{count}} of them came back without a location because its area was deleted.",
+    "itemsRestoredUnassigned_other": "{{count}} of them came back without a location because their areas were deleted.",
+    "openItem": "Open"
+  },
+  "undo": "Undo"
+}

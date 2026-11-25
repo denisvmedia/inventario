@@ -307,6 +307,26 @@ type FileEntity struct {
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
 
+	// DeletedAt is when the file was moved to Trash, nil while it is live. A
+	// trashed file keeps its row, links and blob, and is left out of every
+	// ordinary read of the file registry until it is restored or purged (see
+	// registry.FileRegistry). Server-managed: only the registry's trash
+	// operations write it.
+	//ptah:schema:field name="deleted_at" type="TIMESTAMP"
+	DeletedAt *time.Time `json:"deleted_at,omitempty" db:"deleted_at" userinput:"false" readonly:"true"`
+
+	// DeletedBy is the id of the user who moved the file to Trash.
+	//ptah:schema:field name="deleted_by" type="TEXT"
+	DeletedBy *string `json:"deleted_by,omitempty" db:"deleted_by" userinput:"false" readonly:"true"`
+
+	// DeletedWithCommodityID is set when the file went to Trash because the
+	// item it was attached to was deleted, and names that item. Restoring the
+	// item restores such files; a file deleted on its own has it nil, is a
+	// Trash entry of its own and stays in Trash when an item it was attached
+	// to is restored.
+	//ptah:schema:field name="deleted_with_commodity_id" type="TEXT"
+	DeletedWithCommodityID *string `json:"deleted_with_commodity_id,omitempty" db:"deleted_with_commodity_id" userinput:"false" readonly:"true"`
+
 	// File contains the actual file metadata
 	//ptah:embedded mode="inline"
 	*File
@@ -400,6 +420,28 @@ type FileIndexes struct {
 	// construction at the key-minting site instead.
 	//ptah:schema:index name="files_original_path_idx" fields="original_path" table="files"
 	_ int
+
+	// Partial index for Trash: the group's trash list and the purge worker's
+	// scan for expired files read only trashed rows.
+	//ptah:schema:index name="files_deleted_at_idx" fields="deleted_at" condition="deleted_at IS NOT NULL" table="files"
+	_ int
+
+	// Restoring or purging an item reads the files that went to Trash with it.
+	//ptah:schema:index name="files_deleted_with_commodity_idx" fields="deleted_with_commodity_id" condition="deleted_with_commodity_id IS NOT NULL" table="files"
+	_ int
+}
+
+// IsTrashed reports whether the file is in Trash.
+func (fe *FileEntity) IsTrashed() bool {
+	return fe != nil && fe.DeletedAt != nil
+}
+
+// ClearTrashState drops the trash columns. The registries call it on Create so
+// a caller cannot insert a file that is already in Trash.
+func (fe *FileEntity) ClearTrashState() {
+	fe.DeletedAt = nil
+	fe.DeletedBy = nil
+	fe.DeletedWithCommodityID = nil
 }
 
 func (*FileEntity) Validate() error {

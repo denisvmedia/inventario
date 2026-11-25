@@ -236,8 +236,9 @@ The header also has:
 - **Insurance Report** and **Print** — printable views (see [Reports](../reports/)).
 - **Print label** (the QR code button) — a label for this item (see
   [Asset IDs and QR labels](#asset-ids-and-qr-labels)).
-- **Delete** — permanently removes the item and the files attached only to it.
-  A file that is also attached to another item, location, or area stays there.
+- **Delete** — moves the item, with the files attached only to it, to the
+  [Trash](../trash/), where you can restore it for 30 days. A file that is also
+  attached to another item, location, or area stays there.
 
 ![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
 
@@ -442,8 +443,10 @@ and offers **Clear filters** instead of showing a list that ignores it.
 
 ### Searching for items
 
-The search box on **All Items**, the one on an area's page, and the search page
-all search items the same way:
+The search box on **All Items**, the one on an area's page, the search page, and
+the search window at the top of every page (see
+[Find anything](../getting-started/#find-anything)) all search items the same
+way:
 
 - **Every word must match**, each in any field. `drill garage` finds an item
   named "Drill" that has the tag "Garage", but not an item that only has one of
@@ -502,7 +505,7 @@ On the **All Items** page you can act on several items at once:
    - **Move…** — pick a **destination area** and confirm with **Move items**.
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
-   - **Delete** — permanently removes the selected items. You'll be asked to
-     confirm first, since this can't be undone.
+   - **Delete** — moves the selected items to the [Trash](../trash/) after a
+     confirmation. The message that follows has an **Undo** button.
 
 To clear your selection, untick the items or reload the page.

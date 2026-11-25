@@ -69,11 +69,15 @@ const (
 	// cost_amount / cost_currency). Same no-op skip gate as
 	// CommodityEventKindLoanUpdated.
 	CommodityEventKindServiceUpdated CommodityEventKind = "service_updated"
-	// CommodityEventKindDeleted is emitted right before a commodity is deleted.
-	// Persisted so the event row is still in the table when the commodity row
-	// is removed in the same transaction; ON DELETE CASCADE then drops it. The
-	// row is still observable to anyone scanning during the same request.
+	// CommodityEventKindDeleted is emitted when a commodity is moved to Trash.
+	// The row stays in the timeline while the item is in Trash and after it is
+	// restored; purging the item drops it with the rest of the history through
+	// ON DELETE CASCADE.
 	CommodityEventKindDeleted CommodityEventKind = "deleted"
+	// CommodityEventKindRestored is emitted when a commodity is restored from
+	// Trash. After carries "area_removed": true when the item came back
+	// without an area because its former area was deleted meanwhile.
+	CommodityEventKindRestored CommodityEventKind = "restored"
 )
 
 // IsValid reports whether the event kind is one of the known values.
@@ -92,7 +96,8 @@ func (k CommodityEventKind) IsValid() bool {
 		CommodityEventKindSentForService,
 		CommodityEventKindBackFromService,
 		CommodityEventKindServiceUpdated,
-		CommodityEventKindDeleted:
+		CommodityEventKindDeleted,
+		CommodityEventKindRestored:
 		return true
 	}
 	return false

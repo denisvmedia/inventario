@@ -47,6 +47,8 @@ type Workers struct {
 	OrphanFileGCInterval             string // Orphan-file GC sweep interval (e.g., "24h")
 	OrphanFileGCMinAge               string // Minimum age before an orphan row/blob is eligible (e.g., "72h"; hard floor 24h)
 	OrphanFileGCMode                 string // Orphan-file GC mode: off | report | delete. Ships as "report" — it deletes nothing.
+	TrashRetention                   string // How long items and files stay in Trash before they are deleted for good (e.g., "720h")
+	TrashPurgeInterval               string // Interval between Trash purge sweeps (e.g., "1h")
 }
 
 // ThumbnailGeneration contains default values for thumbnail generation configuration
@@ -130,6 +132,9 @@ func New() Config {
 			OrphanFileGCInterval: "24h",
 			OrphanFileGCMinAge:   "72h",
 			OrphanFileGCMode:     "report",
+			// Trash keeps deleted items and files for 30 days.
+			TrashRetention:     "720h",
+			TrashPurgeInterval: "1h",
 		},
 		ThumbnailGeneration: ThumbnailGeneration{
 			MaxConcurrentPerUser: 5,     // Maximum 5 simultaneous thumbnail generation jobs per user
@@ -241,6 +246,17 @@ func GetGroupPurgeInterval() string {
 // sweeps (#2237).
 func GetOrphanFileGCInterval() string {
 	return defaultConfig.Workers.OrphanFileGCInterval
+}
+
+// GetTrashRetention returns how long items and files stay in Trash by default.
+func GetTrashRetention() string {
+	return defaultConfig.Workers.TrashRetention
+}
+
+// GetTrashPurgeInterval returns the default interval between Trash purge
+// sweeps.
+func GetTrashPurgeInterval() string {
+	return defaultConfig.Workers.TrashPurgeInterval
 }
 
 // GetOrphanFileGCMinAge returns the default minimum age a file row / thumbnail

@@ -55,6 +55,10 @@ const (
 	// in allWorkerTypes and IsValid below — workerpause fails OPEN for
 	// unknown types, which would make the sweeper unpausable.
 	WorkerTypeOrphanFileGC WorkerType = "orphan-file-gc"
+	// WorkerTypeTrashPurge pauses the worker that deletes expired Trash
+	// entries for good. Pausing it keeps everything in Trash past its
+	// retention until the worker resumes.
+	WorkerTypeTrashPurge WorkerType = "trash-purge"
 )
 
 // allWorkerTypes is the canonical ordered set of pausable worker types.
@@ -80,6 +84,7 @@ var allWorkerTypes = []WorkerType{
 	WorkerTypeCurrencyMigration,
 	WorkerTypeWeeklyDigest,
 	WorkerTypeOrphanFileGC,
+	WorkerTypeTrashPurge,
 }
 
 // AllWorkerTypes returns a copy of the canonical ordered worker-type set.
@@ -112,7 +117,8 @@ func (w WorkerType) IsValid() bool {
 		WorkerTypeItemReminder,
 		WorkerTypeCurrencyMigration,
 		WorkerTypeWeeklyDigest,
-		WorkerTypeOrphanFileGC:
+		WorkerTypeOrphanFileGC,
+		WorkerTypeTrashPurge:
 		return true
 	}
 	return false

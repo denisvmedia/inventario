@@ -1,10 +1,10 @@
 {
   "bulk": {
     "deleteButton": "Удалить",
-    "deleteDescription_one": "Это безвозвратно удалит выбранный предмет.",
-    "deleteDescription_few": "Это безвозвратно удалит {{count}} выбранных предмета.",
-    "deleteDescription_many": "Это безвозвратно удалит {{count}} выбранных предметов.",
-    "deleteDescription_other": "Это безвозвратно удалит {{count}} выбранных предметов.",
+    "deleteDescription_one": "Выбранный предмет переместится в корзину вместе с файлами, которые есть только у него. Оттуда его можно восстановить.",
+    "deleteDescription_few": "{{count}} выбранных предмета переместятся в корзину вместе с файлами, которые есть только у них. Оттуда их можно восстановить.",
+    "deleteDescription_many": "{{count}} выбранных предметов переместятся в корзину вместе с файлами, которые есть только у них. Оттуда их можно восстановить.",
+    "deleteDescription_other": "{{count}} выбранных предметов переместятся в корзину вместе с файлами, которые есть только у них. Оттуда их можно восстановить.",
     "deleteTitle_one": "Удалить {{count}} предмет?",
     "deleteTitle_few": "Удалить {{count}} предмета?",
     "deleteTitle_many": "Удалить {{count}} предметов?",
@@ -34,7 +34,7 @@
     "setSuccess": "Обложка обновлена."
   },
   "delete": {
-    "description": "Это безвозвратно удалит предмет и все прикреплённые файлы.",
+    "description": "Предмет переместится в корзину вместе с файлами, которые есть только у него. Оттуда его можно восстановить.",
     "title": "Удалить {{name}}?"
   },
   "detail": {
@@ -100,7 +100,7 @@
       "coverChangedLabelCleared": "Удалена обложка",
       "coverChangedLabelSet": "Установлена обложка",
       "createdLabel": "Добавлен этот предмет",
-      "deletedLabel": "Удалён этот предмет",
+      "deletedLabel": "Предмет перемещён в корзину",
       "lentOutLabel": "Выдано: {{borrower}}",
       "lentOutLabelDue": "Выдано: {{borrower}} (вернуть до {{dueBack}})",
       "lentOutLabelGeneric": "Выдано",
@@ -114,6 +114,8 @@
       "loanUpdatedLabelFields": "Заём обновлён: {{fields}}",
       "movedLabel": "Перемещено в новую зону",
       "priceChangedLabel": "Стоимость изменена",
+      "restoredLabel": "Предмет восстановлен из корзины",
+      "restoredLabelUnassigned": "Предмет восстановлен из корзины без места хранения: его зона была удалена",
       "returnedLabel": "Отмечено как возвращённое",
       "returnedLabelOn": "Отмечено как возвращённое {{returnedAt}}",
       "sentForServiceLabel": "Отправлено на обслуживание в {{provider}}",
@@ -524,10 +526,10 @@
     "written_off": "Списано"
   },
   "toast": {
-    "bulkDeleted_one": "{{count}} предмет удалён.",
-    "bulkDeleted_few": "{{count}} предмета удалено.",
-    "bulkDeleted_many": "{{count}} предметов удалено.",
-    "bulkDeleted_other": "{{count}} предмета удалено.",
+    "bulkDeleted_one": "{{count}} предмет перемещён в корзину.",
+    "bulkDeleted_few": "{{count}} предмета перемещено в корзину.",
+    "bulkDeleted_many": "{{count}} предметов перемещено в корзину.",
+    "bulkDeleted_other": "{{count}} предмета перемещено в корзину.",
     "bulkDeleteError": "Не удалось удалить выбранные предметы.",
     "bulkMoved_one": "{{count}} предмет перемещён.",
     "bulkMoved_few": "{{count}} предмета перемещено.",
@@ -535,7 +537,7 @@
     "bulkMoved_other": "{{count}} предмета перемещено.",
     "bulkMoveError": "Не удалось переместить выбранные предметы.",
     "created": "Предмет добавлен.",
-    "deleted": "Предмет удалён.",
+    "deleted": "Предмет перемещён в корзину.",
     "deleteError": "Не удалось удалить предмет.",
     "statusUpdated": "Статус обновлён.",
     "statusUpdateError": "Не удалось обновить статус.",

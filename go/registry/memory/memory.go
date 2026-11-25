@@ -43,6 +43,13 @@ func NewFactorySet() *registry.FactorySet {
 	// locationFactory, and fileFactory is constructed before all of them.
 	fileFactory.SetLinkedEntityFactories(commodityFactory, areaFactory, locationFactory)
 
+	// The group-wide reads of loans, service records and maintenance
+	// schedules leave out the rows of trashed items; postgres does it with a
+	// join on commodities.
+	commodityLoanFactory.SetCommodityFactory(commodityFactory)
+	commodityServiceFactory.SetCommodityFactory(commodityFactory)
+	maintenanceScheduleFactory.SetCommodityFactory(commodityFactory)
+
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory
 	fs.AreaRegistryFactory = areaFactory

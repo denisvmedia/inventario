@@ -1,10 +1,10 @@
 {
   "bulk": {
     "deleteButton": "Smazat",
-    "deleteDescription_one": "Tímto trvale odstraníte vybranou položku.",
-    "deleteDescription_few": "Tímto trvale odstraníte {{count}} vybrané položky.",
-    "deleteDescription_many": "Tímto trvale odstraníte {{count}} vybrané položky.",
-    "deleteDescription_other": "Tímto trvale odstraníte {{count}} vybraných položek.",
+    "deleteDescription_one": "Vybraná položka se přesune do koše spolu se soubory, které používá jen ona. Odtud ji můžete obnovit.",
+    "deleteDescription_few": "{{count}} vybrané položky se přesunou do koše spolu se soubory, které používají jen ony. Odtud je můžete obnovit.",
+    "deleteDescription_many": "{{count}} vybrané položky se přesunou do koše spolu se soubory, které používají jen ony. Odtud je můžete obnovit.",
+    "deleteDescription_other": "{{count}} vybraných položek se přesune do koše spolu se soubory, které používají jen ony. Odtud je můžete obnovit.",
     "deleteTitle_one": "Smazat {{count}} položku?",
     "deleteTitle_few": "Smazat {{count}} položky?",
     "deleteTitle_many": "Smazat {{count}} položky?",
@@ -34,7 +34,7 @@
     "setSuccess": "Titulní fotografie aktualizována."
   },
   "delete": {
-    "description": "Tímto trvale odstraníte položku i všechny připojené soubory.",
+    "description": "Položka se přesune do koše spolu se soubory, které používá jen ona. Odtud ji můžete obnovit.",
     "title": "Smazat {{name}}?"
   },
   "detail": {
@@ -100,7 +100,7 @@
       "coverChangedLabelCleared": "Titulní fotografie odstraněna",
       "coverChangedLabelSet": "Nastavena titulní fotografie",
       "createdLabel": "Položka přidána",
-      "deletedLabel": "Položka smazána",
+      "deletedLabel": "Položka přesunuta do koše",
       "lentOutLabel": "Zapůjčeno uživateli {{borrower}}",
       "lentOutLabelDue": "Zapůjčeno uživateli {{borrower}} (vrátit do {{dueBack}})",
       "lentOutLabelGeneric": "Zapůjčeno",
@@ -114,6 +114,8 @@
       "loanUpdatedLabelFields": "Zápůjčka aktualizována: {{fields}}",
       "movedLabel": "Přesunuto do nové oblasti",
       "priceChangedLabel": "Cena změněna",
+      "restoredLabel": "Položka obnovena z koše",
+      "restoredLabelUnassigned": "Položka obnovena z koše bez umístění; její oblast byla mezitím smazána",
       "returnedLabel": "Označeno jako vráceno",
       "returnedLabelOn": "Označeno jako vráceno dne {{returnedAt}}",
       "sentForServiceLabel": "Odesláno do servisu k {{provider}}",
@@ -524,10 +526,10 @@
     "written_off": "Odepsáno"
   },
   "toast": {
-    "bulkDeleted_one": "{{count}} položka smazána.",
-    "bulkDeleted_few": "{{count}} položky smazány.",
-    "bulkDeleted_many": "{{count}} položky smazáno.",
-    "bulkDeleted_other": "{{count}} položek smazáno.",
+    "bulkDeleted_one": "{{count}} položka přesunuta do koše.",
+    "bulkDeleted_few": "{{count}} položky přesunuty do koše.",
+    "bulkDeleted_many": "{{count}} položky přesunuto do koše.",
+    "bulkDeleted_other": "{{count}} položek přesunuto do koše.",
     "bulkDeleteError": "Vybrané položky se nepodařilo smazat.",
     "bulkMoved_one": "{{count}} položka přesunuta.",
     "bulkMoved_few": "{{count}} položky přesunuty.",
@@ -535,7 +537,7 @@
     "bulkMoved_other": "{{count}} položek přesunuto.",
     "bulkMoveError": "Vybrané položky se nepodařilo přesunout.",
     "created": "Položka přidána.",
-    "deleted": "Položka smazána.",
+    "deleted": "Položka přesunuta do koše.",
     "deleteError": "Položku se nepodařilo smazat.",
     "statusUpdated": "Stav aktualizován.",
     "statusUpdateError": "Stav se nepodařilo aktualizovat.",

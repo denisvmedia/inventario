@@ -425,6 +425,35 @@ describe("<CommodityHistoryTimeline />", () => {
     expect(row).not.toHaveTextContent(/May 15, 2024/)
   })
 
+  it("labels moving to and restoring from the trash", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.events(SLUG, COMMODITY_ID, [
+        {
+          id: "t3",
+          kind: "restored",
+          occurred_at: "2026-05-03T10:30:00Z",
+          after: { area_removed: true },
+          meta: { actor },
+        },
+        {
+          id: "t2",
+          kind: "deleted",
+          occurred_at: "2026-05-02T10:30:00Z",
+          meta: { actor },
+        },
+      ])
+    )
+    renderTimeline()
+    expect(await screen.findByTestId("history-row-restored")).toHaveTextContent(
+      /Restored this item from the trash without a location/
+    )
+    expect(screen.getByTestId("history-row-deleted")).toHaveTextContent(
+      /Moved this item to the trash/
+    )
+  })
+
   it("is axe-clean when populated", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

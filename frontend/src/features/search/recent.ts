@@ -1,6 +1,7 @@
-// Client-side "recently visited" cache for the search page's empty
-// state. Stored in localStorage scoped per group slug so two browser
-// tabs at different groups don't pollute each other's recents.
+// Client-side cache of the search results a user opened, from the search
+// page or the command palette, shown when either is empty. Stored in
+// localStorage scoped per group slug so two browser tabs at different
+// groups don't pollute each other's recents.
 //
 // Entries are append-with-dedupe + cap at MAX_RECENT, newest first.
 // An entry's URL is the in-app path the cards link to; the type lets
@@ -9,7 +10,7 @@
 const KEY_PREFIX = "inventario_recent_v1:"
 const MAX_RECENT = 10
 
-export type RecentResourceType = "commodity" | "location" | "area" | "file"
+export type RecentResourceType = "commodity" | "location" | "area" | "tag" | "file"
 
 export interface RecentEntry {
   type: RecentResourceType

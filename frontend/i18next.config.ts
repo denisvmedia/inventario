@@ -138,9 +138,12 @@ export default defineConfig({
       "members:roles.*",
       // search:groups.* — built from `t(\`search:groups.${type}\`)` per
       // resource (commodities/locations/areas/files/tags). The set is
-      // SearchableType in features/search/api.ts plus the BE-blocked
-      // "tags" type that ships as a stub.
+      // SearchableType in features/search/api.ts.
       "search:groups.*",
+      // search:kinds.* — the command palette and the search page label a
+      // recently opened result by its RecentResourceType
+      // (features/search/recent.ts) via `t(\`search:kinds.${type}\`)`. (#2801)
+      "search:kinds.*",
       // search:queryHints.* — resolved via a HINT_KEYS lookup table on
       // the empty-state page (`t(HINT_KEYS[h])`), so the extractor
       // can't see the literal keys.

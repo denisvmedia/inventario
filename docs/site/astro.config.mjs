@@ -101,6 +101,7 @@ export default defineConfig({
             { slug: 'files-and-photos' },
             { slug: 'warranties-loans-maintenance' },
             { slug: 'reports' },
+            { slug: 'trash' },
           ],
         },
         {

@@ -525,6 +525,13 @@ func (l *RestoreOperationProcessor) processFile(
 	l.createRestoreStep(ctx, step, models.RestoreStepResultInProgress, l.getActionDescription(action, options))
 
 	linkedDBID, ok := l.resolveLinkedEntityDBID(xmlFile.LinkedEntityType, xmlFile.LinkedEntityID, idMapping)
+	// A file of an item in Trash keeps its link and goes to Trash with it.
+	holderID := trashedItemOf(existing, xmlFile.LinkedEntityType, xmlFile.LinkedEntityID)
+	if !ok && holderID != "" {
+		linkedDBID, ok = holderID, true
+	} else {
+		holderID = ""
+	}
 	if !ok {
 		stats.ErrorCount++
 		msg := fmt.Sprintf("file %s references unknown %s %s", originalXMLID, xmlFile.LinkedEntityType, xmlFile.LinkedEntityID)
@@ -550,8 +557,23 @@ func (l *RestoreOperationProcessor) processFile(
 		l.updateRestoreStep(ctx, step, models.RestoreStepResultError, err.Error())
 		return err
 	}
+	if fileDBID := idMapping.Files[originalXMLID]; action == "create" && holderID != "" && fileDBID != "" && !options.DryRun {
+		if err := l.parkFileInTrash(ctx, fileDBID, holderID); err != nil {
+			l.updateRestoreStep(ctx, step, models.RestoreStepResultError, err.Error())
+			return err
+		}
+	}
 	l.updateRestoreStep(ctx, step, models.RestoreStepResultSuccess, "Completed")
 	return nil
+}
+
+// trashedItemOf returns the DB id of the item in Trash a legacy file element
+// links to, or "" when it links anything else.
+func trashedItemOf(existing *types.ExistingEntities, linkedType, linkedXMLID string) string {
+	if existing == nil || linkedType != models.FileLinkCommodity {
+		return ""
+	}
+	return existing.TrashedCommodities[linkedXMLID]
 }
 
 // decodeFileElement walks the children of a <file> StartElement, decoding each
@@ -647,13 +669,17 @@ func shouldWriteFileBlob(
 	if options.DryRun {
 		return false
 	}
+	if existing != nil && existing.TrashedFiles[xmlFile.ID] {
+		return false
+	}
 	if existing != nil && existing.Files != nil {
 		if _, dupe := existing.Files[xmlFile.ID]; dupe && options.Strategy == types.RestoreStrategyMergeAdd {
 			return false
 		}
 	}
 	if xmlFile.LinkedEntityType != "" && xmlFile.LinkedEntityID != "" {
-		if !linkedEntityResolves(xmlFile.LinkedEntityType, xmlFile.LinkedEntityID, idMapping) {
+		if !linkedEntityResolves(xmlFile.LinkedEntityType, xmlFile.LinkedEntityID, idMapping) &&
+			trashedItemOf(existing, xmlFile.LinkedEntityType, xmlFile.LinkedEntityID) == "" {
 			return false
 		}
 	}
@@ -849,11 +875,14 @@ func (l *RestoreOperationProcessor) predictFileAction(xmlID string, options type
 	case types.RestoreStrategyFullReplace:
 		return "create"
 	case types.RestoreStrategyMergeAdd:
-		if _, ok := existing.Files[xmlID]; ok {
+		if _, ok := existing.Files[xmlID]; ok || existing.TrashedFiles[xmlID] {
 			return "skip"
 		}
 		return "create"
 	case types.RestoreStrategyMergeUpdate:
+		if existing.TrashedFiles[xmlID] {
+			return "skip"
+		}
 		if _, ok := existing.Files[xmlID]; ok {
 			return "update"
 		}

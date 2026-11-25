@@ -3,31 +3,32 @@ import LanguageDetector from "i18next-browser-languagedetector"
 import resourcesToBackend from "i18next-resources-to-backend"
 import { initReactI18next } from "react-i18next"
 
-import * as enAdmin from "./locales/en/admin.json"
-import * as enAuth from "./locales/en/auth.json"
-import * as enBackoffice from "./locales/en/backoffice.json"
-import * as enCommodities from "./locales/en/commodities.json"
-import * as enCommon from "./locales/en/common.json"
-import * as enDashboard from "./locales/en/dashboard.json"
-import * as enErrors from "./locales/en/errors.json"
-import * as enExports from "./locales/en/exports.json"
-import * as enFeedback from "./locales/en/feedback.json"
-import * as enFiles from "./locales/en/files.json"
-import * as enGroups from "./locales/en/groups.json"
-import * as enLanding from "./locales/en/landing.json"
-import * as enLoans from "./locales/en/loans.json"
-import * as enLocations from "./locales/en/locations.json"
-import * as enMaintenance from "./locales/en/maintenance.json"
-import * as enMembers from "./locales/en/members.json"
-import * as enReminders from "./locales/en/reminders.json"
-import * as enReports from "./locales/en/reports.json"
-import * as enSearch from "./locales/en/search.json"
-import * as enServices from "./locales/en/services.json"
-import * as enSettings from "./locales/en/settings.json"
-import * as enStubs from "./locales/en/stubs.json"
-import * as enSupplies from "./locales/en/supplies.json"
-import * as enTags from "./locales/en/tags.json"
-import * as enWarranties from "./locales/en/warranties.json"
+import enAdmin from "./locales/en/admin.json"
+import enAuth from "./locales/en/auth.json"
+import enBackoffice from "./locales/en/backoffice.json"
+import enCommodities from "./locales/en/commodities.json"
+import enCommon from "./locales/en/common.json"
+import enDashboard from "./locales/en/dashboard.json"
+import enErrors from "./locales/en/errors.json"
+import enExports from "./locales/en/exports.json"
+import enFeedback from "./locales/en/feedback.json"
+import enFiles from "./locales/en/files.json"
+import enGroups from "./locales/en/groups.json"
+import enLanding from "./locales/en/landing.json"
+import enLoans from "./locales/en/loans.json"
+import enLocations from "./locales/en/locations.json"
+import enMaintenance from "./locales/en/maintenance.json"
+import enMembers from "./locales/en/members.json"
+import enReminders from "./locales/en/reminders.json"
+import enReports from "./locales/en/reports.json"
+import enSearch from "./locales/en/search.json"
+import enServices from "./locales/en/services.json"
+import enSettings from "./locales/en/settings.json"
+import enStubs from "./locales/en/stubs.json"
+import enSupplies from "./locales/en/supplies.json"
+import enTags from "./locales/en/tags.json"
+import enTrash from "./locales/en/trash.json"
+import enWarranties from "./locales/en/warranties.json"
 
 // Locales we ship today. `cs` and `ru` are present as namespace stubs (mostly
 // empty objects) and fall back to `en`; real translations land in follow-ups.
@@ -64,13 +65,14 @@ export const I18N_NAMESPACES = [
   "backoffice",
   "reports",
   "landing",
+  "trash",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
 // English is bundled statically — it is the fallback for every key, so the
 // app must not require an extra round-trip to render its very first frame.
-// `* as` import lets us survive both `--esModuleInterop` and the legacy
-// `module.exports` shape that some bundlers emit for `.json`.
+// Default imports, not `* as`: a namespace import only carries the top-level
+// keys that are valid identifiers, so a key such as "delete" would be lost.
 const enResources = {
   common: enCommon,
   auth: enAuth,
@@ -97,6 +99,7 @@ const enResources = {
   backoffice: enBackoffice,
   reports: enReports,
   landing: enLanding,
+  trash: enTrash,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via

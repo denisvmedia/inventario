@@ -268,6 +268,8 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 	entities.Areas = make(map[string]*models.Area)
 	entities.Commodities = make(map[string]*models.Commodity)
 	entities.Files = make(map[string]*models.FileEntity)
+	entities.TrashedCommodities = make(map[string]string)
+	entities.TrashedFiles = make(map[string]bool)
 
 	locReg, err := l.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
@@ -320,13 +322,106 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 		entities.Files[file.UUID] = file
 	}
 
+	return loadTrashedEntities(ctx, comReg, fileReg, entities)
+}
+
+// trashPageSize is how many Trash entries one read of loadTrashedEntities
+// takes.
+const trashPageSize = 500
+
+// loadTrashedEntities records the UUIDs of the group's items and files in
+// Trash: the files deleted on their own and the files that went with an item.
+func loadTrashedEntities(ctx context.Context, comReg registry.CommodityRegistry, fileReg registry.FileRegistry, entities *types.ExistingEntities) error {
+	var trashedItemIDs []string
+	for offset := 0; ; offset += trashPageSize {
+		page, total, err := comReg.ListTrashed(ctx, offset, trashPageSize)
+		if err != nil {
+			return errxtrace.Wrap("failed to load trashed commodities", err)
+		}
+		for _, c := range page {
+			entities.TrashedCommodities[c.UUID] = c.ID
+			trashedItemIDs = append(trashedItemIDs, c.ID)
+		}
+		if len(page) == 0 || offset+len(page) >= total {
+			break
+		}
+	}
+	for offset := 0; ; offset += trashPageSize {
+		page, total, err := fileReg.ListTrashed(ctx, offset, trashPageSize)
+		if err != nil {
+			return errxtrace.Wrap("failed to load trashed files", err)
+		}
+		for _, f := range page {
+			entities.TrashedFiles[f.UUID] = true
+		}
+		if len(page) == 0 || offset+len(page) >= total {
+			break
+		}
+	}
+	for _, id := range trashedItemIDs {
+		files, err := fileReg.ListTrashedLinkedTo(ctx, models.FileLinkCommodity, id)
+		if err != nil {
+			return errxtrace.Wrap("failed to load trashed item files", err, errx.Attrs("commodity_id", id))
+		}
+		for _, f := range files {
+			entities.TrashedFiles[f.UUID] = true
+		}
+	}
+	// A file whose item left Trash before the file was settled is in no list
+	// above, but its row still holds the UUID.
+	stranded, err := fileReg.ListStrandedTrashed(ctx, maxStrandedOnRestore)
+	if err != nil {
+		return errxtrace.Wrap("failed to load stranded trashed files", err)
+	}
+	for _, f := range stranded {
+		entities.TrashedFiles[f.UUID] = true
+	}
 	return nil
 }
 
-// clearExistingData removes all existing data for full replace strategy. Three
-// passes, in this order:
+// maxStrandedOnRestore bounds the stranded-file read of loadTrashedEntities.
+// The Trash sweep settles such files within one interval, so a group holds a
+// handful at most.
+const maxStrandedOnRestore = 10000
+
+// parkFileInTrash moves a file this restore has just created to Trash with
+// the item holderID. It is called for a new file whose only links point at
+// items in Trash: deleting the item would have taken the file along, and
+// restoring the item brings it back.
+func (l *RestoreOperationProcessor) parkFileInTrash(ctx context.Context, fileDBID, holderID string) error {
+	user := appctx.UserFromContext(ctx)
+	if user == nil {
+		return security.ErrNoUserContext
+	}
+	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user file registry", err)
+	}
+	if err := fileReg.Trash(ctx, fileDBID, user.ID, holderID, time.Now().UTC()); err != nil {
+		return errxtrace.Wrap("failed to move restored file to Trash", err, errx.Attrs("file_id", fileDBID))
+	}
+	return nil
+}
+
+// unparkFile brings back a file parkFileInTrash moved to Trash, once the
+// restore links it to a live entity.
+func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID string) error {
+	fileReg, err := l.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user file registry", err)
+	}
+	if err := fileReg.Restore(ctx, fileDBID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to restore file from Trash", err, errx.Attrs("file_id", fileDBID))
+	}
+	return nil
+}
+
+// clearExistingData removes all existing data for full replace strategy. The
+// group's Trash is emptied first: an item or file waiting there would otherwise
+// keep its UUID and collide with the archive's copy. Then three passes, in this
+// order:
 //
-//  1. DeleteLocationRecursive per location — cascades areas, their commodities,
+//  1. PurgeLocationRecursive per location — cascades areas, their commodities,
 //     and the commodity-/area-/location-linked files of that subtree.
 //  2. DeleteCommodityRecursive per SURVIVING commodity. Commodities are
 //     enumerated DIRECTLY because commodity.area_id is nullable since #1986: an
@@ -342,6 +437,10 @@ func (l *RestoreOperationProcessor) loadExistingEntities(ctx context.Context, en
 // commodity's own files (row + blob + thumbnails) instead of having them yanked
 // out from under a live row by the sweep.
 func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error {
+	if err := l.entityService.EmptyTrash(ctx); err != nil {
+		return errxtrace.Wrap("failed to empty Trash", err)
+	}
+
 	// RLS-scoped registry: a full_replace restore must only wipe the restoring
 	// user's own locations. CreateServiceRegistry bypasses RLS and would
 	// enumerate (and recursively delete) EVERY tenant's locations — a
@@ -356,7 +455,7 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		return errxtrace.Wrap("failed to list locations for deletion", err)
 	}
 	for _, location := range locations {
-		if err := l.entityService.DeleteLocationRecursive(ctx, location.ID); err != nil {
+		if err := l.entityService.PurgeLocationRecursive(ctx, location.ID); err != nil {
 			return errxtrace.Wrap("failed to delete location recursively", err, errx.Attrs("location_id", location.ID))
 		}
 	}
@@ -434,7 +533,7 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 
 	if l.commodityUUIDMap == nil {
 		serviceAccountRegistry := l.factorySet.CommodityRegistryFactory.CreateServiceRegistry()
-		allCommodities, err := serviceAccountRegistry.List(ctx)
+		allCommodities, err := listCommoditiesWithTrash(ctx, serviceAccountRegistry)
 		if err != nil {
 			stats.ErrorCount++
 			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
@@ -472,6 +571,27 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 	}
 
 	return nil
+}
+
+// listCommoditiesWithTrash returns every commodity the registry sees, the
+// ones in Trash included. A trashed item keeps its UUID, and a restore creates
+// items under their archived UUIDs, so the ownership check has to see trashed
+// items as well.
+func listCommoditiesWithTrash(ctx context.Context, reg registry.CommodityRegistry) ([]*models.Commodity, error) {
+	all, err := reg.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for offset := 0; ; offset += trashPageSize {
+		page, total, err := reg.ListTrashed(ctx, offset, trashPageSize)
+		if err != nil {
+			return nil, err
+		}
+		all = append(all, page...)
+		if len(page) == 0 || offset+len(page) >= total {
+			return all, nil
+		}
+	}
 }
 
 // trackCreatedEntity tracks entities created in this import session.
@@ -731,6 +851,11 @@ func (l *RestoreOperationProcessor) applyStrategyForCommodityModel(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	if existing != nil && existing.TrashedCommodities[originalID] != "" {
+		// The item is in Trash: a merge leaves it there.
+		stats.SkippedCount++
+		return nil
+	}
 	switch options.Strategy {
 	case types.RestoreStrategyFullReplace, types.RestoreStrategyMergeAdd:
 		if options.Strategy == types.RestoreStrategyMergeAdd && existingCommodity != nil {
@@ -883,6 +1008,11 @@ func (l *RestoreOperationProcessor) applyStrategyForFileModel(
 	idMapping *types.IDMapping,
 	options types.RestoreOptions,
 ) error {
+	if existing.TrashedFiles[originalID] {
+		// The file is in Trash: a merge leaves it there.
+		stats.SkippedCount++
+		return nil
+	}
 	existingFile := existing.Files[originalID]
 
 	switch decideFileStrategyAction(options.Strategy, existingFile) {

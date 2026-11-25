@@ -126,11 +126,8 @@ func (p *CurrencyMigrationProcessor) ProcessRunningMigration(ctx context.Context
 		// hashtext(group_id) live in the lock manager's 2x int4
 		// keyspace, so the pair acts as a per-group lock without
 		// needing an int8 PK.
-		if _, err := tx.ExecContext(ctx,
-			"SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
-			"currency_migration", op.GroupID,
-		); err != nil {
-			return errxtrace.Wrap("failed to take per-group advisory lock", err)
+		if err := lockGroupCurrencyMigration(ctx, tx, op.GroupID); err != nil {
+			return err
 		}
 
 		// Build the per-row callbacks the conversion service consumes.
@@ -464,4 +461,18 @@ func buildPriceChangedEvent(op *models.CurrencyMigration, diff *currency.PerRowD
 	event.SetGroupID(op.GroupID)
 	event.SetCreatedByUserID(op.CreatedByUserID)
 	return event
+}
+
+// lockGroupCurrencyMigration takes the group's currency-migration advisory
+// lock until tx ends. TX2 holds it while it converts the group; a write that
+// would break the conversion, such as deleting one of the rows it listed,
+// takes it too and waits for TX2 to finish.
+func lockGroupCurrencyMigration(ctx context.Context, tx *sqlx.Tx, groupID string) error {
+	if _, err := tx.ExecContext(ctx,
+		"SELECT pg_advisory_xact_lock(hashtext($1), hashtext($2))",
+		"currency_migration", groupID,
+	); err != nil {
+		return errxtrace.Wrap("failed to take per-group advisory lock", err)
+	}
+	return nil
 }

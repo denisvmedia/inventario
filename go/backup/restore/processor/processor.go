@@ -252,6 +252,7 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		options:   options,
 		fileRefs:  map[string]*inbPendingFile{},
 		delivered: map[string]string{},
+		parked:    map[string]bool{},
 
 		priceReading: types.PricesOmitZero,
 	}
@@ -423,6 +424,11 @@ type inbWalker struct {
 	// second entity of a shared file, in a later document) becomes a link on
 	// the restored file instead of a pending member.
 	delivered map[string]string
+
+	// parked holds the UUIDs of the files this restore created in Trash
+	// because every link they had pointed at an item in Trash. A later
+	// reference to a live entity brings such a file back.
+	parked map[string]bool
 
 	// pendingCovers accumulates cover-photo cross-references to patch once every
 	// file member has been processed (so idMapping.Files is fully populated).
@@ -758,13 +764,18 @@ func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, lin
 		return nil
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
+	live := ok
 	if !ok {
-		w.stats.ErrorCount++
-		w.stats.Errors = append(w.stats.Errors,
-			fmt.Sprintf("file %s references unmapped %s %s", fileUUID, link.linkedType, link.entityUUID))
-		return nil
+		if dbID = w.trashedItemID(link); dbID == "" {
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors,
+				fmt.Sprintf("file %s references unmapped %s %s", fileUUID, link.linkedType, link.entityUUID))
+			return nil
+		}
 	}
-	w.incBucketStat(link, ref.Tags)
+	if live {
+		w.incBucketStat(link, ref.Tags)
+	}
 	if w.options.DryRun {
 		return nil
 	}
@@ -774,7 +785,15 @@ func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, lin
 		// there is nothing to attach.
 		return nil
 	}
-	return w.ensureLinks(fileDBID, []types.INBFileLink{{Type: link.linkedType, DBID: dbID, Meta: link.meta}})
+	if err := w.ensureLinks(fileDBID, []types.INBFileLink{{Type: link.linkedType, DBID: dbID, Meta: link.meta}}); err != nil {
+		return err
+	}
+	if live && w.parked[fileUUID] {
+		// A live entity uses the file now, so it leaves Trash.
+		delete(w.parked, fileUUID)
+		return w.proc.unparkFile(w.ctx, fileDBID)
+	}
+	return nil
 }
 
 // ensureLinks attaches the file to every given entity it is not attached to
@@ -839,6 +858,16 @@ func (w *inbWalker) registerEntityFileRefs(refs []types.INBEntityFileRef) error 
 	return nil
 }
 
+// trashedItemID returns the DB id of the item in Trash the link points at, or
+// "" when it points elsewhere. A merge leaves that item alone and keeps the
+// link to it.
+func (w *inbWalker) trashedItemID(link inbFileLink) string {
+	if link.linkedType != models.FileLinkCommodity {
+		return ""
+	}
+	return w.existing.TrashedCommodities[link.entityUUID]
+}
+
 // resolveLinkedDBID maps a file's archived link to the destination entity's DB id.
 // A standalone file (empty type) resolves to an empty id, which is correct — the
 // row is persisted with no link at all. ok=false when the archive references an
@@ -892,7 +921,7 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// counted error — a dangling link must never be persisted. A file whose
 	// links all failed to resolve is dropped; a standalone file has no link to
 	// resolve and always lands.
-	links, standalone := w.resolveLinks(pending)
+	links, standalone, holderID := w.resolveLinks(pending)
 	if !standalone && len(links) == 0 {
 		_, _ = io.Copy(io.Discard, r)
 		return nil
@@ -931,6 +960,10 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	// exists — both known here — so the bytes can be drained (skip) instead of
 	// committed to blobKey. This mirrors the legacy XML path's
 	// shouldWriteFileBlob guard, which already gates the blob write.
+	if w.existing.TrashedFiles[pending.ref.ID] {
+		// The file is in Trash: a merge leaves it there.
+		return w.skipFileMember(r, hdr.Size, blobKey)
+	}
 	action := decideFileStrategyAction(w.options.Strategy, w.existing.Files[pending.ref.ID])
 
 	if action == fileActionSkip {
@@ -975,11 +1008,8 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	if err := w.proc.applyStrategyForFileModel(w.ctx, fileEntity, pending.ref.ID, w.stats, w.existing, w.idMapping, w.options); err != nil {
 		return err
 	}
-	if action == fileActionUpdate {
-		// Update leaves links alone; bring over the ones the row lacks.
-		if err := w.ensureLinks(fileEntity.ID, links); err != nil {
-			return err
-		}
+	if err := w.finishFileRow(action, pending.ref.ID, fileEntity.ID, links, holderID); err != nil {
+		return err
 	}
 
 	w.deleteSupersededBlob(staleBlobKey, blobKey)
@@ -990,17 +1020,47 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 	return nil
 }
 
+// finishFileRow completes a file row the strategy just wrote. An updated row
+// gets the links it lacks (an update leaves links alone); a created row whose
+// only links point at items in Trash goes to Trash with holderID.
+func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, links []types.INBFileLink, holderID string) error {
+	switch action {
+	case fileActionUpdate:
+		return w.ensureLinks(fileID, links)
+	case fileActionCreate:
+		fileDBID := w.idMapping.Files[fileUUID]
+		if holderID == "" || fileDBID == "" {
+			return nil
+		}
+		if err := w.proc.parkFileInTrash(w.ctx, fileDBID, holderID); err != nil {
+			return err
+		}
+		w.parked[fileUUID] = true
+	case fileActionSkip:
+	}
+	return nil
+}
+
 // resolveLinks maps a pending file's archived links to destination links.
 // standalone is true for a file archived without any link. Unmapped links are
-// counted as errors and left out.
-func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool) {
+// counted as errors and left out. A link to an item in Trash is kept; when
+// every link is one, holderID is the first such item, which the new file goes
+// to Trash with.
+func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool, holderID string) {
+	live := false
 	for _, link := range pending.links {
 		if link.linkedType == "" {
 			standalone = true
 			continue
 		}
 		dbID, ok := w.resolveLinkedDBID(link)
-		if !ok {
+		if ok {
+			live = true
+		} else if dbID = w.trashedItemID(link); dbID != "" {
+			if holderID == "" {
+				holderID = dbID
+			}
+		} else {
 			w.stats.ErrorCount++
 			w.stats.Errors = append(w.stats.Errors,
 				fmt.Sprintf("file %s references unmapped %s %s", pending.ref.ID, link.linkedType, link.entityUUID))
@@ -1017,7 +1077,10 @@ func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFile
 	if len(links) > 0 {
 		standalone = false
 	}
-	return links, standalone
+	if live {
+		holderID = ""
+	}
+	return links, standalone, holderID
 }
 
 // skipFileMember drains a file member's bytes (so the byte count still flows

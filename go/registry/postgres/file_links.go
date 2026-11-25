@@ -58,21 +58,6 @@ func (r *FileRegistry) loadLinks(ctx context.Context, tx *sqlx.Tx, files []*mode
 	return rows.Err()
 }
 
-// withLinks loads the links of files in a transaction of their own, for the
-// read paths that scan files through the store iterators.
-func (r *FileRegistry) withLinks(ctx context.Context, files []*models.FileEntity) ([]*models.FileEntity, error) {
-	if len(files) == 0 {
-		return files, nil
-	}
-	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		return r.loadLinks(ctx, tx, files)
-	})
-	if err != nil {
-		return nil, err
-	}
-	return files, nil
-}
-
 // queryFiles runs a SELECT of file rows and loads their links, in tx.
 func (r *FileRegistry) queryFiles(ctx context.Context, tx *sqlx.Tx, query string, args ...any) ([]*models.FileEntity, error) {
 	rows, err := tx.QueryxContext(ctx, query, args...)
@@ -266,7 +251,7 @@ func (r *FileRegistry) ListByChecksum(ctx context.Context, sha256 string) ([]*mo
 	}
 	var files []*models.FileEntity
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`SELECT * FROM %s WHERE sha256 = $1 ORDER BY created_at DESC, id DESC`, r.tableNames.Files())
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE sha256 = $1 AND %s ORDER BY created_at DESC, id DESC`, r.tableNames.Files(), liveRow)
 		var err error
 		files, err = r.queryFiles(ctx, tx, query, sha256)
 		return err
@@ -405,6 +390,7 @@ func (r *FileRegistry) createFile(ctx context.Context, file models.FileEntity) (
 
 	links := file.Links
 	file.Links = nil
+	file.ClearTrashState()
 	file.SetID(uuid.NewString())
 	file.SetUUID(uuid.NewString())
 	if !r.service {

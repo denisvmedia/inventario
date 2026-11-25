@@ -8,7 +8,7 @@ interface UseSearchOptions {
   // letter typing in the palette while the user is still writing.
   minChars?: number
   // Forwarded to the BE `limit=`. Default 5 (grouped-page section width);
-  // pass 3 for palette previews.
+  // the palette asks for fewer.
   limit?: number
   // Disables the query without changing the cache key — useful for the
   // palette's debounced query.
@@ -20,9 +20,9 @@ interface UseSearchOptions {
   groupSlug?: string | null
 }
 
-// useSearch is a per-type hook. The grouped page invokes it once per
-// resource (commodities, files, locations, areas); the palette only
-// hits commodities + files. 501 Not Implemented is folded into a
+// useSearch is a per-type hook. The grouped page and the command palette
+// invoke it once per resource (commodities, locations, areas, files,
+// tags). 501 Not Implemented is folded into a
 // `{ unavailable: true }` page by the api wrapper, so the consumer
 // renders a "coming soon" stub instead of a transport error.
 export function useSearch<TAttrs>(
