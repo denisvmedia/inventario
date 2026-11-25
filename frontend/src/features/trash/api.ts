@@ -136,15 +136,24 @@ export async function restoreCommodity(id: string): Promise<CommodityRestoreResu
   }
 }
 
+// The server restores at most this many items per request (jsonapi.MaxBulkIDs).
+const MAX_RESTORE_IDS = 100
+
+// Restores items from Trash. More ids than one request takes, as Undo after
+// a bulk delete of "all matching" items sends, go in several requests.
 export async function restoreCommodities(ids: string[]): Promise<BulkRestoreResult> {
-  const body = await http.post<BulkRestoreEnvelope>(
-    "/trash/commodities/restore",
-    bulkBody("commodities", ids)
-  )
-  return {
-    ...bulkResult(body),
-    areaRemoved: body.data?.attributes?.area_removed ?? [],
+  const merged: BulkRestoreResult = { succeeded: [], failed: [], areaRemoved: [] }
+  for (let i = 0; i < ids.length; i += MAX_RESTORE_IDS) {
+    const body = await http.post<BulkRestoreEnvelope>(
+      "/trash/commodities/restore",
+      bulkBody("commodities", ids.slice(i, i + MAX_RESTORE_IDS))
+    )
+    const part = bulkResult(body)
+    merged.succeeded.push(...part.succeeded)
+    merged.failed.push(...part.failed)
+    merged.areaRemoved.push(...(body.data?.attributes?.area_removed ?? []))
   }
+  return merged
 }
 
 export async function purgeCommodity(id: string): Promise<void> {

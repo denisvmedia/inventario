@@ -46,6 +46,11 @@ You don't have to create tags up front on the Tags page — most of the time you
 2. In the tags field, type a label and press **Enter** (or comma) to add it as a chip. As you type, Inventario suggests matching item tags you've used before.
 3. Save the item.
 
+**On several items at once:** select them on **All Items** and choose
+**Edit → Tags…** in the bulk-action bar. You pick tags to add and tags to
+remove; the items keep their other tags. See [Select and change items in
+bulk](../items/#select-and-change-items-in-bulk).
+
 **On a file:**
 
 1. Edit the file — open its detail panel and choose **Edit metadata** (or set tags while uploading, in the **Adjust** step) — and find its tags field.

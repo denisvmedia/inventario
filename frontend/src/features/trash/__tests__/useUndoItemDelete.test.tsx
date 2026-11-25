@@ -83,4 +83,30 @@ describe("useUndoItemDelete", () => {
 
     await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("1 done, 1 failed.", undefined))
   })
+
+  it("restores more items than one request takes in several requests", async () => {
+    const sent: string[][] = []
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/trash/commodities/restore`), async ({ request }) => {
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        const ids = body.data.attributes.ids
+        sent.push(ids)
+        return HttpResponse.json({
+          data: {
+            type: "commodities.bulk_restore_result",
+            id: "bulk-result",
+            attributes: { succeeded: ids, failed: [], area_removed: [] },
+          },
+        })
+      })
+    )
+    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    const { result } = renderHook(() => useUndoItemDelete(), { wrapper })
+    result.current(ids).onClick()
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("150 items restored.", undefined)
+    )
+    expect(sent.map((chunk) => chunk.length)).toEqual([100, 50])
+  })
 })

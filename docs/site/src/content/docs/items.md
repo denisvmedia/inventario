@@ -394,7 +394,9 @@ an item as:
 | **Disposed** | Permanently removed from your inventory. |
 | **Written Off** | Written off, usually for insurance or accounting. |
 
-To change status, open the item and use the **Change Status** buttons. Marking
+To change status, open the item and use the **Change Status** buttons, or
+change several items at once from the bulk-action bar (see [Select and change
+items in bulk](#select-and-change-items-in-bulk)). Marking
 an item as anything other than In Use opens a short dialog where you record the
 **date**, an optional **note**, and — for **Sold** — the **sale price**.
 
@@ -500,18 +502,56 @@ the first page. A tag on the item page, or a tag's name on the [Tags](../tags/)
 page, opens **All Items** filtered by that tag alone, with **Show inactive**
 on, so it lists every item that has the tag.
 
-## Select, move, and delete in bulk
+## Select and change items in bulk
 
 On the **All Items** page you can act on several items at once:
 
 1. Tick the checkbox on each item you want, or use **Select all visible** to
-   grab everything on the page.
+   select everything on the page.
 2. A bulk-action bar appears showing how many items are selected.
 3. Choose an action:
    - **Move…** — pick a **destination area** and confirm with **Move items**.
+   - **Edit** — opens a menu:
+     - **Tags…** — pick tags under **Add tags** and under **Remove tags**,
+       then click **Apply**. You can also type a new tag to add. Tags you do
+       not pick stay on each item as they are, so this never replaces an
+       item's tags.
+     - **Type…** — pick a type and click **Set type**.
+     - Under **Set status**, a status. **Lost**, **Disposed**, and
+       **Written Off** open the same dialog as a single change, for the
+       **date** and an optional **note**. **In Use** asks for confirmation and
+       clears the status date, note, and sale price. **Sold** is not offered,
+       because each item needs its own sale price: mark items sold one at a
+       time.
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
    - **Delete** — moves the selected items to the [Trash](../trash/) after a
      confirmation. The message that follows has an **Undo** button.
 
-To clear your selection, untick the items or reload the page.
+Each item is changed the way a single change would change it: the same checks
+apply, and the change shows in the item's history. An item that already has
+what you set, such as a tag it already carries, is left as it is.
+
+### Select every item that matches
+
+When the list has more than one page, select the whole page with **Select all
+visible**. The bar then offers **Select all N matching items**, which selects
+every item the current search and filters match, on every page. **Clear
+selection** goes back to no selection. **Print labels** is not offered for
+this selection.
+
+Inventario checks the selection again when you confirm an action. If the
+number of matching items changed in the meantime, for example because someone
+added an item, nothing is changed and a message asks you to check the list and
+try again. One action takes up to 500 items; when more match, narrow the
+filters first.
+
+### When some items fail
+
+If some items could not be changed, a dialog lists each of them with the
+reason. The items that failed stay selected. Click an item's name to open it
+and fix it, or click **Retry failed items** to run the same action on those
+items again.
+
+To clear your selection, untick the items or reload the page. Changing the
+search or a filter also clears it.

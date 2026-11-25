@@ -305,6 +305,14 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
   }
 }
 
+// The query as a bulk request names its items (CommoditySelection): the API
+// query string of the list options, without a page. The server parses it
+// with the same contract as GET /commodities, so it selects the items the
+// list shows.
+export function commodityQueryParam(query: CommodityQuery): string {
+  return listOptionsToParams(commodityQueryToListOptions(query)).toString()
+}
+
 // The unreadable values under their API names, or undefined when there are
 // none, so a query without them keeps its list-options shape.
 function apiUnreadable(values: UnreadableValues): Record<string, string> | undefined {

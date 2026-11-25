@@ -164,20 +164,58 @@ export function remove(slug: string, id: string) {
   ]
 }
 
-export function bulkDelete(slug: string) {
+// The bulk handlers answer like the server does when every id succeeds.
+// onRequest sees the request attributes; respond overrides the response, for
+// partial results and errors.
+type BulkAttributes = Record<string, unknown> & { ids?: string[] }
+interface BulkHandlerOptions {
+  onRequest?: (attributes: BulkAttributes) => void
+  respond?: (attributes: BulkAttributes) => Response | Promise<Response>
+}
+
+export function bulkResultResponse(result: {
+  succeeded?: string[]
+  skipped?: { id: string; name?: string }[]
+  failed?: { id: string; name?: string; code?: string; error?: string }[]
+}) {
+  return HttpResponse.json({
+    data: {
+      id: "bulk-result",
+      type: "commodities.bulk_result",
+      attributes: {
+        succeeded: result.succeeded ?? [],
+        failed: result.failed ?? [],
+        ...(result.skipped ? { skipped: result.skipped } : {}),
+      },
+    },
+  })
+}
+
+function bulkHandler(slug: string, action: string, opts: BulkHandlerOptions) {
   return [
-    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/bulk-delete`), () =>
-      HttpResponse.json({}, { status: 200 })
+    http.post(
+      apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${action}`),
+      async ({ request }) => {
+        const body = (await request.json()) as { data?: { attributes?: BulkAttributes } }
+        const attributes = body.data?.attributes ?? {}
+        opts.onRequest?.(attributes)
+        if (opts.respond) return opts.respond(attributes)
+        return bulkResultResponse({ succeeded: attributes.ids ?? [] })
+      }
     ),
   ]
 }
 
-export function bulkMove(slug: string) {
-  return [
-    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/bulk-move`), () =>
-      HttpResponse.json({}, { status: 200 })
-    ),
-  ]
+export function bulkDelete(slug: string, opts: BulkHandlerOptions = {}) {
+  return bulkHandler(slug, "bulk-delete", opts)
+}
+
+export function bulkMove(slug: string, opts: BulkHandlerOptions = {}) {
+  return bulkHandler(slug, "bulk-move", opts)
+}
+
+export function bulkUpdate(slug: string, opts: BulkHandlerOptions = {}) {
+  return bulkHandler(slug, "bulk-update", opts)
 }
 
 // CommodityEventFixture mirrors the BE list-row shape returned by

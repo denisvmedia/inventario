@@ -21,6 +21,22 @@ the section matching the tag and publishes it as the GitHub Release body. See
   them (format 3.2; a 3.1 archive restores with them empty)
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 
+- Bulk edits on the items list. The bulk-action bar has an Edit menu that adds
+  and removes tags (an item keeps the tags the change does not name), sets the
+  type, and changes the status with the same date and note dialog as a single
+  change; sold is left out, since each item needs its own sale price. After the
+  whole page is selected, "Select all N matching items" selects every item the
+  search and filters match, on every page, for every bulk action but label
+  printing. Each item goes through the checks of a single change and gets its
+  own history event. When some items fail, a dialog lists them with the reason,
+  keeps them selected and offers a retry of those items alone. The new
+  `POST /commodities/bulk-update` takes ids or a query of the item query
+  contract with the number of items it was seen to match, and refuses with 409
+  when that number changed; `bulk-move` and `bulk-delete` take the same
+  selection, and all three answer with the items that changed, were skipped as
+  unchanged, or failed with a reason. A query may select up to 500 items
+  ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).
+
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,
   from two cards a row on a phone to six on a wide screen. The previous cards

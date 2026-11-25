@@ -7,6 +7,7 @@ import { useInvalidateTrash } from "@/features/trash/hooks"
 import {
   bulkDeleteCommodities,
   bulkMoveCommodities,
+  bulkUpdateCommodities,
   createCommodity,
   deleteCommodity,
   getCommoditiesValue,
@@ -20,10 +21,13 @@ import {
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
+  type CommodityBulkPatch,
+  type CommodityBulkResult,
   type CommodityCover,
   type CommodityEvent,
   type CommodityEventKind,
   type CommodityMeta,
+  type CommoditySelection,
   type CreateCommodityRequest,
   type ListCommoditiesOptions,
   type UpdateCommodityRequest,
@@ -331,12 +335,14 @@ export function useSetCommodityCover(id: string) {
   })
 }
 
+// The bulk hooks refresh the list when the request settles, failed or
+// not: a 409 bulk.selection_changed means the list on screen is out of date.
 export function useBulkDeleteCommodities() {
   const invalidate = useInvalidate()
   const invalidateTrash = useInvalidateTrash()
-  return useMutation<void, Error, string[]>({
-    mutationFn: (ids) => bulkDeleteCommodities(ids),
-    onSuccess: () => {
+  return useMutation<CommodityBulkResult, Error, CommoditySelection>({
+    mutationFn: (selection) => bulkDeleteCommodities(selection),
+    onSettled: () => {
       invalidate.all()
       invalidateTrash()
     },
@@ -344,16 +350,33 @@ export function useBulkDeleteCommodities() {
 }
 
 interface BulkMoveVars {
-  ids: string[]
+  selection: CommoditySelection
   areaId: string
 }
 
 export function useBulkMoveCommodities() {
   const invalidate = useInvalidate()
-  return useMutation<void, Error, BulkMoveVars>({
-    mutationFn: ({ ids, areaId }) => bulkMoveCommodities(ids, areaId),
-    onSuccess: () => {
+  return useMutation<CommodityBulkResult, Error, BulkMoveVars>({
+    mutationFn: ({ selection, areaId }) => bulkMoveCommodities(selection, areaId),
+    onSettled: () => {
       invalidate.all()
+    },
+  })
+}
+
+interface BulkUpdateVars {
+  selection: CommoditySelection
+  patch: CommodityBulkPatch
+}
+
+export function useBulkUpdateCommodities() {
+  const invalidate = useInvalidate()
+  const invalidateTags = useInvalidateTags()
+  return useMutation<CommodityBulkResult, Error, BulkUpdateVars>({
+    mutationFn: ({ selection, patch }) => bulkUpdateCommodities(selection, patch),
+    onSettled: () => {
+      invalidate.all()
+      invalidateTags()
     },
   })
 }
