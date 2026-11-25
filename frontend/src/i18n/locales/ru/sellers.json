@@ -1,0 +1,71 @@
+{
+  "create": "Новый продавец",
+  "description": "Магазины и люди, у которых куплены ваши предметы.",
+  "dialog": {
+    "contactLabel": "Контакт",
+    "contactPlaceholder": "Телефон, e-mail или адрес",
+    "createSubmit": "Создать продавца",
+    "createTitle": "Новый продавец",
+    "description": "Магазин или человек, у которого покупает группа. Каждое имя в группе используется один раз.",
+    "editSubmit": "Сохранить изменения",
+    "editTitle": "Изменить продавца",
+    "errorGeneric": "Не удалось сохранить продавца.",
+    "nameLabel": "Название",
+    "namePlaceholder": "например, Хозяйственный магазин",
+    "noteLabel": "Заметка",
+    "notePlaceholder": "Номер клиента, часы работы, всё, что стоит сохранить",
+    "submitting": "Сохранение…",
+    "useExisting": "Выбрать {{name}}",
+    "websiteLabel": "Сайт"
+  },
+  "list": {
+    "delete": "Удалить {{name}}",
+    "edit": "Изменить {{name}}",
+    "empty": "Продавцов пока нет. Добавьте их здесь или на шаге «Покупка» у предмета.",
+    "emptyFiltered": "Нет продавцов по запросу «{{query}}».",
+    "loadError": "Не удалось загрузить продавцов.",
+    "results_few": "{{count}} результата",
+    "results_many": "{{count}} результатов",
+    "results_one": "{{count}} результат",
+    "results_other": "{{count}} результата",
+    "total_few": "{{count}} продавца",
+    "total_many": "{{count}} продавцов",
+    "total_one": "{{count}} продавец",
+    "total_other": "{{count}} продавца",
+    "usageItems_few": "{{count}} предмета",
+    "usageItems_many": "{{count}} предметов",
+    "usageItems_one": "{{count}} предмет",
+    "usageItems_other": "{{count}} предмета",
+    "usageNone": "Пока без предметов"
+  },
+  "removal": {
+    "confirmAction": "Удалить продавца",
+    "confirmDescription": "У продавца {{name}} нет предметов. Он будет удалён из группы.",
+    "confirmTitle": "Удалить {{name}}?",
+    "inUseDescription_few": "У продавца {{name}} куплено {{count}} предмета. Предметы останутся, но без продавца.",
+    "inUseDescription_many": "У продавца {{name}} куплено {{count}} предметов. Предметы останутся, но без продавца.",
+    "inUseDescription_one": "У продавца {{name}} куплен {{count}} предмет. Предмет останется, но без продавца.",
+    "inUseDescription_other": "У продавца {{name}} куплено {{count}} предмета. Предметы останутся, но без продавца."
+  },
+  "search": {
+    "clear": "Очистить поиск",
+    "label": "Поиск продавцов",
+    "placeholder": "Поиск продавцов…"
+  },
+  "title": "Продавцы",
+  "toast": {
+    "created": "Продавец создан",
+    "deleteError": "Не удалось удалить продавца.",
+    "deleted": "Продавец удалён",
+    "updated": "Продавец изменён"
+  },
+  "validation": {
+    "contactTooLong": "Не больше 500 символов.",
+    "nameRequired": "Введите название.",
+    "nameTaken": "Это название уже у другого продавца группы.",
+    "nameTooLong": "Не больше 100 символов.",
+    "noteTooLong": "Не больше 2000 символов.",
+    "websiteInvalid": "Введите полный адрес сайта, начиная с http:// или https://.",
+    "websiteTooLong": "Не больше 2048 символов."
+  }
+}

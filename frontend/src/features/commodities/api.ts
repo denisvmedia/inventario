@@ -130,6 +130,9 @@ export interface ListCommoditiesOptions {
   // with no area ("no location"). The toolbar chip toggles between
   // undefined and true; ignored by the BE when areaId is also set.
   unassigned?: boolean
+  // Seller filter (#2804), by seller id; OR-ed at the BE. The API param is
+  // `seller_id` (repeatable).
+  sellerIds?: string[]
   // Tag filter, by slug; see CommodityTagFilter in ./query. noTags cannot
   // be combined with tags or tagsExclude (the BE answers 400).
   tags?: string[]

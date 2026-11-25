@@ -1,6 +1,7 @@
 package commodityquery_test
 
 import (
+	"fmt"
 	"net/url"
 	"strings"
 	"testing"
@@ -27,6 +28,7 @@ func TestParse_EveryParameter(t *testing.T) {
 		"type=equipment", "type=tools", "type=equipment",
 		"status=in_use", "status=sold",
 		"area_id=area-1", "unassigned=1",
+		"seller_id=s-1", "seller_id=+s-2+", "seller_id=s-1",
 		"include_inactive=false",
 		"warranty_status=active", "warranty_status=expired",
 		"warranty_expires_before=2026-12-31",
@@ -46,6 +48,7 @@ func TestParse_EveryParameter(t *testing.T) {
 		Statuses:              []models.CommodityStatus{"in_use", "sold"},
 		AreaID:                "area-1",
 		Unassigned:            true,
+		SellerIDs:             []string{"s-1", "s-2"},
 		IncludeInactive:       false,
 		WarrantyStatuses:      []registry.WarrantyStatusFilter{"active", "expired"},
 		WarrantyExpiresBefore: "2026-12-31",
@@ -82,6 +85,7 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "a search text over the length limit", query: "q=" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "q"},
 		{name: "a search text over the term limit", query: "q=a+b+c+d+e+f+g+h+i+j+k", param: "q"},
 		{name: "too many tags", query: "tags=" + manyTags(commodityquery.MaxTags+1), param: "tags"},
+		{name: "too many sellers", query: manySellers(commodityquery.MaxSellers + 1), param: "seller_id"},
 		{name: "trashed that is neither", query: "trashed=deleted", param: "trashed"},
 		{name: "lent_out in the trash", query: "trashed=true&lent_out=false", param: "lent_out"},
 	} {
@@ -150,6 +154,14 @@ func manyTags(n int) string {
 	return strings.Join(tags, ",")
 }
 
+func manySellers(n int) string {
+	params := make([]string, n)
+	for i := range params {
+		params[i] = fmt.Sprintf("seller_id=s%d", i)
+	}
+	return strings.Join(params, "&")
+}
+
 func TestParse_Lenient(t *testing.T) {
 	c := qt.New(t)
 
@@ -199,6 +211,7 @@ func TestQuery_ValuesRoundTrip(t *testing.T) {
 			Statuses:              []models.CommodityStatus{"sold"},
 			AreaID:                "area-1",
 			Unassigned:            true,
+			SellerIDs:             []string{"s-2", "s-1"},
 			IncludeInactive:       false,
 			WarrantyStatuses:      []registry.WarrantyStatusFilter{"expiring"},
 			WarrantyExpiresBefore: "2027-01-01",
@@ -231,6 +244,7 @@ func TestQuery_ListOptions(t *testing.T) {
 	q := commodityquery.Query{
 		Text:            "drill",
 		AreaID:          "a",
+		SellerIDs:       []string{"s"},
 		IncludeInactive: true,
 		Tags:            registry.CommodityTagFilter{Exclude: []string{"x"}},
 		SortField:       registry.CommoditySortName,
@@ -239,6 +253,7 @@ func TestQuery_ListOptions(t *testing.T) {
 	opts := q.ListOptions()
 	c.Check(opts.Search, qt.Equals, "drill")
 	c.Check(opts.AreaID, qt.Equals, "a")
+	c.Check(opts.SellerIDs, qt.DeepEquals, []string{"s"})
 	c.Check(opts.IncludeInactive, qt.IsTrue)
 	c.Check(opts.Tags, qt.DeepEquals, q.Tags)
 	c.Check(opts.SortDesc, qt.IsTrue)

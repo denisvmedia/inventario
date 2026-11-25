@@ -165,6 +165,9 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// and the user columns -> users NO ACTION; cleared before both.
 	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
 	func(t store.TableNames) string { return string(t.SavedViews()) },
+	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
+	// them are gone.
+	func(t store.TableNames) string { return string(t.Sellers()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups NO ACTION; cleared before location_groups.

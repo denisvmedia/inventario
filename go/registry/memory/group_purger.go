@@ -27,6 +27,7 @@ type GroupPurger struct {
 	supplyLinks          registry.SupplyLinkRegistryFactory
 	savedViews           registry.SavedViewRegistryFactory
 	tags                 registry.TagRegistryFactory
+	sellers              registry.SellerRegistryFactory
 	exports              registry.ExportRegistryFactory
 	restoreOperations    registry.RestoreOperationRegistryFactory
 	restoreSteps         registry.RestoreStepRegistryFactory
@@ -56,6 +57,7 @@ func NewGroupPurger(
 	supplyLinks registry.SupplyLinkRegistryFactory,
 	savedViews registry.SavedViewRegistryFactory,
 	tags registry.TagRegistryFactory,
+	sellers registry.SellerRegistryFactory,
 	exports registry.ExportRegistryFactory,
 	restoreOperations registry.RestoreOperationRegistryFactory,
 	restoreSteps registry.RestoreStepRegistryFactory,
@@ -80,6 +82,7 @@ func NewGroupPurger(
 		supplyLinks:          supplyLinks,
 		savedViews:           savedViews,
 		tags:                 tags,
+		sellers:              sellers,
 		exports:              exports,
 		restoreOperations:    restoreOperations,
 		restoreSteps:         restoreSteps,
@@ -238,6 +241,12 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// placements every member had for it.
 		{"saved_views", func() error {
 			reg := r.savedViews.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Sellers (#2804). Dropped after the commodities that pointed at
+		// them, mirroring the postgres order.
+		{"sellers", func() error {
+			reg := r.sellers.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Per-user/per-group notification overrides (#2095). The registry is

@@ -1,4 +1,13 @@
-import { Calendar, DollarSign, Hash, MapPin, Package, Tag, type LucideIcon } from "lucide-react"
+import {
+  Calendar,
+  DollarSign,
+  Hash,
+  MapPin,
+  Package,
+  Store,
+  Tag,
+  type LucideIcon,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Separator } from "@/components/ui/separator"
@@ -28,6 +37,8 @@ interface ItemReportProps {
   imageSize: PhotoSize
   // "{Location} · {Area}" breadcrumb for the item's area.
   areaLabel: string
+  // The seller the item was bought from, "" for none.
+  sellerName?: string
   // Group currency: the estimated value is in it.
   groupCurrency: string
   // Purchase currency — `original_price` lives here.
@@ -40,6 +51,7 @@ export function ItemReport({
   imageFiles,
   imageSize,
   areaLabel,
+  sellerName = "",
   groupCurrency,
   purchaseCurrency,
   generatedDate,
@@ -85,6 +97,11 @@ export function ItemReport({
       value: commodity.purchase_date
         ? formatDate(commodity.purchase_date, { style: "long" })
         : noValue,
+    },
+    {
+      icon: Store,
+      label: t("reports:insurance.fields.seller"),
+      value: sellerName || noValue,
     },
     {
       icon: MapPin,

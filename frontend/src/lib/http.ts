@@ -60,6 +60,8 @@ const GROUP_SCOPED_PREFIXES = [
   // cover the per-row PATCH / DELETE and the group-wide Upcoming list.
   "/reminders",
   "/upcoming",
+  // The group's sellers (#2804).
+  "/sellers",
   "/upload-slots",
   "/uploads",
   "/settings",

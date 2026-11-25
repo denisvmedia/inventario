@@ -26,6 +26,7 @@
     "fields": {
       "location": "Локация",
       "purchaseDate": "Дата покупки",
+      "seller": "Продавец",
       "serialNumber": "Серийный номер",
       "type": "Тип"
     },

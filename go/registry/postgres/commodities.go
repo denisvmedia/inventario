@@ -116,6 +116,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// "unassigned" (#1986): a stored "" would miss the `area_id IS NULL`
 	// filter and match no real area.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
 
 	// Every row written now tells an unknown price from a zero one.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -145,6 +146,9 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
 				return err
 			}
+		}
+		if err := r.checkSeller(ctx, tx, commodity.SellerID); err != nil {
+			return err
 		}
 		// Auto-create / row-lock referenced tag rows inside this same tx
 		// so a concurrent DeleteTag(force=true) on one of these slugs
@@ -525,6 +529,9 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		add(cond.In("status", anyStrings(opts.Statuses)...))
 	}
 	add(commodityAreaExpr(cond, opts))
+	if len(opts.SellerIDs) > 0 {
+		add(cond.In("seller_id", anyStrings(opts.SellerIDs)...))
+	}
 	for _, term := range registry.SplitSearchTerms(opts.Search) {
 		add(searchTermExpr(cond, term, opts.SearchTagLabels[term]))
 	}
@@ -757,6 +764,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
 	// empty string persists as NULL, consistent with the IS NULL filter.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
 
 	// The caller's prices tell unknown from zero, whatever the row held.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -784,6 +792,9 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
 				return err
 			}
+		}
+		if err := r.checkSeller(ctx, tx, commodity.SellerID); err != nil {
+			return err
 		}
 		// Same orphan-prevention as in Create — an Update that adds new
 		// tag slugs needs to grab the per-(group, slug) lock + upsert the
@@ -877,6 +888,22 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 	}
 
 	return &area, nil
+}
+
+// checkSeller verifies that sellerID, when set, names a seller the
+// transaction can see. The transaction runs under the group's row-level
+// security, so a seller of another group is not found, which the foreign key
+// alone would not catch.
+func (r *CommodityRegistry) checkSeller(ctx context.Context, tx *sqlx.Tx, sellerID *string) error {
+	if sellerID == nil {
+		return nil
+	}
+	var seller models.Seller
+	sellerReg := store.NewTxRegistry[models.Seller](tx, r.tableNames.Sellers())
+	if err := sellerReg.ScanOneByField(ctx, store.Pair("id", *sellerID), &seller); err != nil {
+		return errxtrace.Wrap("failed to get seller", err)
+	}
+	return nil
 }
 
 // Legacy file-related methods (GetImages/GetManuals/GetInvoices) were removed

@@ -49,6 +49,7 @@ var contentTablesByCreatedByUserID = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.Locations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },
 	func(t store.TableNames) string { return string(t.Tags()) },
+	func(t store.TableNames) string { return string(t.Sellers()) },
 }
 
 // HasRetainedOwnedContent runs one read-only transaction with an EXISTS query

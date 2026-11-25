@@ -104,6 +104,10 @@ export default defineConfig({
       //   are plain strings surfaced through <FieldError>. Same pattern as
       //   auth:validation.*. (#2805)
       "reminders:validation.*",
+      // sellers:validation.* — zod messages in features/sellers/schemas.ts and
+      //   the name-taken message SellerFormDialog sets on a 409, surfaced
+      //   through <FieldError>. Same pattern as auth:validation.*. (#2804)
+      "sellers:validation.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
       //   reminders/updates/channels; row ids: warrantyExpiry,
