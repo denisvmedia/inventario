@@ -12,6 +12,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- "New location" and "New area" at the end of the Location and Area pickers
+  on the item's edit form, its All fields dialog and the location quick edit.
+  They open the Locations page's create dialog over the item and select what
+  it created, so a place that does not exist yet no longer means leaving the
+  item. Only owners and administrators see them, as only they can create
+  locations and areas
+  ([#2796](https://github.com/denisvmedia/inventario/issues/2796)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;

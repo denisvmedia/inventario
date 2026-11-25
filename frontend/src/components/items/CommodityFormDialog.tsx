@@ -72,6 +72,11 @@ import {
   type CommodityTypeValue,
 } from "@/features/commodities/constants"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
+import {
+  LocationAreaFields,
+  type AreaOption,
+  type LocationOption,
+} from "@/components/locations/LocationAreaFields"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
 import type {
   Commodity,
@@ -85,18 +90,6 @@ import {
 } from "@/components/items/AiScanStep"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
-import { withId } from "@/lib/with-id"
-
-interface AreaOption {
-  id?: string
-  name?: string
-  location_id?: string
-}
-
-interface LocationOption {
-  id?: string
-  name?: string
-}
 
 interface CommodityFormDialogProps {
   open: boolean
@@ -1142,52 +1135,6 @@ function BasicsStep(props: any) {
     showStatus,
     showLocationPicker,
   } = props
-  // Mock AddItemDialog L1074-L1091: Location and Area are paired
-  // selects. The form schema only carries `area_id` (the BE resolves
-  // location via the area), so the location_id lives in local UI
-  // state and is derived from the selected area on edit. Picking a
-  // different location clears the area.
-  const allAreas = areas as AreaOption[]
-  const areaIdValue = (watch("area_id") as string | undefined) ?? ""
-  // selectedLocationId is UI-only — the form schema only carries
-  // area_id. Initialise from the current area_id (covers edit mode
-  // and dialog re-opens that re-mount BasicsStep). After mount the
-  // user owns this state via handleLocationChange; we deliberately
-  // don't keep an area→location useEffect — it would race with
-  // setValue("area_id", "") inside handleLocationChange and snap the
-  // location back to "" the moment the user picked a new one.
-  const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
-    if (!areaIdValue) return ""
-    const match = allAreas.find((a) => a.id === areaIdValue)
-    return match?.location_id ?? ""
-  })
-  // Back-fill selectedLocationId once when `areas` arrives async. The
-  // initial useState ran before useAreas() resolved, so an edit-mode
-  // dialog mounting with a real `area_id` but an empty `areas` array
-  // captured "" and never updated — the Area select stayed empty +
-  // disabled. Only auto-fill while we still hold "" AND a matching
-  // area is now reachable. Once the user picks a location explicitly
-  // we don't touch their choice again (handleLocationChange owns it
-  // from then on).
-  useEffect(() => {
-    if (selectedLocationId !== "") return
-    if (!areaIdValue) return
-    const match = allAreas.find((a) => a.id === areaIdValue)
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-time async back-fill: the initial useState ran before the areas query resolved, so we have to recompute on the next data tick. Gated on `selectedLocationId === ""` so a user-driven location change isn't overridden.
-    if (match?.location_id) setSelectedLocationId(match.location_id)
-  }, [allAreas, areaIdValue, selectedLocationId])
-  const visibleAreas = selectedLocationId
-    ? allAreas.filter((a) => a.location_id === selectedLocationId)
-    : []
-  const visibleLocations = locations as LocationOption[]
-  function handleLocationChange(next: string) {
-    if (next === selectedLocationId) return
-    setSelectedLocationId(next)
-    // Clear area when location changes — the previous area belongs
-    // to a different location and would be invalid for the BE's
-    // group-aware uniqueness checks.
-    setValue("area_id", "", { shouldDirty: true, shouldValidate: false })
-  }
   return (
     <div className="space-y-4 py-2" data-testid="commodity-form-basics-step">
       <div className="flex flex-col gap-1.5">
@@ -1321,81 +1268,15 @@ function BasicsStep(props: any) {
           In edit mode the picker also lets the user un-assign (Clear)
           since area is now optional (#1986). */}
       {showLocationPicker ? (
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex flex-col gap-1.5">
-            <div className="flex items-center justify-between gap-2">
-              <FieldLabel htmlFor="commodity-location">
-                {t("commodities:fields.location")}
-              </FieldLabel>
-              {selectedLocationId ? (
-                <button
-                  type="button"
-                  onClick={() => handleLocationChange("")}
-                  className="text-xs text-muted-foreground transition-colors hover:text-foreground"
-                >
-                  {t("commodities:fields.clearLocation")}
-                </button>
-              ) : null}
-            </div>
-            <Select value={selectedLocationId || undefined} onValueChange={handleLocationChange}>
-              <SelectTrigger id="commodity-location" className="w-full">
-                <SelectValue placeholder={t("commodities:fields.locationPlaceholder")} />
-              </SelectTrigger>
-              <SelectContent>
-                {withId(visibleLocations).map((l) => (
-                  <SelectItem key={l.id} value={l.id}>
-                    {l.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <FieldLabel htmlFor="commodity-area">{t("commodities:fields.area")}</FieldLabel>
-            <Controller
-              control={control}
-              name="area_id"
-              render={({ field }) => (
-                <Select
-                  // Re-key on selectedLocationId so a location swap
-                  // remounts the Select with a clean Radix internal
-                  // state — without this, Radix keeps the previously-
-                  // selected label visible in the trigger even though
-                  // the controlled value has been reset to "" and the
-                  // option is no longer in the list, leaving the field
-                  // looking blank rather than restoring the
-                  // "Pick an area" placeholder.
-                  key={selectedLocationId || "no-location"}
-                  value={field.value || undefined}
-                  onValueChange={field.onChange}
-                  disabled={!selectedLocationId}
-                >
-                  <SelectTrigger
-                    id="commodity-area"
-                    className="w-full"
-                    aria-invalid={!!errors.area_id}
-                  >
-                    <SelectValue
-                      placeholder={
-                        selectedLocationId
-                          ? t("commodities:fields.areaPlaceholder")
-                          : t("commodities:fields.areaPlaceholderNoLocation")
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {withId(visibleAreas).map((a) => (
-                      <SelectItem key={a.id} value={a.id}>
-                        {a.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-            <FieldError error={errors.area_id} />
-          </div>
-        </div>
+        <LocationAreaFields
+          areas={areas}
+          locations={locations}
+          areaId={watch("area_id") ?? ""}
+          onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
+          idPrefix="commodity"
+          areaError={errors.area_id}
+          renderLabel={(htmlFor, text) => <FieldLabel htmlFor={htmlFor}>{text}</FieldLabel>}
+        />
       ) : null}
 
       {showStatus ? (

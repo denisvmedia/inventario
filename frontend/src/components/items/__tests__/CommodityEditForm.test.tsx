@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
@@ -14,7 +14,7 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { HttpError, __resetHttpForTests } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { apiUrl, groupHandlers, tagHandlers } from "@/test/handlers"
+import { apiUrl, authHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
 
 const SLUG = "household"
 
@@ -48,7 +48,8 @@ const noList: ListNavigation = {
 
 function renderForm(
   overrides: Partial<Commodity> = {},
-  props: { onSubmit?: (req: unknown) => Promise<unknown> } = {}
+  // `role` signs a member in with that role in the group.
+  props: { onSubmit?: (req: unknown) => Promise<unknown>; role?: string } = {}
 ) {
   setAccessToken("good-token")
   server.use(
@@ -56,6 +57,14 @@ function renderForm(
     ...tagHandlers.list(SLUG, []),
     http.get(apiUrl("/currencies"), () => HttpResponse.json(["USD", "EUR"]))
   )
+  if (props.role) {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...memberHandlers.list("g1", [
+        { id: "m1", attributes: { member_user_id: "u1", role: props.role } },
+      ])
+    )
+  }
   const handlers = {
     onSubmit: vi.fn(props.onSubmit ?? (async () => ({}))),
     onExit: vi.fn(),
@@ -63,6 +72,7 @@ function renderForm(
     onAllFields: vi.fn(),
   }
   const utils = renderWithProviders({
+    withAuth: !!props.role,
     initialPath: `/g/${SLUG}/x`,
     routes: (
       <Route
@@ -188,6 +198,35 @@ describe("<CommodityEditForm />", () => {
     await user.click(screen.getByTestId("commodity-edit-save"))
     expect(await screen.findByText("is already taken")).toBeInTheDocument()
     expect(screen.queryByTestId("commodity-edit-hidden-error")).toBeNull()
+  })
+
+  it("creates a location from the picker without saving or dropping edits", async () => {
+    const user = userEvent.setup()
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/locations`), () =>
+        HttpResponse.json(
+          { data: { id: "l2", type: "locations", attributes: { name: "Cottage" } } },
+          { status: 201 }
+        )
+      )
+    )
+    const { onSubmit, onExit } = renderForm({}, { role: "owner" })
+    await user.type(await screen.findByLabelText(/serial number/i), "SN-7")
+
+    await user.click(screen.getByRole("combobox", { name: /^location/i }))
+    const listbox = await screen.findByRole("listbox")
+    await user.click(await within(listbox).findByRole("option", { name: /new location/i }))
+    const dialog = await screen.findByTestId("location-form-dialog")
+    await user.type(within(dialog).getByTestId("location-name-input"), "Cottage")
+    await user.click(within(dialog).getByTestId("location-form-submit"))
+    await waitFor(() => expect(screen.queryByTestId("location-form-dialog")).toBeNull())
+
+    expect(screen.getByRole("combobox", { name: /^location/i })).toHaveTextContent("Cottage")
+    expect(screen.getByLabelText(/serial number/i)).toHaveValue("SN-7")
+    // The dialog's submit stays out of the item form.
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(onExit).not.toHaveBeenCalled()
+    expect(screen.getByTestId("commodity-edit-form")).toBeInTheDocument()
   })
 
   it("disables an empty warranty for a bundle", async () => {

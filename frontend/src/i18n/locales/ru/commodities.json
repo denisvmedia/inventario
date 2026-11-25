@@ -235,6 +235,8 @@
     "locationPlaceholder": "Выберите локацию",
     "name": "Название",
     "namePlaceholder": "напр. посудомоечная машина Bosch SMV6ZCX42E",
+    "newArea": "Новая зона",
+    "newLocation": "Новая локация",
     "originalPrice": "Первоначальная стоимость",
     "originalPriceHelp": "Валюта первоначальной покупки",
     "partNumbers": "Артикулы",
