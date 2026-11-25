@@ -379,8 +379,9 @@ type CommodityRegistry interface {
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
 	// ListBrands returns the brands the commodities of the group carry, with
-	// how many carry each, for the brand input's suggestions. Every
-	// commodity counts, drafts and inactive items included. A brand matches
+	// how many carry each, for the brand input's suggestions. Every live
+	// commodity counts, drafts and inactive items included; items in Trash
+	// do not. A brand matches
 	// when it contains query as a case-insensitive literal substring; an
 	// empty query matches every brand. CountCommodityBrands states the rules
 	// and the order; at most limit brands are returned.
