@@ -9,6 +9,7 @@ import (
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // FileResponse is an object that holds file information.
@@ -411,6 +412,9 @@ type SearchMeta struct {
 	EntityType string `json:"entity_type"`
 	Total      int    `json:"total"`
 	Query      string `json:"query,omitempty"`
+	// Matches maps result id → the fields the query was found in. Only
+	// the commodities search fills it.
+	Matches map[string][]registry.CommoditySearchMatch `json:"matches,omitempty"`
 }
 
 // NewSearchResponse creates a new search response
@@ -422,6 +426,14 @@ func NewSearchResponse(entityType string, data any, total int) *SearchResponse {
 			Total:      total,
 		},
 	}
+}
+
+// WithMatches sets meta.matches; an empty map leaves it out.
+func (sr *SearchResponse) WithMatches(matches map[string][]registry.CommoditySearchMatch) *SearchResponse {
+	if len(matches) > 0 {
+		sr.Meta.Matches = matches
+	}
+	return sr
 }
 
 // Render renders the SearchResponse as an HTTP response

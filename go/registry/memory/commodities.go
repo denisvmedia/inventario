@@ -377,7 +377,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 // no filter" contract.
 func filterCommodities(in []*models.Commodity, opts registry.CommodityListOptions) []*models.Commodity {
 	out := make([]*models.Commodity, 0, len(in))
-	q := strings.ToLower(strings.TrimSpace(opts.Search))
+	terms := registry.SplitSearchTerms(opts.Search)
 	now := opts.WarrantyNow
 	if now.IsZero() {
 		now = time.Now()
@@ -394,7 +394,7 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 		}
 	}
 	for _, c := range in {
-		if c == nil || !commodityMatches(c, opts, q, now, openSet) {
+		if c == nil || !commodityMatches(c, opts, terms, now, openSet) {
 			continue
 		}
 		out = append(out, c)
@@ -422,7 +422,7 @@ func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOption
 	}
 }
 
-func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q string, now time.Time, openSet map[string]struct{}) bool {
+func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, terms []string, now time.Time, openSet map[string]struct{}) bool {
 	// Default view hides drafts. The explicit Statuses filter never
 	// overrides this — drafts are orthogonal to status.
 	if !opts.IncludeInactive && c.Draft {
@@ -444,7 +444,10 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, q
 	if !commodityMatchesArea(c, opts) {
 		return false
 	}
-	if q != "" && !commoditySearchMatches(c, q) {
+	if _, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels); !ok {
+		return false
+	}
+	if !opts.Tags.Matches(c.Tags) {
 		return false
 	}
 	if len(opts.WarrantyStatuses) > 0 {
@@ -477,20 +480,6 @@ func matchesLentOut(c *models.Commodity, lentOut *bool, openSet map[string]struc
 	}
 	_, open := openSet[c.ID]
 	return open == *lentOut
-}
-
-// commoditySearchMatches reports whether c's name or short_name
-// contains the lowercased query substring q. q is assumed pre-lowered
-// (matches the caller's TrimSpace + ToLower).
-func commoditySearchMatches(c *models.Commodity, q string) bool {
-	if strings.Contains(strings.ToLower(c.Name), q) {
-		return true
-	}
-	if strings.Contains(strings.ToLower(c.ShortName), q) {
-		return true
-	}
-	n, ok := models.ParseAssetID(q)
-	return ok && c.AssetNumber != nil && *c.AssetNumber == n
 }
 
 // pdateString unwraps the PDate pointer to its underlying ISO string,

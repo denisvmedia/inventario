@@ -153,11 +153,19 @@ type CommodityListOptions struct {
 	// filter always wins, so passing both is the same as filtering by
 	// AreaID alone.
 	Unassigned bool
-	// Search runs a case-insensitive substring match against the Name
-	// and ShortName fields. When it also reads as an asset ID
-	// (models.ParseAssetID: "A-0042", "42", ...), a commodity with that
-	// asset number matches too. Empty = no search.
+	// Search is the free-text query. SplitSearchTerms splits it into terms
+	// and a commodity matches when every term matches one of its search
+	// fields, its tags or its asset ID — MatchCommoditySearch states the
+	// rule. Empty = no search.
 	Search string
+	// SearchTagLabels maps each term of Search to the slugs of the
+	// commodity tags in the group whose label contains it, so a term can
+	// find an item by the label of its tag as well as by the slug.
+	// services/commodityquery fills it from TagRegistry.SlugsByLabel; a
+	// term without an entry matches tags by slug only.
+	SearchTagLabels map[string][]string
+	// Tags narrows by the tags items carry; see CommodityTagFilter.
+	Tags CommodityTagFilter
 	// IncludeInactive controls whether non-`in_use` commodities AND
 	// drafts are included. The list page hides them by default; when
 	// the user toggles "Show inactive" the FE sends true. This is
@@ -712,6 +720,14 @@ type TagRegistry interface {
 	// autocomplete endpoint and ranked by usage desc + recency. Empty q
 	// returns the most-used tags of that kind, also capped at limit.
 	Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error)
+
+	// SlugsByLabel returns, sorted, the slugs of every tag of the given
+	// kind in the current group whose label contains text as a
+	// case-insensitive literal substring (% and _ match themselves).
+	// Empty text returns nil. The item search uses it to find an item by
+	// the label of one of its tags; kind keeps the item and file tag
+	// namespaces apart.
+	SlugsByLabel(ctx context.Context, kind models.TagKind, text string) ([]string, error)
 
 	// GetUsage returns the reference count for a tag of the given kind
 	// within the current group (commodities for commodity tags, files for

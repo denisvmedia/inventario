@@ -53,6 +53,10 @@ export default defineConfig({
     //   sees only the template literal and can't enumerate the entries.
     preservePatterns: [
       "stubs:surfaces.*",
+      // commodities:searchMatch.field.* — SearchMatchHint labels a search
+      //   match by the field the BE reports (registry.CommoditySearchField),
+      //   via `t(\`commodities:searchMatch.field.${match.field}\`)`. (#2800)
+      "commodities:searchMatch.field.*",
       "common:nav.*",
       // errors:validation.* — backend field-validation messages keyed by the
       //   BE's stable validation code, resolved via

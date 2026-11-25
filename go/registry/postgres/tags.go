@@ -281,6 +281,35 @@ func (r *TagRegistry) applyTagOrder(sb *sqlb.SelectBuilder, opts registry.TagLis
 	}
 }
 
+// SlugsByLabel returns the sorted slugs of the group's tags of the given kind
+// whose label contains text. The pattern is escaped so the match is literal,
+// like the memory backend's strings.Contains; the trigram index on label
+// serves the ILIKE.
+func (r *TagRegistry) SlugsByLabel(ctx context.Context, kind models.TagKind, text string) ([]string, error) {
+	if text == "" {
+		return nil, nil
+	}
+	sb := newSelect().Select("t.slug").From(string(r.tableNames.Tags()) + " t")
+	sb.Where(
+		sb.Equal("t.kind", kind),
+		sb.ILike("t.label", containsPattern(text)),
+	)
+	query, args := sb.Build()
+
+	var slugs []string
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		return tx.SelectContext(ctx, &slugs, query, args...)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to match tag labels", err)
+	}
+	// Sorted here rather than by ORDER BY: the database collation would
+	// order non-ASCII slugs differently from the memory backend.
+	slices.Sort(slugs)
+	return slugs, nil
+}
+
 func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind models.TagKind) ([]*models.Tag, error) {
 	var tags []*models.Tag
 

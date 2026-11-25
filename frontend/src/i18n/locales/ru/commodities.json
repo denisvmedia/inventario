@@ -453,7 +453,9 @@
     "headerStatus": "Статус",
     "headerValue": "Стоимость",
     "heading": "Предметы",
-    "searchPlaceholder": "Поиск по названию, краткому названию или инвентарному номеру…",
+    "invalidQueryDescription": "Ссылка требует фильтр, который список предметов не умеет применять ({{parameter}}). Сбросьте фильтры, чтобы увидеть свои предметы.",
+    "invalidQueryTitle": "Этот фильтр не поддерживается",
+    "searchPlaceholder": "Поиск по названию, серийному номеру, артикулу, тегу, заметкам или инвентарному номеру…",
     "selectAll": "Выбрать все видимые",
     "subtitle_one": "{{count}} предмет в этой группе",
     "subtitle_few": "{{count}} предмета в этой группе",
@@ -476,6 +478,21 @@
     "sectionBasics": "Основное",
     "sectionExtras": "Дополнительно",
     "sectionPurchase": "Покупка"
+  },
+  "searchMatch": {
+    "field": {
+      "asset_id": "Инвентарный номер",
+      "comments": "Заметки",
+      "extra_serial_numbers": "Серийный номер",
+      "name": "Название",
+      "part_numbers": "Артикул",
+      "serial_number": "Серийный номер",
+      "short_name": "Краткое название",
+      "status_note": "Заметка о статусе",
+      "tags": "Тег",
+      "warranty_notes": "Заметки о гарантии"
+    },
+    "text": "{{field}}: {{value}}"
   },
   "sort": {
     "count": "Количество",

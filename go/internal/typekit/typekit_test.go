@@ -946,6 +946,27 @@ func TestExtractDBFields(t *testing.T) {
 		})
 	})
 
+	// A generated column is scanned back but never written: PostgreSQL
+	// rejects a value for it in INSERT and UPDATE.
+	c.Run("struct with dbwrite:\"false\" generated column", func(c *qt.C) {
+		type EntityWithGenerated struct {
+			ID         int    `db:"id"`
+			Name       string `db:"name"`
+			SearchText string `db:"search_text" dbwrite:"false"`
+		}
+
+		var fields []string
+		var placeholders []string
+		params := make(map[string]any)
+
+		err := typekit.ExtractDBFields(EntityWithGenerated{ID: 1, Name: "n", SearchText: "n"}, &fields, &placeholders, params)
+
+		c.Assert(err, qt.IsNil)
+		c.Assert(fields, qt.DeepEquals, []string{"id", "name"})
+		c.Assert(placeholders, qt.DeepEquals, []string{":id", ":name"})
+		c.Assert(params, qt.DeepEquals, map[string]any{"id": 1, "name": "n"})
+	})
+
 	// Test with embedded struct
 	c.Run("embedded struct", func(c *qt.C) {
 		type BaseEntity struct {

@@ -21,9 +21,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   and the date's year must be between 1900 and 2200. The emails go to whoever
   created the reminder, at most once per date and lead time, and can be
   turned off with the new "Item reminders" toggle in Settings →
-  Notifications. Deleting an account deletes the reminders its owner created. The Upcoming page in the sidebar lists item reminders,
-  warranty expiries, loans due back and maintenance due across the group by
-  date, for the next 30 days, 90 days or 12 months. The worker runs every
+  Notifications. Deleting an account deletes the reminders its owner
+  created. The Upcoming page in the sidebar lists item reminders, warranty
+  expiries, loans due back and maintenance due across the group by date, for
+  the next 30 days, 90 days or 12 months. The worker runs every
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
@@ -37,6 +38,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `--loan-reminder-due-soon-days` for loans, which `/system` now reports as
   `loan_reminder_due_soon_days`
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Item search covers serial numbers, extra serial numbers, part numbers, tags
+  (by slug and by name), notes, warranty notes and the status note, besides the
+  name, short name and asset ID. Every word of a search must match, in any
+  field, and double quotes keep a phrase together. A result that matched on
+  something other than its name says where ("Serial number: SN-1234"). The
+  items list, the area page and the search page use the same search, done in
+  SQL on an indexed column
+  ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
@@ -132,6 +141,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `inventario_maintenance_reminders_sent_total` is `custom` for a lead time
   other than the defaults
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+
+### Changed
+
+- `GET /commodities` and `GET /search?type=commodities` read one shared set of
+  filter parameters, including the new `tags`, `tag_mode`, `tags_exclude` and
+  `no_tags`. An unknown parameter, an unreadable value or a contradictory
+  combination is answered with 400 and the code `query.invalid_parameter`
+  instead of being ignored, and the `operator` parameter of `/search` is gone
+  (`tag_mode` replaces it). The search page's link to all matching items now
+  includes inactive items, as the search does
+  ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 ### Fixed
 

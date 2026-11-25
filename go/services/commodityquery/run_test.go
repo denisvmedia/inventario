@@ -1,0 +1,156 @@
+package commodityquery_test
+
+import (
+	"context"
+	"testing"
+
+	qt "github.com/frankban/quicktest"
+	"github.com/shopspring/decimal"
+
+	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/memory"
+	"go.5x5.cz/inventario/services/commodityquery"
+)
+
+func newMemorySet(c *qt.C) (context.Context, *registry.Set) {
+	c.Helper()
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-1"},
+			TenantID: "tenant-1",
+		},
+	})
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "group-1"},
+			TenantID: "tenant-1",
+		},
+		Slug:          "group-1",
+		GroupCurrency: "USD",
+	})
+	set, err := memory.NewFactorySet().CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	return ctx, set
+}
+
+func seedItem(c *qt.C, ctx context.Context, set *registry.Set, name string, tags ...string) *models.Commodity {
+	c.Helper()
+	created, err := set.CommodityRegistry.Create(ctx, models.Commodity{
+		Name:                   name,
+		ShortName:              name,
+		Type:                   models.CommodityTypeOther,
+		Count:                  1,
+		OriginalPrice:          decimal.NewFromInt(1),
+		OriginalPriceCurrency:  "USD",
+		ConvertedOriginalPrice: decimal.Zero,
+		CurrentPrice:           decimal.NewFromInt(1),
+		Status:                 models.CommodityStatusInUse,
+		Tags:                   models.ValuerSlice[string](tags),
+		PurchaseDate:           models.ToPDate("2024-01-01"),
+		RegisteredDate:         models.ToPDate("2024-01-01"),
+		LastModifiedDate:       models.ToPDate("2024-01-01"),
+	})
+	c.Assert(err, qt.IsNil)
+	return created
+}
+
+func listNames(page commodityquery.Page) []string {
+	out := make([]string, 0, len(page.Commodities))
+	for _, cm := range page.Commodities {
+		out = append(out, cm.Name)
+	}
+	return out
+}
+
+func TestList_FindsByTagLabelAndExplains(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+
+	_, err := set.TagRegistry.Create(ctx, models.Tag{
+		Kind: models.TagKindCommodity, Slug: "pt", Label: "Power Tools", Color: models.TagColorBlue,
+	})
+	c.Assert(err, qt.IsNil)
+	// The same label in the file namespace must not leak into item search.
+	_, err = set.TagRegistry.Create(ctx, models.Tag{
+		Kind: models.TagKindFile, Slug: "manual", Label: "Power tools manual", Color: models.TagColorBlue,
+	})
+	c.Assert(err, qt.IsNil)
+
+	seedItem(c, ctx, set, "Drill", "pt")
+	seedItem(c, ctx, set, "Lamp", "manual")
+	seedItem(c, ctx, set, "Saw")
+
+	page, err := commodityquery.List(ctx, set, commodityquery.Query{Text: `"power tools"`, IncludeInactive: true}, 0, 10)
+	c.Assert(err, qt.IsNil)
+	c.Check(listNames(page), qt.DeepEquals, []string{"Drill"})
+	c.Check(page.Total, qt.Equals, 1)
+	c.Check(page.Matches[page.Commodities[0].ID], qt.DeepEquals, []registry.CommoditySearchMatch{
+		{Field: registry.CommoditySearchFieldTags, Value: "pt"},
+	})
+}
+
+func TestList_NoTextMeansNoMatches(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	seedItem(c, ctx, set, "Drill", "red")
+	seedItem(c, ctx, set, "Saw")
+
+	page, err := commodityquery.List(ctx, set, commodityquery.Query{
+		IncludeInactive: true,
+		Tags:            registry.CommodityTagFilter{Untagged: true},
+	}, 0, 10)
+	c.Assert(err, qt.IsNil)
+	c.Check(listNames(page), qt.DeepEquals, []string{"Saw"})
+	c.Check(page.Matches, qt.IsNil)
+}
+
+func TestList_PagesKeepTheTotal(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	for _, name := range []string{"Red A", "Red B", "Red C", "Blue"} {
+		seedItem(c, ctx, set, name)
+	}
+
+	page, err := commodityquery.List(ctx, set, commodityquery.Query{Text: "red", IncludeInactive: true}, 1, 1)
+	c.Assert(err, qt.IsNil)
+	c.Check(listNames(page), qt.DeepEquals, []string{"Red B"})
+	c.Check(page.Total, qt.Equals, 3)
+	c.Check(page.Matches, qt.HasLen, 1)
+}
+
+func TestResolve_LentOutOnTheMemoryBackend(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	lent := seedItem(c, ctx, set, "Ladder")
+	seedItem(c, ctx, set, "Bucket")
+	_, err := set.CommodityLoanRegistry.Create(ctx, models.CommodityLoan{
+		CommodityID:  lent.ID,
+		BorrowerName: "Neighbor",
+		LentAt:       models.Date("2026-01-01"),
+	})
+	c.Assert(err, qt.IsNil)
+
+	opts, err := commodityquery.Resolve(ctx, set, commodityquery.Query{IncludeInactive: true, LentOut: new(true)})
+	c.Assert(err, qt.IsNil)
+	c.Check(opts.OpenLoanCommodityIDs, qt.DeepEquals, []string{lent.ID})
+
+	page, err := commodityquery.List(ctx, set, commodityquery.Query{IncludeInactive: true, LentOut: new(false)}, 0, 10)
+	c.Assert(err, qt.IsNil)
+	c.Check(listNames(page), qt.DeepEquals, []string{"Bucket"})
+}
+
+func TestExplain_SkipsItemsTheRuleDoesNotMatch(t *testing.T) {
+	c := qt.New(t)
+	red := &models.Commodity{Name: "Red drill"}
+	red.ID = "1"
+	blue := &models.Commodity{Name: "Blue saw"}
+	blue.ID = "2"
+	items := []*models.Commodity{red, blue, nil}
+	got := commodityquery.Explain(items, registry.CommodityListOptions{Search: "red"})
+	c.Assert(got, qt.DeepEquals, map[string][]registry.CommoditySearchMatch{
+		"1": {{Field: registry.CommoditySearchFieldName, Value: "Red drill"}},
+	})
+	c.Assert(commodityquery.Explain(items, registry.CommodityListOptions{}), qt.IsNil)
+}
