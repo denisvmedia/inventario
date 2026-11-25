@@ -77,10 +77,12 @@ import {
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import {
   DEFAULT_COMMODITY_QUERY,
-  commodityTagHref,
   hasCommodityFilters,
   parseCommodityQuery,
   primarySearchMatch,
+  unreadableTagParamCount,
+  withIncludedTag,
+  withTagFilter,
   writeCommodityQuery,
   type CommodityQuery,
   type CommoditySearchMatch,
@@ -451,6 +453,17 @@ export function CommoditiesListPage() {
   const tagIndex = useTagIndex("commodity")
   const resolveTag = tagIndex.resolve
   const tagLabel = useCallback((slug: string) => resolveTag(slug).label, [resolveTag])
+  // A card's tag links to this list narrowed to that tag as well; the other
+  // filters stay and the list starts again at the first page.
+  const tagHref = useCallback(
+    (tagSlug: string) => {
+      if (!slug) return undefined
+      const next = writeCommodityQuery(searchParams, withIncludedTag(query, tagSlug))
+      next.delete("page")
+      return `/g/${encodeURIComponent(slug)}/commodities?${next.toString()}`
+    },
+    [slug, searchParams, query]
+  )
 
   // ---- Handlers ----------------------------------------------------------
   // After a successful create, drop the user on the new commodity's
@@ -562,7 +575,8 @@ export function CommoditiesListPage() {
           tagFilter={query.tags}
           tagOptions={tagIndex.tags}
           tagCounts={tagCounts.data}
-          onSetTagFilter={(tags) => updateQuery({ tags })}
+          tagFilterUnreadable={unreadableTagParamCount(query)}
+          onSetTagFilter={(tags) => updateQuery(withTagFilter(query, tags))}
           onTagMenuOpenChange={setTagMenuOpen}
           onSetSort={setSort}
           onToggleInactive={toggleInactive}
@@ -681,6 +695,7 @@ export function CommoditiesListPage() {
             areaName={areaName}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
+            tagHref={tagHref}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -698,6 +713,7 @@ export function CommoditiesListPage() {
             areaName={areaName}
             tagLabel={tagLabel}
             resolveTag={resolveTag}
+            tagHref={tagHref}
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
@@ -802,6 +818,8 @@ interface ToolbarProps {
   onToggleLentOut: () => void
   onToggleUnassigned: () => void
   tagFilter: CommodityTagFilter
+  // Tag-filter parameters in the URL whose value cannot be read.
+  tagFilterUnreadable: number
   tagOptions: ResolvedTag[]
   tagCounts: { tags: Record<string, number>; untagged: number } | undefined
   onSetTagFilter: (tags: CommodityTagFilter) => void
@@ -968,6 +986,7 @@ function Toolbar(props: ToolbarProps) {
         testIdPrefix="commodities-filter-tags"
         tags={props.tagOptions}
         value={props.tagFilter}
+        unreadable={props.tagFilterUnreadable}
         onChange={props.onSetTagFilter}
         counts={props.tagCounts?.tags}
         untaggedCount={props.tagCounts?.untagged}
@@ -1188,6 +1207,8 @@ interface CommoditiesGridProps {
   tagLabel: (slug: string) => string
   // Resolves a stored tag slug to its label and color.
   resolveTag: (slug: string) => ResolvedTag
+  // Where a tag on a row links to.
+  tagHref: (tagSlug: string) => string | undefined
   currency: string
   // Map of commodity_id → open-loan count (#1452). Rows with count > 0
   // render a "Lent out" pill. Empty / missing keys mean "not lent" so
@@ -1214,6 +1235,7 @@ function CommoditiesGrid({
   areaName,
   tagLabel,
   resolveTag,
+  tagHref,
   currency,
   loanCounts,
   serviceCounts,
@@ -1233,6 +1255,7 @@ function CommoditiesGrid({
           areaName={areaName}
           tagLabel={tagLabel}
           resolveTag={resolveTag}
+          tagHref={tagHref}
           currency={currency}
           lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
           inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
@@ -1253,6 +1276,7 @@ interface CommodityCardProps {
   areaName: (id?: string) => string
   tagLabel: (slug: string) => string
   resolveTag: (slug: string) => ResolvedTag
+  tagHref: (tagSlug: string) => string | undefined
   currency: string
   lent?: boolean
   inService?: boolean
@@ -1269,6 +1293,7 @@ function CommodityGridCard({
   areaName,
   tagLabel,
   resolveTag,
+  tagHref,
   currency,
   lent,
   inService,
@@ -1420,7 +1445,7 @@ function CommodityGridCard({
                   label={tag.label}
                   color={tag.color}
                   size="xs"
-                  href={slug ? commodityTagHref(slug, tagSlug) : undefined}
+                  href={tagHref(tagSlug)}
                   className="pointer-events-auto relative z-10"
                   data-testid="commodity-card-tag"
                 />

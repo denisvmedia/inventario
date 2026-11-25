@@ -142,7 +142,7 @@ describe("<TagsListPage />", () => {
     renderPage()
     expect(await screen.findByTestId("tag-row-kitchen-link")).toHaveAttribute(
       "href",
-      `/g/${SLUG}/commodities?tags=kitchen`
+      `/g/${SLUG}/commodities?inactive=1&tags=kitchen`
     )
     await user.click(screen.getByTestId("tags-view-file"))
     await waitFor(() =>

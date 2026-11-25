@@ -17,10 +17,13 @@ const EMPTY: TagFilterValue = { include: [], exclude: [], mode: "all", untagged:
 function Harness({
   initial = EMPTY,
   onChange,
+  tags = TAGS,
   ...props
 }: {
   initial?: TagFilterValue
   onChange?: (v: TagFilterValue) => void
+  tags?: ResolvedTag[]
+  unreadable?: number
   allowExclude?: boolean
   allowMode?: boolean
   allowUntagged?: boolean
@@ -33,7 +36,7 @@ function Harness({
     <TagFilterMenu
       label="Tags"
       testIdPrefix="tf"
-      tags={TAGS}
+      tags={tags}
       value={value}
       onChange={(next) => {
         setValue(next)
@@ -113,6 +116,28 @@ describe("<TagFilterMenu />", () => {
 
     await user.click(screen.getByTestId("tf-clear"))
     expect(onChange).toHaveBeenLastCalledWith({ ...EMPTY, mode: "any" })
+  })
+
+  it("shows 0 for a tag whose slug names an Object.prototype member", async () => {
+    const user = userEvent.setup()
+    render(
+      <Harness
+        tags={[...TAGS, { slug: "constructor", label: "Constructor", color: "muted" }]}
+        counts={{ garage: 1 }}
+      />
+    )
+    await user.click(screen.getByTestId("tf"))
+    expect(await screen.findByTestId("tag-filter-count-constructor")).toHaveTextContent(/^0$/)
+  })
+
+  it("counts unreadable values as active and offers Clear for them", async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    render(<Harness onChange={onChange} unreadable={1} allowMode />)
+    expect(within(screen.getByTestId("tf")).getByText("1")).toBeInTheDocument()
+    await user.click(screen.getByTestId("tf"))
+    await user.click(await screen.findByTestId("tf-clear"))
+    expect(onChange).toHaveBeenLastCalledWith(EMPTY)
   })
 
   it("filters the list by the search box and keeps an unknown selected slug", async () => {

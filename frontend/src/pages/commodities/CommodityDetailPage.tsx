@@ -771,9 +771,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               {type ? (
                 <p className="text-sm text-muted-foreground mt-0.5">
                   {slug ? (
-                    // The items list with every item of this type.
+                    // The items list with every item of this type, inactive
+                    // ones included, since this item may be one of them.
                     <Link
-                      to={commodityListHref(slug, { types: [type] })}
+                      to={commodityListHref(slug, { types: [type], includeInactive: true })}
                       className="hover:text-foreground hover:underline"
                       data-testid="commodity-detail-type-link"
                     >
@@ -1393,7 +1394,8 @@ function DetailsTab({
   const tagIndex = useTagIndex("commodity")
   const noValue = t("commodities:detail.noValue")
   const areaText = (isSheetVariant: boolean) => (isSheetVariant ? areaLabel : areaName) || noValue
-  // Tags, the area and the type link to the items list filtered by them.
+  // Tags, the area and the type link to the items list filtered by them
+  // alone, inactive items included.
   const tagPills = (commodity.tags ?? []).map((slug) => {
     const tag = tagIndex.resolve(slug)
     return (
@@ -1541,7 +1543,10 @@ function DetailsTab({
               />
             ) : groupSlug && commodity.area_id ? (
               <Link
-                to={commodityListHref(groupSlug, { areaId: commodity.area_id })}
+                to={commodityListHref(groupSlug, {
+                  areaId: commodity.area_id,
+                  includeInactive: true,
+                })}
                 className="hover:underline"
                 data-testid="commodity-detail-area-link"
               >

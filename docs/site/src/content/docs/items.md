@@ -180,7 +180,8 @@ row of tabs.
 
 - **Details** — name, status, type, location/area, prices, serial numbers, part
   numbers, links, tags, notes, and dates. Click a tag, the area, or the type
-  (under the name) to open **All Items** filtered by it.
+  (under the name) to open **All Items** filtered by it alone, with **Show
+  inactive** on.
 - **Warranty** — expiry, notes, and a reminder of how long is left. See
   [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 - **Files** — every file attached to this item, filterable by **All**,
@@ -419,17 +420,20 @@ Type in the box at the top to find a tag by name.
 - Click a tag once to show only items that **have** it, and a second time to
   show only items that **don't have** it (the tag is crossed out). A third
   click removes it from the filter.
-- With more than one tag selected, choose **All tags** to show items that have
-  every one of them, or **Any tag** to show items that have at least one.
+- Choose **All tags** to show items that have every selected tag, or **Any
+  tag** to show items that have at least one of them. You can choose before
+  selecting any tag; the choice is kept.
 - **No tags** shows the items that have no tags at all.
 
 The **Tags** button shows how many tag conditions are set, and **Clear** at the
 bottom of the list removes them. The tag filter is part of the page URL, like
 the other filters.
 
-Tags on item cards and on the item page are links: clicking one opens **All
-Items** filtered by that tag. So does clicking a tag's name on the
-[Tags](../tags/) page.
+Tags are links. A tag on an item card adds that tag to the filters the list
+already has: the search and the other filters stay, and the list goes back to
+the first page. A tag on the item page, or a tag's name on the [Tags](../tags/)
+page, opens **All Items** filtered by that tag alone, with **Show inactive**
+on, so it lists every item that has the tag.
 
 ## Select, move, and delete in bulk
 

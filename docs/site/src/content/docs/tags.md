@@ -137,7 +137,7 @@ Each row shows the tag's colour dot, its name, and how many items and/or files u
 
 Tags are most useful when you turn them into a filter.
 
-Click a tag's name on this page to open the list it filters: an item tag opens [All Items](../items/) showing the items with that tag, a file tag opens [Files](../files-and-photos/) showing the files with it.
+Click a tag's name on this page to open the list it filters: an item tag opens [All Items](../items/) showing every item with that tag, inactive ones included, and a file tag opens [Files](../files-and-photos/) showing the files with it.
 
 ### Files
 
@@ -145,7 +145,7 @@ On the [Files](../files-and-photos/) page there's a row of tag-filter pills in t
 
 ### Items
 
-On the [Items](../items/) list, each item shows its tags as coloured pills. Click a pill to see every item with that tag. The **Tags** button in the toolbar filters by one or more tags, excludes tags, or shows items without tags, with a count next to each tag; see [Filtering by tag](../items/#filtering-by-tag). Only item tags are offered there.
+On the [Items](../items/) list, each item shows its tags as coloured pills. Click a pill to add that tag to the list's current filters; the search and the other filters stay. On an item's page, clicking a tag opens the list of every item with that tag. The **Tags** button in the toolbar filters by one or more tags, excludes tags, or shows items without tags, with a count next to each tag; see [Filtering by tag](../items/#filtering-by-tag). Only item tags are offered there.
 
 ## Related
 

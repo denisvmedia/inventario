@@ -31,6 +31,11 @@ export interface TagFilterMenuProps {
   // Every tag the picker offers.
   tags: ResolvedTag[]
   value: TagFilterValue
+  // How many parts of the filter the URL holds in a form the picker cannot
+  // show (an unreadable tag_mode or no_tags). They count as active, so the
+  // trigger is highlighted and Clear is offered; onChange is expected to
+  // drop them.
+  unreadable?: number
   onChange: (next: TagFilterValue) => void
   // Per slug, how many items the tag would list; absent while loading or
   // for a picker without counts.
@@ -63,6 +68,7 @@ function stateOf(value: TagFilterValue, slug: string): TagState {
 export function TagFilterMenu({
   tags,
   value,
+  unreadable = 0,
   onChange,
   counts,
   untaggedCount,
@@ -75,7 +81,7 @@ export function TagFilterMenu({
 }: TagFilterMenuProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
-  const active = value.include.length + value.exclude.length + (value.untagged ? 1 : 0)
+  const active = value.include.length + value.exclude.length + (value.untagged ? 1 : 0) + unreadable
 
   // Selected tags first, then by label. A selected slug with no tag row
   // (a hand-edited URL) is listed too, so it can be cleared.
@@ -195,7 +201,7 @@ export function TagFilterMenu({
                     {state === "exclude" ? (
                       <span className="sr-only">{t("tags:filter.excluded")}</span>
                     ) : null}
-                    <Count value={counts ? (counts[tag.slug] ?? 0) : undefined} slug={tag.slug} />
+                    <Count value={counts ? countOf(counts, tag.slug) : undefined} slug={tag.slug} />
                   </CommandItem>
                 )
               })}
@@ -222,6 +228,12 @@ export function TagFilterMenu({
       </PopoverContent>
     </Popover>
   )
+}
+
+// A slug is user text, so it may name an Object.prototype member
+// ("constructor"); only the record's own keys are counts.
+function countOf(counts: Record<string, number>, slug: string): number {
+  return Object.hasOwn(counts, slug) ? counts[slug] : 0
 }
 
 function StateMark({ state }: { state: TagState }) {

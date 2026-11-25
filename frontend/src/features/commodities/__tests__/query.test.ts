@@ -10,6 +10,9 @@ import {
   listOptionsToParams,
   parseCommodityQuery,
   primarySearchMatch,
+  unreadableTagParamCount,
+  withIncludedTag,
+  withTagFilter,
   writeCommodityQuery,
   type CommodityQuery,
 } from "../query"
@@ -118,6 +121,18 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
     })
   })
 
+  it("keeps the any mode picked before the first tag", () => {
+    const anyOnly: CommodityQuery = {
+      ...DEFAULT_COMMODITY_QUERY,
+      tags: { ...DEFAULT_COMMODITY_QUERY.tags, mode: "any" },
+    }
+    const params = writeCommodityQuery(new URLSearchParams(), anyOnly)
+    expect(params.toString()).toBe("tag_mode=any")
+    expect(parseCommodityQuery(params)).toEqual(anyOnly)
+    // The mode alone selects nothing.
+    expect(hasCommodityFilters(anyOnly)).toBe(false)
+  })
+
   it("owns exactly the parameters it writes", () => {
     const written = [...new Set([...writeCommodityQuery(new URLSearchParams(), FULL).keys()])]
     for (const name of written) expect(COMMODITY_QUERY_URL_PARAMS).toContain(name)
@@ -137,10 +152,60 @@ describe("commodityListHref", () => {
     expect(commodityListHref("h", {})).toBe("/g/h/commodities")
   })
 
-  it("links one tag, escaping its slug", () => {
+  it("links one tag with inactive items included, escaping its slug", () => {
     expect(commodityTagHref("h", "usb-кабель")).toBe(
-      `/g/h/commodities?tags=${encodeURIComponent("usb-кабель")}`
+      `/g/h/commodities?inactive=1&tags=${encodeURIComponent("usb-кабель")}`
     )
+  })
+})
+
+describe("withTagFilter / withIncludedTag", () => {
+  const base: CommodityQuery = {
+    ...DEFAULT_COMMODITY_QUERY,
+    text: "drill",
+    statuses: ["in_use"],
+    tags: { include: ["red"], mode: "any", exclude: ["blue"], untagged: false },
+  }
+
+  it("adds a tag and keeps every other condition", () => {
+    expect(withIncludedTag(base, "green")).toEqual({
+      ...base,
+      tags: { include: ["red", "green"], mode: "any", exclude: ["blue"], untagged: false },
+    })
+  })
+
+  it("leaves an included tag as it is", () => {
+    expect(withIncludedTag(base, "red")).toEqual(base)
+  })
+
+  it("moves an excluded tag to the included ones and turns off No tags", () => {
+    expect(withIncludedTag(base, "blue").tags).toEqual({
+      include: ["red", "blue"],
+      mode: "any",
+      exclude: [],
+      untagged: false,
+    })
+    const untagged = {
+      ...DEFAULT_COMMODITY_QUERY,
+      tags: { ...DEFAULT_COMMODITY_QUERY.tags, untagged: true },
+    }
+    expect(withIncludedTag(untagged, "red").tags).toEqual({
+      include: ["red"],
+      mode: "all",
+      exclude: [],
+      untagged: false,
+    })
+  })
+
+  it("drops unreadable tag parameters and keeps the others", () => {
+    const q = parseCommodityQuery(new URLSearchParams("tag_mode=some&no_tags=x&lent_out=maybe"))
+    expect(unreadableTagParamCount(q)).toBe(2)
+    const next = withTagFilter(q, DEFAULT_COMMODITY_QUERY.tags)
+    expect(next.unreadable).toEqual({ lent_out: "maybe" })
+    expect(unreadableTagParamCount(next)).toBe(0)
+    expect(withIncludedTag(q, "red").unreadable).toEqual({ lent_out: "maybe" })
+    // The input is not modified.
+    expect(q.unreadable).toEqual({ tag_mode: "some", no_tags: "x", lent_out: "maybe" })
   })
 })
 
@@ -212,6 +277,12 @@ describe("listOptionsToParams", () => {
     expect(listOptionsToParams(commodityQueryToListOptions(any)).get("tag_mode")).toBe("any")
     const all = parseCommodityQuery(new URLSearchParams("tags=a&tag_mode=all"))
     expect(listOptionsToParams(commodityQueryToListOptions(all)).has("tag_mode")).toBe(false)
+    // Without tags the mode selects nothing, so the request is the same as
+    // for the default mode and shares its cache entry.
+    const anyOnly = parseCommodityQuery(new URLSearchParams("tag_mode=any"))
+    expect(listOptionsToParams(commodityQueryToListOptions(anyOnly)).toString()).toBe(
+      listOptionsToParams(commodityQueryToListOptions(DEFAULT_COMMODITY_QUERY)).toString()
+    )
   })
 
   it("sends no_tags", () => {

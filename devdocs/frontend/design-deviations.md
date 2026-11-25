@@ -250,7 +250,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #2792 / PR (pending)
 - **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid cards and [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) draw item tags with `TagPill size="xs"` as plain spans; the area and the type on the item page are plain text.
-- **Reality**: `frontend/src/components/tags/TagPill.tsx` follows the mock's pill (sizes, `#` glyph, `bg-*/15` and `border-*/30` tones, using the `tag-*` color tokens that `TagBadge` already uses for real tag colors) and renders a `Link` when given an `href`, with `hover:opacity-80` and a focus outline. Item cards and the item page's Details tab link each tag to `?tags=<slug>`; on cards the pill sits above the card-wide link (`relative z-10 pointer-events-auto`), like the selection checkbox. The area value in the Details tab links to `?area=<id>` and the type under the item name to `?type=<type>`, both with `hover:underline`.
+- **Reality**: `frontend/src/components/tags/TagPill.tsx` follows the mock's pill (sizes, `#` glyph, `bg-*/15` and `border-*/30` tones, using the `tag-*` color tokens that `TagBadge` already uses for real tag colors) and renders a `Link` when given an `href`, with `hover:opacity-80` and a focus outline. A tag on an item card adds itself to the list's current query (other filters kept, back to page 1); the pill sits above the card-wide link (`relative z-10 pointer-events-auto`), like the selection checkbox. The item page's Details tab links each tag to `?inactive=1&tags=<slug>`, the area value to `?area=<id>&inactive=1` and the type under the item name to `?type=<type>&inactive=1`, the last two with `hover:underline`.
 - **Why**: not present in mock. #2792 asks that a tag anywhere, and the type and area values on the item page, link to the items list filtered by them.
 - **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` shows interactive tags.
@@ -412,7 +412,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #2792 / PR (pending)
 - **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) row label is plain text.
-- **Reality**: `TagRow` renders the `# label` as a `Link` with `hover:underline`: an item tag opens the items list with `?tags=<slug>`, a file tag opens the Files page with `?tags=<slug>`.
+- **Reality**: `TagRow` renders the `# label` as a `Link` with `hover:underline`: an item tag opens the items list with `?inactive=1&tags=<slug>`, so the list matches the row's item count, and a file tag opens the Files page with `?tags=<slug>`.
 - **Why**: not present in mock. #2792 asks that a tag in a row of the Tags page link to the list filtered by it.
 - **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` shows interactive tag rows.

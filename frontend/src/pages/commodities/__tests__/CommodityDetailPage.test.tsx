@@ -239,19 +239,20 @@ describe("<CommodityDetailPage />", () => {
     )
     renderDetail()
     const tag = await screen.findByRole("link", { name: "Work" })
-    expect(tag).toHaveAttribute("href", `/g/${SLUG}/commodities?tags=work`)
+    // Each opens the list filtered by that alone, inactive items included.
+    expect(tag).toHaveAttribute("href", `/g/${SLUG}/commodities?inactive=1&tags=work`)
     expect(tag.className).toContain("text-tag-green")
     expect(screen.getByRole("link", { name: "tech" })).toHaveAttribute(
       "href",
-      `/g/${SLUG}/commodities?tags=tech`
+      `/g/${SLUG}/commodities?inactive=1&tags=tech`
     )
     expect(screen.getByTestId("commodity-detail-area-link")).toHaveAttribute(
       "href",
-      `/g/${SLUG}/commodities?area=a1`
+      `/g/${SLUG}/commodities?area=a1&inactive=1`
     )
     expect(screen.getByTestId("commodity-detail-type-link")).toHaveAttribute(
       "href",
-      `/g/${SLUG}/commodities?type=electronics`
+      `/g/${SLUG}/commodities?type=electronics&inactive=1`
     )
   })
 

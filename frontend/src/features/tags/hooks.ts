@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 
+import { commodityKeys } from "@/features/commodities/keys"
+import { fileKeys } from "@/features/files/keys"
 import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 
 import {
@@ -65,17 +67,27 @@ export function useTag(id: string | undefined, { enabled = true }: QueryOptions 
   })
 }
 
-// invalidateAll wipes the entire tags namespace for the active group.
-// Used after every mutation because list queries are keyed by sort +
-// order + search + include flags, and a focused invalidation would miss
-// cached permutations the user can switch back to.
+// all wipes the entire tags namespace for the active group. Used after
+// every mutation because list queries are keyed by sort + order + search +
+// include flags, and a focused invalidation would miss cached permutations
+// the user can switch back to.
+//
+// tagged also wipes the item and file namespaces (lists, details, tag
+// counts): renaming a tag's slug or deleting it changes the tags those
+// records carry.
 function useInvalidate() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  const all = () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
   return {
-    all: () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) }),
-    detail: (id: string) => qc.invalidateQueries({ queryKey: tagKeys.detail(slug, id) }),
+    all,
+    tagged: () =>
+      Promise.all([
+        all(),
+        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
+        qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+      ]),
   }
 }
 
@@ -96,7 +108,7 @@ export function useUpdateTag() {
   const invalidate = useInvalidate()
   return useMutation<TagEntity & { id: string }, Error, UpdateTagVars>({
     mutationFn: ({ id, req }) => updateTag(id, req),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => invalidate.tagged(),
   })
 }
 
@@ -109,7 +121,7 @@ export function useDeleteTag() {
   const invalidate = useInvalidate()
   return useMutation<void, Error, DeleteTagVars>({
     mutationFn: ({ id, force }) => deleteTag(id, force),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => invalidate.tagged(),
   })
 }
 

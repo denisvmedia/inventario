@@ -4,10 +4,11 @@
  *   1. The Tags menu on the items list shows a count per tag, requires a
  *      tag on the first click, excludes it on the second, and offers
  *      "No tags"; every choice lands in the URL.
- *   2. A tag pill on an item card opens the list filtered by that tag.
- *   3. On the item page, tags, the area and the type link to the
- *      filtered list.
- *   4. A row on the Tags page links to the list it filters.
+ *   2. A tag pill on an item card adds that tag to the list's filters.
+ *   3. On the item page, tags, the area and the type link to the list
+ *      filtered by them alone, inactive items included.
+ *   4. A row on the Tags page links to the list it filters, inactive
+ *      items included.
  *   5. The file browser's tag picker offers file tags, not item tags.
  */
 import { expect, type APIRequestContext } from "@playwright/test";
@@ -140,7 +141,7 @@ test.describe("Filter items by tag (#2792)", () => {
     await expect(page.getByTestId("commodities-filter-tags")).toContainText("1");
   });
 
-  test("a tag on a card opens the list filtered by it", async ({ page, request }) => {
+  test("a tag on a card adds it to the list's filters", async ({ page, request }) => {
     const label = `Camping ${run}`;
     await create(request, { name: `Tent ${run}`, tags: [label] });
     await create(request, { name: `Lamp ${run}` });
@@ -148,7 +149,8 @@ test.describe("Filter items by tag (#2792)", () => {
     await page.goto(list(`q=${run}`));
     const tent = page.getByTestId("commodity-card").filter({ hasText: `Tent ${run}` });
     await tent.getByRole("link", { name: label }).click();
-    await expect(page).toHaveURL(new RegExp(`/commodities\\?tags=camping-${run}$`));
+    // The search stays.
+    await expect(page).toHaveURL(new RegExp(`/commodities\\?q=${run}&tags=camping-${run}$`));
     await expect(page.getByTestId("commodity-card")).toHaveCount(1);
   });
 
@@ -157,31 +159,38 @@ test.describe("Filter items by tag (#2792)", () => {
     request,
   }) => {
     const label = `Workshop ${run}`;
-    const id = await create(request, { name: `Saw ${run}`, type: "equipment", tags: [label] });
+    // A sold item is inactive; the links still list it.
+    const id = await create(request, {
+      name: `Saw ${run}`,
+      type: "equipment",
+      status: "sold",
+      tags: [label],
+    });
 
     const detail = `/g/${encodeURIComponent(slug)}/commodities/${id}`;
     await page.goto(detail);
     await page.getByTestId("commodity-detail-details").getByRole("link", { name: label }).click();
-    await expect(page).toHaveURL(new RegExp(`/commodities\\?tags=workshop-${run}$`));
+    await expect(page).toHaveURL(new RegExp(`/commodities\\?inactive=1&tags=workshop-${run}$`));
     await expect(page.getByTestId("commodity-card")).toHaveCount(1);
 
     await page.goto(detail);
     await page.getByTestId("commodity-detail-area-link").click();
-    await expect(page).toHaveURL(new RegExp(`/commodities\\?area=${areaId}$`));
+    await expect(page).toHaveURL(new RegExp(`/commodities\\?area=${areaId}&inactive=1$`));
 
     await page.goto(detail);
     await page.getByTestId("commodity-detail-type-link").click();
-    await expect(page).toHaveURL(/\/commodities\?type=equipment$/);
+    await expect(page).toHaveURL(/\/commodities\?type=equipment&inactive=1$/);
   });
 
   test("a row on the Tags page links to the items with that tag", async ({ page, request }) => {
     const label = `Attic ${run}`;
     await create(request, { name: `Box ${run}`, tags: [label] });
+    await create(request, { name: `Crate ${run}`, status: "sold", tags: [label] });
 
     await page.goto(`/g/${encodeURIComponent(slug)}/tags?kind=commodity&q=${run}`);
     await page.getByTestId(`tag-row-attic-${run}-link`).click();
-    await expect(page).toHaveURL(new RegExp(`/commodities\\?tags=attic-${run}$`));
-    await expect(page.getByTestId("commodity-card")).toHaveCount(1);
+    await expect(page).toHaveURL(new RegExp(`/commodities\\?inactive=1&tags=attic-${run}$`));
+    await expect(page.getByTestId("commodity-card")).toHaveCount(2);
   });
 
   test("the file browser picks from file tags only", async ({ page, request }) => {
