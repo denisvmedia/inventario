@@ -11,7 +11,11 @@
       "errorTitle": "Не удалось загрузить предметы",
       "statsActiveWarranties": "Активные гарантии",
       "statsItems": "Предметы",
-      "statsValue": "Оценочная стоимость"
+      "statsValue": "Оценочная стоимость",
+      "statsValueExcludes_one": "Не учтён {{count}} предмет без стоимости",
+      "statsValueExcludes_few": "Не учтены {{count}} предмета без стоимости",
+      "statsValueExcludes_many": "Не учтено {{count}} предметов без стоимости",
+      "statsValueExcludes_other": "Не учтено {{count}} предмета без стоимости"
     },
     "printAreaAndItemLabels": "Этикетки для зоны и её предметов",
     "printAreaLabel": "Этикетка для этой зоны",

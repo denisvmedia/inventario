@@ -95,10 +95,10 @@ func newOwnershipFixture(t *testing.T) *ownershipFixture {
 		Type:                   models.CommodityTypeElectronics,
 		Status:                 models.CommodityStatusInUse,
 		Count:                  1,
-		OriginalPrice:          decimal.RequireFromString("100.00"),
-		CurrentPrice:           decimal.RequireFromString("90.00"),
+		OriginalPrice:          new(decimal.RequireFromString("100.00")),
+		CurrentPrice:           new(decimal.RequireFromString("90.00")),
 		OriginalPriceCurrency:  models.Currency("USD"),
-		ConvertedOriginalPrice: decimal.Zero,
+		ConvertedOriginalPrice: nil,
 		PurchaseDate:           models.ToPDate("2023-01-01"),
 	}))
 

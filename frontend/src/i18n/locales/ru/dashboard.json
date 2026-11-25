@@ -39,7 +39,11 @@
     "totalItems": "Всего предметов",
     "totalItemsSub": "По всем локациям",
     "totalValue": "Оценочная общая стоимость",
-    "totalValueSub": "Сумма текущих цен"
+    "totalValueExcludes_one": "Не учтён {{count}} предмет без стоимости",
+    "totalValueExcludes_few": "Не учтены {{count}} предмета без стоимости",
+    "totalValueExcludes_many": "Не учтено {{count}} предметов без стоимости",
+    "totalValueExcludes_other": "Не учтено {{count}} предмета без стоимости",
+    "totalValueSub": "Сумма текущих стоимостей или цен покупки"
   },
   "tagline": "Всё, чем вы владеете, как на ладони.",
   "warrantyHealth": {

@@ -74,6 +74,7 @@ import { useLocations } from "@/features/locations/hooks"
 import { formatAssetId } from "@/features/commodities/asset-id"
 import { CommodityHistoryTimeline } from "@/features/commodities/CommodityHistoryTimeline"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
+import { formatPrice } from "@/features/commodities/price"
 import {
   useCommodity,
   useDeleteCommodity,
@@ -1469,6 +1470,7 @@ function DetailsTab({
     {
       icon: Calendar,
       label: t("commodities:detail.fields.purchaseDate"),
+      testId: "commodity-detail-purchase-date",
       value: commodity.purchase_date
         ? formatDate(commodity.purchase_date as string, { style: "short" })
         : noValue,
@@ -1476,6 +1478,7 @@ function DetailsTab({
     {
       icon: DollarSign,
       label: t("commodities:detail.fields.originalPrice"),
+      testId: "commodity-detail-original-price",
       // After a currency migration the BE freezes the per-row
       // "as purchased" amount in `acquisition_price` /
       // `acquisition_currency` (issue #202 §2 Case A). Surface it
@@ -1487,9 +1490,7 @@ function DetailsTab({
       value: (
         <span className="flex flex-col gap-0.5">
           <span>
-            {commodity.original_price !== undefined
-              ? formatCurrency(Number(commodity.original_price), purchaseCurrency)
-              : noValue}
+            {formatPrice(commodity.original_price, purchaseCurrency, noValue, formatCurrency)}
           </span>
           {commodity.acquisition_price != null && commodity.acquisition_currency ? (
             <span
@@ -1516,18 +1517,19 @@ function DetailsTab({
     {
       icon: DollarSign,
       label: t("commodities:detail.fields.convertedOriginalPrice"),
-      value:
-        commodity.converted_original_price !== undefined
-          ? formatCurrency(Number(commodity.converted_original_price), groupCurrency)
-          : noValue,
+      testId: "commodity-detail-converted-price",
+      value: formatPrice(
+        commodity.converted_original_price,
+        groupCurrency,
+        noValue,
+        formatCurrency
+      ),
     },
     {
       icon: DollarSign,
       label: t("commodities:detail.fields.currentPrice"),
-      value:
-        commodity.current_price !== undefined
-          ? formatCurrency(Number(commodity.current_price), groupCurrency)
-          : noValue,
+      testId: "commodity-detail-current-price",
+      value: formatPrice(commodity.current_price, groupCurrency, noValue, formatCurrency),
     },
     {
       icon: Hash,
@@ -1591,6 +1593,7 @@ function DetailsTab({
             value={r.value}
             variant={variant}
             withDivider={isSheet}
+            testId={r.testId}
           />
         ))}
         {/* Auxiliary fields (tags / urls / notes / extra serials /

@@ -667,8 +667,12 @@ func buildPreviewBody(commodities []*models.Commodity, from, to models.Currency,
 			continue
 		}
 		result := currency.ApplyConversion(*c, from, to, rate)
-		totalCurrentBefore = totalCurrentBefore.Add(result.Before.CurrentPrice)
-		totalCurrentAfter = totalCurrentAfter.Add(result.After.CurrentPrice)
+		if result.Before.CurrentPrice != nil {
+			totalCurrentBefore = totalCurrentBefore.Add(*result.Before.CurrentPrice)
+		}
+		if result.After.CurrentPrice != nil {
+			totalCurrentAfter = totalCurrentAfter.Add(*result.After.CurrentPrice)
+		}
 		if result.FillAcquisition {
 			fillsCount++
 		}
@@ -688,8 +692,8 @@ func buildPreviewBody(commodities []*models.Commodity, from, to models.Currency,
 	// truncated diff list is the most informative for the FE preview
 	// table. Stable so equal-delta rows keep insertion order.
 	sort.SliceStable(allDiffs, func(i, j int) bool {
-		di := allDiffs[i].CurrentPriceAfter.Sub(allDiffs[i].CurrentPriceBefore).Abs()
-		dj := allDiffs[j].CurrentPriceAfter.Sub(allDiffs[j].CurrentPriceBefore).Abs()
+		di := currency.PriceDelta(allDiffs[i].CurrentPriceBefore, allDiffs[i].CurrentPriceAfter).Abs()
+		dj := currency.PriceDelta(allDiffs[j].CurrentPriceBefore, allDiffs[j].CurrentPriceAfter).Abs()
 		return di.GreaterThan(dj)
 	})
 
@@ -705,16 +709,17 @@ func buildPreviewBody(commodities []*models.Commodity, from, to models.Currency,
 	return body, nil
 }
 
-// sumCurrentString returns the canonical decimal string of the sum of
-// CurrentPrice across all commodities. The state hash is derived from
-// (count, this string) — both must be deterministic across replicas.
+// sumCurrentString returns the canonical decimal string of the sum of the
+// known CurrentPrice values across all commodities. The state hash is
+// derived from (count, this string) — both must be deterministic across
+// replicas.
 func sumCurrentString(commodities []*models.Commodity) string {
 	sum := decimal.Zero
 	for _, c := range commodities {
-		if c == nil {
+		if c == nil || c.CurrentPrice == nil {
 			continue
 		}
-		sum = sum.Add(c.CurrentPrice)
+		sum = sum.Add(*c.CurrentPrice)
 	}
 	return sum.String()
 }

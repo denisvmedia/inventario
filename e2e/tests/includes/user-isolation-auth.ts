@@ -329,10 +329,10 @@ export async function createCommodityAsUser(user: TestUser, commodityName: strin
           purchase_date: '2026-01-01',
           original_price: 0,
           original_price_currency: groupCurrency,
-          current_price: 0,
-          // BE enforces converted_original_price === 0 when the
-          // purchase currency matches the group_currency.
-          converted_original_price: 0,
+          // Unknown, not zero: a current value of 0 is a known zero. The
+          // converted price is left out because it does not apply when the
+          // purchase currency is the group currency.
+          current_price: null,
           draft: false,
         },
       },

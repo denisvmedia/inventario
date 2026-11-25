@@ -6,7 +6,6 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
-	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/internal/valuation"
 	"go.5x5.cz/inventario/jsonapi"
@@ -17,7 +16,11 @@ type valuesAPI struct {
 
 // getValues returns the total value of commodities.
 // @Summary Get total value of commodities
-// @Description Get the total value of commodities globally, by location, and by area
+// @Description Get the total value of commodities globally, by location, and by area.
+// @Description Only in-use, non-draft items count. An item's value is its current price,
+// @Description or its purchase price in the group currency when the current price is
+// @Description unknown; a known zero counts. Items with no known value are not added as
+// @Description zero: unvalued_count reports how many each total leaves out.
 // @Tags commodities
 // @Accept json
 // @Produce json-api
@@ -35,22 +38,7 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 	// Create a valuator
 	valuator := valuation.NewValuator(r.Context(), registrySet)
 
-	// Calculate global total
-	globalTotal, err := valuator.CalculateGlobalTotalValue()
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-
-	// Calculate totals by location
-	locationTotals, err := valuator.CalculateTotalValueByLocation()
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
-
-	// Calculate totals by area
-	areaTotals, err := valuator.CalculateTotalValueByArea()
+	totals, err := valuator.Calculate()
 	if err != nil {
 		internalServerError(w, r, err)
 		return
@@ -82,9 +70,11 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 
 	// Create response
 	response := jsonapi.NewValueResponse(
-		globalTotal,
-		buildNamedTotals(locationTotals, locationNames),
-		buildNamedTotals(areaTotals, areaNames),
+		totals.Global.Value,
+		totals.Global.ValuedCount,
+		totals.Global.UnvaluedCount,
+		buildNamedTotals(totals.ByLocation, locationNames),
+		buildNamedTotals(totals.ByArea, areaNames),
 	)
 
 	// Render response
@@ -92,18 +82,20 @@ func (api *valuesAPI) getValues(w http.ResponseWriter, r *http.Request) { //revi
 	render.Render(w, r, response)
 }
 
-// buildNamedTotals zips a `id → value` map with a `id → name` lookup
+// buildNamedTotals zips a `id → total` map with a `id → name` lookup
 // into the API's `[]NamedTotal` shape, sorted by descending value so
 // the frontend can slice a top-N without a second sort. Entries with
 // no matching name fall back to the empty string — the frontend will
-// render them as "Unknown".
-func buildNamedTotals(totals map[string]decimal.Decimal, names map[string]string) []jsonapi.NamedTotal {
+// render them as "Unknown". An entry whose items all lack a known value
+// is kept with a zero value, so its unvalued count still reaches the UI.
+func buildNamedTotals(totals map[string]valuation.Total, names map[string]string) []jsonapi.NamedTotal {
 	out := make([]jsonapi.NamedTotal, 0, len(totals))
-	for id, value := range totals {
+	for id, total := range totals {
 		out = append(out, jsonapi.NamedTotal{
-			ID:    id,
-			Name:  names[id],
-			Value: value,
+			ID:            id,
+			Name:          names[id],
+			Value:         total.Value,
+			UnvaluedCount: total.UnvaluedCount,
 		})
 	}
 	sort.Slice(out, func(i, j int) bool {

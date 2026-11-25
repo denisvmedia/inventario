@@ -132,6 +132,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// mean unassigned, matching the postgres registry and the IS NULL filter.
 	commodity.NormalizeAreaID()
 
+	// Every row written now tells an unknown price from a zero one.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
+
 	// The asset number is server-managed, as in the postgres registry: the
 	// caller's value is dropped and the number is picked while holding the
 	// lock that also covers storing the row.
@@ -311,11 +315,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		if existingCommodity.AssetNumber != nil {
 			commodity.AssetNumber = new(*existingCommodity.AssetNumber)
 		}
+		commodity.UnsetEchoedLegacyZeros(existingCommodity)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
 	// stored as nil and the area-tracking below sees a single canonical form.
 	commodity.NormalizeAreaID()
+
+	// The caller's prices tell unknown from zero, whatever the row held.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
 
 	// Call the base registry's UpdateWithUser method to ensure user context is preserved
 	updatedCommodity, err := r.Registry.UpdateWithUser(ctx, commodity)
@@ -505,6 +514,9 @@ func pdateString(d models.PDate) string {
 // to CommoditySortName ascending, matching the historical behaviour of
 // the unfiltered ListPaginated. Sort is stable so ties preserve insertion
 // order, which keeps page-to-page navigation deterministic.
+//
+// An unknown date or price sorts after every known one in both directions,
+// matching the NULLS LAST ordering of the postgres backend.
 func sortCommodities(items []*models.Commodity, opts registry.CommodityListOptions) {
 	field := opts.SortField
 	if !field.IsValid() {
@@ -514,13 +526,25 @@ func sortCommodities(items []*models.Commodity, opts registry.CommodityListOptio
 		var c int
 		switch field {
 		case registry.CommoditySortRegisteredDate:
+			if u := unknownLast(pdateString(a.RegisteredDate) == "", pdateString(b.RegisteredDate) == ""); u != 0 {
+				return u
+			}
 			c = strings.Compare(pdateString(a.RegisteredDate), pdateString(b.RegisteredDate))
 		case registry.CommoditySortPurchaseDate:
+			if u := unknownLast(pdateString(a.PurchaseDate) == "", pdateString(b.PurchaseDate) == ""); u != 0 {
+				return u
+			}
 			c = strings.Compare(pdateString(a.PurchaseDate), pdateString(b.PurchaseDate))
 		case registry.CommoditySortCurrentPrice:
-			c = a.CurrentPrice.Cmp(b.CurrentPrice)
+			if u := unknownLast(a.CurrentPrice == nil, b.CurrentPrice == nil); u != 0 {
+				return u
+			}
+			c = comparePrices(a.CurrentPrice, b.CurrentPrice)
 		case registry.CommoditySortOriginalPrice:
-			c = a.OriginalPrice.Cmp(b.OriginalPrice)
+			if u := unknownLast(a.OriginalPrice == nil, b.OriginalPrice == nil); u != 0 {
+				return u
+			}
+			c = comparePrices(a.OriginalPrice, b.OriginalPrice)
 		case registry.CommoditySortCount:
 			c = a.Count - b.Count
 		default: // CommoditySortName
@@ -535,6 +559,29 @@ func sortCommodities(items []*models.Commodity, opts registry.CommodityListOptio
 		return c
 	}
 	slices.SortStableFunc(items, cmp)
+}
+
+// unknownLast orders an unknown value after a known one regardless of the
+// sort direction. It returns 0 when both are known, and also when both are
+// unknown, leaving the tie to the caller's id tiebreaker.
+func unknownLast(aUnknown, bUnknown bool) int {
+	switch {
+	case aUnknown == bUnknown:
+		return 0
+	case aUnknown:
+		return 1
+	default:
+		return -1
+	}
+}
+
+// comparePrices compares two prices, treating two unknown ones as equal.
+// Callers order unknown against known with unknownLast first.
+func comparePrices(a, b *decimal.Decimal) int {
+	if a == nil || b == nil {
+		return 0
+	}
+	return a.Cmp(*b)
 }
 
 // Enhanced methods with simplified in-memory implementations
@@ -696,10 +743,13 @@ func (r *CommodityRegistry) AggregateByArea(ctx context.Context, groupBy []strin
 		if commodity.AreaID == nil || *commodity.AreaID == "" {
 			continue
 		}
-		price, _ := commodity.OriginalPrice.Float64()
-		if !commodity.ConvertedOriginalPrice.IsZero() {
-			price, _ = commodity.ConvertedOriginalPrice.Float64()
+		known, ok := knownPurchasePrice(commodity)
+		if !ok {
+			// No known purchase price: the aggregate leaves it out
+			// rather than counting it as zero.
+			continue
 		}
+		price, _ := known.Float64()
 		areaMap[*commodity.AreaID] = append(areaMap[*commodity.AreaID], price)
 	}
 
@@ -765,10 +815,12 @@ func (r *CommodityRegistry) FindByPriceRange(ctx context.Context, minPrice, maxP
 
 	var filtered []*models.Commodity
 	for _, commodity := range commodities {
-		price, _ := commodity.OriginalPrice.Float64()
-		if !commodity.ConvertedOriginalPrice.IsZero() {
-			price, _ = commodity.ConvertedOriginalPrice.Float64()
+		known, ok := knownPurchasePrice(commodity)
+		if !ok {
+			// An unknown price is in no range.
+			continue
 		}
+		price, _ := known.Float64()
 
 		// Check currency if specified
 		if currency != "" && string(commodity.OriginalPriceCurrency) != currency {
@@ -815,6 +867,18 @@ func (r *CommodityRegistry) FindByDateRange(ctx context.Context, startDate, endD
 	}
 
 	return filtered, nil
+}
+
+// knownPurchasePrice returns the converted purchase price when it is known,
+// otherwise the original one, and false when neither is known.
+func knownPurchasePrice(commodity *models.Commodity) (decimal.Decimal, bool) {
+	if commodity.ConvertedOriginalPrice != nil {
+		return *commodity.ConvertedOriginalPrice, true
+	}
+	if commodity.OriginalPrice != nil {
+		return *commodity.OriginalPrice, true
+	}
+	return decimal.Zero, false
 }
 
 // FindBySerialNumbers finds commodities by serial numbers (simplified)

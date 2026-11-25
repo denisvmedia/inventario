@@ -106,8 +106,8 @@ func TestINBFieldFidelityRoundTripPostgres(t *testing.T) {
 	c.Assert(restored.SerialNumber, qt.Equals, srcReloaded.SerialNumber)
 	c.Assert(restored.Status, qt.Equals, srcReloaded.Status)
 	c.Assert(restored.OriginalPriceCurrency, qt.Equals, srcReloaded.OriginalPriceCurrency)
-	c.Assert(restored.OriginalPrice.Equal(srcReloaded.OriginalPrice), qt.IsTrue)
-	c.Assert(restored.CurrentPrice.Equal(srcReloaded.CurrentPrice), qt.IsTrue)
+	c.Assert(models.SamePrice(restored.OriginalPrice, srcReloaded.OriginalPrice), qt.IsTrue)
+	c.Assert(models.SamePrice(restored.CurrentPrice, srcReloaded.CurrentPrice), qt.IsTrue)
 	c.Assert(restored.Comments, qt.Equals, srcReloaded.Comments)
 	c.Assert([]string(restored.ExtraSerialNumbers), qt.DeepEquals, []string(srcReloaded.ExtraSerialNumbers))
 	c.Assert([]string(restored.PartNumbers), qt.DeepEquals, []string(srcReloaded.PartNumbers))
@@ -210,10 +210,10 @@ func seedFullCommodity(c *qt.C, fs *registry.FactorySet, uctx context.Context, t
 		Type:                     models.CommodityTypeElectronics,
 		AreaID:                   new(area.ID),
 		Count:                    1,
-		OriginalPrice:            decimal.RequireFromString("499.99"),
+		OriginalPrice:            new(decimal.RequireFromString("499.99")),
 		OriginalPriceCurrency:    models.Currency("USD"),
-		ConvertedOriginalPrice:   decimal.Zero, // USD == group currency → must be zero
-		CurrentPrice:             decimal.RequireFromString("250.00"),
+		ConvertedOriginalPrice:   nil, // USD == group currency → must be zero
+		CurrentPrice:             new(decimal.RequireFromString("250.00")),
 		SerialNumber:             "SN-FIDELITY-1",
 		ExtraSerialNumbers:       models.ValuerSlice[string]{"SN-EXTRA-1"},
 		PartNumbers:              models.ValuerSlice[string]{"PN-1"},

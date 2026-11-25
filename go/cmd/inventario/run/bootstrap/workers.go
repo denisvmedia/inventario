@@ -650,6 +650,44 @@ func StartFileLinkMove(ctx context.Context, rs *RuntimeSetup, _ *Config) func() 
 	}
 }
 
+// legacyPriceBackfillRetryInterval spaces the retries of a failed legacy
+// price backfill.
+const legacyPriceBackfillRetryInterval = time.Minute
+
+// legacyPriceBackfillSyncTimeout bounds the synchronous first pass of the
+// legacy price backfill, so a slow database cannot hold startup indefinitely.
+const legacyPriceBackfillSyncTimeout = 2 * time.Minute
+
+// StartLegacyPriceBackfill rewrites the commodities stored before a price
+// could be unknown (see services.BackfillLegacyPrices). The first pass runs
+// before it returns, so the API never serves such a row's "not set" zero as
+// a known zero value; when that pass fails or times out, it keeps retrying
+// in the background. The returned stop function cancels the retries and
+// waits for them to return.
+func StartLegacyPriceBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	syncCtx, cancelSync := context.WithTimeout(ctx, legacyPriceBackfillSyncTimeout)
+	rewritten, err := services.BackfillLegacyPrices(syncCtx, rs.FactorySet)
+	cancelSync()
+	if err == nil {
+		if rewritten > 0 {
+			slog.Info("legacy prices backfilled", "commodities", rewritten)
+		}
+		return func() {}
+	}
+	slog.Warn("legacy price backfill failed at startup; retrying in the background",
+		"error", err.Error(), "commodities", rewritten)
+
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.RunLegacyPriceBackfill(ctx, rs.FactorySet, legacyPriceBackfillRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
 // StartFileChecksumBackfill computes, in the background, the SHA-256 of the
 // files that have none yet (see services.BackfillFileChecksums) and returns a
 // stop function that cancels the pass and waits for it to return.

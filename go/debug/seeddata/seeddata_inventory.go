@@ -68,9 +68,8 @@ type commoditySpec struct {
 	Count     int
 	// OriginalPrice + ConvertedOriginalPrice + CurrentPrice are
 	// expressed in source currency / CZK / CZK respectively — same
-	// convention the pre-existing seed used. Empty currency means
-	// "skip the converted_original_price round-trip" (used for
-	// drafts).
+	// convention the pre-existing seed used. A zero converted or
+	// current price seeds that price as unknown.
 	OriginalPrice          float64
 	OriginalPriceCurrency  string
 	ConvertedOriginalPrice float64
@@ -669,9 +668,8 @@ func buildCommodity(spec commoditySpec, areaID string, user *models.User, group 
 		Type:                  spec.Type,
 		AreaID:                &areaID,
 		Count:                 spec.Count,
-		OriginalPrice:         decimal.NewFromFloat(spec.OriginalPrice),
+		OriginalPrice:         new(decimal.NewFromFloat(spec.OriginalPrice)),
 		OriginalPriceCurrency: models.Currency(spec.OriginalPriceCurrency),
-		CurrentPrice:          decimal.NewFromFloat(spec.CurrentPrice),
 		SerialNumber:          spec.SerialNumber,
 		Status:                spec.Status,
 		PurchaseDate:          purchase,
@@ -683,7 +681,10 @@ func buildCommodity(spec commoditySpec, areaID string, user *models.User, group 
 		WarrantyNotes:         spec.WarrantyNotes,
 	}
 	if spec.ConvertedOriginalPrice != 0 {
-		commodity.ConvertedOriginalPrice = decimal.NewFromFloat(spec.ConvertedOriginalPrice)
+		commodity.ConvertedOriginalPrice = new(decimal.NewFromFloat(spec.ConvertedOriginalPrice))
+	}
+	if spec.CurrentPrice != 0 {
+		commodity.CurrentPrice = new(decimal.NewFromFloat(spec.CurrentPrice))
 	}
 	return commodity
 }

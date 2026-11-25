@@ -184,7 +184,13 @@ export function DashboardPage() {
               <StatCard
                 label={t("dashboard:stats.totalValue")}
                 value={formattedValue}
-                sub={t("dashboard:stats.totalValueSub")}
+                // A total that leaves items out says how many, so an
+                // unknown value never passes for a zero.
+                sub={
+                  data.unvaluedCount > 0
+                    ? t("dashboard:stats.totalValueExcludes", { count: data.unvaluedCount })
+                    : t("dashboard:stats.totalValueSub")
+                }
                 icon={TrendingUp}
                 to={itemsHref}
                 isLoading={data.isLoading}

@@ -32,8 +32,10 @@
 // The Case C bug from the previous service (where ConvertedOriginalPrice
 // was multiplied by the rate even when OriginalPriceCurrency already
 // equalled the target currency, leaving the row in violation of
-// PriceRule) is fixed: Case C now collapses ConvertedOriginalPrice to
-// zero.
+// PriceRule) is fixed: Case C now clears ConvertedOriginalPrice.
+//
+// An unknown (nil) price stays unknown through every case: the rate only
+// applies to known amounts, and a conversion never invents a price.
 package currency
 
 import (
@@ -84,7 +86,7 @@ const (
 	// ApplyOutcomeCaseA — original was in old group currency. Live
 	// OriginalPrice / OriginalPriceCurrency are overwritten;
 	// AcquisitionPrice / AcquisitionCurrency are filled if they were
-	// still NULL.
+	// still NULL and the original price is known.
 	ApplyOutcomeCaseA ApplyOutcome = iota
 	// ApplyOutcomeCaseB — original in a third currency X.
 	// OriginalPrice / OriginalPriceCurrency unchanged; the converted /
@@ -93,26 +95,27 @@ const (
 	ApplyOutcomeCaseB
 	// ApplyOutcomeCaseC — original already in target currency. Edge case:
 	// the previous service would multiply ConvertedOriginalPrice by the
-	// rate, violating PriceRule. We collapse it to zero. Acquisition
-	// columns untouched (no original lost — original is already in G_new).
+	// rate, violating PriceRule. We clear it. Acquisition columns
+	// untouched (no original lost — original is already in G_new).
 	ApplyOutcomeCaseC
 )
 
 // RowImage is the price-related slice of a Commodity captured for the
 // audit table. Stored verbatim before and after the conversion so the
-// audit row is self-describing.
+// audit row is self-describing. A nil price is unknown.
 type RowImage struct {
-	OriginalPrice          decimal.Decimal
+	OriginalPrice          *decimal.Decimal
 	OriginalPriceCurrency  models.Currency
-	ConvertedOriginalPrice decimal.Decimal
-	CurrentPrice           decimal.Decimal
+	ConvertedOriginalPrice *decimal.Decimal
+	CurrentPrice           *decimal.Decimal
 }
 
 // ApplyResult is the outcome of ApplyConversion for one commodity.
 //
 // FillAcquisition is true iff this is Case A AND the row's acquisition
-// columns were still NULL — i.e. this is the migration that captures the
-// "as purchased" amount for that commodity. The caller writes the
+// columns were still NULL AND the original price is known — i.e. this is
+// the migration that captures the "as purchased" amount for that
+// commodity. An unknown purchase price has nothing to freeze. The caller writes the
 // columns via migrationops.SetAcquisition only when FillAcquisition is
 // true.
 type ApplyResult struct {
@@ -139,28 +142,31 @@ func ApplyConversion(commodity models.Commodity, fromCurrency, toCurrency models
 	case fromCurrency:
 		// Case A — original was in old group currency.
 		mutated := commodity
-		mutated.OriginalPrice = quantizeConvertedMoney(commodity.OriginalPrice.Mul(rate))
+		mutated.OriginalPrice = convertPrice(commodity.OriginalPrice, rate)
 		mutated.OriginalPriceCurrency = toCurrency
-		mutated.ConvertedOriginalPrice = decimal.Zero
-		mutated.CurrentPrice = quantizeConvertedMoney(commodity.CurrentPrice.Mul(rate))
-		return ApplyResult{
+		mutated.ConvertedOriginalPrice = nil
+		mutated.CurrentPrice = convertPrice(commodity.CurrentPrice, rate)
+		result := ApplyResult{
 			Outcome:             ApplyOutcomeCaseA,
 			Before:              before,
 			After:               imageFromCommodity(mutated),
-			FillAcquisition:     commodity.AcquisitionPrice == nil && commodity.AcquisitionCurrency == nil,
-			AcquisitionPrice:    commodity.OriginalPrice,
 			AcquisitionCurrency: commodity.OriginalPriceCurrency,
 		}
+		if commodity.OriginalPrice != nil {
+			result.FillAcquisition = commodity.AcquisitionPrice == nil && commodity.AcquisitionCurrency == nil
+			result.AcquisitionPrice = *commodity.OriginalPrice
+		}
+		return result
 
 	case toCurrency:
-		// Case C — original already in target currency. Collapse
-		// ConvertedOriginalPrice to zero so PriceRule's
-		// "OriginalCurrency == GroupCurrency ⇒ ConvertedOriginalPrice == 0"
+		// Case C — original already in target currency. Clear
+		// ConvertedOriginalPrice so PriceRule's
+		// "OriginalCurrency == GroupCurrency ⇒ no converted price"
 		// invariant continues to hold. CurrentPrice scales by rate
 		// (it was previously denominated in G_old).
 		mutated := commodity
-		mutated.ConvertedOriginalPrice = decimal.Zero
-		mutated.CurrentPrice = quantizeConvertedMoney(commodity.CurrentPrice.Mul(rate))
+		mutated.ConvertedOriginalPrice = nil
+		mutated.CurrentPrice = convertPrice(commodity.CurrentPrice, rate)
 		return ApplyResult{
 			Outcome: ApplyOutcomeCaseC,
 			Before:  before,
@@ -172,8 +178,8 @@ func ApplyConversion(commodity models.Commodity, fromCurrency, toCurrency models
 		// OriginalPriceCurrency stay put; the converted / current
 		// G-side amounts move.
 		mutated := commodity
-		mutated.ConvertedOriginalPrice = quantizeConvertedMoney(commodity.ConvertedOriginalPrice.Mul(rate))
-		mutated.CurrentPrice = quantizeConvertedMoney(commodity.CurrentPrice.Mul(rate))
+		mutated.ConvertedOriginalPrice = convertPrice(commodity.ConvertedOriginalPrice, rate)
+		mutated.CurrentPrice = convertPrice(commodity.CurrentPrice, rate)
 		return ApplyResult{
 			Outcome: ApplyOutcomeCaseB,
 			Before:  before,
@@ -196,7 +202,8 @@ type PerRowDiff struct {
 	FilledFromCase bool
 }
 
-// RunResult is the aggregate output of ConvertGroup. It is the source
+// RunResult is the aggregate output of ConvertGroup. The totals sum the
+// known current prices; an unknown current price adds nothing. It is the source
 // of truth for both the preview response (rendered to the user, then
 // rolled back) and the migration row update (written by the worker on
 // commit).
@@ -313,7 +320,7 @@ func (s *ConversionService) ConvertGroup(ctx context.Context, tx *sqlx.Tx, opts 
 	}
 
 	for _, commodity := range commodities {
-		result.TotalCurrentBefore = result.TotalCurrentBefore.Add(commodity.CurrentPrice)
+		result.TotalCurrentBefore = addKnown(result.TotalCurrentBefore, commodity.CurrentPrice)
 
 		applyResult := ApplyConversion(*commodity, opts.FromCurrency, opts.ToCurrency, opts.Rate)
 
@@ -358,14 +365,14 @@ func (s *ConversionService) ConvertGroup(ctx context.Context, tx *sqlx.Tx, opts 
 			}
 		}
 
-		result.TotalCurrentAfter = result.TotalCurrentAfter.Add(applyResult.After.CurrentPrice)
+		result.TotalCurrentAfter = addKnown(result.TotalCurrentAfter, applyResult.After.CurrentPrice)
 		result.Diffs = append(result.Diffs, PerRowDiff{
 			CommodityID:    commodity.GetID(),
 			CommodityName:  commodity.Name,
 			Outcome:        applyResult.Outcome,
 			Before:         applyResult.Before,
 			After:          applyResult.After,
-			CurrentDelta:   applyResult.After.CurrentPrice.Sub(applyResult.Before.CurrentPrice),
+			CurrentDelta:   PriceDelta(applyResult.Before.CurrentPrice, applyResult.After.CurrentPrice),
 			FilledFromCase: filled,
 		})
 
@@ -448,39 +455,71 @@ func (s *ConversionService) updateCommodityImage(ctx context.Context, tx *sqlx.T
 
 func buildAuditRow(opts RunOptions, commodityID string, ar ApplyResult, filled bool) models.CurrencyMigrationAuditRow {
 	commodityRef := commodityID
-	beforePrice := ar.Before.OriginalPrice
-	afterPrice := ar.After.OriginalPrice
-	beforeConverted := ar.Before.ConvertedOriginalPrice
-	afterConverted := ar.After.ConvertedOriginalPrice
-	beforeCurrent := ar.Before.CurrentPrice
-	afterCurrent := ar.After.CurrentPrice
 	beforeCurrency := ar.Before.OriginalPriceCurrency
 	afterCurrency := ar.After.OriginalPriceCurrency
 
+	// A nil price is recorded as NULL: the audit row keeps an unknown price
+	// unknown instead of writing it as zero.
 	return models.CurrencyMigrationAuditRow{
 		MigrationID:                opts.MigrationID,
 		CommodityID:                &commodityRef,
-		OriginalPriceBefore:        &beforePrice,
-		OriginalPriceAfter:         &afterPrice,
+		OriginalPriceBefore:        clonePrice(ar.Before.OriginalPrice),
+		OriginalPriceAfter:         clonePrice(ar.After.OriginalPrice),
 		OriginalCurrencyBefore:     &beforeCurrency,
 		OriginalCurrencyAfter:      &afterCurrency,
-		ConvertedBefore:            &beforeConverted,
-		ConvertedAfter:             &afterConverted,
-		CurrentBefore:              &beforeCurrent,
-		CurrentAfter:               &afterCurrent,
+		ConvertedBefore:            clonePrice(ar.Before.ConvertedOriginalPrice),
+		ConvertedAfter:             clonePrice(ar.After.ConvertedOriginalPrice),
+		CurrentBefore:              clonePrice(ar.Before.CurrentPrice),
+		CurrentAfter:               clonePrice(ar.After.CurrentPrice),
 		AcquisitionFilledInThisRun: filled,
 	}
 }
 
 func imageFromCommodity(c models.Commodity) RowImage {
 	return RowImage{
-		OriginalPrice:          c.OriginalPrice,
+		OriginalPrice:          clonePrice(c.OriginalPrice),
 		OriginalPriceCurrency:  c.OriginalPriceCurrency,
-		ConvertedOriginalPrice: c.ConvertedOriginalPrice,
-		CurrentPrice:           c.CurrentPrice,
+		ConvertedOriginalPrice: clonePrice(c.ConvertedOriginalPrice),
+		CurrentPrice:           clonePrice(c.CurrentPrice),
 	}
+}
+
+// clonePrice copies a price so an image never aliases the commodity it was
+// taken from.
+func clonePrice(price *decimal.Decimal) *decimal.Decimal {
+	if price == nil {
+		return nil
+	}
+	return new(*price)
 }
 
 func quantizeConvertedMoney(amount decimal.Decimal) decimal.Decimal {
 	return amount.Round(convertedMoneyScale)
+}
+
+// convertPrice applies the rate to a known price and leaves an unknown one
+// unknown.
+func convertPrice(price *decimal.Decimal, rate decimal.Decimal) *decimal.Decimal {
+	if price == nil {
+		return nil
+	}
+	return new(quantizeConvertedMoney(price.Mul(rate)))
+}
+
+// addKnown adds a known price to a running total; an unknown one adds
+// nothing.
+func addKnown(total decimal.Decimal, price *decimal.Decimal) decimal.Decimal {
+	if price == nil {
+		return total
+	}
+	return total.Add(*price)
+}
+
+// PriceDelta is after minus before when both prices are known, and zero
+// when either is unknown: a conversion never turns one into the other.
+func PriceDelta(before, after *decimal.Decimal) decimal.Decimal {
+	if before == nil || after == nil {
+		return decimal.Zero
+	}
+	return after.Sub(*before)
 }

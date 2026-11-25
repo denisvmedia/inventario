@@ -18,7 +18,6 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
-	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -454,7 +453,7 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	commodity.AreaID = &actualAreaID
 
 	if groupCurrency, gcErr := validationctx.GroupCurrencyFromContext(ctx); gcErr == nil && string(commodity.OriginalPriceCurrency) == groupCurrency {
-		commodity.ConvertedOriginalPrice = decimal.Zero
+		commodity.ConvertedOriginalPrice = nil
 	}
 	if err := commodity.ValidateWithContext(ctx); err != nil {
 		return errxtrace.Wrap("invalid commodity", err, errx.Attrs("original_commodity_id", xmlCommodity.ID))
