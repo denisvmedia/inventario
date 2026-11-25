@@ -278,3 +278,110 @@ func TestTrash_Postgres_TagDeleteReachesTrashedItems(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(result.Commodity.Tags, qt.HasLen, 0)
 }
+
+// trashUnderUpdate moves a row to Trash in a transaction it keeps open until
+// update is blocked on the row, then commits, and returns update's error. It
+// reproduces an Update whose unlocked read of the stored row comes before a
+// concurrent Trash commits.
+func (fx trashPGFixture) trashUnderUpdate(c *qt.C, table, id string, update func() error) error {
+	c.Helper()
+	tx, err := fx.dbx.BeginTxx(fx.ctx, nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(fx.ctx,
+		`UPDATE `+table+` SET deleted_at = now(), deleted_by = 'someone-else' WHERE id = $1`, id)
+	c.Assert(err, qt.IsNil)
+
+	done := make(chan error, 1)
+	go func() { done <- update() }()
+	fx.waitForLockWaiter(c, done)
+	c.Assert(tx.Commit(), qt.IsNil)
+	return <-done
+}
+
+// waitForLockWaiter returns once a session of the test database waits on a
+// lock, and fails the test when done delivers first.
+func (fx trashPGFixture) waitForLockWaiter(c *qt.C, done <-chan error) {
+	c.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		var waiting int
+		c.Assert(fx.dbx.GetContext(fx.ctx, &waiting,
+			`SELECT COUNT(*) FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`), qt.IsNil)
+		if waiting > 0 {
+			return
+		}
+		select {
+		case err := <-done:
+			c.Fatalf("the call returned before it waited on a lock: %v", err)
+		default:
+		}
+		if time.Now().After(deadline) {
+			c.Fatal("the call never waited on a lock")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestTrash_Postgres_UpdateDoesNotUndoAConcurrentTrash(t *testing.T) {
+	c := qt.New(t)
+	fx := newTrashPGFixture(t)
+
+	item := fx.item(c, "Drill")
+	err := fx.trashUnderUpdate(c, "commodities", item.ID, func() error {
+		next := *item
+		next.Name = "Renamed"
+		_, err := fx.set.CommodityRegistry.Update(fx.ctx, next)
+		return err
+	})
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	trashed, err := fx.set.CommodityRegistry.GetTrashed(fx.ctx, item.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(trashed.Name, qt.Equals, "Drill")
+
+	file := fx.file(c, "manual.pdf", 10, pgCommodityLink(fx.item(c, "Saw").ID, models.FileLinkMetaDocuments))
+	err = fx.trashUnderUpdate(c, "files", file.ID, func() error {
+		next := *file
+		next.Title = "Renamed"
+		_, err := fx.set.FileRegistry.Update(fx.ctx, next)
+		return err
+	})
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	trashedFile, err := fx.set.FileRegistry.GetTrashed(fx.ctx, file.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(trashedFile.Title, qt.Equals, "manual.pdf")
+}
+
+func TestTrash_Postgres_PurgeWaitsForACurrencyMigration(t *testing.T) {
+	c := qt.New(t)
+	fx := newTrashPGFixture(t)
+
+	item := fx.item(c, "Drill")
+	_, err := fx.set.CommodityRegistry.Trash(fx.ctx, item.ID, fx.user.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+
+	// A running migration holds the group's lock between listing the items
+	// and updating them.
+	tx, err := fx.dbx.BeginTxx(fx.ctx, nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(fx.ctx, `SELECT pg_advisory_xact_lock(hashtext('currency_migration'), hashtext($1))`, fx.groupID)
+	c.Assert(err, qt.IsNil)
+
+	done := make(chan error, 1)
+	var deleted bool
+	go func() {
+		var err error
+		deleted, err = fx.set.CommodityRegistry.PurgeTrashed(fx.ctx, item.ID)
+		done <- err
+	}()
+	fx.waitForLockWaiter(c, done)
+
+	var rows int
+	c.Assert(tx.GetContext(fx.ctx, &rows, `SELECT COUNT(*) FROM commodities WHERE id = $1`, item.ID), qt.IsNil)
+	c.Assert(rows, qt.Equals, 1, qt.Commentf("the row the migration listed is still there"))
+	c.Assert(tx.Commit(), qt.IsNil)
+
+	c.Assert(<-done, qt.IsNil)
+	c.Assert(deleted, qt.IsTrue)
+}

@@ -134,27 +134,30 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 	reg := r.newSQLRegistry()
 
 	err := reg.UpdateWithPrepare(ctx, file, func(ctx context.Context, tx *sqlx.Tx, stored models.FileEntity, next *models.FileEntity) error {
-		// A trashed file is read-only until it is restored. The trash
-		// columns themselves belong to Trash and Restore.
-		if stored.IsTrashed() {
-			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", stored.ID))
-		}
-		next.ClearTrashState()
 		var current struct {
 			LegacyType string `db:"linked_entity_type"`
 			LegacyID   string `db:"linked_entity_id"`
 			LegacyMeta string `db:"linked_entity_meta"`
 			SHA256     string `db:"sha256"`
+			Trashed    bool   `db:"trashed"`
 		}
 		lock := fmt.Sprintf(`
 			SELECT COALESCE(linked_entity_type, '') AS linked_entity_type,
 				COALESCE(linked_entity_id, '') AS linked_entity_id,
 				COALESCE(linked_entity_meta, '') AS linked_entity_meta,
-				sha256
+				sha256,
+				deleted_at IS NOT NULL AS trashed
 			FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Files())
 		if err := tx.QueryRowxContext(ctx, lock, next.ID).StructScan(&current); err != nil {
 			return errxtrace.Wrap("failed to lock file", err)
 		}
+		// A trashed file is read-only until it is restored. stored was read
+		// without a lock, so the check is made under this one. The trash
+		// columns themselves belong to Trash and Restore.
+		if current.Trashed {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", stored.ID))
+		}
+		next.ClearTrashState()
 		next.LegacyFileLink = models.LegacyFileLink{
 			LegacyLinkedEntityType: current.LegacyType,
 			LegacyLinkedEntityID:   current.LegacyID,

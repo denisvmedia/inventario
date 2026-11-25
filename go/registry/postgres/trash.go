@@ -2,11 +2,16 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/registry/postgres/store"
 )
 
 // Trash filters. Commodities and files carry deleted_at; a NULL value is a live
@@ -74,4 +79,22 @@ func execAffected(ctx context.Context, tx *sqlx.Tx, query string, args ...any) (
 		return false, err
 	}
 	return n > 0, nil
+}
+
+// lockLiveRow locks a commodity or file row until tx ends and returns
+// registry.ErrNotFound when the row is gone or in Trash. An Update reads the
+// stored row before it holds a lock and then writes every column, the trash
+// columns included; checking deleted_at again under the lock keeps it from
+// writing a row that a concurrent Trash moved to Trash in between.
+func lockLiveRow(ctx context.Context, tx *sqlx.Tx, table store.TableName, entityType, id string) error {
+	var trashed bool
+	query := fmt.Sprintf(`SELECT deleted_at IS NOT NULL FROM %s WHERE id = $1 FOR UPDATE`, table)
+	err := tx.GetContext(ctx, &trashed, query, id)
+	if errors.Is(err, sql.ErrNoRows) || (err == nil && trashed) {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", entityType, "entity_id", id))
+	}
+	if err != nil {
+		return errxtrace.Wrap("failed to lock row", err, errx.Attrs("entity_type", entityType, "entity_id", id))
+	}
+	return nil
 }

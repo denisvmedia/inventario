@@ -532,19 +532,32 @@ Trash longer than the retention. It runs in the `housekeeping` worker group,
 sweeps once at startup and then on every interval, in rounds of 100 items
 and 100 files until a round finds nothing.
 
-Purging an item deletes its row (the history, loans, services and
-maintenance schedules go with it through their foreign keys) and settles
-every file that went to Trash with it:
+Purging an item first moves to Trash with it any live file that only it
+uses (one its delete missed), then deletes its row (the history, loans,
+services and maintenance schedules go with it through their foreign keys)
+and settles every file that went to Trash with it:
 
 - a file also linked to another item in Trash moves to that item;
-- a file linked to a live item, location or area comes back as live;
+- a file linked to a live item, location or area comes back as live, and so
+  does a file linked to an item the group cannot find;
 - anything else is deleted, and its blob is removed only when no other file
   row points at the same blob.
 
+The purge of an item holds the group's currency-migration lock, so it waits
+for a running currency migration of that group to finish.
+
+Every sweep also settles, whatever their age, the files that went to Trash
+with an item that is no longer there: a file whose item is live again comes
+back, and a file whose item was purged is settled as above. Such files are
+left behind by a purge, restore or delete that stopped halfway; "Empty
+trash" settles them for its group as well.
+
 Every step re-reads its state, so a sweep that stops halfway (crash,
-deploy, DB error) is finished by the next one. A failed sweep logs
-`Failed to purge expired Trash entries` and stops; a sweep that deleted
-something logs `Purged expired Trash entries` with the counts.
+deploy, DB error) is finished by the next one. An entry that fails is
+skipped and the sweep goes on with the rest; the round then logs
+`Failed to purge expired Trash entries` with every error and the sweep
+stops until the next interval. A sweep that deleted something logs
+`Purged expired Trash entries` with the counts.
 
 ### Knobs
 
@@ -555,7 +568,8 @@ something logs `Purged expired Trash entries` with the counts.
 
 Backups (`.inb` exports) leave Trash out. A full-replace restore empties
 the group's Trash first; a merge restore skips any item or file whose id is
-in Trash.
+in Trash, and creates a file the group does not have, whose only links point
+at items in Trash, in Trash with the first of them.
 
 ### Stopping it
 

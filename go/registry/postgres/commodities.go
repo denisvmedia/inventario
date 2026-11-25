@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -685,10 +686,11 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	reg := r.newSQLRegistry()
 
 	err := reg.UpdateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, stored models.Commodity, row *models.Commodity) error {
-		// A trashed item is read-only until it is restored. The trash
+		// A trashed item is read-only until it is restored. stored was read
+		// without a lock, so the check is made again under one. The trash
 		// columns themselves belong to Trash and Restore.
-		if stored.IsTrashed() {
-			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", stored.ID))
+		if err := lockLiveRow(ctx, tx, r.tableNames.Commodities(), "commodity", stored.ID); err != nil {
+			return err
 		}
 		row.ClearTrashState()
 		// The asset number is server-managed: carry the stored one over.
@@ -914,11 +916,25 @@ func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Com
 
 // PurgeTrashed deletes a trashed item's row. The condition on deleted_at lives
 // in the DELETE, so a concurrent restore wins and the purge deletes nothing.
+// It holds the group's currency-migration lock while it deletes: a running
+// migration lists every item of the group, trashed ones included, and then
+// updates each listed row, so a row deleted in between would fail it.
 func (r *CommodityRegistry) PurgeTrashed(ctx context.Context, id string) (bool, error) {
 	var deleted bool
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
+		var groupID string
+		query := fmt.Sprintf(`SELECT group_id FROM %s WHERE id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
+		if err := tx.GetContext(ctx, &groupID, query, id); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		if err := lockGroupCurrencyMigration(ctx, tx, groupID); err != nil {
+			return err
+		}
+		query = fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND %s`, r.tableNames.Commodities(), trashedRow)
 		var err error
 		deleted, err = execAffected(ctx, tx, query, id)
 		return err
