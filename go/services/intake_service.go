@@ -3,13 +3,14 @@ package services
 import (
 	"context"
 	"errors"
-	"sort"
+	"slices"
 	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
+	"go.5x5.cz/inventario/internal/mimekit"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -24,8 +25,9 @@ const (
 )
 
 // ErrIntakeQueueFull is returned when a new batch would put more sources in
-// the group's scan queue than IntakeConfig.MaxQueuedPerGroup allows.
-var ErrIntakeQueueFull = errx.NewSentinel("the scan queue of the group is full")
+// the group's scan queue than IntakeConfig.MaxQueuedPerGroup allows. It is
+// the registry's sentinel, which checks the limit atomically.
+var ErrIntakeQueueFull = registry.ErrIntakeQueueFull
 
 // IntakeConfig carries the limits of batch intake. The per-purchase file
 // count, the file size and the accepted types come from the scan service,
@@ -37,13 +39,15 @@ type IntakeConfig struct {
 
 // IntakeLimits are the limits a client shows and checks before uploading.
 type IntakeLimits struct {
-	Enabled           bool     `json:"enabled"`
-	MaxFilesPerBatch  int      `json:"max_files_per_batch"`
-	MaxFilesPerSource int      `json:"max_files_per_source"`
-	MaxFileBytes      int      `json:"max_file_bytes"`
-	MaxQueuedPerGroup int      `json:"max_queued_per_group"`
-	Queued            int      `json:"queued"`
-	RateLimitPerHour  int      `json:"rate_limit_per_hour"`
+	Enabled           bool `json:"enabled"`
+	MaxFilesPerBatch  int  `json:"max_files_per_batch"`
+	MaxFilesPerSource int  `json:"max_files_per_source"`
+	MaxFileBytes      int  `json:"max_file_bytes"`
+	MaxQueuedPerGroup int  `json:"max_queued_per_group"`
+	Queued            int  `json:"queued"`
+	RateLimitPerHour  int  `json:"rate_limit_per_hour"`
+	// AcceptedMIMETypes are the types a file can be uploaded as and scanned
+	// in: the scan reads HEIC photos, but the upload does not take them.
 	AcceptedMIMETypes []string `json:"accepted_mime_types"`
 }
 
@@ -143,10 +147,7 @@ func (s *IntakeService) Limits(ctx context.Context) (IntakeLimits, error) {
 		MaxQueuedPerGroup: s.cfg.MaxQueuedPerGroup,
 		RateLimitPerHour:  cfg.RateLimitPerHour,
 	}
-	for mime := range AllowedMIMETypes {
-		limits.AcceptedMIMETypes = append(limits.AcceptedMIMETypes, mime)
-	}
-	sort.Strings(limits.AcceptedMIMETypes)
+	limits.AcceptedMIMETypes = IntakeAcceptedMIMETypes()
 	reg, err := s.intake(ctx)
 	if err != nil {
 		return limits, err
@@ -157,14 +158,32 @@ func (s *IntakeService) Limits(ctx context.Context) (IntakeLimits, error) {
 	return limits, nil
 }
 
+// IntakeAcceptedMIMETypes returns, sorted, the types a batch file can have:
+// the ones the upload takes (mimekit.AllContentTypes) that the scan reads
+// (AllowedMIMETypes).
+func IntakeAcceptedMIMETypes() []string {
+	var out []string
+	for _, mime := range mimekit.AllContentTypes() {
+		if AllowedMIMETypes[mime] && !slices.Contains(out, mime) {
+			out = append(out, mime)
+		}
+	}
+	slices.Sort(out)
+	return out
+}
+
 // CreateSession stores a new batch and queues its sources for the worker.
 // clientKey is the client's identity for the batch: a key the group already
 // has returns that session with created=false and nothing else changes, so
-// a retry after a lost response does not queue the files twice.
+// a retry after a lost response does not queue the files twice. The replay
+// does not compare the sources: a client that reuses a key for other files
+// gets the first batch back, so a client takes a new key for every batch.
 //
 // Every file must be a live file of the group, of an accepted type and
 // within the size limit; a file may appear once in a batch. Validation
-// problems are a validation.Errors keyed by the request field.
+// problems are a validation.Errors keyed by the request field. A batch that
+// does not fit in the group's scan queue fails with ErrIntakeQueueFull; the
+// registry counts the queue and stores the batch atomically.
 func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sources []IntakeSourceRequest) (*IntakeSessionDetail, bool, error) {
 	reg, err := s.intake(ctx)
 	if err != nil {
@@ -188,16 +207,8 @@ func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sou
 	if err != nil {
 		return nil, false, err
 	}
-	queued, err := reg.CountQueued(ctx)
-	if err != nil {
-		return nil, false, err
-	}
-	if queued+len(inputs) > s.cfg.MaxQueuedPerGroup {
-		return nil, false, errxtrace.Classify(ErrIntakeQueueFull,
-			errx.Attrs("queued", queued, "limit", s.cfg.MaxQueuedPerGroup))
-	}
 
-	stored, created, err := reg.CreateSession(ctx, session, inputs)
+	stored, created, err := reg.CreateSession(ctx, session, inputs, s.cfg.MaxQueuedPerGroup)
 	if err != nil {
 		return nil, false, err
 	}
@@ -206,19 +217,14 @@ func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sou
 }
 
 // checkSources validates the sources of a new batch against the limits and
-// the group's files.
+// the group's files. The shape of the request is checked before any file is
+// read, so an oversized batch costs no lookups.
 func (s *IntakeService) checkSources(ctx context.Context, sources []IntakeSourceRequest) ([]registry.IntakeSourceInput, error) {
 	cfg := s.scan.Config()
 	if len(sources) == 0 {
 		return nil, validation.Errors{"sources": validation.NewError("validation_intake_no_sources", "add at least one file")}
 	}
-	files, err := s.files(ctx)
-	if err != nil {
-		return nil, err
-	}
 	seen := map[string]bool{}
-	total := 0
-	inputs := make([]registry.IntakeSourceInput, 0, len(sources))
 	for _, src := range sources {
 		if len(src.FileIDs) == 0 {
 			return nil, validation.Errors{"sources": validation.NewError("validation_intake_empty_source", "every purchase needs at least one file")}
@@ -228,11 +234,24 @@ func (s *IntakeService) checkSources(ctx context.Context, sources []IntakeSource
 				"too many files for one item").SetParams(map[string]any{"max": cfg.MaxPhotos})}
 		}
 		for _, id := range src.FileIDs {
-			total++
 			if seen[id] {
 				return nil, validation.Errors{"sources": validation.NewError("validation_intake_duplicate_file", "a file is listed twice")}
 			}
 			seen[id] = true
+		}
+	}
+	if len(seen) > s.cfg.MaxFilesPerBatch {
+		return nil, validation.Errors{"sources": validation.NewError("validation_intake_too_many_files",
+			"too many files in one batch").SetParams(map[string]any{"max": s.cfg.MaxFilesPerBatch})}
+	}
+
+	files, err := s.files(ctx)
+	if err != nil {
+		return nil, err
+	}
+	inputs := make([]registry.IntakeSourceInput, 0, len(sources))
+	for _, src := range sources {
+		for _, id := range src.FileIDs {
 			file, err := files.Get(ctx, id)
 			if err != nil {
 				return nil, err
@@ -242,10 +261,6 @@ func (s *IntakeService) checkSources(ctx context.Context, sources []IntakeSource
 			}
 		}
 		inputs = append(inputs, registry.IntakeSourceInput{FileIDs: src.FileIDs, OneItem: src.OneItem})
-	}
-	if total > s.cfg.MaxFilesPerBatch {
-		return nil, validation.Errors{"sources": validation.NewError("validation_intake_too_many_files",
-			"too many files in one batch").SetParams(map[string]any{"max": s.cfg.MaxFilesPerBatch})}
 	}
 	return inputs, nil
 }
@@ -607,7 +622,9 @@ func (s *IntakeService) Resume(ctx context.Context, sessionID string) (*IntakeSe
 
 // Rescan queues one source for a new scan on the member's request. Its
 // detected products are replaced; a source with a product that has its draft
-// cannot be rescanned.
+// cannot be rescanned. A draft that a stopped CreateDrafts made without
+// recording it is recorded first, so the refusal leaves the session showing
+// the draft.
 func (s *IntakeService) Rescan(ctx context.Context, sessionID, sourceID string) (*IntakeSessionDetail, error) {
 	if !s.scan.Enabled() {
 		return nil, errxtrace.Classify(ErrScanProviderDisabled)
@@ -627,10 +644,46 @@ func (s *IntakeService) Rescan(ctx context.Context, sessionID, sourceID string) 
 	if src.SessionID != session.ID {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "intake_source", "entity_id", sourceID))
 	}
+	if err := s.recordMadeDrafts(ctx, reg, session.ID, src.ID); err != nil {
+		return nil, err
+	}
 	if _, err := reg.RescanSource(ctx, src.ID, s.now()); err != nil {
 		return nil, err
 	}
 	return s.detail(ctx, reg, session)
+}
+
+// recordMadeDrafts marks created the candidates of the source whose draft
+// exists although the outcome was never recorded: CreateDrafts made the
+// draft and stopped before it wrote the outcome.
+func (s *IntakeService) recordMadeDrafts(ctx context.Context, reg registry.IntakeRegistry, sessionID, sourceID string) error {
+	candidates, err := reg.ListCandidates(ctx, sessionID)
+	if err != nil {
+		return err
+	}
+	drafts, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create draft registry", err)
+	}
+	for _, cand := range candidates {
+		if cand.SourceID != sourceID || cand.Outcome == models.IntakeCandidateCreated {
+			continue
+		}
+		draft, err := drafts.GetByClientKey(ctx, cand.DraftClientKey())
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if draft.Status == models.CommodityDraftDiscarding {
+			continue
+		}
+		if _, err := reg.SetCandidateOutcome(ctx, cand.ID, models.IntakeCandidateCreated, &draft.ID, ""); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Delete deletes the session. Drafts made from it stay. Its files that

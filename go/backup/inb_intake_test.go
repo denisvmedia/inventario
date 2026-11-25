@@ -26,7 +26,7 @@ func TestINBRoundTrip_IntakeSessionsStayOut(t *testing.T) {
 	receipt := f.attachStandaloneFile(c, "receipt", ".jpg", "image/jpeg", 128)
 	intake := must.Must(f.fs.IntakeRegistryFactory.CreateUserRegistry(f.ctx))
 	session, created, err := intake.CreateSession(f.ctx, models.IntakeSession{ClientKey: "batch-in-backup"},
-		[]registry.IntakeSourceInput{{FileIDs: []string{f.fileByUUID(c, receipt).ID}}})
+		[]registry.IntakeSourceInput{{FileIDs: []string{f.fileByUUID(c, receipt).ID}}}, 0)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(f.fileByUUID(c, receipt).Links, qt.HasLen, 1)

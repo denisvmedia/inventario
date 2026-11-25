@@ -260,10 +260,18 @@ type IntakeSource struct {
 	//ptah:schema:field name="status" type="TEXT" not_null="true" default="pending"
 	Status IntakeSourceStatus `json:"status" db:"status" userinput:"false"`
 
-	// Attempts counts the scans started for the source, a rate-limited wait
-	// excepted.
+	// Attempts counts the scans started for the source. It never goes
+	// down, so it also tells the result of the current scan from the late
+	// result of an earlier one.
 	//ptah:schema:field name="attempts" type="INTEGER" not_null="true" default="0"
 	Attempts int `json:"attempts" db:"attempts" userinput:"false"`
+
+	// RetryBase is the part of Attempts that does not count against the
+	// worker's limit of scans: a resume or a rescan sets it to Attempts, and
+	// a wait for the rate limit raises it by one, since that scan never
+	// reached the provider. See CountedAttempts.
+	//ptah:schema:field name="retry_base" type="INTEGER" not_null="true" default="0"
+	RetryBase int `json:"-" db:"retry_base" userinput:"false"`
 
 	// NextAttemptAt is the earliest time the worker may scan a pending
 	// source.
@@ -335,6 +343,18 @@ func (s *IntakeSource) HasExternalIdentity() bool {
 	return s.ExternalDocumentID != ""
 }
 
+// CountedAttempts is the number of scans that count against the worker's
+// limit since the source was last queued by a member.
+func (s *IntakeSource) CountedAttempts() int {
+	return s.Attempts - s.RetryBase
+}
+
+// InScan reports whether a worker holds a claim on the source: it is being
+// scanned, or it was canceled while the scan was running.
+func (s *IntakeSource) InScan() bool {
+	return s.Status == IntakeSourceScanning || (s.Status == IntakeSourceCanceled && s.ClaimedAt != nil)
+}
+
 func (*IntakeSource) Validate() error {
 	return ErrMustUseValidateWithContext
 }
@@ -348,7 +368,9 @@ func (s *IntakeSource) ValidateWithContext(ctx context.Context) error {
 			IntakeSourcePending, IntakeSourceScanning, IntakeSourceScanned, IntakeSourceFailed, IntakeSourceCanceled,
 		)),
 		validation.Field(&s.Attempts, validation.Min(0)),
-		validation.Field(&s.ExternalSystem, validation.Length(0, IntakeExternalValueMaxLength)),
+		validation.Field(&s.RetryBase, validation.Min(0), validation.Max(s.Attempts)),
+		validation.Field(&s.ExternalSystem, validation.Length(0, IntakeExternalValueMaxLength),
+			validation.When(s.ExternalDocumentID != "", validation.Required)),
 		validation.Field(&s.ExternalInstance, validation.Length(0, IntakeExternalValueMaxLength)),
 		validation.Field(&s.ExternalDocumentID, validation.Length(0, IntakeExternalValueMaxLength)),
 	)

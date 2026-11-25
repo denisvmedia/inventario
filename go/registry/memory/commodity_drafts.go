@@ -50,6 +50,20 @@ func NewCommodityDraftRegistryFactory(commodityFactory *CommodityRegistryFactory
 	}
 }
 
+// hasLiveDraftWithKey reports whether the group has a draft with the client
+// key that is not being discarded.
+func (f *CommodityDraftRegistryFactory) hasLiveDraftWithKey(groupID, clientKey string) bool {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		d := pair.Value
+		if d.GroupID == groupID && d.ClientKey == clientKey && d.Status != models.CommodityDraftDiscarding {
+			return true
+		}
+	}
+	return false
+}
+
 func (f *CommodityDraftRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CommodityDraftRegistry {
 	return must.Must(f.CreateUserRegistry(ctx))
 }

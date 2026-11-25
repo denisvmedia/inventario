@@ -20,15 +20,20 @@ import (
 // Timing of the intake worker.
 const (
 	defaultIntakeInterval = 5 * time.Second
-	// intakeStuckAfter is how long a claimed scan may run before the sweep
-	// assumes its worker died and queues the source again. It is well above
-	// any provider deadline.
-	intakeStuckAfter = 10 * time.Minute
+	// intakeStuckMargin is how much longer than the provider deadline a
+	// claimed scan may take (reading the files, the audit row, storing the
+	// result) before the sweep assumes its worker died.
+	intakeStuckMargin = 2 * time.Minute
+	// intakeStuckWithoutTimeout is the sweep's wait when the provider has no
+	// deadline.
+	intakeStuckWithoutTimeout = 10 * time.Minute
 	// intakeRateLimitWait is how long a source waits when its author's
 	// hourly scan limit is reached.
 	intakeRateLimitWait = 5 * time.Minute
 	// intakeMaxAttempts is how many scans a source gets for failures that
-	// may pass (timeouts, an unavailable provider) before it fails.
+	// may pass (timeouts, an unavailable provider, a worker that died
+	// during the scan) before it fails. A resume or a rescan gives it as
+	// many again.
 	intakeMaxAttempts = 3
 	// defaultIntakeSourcesPerTick bounds one tick, so a long queue does not
 	// keep the worker from noticing Stop or a pause.
@@ -67,6 +72,7 @@ type IntakeWorker struct {
 	scan           *CommodityScanService
 	uploadLocation string
 	interval       time.Duration
+	stuckAfter     time.Duration
 	perTick        int
 	pause          PauseChecker
 	clock          func() time.Time
@@ -136,6 +142,10 @@ func NewIntakeWorker(factorySet *registry.FactorySet, scan *CommodityScanService
 	for _, opt := range opts {
 		opt(w)
 	}
+	w.stuckAfter = intakeStuckWithoutTimeout
+	if timeout := scan.Config().Timeout; timeout > 0 {
+		w.stuckAfter = timeout + intakeStuckMargin
+	}
 	return w
 }
 
@@ -192,7 +202,7 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 	}
 	reg := w.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
 	now := w.clock()
-	if n, err := reg.SweepStuckSources(ctx, now.Add(-intakeStuckAfter), now); err != nil {
+	if n, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
 		slog.Error("Intake worker: failed to sweep stuck sources", "error", err)
 	} else if n > 0 {
 		slog.Warn("Intake worker: requeued stuck sources", "count", n)
@@ -230,7 +240,12 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
-	photos, code, err := w.readFiles(author.ctx, src)
+	// The claim is held for stuckAfter; the work stops before the sweep
+	// would hand the source to another worker, leaving time to store it.
+	workCtx, cancel := context.WithTimeout(author.ctx, w.stuckAfter-intakeStuckMargin/2)
+	defer cancel()
+
+	photos, code, err := w.readFiles(workCtx, src)
 	if err != nil {
 		log.Error("Intake worker: failed to read the source files", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorFileUnreadable, log)
@@ -241,11 +256,15 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		return
 	}
 
-	input := ScanInput{Photos: photos, PreferredCurrencyCode: string(author.group.GroupCurrency)}
+	input := ScanInput{
+		Photos:                photos,
+		PreferredCurrencyCode: string(author.group.GroupCurrency),
+		ItemTypes:             w.itemTypes(author.ctx, log),
+	}
 	if src.OneItem {
 		input.HintFromUser = intakeOneItemHint
 	}
-	result, err := w.scan.Scan(author.ctx, author.user.TenantID, author.user.ID, input)
+	result, err := w.scan.Scan(workCtx, author.user.TenantID, author.user.ID, input)
 	if err != nil {
 		w.handleScanError(ctx, reg, src, author.user.ID, err, log)
 		return
@@ -308,6 +327,21 @@ func (w *IntakeWorker) authorContext(ctx context.Context, src *models.IntakeSour
 		return nil, fmt.Errorf("user %s cannot edit items in group %s", user.ID, group.ID)
 	}
 	return &intakeAuthor{ctx: appctx.WithGroup(appctx.WithUser(ctx, user), group), user: user, group: group}, nil
+}
+
+// itemTypes returns the item types of the author's group for the scan to
+// classify into, as the scan in the item form offers them. When they cannot
+// be read, the scan offers the built-in ones.
+func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanItemType {
+	reg, err := w.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(ctx)
+	if err == nil {
+		var types []*models.ItemType
+		if types, err = reg.List(ctx); err == nil {
+			return ScanItemTypes(types)
+		}
+	}
+	log.Warn("Intake worker: item types unavailable, offering the built-in ones", "error", err)
+	return nil
 }
 
 // readFiles reads the live files of the source. A code reports a problem
@@ -414,11 +448,11 @@ func (w *IntakeWorker) handleScanError(ctx context.Context, reg registry.IntakeR
 // retryOrFail queues the source again with a growing delay while it has
 // attempts left, and fails it with code after the last one.
 func (w *IntakeWorker) retryOrFail(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, code string, log *slog.Logger) {
-	if src.Attempts >= intakeMaxAttempts {
+	if src.CountedAttempts() >= intakeMaxAttempts {
 		w.fail(ctx, reg, src, code, log)
 		return
 	}
-	delay := time.Duration(src.Attempts) * time.Minute
+	delay := time.Duration(src.CountedAttempts()) * time.Minute
 	w.requeue(ctx, reg, src, w.clock().Add(delay), models.IntakeWaitRetry, log)
 }
 

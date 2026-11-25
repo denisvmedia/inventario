@@ -81,7 +81,7 @@ func seedTenantWithDependents(c *qt.C, ctx context.Context, fs *registry.Factory
 	c.Assert(err, qt.IsNil)
 	_, _, err = userSet.IntakeRegistry.CreateSession(userCtx,
 		models.IntakeSession{ClientKey: "intake-" + slug, Origin: models.IntakeOriginUpload},
-		[]registry.IntakeSourceInput{{FileIDs: []string{fileID}}})
+		[]registry.IntakeSourceInput{{FileIDs: []string{fileID}}}, 0)
 	c.Assert(err, qt.IsNil)
 
 	// Tenant-only auth rows.

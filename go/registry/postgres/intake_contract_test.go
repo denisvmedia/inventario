@@ -23,5 +23,6 @@ func newPostgresIntakeEnv(t *testing.T) registrytest.IntakeEnv {
 		Intake:  intake,
 		Service: fx.factorySet.IntakeRegistryFactory.CreateServiceRegistry(),
 		Files:   fx.set.FileRegistry,
+		Drafts:  fx.set.CommodityDraftRegistry,
 	}
 }

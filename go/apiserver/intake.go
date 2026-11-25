@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"net/http"
 
@@ -211,7 +212,8 @@ func (api *intakeAPI) list(w http.ResponseWriter, r *http.Request) {
 // @Description type and size the scan accepts; GET .../intake/limits gives the limits. client_key
 // @Description is the client's identity for the batch: a key the group already has returns that
 // @Description session with 200, so a retry after a lost response does not queue the files
-// @Description twice. Without an AI scan provider the request answers 503
+// @Description twice. The replay does not compare the sources, so a client takes a new key for
+// @Description every batch. Without an AI scan provider the request answers 503
 // @Description commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
 // @Tags intake
 // @Accept json-api
@@ -313,8 +315,9 @@ func (api *intakeAPI) cancel(w http.ResponseWriter, r *http.Request) {
 // resume queues the canceled and failed purchases of a session again.
 //
 // @Summary Resume an intake session
-// @Description Queue the session's canceled and failed purchases again. Purchases that were
-// @Description scanned are not scanned again.
+// @Description Queue the session's canceled and failed purchases again. A purchase canceled while
+// @Description its scan runs goes back to that scan. Purchases that were scanned are not scanned
+// @Description again.
 // @Tags intake
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -349,7 +352,9 @@ func (api *intakeAPI) resume(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Session not found"
 // @Router /g/{groupSlug}/intake/sessions/{sessionID}/drafts [post].
 func (api *intakeAPI) createDrafts(w http.ResponseWriter, r *http.Request) {
-	result, err := api.service.CreateDrafts(r.Context(), chi.URLParam(r, "sessionID"))
+	// A client that goes away must not stop the call between making a draft
+	// and recording it on its product.
+	result, err := api.service.CreateDrafts(context.WithoutCancel(r.Context()), chi.URLParam(r, "sessionID"))
 	if err != nil {
 		renderIntakeError(w, r, err)
 		return
@@ -402,9 +407,9 @@ func (api *intakeAPI) reviewCandidate(w http.ResponseWriter, r *http.Request) {
 //
 // @Summary Rescan a purchase
 // @Description Queue one purchase of the session for a new AI scan on the member's request. Its
-// @Description detected products are replaced. A purchase being scanned answers 409
-// @Description intake.source_busy; one with a product that has its draft answers 409
-// @Description intake.source_has_drafts.
+// @Description detected products are replaced. A purchase being scanned, also one canceled while
+// @Description its scan runs, answers 409 intake.source_busy; one with a product that has its
+// @Description draft answers 409 intake.source_has_drafts.
 // @Tags intake
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"

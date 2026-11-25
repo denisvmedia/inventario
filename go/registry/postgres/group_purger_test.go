@@ -319,7 +319,7 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	intakeFileID := seedTagFile(c, set, ctx, "intake-receipt")
 	intake, _, err := set.IntakeRegistry.CreateSession(ctx,
 		models.IntakeSession{ClientKey: "purge-intake", Origin: models.IntakeOriginUpload},
-		[]registry.IntakeSourceInput{{FileIDs: []string{intakeFileID}}})
+		[]registry.IntakeSourceInput{{FileIDs: []string{intakeFileID}}}, 0)
 	c.Assert(err, qt.IsNil)
 
 	// Currency migration + audit row (#2095). The audit row's group_id FK is
