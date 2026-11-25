@@ -257,8 +257,7 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		delivered: map[string]string{},
 		parked:    map[string]bool{},
 
-		draftIDs:   map[string]string{},
-		keptDrafts: map[string]bool{},
+		draftIDs: map[string]string{},
 
 		priceReading: types.PricesOmitZero,
 	}
@@ -453,11 +452,10 @@ type inbWalker struct {
 	sellerIDs map[string]string
 
 	// draftIDs maps an archived draft's UUID to the restored draft's DB id.
-	// keptDrafts holds the archived drafts a merge did not restore because
-	// the group has a draft with the same client key; links to them are
-	// left out without an error.
-	draftIDs   map[string]string
-	keptDrafts map[string]bool
+	// A link to an archived draft that is not in it (a draft a merge kept,
+	// one that failed to restore, one the archive does not carry) is left
+	// out without an error.
+	draftIDs map[string]string
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -829,7 +827,7 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // reference that arrived after the file's bytes. The attach is idempotent, so a
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
-	if fileUUID == "" || link.linkedType == "" || w.isKeptDraft(link) {
+	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
 		// fileUUID is empty for bytes that arrived before any reference
 		// could use them; they were dropped with a counted error.
 		return nil
@@ -1127,9 +1125,9 @@ func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, li
 func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool, holderID string) {
 	live := false
 	for _, link := range pending.links {
-		if link.linkedType == "" || w.isKeptDraft(link) {
-			// A file the kept draft used, and nothing else of the archive,
-			// is restored as a standalone file rather than lost.
+		if link.linkedType == "" || w.isUnrestoredDraft(link) {
+			// A file only drafts the restore did not recreate used is
+			// restored as a standalone file rather than lost.
 			standalone = true
 			continue
 		}

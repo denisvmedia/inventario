@@ -6069,8 +6069,10 @@ export type paths = {
         /**
          * List drafts
          * @description The group's open drafts, most recently saved first. A draft is an unfinished
-         *     item saved on the server; it is not an item and appears in no item list, count,
-         *     search or export.
+         *     item saved on the server; it is not an item and appears in no item list, count
+         *     or search. A whole-group backup carries the open drafts. When a member who can
+         *     edit items lists the drafts, a discard that stopped more than ten minutes ago is
+         *     finished first.
          */
         get: {
             parameters: {

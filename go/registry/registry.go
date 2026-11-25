@@ -1497,6 +1497,11 @@ type CommodityDraftRegistry interface {
 	// DeleteDiscarding deletes a draft whose discard has begun; ErrNotFound
 	// when there is no such draft.
 	DeleteDiscarding(ctx context.Context, id string) error
+
+	// ListDiscarding returns, oldest first, at most limit of the group's
+	// drafts whose discard began before the given time and did not finish.
+	// MarkDiscarding sets UpdatedAt, so it is the time the discard began.
+	ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error)
 }
 
 // DraftPromotion is the result of CommodityDraftRegistry.Promote.

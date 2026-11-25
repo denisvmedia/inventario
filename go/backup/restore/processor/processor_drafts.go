@@ -71,7 +71,9 @@ func (w *inbWalker) handleDraftsMember(hdr *tar.Header, r io.Reader) error {
 // applyDraft recreates one archived draft with new ids, or keeps the group's
 // draft with the same client key. created is false for a kept draft, which
 // gets a skipped step of its own in the restore log. A full replace has
-// removed the group's drafts before, so a draft is kept only in a merge.
+// removed the group's drafts before, so a draft is kept only in a merge. The
+// files of a draft that is kept or fails to restore are restored as
+// standalone files, unless something else the archive restores uses them.
 func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	createdAt, updatedAt, err := a.Timestamps()
 	if err != nil {
@@ -89,8 +91,8 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	// A dry run of a full replace removes nothing, but the real run would
 	// remove the group's drafts first, so it has nothing to keep.
 	if !w.options.DryRun || w.options.Strategy != types.RestoreStrategyFullReplace {
-		if _, err := reg.GetByClientKey(w.ctx, a.ClientKey); err == nil {
-			w.keepDraft(a)
+		if existing, err := reg.GetByClientKey(w.ctx, a.ClientKey); err == nil {
+			w.keepDraft(a, existing)
 			return false, nil
 		} else if !errors.Is(err, registry.ErrNotFound) {
 			return false, errxtrace.Wrap("failed to look up draft", err, errx.Attrs("draft_id", a.ID))
@@ -115,7 +117,7 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	}
 	if !isNew {
 		// Another request made a draft with the key since the lookup.
-		w.keepDraft(a)
+		w.keepDraft(a, stored)
 		return false, nil
 	}
 	w.draftIDs[a.ID] = stored.ID
@@ -124,22 +126,35 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 	return true, nil
 }
 
-// keepDraft records an archived draft the restore leaves out because the
-// group has a draft with its client key, and reports it in the restore log.
-func (w *inbWalker) keepDraft(a *types.INBDraft) {
-	w.keptDrafts[a.ID] = true
+// keepDraft reports in the restore log an archived draft the restore leaves
+// out because the group's draft existing has its client key.
+func (w *inbWalker) keepDraft(a *types.INBDraft, existing *models.CommodityDraft) {
 	w.stats.SkippedCount++
 	name := a.Values.Title()
 	if name == "" {
 		name = a.ClientKey
 	}
-	w.proc.createRestoreStep(w.ctx, "Draft: "+name, models.RestoreStepResultSkipped,
-		"The group already has a draft with the same client key, so it was kept and the backup's copy was not restored.")
+	w.proc.createRestoreStep(w.ctx, "Draft: "+name, models.RestoreStepResultSkipped, keptDraftReason(existing))
 }
 
-// isKeptDraft reports whether link points at a draft the restore kept.
-func (w *inbWalker) isKeptDraft(link inbFileLink) bool {
-	return link.linkedType == models.FileLinkDraft && w.keptDrafts[link.entityUUID]
+// keptDraftReason says why the backup's copy of a draft was not restored,
+// after the state of the group's draft with the same client key.
+func keptDraftReason(existing *models.CommodityDraft) string {
+	switch {
+	case existing.Status == models.CommodityDraftPromoted:
+		return "The group's draft with the same client key has already become an item, so the backup's copy was not restored."
+	case existing.IsDiscarding():
+		return "The group's draft with the same client key is being discarded, so the backup's copy was not restored."
+	default:
+		return "The group already has a draft with the same client key, so it was kept and the backup's copy was not restored."
+	}
+}
+
+// isUnrestoredDraft reports whether link points at an archived draft the
+// restore did not recreate: one it kept, one that failed, or one the archive
+// does not carry.
+func (w *inbWalker) isUnrestoredDraft(link inbFileLink) bool {
+	return link.linkedType == models.FileLinkDraft && w.draftIDs[link.entityUUID] == ""
 }
 
 // restoreDraftValues maps the references in archived draft values to the
