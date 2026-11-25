@@ -289,8 +289,9 @@ test.describe("Custom fields (#2803)", () => {
     expect(saved).toHaveLength(1);
     const draftId = saved[0].id;
 
-    await page.goto(`/g/${encodeURIComponent(slug)}/commodities`);
-    await page.getByTestId(`draft-resume-${draftId}`).click();
+    await page.goto(`/g/${encodeURIComponent(slug)}/inbox?reason=draft`);
+    const row = page.getByTestId(`inbox-row-draft-${draftId}`);
+    await row.getByTestId(`inbox-resume-${draftId}`).click();
     await expect(page.locator("#commodity-name")).toHaveValue(name);
     // Finishing needs what any item needs: a type.
     await page.locator("#commodity-type").click();
