@@ -16,16 +16,22 @@ import (
 const inboxReasonParam = "reason"
 
 // inboxAPI serves the inbox of a group (#2794): the records that still need
-// attention, from every source of unfinished work. It only reads, so every
-// member can open it; each entry is cleared through the record's own
-// endpoints, which apply their own role checks.
+// attention, from every source of unfinished work. Every member can open
+// it; each entry is cleared through the record's own endpoints, which apply
+// their own role checks. Like GET /drafts, it first finishes the draft
+// discards that stopped half way, when the member may discard drafts, so a
+// stopped discard does not keep its files and client key for good.
 type inboxAPI struct {
 	service *services.InboxService
+	stale   staleDiscards
 }
 
 // Inbox mounts /g/{groupSlug}/inbox.
-func Inbox() func(r chi.Router) {
-	api := &inboxAPI{service: services.NewInboxService()}
+func Inbox(params Params, groupService *services.GroupService) func(r chi.Router) {
+	api := &inboxAPI{
+		service: services.NewInboxService(),
+		stale:   staleDiscards{drafts: newCommodityDraftService(params), groups: groupService},
+	}
 	return func(r chi.Router) {
 		r.Get("/", api.list)
 		r.Get("/count", api.count)
@@ -74,7 +80,9 @@ func inboxEntries(entries []services.InboxEntry) []jsonapi.InboxEntry {
 // @Description most recently saved first, items most recently added first. meta.entries counts
 // @Description the entries the reason filter keeps; meta.counts describes the whole inbox and
 // @Description counts each record once in total, whatever its number of reasons. Every member of
-// @Description the group can read it.
+// @Description the group can read it. When a member who can edit items reads it, the draft
+// @Description discards that stopped more than ten minutes ago are finished first, as for
+// @Description GET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.
 // @Tags inbox
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -99,6 +107,7 @@ func (api *inboxAPI) list(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	api.stale.finish(r)
 	page, perPage := parsePagination(r.URL.Query().Get("page"), r.URL.Query().Get("per_page"))
 	result, err := api.service.List(r.Context(), regSet, services.InboxListOptions{
 		Reason: reason,
@@ -122,7 +131,8 @@ func (api *inboxAPI) list(w http.ResponseWriter, r *http.Request) {
 // @Description How many records of the group need attention, for the sidebar and the dashboard.
 // @Description total counts each record once, whatever its number of reasons; reasons counts,
 // @Description per reason, the records that have it. The counts cover only what the group holds,
-// @Description so they agree with GET /g/{groupSlug}/inbox.
+// @Description so they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished
+// @Description first, as for GET /g/{groupSlug}/inbox.
 // @Tags inbox
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -134,6 +144,7 @@ func (api *inboxAPI) count(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	api.stale.finish(r)
 	counts, err := api.service.Count(r.Context(), regSet)
 	if err != nil {
 		_ = renderEntityError(w, r, err)

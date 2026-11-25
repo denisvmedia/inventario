@@ -123,6 +123,10 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 2)
 		c.Assert(draftIDs(second), qt.DeepEquals, []string{b.ID})
+
+		ids, err := env.Drafts.OpenIDs(env.Ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(ids, qt.DeepEquals, []string{a.ID, b.ID})
 	})
 
 	t.Run("promote creates one item and moves the files", func(t *testing.T) {
@@ -294,6 +298,9 @@ func runCommodityDraftLifecycleContract(t *testing.T, newEnv func(t *testing.T) 
 		c.Assert(err, qt.IsNil)
 		c.Assert(total, qt.Equals, 1)
 		c.Assert(draftIDs(page), qt.DeepEquals, []string{other.ID})
+		ids, err := env.Drafts.OpenIDs(env.Ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(ids, qt.DeepEquals, []string{other.ID})
 
 		_, err = env.Drafts.SaveValues(env.Ctx, draft.ID, 1, models.CommodityDraftValues{"name": "Late"})
 		c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)

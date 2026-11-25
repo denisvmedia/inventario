@@ -1467,6 +1467,11 @@ type CommodityDraftRegistry interface {
 	// saved first, with the total.
 	ListOpen(ctx context.Context, offset, limit int) ([]*models.CommodityDraft, int, error)
 
+	// OpenIDs returns the ids of every open draft of the group, in the order
+	// of ListOpen. It reads ids only, for a caller that counts the drafts
+	// or merges them with other records without loading their values.
+	OpenIDs(ctx context.Context) ([]string, error)
+
 	// SaveValues replaces the values of an open draft and increments its
 	// revision. revision is the revision the values were based on:
 	// ErrDraftRevisionConflict when it is not the current one,

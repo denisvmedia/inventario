@@ -6713,7 +6713,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/inbox": {
             "get": {
-                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft) and items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity). Missing information\nsuch as no location, no photo or an unknown price does not put an item here.\nEntries are ordered by their first reason in the order draft, item_draft; drafts\nmost recently saved first, items most recently added first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it.",
+                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft) and items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity). Missing information\nsuch as no location, no photo or an unknown price does not put an item here.\nEntries are ordered by their first reason in the order draft, item_draft; drafts\nmost recently saved first, items most recently added first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it. When a member who can edit items reads it, the draft\ndiscards that stopped more than ten minutes ago are finished first, as for\nGET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -6770,7 +6770,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/inbox/count": {
             "get": {
-                "description": "How many records of the group need attention, for the sidebar and the dashboard.\ntotal counts each record once, whatever its number of reasons; reasons counts,\nper reason, the records that have it. The counts cover only what the group holds,\nso they agree with GET /g/{groupSlug}/inbox.",
+                "description": "How many records of the group need attention, for the sidebar and the dashboard.\ntotal counts each record once, whatever its number of reasons; reasons counts,\nper reason, the records that have it. The counts cover only what the group holds,\nso they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished\nfirst, as for GET /g/{groupSlug}/inbox.",
                 "produces": [
                     "application/vnd.api+json"
                 ],

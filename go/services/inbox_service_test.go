@@ -144,6 +144,14 @@ type fakeSource struct {
 	err     error
 }
 
+func (s fakeSource) Refs(context.Context, *registry.Set) ([]services.InboxRef, error) {
+	refs := make([]services.InboxRef, 0, len(s.entries))
+	for _, e := range s.entries {
+		refs = append(refs, services.InboxRef{Kind: e.Kind, ID: e.ID, Reasons: e.Reasons})
+	}
+	return refs, s.err
+}
+
 func (s fakeSource) Collect(context.Context, *registry.Set) ([]services.InboxEntry, error) {
 	return s.entries, s.err
 }
@@ -182,6 +190,11 @@ func TestInboxService_OneEntryPerRecord(t *testing.T) {
 	page, err = svc.List(f.ctx, f.regs, services.InboxListOptions{Reason: intakeFailed, Limit: 50})
 	c.Assert(err, qt.IsNil)
 	c.Check(page.Total, qt.Equals, 2)
+
+	// The count, built from refs alone, merges the records the same way.
+	counts, err := svc.Count(f.ctx, f.regs)
+	c.Assert(err, qt.IsNil)
+	c.Check(counts, qt.DeepEquals, page.Counts)
 }
 
 func TestInboxService_SourceError(t *testing.T) {

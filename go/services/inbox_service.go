@@ -3,6 +3,7 @@ package services
 import (
 	"cmp"
 	"context"
+	"math"
 	"slices"
 	"time"
 
@@ -75,10 +76,24 @@ type InboxEntry struct {
 	FileCount int
 }
 
+// InboxRef names a record a source flags and why, without the record's
+// details.
+type InboxRef struct {
+	Kind    InboxKind
+	ID      string
+	Reasons []InboxReason
+}
+
 // InboxSource finds one kind of unfinished work in the group of a registry
 // set. A new kind of work (an intake session, an extraction waiting for
 // review) is a new source; the service merges what the sources return.
 type InboxSource interface {
+	// Refs returns the kind, id and reasons of every record of the group
+	// that the source flags, and reads nothing else. The inbox count is
+	// built from refs alone: the sidebar and the dashboard ask for it after
+	// every change to an item, so it must stay cheap as sources are added.
+	// A source returns the same records from Refs and Collect.
+	Refs(ctx context.Context, regSet *registry.Set) ([]InboxRef, error)
 	// Collect returns every record of the group that the source flags, in
 	// the order the source lists them, with at least one reason each. A
 	// record another source flags too is named by the same kind and id, so
@@ -145,13 +160,33 @@ func DefaultInboxSources() []InboxSource {
 	return []InboxSource{DraftInboxSource{}, ItemDraftInboxSource{}}
 }
 
-// Count returns the counts of the inbox of regSet's group.
+// Count returns the counts of the inbox of regSet's group. It reads the
+// sources' refs only, never the records.
 func (s *InboxService) Count(ctx context.Context, regSet *registry.Set) (InboxCounts, error) {
-	entries, err := s.collect(ctx, regSet)
-	if err != nil {
-		return InboxCounts{}, err
+	if regSet == nil {
+		return InboxCounts{}, errxtrace.Wrap("inbox: registry set is required", registry.ErrFieldRequired)
 	}
-	return countInbox(entries), nil
+	reasons := map[inboxKey][]InboxReason{}
+	for _, src := range s.sources {
+		refs, err := src.Refs(ctx, regSet)
+		if err != nil {
+			return InboxCounts{}, err
+		}
+		for _, ref := range refs {
+			if len(ref.Reasons) == 0 {
+				continue
+			}
+			key := inboxKey{kind: ref.Kind, id: ref.ID}
+			reasons[key] = append(reasons[key], ref.Reasons...)
+		}
+	}
+	counts := InboxCounts{Total: len(reasons), Reasons: map[InboxReason]int{}}
+	for _, rs := range reasons {
+		for _, r := range orderInboxReasons(rs) {
+			counts.Reasons[r]++
+		}
+	}
+	return counts, nil
 }
 
 // List returns a page of the inbox of regSet's group.
@@ -276,6 +311,19 @@ const inboxReadPage = 500
 // inbox.
 type DraftInboxSource struct{}
 
+// Refs returns the ids of the open drafts, without their values.
+func (DraftInboxSource) Refs(ctx context.Context, regSet *registry.Set) ([]InboxRef, error) {
+	ids, err := regSet.CommodityDraftRegistry.OpenIDs(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("inbox: list draft ids", err)
+	}
+	refs := make([]InboxRef, 0, len(ids))
+	for _, id := range ids {
+		refs = append(refs, InboxRef{Kind: InboxKindDraft, ID: id, Reasons: []InboxReason{InboxReasonDraft}})
+	}
+	return refs, nil
+}
+
 // Collect returns the open drafts, most recently saved first.
 func (DraftInboxSource) Collect(ctx context.Context, regSet *registry.Set) ([]InboxEntry, error) {
 	var out []InboxEntry
@@ -327,13 +375,28 @@ func (DraftInboxSource) Detail(ctx context.Context, regSet *registry.Set, entrie
 // draft, whatever its status. Items in Trash are left out.
 type ItemDraftInboxSource struct{}
 
+// itemDraftOptions selects the items the source flags.
+var itemDraftOptions = registry.CommodityListOptions{IncludeInactive: true, DraftsOnly: true}
+
+// Refs returns the ids of the items marked as draft, without the items.
+func (ItemDraftInboxSource) Refs(ctx context.Context, regSet *registry.Set) ([]InboxRef, error) {
+	ids, err := regSet.CommodityRegistry.ListIDs(ctx, itemDraftOptions, math.MaxInt)
+	if err != nil {
+		return nil, errxtrace.Wrap("inbox: list draft item ids", err)
+	}
+	refs := make([]InboxRef, 0, len(ids))
+	for _, id := range ids {
+		refs = append(refs, InboxRef{Kind: InboxKindCommodity, ID: id, Reasons: []InboxReason{InboxReasonItemDraft}})
+	}
+	return refs, nil
+}
+
 // Collect returns the items marked as draft, the most recently added first
 // (by asset number, which the registry gives out in creation order).
 func (ItemDraftInboxSource) Collect(ctx context.Context, regSet *registry.Set) ([]InboxEntry, error) {
-	opts := registry.CommodityListOptions{IncludeInactive: true, DraftsOnly: true}
 	var items []*models.Commodity
 	for offset := 0; ; {
-		page, total, err := regSet.CommodityRegistry.ListPaginated(ctx, offset, inboxReadPage, opts)
+		page, total, err := regSet.CommodityRegistry.ListPaginated(ctx, offset, inboxReadPage, itemDraftOptions)
 		if err != nil {
 			return nil, errxtrace.Wrap("inbox: list draft items", err)
 		}
