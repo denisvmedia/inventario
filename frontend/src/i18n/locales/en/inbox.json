@@ -1,6 +1,7 @@
 {
   "continueLabel": "Continue: {{title}}",
   "dashboard": {
+    "error": "The inbox count could not be loaded.",
     "title": "Needs attention: {{total}}"
   },
   "empty": {

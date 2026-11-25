@@ -48,19 +48,26 @@ async function createDraft(
   return ((await resp.json()) as { data: { id: string } }).data.id;
 }
 
-// draftListed reports whether the group's open drafts include id. A
-// promoted or discarded draft is not listed.
+// draftListed reports whether the group's open drafts include id, reading
+// every page: other specs add drafts to the same group. A promoted or
+// discarded draft is not listed.
 async function draftListed(
   request: APIRequestContext,
   auth: ApiAuth,
   slug: string,
   id: string,
 ): Promise<boolean> {
-  const resp = await request.get(`/api/v1/g/${encodeURIComponent(slug)}/drafts?per_page=100`, {
-    headers: headers(auth),
-  });
-  expect(resp.ok(), `GET /drafts → ${resp.status()}`).toBe(true);
-  return ((await resp.json()) as { data: { id: string }[] }).data.some((d) => d.id === id);
+  const perPage = 100;
+  for (let page = 1; ; page++) {
+    const resp = await request.get(
+      `/api/v1/g/${encodeURIComponent(slug)}/drafts?page=${page}&per_page=${perPage}`,
+      { headers: headers(auth) },
+    );
+    expect(resp.ok(), `GET /drafts?page=${page} → ${resp.status()}`).toBe(true);
+    const body = (await resp.json()) as { data: { id: string }[]; meta: { drafts: number } };
+    if (body.data.some((d) => d.id === id)) return true;
+    if (body.data.length === 0 || page * perPage >= body.meta.drafts) return false;
+  }
 }
 
 async function itemIsDraft(

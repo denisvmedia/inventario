@@ -42,14 +42,15 @@ export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryO
 }
 
 // The server's count of the inbox, for the sidebar and the dashboard. It
-// counts what the group holds, each record once.
+// counts what the group holds, each record once. It has no placeholder: the
+// key changes only with the group, and another group's count must not stand
+// in while this group's loads.
 export function useInboxCount({ enabled = true }: QueryOptions = {}) {
   const slug = useSlug()
   return useQuery<InboxCounts>({
     queryKey: inboxKeys.count(slug),
     queryFn: ({ signal }) => getInboxCount(signal),
     enabled: enabled && !!slug,
-    placeholderData: (prev) => prev,
   })
 }
 

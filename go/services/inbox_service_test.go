@@ -3,6 +3,7 @@ package services_test
 import (
 	"context"
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -135,6 +136,11 @@ func TestInboxService_ReasonFilterAndPages(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(page.Entries, qt.HasLen, 0)
 	c.Check(page.Total, qt.Equals, 3)
+
+	// A limit as large as an int gets the rest of the list.
+	page, err = svc.List(f.ctx, f.regs, services.InboxListOptions{Offset: 1, Limit: math.MaxInt})
+	c.Assert(err, qt.IsNil)
+	c.Check(page.Entries, qt.HasLen, 2)
 }
 
 // fakeSource returns fixed entries, as a later source (intake, extraction)

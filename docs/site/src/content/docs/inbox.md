@@ -17,7 +17,9 @@ attention. Other places lead to the inbox too:
 - The **All Items** page shows a line with the same summary and an
   **Open inbox** button.
 
-The card, the line and the number are hidden while the inbox is empty.
+The card, the line and the number are hidden while the inbox is empty. If the
+number cannot be loaded, the dashboard card says so, with **Retry** and a link
+to the inbox.
 
 ## What is in the inbox
 

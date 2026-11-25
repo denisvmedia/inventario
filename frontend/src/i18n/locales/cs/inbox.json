@@ -1,6 +1,7 @@
 {
   "continueLabel": "Pokračovat: {{title}}",
   "dashboard": {
+    "error": "Počet položek ve schránce se nepodařilo načíst.",
     "title": "Vyžaduje pozornost: {{total}}"
   },
   "empty": {
