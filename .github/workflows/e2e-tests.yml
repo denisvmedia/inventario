@@ -178,15 +178,11 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - id: vars
-        if: steps.gate.outputs.run == 'true'
-        uses: ./.github/actions/vars
-
       - name: Set up Node.js
         if: steps.gate.outputs.run == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: ${{ steps.vars.outputs.node_version }}
+          node-version-file: mise.toml
           cache: 'npm'
           cache-dependency-path: e2e/package-lock.json
 
@@ -352,15 +348,11 @@ jobs:
         if: steps.gate.outputs.run == 'true'
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - id: vars
-        if: steps.gate.outputs.run == 'true'
-        uses: ./.github/actions/vars
-
       - name: Set up Node.js
         if: steps.gate.outputs.run == 'true'
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: ${{ steps.vars.outputs.node_version }}
+          node-version-file: mise.toml
           cache: 'npm'
           cache-dependency-path: e2e/package-lock.json
 
@@ -487,9 +479,9 @@ jobs:
 
   # macOS webkit consumes the darwin/arm64 binary that docker.yml produced
   # for this commit. No Go rebuild here — macos-latest is Apple Silicon, so
-  # the binary runs natively. The embedded frontend bundle is built with the
-  # same Node version Dockerfile pins (frontend/package.json volta.node), so
-  # both lanes exercise equivalent JS.
+  # the binary runs natively. Its embedded frontend bundle and this lane's
+  # Playwright runner use the Node version from mise.toml. The Docker image
+  # builds its frontend with the independently pinned Node base image.
   #
   # No Mailpit is started here: the webkit lane runs inventario directly as
   # a host binary without docker-compose, so EMAIL_PROVIDER defaults to
@@ -546,9 +538,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
 
-      - id: vars
-        uses: ./.github/actions/vars
-
       - name: Set up PostgreSQL
         run: |
           brew install postgresql@17
@@ -568,7 +557,7 @@ jobs:
       - name: Set up Node.js
         uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7
         with:
-          node-version: ${{ steps.vars.outputs.node_version }}
+          node-version-file: mise.toml
           cache: 'npm'
           cache-dependency-path: e2e/package-lock.json
 
