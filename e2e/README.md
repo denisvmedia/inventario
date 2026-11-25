@@ -18,9 +18,11 @@ e2e/
 
 ### Prerequisites
 
-- Node.js (v24.16.0, per `package.json` `engines`)
-- npm (v8 or later)
+- Node.js and npm, using the versions in [`mise.toml`](../mise.toml)
 - Go (v1.26 or later)
+
+Follow the [mise setup instructions](../CONTRIBUTING.md#prerequisites) first.
+Enable shell activation or prefix the commands below with `mise exec --`.
 
 ### Installation
 

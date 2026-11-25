@@ -111,11 +111,13 @@
       ]
     },
     {
-      "description": "Volta Node.js and npm version pinning",
+      "description": "Pinned frontend/E2E dependencies and mise tool versions",
       "matchManagers": [
-        "npm"
+        "npm",
+        "mise"
       ],
       "matchFileNames": [
+        "mise.toml",
         "frontend/package.json",
         "e2e/package.json"
       ],

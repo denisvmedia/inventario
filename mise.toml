@@ -1,0 +1,5 @@
+# Shared development toolchain for the frontend, E2E tests and documentation.
+# GitHub Actions reads the Node.js version with setup-node's node-version-file.
+[tools]
+node = "24.22.3"
+npm = "12.2.3"

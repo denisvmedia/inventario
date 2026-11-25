@@ -39,11 +39,33 @@ Before touching anything under `frontend/src/`, also read
 ## Prerequisites
 
 - **Go** 1.26 or higher.
-- **Node.js** 24.16.0 (managed via [Volta](https://volta.sh/); the version is
-  pinned in `frontend/package.json`).
+- **Node.js and npm**, managed via [mise](https://mise.jdx.dev/), with exact
+  versions pinned in [`mise.toml`](mise.toml).
 - **Git**.
 - **PostgreSQL** for anything beyond the in-memory backend (user/tenant CLI
   commands, integration tests, and migrations require it).
+
+Install mise using the [platform instructions in the README](README.md#prerequisites),
+then run from the repository root:
+
+```bash
+mise trust
+mise install
+mise exec -- make build
+```
+
+The root configuration applies in `frontend/`, `e2e/` and `docs/site/` too.
+Use `mise exec --` before the commands below, or enable
+[shell activation](https://mise.jdx.dev/shells.html) once to
+select the pinned tools automatically when entering the repository:
+
+```bash
+# Bash: add to ~/.bashrc
+eval "$(mise activate bash)"
+
+# Zsh: add to ~/.zshrc instead
+eval "$(mise activate zsh)"
+```
 
 ## Building
 
