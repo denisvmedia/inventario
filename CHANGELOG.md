@@ -42,7 +42,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   deleted for good after `--trash-retention` (default 30 days) by the new
   `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
   toasts have an Undo button. Backups leave Trash out, a full-replace restore
-  empties it, and a merge restore skips what is in it
+  empties it, and a merge restore skips what is in it and puts a backup file
+  that only trashed items use in Trash with them
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.

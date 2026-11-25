@@ -91,6 +91,9 @@ item gets a new number after the highest one in the group.
 
 The two merge strategies skip an item or file from the backup that is in your
 [Trash](../trash/): it stays in the trash, and you restore it from the Trash page.
+A file from the backup that your group no longer has and that is attached only to
+items in your trash goes to the trash with them, so restoring the item brings it
+back.
 
 **Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup.
 
