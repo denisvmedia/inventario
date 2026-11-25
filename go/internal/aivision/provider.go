@@ -91,9 +91,9 @@ type ScanRequest struct {
 	// Photos is the ordered list of images to analyse. Length is at
 	// least 1; the caller enforces the upper bound.
 	Photos []PhotoInput
-	// HintFromUser is an optional free-form user hint (brand, category
-	// guess, model number visible elsewhere). Currently always empty;
-	// reserved for a future affordance on the Add Item dialog.
+	// HintFromUser is an optional free-form hint (brand, category guess,
+	// model number visible elsewhere). Batch intake uses it to say that
+	// all files show one item.
 	HintFromUser string
 	// PreferredCurrencyCode is the tenant's main currency (e.g. "USD",
 	// "EUR"). The prompt asks the model to prefer this code when a
@@ -110,6 +110,8 @@ type ScanRequest struct {
 //     original_price_currency: string
 //   - original_price: float64 (decimal as string is also accepted by
 //     callers, which coerce it to a number)
+//   - quantity: float64, the number of identical units a product line
+//     covers; original_price is then the amount of the whole line
 //   - urls, tags: []string
 //   - purchase_date, warranty_expires_at: string in YYYY-MM-DD form
 type FieldGuess struct {
@@ -246,6 +248,10 @@ const (
 	// `documents` bucket, and invoice-vs-manual is a tag (#1989), so this is
 	// what lets a scanned receipt arrive already tagged.
 	FieldNameDocumentType FieldName = "document_type"
+	// FieldNameQuantity is the number of identical units one product line
+	// covers (#2810). The line's amount stays in original_price, so a line
+	// of three mugs for 12.00 reads quantity 3 and original_price 12.00.
+	FieldNameQuantity FieldName = "quantity"
 )
 
 // AllFieldNames is the closed set used by tests and by the prompt
@@ -266,4 +272,5 @@ var AllFieldNames = []FieldName{
 	FieldNameComments,
 	FieldNameTags,
 	FieldNameDocumentType,
+	FieldNameQuantity,
 }

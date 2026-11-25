@@ -114,6 +114,19 @@ func StartThumbnailWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) fu
 	return worker.Stop
 }
 
+// StartIntakeWorker wires and starts the worker that scans the files of batch
+// intake sessions (#2810) and returns its stop function. Without an AI scan
+// provider the worker does not start.
+func StartIntakeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	var opts []services.IntakeWorkerOption
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithIntakePauseController(rs.PauseController))
+	}
+	worker := services.NewIntakeWorker(rs.FactorySet, rs.Params.CommodityScanService, rs.Params.UploadLocation, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartRefreshTokenCleanupWorker wires and starts the refresh token cleanup
 // worker (which deletes expired tokens on the configured interval) and returns
 // its stop function.

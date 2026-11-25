@@ -194,6 +194,19 @@ func (s *CommodityScanService) SetClock(now func() time.Time) {
 	}
 }
 
+// Enabled reports whether a provider is configured, so a scan can succeed.
+func (s *CommodityScanService) Enabled() bool {
+	return s != nil && s.provider != nil
+}
+
+// Config returns the limits the service applies.
+func (s *CommodityScanService) Config() CommodityScanConfig {
+	if s == nil {
+		return CommodityScanConfig{}
+	}
+	return s.cfg
+}
+
 // ScanInput is the request shape passed into Scan. It deliberately
 // mirrors aivision.ScanRequest but in a service-friendly form (the
 // caller doesn't need to know about the aivision package).
