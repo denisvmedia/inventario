@@ -186,10 +186,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `DELETE /files/{id}` and `POST /files/bulk-delete` move the entries to Trash
   instead of removing them. Lists, search and the other live reads leave
   trashed entries out; `GET /trash/commodities` and `GET /trash/files` list
-  them, with restore and purge endpoints under `/trash`. `GET /commodities`
-  and `GET /search?type=commodities` take `trashed=true` to apply the same
-  filters to the items in Trash. The storage usage breakdown gains a `trash`
-  bucket
+  them, with restore and purge endpoints under `/trash`. `GET /commodities`,
+  `GET /commodities/tag-counts` and `GET /search?type=commodities` take
+  `trashed=true` to apply the same filters to the items in Trash. The
+  maintenance schedule of an item in Trash answers 404 under
+  `/maintenance/{id}` until the item is restored. The storage usage breakdown
+  gains a `trash` bucket
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 
 ### Changed

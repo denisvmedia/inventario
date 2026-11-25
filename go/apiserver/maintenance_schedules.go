@@ -29,7 +29,10 @@ func maintenanceScheduleFromContext(ctx context.Context) *models.MaintenanceSche
 // {scheduleID} URL param into the request context. When mounted under
 // a /commodities/{commodityID}/maintenance/{scheduleID} prefix it also
 // enforces that the schedule belongs to the named commodity (404 on
-// mismatch — same hardening as loanCtx).
+// mismatch — same hardening as loanCtx). Mounted group-wide, it answers
+// 404 for the schedule of an item in Trash, as the per-item routes do
+// through commodityCtx: the schedule is read-only until the item is
+// restored.
 func maintenanceScheduleCtx() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -44,9 +47,16 @@ func maintenanceScheduleCtx() func(http.Handler) http.Handler {
 				renderEntityError(w, r, err)
 				return
 			}
-			if commodityID := chi.URLParam(r, "commodityID"); commodityID != "" && schedule.CommodityID != commodityID {
+			commodityID := chi.URLParam(r, "commodityID")
+			if commodityID != "" && schedule.CommodityID != commodityID {
 				renderEntityError(w, r, registry.ErrNotFound)
 				return
+			}
+			if commodityID == "" {
+				if _, err := regSet.CommodityRegistry.Get(r.Context(), schedule.CommodityID); err != nil {
+					renderEntityError(w, r, err)
+					return
+				}
 			}
 			ctx := context.WithValue(r.Context(), maintenanceScheduleCtxKey, schedule)
 			next.ServeHTTP(w, r.WithContext(ctx))

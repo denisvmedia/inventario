@@ -183,3 +183,39 @@ func TestTrashAPI_FileTrashedWithItemIsRefusedAlone(t *testing.T) {
 	// The fixture item has files of its own; every one of them went along.
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data[0].meta.file_count"), float64(len(linked)))
 }
+
+func TestTrashAPI_ScheduleOfATrashedItemIsReadOnly(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	ids := env.commodityIDs()
+	c.Assert(ids, qt.Not(qt.HasLen), 0)
+
+	ctx := getRegistrySetFromParams(env.params, env.user)
+	schedule := must.Must(ctx.MaintenanceScheduleRegistry.Create(context.Background(), models.MaintenanceSchedule{
+		CommodityID:  ids[0],
+		Title:        "Oil change",
+		IntervalDays: 90,
+		NextDueAt:    models.Date("2026-12-01"),
+		Enabled:      true,
+	}))
+
+	rr := env.do(http.MethodDelete, "/commodities/"+ids[0], "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
+
+	path := "/maintenance/" + schedule.ID
+	for _, call := range []struct{ method, path string }{
+		{http.MethodPatch, path},
+		{http.MethodPost, path + "/done"},
+		{http.MethodDelete, path},
+	} {
+		rr = env.do(call.method, call.path, `{"data":{"type":"maintenance_schedules","attributes":{"title":"Changed"}}}`)
+		c.Check(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("%s %s body=%s", call.method, call.path, rr.Body.String()))
+	}
+	got := must.Must(ctx.MaintenanceScheduleRegistry.Get(context.Background(), schedule.ID))
+	c.Assert(got.Title, qt.Equals, "Oil change")
+
+	rr = env.do(http.MethodPost, "/trash/commodities/"+ids[0]+"/restore", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodDelete, path, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
+}
