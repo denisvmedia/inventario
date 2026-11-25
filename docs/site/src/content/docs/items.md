@@ -118,8 +118,8 @@ of the whole line.
   [Unknown is not zero](#unknown-is-not-zero).
 - Click **Create N drafts**. Each ticked product gets exactly one draft, and the
   products you did not tick are marked **Left out**. If none is ticked, the
-  button reads **Leave all out**. The button waits while a choice you just
-  made is being saved, so the drafts always get it.
+  button reads **Leave all out**. A choice you just made that is still being
+  saved reaches the server first, so the drafts always get it.
 
 Each draft gets the files of its purchase, so one receipt is attached to every
 item made from it: the same file, not a copy. A seller the scan read and your
@@ -140,10 +140,10 @@ Other actions on the review page:
   retrying never repeats a scan.
 - **Rescan** scans one file again and replaces its products. It is offered
   while the file is not waiting or being scanned and none of its products has
-  a draft. If a draft was made that the page did not show yet (the answer to
-  **Create N drafts** was lost), or the file is still being scanned after
-  **Stop scanning**, the page says so and scans nothing; it then shows the
-  drafts.
+  a draft, and it is disabled while the drafts are being created. If a draft
+  was made that the page did not show yet (the answer to **Create N drafts**
+  was lost), or the file is still being scanned after **Stop scanning**, the
+  page says so and scans nothing; it then shows the drafts.
 - The trash button removes the batch. Drafts made from it stay; its files that
   nothing else uses go to the [Trash](../trash/).
 

@@ -46,7 +46,6 @@ import {
   useCreateIntakeDrafts,
   useDeleteIntakeSession,
   reviewsSettled,
-  useIntakeReviewsPending,
   useIntakeSession,
   useRescanIntakeSource,
   useResumeIntakeSession,
@@ -133,7 +132,7 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
   const cancel = useCancelIntakeSession()
   const resume = useResumeIntakeSession()
   const remove = useDeleteIntakeSession()
-  const reviewing = useIntakeReviewsPending()
+  const [creating, setCreating] = useState(false)
 
   const s = session.summary
   const toCreate = session.candidates.filter(
@@ -141,12 +140,17 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
   ).length
   const undecided = s.undecided + s.unfinished
   const canResume = s.failed + s.canceled > 0
-  const busy = createDrafts.isPending || cancel.isPending || resume.isPending || remove.isPending
+  const busy =
+    creating || createDrafts.isPending || cancel.isPending || resume.isPending || remove.isPending
 
   async function handleCreateDrafts() {
+    setCreating(true)
     try {
       // A choice still being saved would reach the server after the drafts
-      // were made from what it held before.
+      // were made from what it held before. The button stays enabled while
+      // a choice is saved: the quantity field saves when it loses focus,
+      // which the press on the button does, and a button disabled between
+      // the press and the release never gets the click.
       await reviewsSettled(qc, slug)
       const result = await createDrafts.mutateAsync(session.id)
       const text = summaryText(result.session.summary)
@@ -154,6 +158,8 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
       else toast.success(text)
     } catch (err) {
       toast.error(parseServerError(err, t("commodities:intake.page.draftsFailed")))
+    } finally {
+      setCreating(false)
     }
   }
 
@@ -282,6 +288,7 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
               .filter((c) => c.sourceId === source.id)
               .sort((a, b) => a.sortOrder - b.sortOrder)}
             canWrite={canWrite}
+            busy={busy}
           />
         ))}
       </div>
@@ -299,13 +306,11 @@ function SessionView({ session, canWrite, backLink }: SessionViewProps) {
           <Button
             type="button"
             onClick={() => void handleCreateDrafts()}
-            disabled={busy || reviewing}
+            disabled={busy}
             className="gap-2"
             data-testid="intake-create-drafts"
           >
-            {createDrafts.isPending ? (
-              <Loader2 className="size-4 animate-spin" aria-hidden="true" />
-            ) : null}
+            {creating ? <Loader2 className="size-4 animate-spin" aria-hidden="true" /> : null}
             {toCreate > 0
               ? t("commodities:intake.page.createDrafts", { count: toCreate })
               : t("commodities:intake.page.finish")}
@@ -322,9 +327,13 @@ interface SourceCardProps {
   source: IntakeSource
   candidates: IntakeCandidate[]
   canWrite: boolean
+  // busy: the session's drafts are being made, or it is being canceled,
+  // resumed or deleted. A rescan then waits, so it cannot replace the
+  // products the drafts are being made from.
+  busy: boolean
 }
 
-function SourceCard({ index, sessionId, source, candidates, canWrite }: SourceCardProps) {
+function SourceCard({ index, sessionId, source, candidates, canWrite, busy }: SourceCardProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const sourceError = useIntakeSourceErrorText()
@@ -392,7 +401,7 @@ function SourceCard({ index, sessionId, source, candidates, canWrite }: SourceCa
               size="sm"
               className="gap-2"
               onClick={() => void handleRescan()}
-              disabled={rescan.isPending}
+              disabled={busy || rescan.isPending}
               data-testid={`intake-rescan-${source.id}`}
             >
               <RotateCcw className="size-4" aria-hidden="true" />

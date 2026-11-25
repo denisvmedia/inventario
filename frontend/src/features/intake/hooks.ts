@@ -1,10 +1,4 @@
-import {
-  useIsMutating,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  type QueryClient,
-} from "@tanstack/react-query"
+import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { draftKeys } from "@/features/drafts/keys"
 import { fileKeys } from "@/features/files/keys"
@@ -136,18 +130,10 @@ export function useReviewIntakeCandidate() {
   })
 }
 
-// useIntakeReviewsPending reports whether a product review is still being
-// saved. The drafts take what the server holds, so creating them waits for
-// those saves.
-export function useIntakeReviewsPending(): boolean {
-  const slug = useSlug()
-  return useIsMutating({ mutationKey: intakeKeys.review(slug) }) > 0
-}
-
 // reviewsSettled resolves once no product review of the group is being
-// saved. A quantity is saved when its field loses focus, which happens on
-// the same click that creates the drafts, before the button can turn
-// disabled.
+// saved. The drafts take what the server holds, so creating them waits for
+// those saves; a quantity is saved when its field loses focus, which
+// happens on the same click that creates the drafts.
 export function reviewsSettled(qc: QueryClient, slug: string): Promise<void> {
   const mutationKey = intakeKeys.review(slug)
   if (qc.isMutating({ mutationKey }) === 0) return Promise.resolve()

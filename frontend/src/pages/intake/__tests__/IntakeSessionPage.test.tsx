@@ -146,20 +146,27 @@ describe("<IntakeSessionPage />", () => {
     const machine = `${session.id}-c0`
     const create = await screen.findByTestId("intake-create-drafts")
 
-    // While a choice is saved, the button waits.
+    // The button stays enabled while a choice is saved: a button disabled
+    // between the press and the release would lose the click.
     await user.click(screen.getByTestId(`intake-keep-${session.id}-c1`))
-    await waitFor(() => expect(create).toBeDisabled())
-    await waitFor(() => expect(create).toBeEnabled())
+    expect(create).toBeEnabled()
 
     // A quantity is saved when its field loses focus, which the click on
-    // the button does: the drafts are requested after that save.
+    // the button does: the drafts are requested after both saves.
     const quantity = screen.getByTestId(`intake-quantity-${machine}`)
     await user.clear(quantity)
     await user.type(quantity, "3")
     await user.click(create)
+
+    // Until the drafts are made, the button and the rescan wait.
+    expect(create).toBeDisabled()
+    expect(screen.getByTestId(`intake-rescan-${session.id}-photo`)).toBeDisabled()
     await waitFor(() => expect(fake.draftRequests).toBe(1))
     expect(fake.events).toEqual([`review ${session.id}-c1`, `review ${machine}`, "drafts"])
     expect(fake.sessions[0]?.candidates[0]?.quantity).toBe(3)
+    await waitFor(() =>
+      expect(screen.getByTestId(`intake-rescan-${session.id}-photo`)).toBeEnabled()
+    )
   })
 
   it("says why a file is not scanned again and shows the drafts it already has", async () => {
