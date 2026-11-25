@@ -46,6 +46,12 @@ const CREATE_VALUE = "__create__"
 
 type CreateKind = "location" | "area"
 
+// An open create dialog. Every opening gets a number of its own.
+interface Opening {
+  kind: CreateKind
+  id: number
+}
+
 export interface LocationAreaFieldsProps {
   areas: AreaOption[]
   locations: LocationOption[]
@@ -100,9 +106,33 @@ export function LocationAreaFields({
   // the focus to the select it was opened from.
   const listOpen = useRef<CreateKind | null>(null)
   const requested = useRef<CreateKind | null>(null)
-  const [creating, setCreating] = useState<CreateKind | null>(null)
+  const [dialog, setDialog] = useState<Opening | null>(null)
   const locationTrigger = useRef<HTMLButtonElement>(null)
   const areaTrigger = useRef<HTMLButtonElement>(null)
+
+  // Escape closes a dialog while its create still runs, and the dialog can
+  // open again before the create ends. The number of the opening a create
+  // was sent from tells whether that dialog is still open when it ends.
+  const lastOpening = useRef(0)
+  const openNow = useRef(0)
+
+  function openDialog(kind: CreateKind) {
+    lastOpening.current += 1
+    openNow.current = lastOpening.current
+    setDialog({ kind, id: lastOpening.current })
+  }
+
+  // A create that ends after its dialog closed would otherwise close the
+  // dialog open now.
+  function closeDialog(id: number) {
+    if (openNow.current !== id) return
+    openNow.current = 0
+    setDialog(null)
+  }
+
+  function isOpen(id: number) {
+    return openNow.current === id
+  }
 
   // A pick from the open list waits for the list to close (openRequested),
   // so the dialog never opens under it. Typing a letter on a closed select
@@ -110,7 +140,7 @@ export function LocationAreaFields({
   // would close it; the dialog opens at once.
   function request(kind: CreateKind) {
     if (listOpen.current === kind) requested.current = kind
-    else setCreating(kind)
+    else openDialog(kind)
   }
 
   function trackOpen(kind: CreateKind, open: boolean) {
@@ -140,19 +170,24 @@ export function LocationAreaFields({
   function openRequested() {
     const kind = requested.current
     requested.current = null
-    if (kind) setCreating(kind)
+    if (kind) openDialog(kind)
   }
 
-  function locationCreated(created: LocationOption) {
+  // A created entry joins the list in any case, but it is selected only
+  // while its dialog is open, so a create that ends after the dialog closed
+  // leaves a choice made in the meantime alone.
+  function locationCreated(created: LocationOption, select: boolean) {
     if (!created.id) return
     setCreatedLocations((prev) => [...prev, created])
+    if (!select) return
     setLocationId(created.id)
     onAreaChange("")
   }
 
-  function areaCreated(created: AreaOption) {
+  function areaCreated(created: AreaOption, select: boolean) {
     if (!created.id) return
     setCreatedAreas((prev) => [...prev, created])
+    if (!select) return
     // The dialog lets the user pick another parent than the one selected.
     if (created.location_id) setLocationId(created.location_id)
     onAreaChange(created.id)
@@ -249,8 +284,9 @@ export function LocationAreaFields({
       </div>
       {canCreate ? (
         <CreateDialogs
-          creating={creating}
-          onClose={() => setCreating(null)}
+          dialog={dialog}
+          onClose={closeDialog}
+          isOpen={isOpen}
           locations={allLocations}
           locationId={locationId}
           locationTrigger={locationTrigger}
@@ -297,21 +333,23 @@ function CreateEntry({
 }
 
 interface CreateDialogsProps {
-  creating: CreateKind | null
-  onClose: () => void
+  dialog: Opening | null
+  onClose: (id: number) => void
+  isOpen: (id: number) => boolean
   locations: LocationOption[]
   locationId: string
   locationTrigger: RefObject<HTMLButtonElement | null>
   areaTrigger: RefObject<HTMLButtonElement | null>
-  onLocationCreated: (created: LocationOption) => void
-  onAreaCreated: (created: AreaOption) => void
+  onLocationCreated: (created: LocationOption, select: boolean) => void
+  onAreaCreated: (created: AreaOption, select: boolean) => void
 }
 
 // The create dialogs of the Locations page, opened over the form. Mounted
 // only for a member who may create, as the mutations need the group.
 function CreateDialogs({
-  creating,
+  dialog,
   onClose,
+  isOpen,
   locations,
   locationId,
   locationTrigger,
@@ -324,22 +362,26 @@ function CreateDialogs({
   const createLocation = useCreateLocation()
   const createArea = useCreateArea()
 
+  // The dialogs keep the handlers of the render they were submitted from, so
+  // a create and the close that follows it carry the opening they came from.
+  const opening = dialog?.id ?? 0
+
   // A failure rejects, and the dialog keeps what was typed and shows the
   // server's error.
   async function submitLocation(values: LocationFormInput) {
     const created = await createLocation.mutateAsync(values)
     toast.success(t("locations:toast.locationCreated"))
-    onLocationCreated(created)
+    onLocationCreated(created, isOpen(opening))
   }
 
   async function submitArea(values: AreaFormInput) {
     const created = await createArea.mutateAsync(values)
     toast.success(t("locations:toast.areaCreated"))
-    onAreaCreated(created)
+    onAreaCreated(created, isOpen(opening))
   }
 
   const closeOnDismiss = (open: boolean) => {
-    if (!open) onClose()
+    if (!open) onClose(opening)
   }
   const focusOnClose = (trigger: RefObject<HTMLButtonElement | null>) => (event: Event) => {
     event.preventDefault()
@@ -363,14 +405,14 @@ function CreateDialogs({
       onDrop={refuseFileDrag}
     >
       <LocationFormDialog
-        open={creating === "location"}
+        open={dialog?.kind === "location"}
         onOpenChange={closeOnDismiss}
         onSubmit={submitLocation}
         isPending={createLocation.isPending}
         onCloseAutoFocus={focusOnClose(locationTrigger)}
       />
       <AreaFormDialog
-        open={creating === "area"}
+        open={dialog?.kind === "area"}
         onOpenChange={closeOnDismiss}
         locations={locations}
         defaultLocationId={locationId || undefined}

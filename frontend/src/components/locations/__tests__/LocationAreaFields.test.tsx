@@ -213,6 +213,97 @@ describe("<LocationAreaFields />", () => {
     expect(onAreaChange).not.toHaveBeenCalled()
   })
 
+  it("does not select a location whose create ends after its dialog closed", async () => {
+    const user = userEvent.setup()
+    let respond!: () => void
+    const responded = new Promise<void>((resolve) => {
+      respond = resolve
+    })
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/locations`), async () => {
+        await responded
+        return HttpResponse.json(
+          { data: { id: "l2", type: "locations", attributes: { name: "Cottage" } } },
+          { status: 201 }
+        )
+      })
+    )
+    const { onAreaChange } = renderPicker({ initialAreaId: "a1" })
+    expect(await screen.findByRole("combobox", { name: /^area/i })).toHaveTextContent("Study")
+
+    let listbox = await openSelect(user, /^location/i)
+    await user.click(await within(listbox).findByRole("option", { name: /new location/i }))
+    let dialog = await screen.findByTestId("location-form-dialog")
+    await user.type(within(dialog).getByTestId("location-name-input"), "Cottage")
+    await user.click(within(dialog).getByTestId("location-form-submit"))
+    await waitFor(() => expect(within(dialog).getByTestId("location-form-submit")).toBeDisabled())
+    // Escape closes the dialog while the create runs.
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByTestId("location-form-dialog")).toBeNull())
+
+    // The dialog opens again before the create ends.
+    listbox = await openSelect(user, /^location/i)
+    await user.click(await within(listbox).findByRole("option", { name: /new location/i }))
+    dialog = await screen.findByTestId("location-form-dialog")
+    respond()
+    await waitFor(() => expect(within(dialog).getByTestId("location-form-submit")).toBeEnabled())
+    // The create that ended belongs to the closed opening: it neither
+    // selects nor closes the dialog open now.
+    expect(screen.getByTestId("location-form-dialog")).toBeInTheDocument()
+    await user.click(within(dialog).getByTestId("location-form-cancel"))
+    await waitFor(() => expect(screen.queryByTestId("location-form-dialog")).toBeNull())
+
+    expect(screen.getByRole("combobox", { name: /^location/i })).toHaveTextContent("Home")
+    expect(screen.getByRole("combobox", { name: /^area/i })).toHaveTextContent("Study")
+    expect(onAreaChange).not.toHaveBeenCalled()
+    // The location was created, so it can be picked.
+    listbox = await openSelect(user, /^location/i)
+    expect(within(listbox).getByRole("option", { name: "Cottage" })).toBeInTheDocument()
+  })
+
+  it("keeps a choice made while an area's create ran after its dialog closed", async () => {
+    const user = userEvent.setup()
+    let respond!: () => void
+    const responded = new Promise<void>((resolve) => {
+      respond = resolve
+    })
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/areas`), async () => {
+        await responded
+        return HttpResponse.json(
+          { data: { id: "a2", type: "areas", attributes: { name: "Attic", location_id: "l1" } } },
+          { status: 201 }
+        )
+      })
+    )
+    const { onAreaChange } = renderPicker({ initialAreaId: "a1" })
+    expect(await screen.findByRole("combobox", { name: /^area/i })).toHaveTextContent("Study")
+
+    let listbox = await openSelect(user, /^area/i)
+    await user.click(await within(listbox).findByRole("option", { name: /new area/i }))
+    const dialog = await screen.findByTestId("area-form-dialog")
+    await user.type(within(dialog).getByTestId("area-name-input"), "Attic")
+    await user.click(within(dialog).getByTestId("area-form-submit"))
+    await waitFor(() => expect(within(dialog).getByTestId("area-form-submit")).toBeDisabled())
+    await user.keyboard("{Escape}")
+    await waitFor(() => expect(screen.queryByTestId("area-form-dialog")).toBeNull())
+
+    // A choice made while the create runs.
+    listbox = await openSelect(user, /^area/i)
+    expect(within(listbox).queryByRole("option", { name: "Attic" })).toBeNull()
+    await user.keyboard("{Escape}")
+    await user.click(screen.getByTestId("test-location-clear"))
+    expect(onAreaChange).toHaveBeenLastCalledWith("")
+
+    respond()
+    // The created area joins the list of its location without being picked.
+    await user.click(screen.getByRole("combobox", { name: /^location/i }))
+    await user.click(await screen.findByRole("option", { name: "Home" }))
+    listbox = await openSelect(user, /^area/i)
+    expect(await within(listbox).findByRole("option", { name: "Attic" })).toBeInTheDocument()
+    expect(onAreaChange).not.toHaveBeenCalledWith("a2")
+  })
+
   it("opens the dialog when typing picks the entry on a closed select", async () => {
     const user = userEvent.setup()
     renderPicker({ initialAreaId: "a1" })
