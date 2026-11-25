@@ -26,7 +26,7 @@
     "clean": "rm -rf dist node_modules/.tmp"
   },
   "dependencies": {
-    "@hookform/resolvers": "5.9.2",
+    "@hookform/resolvers": "7.0.9",
     "@tanstack/react-query": "5.108.4",
     "@zxcvbn-ts/core": "4.3.0",
     "@zxcvbn-ts/language-common": "4.2.0",
