@@ -616,6 +616,11 @@ func intakeContractOpenSessions(t *testing.T, env IntakeEnv) {
 		keys = append(keys, sess.ClientKey)
 	}
 	c.Assert(keys, qt.DeepEquals, []string{"queued", "failed", "retry", "review"})
+
+	// The inbox of a group reads them; the service registry, which sees
+	// every group, is refused.
+	_, err = env.Service.ListOpenSessions(env.Ctx)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 }
 
 // scannedSession creates a session with one source and stores a scan with

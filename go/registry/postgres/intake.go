@@ -298,6 +298,9 @@ func (r *IntakeRegistry) ListSessions(ctx context.Context, offset, limit int) ([
 }
 
 func (r *IntakeRegistry) ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, err
+	}
 	sessions := []*models.IntakeSession{}
 	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`SELECT s.* FROM %s s

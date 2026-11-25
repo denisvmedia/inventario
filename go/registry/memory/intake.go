@@ -341,6 +341,9 @@ func (r *IntakeRegistry) ListSessions(ctx context.Context, offset, limit int) ([
 }
 
 func (r *IntakeRegistry) ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, err
+	}
 	all, _, err := r.ListSessions(ctx, 0, math.MaxInt)
 	if err != nil {
 		return nil, err

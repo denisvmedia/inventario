@@ -1606,7 +1606,8 @@ type IntakeRegistry interface {
 	// source waits for its scan, is being scanned or failed, or a candidate
 	// has no outcome yet or is kept with a failed draft. It is the set
 	// models.IntakeSessionSummary.Open reports, read in one query for the
-	// inbox count.
+	// inbox count. It needs a group: the service registry gets
+	// ErrFieldRequired rather than the sessions of every group.
 	ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error)
 
 	// ListSources returns the sources of the given sessions, ordered by
