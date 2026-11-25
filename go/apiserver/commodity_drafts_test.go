@@ -313,7 +313,7 @@ func TestCommodityDraftsAPI_PromoteChecksTheSeller(t *testing.T) {
 	itemsBefore := must.Must(regs.CommodityRegistry.Count(ctx))
 	rr = env.do(http.MethodPost, "/drafts/"+stale+"/promote", promoteBody("1", "Saw", gone.ID))
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
-	c.Check(rr.Body.String(), qt.Contains, "seller_id")
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.seller_id"), "no seller with this ID in the group")
 	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore)
 	c.Assert(must.Must(regs.CommodityDraftRegistry.Get(ctx, stale)).IsOpen(), qt.IsTrue)
 
