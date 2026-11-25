@@ -199,3 +199,45 @@ func TestToScanResult_CustomFields(t *testing.T) {
 		"f-electric": {Value: false, Confidence: 0.7},
 	})
 }
+
+// A wrapped item keeps its fields when its custom field values sit next to
+// the wrapper or inside it, and a custom-only item still counts.
+func TestToScanResult_WrappedItemWithCustomFields(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		wantName   any
+		wantCustom map[string]aivision.FieldGuess
+	}{
+		{
+			name:       "custom fields next to the wrapper",
+			body:       `{"items":[{"fields":{"name":{"value":"Car","confidence":0.9}},"custom_fields":{"vin":{"value":"ABC","confidence":0.8}}}]}`,
+			wantName:   "Car",
+			wantCustom: map[string]aivision.FieldGuess{"vin": {Value: "ABC", Confidence: 0.8}},
+		},
+		{
+			name:       "custom fields inside the wrapper",
+			body:       `{"items":[{"fields":{"name":{"value":"Car","confidence":0.9},"custom_fields":{"vin":{"value":"ABC","confidence":0.8}}}}]}`,
+			wantName:   "Car",
+			wantCustom: map[string]aivision.FieldGuess{"vin": {Value: "ABC", Confidence: 0.8}},
+		},
+		{
+			name:       "custom fields only",
+			body:       `{"items":[{"custom_fields":{"vin":{"value":"ABC","confidence":0.8}}}]}`,
+			wantCustom: map[string]aivision.FieldGuess{"vin": {Value: "ABC", Confidence: 0.8}},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			res, err := aivision.ToScanResult([]byte(tt.body))
+			c.Assert(err, qt.IsNil)
+			if tt.wantName == nil {
+				c.Check(res.Fields, qt.HasLen, 0)
+			} else {
+				c.Check(res.Fields[aivision.FieldNameName].Value, qt.Equals, tt.wantName)
+			}
+			c.Check(res.CustomFields, qt.DeepEquals, tt.wantCustom)
+		})
+	}
+}

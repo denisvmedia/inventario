@@ -323,6 +323,7 @@ func (s *EntityService) UnlinkAndDeleteArea(ctx context.Context, id string) erro
 		}
 
 		commodity.AreaID = nil
+		commodity.CustomFields = nil // only the area changes
 		if _, err := comReg.Update(ctx, *commodity); err != nil {
 			if errors.Is(err, registry.ErrNotFound) {
 				continue

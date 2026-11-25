@@ -542,6 +542,7 @@ func (r *TagRegistry) RewriteSlugReferences(ctx context.Context, kind models.Tag
 			continue
 		}
 		c.Tags = newTags
+		c.CustomFields = nil // only the tags change
 		if _, err := r.commodityRegistry.Update(ctx, *c); err != nil {
 			return commodityCount, 0, errxtrace.Wrap("failed to rewrite commodity tag", err)
 		}
@@ -592,6 +593,7 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 			continue
 		}
 		c.Tags = newTags
+		c.CustomFields = nil // only the tags change
 		if _, err := r.commodityRegistry.Update(ctx, *c); err != nil {
 			return commodityCount, 0, errxtrace.Wrap("failed to strip commodity tag", err)
 		}

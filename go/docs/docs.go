@@ -5399,6 +5399,12 @@ const docTemplate = `{
                         "description": "Delete the field's values along with it",
                         "name": "delete_values",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta",
+                        "name": "expected_values",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -5415,13 +5421,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Items have a value of the field and delete_values was not true",
+                        "description": "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
-                        "description": "delete_values is not a boolean",
+                        "description": "delete_values is not a boolean, or expected_values is not a whole number of at least 0",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6978,6 +6984,92 @@ const docTemplate = `{
                         "description": "File not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/inbox": {
+            "get": {
+                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft) and items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity). Missing information\nsuch as no location, no photo or an unknown price does not put an item here.\nEntries are ordered by their first reason in the order draft, item_draft; drafts\nmost recently saved first, items most recently added first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it. When a member who can edit items reads it, the draft\ndiscards that stopped more than ten minutes ago are finished first, as for\nGET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "inbox"
+                ],
+                "summary": "List the inbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "draft",
+                            "item_draft"
+                        ],
+                        "type": "string",
+                        "description": "Keep the entries with this reason",
+                        "name": "reason",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Entries per page (at most 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InboxResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unknown reason (query.invalid_parameter)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/inbox/count": {
+            "get": {
+                "description": "How many records of the group need attention, for the sidebar and the dashboard.\ntotal counts each record once, whatever its number of reasons; reasons counts,\nper reason, the records that have it. The counts cover only what the group holds,\nso they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished\nfirst, as for GET /g/{groupSlug}/inbox.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "inbox"
+                ],
+                "summary": "Count the inbox",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InboxCountResponse"
                         }
                     }
                 }
@@ -16004,6 +16096,100 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.InboxCountResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.InboxCounts"
+                }
+            }
+        },
+        "jsonapi.InboxCounts": {
+            "type": "object",
+            "properties": {
+                "reasons": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "jsonapi.InboxEntry": {
+            "type": "object",
+            "properties": {
+                "file_count": {
+                    "description": "FileCount is the number of live files attached to a draft; 0 for an\nitem.",
+                    "type": "integer",
+                    "example": 1
+                },
+                "id": {
+                    "type": "string",
+                    "example": "5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": [
+                        "draft",
+                        "commodity"
+                    ],
+                    "example": "draft"
+                },
+                "reasons": {
+                    "description": "Reasons holds at least one reason, each once, in display order.",
+                    "type": "array",
+                    "items": {
+                        "type": "string",
+                        "enum": [
+                            "draft",
+                            "item_draft"
+                        ]
+                    },
+                    "example": [
+                        "draft"
+                    ]
+                },
+                "title": {
+                    "type": "string",
+                    "example": "Cordless drill"
+                },
+                "updated_at": {
+                    "description": "UpdatedAt is when the record was last saved; drafts carry it, items\ndo not.",
+                    "type": "string",
+                    "x-nullable": "true"
+                }
+            }
+        },
+        "jsonapi.InboxMeta": {
+            "type": "object",
+            "properties": {
+                "counts": {
+                    "$ref": "#/definitions/jsonapi.InboxCounts"
+                },
+                "entries": {
+                    "type": "integer",
+                    "example": 2
+                }
+            }
+        },
+        "jsonapi.InboxResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.InboxEntry"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.InboxMeta"
+                }
+            }
+        },
         "jsonapi.InviteInfoAttr": {
             "type": "object",
             "properties": {
@@ -18421,7 +18607,11 @@ const docTemplate = `{
                 },
                 "custom_fields": {
                     "description": "CustomFields are the item's custom field values (#2803), keyed by\nfield ID; see CustomFieldValues for the read and write rules. They are\nrows of commodity_custom_field_values, not a column: the registries\nread them with the item and write them in the item's transaction,\nafter checking each one against its field.",
-                    "type": "object"
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.CustomFieldValuesSchema"
+                        }
+                    ]
                 },
                 "deleted_at": {
                     "description": "DeletedAt is when the item was moved to Trash, nil while it is live. A\ntrashed item keeps its id, asset number, history, loans, service\nrecords, maintenance schedules and attachments, and is left out of every\nordinary read of the registries until it is restored or purged (see\nregistry.CommodityRegistry). Server-managed: only the registry's trash\noperations write it; Create and Update ignore a caller's value.",
@@ -18812,14 +19002,16 @@ const docTemplate = `{
         "models.CustomFieldTemplate": {
             "type": "object",
             "properties": {
-                "default_value": {
-                    "type": "object"
-                },
+                "default_value": {},
                 "item_type_id": {
                     "type": "string",
                     "example": "8f1c..."
                 }
             }
+        },
+        "models.CustomFieldValuesSchema": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "models.Export": {
             "type": "object",

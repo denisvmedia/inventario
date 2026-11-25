@@ -6,6 +6,7 @@ import (
 	"errors"
 	"maps"
 	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -143,7 +144,7 @@ func runCustomFieldValueContract(t *testing.T, newEnv func(t *testing.T) CustomF
 		want := map[string]string{
 			text.ID:   `"AB 123"`,
 			long.ID:   `"line one\nline two"`,
-			number.ID: `12.5`,
+			number.ID: `"12.5"`,
 			date.ID:   `"2026-03-01"`,
 			flag.ID:   `false`,
 			link.ID:   `"https://example.com/manual"`,
@@ -215,7 +216,7 @@ func runCustomFieldValueContract(t *testing.T, newEnv func(t *testing.T) CustomF
 		got, err := env.CommoditiesA.Get(env.CtxA, item.ID)
 		c.Assert(err, qt.IsNil)
 		c.Check(got.Name, qt.Equals, "Thing", qt.Commentf("nothing of the write is stored"))
-		c.Check(valueStrings(got.CustomFields), qt.DeepEquals, map[string]string{number.ID: `1`})
+		c.Check(valueStrings(got.CustomFields), qt.DeepEquals, map[string]string{number.ID: `"1"`})
 
 		_, err = env.CommoditiesA.Create(env.CtxA, customFieldItem("New", env.AreaA, models.CustomFieldValues{fieldB.ID: rawJSON(`"x"`)}))
 		c.Check(err, qt.ErrorIs, registry.ErrInvalidCustomFieldValue)
@@ -332,7 +333,11 @@ func runCustomFieldDeleteContract(t *testing.T, newEnv func(t *testing.T) Custom
 		_, err = env.FieldsA.Get(env.CtxA, unused.ID)
 		c.Check(err, qt.ErrorIs, registry.ErrNotFound)
 
-		n, err := env.FieldsA.DeleteWithValues(env.CtxA, field.ID)
+		_, err = env.FieldsA.DeleteWithValues(env.CtxA, field.ID, 1)
+		c.Check(err, qt.ErrorIs, registry.ErrCustomFieldInUse, qt.Commentf("the caller confirmed another count"))
+		_, err = env.FieldsA.Get(env.CtxA, field.ID)
+		c.Assert(err, qt.IsNil)
+		n, err := env.FieldsA.DeleteWithValues(env.CtxA, field.ID, 2)
 		c.Assert(err, qt.IsNil)
 		c.Check(n, qt.Equals, 2)
 		_, err = env.FieldsA.Get(env.CtxA, field.ID)
@@ -347,6 +352,77 @@ func runCustomFieldDeleteContract(t *testing.T, newEnv func(t *testing.T) Custom
 }
 
 func runCustomFieldTemplateContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
+	t.Run("GetNames names the group's items, live or in Trash", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		live := mustCustomFieldItem(c, env, "Van", nil)
+		trashed := mustCustomFieldItem(c, env, "Old van", nil)
+		_, err := env.CommoditiesA.Trash(env.CtxA, trashed.ID, "", time.Now())
+		c.Assert(err, qt.IsNil)
+		other, err := env.CommoditiesB.Create(env.CtxB, customFieldItem("Car", env.AreaB, nil))
+		c.Assert(err, qt.IsNil)
+
+		names, err := env.CommoditiesA.GetNames(env.CtxA, []string{trashed.ID, live.ID, trashed.ID, other.ID, "no-such-item"})
+		c.Assert(err, qt.IsNil)
+		slices.SortFunc(names, func(a, b registry.CommodityName) int { return strings.Compare(a.Name, b.Name) })
+		c.Check(names, qt.DeepEquals, []registry.CommodityName{
+			{ID: trashed.ID, Name: "Old van", Trashed: true},
+			{ID: live.ID, Name: "Van"},
+		})
+		names, err = env.CommoditiesA.GetNames(env.CtxA, nil)
+		c.Assert(err, qt.IsNil)
+		c.Check(names, qt.HasLen, 0)
+	})
+
+	t.Run("a caller's change to what it passed or got back changes nothing stored", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		vehicle, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: "Vehicle"})
+		c.Assert(err, qt.IsNil)
+		templates := []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"4"`)}}
+		wheels, err := env.FieldsA.Create(env.CtxA, models.CustomFieldDefinition{Name: "Wheels", Type: models.CustomFieldTypeNumber, Templates: templates})
+		c.Assert(err, qt.IsNil)
+		templates[0].DefaultValue[1] = '9'
+		wheels.Templates[0].DefaultValue[1] = '8'
+		got, err := env.FieldsA.Get(env.CtxA, wheels.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Templates, qt.DeepEquals, []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"4"`)}})
+		replace := *wheels
+		replace.Templates = []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"6"`)}}
+		_, err = env.FieldsA.Update(env.CtxA, replace)
+		c.Assert(err, qt.IsNil)
+		replace.Templates[0].DefaultValue[1] = '7'
+		got, err = env.FieldsA.Get(env.CtxA, wheels.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(got.Templates, qt.DeepEquals, []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"6"`)}})
+
+		plate := mustField(c, env.FieldsA, env.CtxA, "Plate", models.CustomFieldTypeText)
+		values := models.CustomFieldValues{plate.ID: json.RawMessage(`"AB-1"`)}
+		van := mustCustomFieldItem(c, env, "Van", values)
+		values[plate.ID][1] = 'X'
+		van.CustomFields[plate.ID][1] = 'Y'
+		van.CustomFields["other"] = json.RawMessage(`"z"`)
+		read, err := env.CommoditiesA.Get(env.CtxA, van.ID)
+		c.Assert(err, qt.IsNil)
+		read.CustomFields[plate.ID][1] = 'Z'
+		listed, err := env.CommoditiesA.List(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		for _, item := range listed {
+			item.CustomFields[plate.ID] = json.RawMessage(`"listed"`)
+		}
+		update := *read
+		update.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"CD-2"`)}
+		updated, err := env.CommoditiesA.Update(env.CtxA, update)
+		c.Assert(err, qt.IsNil)
+		update.CustomFields[plate.ID][1] = 'W'
+		updated.CustomFields[plate.ID][1] = 'V'
+		read, err = env.CommoditiesA.Get(env.CtxA, van.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(read.CustomFields, qt.DeepEquals, models.CustomFieldValues{plate.ID: json.RawMessage(`"CD-2"`)})
+	})
+
 	t.Run("templates name the group's item types and are replaced or kept", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -360,7 +436,7 @@ func runCustomFieldTemplateContract(t *testing.T, newEnv func(t *testing.T) Cust
 			Templates: []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"4"`)}},
 		})
 		c.Assert(err, qt.IsNil)
-		c.Check(field.Templates, qt.DeepEquals, []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`4`)}})
+		c.Check(field.Templates, qt.DeepEquals, []models.CustomFieldTemplate{{ItemTypeID: vehicle.ID, DefaultValue: models.JSONValue(`"4"`)}})
 
 		_, err = env.FieldsA.Create(env.CtxA, models.CustomFieldDefinition{
 			Name: "Doors", Type: models.CustomFieldTypeNumber,

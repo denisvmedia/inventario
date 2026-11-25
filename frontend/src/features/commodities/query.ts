@@ -378,6 +378,22 @@ function apiUnreadable(values: UnreadableValues): Record<string, string> | undef
   return Object.fromEntries(entries.map(([name, raw]) => [UNREADABLE_API_PARAM[name], raw]))
 }
 
+// A custom field condition in the form a saved view stores it: the option
+// ids of an "in" condition trimmed, without repeats and sorted. Any other
+// condition, and an "in" without ids, is sent as written, so the server can
+// refuse it.
+function canonicalCustomFieldCondition(cond: string): string {
+  const [fieldId, op, ...rest] = cond.split(":")
+  if (op !== "in" || rest.length === 0) return cond
+  const ids = rest
+    .join(":")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id !== "")
+  if (ids.length === 0) return cond
+  return `${fieldId}:in:${[...new Set(ids)].sort().join(",")}`
+}
+
 // The API wire format of the list options: the one place that names the
 // query parameters GET /commodities reads. Set-like lists are sorted, so
 // two option objects that select the same items produce the same string
@@ -421,7 +437,9 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
     params.set("tags_exclude", sorted(opts.tagsExclude).join(","))
   }
   if (opts.noTags) params.set("no_tags", "true")
-  for (const cond of sorted(opts.customFields)) params.append("cf", cond)
+  for (const cond of new Set(sorted(opts.customFields?.map(canonicalCustomFieldCondition)))) {
+    params.append("cf", cond)
+  }
   if (opts.trashed) params.set("trashed", "true")
   // Sent as written, replacing the readable default written above, so the
   // server refuses the request instead of applying a filter the URL did not

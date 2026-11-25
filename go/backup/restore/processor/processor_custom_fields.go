@@ -1,3 +1,5 @@
+//go:build !legacy_xml_backup
+
 package processor
 
 import (
@@ -31,27 +33,34 @@ type inbPendingLink struct {
 }
 
 // restoreCustomFields maps the archived custom fields onto the destination
-// group's before the first item names one. A field is matched by name, the
-// way the group keeps names unique. A match of the same type is reused, its
-// templates left as they are, and gets the archived options it lacks, matched
-// by label; a match of another type cannot hold the archived values, so the
-// field is counted as an error and its values are left out. A field the
-// group lacks is created with its archived options and templates. A dry run
-// writes nothing and maps nothing.
+// group's before the first item names one. A field is matched by its UUID
+// first, so a field renamed since the backup is still the same field, and
+// then by name, the way the group keeps names unique. A match of the same
+// type is reused, its templates left as they are, and gets the archived
+// options it lacks (see mergeCustomFieldOptions). A name match of another
+// type cannot hold the archived values, so the field is counted as an error
+// and its values are left out. A field the group lacks is created with its
+// archived options and templates. A dry run writes nothing and maps nothing,
+// but counts the fields a restore would refuse.
 func (w *inbWalker) restoreCustomFields(archived []types.INBCustomField) error {
 	w.customFields = map[string]*restoredCustomField{}
-	if len(archived) == 0 || w.options.DryRun || w.proc.factorySet.CustomFieldRegistryFactory == nil {
+	if len(archived) == 0 || w.proc.factorySet.CustomFieldRegistryFactory == nil {
 		return nil
 	}
 	reg, err := w.proc.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(w.ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create custom field registry", err)
 	}
+	list, err := reg.List(w.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list custom fields", err)
+	}
+	index := newCustomFieldIndex(list)
 	for _, a := range archived {
 		if a.ID == "" {
 			continue
 		}
-		restored, err := w.restoreCustomField(reg, a)
+		restored, err := w.restoreCustomField(reg, index, a)
 		if refusal, ok := errors.AsType[customFieldRefusal](err); ok {
 			w.stats.ErrorCount++
 			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("custom field %s: %v", a.ID, refusal.err))
@@ -60,9 +69,49 @@ func (w *inbWalker) restoreCustomFields(archived []types.INBCustomField) error {
 		if err != nil {
 			return errxtrace.Wrap("failed to restore custom field", err, errx.Attrs("custom_field_id", a.ID))
 		}
-		w.customFields[a.ID] = restored
+		if restored != nil {
+			w.customFields[a.ID] = restored
+		}
 	}
 	return nil
+}
+
+// customFieldIndex is the destination group's fields by UUID and by name
+// key, kept current as the restore creates and updates fields.
+type customFieldIndex struct {
+	byUUID map[string]*models.CustomFieldDefinition
+	byName map[string]*models.CustomFieldDefinition
+	// count is how many fields the group has, counting the ones a dry run
+	// would create.
+	count int
+}
+
+func newCustomFieldIndex(list []*models.CustomFieldDefinition) *customFieldIndex {
+	index := &customFieldIndex{
+		byUUID: make(map[string]*models.CustomFieldDefinition, len(list)),
+		byName: make(map[string]*models.CustomFieldDefinition, len(list)),
+	}
+	for _, d := range list {
+		index.put(d)
+	}
+	return index
+}
+
+func (x *customFieldIndex) put(d *models.CustomFieldDefinition) {
+	if _, ok := x.byUUID[d.UUID]; !ok {
+		x.count++
+	}
+	x.byUUID[d.UUID] = d
+	x.byName[d.NameKey] = d
+}
+
+// match returns the destination field of a: the field with its UUID and
+// type, else the field with its name, whatever its type.
+func (x *customFieldIndex) match(a types.INBCustomField) *models.CustomFieldDefinition {
+	if d := x.byUUID[a.ID]; d != nil && string(d.Type) == a.Type {
+		return d
+	}
+	return x.byName[models.CustomFieldNameKey(a.Name)]
 }
 
 // customFieldRefusal is an archived field the restore reports and moves
@@ -71,23 +120,30 @@ type customFieldRefusal struct{ err error }
 
 func (r customFieldRefusal) Error() string { return r.err.Error() }
 
-// restoreCustomField returns the destination of one archived field, or a
-// customFieldRefusal.
-func (w *inbWalker) restoreCustomField(reg registry.CustomFieldRegistry, a types.INBCustomField) (*restoredCustomField, error) {
-	existing, err := reg.GetByName(w.ctx, a.Name)
-	switch {
-	case err == nil:
+// restoreCustomField returns the destination of one archived field, nil in
+// a dry run, or a customFieldRefusal.
+func (w *inbWalker) restoreCustomField(reg registry.CustomFieldRegistry, index *customFieldIndex, a types.INBCustomField) (*restoredCustomField, error) {
+	if existing := index.match(a); existing != nil {
 		if string(existing.Type) != a.Type {
 			return nil, customFieldRefusal{fmt.Errorf("the group has a field named %q of type %s", existing.Name, existing.Type)}
 		}
-		return w.mergeCustomFieldOptions(reg, existing, a)
-	case !errors.Is(err, registry.ErrNotFound):
-		return nil, err
+		return w.mergeCustomFieldOptions(reg, index, existing, a)
 	}
 
 	def := models.CustomFieldDefinition{Name: a.Name, Type: models.CustomFieldType(a.Type)}
 	for _, o := range a.Options {
 		def.Options = append(def.Options, models.CustomFieldOption{ID: o.ID, Label: o.Label})
+	}
+	if w.options.DryRun {
+		def.Normalize()
+		if verr := def.ValidateFields(w.ctx); verr != nil {
+			return nil, customFieldRefusal{verr}
+		}
+		if index.count >= models.MaxCustomFieldsPerGroup {
+			return nil, customFieldRefusal{registry.ErrResourceLimitExceeded}
+		}
+		index.count++
+		return nil, nil
 	}
 	templates, err := w.restoreCustomFieldTemplates(a.Templates)
 	if err != nil {
@@ -100,19 +156,26 @@ func (w *inbWalker) restoreCustomField(reg registry.CustomFieldRegistry, a types
 	}
 	created, err := reg.Create(w.ctx, def)
 	switch {
-	case errors.Is(err, registry.ErrResourceLimitExceeded), errors.Is(err, registry.ErrInvalidInput):
+	case errors.Is(err, registry.ErrResourceLimitExceeded), errors.Is(err, registry.ErrInvalidInput), errors.Is(err, registry.ErrAlreadyExists):
 		return nil, customFieldRefusal{err}
 	case err != nil:
 		return nil, err
 	}
+	index.put(created)
 	return newRestoredCustomField(created, a.Options), nil
 }
 
 // mergeCustomFieldOptions adds to an existing select field the archived
-// options it has no option of the same label for, so the archived values
-// that hold them restore.
-func (w *inbWalker) mergeCustomFieldOptions(reg registry.CustomFieldRegistry, existing *models.CustomFieldDefinition, a types.INBCustomField) (*restoredCustomField, error) {
+// options it has neither the ID nor the label of, so the archived values
+// that hold them restore. An option keeps its ID across a backup and a
+// restore, so an option relabeled since the backup is still the same
+// option. A dry run returns nil once it has counted the options the field
+// could not take.
+func (w *inbWalker) mergeCustomFieldOptions(reg registry.CustomFieldRegistry, index *customFieldIndex, existing *models.CustomFieldDefinition, a types.INBCustomField) (*restoredCustomField, error) {
 	if existing.Type != models.CustomFieldTypeSelect {
+		if w.options.DryRun {
+			return nil, nil
+		}
 		return newRestoredCustomField(existing, nil), nil
 	}
 	labels := make(map[string]bool, len(existing.Options))
@@ -127,32 +190,35 @@ func (w *inbWalker) mergeCustomFieldOptions(reg registry.CustomFieldRegistry, ex
 	added := false
 	for _, o := range a.Options {
 		key := models.CustomFieldNameKey(o.Label)
-		if labels[key] {
+		if ids[o.ID] || labels[key] {
 			continue
 		}
 		labels[key] = true
-		id := o.ID
-		if ids[id] {
-			id = ""
-		}
-		merged.Options = append(merged.Options, models.CustomFieldOption{ID: id, Label: o.Label})
+		ids[o.ID] = true
+		merged.Options = append(merged.Options, models.CustomFieldOption{ID: o.ID, Label: o.Label})
 		added = true
 	}
-	if !added {
-		return newRestoredCustomField(existing, a.Options), nil
+	if added {
+		merged.Normalize()
+		if verr := merged.ValidateFields(w.ctx); verr != nil {
+			// Too many options: keep the field as it is and restore the
+			// values whose option it has.
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("custom field %s: %v", a.ID, verr))
+			added = false
+		}
 	}
-	merged.Normalize()
-	if verr := merged.ValidateFields(w.ctx); verr != nil {
-		// Too many options: keep the field as it is and restore the values
-		// whose option it has.
-		w.stats.ErrorCount++
-		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("custom field %s: %v", a.ID, verr))
+	switch {
+	case w.options.DryRun:
+		return nil, nil
+	case !added:
 		return newRestoredCustomField(existing, a.Options), nil
 	}
 	updated, err := reg.Update(w.ctx, merged)
 	if err != nil {
 		return nil, err
 	}
+	index.put(updated)
 	return newRestoredCustomField(updated, a.Options), nil
 }
 
@@ -181,16 +247,21 @@ func (w *inbWalker) restoreCustomFieldTemplates(archived []types.INBCustomFieldT
 }
 
 // newRestoredCustomField maps each archived option to the destination
-// option of the same label.
+// option with its ID, else to the one with its label.
 func newRestoredCustomField(def *models.CustomFieldDefinition, archived []types.INBCustomFieldOption) *restoredCustomField {
+	ids := make(map[string]bool, len(def.Options))
 	byLabel := make(map[string]string, len(def.Options))
 	for _, o := range def.Options {
+		ids[o.ID] = true
 		byLabel[models.CustomFieldNameKey(o.Label)] = o.ID
 	}
 	r := &restoredCustomField{def: def, options: make(map[string]string, len(archived))}
 	for _, o := range archived {
-		if id := byLabel[models.CustomFieldNameKey(o.Label)]; id != "" {
-			r.options[o.ID] = id
+		switch {
+		case ids[o.ID]:
+			r.options[o.ID] = o.ID
+		case byLabel[models.CustomFieldNameKey(o.Label)] != "":
+			r.options[o.ID] = byLabel[models.CustomFieldNameKey(o.Label)]
 		}
 	}
 	return r
@@ -293,8 +364,9 @@ func (f *restoredCustomField) value(raw json.RawMessage) (json.RawMessage, error
 }
 
 // applyPendingLinks sets the item link values once every item of the archive
-// is restored. A link to an item neither restored nor already in the group
-// is left out, and so is one the destination refuses (an item in Trash).
+// is restored. A link is left out and counted as an error when it names an
+// item neither restored nor in the group outside Trash, when the item that
+// holds it cannot be read, or when the destination refuses it.
 func (w *inbWalker) applyPendingLinks() error {
 	if len(w.pendingLinks) == 0 {
 		return nil
@@ -303,23 +375,28 @@ func (w *inbWalker) applyPendingLinks() error {
 	if err != nil {
 		return errxtrace.Wrap("failed to create user commodity registry for item links", err)
 	}
+	dropLink := func(pl inbPendingLink, reason error) {
+		w.stats.ErrorCount++
+		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("commodity %s: item link to %s: %v", pl.commodityUUID, pl.targetUUID, reason))
+	}
 	for _, pl := range w.pendingLinks {
 		commodityID := w.commodityDBID(pl.commodityUUID)
 		targetID := w.commodityDBID(pl.targetUUID)
 		if commodityID == "" || targetID == "" {
+			dropLink(pl, errors.New("the linked item is neither in the backup nor in the group"))
 			continue
 		}
 		commodity, err := comReg.Get(w.ctx, commodityID)
 		if err != nil {
-			return errxtrace.Wrap("failed to load commodity for item link", err, errx.Attrs("commodity_id", pl.commodityUUID))
+			dropLink(pl, err)
+			continue
 		}
 		commodity.CustomFields = models.CustomFieldValues{pl.fieldID: json.RawMessage(`"` + targetID + `"`)}
 		if _, err := comReg.Update(w.ctx, *commodity); err != nil {
-			if !errors.Is(err, registry.ErrInvalidCustomFieldValue) {
+			if !errors.Is(err, registry.ErrInvalidCustomFieldValue) && !errors.Is(err, registry.ErrNotFound) {
 				return errxtrace.Wrap("failed to set item link", err, errx.Attrs("commodity_id", pl.commodityUUID))
 			}
-			w.stats.ErrorCount++
-			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("commodity %s: item link: %v", pl.commodityUUID, err))
+			dropLink(pl, err)
 		}
 	}
 	return nil

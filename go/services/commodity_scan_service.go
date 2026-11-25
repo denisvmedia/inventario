@@ -244,6 +244,9 @@ func (in ScanInput) customFieldOptions() []aivision.CustomFieldOption {
 // field of in and turns a select field's label into its option ID, in the
 // primary guess and in every item. A guess for an unknown field or option,
 // or of the wrong kind, is dropped: the form fills only what it can use.
+// An item left with no guess at all is dropped too; when the primary guess
+// is then empty it becomes the first item left, and the items stay only
+// while they still offer a choice.
 func (in ScanInput) mapCustomFieldGuesses(result *aivision.ScanResult) {
 	if result == nil {
 		return
@@ -269,9 +272,25 @@ func (in ScanInput) mapCustomFieldGuesses(result *aivision.ScanResult) {
 		return out
 	}
 	result.CustomFields = mapGuesses(result.CustomFields)
-	for i := range result.Items {
-		result.Items[i].CustomFields = mapGuesses(result.Items[i].CustomFields)
+	items := make([]aivision.ScanItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		item.CustomFields = mapGuesses(item.CustomFields)
+		if len(item.Fields) > 0 || len(item.CustomFields) > 0 {
+			items = append(items, item)
+		}
 	}
+	if len(items) == len(result.Items) {
+		result.Items = items
+		return
+	}
+	if len(result.Fields) == 0 && len(result.CustomFields) == 0 && len(items) > 0 {
+		result.Fields = items[0].Fields
+		result.CustomFields = items[0].CustomFields
+	}
+	if len(items) < 2 {
+		items = nil
+	}
+	result.Items = items
 }
 
 func customFieldGuessValue(f ScanCustomField, v any) (any, bool) {

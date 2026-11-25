@@ -232,6 +232,7 @@ func (s *FileLinkService) clearCover(ctx context.Context, commodityID, fileID st
 		return nil
 	}
 	commodity.CoverFileID = nil
+	commodity.CustomFields = nil // only the cover changes
 	if _, err := comReg.Update(ctx, *commodity); err != nil {
 		return errxtrace.Wrap("failed to clear the cover photo", err)
 	}

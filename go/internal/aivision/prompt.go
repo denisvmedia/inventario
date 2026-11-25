@@ -305,23 +305,26 @@ type rawScanResponse struct {
 //     e.g. {"name": {...}, "type": {...}}
 //   - nested: a {"fields": {...}} wrapper (legacy / some responses)
 //
-// Whichever yields a non-empty field map wins (flat is tried first). The
-// custom field values sit under FieldNameCustomFields in either shape.
+// The flat shape is tried first; when it holds no canonical field, the
+// wrapper is read. The custom field values sit under FieldNameCustomFields,
+// next to the wrapper or inside it; the ones next to it win.
 func decodeRawItem(raw json.RawMessage) ScanItem {
 	var flat map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &flat); err == nil {
-		item := ScanItem{Fields: decodeFlatFields(flat), CustomFields: decodeCustomFields(flat[FieldNameCustomFields])}
-		if len(item.Fields) > 0 || len(item.CustomFields) > 0 {
-			return item
-		}
-		if nested, ok := flat["fields"]; ok {
-			var fields map[string]json.RawMessage
-			if json.Unmarshal(nested, &fields) == nil {
-				return ScanItem{Fields: decodeFlatFields(fields), CustomFields: decodeCustomFields(fields[FieldNameCustomFields])}
-			}
+	if json.Unmarshal(raw, &flat) != nil {
+		return ScanItem{}
+	}
+	item := ScanItem{Fields: decodeFlatFields(flat), CustomFields: decodeCustomFields(flat[FieldNameCustomFields])}
+	if len(item.Fields) > 0 {
+		return item
+	}
+	var fields map[string]json.RawMessage
+	if nested, ok := flat["fields"]; ok && json.Unmarshal(nested, &fields) == nil {
+		item.Fields = decodeFlatFields(fields)
+		if item.CustomFields == nil {
+			item.CustomFields = decodeCustomFields(fields[FieldNameCustomFields])
 		}
 	}
-	return ScanItem{}
+	return item
 }
 
 // decodeFlatFields decodes the canonical fields of one item, skipping a key

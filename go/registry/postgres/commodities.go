@@ -283,6 +283,23 @@ func (r *CommodityRegistry) GetMany(ctx context.Context, ids []string) ([]*model
 	return commodities, nil
 }
 
+// GetNames returns the names of the items among ids, live or in Trash, in
+// one query.
+func (r *CommodityRegistry) GetNames(ctx context.Context, ids []string) ([]registry.CommodityName, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var names []registry.CommodityName
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT id, name, deleted_at IS NOT NULL AS trashed FROM %s WHERE id = ANY($1)`, r.tableNames.Commodities())
+		return tx.SelectContext(ctx, &names, query, ids)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get commodity names", err)
+	}
+	return names, nil
+}
+
 // ListByGroup returns every commodity in (tenant_id, group_id), regardless
 // of draft / status. The currency-migration service (#202) needs the full
 // row set — ListPaginated's default filters would otherwise hide drafts and
@@ -603,6 +620,9 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityListTabl
 		if len(opts.Statuses) == 0 {
 			add(cond.Equal("status", string(models.CommodityStatusInUse)))
 		}
+	}
+	if opts.DraftsOnly {
+		add(cond.Equal("draft", true))
 	}
 
 	if len(opts.Types) > 0 {

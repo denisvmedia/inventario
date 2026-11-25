@@ -490,6 +490,9 @@ func (s *CommodityBulkService) Update(ctx context.Context, items registry.Commod
 			out.Skipped = append(out.Skipped, BulkSkip{ID: t.ID, Name: before.Name})
 			continue
 		}
+		// The patch edits no custom field; values read with the item
+		// would overwrite one written since.
+		after.CustomFields = nil
 		if err := ValidateCommodityStatusTransition(before.Status, after.Status, after.StatusDate, after.SalePrice); err != nil {
 			out.fail(t.ID, before.Name, err)
 			continue
@@ -531,6 +534,7 @@ func (s *CommodityBulkService) Move(ctx context.Context, items registry.Commodit
 		}
 		after := *before
 		after.AreaID = new(areaID)
+		after.CustomFields = nil // the move edits no custom field
 		if err := after.ValidateWithContext(ctx); err != nil {
 			out.fail(t.ID, before.Name, err)
 			continue

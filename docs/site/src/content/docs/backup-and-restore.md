@@ -128,16 +128,23 @@ already exists keeps its name and icon, whichever strategy you pick, and
 
 ### Custom fields
 
-A restore matches each custom field to the group's field with the same name,
-ignoring case and extra spaces, and creates the fields the group does not
-have, with their options and the item types whose form shows them. A field
-that already exists keeps its name and its item types; a select field gets the
-options of the backup it does not have, matched by label. When the group has a
-field of that name with a different type, the backup's values of that field
-are left out and the restore reports an error for it. A link to another item
-is restored when the linked item is in the backup or already in the group.
-**Full replace** does not remove custom fields. A dry run creates no custom
-fields.
+A restore matches each custom field to the group's field it was backed up
+from, even when that field was renamed since, and otherwise to the group's
+field with the same name, ignoring case and extra spaces. It creates the fields
+the group does not have, with their options and the item types whose form
+shows them. A field that already exists keeps its name and its item types. A
+select field keeps its options and gets the backup's options it lacks. An
+option is matched the same way as a field, first to the option it was backed
+up from and then by label, so an option renamed since the backup still holds
+its values. When the group has a field of that name with a different
+type, the backup's values of that field are left out and the restore reports
+an error for it.
+
+A link to another item is restored when the linked item is in the backup or in
+the group, outside the Trash. A backup keeps a link to an item in the Trash,
+and a restore that cannot set a link reports an error for it. **Full replace**
+does not remove custom fields. A dry run creates no custom fields, but reports
+an error for each field the restore would refuse.
 
 ### Other options
 

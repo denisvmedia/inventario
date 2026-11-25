@@ -381,9 +381,9 @@ func (r *CustomFieldRegistry) Create(ctx context.Context, def models.CustomField
 	if err := r.checkTemplates(groupID, def.Templates); err != nil {
 		return nil, err
 	}
-	if def.Templates == nil {
-		def.Templates = []models.CustomFieldTemplate{}
-	}
+	// The store keeps its own templates, so a later change to the caller's
+	// slice or default bytes cannot reach it.
+	def.Templates = cloneTemplates(def.Templates)
 	now := time.Now()
 	def.CreatedAt = now
 	def.UpdatedAt = now
@@ -411,6 +411,8 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 	keepTemplates := def.Templates == nil
 	if keepTemplates {
 		def.Templates = stored.Templates
+	} else {
+		def.Templates = cloneTemplates(def.Templates)
 	}
 	// Defaults naming a dropped option go with it.
 	keep := def.OptionIDs()
@@ -442,6 +444,19 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 	return r.factory.copyField(updated), nil
 }
 
+// cloneTemplates returns a copy of templates that shares no memory with it,
+// and an empty list for nil.
+func cloneTemplates(templates []models.CustomFieldTemplate) []models.CustomFieldTemplate {
+	out := make([]models.CustomFieldTemplate, 0, len(templates))
+	for _, t := range templates {
+		out = append(out, models.CustomFieldTemplate{
+			ItemTypeID:   t.ItemTypeID,
+			DefaultValue: models.JSONValue(slices.Clone([]byte(t.DefaultValue))),
+		})
+	}
+	return out
+}
+
 func clearRemovedDefaults(templates []models.CustomFieldTemplate, removed []string) []models.CustomFieldTemplate {
 	out := make([]models.CustomFieldTemplate, 0, len(templates))
 	for _, t := range templates {
@@ -456,18 +471,19 @@ func clearRemovedDefaults(templates []models.CustomFieldTemplate, removed []stri
 
 // Delete deletes a field no item has a value of.
 func (r *CustomFieldRegistry) Delete(ctx context.Context, id string) error {
-	_, err := r.deleteField(ctx, id, registry.ErrCustomFieldInUse)
+	_, err := r.deleteField(ctx, id, 0)
 	return err
 }
 
 // DeleteWithValues deletes the field with its values.
-func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string) (int, error) {
-	return r.deleteField(ctx, id, nil)
+func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string, expected int) (int, error) {
+	return r.deleteField(ctx, id, expected)
 }
 
 // deleteField deletes the field and returns how many items had a value of
-// it; when inUse is set and items have a value, it fails with inUse instead.
-func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, inUse error) (int, error) {
+// it; when another number of items than expected has one, it fails with
+// ErrCustomFieldInUse instead.
+func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expected int) (int, error) {
 	r.factory.mu.Lock()
 	defer r.factory.mu.Unlock()
 
@@ -486,8 +502,8 @@ func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, inUse 
 		}
 		base.lock.RUnlock()
 	}
-	if items > 0 && inUse != nil {
-		return 0, errxtrace.Classify(inUse, errx.Attrs("custom_field_id", id, "items", items))
+	if err := registry.CheckCustomFieldValueCount(id, items, expected); err != nil {
+		return 0, err
 	}
 	r.factory.dropFieldValues(stored.GroupID, id, nil)
 	if err := r.Registry.Delete(ctx, id); err != nil {

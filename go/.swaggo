@@ -1,0 +1,4 @@
+// Custom field values and template defaults are JSON values kept as raw
+// bytes. Document them as JSON values, not as arrays of bytes.
+replace go.5x5.cz/inventario/models.CustomFieldValues go.5x5.cz/inventario/models.CustomFieldValuesSchema
+replace go.5x5.cz/inventario/models.JSONValue go.5x5.cz/inventario/models.JSONValueSchema
