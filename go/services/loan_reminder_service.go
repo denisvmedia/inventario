@@ -171,6 +171,8 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 //  1. Resolve the lender + recipient email. If the lender has no email
 //     on file or no user record at all, treat the loan as "no recipient"
 //     and flip the flag anyway (no point re-evaluating it every tick).
+//     A lookup that fails for any other reason returns the error and
+//     leaves the flag false.
 //     For symmetry with the issue's preferences decision, this case
 //     still flips — it's a structural skip, not a user opt-out.
 //  2. Honour notifications.loan_reminder × channel.email. If off, skip
@@ -187,10 +189,17 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 //   - (false, nil) — not inside the lead time yet (flag NOT flipped) OR
 //     no recipient (flag still flipped) OR opted out (flag NOT flipped)
 //     OR concurrent worker won the flip.
-//   - (false, err) — enqueue or flip-side failure that should retry.
+//   - (false, err) — lender lookup, enqueue or flip-side failure that
+//     should retry.
 func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.CommodityLoanRegistry, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, sweep *loanSweep) (bool, error) {
 	prefsCache := sweep.prefs
-	lender, recipientEmail, recipientName := s.cachedLender(ctx, l, sweep)
+	found, err := s.cachedLender(ctx, l, sweep)
+	if err != nil {
+		// A failed lookup is not "no recipient": flipping the flag now
+		// would drop the reminder for good. Leave it for the next sweep.
+		return false, errxtrace.Wrap("loan reminder: look up lender", err)
+	}
+	lender, recipientEmail, recipientName := found.user, found.email, found.name
 	if kind == registry.LoanReminderKindDueSoon && computeDaysDelta(l.DueBackAt, now) > s.leadTimeFor(ctx, lender, prefsCache) {
 		// Not inside the lender's lead time yet. The flag stays false,
 		// so a later sweep sends the reminder once the date is close
@@ -318,44 +327,47 @@ type loanLender struct {
 }
 
 // cachedLender returns lookupLender, reusing a lender already found in
-// this sweep. A failed lookup is not cached: lookupLender reports it as "no
-// recipient", which flips the loan's flag, and a transient error must not
-// do that to every other loan of the same lender.
-func (s *LoanReminderService) cachedLender(ctx context.Context, l *models.CommodityLoan, sweep *loanSweep) (lender *models.User, email, name string) {
+// this sweep. Only a found lender is cached; a missing one is looked up
+// again for each loan, and a failed lookup returns its error.
+func (s *LoanReminderService) cachedLender(ctx context.Context, l *models.CommodityLoan, sweep *loanSweep) (loanLender, error) {
 	if l == nil {
-		return nil, "", ""
+		return loanLender{}, nil
 	}
 	if cached, ok := sweep.lenders[l.CreatedByUserID]; ok {
-		return cached.user, cached.email, cached.name
+		return cached, nil
 	}
-	lender, email, name = s.lookupLender(ctx, l)
-	if lender != nil {
-		sweep.lenders[l.CreatedByUserID] = loanLender{user: lender, email: email, name: name}
+	lender, err := s.lookupLender(ctx, l)
+	if err != nil {
+		return loanLender{}, err
 	}
-	return lender, email, name
+	if lender.user != nil {
+		sweep.lenders[l.CreatedByUserID] = lender
+	}
+	return lender, nil
 }
 
 // lookupLender returns the resolved lender User + its email + display
 // name. Empty email return signals "no recipient on file" so the caller
-// can short-circuit. The lender is the user who created the loan row;
+// can short-circuit; a lender whose user is gone is the same. Any other
+// lookup error is returned. The lender is the user who created the loan row;
 // fan-out to admins is intentional out-of-scope — admins are not the
 // canonical "I lent this" actor for a personal-inventory app.
-func (s *LoanReminderService) lookupLender(ctx context.Context, l *models.CommodityLoan) (lender *models.User, email, name string) {
+func (s *LoanReminderService) lookupLender(ctx context.Context, l *models.CommodityLoan) (loanLender, error) {
 	if l == nil || l.CreatedByUserID == "" {
-		return nil, "", ""
+		return loanLender{}, nil
 	}
 	if s.factorySet.UserRegistry == nil {
-		return nil, "", ""
+		return loanLender{}, nil
 	}
-	u, err := s.factorySet.UserRegistry.Get(ctx, l.CreatedByUserID)
+	u, err := lookupReminderUser(ctx, s.factorySet.UserRegistry, l.CreatedByUserID)
 	if err != nil || u == nil {
-		return nil, "", ""
+		return loanLender{}, err
 	}
-	email = strings.TrimSpace(u.Email)
+	email := strings.TrimSpace(u.Email)
 	if email == "" {
-		return u, "", ""
+		return loanLender{user: u}, nil
 	}
-	return u, email, u.Name
+	return loanLender{user: u, email: email, name: u.Name}, nil
 }
 
 // emitAuditEvent writes a commodity_events row of kind loan_reminder_sent.

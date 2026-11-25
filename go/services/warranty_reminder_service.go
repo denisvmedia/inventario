@@ -4,7 +4,6 @@ import (
 	"context"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -524,74 +523,20 @@ type warrantyRecipient struct {
 	fromMembership bool
 }
 
-// recipientsForCommodity returns every group admin/owner that should
-// receive a reminder for this commodity. Falls back to the
-// CreatedByUserID when no membership records resolve, so a single-user
-// install (memberships table empty) still gets a notification.
+// recipientsForCommodity returns every group admin that should receive a
+// reminder for this commodity, or the commodity's creator when the group
+// has none, so a single-user install still gets a notification. See
+// reminderRecipientUsers.
 func (s *WarrantyReminderService) recipientsForCommodity(ctx context.Context, c *models.Commodity) ([]warrantyRecipient, error) {
-	out := make([]warrantyRecipient, 0, 4)
-	if s.factorySet.GroupMembershipRegistry != nil {
-		members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, c.GroupID)
-		if err != nil {
-			return nil, err
-		}
-		out = s.collectAdminRecipients(ctx, c.GroupID, members)
+	users, fromMembership, err := reminderRecipientUsers(ctx, s.factorySet, c)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(out) == 0 && c.CreatedByUserID != "" {
-		user, err := s.factorySet.UserRegistry.Get(ctx, c.CreatedByUserID)
-		if err == nil && user != nil && strings.TrimSpace(user.Email) != "" {
-			out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user})
-		}
+	out := make([]warrantyRecipient, 0, len(users))
+	for _, u := range users {
+		out = append(out, warrantyRecipient{email: u.Email, name: u.Name, user: u, fromMembership: fromMembership})
 	}
 	return out, nil
-}
-
-// isWarrantyRecipient reports whether the given membership role should
-// receive warranty reminders. Admins do; plain users do not — they get
-// the FE pill, but the email goes to the people who can act on it.
-func isWarrantyRecipient(role models.GroupRole) bool {
-	return role == models.GroupRoleAdmin
-}
-
-// collectAdminRecipients filters memberships to admin-role rows,
-// resolves each to a User, and returns the deduplicated recipient
-// list. Lookups that 404 (member id rotted out from under a stale
-// membership row) are logged and skipped — the rest of the group
-// still gets the reminder. Split out of recipientsForCommodity to
-// keep the outer function under the nestif threshold.
-func (s *WarrantyReminderService) collectAdminRecipients(
-	ctx context.Context,
-	groupID string,
-	members []*models.GroupMembership,
-) []warrantyRecipient {
-	out := make([]warrantyRecipient, 0, 4)
-	seen := make(map[string]struct{}, 4)
-	for _, m := range members {
-		if m == nil || !isWarrantyRecipient(m.Role) {
-			// Skip viewer-only memberships — owners + admins are the
-			// canonical recipients for renewal-actionable reminders.
-			continue
-		}
-		user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
-		if err != nil {
-			slog.Warn("warranty reminder: skip member with missing user",
-				"user_id", m.MemberUserID,
-				"group_id", groupID,
-				"error", err,
-			)
-			continue
-		}
-		if user == nil || strings.TrimSpace(user.Email) == "" {
-			continue
-		}
-		if _, ok := seen[user.Email]; ok {
-			continue
-		}
-		seen[user.Email] = struct{}{}
-		out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user, fromMembership: true})
-	}
-	return out
 }
 
 // buildCommodityURL composes the deep-link printed in the reminder.

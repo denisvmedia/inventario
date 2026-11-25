@@ -5,7 +5,6 @@ import (
 	"errors"
 	"log/slog"
 	"slices"
-	"strings"
 	"time"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -514,60 +513,19 @@ func (s *MaintenanceReminderService) lookupCommodity(ctx context.Context, commod
 	return c, nil
 }
 
-// recipientsForCommodity returns every group admin/owner that should
-// receive a reminder for this schedule.
+// recipientsForCommodity returns every group admin that should receive a
+// reminder for this schedule, or the commodity's creator when the group has
+// none. See reminderRecipientUsers.
 func (s *MaintenanceReminderService) recipientsForCommodity(ctx context.Context, c *models.Commodity) ([]maintenanceRecipient, error) {
-	out := make([]maintenanceRecipient, 0, 4)
-	if s.factorySet.GroupMembershipRegistry != nil {
-		members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, c.GroupID)
-		if err != nil {
-			return nil, err
-		}
-		out = s.collectAdminRecipients(ctx, c.GroupID, members)
+	users, fromMembership, err := reminderRecipientUsers(ctx, s.factorySet, c)
+	if err != nil {
+		return nil, err
 	}
-
-	if len(out) == 0 && c.CreatedByUserID != "" {
-		user, err := s.factorySet.UserRegistry.Get(ctx, c.CreatedByUserID)
-		if err == nil && user != nil && strings.TrimSpace(user.Email) != "" {
-			out = append(out, maintenanceRecipient{email: user.Email, name: user.Name, user: user})
-		}
+	out := make([]maintenanceRecipient, 0, len(users))
+	for _, u := range users {
+		out = append(out, maintenanceRecipient{email: u.Email, name: u.Name, user: u, fromMembership: fromMembership})
 	}
 	return out, nil
-}
-
-// collectAdminRecipients filters memberships to admin-role rows,
-// resolves each to a User, and returns the deduplicated recipient
-// list. Mirrors the warranty service's collectAdminRecipients.
-func (s *MaintenanceReminderService) collectAdminRecipients(
-	ctx context.Context,
-	groupID string,
-	members []*models.GroupMembership,
-) []maintenanceRecipient {
-	out := make([]maintenanceRecipient, 0, 4)
-	seen := make(map[string]struct{}, 4)
-	for _, m := range members {
-		if m == nil || m.Role != models.GroupRoleAdmin {
-			continue
-		}
-		user, err := s.factorySet.UserRegistry.Get(ctx, m.MemberUserID)
-		if err != nil {
-			slog.Warn("maintenance reminder: skip member with missing user",
-				"user_id", m.MemberUserID,
-				"group_id", groupID,
-				"error", err,
-			)
-			continue
-		}
-		if user == nil || strings.TrimSpace(user.Email) == "" {
-			continue
-		}
-		if _, ok := seen[user.Email]; ok {
-			continue
-		}
-		seen[user.Email] = struct{}{}
-		out = append(out, maintenanceRecipient{email: user.Email, name: user.Name, user: user, fromMembership: true})
-	}
-	return out
 }
 
 func (s *MaintenanceReminderService) buildCommodityURL(ctx context.Context, c *models.Commodity) string {

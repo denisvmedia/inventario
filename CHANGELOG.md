@@ -207,6 +207,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- A warranty, maintenance or loan reminder is no longer dropped when a
+  recipient's account cannot be read for a moment, for example during a
+  database restart. The reminder is retried on the next sweep instead of
+  going out without that recipient, or, for a loan, being marked as sent
+  with no email
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 - The search page renders item results. It expected each result wrapped in
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item
