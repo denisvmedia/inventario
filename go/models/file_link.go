@@ -36,9 +36,11 @@ const (
 	// FileLinkDraft attaches a file to an unfinished item (#2812). Meta is
 	// "images" or "documents", as on an item, and promoting the draft turns
 	// the link into an item link with the same meta. A draft is not an
-	// inventory entity, so its links are not among the ordinary links, and a
-	// file whose only links are draft links is still a standalone file to
-	// every other part of the app.
+	// inventory entity, so its links are not among the ordinary links: a
+	// file whose only links are draft links takes its category from its
+	// first attachment to an inventory entity, as a standalone file does.
+	// The file API names an open draft on the link and leaves out a link
+	// to a draft being discarded.
 	FileLinkDraft FileLinkEntityType = "draft"
 	// FileLinkIntake holds a file for an intake source (#2810): a file a
 	// member dropped for the AI scan to read. The entity id is the source id

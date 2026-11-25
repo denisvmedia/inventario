@@ -121,9 +121,12 @@ func (api *commodityDraftsAPI) fileCount(r *http.Request, id string) (int, error
 // @Summary List drafts
 // @Description The group's open drafts, most recently saved first. A draft is an unfinished
 // @Description item saved on the server; it is not an item and appears in no item list, count
-// @Description or search. A whole-group backup carries the open drafts. When a member who can
-// @Description edit items lists the drafts, a discard that stopped more than ten minutes ago is
-// @Description finished first.
+// @Description or search. A whole-group export in the .inb format (3.5 and later) carries the
+// @Description open drafts; a selected-items export and the legacy XML export do not. When a
+// @Description member who can edit items lists the drafts, the discards that stopped more than
+// @Description ten minutes ago are finished first. That is best effort: at most 10 per request,
+// @Description and a failure is logged, not returned. A 200 therefore does not mean that every
+// @Description stopped discard finished or that the client_key of a discarded draft is free.
 // @Tags drafts
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -291,7 +294,9 @@ func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
 // @Summary Discard a draft
 // @Description Delete an open draft. Its files that nothing else uses go to Trash, where they
 // @Description can be restored as standalone files until the Trash retention runs out; files
-// @Description attached elsewhere only lose the link to the draft. A promoted draft answers 409
+// @Description attached elsewhere only lose the link to the draft. A file attached only to the
+// @Description draft and to an item that is already in Trash goes to Trash with that item:
+// @Description restoring the item brings the file back. A promoted draft answers 409
 // @Description draft.promoted. Once the discard has begun the draft can no longer be saved,
 // @Description promoted or given files; repeating a discard that did not finish completes it.
 // @Tags drafts
@@ -325,7 +330,11 @@ func (api *commodityDraftsAPI) finishStaleDiscards(r *http.Request) {
 		return
 	}
 	canWrite, _, err := api.groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
-	if err != nil || !canWrite {
+	if err != nil {
+		slog.Error("Failed to check the role for finishing stopped draft discards", "group_id", group.ID, "user_id", user.ID, "error", err)
+		return
+	}
+	if !canWrite {
 		return
 	}
 	finished, err := api.service.FinishStaleDiscards(context.WithoutCancel(r.Context()))

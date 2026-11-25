@@ -294,7 +294,8 @@ draft.
 A draft is not an item. It is not in item lists, counts, search results,
 reports, saved views or reminders, and it never expires. The files saved with
 a draft are ordinary files: you find them on the
-[Files](../files-and-photos/) page. A [backup](../backup-and-restore/) of the
+[Files](../files-and-photos/) page, attached to **Draft:** and the draft's
+name. A [backup](../backup-and-restore/) of the
 whole group includes the drafts and their files, and restoring it brings them
 back. [Deleting your account](../settings-and-account/) deletes the drafts
 you started; their files are kept as standalone files.

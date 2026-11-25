@@ -6205,9 +6205,12 @@ export type paths = {
          * List drafts
          * @description The group's open drafts, most recently saved first. A draft is an unfinished
          *     item saved on the server; it is not an item and appears in no item list, count
-         *     or search. A whole-group backup carries the open drafts. When a member who can
-         *     edit items lists the drafts, a discard that stopped more than ten minutes ago is
-         *     finished first.
+         *     or search. A whole-group export in the .inb format (3.5 and later) carries the
+         *     open drafts; a selected-items export and the legacy XML export do not. When a
+         *     member who can edit items lists the drafts, the discards that stopped more than
+         *     ten minutes ago are finished first. That is best effort: at most 10 per request,
+         *     and a failure is logged, not returned. A 200 therefore does not mean that every
+         *     stopped discard finished or that the client_key of a discarded draft is free.
          */
         get: {
             parameters: {
@@ -6421,7 +6424,9 @@ export type paths = {
          * Discard a draft
          * @description Delete an open draft. Its files that nothing else uses go to Trash, where they
          *     can be restored as standalone files until the Trash retention runs out; files
-         *     attached elsewhere only lose the link to the draft. A promoted draft answers 409
+         *     attached elsewhere only lose the link to the draft. A file attached only to the
+         *     draft and to an item that is already in Trash goes to Trash with that item:
+         *     restoring the item brings the file back. A promoted draft answers 409
          *     draft.promoted. Once the discard has begun the draft can no longer be saved,
          *     promoted or given files; repeating a discard that did not finish completes it.
          */
@@ -6604,7 +6609,9 @@ export type paths = {
         put?: never;
         /**
          * Create an export
-         * @description create a new export
+         * @description Create a new export. A whole-group export in the .inb format (3.5 and later)
+         *     carries the group's open drafts and the files saved with them; a selected-items
+         *     export and the legacy XML export do not.
          */
         post: {
             parameters: {
@@ -14510,30 +14517,30 @@ export type components = {
         };
         "jsonapi.CommodityDraftCreateAttributes": {
             /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
-            client_key?: string;
+            client_key: string;
             values?: Record<string, never>;
         };
         "jsonapi.CommodityDraftCreateRequest": {
-            data?: components["schemas"]["jsonapi.CommodityDraftCreateRequestData"];
+            data: components["schemas"]["jsonapi.CommodityDraftCreateRequestData"];
         };
         "jsonapi.CommodityDraftCreateRequestData": {
-            attributes?: components["schemas"]["jsonapi.CommodityDraftCreateAttributes"];
+            attributes: components["schemas"]["jsonapi.CommodityDraftCreateAttributes"];
             id?: string;
             /**
              * @example commodity_drafts
              * @enum {string}
              */
-            type?: "commodity_drafts";
+            type: "commodity_drafts";
         };
         "jsonapi.CommodityDraftPromoteMeta": {
             /** @example 6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10 */
-            promotion_key?: string;
+            promotion_key: string;
             /** @example 3 */
-            revision?: number;
+            revision: number;
         };
         "jsonapi.CommodityDraftPromoteRequest": {
-            data?: components["schemas"]["jsonapi.CommodityData"];
-            meta?: components["schemas"]["jsonapi.CommodityDraftPromoteMeta"];
+            data: components["schemas"]["jsonapi.CommodityData"];
+            meta: components["schemas"]["jsonapi.CommodityDraftPromoteMeta"];
         };
         "jsonapi.CommodityDraftResponse": {
             data?: components["schemas"]["jsonapi.CommodityDraftResponseData"];
@@ -14549,20 +14556,20 @@ export type components = {
         };
         "jsonapi.CommodityDraftSaveAttributes": {
             /** @example 3 */
-            revision?: number;
+            revision: number;
             values?: Record<string, never>;
         };
         "jsonapi.CommodityDraftSaveRequest": {
-            data?: components["schemas"]["jsonapi.CommodityDraftSaveRequestData"];
+            data: components["schemas"]["jsonapi.CommodityDraftSaveRequestData"];
         };
         "jsonapi.CommodityDraftSaveRequestData": {
-            attributes?: components["schemas"]["jsonapi.CommodityDraftSaveAttributes"];
+            attributes: components["schemas"]["jsonapi.CommodityDraftSaveAttributes"];
             id?: string;
             /**
              * @example commodity_drafts
              * @enum {string}
              */
-            type?: "commodity_drafts";
+            type: "commodity_drafts";
         };
         "jsonapi.CommodityDraftView": {
             /**

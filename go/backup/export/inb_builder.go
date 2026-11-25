@@ -161,11 +161,12 @@ type plannedUnassigned struct {
 	pending []pendingFile
 }
 
-// plannedDrafts is the plan for the drafts member; present is false when no
-// draft is in scope, so the member is omitted.
+// plannedDrafts is the plan for the drafts member: the document encoded as it
+// is written. present is false when no draft is in scope, so the member is
+// omitted.
 type plannedDrafts struct {
 	present bool
-	doc     INBDraftsDoc
+	data    []byte
 }
 
 // plannedFiles is the in-memory plan for the non-commodity files member (issue
@@ -283,6 +284,16 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		b.areaUUIDByDBID[area.ID] = area.UUID
 	}
 
+	// The drafts are read before the items, in a transaction of their own.
+	// A promotion that commits between the two reads then leaves the archive
+	// with both the draft and the item it became, which restores as a
+	// duplicate the user can discard. Read the other way round, the item
+	// would be missing from the items read and the draft from the drafts
+	// read, and the archive would lose it.
+	if err := b.loadDrafts(scope); err != nil {
+		return err
+	}
+
 	commodities, err := b.loadCommodities()
 	if err != nil {
 		return err
@@ -306,11 +317,7 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		return err
 	}
 
-	// Before the files, which link to the drafts.
-	if err := b.loadDrafts(scope); err != nil {
-		return err
-	}
-
+	// After the drafts, which the files link to.
 	if err := b.indexFiles(); err != nil {
 		return err
 	}
@@ -377,10 +384,12 @@ func (b *inbBuilder) loadDrafts(scope *inbScope) error {
 // planDrafts builds the drafts member. The area and the seller a draft names
 // are written as their UUIDs, which the restore maps to the restored area
 // and seller; one the export cannot resolve is left out, so the archive never
-// carries a DB id.
-func (b *inbBuilder) planDrafts() plannedDrafts {
+// carries a DB id. The document is encoded here, in the planning pass, so a
+// document larger than a restore accepts fails the export with
+// ErrDraftsTooLarge before anything is written.
+func (b *inbBuilder) planDrafts() (plannedDrafts, error) {
 	if len(b.drafts) == 0 {
-		return plannedDrafts{}
+		return plannedDrafts{}, nil
 	}
 	doc := INBDraftsDoc{Drafts: make([]INBDraft, 0, len(b.drafts))}
 	for _, d := range b.drafts {
@@ -397,7 +406,15 @@ func (b *inbBuilder) planDrafts() plannedDrafts {
 			UpdatedAt: d.UpdatedAt.UTC().Format(time.RFC3339),
 		})
 	}
-	return plannedDrafts{present: true, doc: doc}
+	data, err := encodeJSONMember(INBDraftsName, doc)
+	if err != nil {
+		return plannedDrafts{}, err
+	}
+	if limit := jsonDocLimit(); int64(len(data)) > limit {
+		return plannedDrafts{}, errx.Classify(ErrDraftsTooLarge,
+			errx.Attrs("member", INBDraftsName, "size", len(data), "max", limit, "drafts", len(doc.Drafts)))
+	}
+	return plannedDrafts{present: true, data: data}, nil
 }
 
 // exportDraftReference replaces the DB id in values[key] with the UUID
@@ -1223,11 +1240,16 @@ func (b *inbBuilder) run() (inbPlan, error) {
 
 	unassigned := b.planUnassigned(scope)
 
+	drafts, err := b.planDrafts()
+	if err != nil {
+		return inbPlan{}, err
+	}
+
 	return inbPlan{
 		locations:    planned,
 		manifestLocs: manifestLocs,
 		unassigned:   unassigned,
-		drafts:       b.planDrafts(),
+		drafts:       drafts,
 		files:        b.planFiles(scope),
 		// After every item is planned, so usedSellers is complete.
 		sellers: b.manifestSellers(scope),
@@ -1281,7 +1303,7 @@ func (b *inbBuilder) writeDrafts(pd plannedDrafts) error {
 	if !pd.present {
 		return nil
 	}
-	return b.writeJSONMember(INBDraftsName, pd.doc)
+	return b.writeMember(INBDraftsName, pd.data)
 }
 
 // writeFiles writes the non-commodity files member (issue #2235): its JSON

@@ -205,12 +205,16 @@ any tags, and what the file is linked to. Tag chips are clickable — they take 
 to the Files page filtered to that tag.
 
 **Linked to** lists every item, location, and area the file is attached to. Each
-name opens that page. The **×** next to a name removes that attachment and
-nothing else: the file stays attached everywhere else, and once nothing is left
-it stays on the Files page as **Not attached to anything** until you delete it.
-A file you dropped for [Add items from files](../items/#add-items-from-files)
-shows **Added from files** while its batch holds it. That entry has no **×**:
-the file is released when the batch is removed.
+name opens that page. A file saved with a
+[draft of a new item](../items/#drafts-of-a-new-item) lists the draft as
+**Draft:** and its name (just **Draft** when it has none); that link opens the
+draft in the **Add item** dialog. The **×** next to a name removes that
+attachment and nothing else: the file stays attached everywhere else, and once
+nothing is left it stays on the Files page as **Not attached to anything**
+until you delete it. A file you dropped for
+[Add items from files](../items/#add-items-from-files) shows **Added from
+files** while its batch holds it. That entry has no **×**: the file is released
+when the batch is removed.
 
 The action row gives you:
 
