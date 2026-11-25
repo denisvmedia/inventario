@@ -239,7 +239,7 @@ function InboxList({ slug, reason, page, onPage, inbox, canWrite }: InboxListPro
       ? page
       : reviewPageForAllOffset(
           (page - 1) * INBOX_PAGE_SIZE + index,
-          inbox.data?.counts.reasons.draft ?? 0
+          inbox.data?.counts.reasons ?? {}
         )
 
   // Clearing the last entries of the last page leaves the page past the

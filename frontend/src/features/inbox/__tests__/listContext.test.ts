@@ -34,9 +34,15 @@ describe("inbox review list context", () => {
 
   it("finds the review page of an entry of the All list, past the drafts", () => {
     // Two drafts come first: the entry at offset 2 is the first item to review.
-    expect(reviewPageForAllOffset(2, 2)).toBe(1)
-    expect(reviewPageForAllOffset(51, 2)).toBe(1)
-    expect(reviewPageForAllOffset(52, 2)).toBe(2)
-    expect(reviewPageForAllOffset(0, 0)).toBe(1)
+    expect(reviewPageForAllOffset(2, { draft: 2, item_draft: 60 })).toBe(1)
+    expect(reviewPageForAllOffset(51, { draft: 2, item_draft: 60 })).toBe(1)
+    expect(reviewPageForAllOffset(52, { draft: 2, item_draft: 60 })).toBe(2)
+    expect(reviewPageForAllOffset(0, {})).toBe(1)
+  })
+
+  it("skips only the reasons ranked before the items to review", () => {
+    // A reason the inbox ranks after the items to review, or one this client
+    // does not know, comes after them and moves nothing.
+    expect(reviewPageForAllOffset(52, { draft: 2, item_draft: 60, later: 40 })).toBe(2)
   })
 })

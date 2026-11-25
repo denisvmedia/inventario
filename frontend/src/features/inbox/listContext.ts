@@ -10,7 +10,7 @@
 import { listPageQuery, type ListPageSource } from "@/hooks/useListNavigation"
 import { listContextPage, listContextParams, type ListContext } from "@/lib/list-context"
 
-import { listInbox, type InboxListOptions } from "./api"
+import { INBOX_REASONS, listInbox, type InboxListOptions } from "./api"
 import { inboxKeys } from "./keys"
 
 /** Entries per inbox page; the inbox page and the walk use the same size. */
@@ -62,9 +62,16 @@ export function inboxReviewSource(ctx: ListContext, slug: string): ListPageSourc
 /**
  * The page of the Items to review list that holds the entry at `offset` (0-based)
  * of the All list. The server orders the inbox by each entry's first reason,
- * drafts first, so the items to review follow the `drafts` draft entries in
- * the same order.
+ * in the order of INBOX_REASONS, so the items to review follow the entries
+ * of every reason ranked before theirs; `reasons` holds the count of each
+ * reason. An entry of an earlier reason that also waits for review would
+ * shift the page by one place at most, which the walk's lookup on the pages
+ * on either side absorbs.
  */
-export function reviewPageForAllOffset(offset: number, drafts: number): number {
-  return Math.floor(Math.max(0, offset - drafts) / INBOX_PAGE_SIZE) + 1
+export function reviewPageForAllOffset(offset: number, reasons: Record<string, number>): number {
+  const before = INBOX_REASONS.slice(0, INBOX_REASONS.indexOf(REVIEW_REASON)).reduce(
+    (n, reason) => n + (reasons[reason] ?? 0),
+    0
+  )
+  return Math.floor(Math.max(0, offset - before) / INBOX_PAGE_SIZE) + 1
 }
