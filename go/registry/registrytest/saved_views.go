@@ -15,14 +15,29 @@ import (
 	"go.5x5.cz/inventario/registry"
 )
 
-// SavedViewEnv is what RunSavedViewContract needs from a backend: one
-// factory, two members of one empty group (Ctx for Alice, OtherCtx for Bob),
-// and Alice in a second, empty group (OtherGroupCtx).
+// SavedViewEnv is what RunSavedViewContract needs from a backend: the saved
+// view factory and the tag factory it reads slugs from, two members of one
+// empty group (Ctx for Alice, OtherCtx for Bob), and Alice in a second, empty
+// group (OtherGroupCtx).
 type SavedViewEnv struct {
 	Views         registry.SavedViewRegistryFactory
+	Tags          registry.TagRegistryFactory
 	Ctx           context.Context
 	OtherCtx      context.Context
 	OtherGroupCtx context.Context
+}
+
+// newTag creates an item tag in the group of ctx.
+func newTag(c *qt.C, env SavedViewEnv, ctx context.Context, slug string) *models.Tag {
+	c.Helper()
+	tag, err := env.Tags.MustCreateUserRegistry(ctx).Create(ctx, models.Tag{
+		Kind:  models.TagKindCommodity,
+		Slug:  slug,
+		Label: slug,
+		Color: models.TagColorBlue,
+	})
+	c.Assert(err, qt.IsNil)
+	return tag
 }
 
 func newView(name, query string, shared bool) models.SavedView {
@@ -255,12 +270,13 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		c := qt.New(t)
 		f := setup(t)
 		ctx, bobCtx := f.env.Ctx, f.env.OtherCtx
+		tag := newTag(c, f.env, ctx, "sold-items")
 		done := make(chan struct{})
 		var rewritten atomic.Bool
 		_, err := f.alice.UpdateFunc(ctx, f.mine.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			go func() {
 				defer close(done)
-				_, err := f.bob.RewriteQueries(bobCtx, func(v models.SavedView) (string, bool) {
+				_, err := f.bob.RewriteForTag(bobCtx, tag.ID, func(v models.SavedView, _ string) (string, bool) {
 					return "status=sold", v.Name == "Renamed under the lock"
 				})
 				if err == nil {
@@ -445,15 +461,20 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		ctx := f.env.Ctx
 		other, err := f.aliceOtherGroup.Create(f.env.OtherGroupCtx, newView("Elsewhere", "tags=fragile", false))
 		c.Assert(err, qt.IsNil)
+		tag := newTag(c, f.env, ctx, "delicate")
 
-		n, err := f.alice.RewriteQueries(ctx, func(v models.SavedView) (string, bool) {
+		var slugs []string
+		n, err := f.alice.RewriteForTag(ctx, tag.ID, func(v models.SavedView, slug string) (string, bool) {
+			slugs = append(slugs, slug)
 			if !strings.Contains(v.Query, "fragile") {
 				return "", false
 			}
-			return strings.ReplaceAll(v.Query, "fragile", "delicate"), true
+			return strings.ReplaceAll(v.Query, "fragile", slug), true
 		})
 		c.Assert(err, qt.IsNil)
 		c.Assert(n, qt.Equals, 2)
+		// Every view of the group, with the slug the tag has.
+		c.Assert(slugs, qt.DeepEquals, []string{"delicate", "delicate", "delicate", "delicate"})
 
 		private, err := f.bob.Get(f.env.OtherCtx, f.bobPrivate.ID)
 		c.Assert(err, qt.IsNil)
@@ -467,6 +488,22 @@ func runSavedViewOrderAndRewrite(t *testing.T, setup func(*testing.T) savedViewF
 		untouched, err := f.aliceOtherGroup.Get(f.env.OtherGroupCtx, other.ID)
 		c.Assert(err, qt.IsNil)
 		c.Assert(untouched.Query, qt.Equals, "tags=fragile")
+	})
+
+	t.Run("rewrite for a tag that does not exist changes nothing", func(t *testing.T) {
+		c := qt.New(t)
+		f := setup(t)
+		ctx := f.env.Ctx
+		called := false
+		_, err := f.alice.RewriteForTag(ctx, "no-such-tag", func(models.SavedView, string) (string, bool) {
+			called = true
+			return "status=sold", true
+		})
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		c.Assert(called, qt.IsFalse)
+		got, err := f.alice.Get(ctx, f.mine.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.Query, qt.Equals, "status=in_use")
 	})
 
 	t.Run("delete removes a visible view", func(t *testing.T) {

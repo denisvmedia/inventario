@@ -290,3 +290,27 @@ func TestSavedViews_PlacementIsPerMember(t *testing.T) {
 	rr = env.do(c, http.MethodPatch, "/"+id, env.viewerID, savedViewBody(map[string]any{"name": "Taken", "show_on_dashboard": true}))
 	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
 }
+
+// An admin who unshares another member's view gets 200 with the view as
+// stored, even though the edit carries the placement fields the manage page
+// always sends and the admin no longer sees the view afterwards.
+func TestSavedViews_AdminUnsharesAnotherMembersView(t *testing.T) {
+	c := qt.New(t)
+	env := newSavedViewsEnv(c)
+	id := env.create(c, env.otherUser, map[string]any{"name": "For everyone", "shared": true, "show_in_sidebar": true})
+
+	rr := env.do(c, http.MethodPatch, "/"+id, env.adminID, savedViewBody(map[string]any{
+		"name": "For everyone", "icon": "bookmark", "shared": false,
+		"show_in_sidebar": true, "show_on_dashboard": false,
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.shared"), false)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.can_edit"), false)
+
+	rr = env.do(c, http.MethodGet, "/"+id, env.adminID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	rr = env.do(c, http.MethodGet, "/"+id, env.otherUser, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.shared"), false)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), true)
+}

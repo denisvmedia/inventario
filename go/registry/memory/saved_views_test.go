@@ -31,8 +31,10 @@ func memberCtx(userID, groupID string) context.Context {
 
 func TestSavedViewContract_Memory(t *testing.T) {
 	registrytest.RunSavedViewContract(t, func(*testing.T) registrytest.SavedViewEnv {
+		fs := memory.NewFactorySet()
 		return registrytest.SavedViewEnv{
-			Views:         memory.NewSavedViewRegistryFactory(),
+			Views:         fs.SavedViewRegistryFactory,
+			Tags:          fs.TagRegistryFactory,
 			Ctx:           memberCtx("alice", "group-1"),
 			OtherCtx:      memberCtx("bob", "group-1"),
 			OtherGroupCtx: memberCtx("alice", "group-2"),

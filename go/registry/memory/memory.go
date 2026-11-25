@@ -26,7 +26,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
-	savedViewFactory := NewSavedViewRegistryFactory()
+	savedViewFactory := NewSavedViewRegistryFactory(tagFactory)
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()

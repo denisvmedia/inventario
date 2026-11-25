@@ -376,16 +376,18 @@ func TestSavedViewService_RenameTag_FollowsTheTagsCurrentSlug(t *testing.T) {
 	ctx := savedViewCtx("alice")
 	view, err := f.svc.Create(ctx, actor("alice", models.GroupRoleUser), viewInput("A", "tags=a", false))
 	c.Assert(err, qt.IsNil)
-	tagIsNow := func(slug string) func(context.Context) (string, error) {
-		return func(context.Context) (string, error) { return slug, nil }
-	}
+	// Both renames have committed: the tag is c.
+	tag, err := f.factory.TagRegistryFactory.MustCreateUserRegistry(ctx).Create(ctx, models.Tag{
+		Kind: models.TagKindCommodity, Slug: "c", Label: "C", Color: models.TagColorBlue,
+	})
+	c.Assert(err, qt.IsNil)
 
 	// The second rename (b to c) rewrites first; no view names b yet.
-	n, err := f.svc.RenameTag(ctx, "b", tagIsNow("c"))
+	n, err := f.svc.RenameTag(ctx, "b", tag.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(n, qt.Equals, 0)
 	// The first rename (a to b) rewrites last, when the tag is already c.
-	n, err = f.svc.RenameTag(ctx, "a", tagIsNow("c"))
+	n, err = f.svc.RenameTag(ctx, "a", tag.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(n, qt.Equals, 1)
 
@@ -507,4 +509,39 @@ func TestSavedViewService_SharedLimitHoldsUnderConcurrency(t *testing.T) {
 	}
 	wg.Wait()
 	c.Assert(shared.Load(), qt.Equals, int32(1))
+}
+
+// An admin who unshares another member's view no longer sees it. The change
+// is stored and the PATCH succeeds, placement fields and all, with the view
+// as written; it does not fail on the placement it can no longer set.
+func TestSavedViewService_AdminUnsharesAnotherMembersView(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	aliceCtx, carolCtx := savedViewCtx("alice"), savedViewCtx("carol")
+	alice := actor("alice", models.GroupRoleUser)
+	carol := actor("carol", models.GroupRoleAdmin)
+	shared, err := f.svc.Create(aliceCtx, alice, services.SavedViewInput{Name: "Team", Shared: true, ShowInSidebar: true})
+	c.Assert(err, qt.IsNil)
+	_, err = f.svc.Update(carolCtx, carol, shared.View.ID, services.SavedViewPatch{ShowInSidebar: new(true)})
+	c.Assert(err, qt.IsNil)
+
+	// The manage page sends the placement fields with every edit.
+	got, err := f.svc.Update(carolCtx, carol, shared.View.ID, services.SavedViewPatch{
+		Name:            new("Team"),
+		Shared:          new(false),
+		ShowInSidebar:   new(true),
+		ShowOnDashboard: new(false),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.View.Shared, qt.IsFalse)
+	c.Assert(got.CanEdit, qt.IsFalse)
+	c.Assert(got.CanDelete, qt.IsFalse)
+	c.Assert(got.ShowInSidebar, qt.IsFalse)
+
+	_, err = f.svc.Get(carolCtx, carol, shared.View.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	mine, err := f.svc.Get(aliceCtx, alice, shared.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(mine.View.Shared, qt.IsFalse)
+	c.Assert(mine.ShowInSidebar, qt.IsTrue, qt.Commentf("the creator keeps their placement"))
 }

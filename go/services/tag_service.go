@@ -200,14 +200,7 @@ func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string
 		return nil, err
 	}
 	if renamed.Kind == models.TagKindCommodity && renamed.Slug != from && s.factorySet.SavedViewRegistryFactory != nil {
-		current := func(ctx context.Context) (string, error) {
-			tag, err := tagReg.Get(ctx, id)
-			if err != nil {
-				return "", err
-			}
-			return tag.Slug, nil
-		}
-		if _, err := NewSavedViewService(s.factorySet).RenameTag(ctx, from, current); err != nil {
+		if _, err := NewSavedViewService(s.factorySet).RenameTag(ctx, from, id); err != nil {
 			slog.WarnContext(ctx, "Saved views kept the old tag slug after a rename",
 				"tag_id", id, "from", from, "to", renamed.Slug, "error", err)
 		}

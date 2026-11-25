@@ -1235,12 +1235,19 @@ type SavedViewRegistry interface {
 	// is changed.
 	Reorder(ctx context.Context, ids []string) error
 
-	// RewriteQueries calls rewrite for every view of the group, including
-	// the personal views of other members, and stores the query it returns
-	// when changed is true. It returns how many views changed. It is meant
-	// for changes that every reference has to follow, such as a tag slug
-	// rename, and runs in one transaction under the group's write lock.
-	RewriteQueries(ctx context.Context, rewrite func(view models.SavedView) (query string, changed bool)) (int, error)
+	// RewriteForTag calls rewrite for every view of the group, including
+	// the personal views of other members, with the slug the tag tagID has
+	// now, and stores the query rewrite returns when changed is true. It
+	// returns how many views changed. It runs in one transaction under the
+	// group's write lock and reads the slug in that transaction after taking
+	// the lock, so it needs no second connection, and a rewrite that runs
+	// after a later rename of the tag still lands on the tag's final slug. A
+	// tag the registry cannot see fails with ErrNotFound and changes nothing.
+	RewriteForTag(
+		ctx context.Context,
+		tagID string,
+		rewrite func(view models.SavedView, tagSlug string) (query string, changed bool),
+	) (int, error)
 }
 
 // MaintenanceListOptions narrows the result of

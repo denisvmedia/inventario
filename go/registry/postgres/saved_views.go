@@ -386,22 +386,36 @@ func (r *SavedViewRegistry) SetPlacement(
 	var placement *models.SavedViewPlacement
 	cond, args := r.visibility(2)
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var seen bool
-		query := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE id = $1 AND %s)`, r.tableNames.SavedViews(), cond)
-		if err := tx.GetContext(ctx, &seen, query, append([]any{viewID}, args...)...); err != nil {
+		// FOR SHARE holds the view row until the placement is stored: an
+		// unshare or a delete that comes in between waits for this
+		// transaction, and one that came first leaves no visible row.
+		var one int
+		query := fmt.Sprintf(`SELECT 1 FROM %s WHERE id = $1 AND %s FOR SHARE`, r.tableNames.SavedViews(), cond)
+		if err := tx.GetContext(ctx, &one, query, append([]any{viewID}, args...)...); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return registry.ErrNotFound
+			}
 			return errxtrace.Wrap("failed to read saved view", err)
-		}
-		if !seen {
-			return registry.ErrNotFound
 		}
 		var err error
 		placement, err = r.upsertPlacement(ctx, tx, viewID, patch)
+		if isForeignKeyViolation(err) {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("saved_view_id", viewID))
+		}
 		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to store saved view placement", err)
 	}
 	return placement, nil
+}
+
+// isForeignKeyViolation reports whether err is PostgreSQL's
+// foreign_key_violation (23503).
+func isForeignKeyViolation(err error) bool {
+	type sqlStater interface{ SQLState() string }
+	var s sqlStater
+	return errors.As(err, &s) && s.SQLState() == "23503"
 }
 
 func (r *SavedViewRegistry) Delete(ctx context.Context, id string) error {
@@ -471,13 +485,28 @@ func (r *SavedViewRegistry) Reorder(ctx context.Context, ids []string) error {
 	})
 }
 
-func (r *SavedViewRegistry) RewriteQueries(ctx context.Context, rewrite func(view models.SavedView) (string, bool)) (int, error) {
+func (r *SavedViewRegistry) RewriteForTag(
+	ctx context.Context,
+	tagID string,
+	rewrite func(view models.SavedView, tagSlug string) (string, bool),
+) (int, error) {
 	changed := 0
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		if !r.service {
 			if err := lockSavedViewGroup(ctx, tx, r.groupID); err != nil {
 				return err
 			}
+		}
+		// The slug is read here, in the locked transaction, rather than by
+		// the caller: a second read would need a second pool connection
+		// while this one waits.
+		var slug string
+		slugQuery := fmt.Sprintf(`SELECT slug FROM %s WHERE id = $1`, r.tableNames.Tags())
+		if err := tx.GetContext(ctx, &slug, slugQuery, tagID); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("tag_id", tagID))
+			}
+			return errxtrace.Wrap("failed to read tag slug", err)
 		}
 		var views []models.SavedView
 		// Every view of the group: RLS keeps a user registry to its group,
@@ -489,7 +518,7 @@ func (r *SavedViewRegistry) RewriteQueries(ctx context.Context, rewrite func(vie
 		now := time.Now()
 		updateSQL := fmt.Sprintf(`UPDATE %s SET query = $1, updated_at = $2 WHERE id = $3`, r.tableNames.SavedViews())
 		for _, v := range views {
-			next, ok := rewrite(v)
+			next, ok := rewrite(v, slug)
 			if !ok {
 				continue
 			}

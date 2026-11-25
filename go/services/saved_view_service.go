@@ -298,8 +298,15 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 		return SavedViewEntry{}, err
 	}
 	if patch.changesView() {
-		if err := updateSavedView(ctx, reg, actor, id, patch); err != nil {
+		updated, err := updateSavedView(ctx, reg, actor, id, patch)
+		if err != nil {
 			return SavedViewEntry{}, err
+		}
+		// An admin who unshares another member's view no longer sees it:
+		// the change is stored, so it answers with the view as written, and
+		// there is no placement left to set or view to read again.
+		if !updated.Shared && updated.CreatedByUserID != actor.UserID {
+			return entryFor(updated, models.SavedViewPlacement{}, actor), nil
 		}
 	}
 	if patch.changesPlacement() {
@@ -315,16 +322,22 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 }
 
 // updateSavedView applies the view fields of patch under the registry's
-// write lock.
-func updateSavedView(ctx context.Context, reg registry.SavedViewRegistry, actor SavedViewActor, id string, patch SavedViewPatch) error {
+// write lock and returns the view as stored.
+func updateSavedView(
+	ctx context.Context,
+	reg registry.SavedViewRegistry,
+	actor SavedViewActor,
+	id string,
+	patch SavedViewPatch,
+) (*models.SavedView, error) {
 	var query string
 	if patch.Query != nil {
 		var err error
 		if query, err = canonicalQuery(*patch.Query); err != nil {
-			return err
+			return nil, err
 		}
 	}
-	_, err := reg.UpdateFunc(ctx, id, func(view *models.SavedView, tally registry.SavedViewTally) error {
+	updated, err := reg.UpdateFunc(ctx, id, func(view *models.SavedView, tally registry.SavedViewTally) error {
 		if !canEdit(view, actor) {
 			return errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "not_editable"))
 		}
@@ -347,9 +360,9 @@ func updateSavedView(ctx context.Context, reg registry.SavedViewRegistry, actor 
 		return nil
 	})
 	if err != nil {
-		return errxtrace.Wrap("failed to update saved view", err)
+		return nil, errxtrace.Wrap("failed to update saved view", err)
 	}
-	return nil
+	return updated, nil
 }
 
 func applySavedViewPatch(view *models.SavedView, patch SavedViewPatch) {
@@ -457,23 +470,20 @@ func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[s
 }
 
 // RenameTag makes every view of the group that names the item tag slug from
-// name the tag's current slug instead, which current reads. It is called
-// after a tag slug rename, so the views keep selecting the tag they were
-// saved with. current runs once, inside the rewrite and so under the
-// registry's write lock: when two renames of one tag rewrite the views in the
-// other order than they renamed the tag, the views still end on the slug the
-// tag has. A view whose query cannot run is left alone.
-func (s *SavedViewService) RenameTag(ctx context.Context, from string, current func(context.Context) (string, error)) (int, error) {
+// name the current slug of the tag tagID instead. It is called after a tag
+// slug rename, so the views keep selecting the tag they were saved with. The
+// registry reads the current slug inside its locked rewrite: when two renames
+// of one tag rewrite the views in the other order than they renamed the tag,
+// the views still end on the slug the tag has. A view whose query cannot run
+// is left alone.
+func (s *SavedViewService) RenameTag(ctx context.Context, from, tagID string) (int, error) {
 	reg, err := s.registry(ctx)
 	if err != nil {
 		return 0, err
 	}
-	var (
-		to       string
-		resolved bool
-		toErr    error
-	)
-	n, err := reg.RewriteQueries(ctx, func(view models.SavedView) (string, bool) {
+	var to string
+	n, err := reg.RewriteForTag(ctx, tagID, func(view models.SavedView, slug string) (string, bool) {
+		to = slug
 		if view.QueryVersion != models.SavedViewQueryVersion {
 			return "", false
 		}
@@ -481,14 +491,7 @@ func (s *SavedViewService) RenameTag(ctx context.Context, from string, current f
 		if err != nil {
 			return "", false
 		}
-		if !resolved {
-			resolved = true
-			to, toErr = current(ctx)
-		}
-		if toErr != nil {
-			return "", false
-		}
-		renamed, changed := q.RenameTag(from, to)
+		renamed, changed := q.RenameTag(from, slug)
 		if !changed {
 			return "", false
 		}
@@ -496,9 +499,6 @@ func (s *SavedViewService) RenameTag(ctx context.Context, from string, current f
 	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to rewrite saved view queries", err)
-	}
-	if toErr != nil {
-		return 0, errxtrace.Wrap("failed to read the renamed tag", toErr)
 	}
 	if n > 0 {
 		slog.DebugContext(ctx, "Saved views follow a tag rename", "from", from, "to", to, "views", n)
