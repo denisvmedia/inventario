@@ -24,12 +24,19 @@ the section matching the tag and publishes it as the GitHub Release body. See
   a field or a select option keeps its values, and deleting a field that
   items have values for asks to confirm with the number of items that lose a
   value (the API needs `delete_values=true`, 409 `custom_field.in_use`
-  otherwise, with the item counts). An item type's
-  template names the fields its items are offered, with an optional default.
+  otherwise, with the item counts). A field can be offered on some item
+  types, each with an optional default: picking the type in an item form
+  shows the field and fills in the default where the item has no value. On
+  **All Items**, the **Fields** menu filters by custom field values (typed
+  comparisons, ranges with "at least" and "at most"), **Sort by** lists the
+  custom fields, the list layout shows up to four of them as **Columns**,
+  and search finds their text and names the field it matched. A saved view
+  or link that names a deleted field marks it "Deleted field".
   The API gains `/g/{slug}/custom-fields`; item writes take `custom_fields`
   and refuse a value its field cannot hold with 422; the items list filters
   with `cf=<field id>:<op>[:<value>]` and sorts with `sort=cf.<field id>`,
-  saved views keep both, and search reads text fields and option labels. AI
+  names linked items in `meta.linked_items`, saved views keep both, and
+  search reads text fields and option labels. AI
   scan fills the group's fields except money and links, after the member
   reviews them. Backups carry the
   fields, templates and values (format 3.5) and a restore matches fields by

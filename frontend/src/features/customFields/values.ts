@@ -145,3 +145,30 @@ export function validateFormValue(field: CustomField, v: CustomFieldFormValue): 
       return undefined
   }
 }
+
+// withTemplate applies the template of the item type with id itemTypeId to
+// an item form's entries: each field the template names is shown, and one
+// without a value gets the template's default. A value already in the form
+// is kept, and the fields of an earlier type stay. Undefined when nothing
+// changes.
+export function withTemplate(
+  fields: readonly CustomField[],
+  itemTypeId: string,
+  current: CustomFieldFormValues | undefined,
+  groupCurrency: string
+): CustomFieldFormValues | undefined {
+  let next: CustomFieldFormValues | undefined
+  for (const field of fields) {
+    const entry = field.templates.find((t) => t.item_type_id === itemTypeId)
+    if (!entry) continue
+    const have = current?.[field.id]
+    if (have && have.value.trim() !== "") continue
+    const hasDefault = entry.default_value !== undefined && entry.default_value !== null
+    if (have && !hasDefault) continue
+    next ??= { ...(current ?? {}) }
+    next[field.id] = hasDefault
+      ? toFormValue(entry.default_value)
+      : { value: "", currency: field.type === "money" ? groupCurrency : "" }
+  }
+  return next
+}

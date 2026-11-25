@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Plus, X } from "lucide-react"
 
 import { FieldError } from "@/components/FieldError"
+import { CustomFieldTemplatesFieldset } from "@/components/customFields/CustomFieldTemplatesFieldset"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { Button } from "@/components/ui/button"
 import {
@@ -33,12 +34,20 @@ import {
   CUSTOM_FIELD_TYPES,
   CUSTOM_FIELDS_MAX,
   type CustomField,
+  type CustomFieldTemplate,
 } from "@/features/customFields/api"
 import {
   customFieldFormSchema,
   type CustomFieldFormInput,
   type CustomFieldFormValues,
 } from "@/features/customFields/schemas"
+import {
+  toApiValue,
+  toFormValue,
+  validateFormValue,
+  type CustomFieldFormValues as CustomFieldValueForms,
+} from "@/features/customFields/values"
+import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
 import { nameKey } from "@/lib/name-key"
 import {
@@ -57,13 +66,15 @@ export interface CustomFieldFormDialogProps {
   // The group's fields, to refuse a taken name before the server does.
   fields: readonly CustomField[]
   // Rejects with the server's error; the dialog keeps what was typed and
-  // shows it. On success the dialog closes itself.
-  onSubmit: (values: CustomFieldFormValues) => Promise<unknown>
+  // shows it. On success the dialog closes itself. templates are the item
+  // types the field is offered on, with their defaults.
+  onSubmit: (values: CustomFieldFormValues, templates: CustomFieldTemplate[]) => Promise<unknown>
   isPending?: boolean
 }
 
 // The create / edit form of a custom field (#2803): a name, a type that is
-// fixed once the field exists, and the options of a select field. The mock
+// fixed once the field exists, the options of a select field, and the item
+// types whose items the item form offers the field on. The mock
 // has no custom fields; the dialog follows ItemTypeFormDialog, with the
 // options as a list of inputs in the way the item form lists its links.
 export function CustomFieldFormDialog({
@@ -77,6 +88,10 @@ export function CustomFieldFormDialog({
   const { t } = useTranslation()
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const isEdit = !!field
+  const groupCurrency = useOptionalCurrentGroup()?.currentGroup?.group_currency ?? "USD"
+  // The template entries by item type id, with the default as typed.
+  const [templates, setTemplates] = useState<CustomFieldValueForms>({})
+  const [templateErrors, setTemplateErrors] = useState<Record<string, string | undefined>>({})
 
   const form = useForm<CustomFieldFormInput, unknown, CustomFieldFormValues>({
     resolver: zodResolver(customFieldFormSchema),
@@ -102,8 +117,24 @@ export function CustomFieldFormDialog({
       type: field?.type ?? "text",
       options: (field?.options ?? []).map((o) => ({ id: o.id ?? "", label: o.label ?? "" })),
     })
+    setTemplates(
+      Object.fromEntries(
+        (field?.templates ?? []).map((entry) => [entry.item_type_id, toFormValue(entry.default_value)])
+      )
+    )
+    setTemplateErrors({})
     setServerError(null)
   }, [open, field, form])
+
+  // The field as the template defaults see it: the type picked, and of a
+  // select field the options already saved, which a default can name.
+  const draftField: CustomField = {
+    ...(field ?? { id: "", name: "", options: [], templates: [] }),
+    type,
+    options: currentOptions
+      .filter((o) => o.id)
+      .map((o) => ({ id: o.id, label: o.label })),
+  }
 
   // Items that lose their value when the removed options go.
   const keptIds = new Set(currentOptions.map((o) => o.id).filter(Boolean))
@@ -118,8 +149,24 @@ export function CustomFieldFormDialog({
       form.setError("name", { type: "taken", message: NAME_TAKEN_MESSAGE })
       return
     }
+    // A link to an item takes no default; an option that is not saved yet
+    // cannot be one.
+    const entries: CustomFieldTemplate[] = []
+    const nextErrors: Record<string, string | undefined> = {}
+    const checkedField = { ...draftField, type: values.type }
+    const savedOptions = new Set(checkedField.options.map((o) => o.id))
+    for (const [itemTypeId, v] of Object.entries(templates)) {
+      const key = values.type === "item_link" ? undefined : validateFormValue(checkedField, v)
+      if (key) nextErrors[itemTypeId] = `customFields:errors.${key}`
+      const removedOption = values.type === "select" && !savedOptions.has(v.value)
+      const def =
+        values.type === "item_link" || removedOption ? null : toApiValue(values.type, v)
+      entries.push({ item_type_id: itemTypeId, default_value: def })
+    }
+    setTemplateErrors(nextErrors)
+    if (Object.keys(nextErrors).length > 0) return
     try {
-      await onSubmit(values)
+      await onSubmit(values, entries)
       onOpenChange(false)
     } catch (err) {
       const code = getServerErrorCode(err)
@@ -302,6 +349,15 @@ export function CustomFieldFormDialog({
               ) : null}
             </fieldset>
           ) : null}
+
+          <CustomFieldTemplatesFieldset
+            field={draftField}
+            value={templates}
+            onChange={setTemplates}
+            errors={templateErrors}
+            groupCurrency={groupCurrency}
+            disabled={isPending}
+          />
 
           <ServerErrorBanner error={serverError} testId="custom-field-form-server-error" />
 

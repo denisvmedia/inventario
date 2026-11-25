@@ -34,6 +34,7 @@ import { useCurrentGroup } from "@/features/group/GroupContext"
 import type { SavedView } from "@/features/saved-views/api"
 import {
   useDeleteSavedView,
+  useCustomFieldCatalog,
   useItemTypeCatalog,
   useReorderSavedViews,
   useSavedViewCounts,
@@ -74,6 +75,7 @@ export function SavedViewsPage() {
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellerCatalog()
   const itemTypes = useItemTypeCatalog()
+  const customFields = useCustomFieldCatalog()
   const update = useUpdateSavedView()
   const remove = useDeleteSavedView()
   const reorder = useReorderSavedViews()
@@ -193,7 +195,14 @@ export function SavedViewsPage() {
               {views.map((view, i) => {
                 const query = savedViewQuery(view)
                 const stale = referencesLoaded
-                  ? staleReferences(query, areaIds, tagSlugs, sellers.ids, itemTypes.slugs)
+                  ? staleReferences(
+                      query,
+                      areaIds,
+                      tagSlugs,
+                      sellers.ids,
+                      itemTypes.slugs,
+                      customFields.ids
+                    )
                   : undefined
                 const editIndex = editable.findIndex((v) => v.id === view.id)
                 const count = counts.data?.[view.id]
@@ -260,6 +269,7 @@ export function SavedViewsPage() {
                             tagLabel={(s) => tagIndex.resolve(s).label}
                             sellerNames={sellers.names}
                             typeLabel={itemTypes.label}
+                            customFields={customFields.fields}
                             stale={stale}
                           />
                         )}

@@ -2,21 +2,26 @@ import { useTranslation } from "react-i18next"
 import type { TFunction } from "i18next"
 
 import type { CommoditySearchMatch } from "@/features/commodities/query"
+import { useCustomFieldName } from "@/features/customFields/hooks"
 import { cn } from "@/lib/utils"
 
 // The text of a search match: "Serial number: SN-1234". A tag match carries
-// the slug, shown through tagLabel as the tag's label.
+// the slug, shown through tagLabel as the tag's label; a custom field match
+// is named by the field, through customFieldName.
 export function searchMatchText(
   t: TFunction,
   match: CommoditySearchMatch,
-  tagLabel: (slug: string) => string
+  tagLabel: (slug: string) => string,
+  customFieldName?: (id: string) => string | undefined
 ): string {
   const raw = match.value ?? ""
   const value = match.field === "tags" ? tagLabel(raw) : raw
-  return t("commodities:searchMatch.text", {
-    field: t(`commodities:searchMatch.field.${match.field ?? "name"}`),
-    value,
-  })
+  const field =
+    match.field === "custom_fields"
+      ? (customFieldName?.(match.custom_field_id ?? "") ??
+        t("commodities:searchMatch.field.custom_fields"))
+      : t(`commodities:searchMatch.field.${match.field ?? "name"}`)
+  return t("commodities:searchMatch.text", { field, value })
 }
 
 interface SearchMatchHintProps {
@@ -31,8 +36,9 @@ interface SearchMatchHintProps {
 // primarySearchMatch). Renders nothing without a match.
 export function SearchMatchHint({ match, tagLabel, className, ...rest }: SearchMatchHintProps) {
   const { t } = useTranslation()
+  const customFieldName = useCustomFieldName()
   if (!match?.field) return null
-  const text = searchMatchText(t, match, tagLabel)
+  const text = searchMatchText(t, match, tagLabel, customFieldName)
   return (
     <p
       className={cn("truncate text-[11px] text-muted-foreground", className)}

@@ -631,6 +631,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2803 by the 2026-11-24 goal to implement the open enhancements; the add menu, manage link, yes/no select, "in Trash" badge, insurance report rows and AI review rows agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock once `inventario-design` adds custom fields to the item views.
 
+#### 2026-11-25 — Custom field filter, sort and columns on the items list
+
+- **Issue/PR**: #2803 / PR (custom fields, part 3)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar has fixed filter dropdowns (`DropdownMenuCheckboxItem`s), a sort dropdown over the built-in fields, and a table with fixed columns. No custom fields.
+- **Reality**: `CustomFieldFilterMenu` adds a **Fields** button after Tags, shown once the group has a field or the URL has a condition, styled like the other filter buttons (filled with a count badge when conditions are set). It opens a `Popover` (`w-80`) instead of a dropdown menu, because a condition needs a field `Select`, a comparison `Select` and a value (an `Input`, a date input, a yes/no `Select`, or option checkboxes): the conditions are listed on top as muted rows with a ghost **×** each, a condition on a deleted field in the warning tone with "Deleted field", and **Add condition** builds a new one. The sort dropdown lists the sortable custom fields under a "Custom fields" label after a separator, and its trigger shows the field's name. In the list layout, `CustomFieldColumnsMenu`, an outline **Columns** button with the `Columns3` icon next to **Views**, picks up to four fields as columns; the table adds a `w-28` column per field from `md` up, between Status and Value, with the value as muted text and "—" for none.
+- **Why**: not present in mock. #2803 asks for custom fields as list columns, filters and sort. The popover, the four-column cap, the column placement and keeping the columns per device and group (localStorage) are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2803 by the 2026-11-24 goal to implement the open enhancements; popover, column cap, placement and per-device columns agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds custom fields to the items list.
+
+#### 2026-11-25 — Item types of a custom field, custom field chips of saved views
+
+- **Issue/PR**: #2803 / PR (custom fields, part 3)
+- **Mock**: none for custom fields; the saved views page follows [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) rows (see the Saved views entries).
+- **Reality**: `CustomFieldFormDialog` ends with an **Item types** fieldset (`CustomFieldTemplatesFieldset`): a hint, then a bordered, scrolling list of the group's types, each a `Checkbox` with the type's icon and name; a ticked type shows an indented **Default (optional)** input of the field's type below it, except for a link to an item. Picking a type in the item forms then shows the fields offered on it with their defaults. `QueryConditions` spells out each custom field condition as an outline badge ("Plate contains “AB”", "Fuel: Diesel, Petrol", "Odometer at least 1000"), one on a deleted field as "Deleted field" in the warning tone, and the sort badge names the field; the stale notice of the **Views** menu counts deleted fields.
+- **Why**: not present in mock. #2803 asks for templates per item type with defaults and for saved views to keep the custom field filters. Putting the templates in the field's dialog rather than the item type's, and the condition wording, are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2803 by the 2026-11-24 goal to implement the open enhancements; template placement and condition wording agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds templates to its item type or field views.
+
 ### Forms & Validation
 
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions

@@ -57,6 +57,7 @@ import {
   tagListHref,
 } from "@/features/search/results"
 import { useTagLabel } from "@/features/tags/hooks"
+import { useCustomFieldName } from "@/features/customFields/hooks"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
@@ -350,6 +351,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   })
   const tags = useSearch<TagAttrs>(settledQuery, "tags", { ...searchOptions, limit: OTHER_LIMIT })
   const tagLabel = useTagLabel("commodity")
+  const customFieldName = useCustomFieldName()
 
   // Read once per open; the palette is not on screen while a result is
   // being visited.
@@ -448,7 +450,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
                     t,
                     r.attributes,
                     primarySearchMatch(items.data?.matches[r.id]),
-                    tagLabel
+                    tagLabel,
+                    customFieldName
                   )}
                   onSelect={() =>
                     openResult({

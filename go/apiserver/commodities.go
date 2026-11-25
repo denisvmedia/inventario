@@ -97,9 +97,19 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	digest := listSelectionDigest(r.Context(), regSet, query, offset, result)
 
+	// The names of linked items are for the list's custom field columns; a
+	// failed lookup shows those columns without names instead of failing
+	// the list.
+	linked, err := linkedItemSummaries(r.Context(), regSet, result.Commodities...)
+	if err != nil {
+		slog.WarnContext(r.Context(), "items list: linked item lookup failed; rendering without it", "err", err)
+		linked = nil
+	}
+
 	resp := jsonapi.NewCommoditiesResponseWithCovers(result.Commodities, result.Total, page, perPage, covers).
 		WithMatches(result.Matches).
-		WithSelectionDigest(digest)
+		WithSelectionDigest(digest).
+		WithLinkedItems(linked)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return

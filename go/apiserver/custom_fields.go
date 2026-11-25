@@ -331,11 +331,12 @@ func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// linkedItemSummaries names the items commodity's item link values point at:
-// the live ones in one query, a trashed one by its own lookup. A link always
-// names an item of the group, because purging the item deletes the value.
-func linkedItemSummaries(ctx context.Context, set *registry.Set, commodity *models.Commodity) (map[string]jsonapi.LinkedItemSummary, error) {
-	if set == nil || set.CustomFieldRegistry == nil || len(commodity.CustomFields) == 0 {
+// linkedItemSummaries names the items the item link values of commodities
+// point at: the live ones in one query, a trashed one by its own lookup. A
+// link always names an item of the group, because purging the item deletes
+// the value.
+func linkedItemSummaries(ctx context.Context, set *registry.Set, commodities ...*models.Commodity) (map[string]jsonapi.LinkedItemSummary, error) {
+	if set == nil || set.CustomFieldRegistry == nil || !anyCustomFieldValues(commodities) {
 		return nil, nil
 	}
 	defs, err := set.CustomFieldRegistry.List(ctx)
@@ -344,13 +345,18 @@ func linkedItemSummaries(ctx context.Context, set *registry.Set, commodity *mode
 	}
 	var ids []string
 	for _, d := range defs {
-		raw, ok := commodity.CustomFields[d.ID]
-		if !ok || d.Type != models.CustomFieldTypeItemLink {
+		if d.Type != models.CustomFieldTypeItemLink {
 			continue
 		}
-		var id string
-		if json.Unmarshal(raw, &id) == nil && id != "" && !slices.Contains(ids, id) {
-			ids = append(ids, id)
+		for _, commodity := range commodities {
+			raw, ok := commodity.CustomFields[d.ID]
+			if !ok {
+				continue
+			}
+			var id string
+			if json.Unmarshal(raw, &id) == nil && id != "" && !slices.Contains(ids, id) {
+				ids = append(ids, id)
+			}
 		}
 	}
 	if len(ids) == 0 {
@@ -393,4 +399,15 @@ func CustomFields() func(r chi.Router) {
 			r.Delete("/", api.deleteCustomField)
 		})
 	}
+}
+
+// anyCustomFieldValues reports whether one of commodities has a custom field
+// value.
+func anyCustomFieldValues(commodities []*models.Commodity) bool {
+	for _, c := range commodities {
+		if c != nil && len(c.CustomFields) > 0 {
+			return true
+		}
+	}
+	return false
 }

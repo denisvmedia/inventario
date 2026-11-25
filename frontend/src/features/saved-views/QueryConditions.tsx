@@ -2,6 +2,8 @@ import { useTranslation } from "react-i18next"
 
 import { Badge } from "@/components/ui/badge"
 import type { CommodityQuery } from "@/features/commodities/query"
+import type { CustomField } from "@/features/customFields/api"
+import { customFieldConditionLabel } from "@/features/customFields/conditionLabel"
 import { cn } from "@/lib/utils"
 
 import type { StaleReferences } from "./view"
@@ -16,6 +18,9 @@ interface QueryConditionsProps {
   sellerNames: ReadonlyMap<string, string>
   // Item type labels by slug.
   typeLabel: (slug: string) => string
+  // The group's custom fields, for the custom field conditions and sort;
+  // undefined while they are not known.
+  customFields?: readonly CustomField[]
   stale?: StaleReferences
 }
 
@@ -28,6 +33,7 @@ export function QueryConditions({
   tagLabel,
   sellerNames,
   typeLabel,
+  customFields,
   stale,
 }: QueryConditionsProps) {
   const { t } = useTranslation()
@@ -112,13 +118,29 @@ export function QueryConditions({
   if (query.tags.untagged) {
     chips.push({ key: "untagged", label: t("commodities:savedViews.conditions.untagged") })
   }
+  // A condition on a deleted custom field reads "Deleted field".
+  for (const raw of query.customFields) {
+    const { label, stale } = customFieldConditionLabel(t, raw, customFields)
+    chips.push({ key: `cf-${raw}`, label, stale })
+  }
   if (query.includeInactive) {
     chips.push({ key: "inactive", label: t("commodities:savedViews.conditions.inactive") })
   }
+  const sortField = query.customFieldSort
+    ? customFields?.find((f) => f.id === query.customFieldSort)
+    : undefined
+  const sortStale = query.customFieldSort !== "" && !!customFields && !sortField
   chips.push({
     key: "sort",
+    stale: sortStale,
     label: t("commodities:savedViews.conditions.sort", {
-      field: t(`commodities:sort.${query.sort}`),
+      field: !query.customFieldSort
+        ? t(`commodities:sort.${query.sort}`)
+        : sortField
+          ? sortField.name
+          : sortStale
+            ? t("customFields:filter.deletedField")
+            : t("customFields:filter.someField"),
       direction: query.sortDesc
         ? t("commodities:savedViews.conditions.descending")
         : t("commodities:savedViews.conditions.ascending"),

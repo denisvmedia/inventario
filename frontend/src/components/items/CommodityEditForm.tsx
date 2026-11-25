@@ -362,7 +362,10 @@ export function CommodityEditForm({
                   <ItemTypeField
                     id="edit-category"
                     value={field.value ?? ""}
-                    onChange={field.onChange}
+                    onChange={(slug) => {
+                      field.onChange(slug)
+                      customFieldsBinding.applyTemplate(slug)
+                    }}
                     invalid={!!errors.type}
                     errorMessage={errors.type?.message}
                   />

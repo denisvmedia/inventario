@@ -13667,6 +13667,14 @@ export type components = {
                 [key: string]: components["schemas"]["jsonapi.CommodityCover"];
             };
             /**
+             * @description LinkedItems names, per item ID, the items the listed items' "link to
+             *     an item" custom fields point at, with whether each is in Trash.
+             *     Omitted when no listed item has such a value.
+             */
+            linked_items?: {
+                [key: string]: components["schemas"]["jsonapi.LinkedItemSummary"];
+            };
+            /**
              * @description Matches maps commodity id → the fields the search text (`q`) was
              *     found in, so the list can say why an item matched. Omitted when the
              *     request has no `q`.

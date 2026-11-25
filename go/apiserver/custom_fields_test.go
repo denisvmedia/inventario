@@ -145,7 +145,7 @@ func TestCustomFields_CRUDAndItemValues(t *testing.T) {
 	c.Check(filtered.Data, qt.HasLen, 0)
 }
 
-func TestCustomFields_LinkedItemsOnTheItemPage(t *testing.T) {
+func TestCustomFields_LinkedItemsOnTheItemPageAndList(t *testing.T) {
 	c := qt.New(t)
 	env := newTrashAPIEnv(c)
 
@@ -167,15 +167,30 @@ func TestCustomFields_LinkedItemsOnTheItemPage(t *testing.T) {
 		c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
 		return resp
 	}
+	list := func() jsonapi.CommoditiesResponse {
+		c.Helper()
+		rr := env.do(http.MethodGet, "/commodities", "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+		var resp jsonapi.CommoditiesResponse
+		c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+		return resp
+	}
 	got := page()
 	c.Assert(got.Meta, qt.IsNotNil)
 	c.Check(got.Meta.LinkedItems, qt.DeepEquals, map[string]jsonapi.LinkedItemSummary{charger.Data.ID: {Name: "Charger"}})
+	c.Check(list().Meta.LinkedItems, qt.DeepEquals, map[string]jsonapi.LinkedItemSummary{charger.Data.ID: {Name: "Charger"}})
 
 	rr = env.do(http.MethodDelete, "/commodities/"+charger.Data.ID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
 	got = page()
 	c.Assert(got.Meta, qt.IsNotNil)
 	c.Check(got.Meta.LinkedItems, qt.DeepEquals, map[string]jsonapi.LinkedItemSummary{charger.Data.ID: {Name: "Charger", Trashed: true}})
+	// The list no longer shows the charger, and still names it for the phone.
+	listed := list()
+	for _, row := range listed.Data {
+		c.Check(row.ID, qt.Not(qt.Equals), charger.Data.ID)
+	}
+	c.Check(listed.Meta.LinkedItems, qt.DeepEquals, map[string]jsonapi.LinkedItemSummary{charger.Data.ID: {Name: "Charger", Trashed: true}})
 }
 
 func TestCustomFields_ViewerCannotWrite(t *testing.T) {

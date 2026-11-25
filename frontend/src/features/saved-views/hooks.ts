@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useMemo } from "react"
 
+import type { CustomField } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useItemTypeLookup, useItemTypes } from "@/features/itemTypes/hooks"
 import { useSellers } from "@/features/sellers/hooks"
@@ -127,5 +129,25 @@ export function useItemTypeCatalog(): ItemTypeCatalog {
       slugs: known ? new Set(lookup.types.map((type) => type.slug ?? "")) : undefined,
     }),
     [lookup, known]
+  )
+}
+
+export interface CustomFieldCatalog {
+  // The group's fields once they have loaded for this group; undefined
+  // while they load, after a failed load, and while the previous group's
+  // list stands in, as with the sellers.
+  fields?: readonly CustomField[]
+  ids?: ReadonlySet<string>
+}
+
+export function useCustomFieldCatalog(): CustomFieldCatalog {
+  const fields = useCustomFields()
+  const known = fields.isSuccess && !fields.isPlaceholderData
+  return useMemo(
+    () =>
+      known && fields.data
+        ? { fields: fields.data, ids: new Set(fields.data.map((f) => f.id)) }
+        : {},
+    [fields.data, known]
   )
 }

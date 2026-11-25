@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
-import type { CustomField } from "@/features/customFields/api"
+import type { CustomField, CustomFieldTemplate } from "@/features/customFields/api"
 import {
   useCreateCustomField,
   useCustomFields,
@@ -75,7 +75,7 @@ export function CustomFieldsListPage() {
 
   // A failure rejects, and the dialog maps a duplicate name and field errors
   // onto its inputs. An edit sends no type: the server keeps it.
-  async function onSubmit(values: CustomFieldFormValues) {
+  async function onSubmit(values: CustomFieldFormValues, templates: CustomFieldTemplate[]) {
     const options =
       values.type === "select"
         ? values.options.map((o) => (o.id ? { id: o.id, label: o.label } : { label: o.label }))
@@ -84,11 +84,16 @@ export function CustomFieldsListPage() {
     if (editing) {
       await updateMutation.mutateAsync({
         id: editing.id,
-        input: { name: values.name, ...(options ? { options } : {}) },
+        input: { name: values.name, ...(options ? { options } : {}), templates },
       })
       toast.success(t("customFields:toast.updated"))
     } else {
-      await createMutation.mutateAsync({ name: values.name, type: values.type, options })
+      await createMutation.mutateAsync({
+        name: values.name,
+        type: values.type,
+        options,
+        templates,
+      })
       toast.success(t("customFields:toast.created"))
     }
   }

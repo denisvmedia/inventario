@@ -34,6 +34,7 @@ import { cn } from "@/lib/utils"
 import type { SavedView, SavedViewLayout } from "./api"
 import {
   useCreateSavedView,
+  useCustomFieldCatalog,
   useItemTypeCatalog,
   useSavedViews,
   useSellerCatalog,
@@ -383,13 +384,14 @@ export function useStaleReferences(query: CommodityQuery | undefined): StaleRefe
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellerCatalog()
   const types = useItemTypeCatalog()
+  const customFields = useCustomFieldCatalog()
   const tagsUnknown = tagIndex.isLoading || tagIndex.isError || tagIndex.isPlaceholderData
   return useMemo(() => {
     if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))
     const tagSlugs = new Set(tagIndex.tags.map((tag) => tag.slug))
-    return staleReferences(query, areaIds, tagSlugs, sellers.ids, types.slugs)
-  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids, types.slugs])
+    return staleReferences(query, areaIds, tagSlugs, sellers.ids, types.slugs, customFields.ids)
+  }, [query, areas.data, tagsUnknown, tagIndex.tags, sellers.ids, types.slugs, customFields.ids])
 }
 
 // Names what a view's filter still asks for but no longer exists. The list
@@ -419,6 +421,11 @@ export function StaleNotice({ stale }: { stale: StaleReferences }) {
         ) : null}
         {stale.types.length > 0 ? (
           <span>{t("commodities:savedViews.stale.types", { count: stale.types.length })}</span>
+        ) : null}
+        {stale.customFields.length > 0 ? (
+          <span>
+            {t("commodities:savedViews.stale.customFields", { count: stale.customFields.length })}
+          </span>
         ) : null}
       </div>
     </div>

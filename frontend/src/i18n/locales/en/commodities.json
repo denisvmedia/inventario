@@ -668,6 +668,8 @@
     },
     "stale": {
       "area": "The area of this view was deleted.",
+      "customFields_one": "A custom field of this view was deleted.",
+      "customFields_other": "{{count}} custom fields of this view were deleted.",
       "hint": "The marked conditions refer to something that was deleted. The view still applies them, so it shows what still matches.",
       "sellers_one": "A seller of this view was deleted.",
       "sellers_other": "{{count}} sellers of this view were deleted.",
@@ -718,6 +720,7 @@
       "asset_id": "Asset ID",
       "brand": "Brand",
       "comments": "Notes",
+      "custom_fields": "Custom field",
       "extra_serial_numbers": "Serial number",
       "model": "Model",
       "name": "Name",

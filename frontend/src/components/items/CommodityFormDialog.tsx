@@ -716,6 +716,8 @@ export function CommodityFormDialog({
     if (values.custom_fields !== undefined) {
       apply("custom_fields", { ...(getValues("custom_fields") ?? {}), ...values.custom_fields })
     }
+    // The type read brings its template, after the values read so those win.
+    if (values.type !== undefined) customFieldsBinding.applyTemplate(values.type)
     // #1983 Part A: keep the photos / PDFs the user scanned. They join the
     // Files-step queue (deduped against anything already staged there), so
     // the existing post-create uploadPendingFiles() attaches them with the
@@ -995,6 +997,7 @@ export function CommodityFormDialog({
                 locations={locations}
                 showStatus={mode === "edit"}
                 showLocationPicker={mode === "edit"}
+                onTypeChange={customFieldsBinding.applyTemplate}
               />
             ) : null}
             {step === "purchase" ? (
@@ -1222,6 +1225,7 @@ function BasicsStep(props: any) {
     locations,
     showStatus,
     showLocationPicker,
+    onTypeChange,
   } = props
   return (
     <div className="space-y-4 py-2" data-testid="commodity-form-basics-step">
@@ -1314,7 +1318,10 @@ function BasicsStep(props: any) {
               <ItemTypeField
                 id="commodity-type"
                 value={field.value ?? ""}
-                onChange={field.onChange}
+                onChange={(slug: string) => {
+                  field.onChange(slug)
+                  onTypeChange?.(slug)
+                }}
                 ariaRequired
                 invalid={!!errors.type}
                 errorMessage={errors.type?.message}

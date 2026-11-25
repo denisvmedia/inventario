@@ -142,6 +142,7 @@ describe("<CustomFieldsListPage />", () => {
         name: "Mount",
         type: "select",
         options: [{ label: "E" }, { label: "Z" }],
+        templates: [],
       },
     })
   })
@@ -184,7 +185,78 @@ describe("<CustomFieldsListPage />", () => {
     expect(body.value?.data.attributes).toEqual({
       name: "Fuel type",
       options: [{ id: "opt-diesel", label: "Diesel" }],
+      templates: [],
     })
+  })
+
+  it("offers a field on item types, with a default for each", async () => {
+    const body = capture<{ data: { attributes: Record<string, unknown> } }>()
+    seed([
+      fuel,
+      { ...plate, templates: [{ item_type_id: "type-electronics", default_value: "X" }] },
+    ])
+    server.use(...customFieldHandlers.update(SLUG, plate, body))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("custom-field-row-cf-plate-edit"))
+    const dialog = await screen.findByTestId("custom-field-form-dialog")
+    const templates = within(dialog).getByTestId("custom-field-templates")
+    expect(within(templates).getByTestId("custom-field-template-electronics")).toBeChecked()
+    expect(
+      within(templates).getByTestId("custom-field-template-default-type-electronics-input")
+    ).toHaveValue("X")
+
+    // Untick electronics, tick equipment with a default and furniture without.
+    await user.click(within(templates).getByTestId("custom-field-template-electronics"))
+    await user.click(within(templates).getByTestId("custom-field-template-equipment"))
+    await user.type(
+      within(templates).getByTestId("custom-field-template-default-type-equipment-input"),
+      "N/A"
+    )
+    await user.click(within(templates).getByTestId("custom-field-template-furniture"))
+    await user.click(within(dialog).getByTestId("custom-field-form-submit"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("custom-field-form-dialog")).not.toBeInTheDocument()
+    )
+    expect(body.value?.data.attributes.templates).toEqual([
+      { item_type_id: "type-equipment", default_value: "N/A" },
+      { item_type_id: "type-furniture", default_value: null },
+    ])
+  })
+
+  it("checks a template default against the field's type", async () => {
+    const body = capture<{ data: { attributes: Record<string, unknown> } }>()
+    seed()
+    server.use(
+      ...customFieldHandlers.create(
+        SLUG,
+        customFieldHandlers.field({ id: "cf-odo", name: "Odometer", type: "number" }),
+        body
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId("custom-field-row-cf-plate")
+    await user.click(screen.getByTestId("custom-fields-create-button"))
+    const dialog = await screen.findByTestId("custom-field-form-dialog")
+    await user.type(within(dialog).getByTestId("custom-field-name-input"), "Odo")
+    await pickRadixSelect(user, /^Type$/, { optionLabel: /^Number$/ })
+    await user.click(within(dialog).getByTestId("custom-field-template-other"))
+    const input = within(dialog).getByTestId("custom-field-template-default-type-other-input")
+    await user.type(input, "lots")
+    await user.click(within(dialog).getByTestId("custom-field-form-submit"))
+    expect(await within(dialog).findByText("Enter a number.")).toBeVisible()
+    expect(body.value).toBeUndefined()
+
+    await user.clear(input)
+    await user.type(input, "12")
+    await user.click(within(dialog).getByTestId("custom-field-form-submit"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("custom-field-form-dialog")).not.toBeInTheDocument()
+    )
+    expect(body.value?.data.attributes.templates).toEqual([
+      { item_type_id: "type-other", default_value: 12 },
+    ])
   })
 
   it("deletes a field in use only once the member confirms its values go too", async () => {
