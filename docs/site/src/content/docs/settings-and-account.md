@@ -72,9 +72,11 @@ A couple of things to know:
   includes a tag or a seller you added there, even when other members use it on
   their own items. Item reminders you set in a shared group are deleted
   with your account, since they only ever emailed you. So are the
-  [drafts of new items](../items/#drafts-of-a-new-item) you started; the
-  files saved with them are kept as standalone files. Once deletion succeeds
-  you're signed out immediately.
+  [drafts of new items](../items/#drafts-of-a-new-item) you started there. A
+  file saved with one of those drafts counts like any other file: one you
+  uploaded needs to be removed first, and one another member uploaded stays in
+  the group as a standalone file. Once deletion succeeds you're signed out
+  immediately.
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).

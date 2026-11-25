@@ -26,12 +26,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   offers to open the item or save as a new draft. Drafts stay out of item
   lists, counts, search, reports, reminders and backups; their files are
   standalone files in backups. A full-replace restore deletes the group's
-  drafts, and deleting an account deletes the drafts its user started; their
-  files are kept as standalone files. The short name of a new item follows the
-  name until one is typed. The new API is `/drafts` (list, create with a
-  client key, save with a revision, discard, promote with a promotion key
-  that makes a retry return the same item). The dialog no longer creates
-  items flagged as drafts; editing an item keeps that switch
+  drafts and brings their files back from the backup as standalone files.
+  Deleting an account deletes the drafts its user started; files other
+  members saved with them stay as standalone files. The short name of a new
+  item follows the name until one is typed. The new API is `/drafts` (list,
+  create with a client key, save with a revision, discard, promote with a
+  promotion key that makes a retry return the same item). The dialog no
+  longer creates items flagged as drafts; editing an item keeps that switch
   ([#2812](https://github.com/denisvmedia/inventario/issues/2812)).
 
 - An item has a brand and a model, both optional text of up to 100
