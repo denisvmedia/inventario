@@ -14,7 +14,7 @@ import (
 const defaultTrashPurgeInterval = time.Hour
 
 // trashPurgeBatch is how many items and how many files one round of a sweep
-// deletes. A sweep repeats rounds until a round finds nothing to delete.
+// deletes.
 const trashPurgeBatch = 100
 
 // TrashPurger deletes expired Trash entries; TrashService implements it.
@@ -130,7 +130,10 @@ func (w *TrashPurgeWorker) run(ctx context.Context) {
 }
 
 // Sweep deletes every entry that expired by now, in rounds of trashPurgeBatch.
-// It stops at the first error; the next sweep starts over.
+// A round without errors that deletes less than a full batch is the last one.
+// A round with errors logs them, and the sweep goes on while rounds still
+// delete something, so one entry that keeps failing does not hold back the
+// rest; it is retried on the next sweep.
 func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 	if w.pause != nil && w.pause.IsPaused(models.WorkerTypeTrashPurge) {
 		return
@@ -151,7 +154,10 @@ func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 		totalFiles += files
 		if err != nil {
 			slog.Error("Failed to purge expired Trash entries", "error", err, "cutoff", cutoff)
-			break
+			if items+files == 0 {
+				break
+			}
+			continue
 		}
 		if items < trashPurgeBatch && files < trashPurgeBatch {
 			break
