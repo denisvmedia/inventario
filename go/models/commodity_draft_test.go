@@ -23,6 +23,7 @@ func TestCommodityDraftValuesRule_AcceptsTheFormTypes(t *testing.T) {
 		"tags":                 []any{"tools", "garage"},
 		"urls":                 []any{},
 		"draft":                true,
+		"custom_fields":        map[string]any{"cf-1": map[string]any{"value": "AB 123", "currency": ""}},
 		"from_intake":          map[string]any{"any": "shape"},
 		"unknown_number_field": float64(3),
 	}
@@ -43,6 +44,7 @@ func TestCommodityDraftValuesRule_NamesTheFieldOfTheWrongType(t *testing.T) {
 		{name: "list field holding a string", key: "tags", value: "tools", code: "validation_draft_value_list"},
 		{name: "list field holding a number", key: "part_numbers", value: []any{"a", float64(2)}, code: "validation_draft_value_list"},
 		{name: "flag field holding a string", key: "draft", value: "true", code: "validation_draft_value_flag"},
+		{name: "custom fields holding a list", key: "custom_fields", value: []any{"cf-1"}, code: "validation_draft_value_object"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
