@@ -5133,7 +5133,7 @@
         },
         "/g/{groupSlug}/drafts": {
             "get": {
-                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count,\nsearch or export.",
+                "description": "The group's open drafts, most recently saved first. A draft is an unfinished\nitem saved on the server; it is not an item and appears in no item list, count\nor search. A whole-group backup carries the open drafts. When a member who can\nedit items lists the drafts, a discard that stopped more than ten minutes ago is\nfinished first.",
                 "produces": [
                     "application/vnd.api+json"
                 ],

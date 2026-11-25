@@ -1,7 +1,9 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -33,15 +35,17 @@ const (
 // the server. Every member can read them; saving, discarding and promoting
 // need a role that can edit items (the route's write gate).
 type commodityDraftsAPI struct {
-	service    *services.CommodityDraftService
-	tagService *services.TagService
+	service      *services.CommodityDraftService
+	tagService   *services.TagService
+	groupService *services.GroupService
 }
 
 // Drafts mounts /g/{groupSlug}/drafts.
-func Drafts(params Params) func(r chi.Router) {
+func Drafts(params Params, groupService *services.GroupService) func(r chi.Router) {
 	api := &commodityDraftsAPI{
-		service:    services.NewCommodityDraftService(params.FactorySet),
-		tagService: services.NewTagService(params.FactorySet),
+		service:      services.NewCommodityDraftService(params.FactorySet),
+		tagService:   services.NewTagService(params.FactorySet),
+		groupService: groupService,
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.list)
@@ -106,8 +110,10 @@ func (api *commodityDraftsAPI) fileCount(r *http.Request, id string) (int, error
 //
 // @Summary List drafts
 // @Description The group's open drafts, most recently saved first. A draft is an unfinished
-// @Description item saved on the server; it is not an item and appears in no item list, count,
-// @Description search or export.
+// @Description item saved on the server; it is not an item and appears in no item list, count
+// @Description or search. A whole-group backup carries the open drafts. When a member who can
+// @Description edit items lists the drafts, a discard that stopped more than ten minutes ago is
+// @Description finished first.
 // @Tags drafts
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -121,6 +127,7 @@ func (api *commodityDraftsAPI) list(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
 		return
 	}
+	api.finishStaleDiscards(r)
 	page, perPage := parsePagination(r.URL.Query().Get("page"), r.URL.Query().Get("per_page"))
 	drafts, total, err := regSet.CommodityDraftRegistry.ListOpen(r.Context(), (page-1)*perPage, perPage)
 	if err != nil {
@@ -285,11 +292,38 @@ func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
 // @Failure 409 {object} jsonapi.Errors "Promoted draft"
 // @Router /g/{groupSlug}/drafts/{draftID} [delete].
 func (api *commodityDraftsAPI) discard(w http.ResponseWriter, r *http.Request) {
-	if err := api.service.Discard(r.Context(), chi.URLParam(r, "draftID")); err != nil {
+	// A client that goes away must not stop the discard half way: the draft
+	// would stay hidden with its files and its client key until
+	// finishStaleDiscards takes it up.
+	if err := api.service.Discard(context.WithoutCancel(r.Context()), chi.URLParam(r, "draftID")); err != nil {
 		renderDraftError(w, r, err)
 		return
 	}
 	render.NoContent(w, r)
+}
+
+// finishStaleDiscards finishes the group's discards that stopped half way
+// (a server that died, a database error), when the member listing the
+// drafts may discard them. Such a draft is hidden but keeps its files and
+// its client key, and nothing else takes it up. A failure is logged and the
+// list is served anyway.
+func (api *commodityDraftsAPI) finishStaleDiscards(r *http.Request) {
+	group := groupFromContext(r.Context())
+	user := GetUserFromRequest(r)
+	if group == nil || user == nil || api.groupService == nil {
+		return
+	}
+	canWrite, _, err := api.groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
+	if err != nil || !canWrite {
+		return
+	}
+	finished, err := api.service.FinishStaleDiscards(context.WithoutCancel(r.Context()))
+	if err != nil {
+		slog.Error("Failed to finish stopped draft discards", "group_id", group.ID, "error", err)
+	}
+	if finished > 0 {
+		slog.Info("Finished stopped draft discards", "group_id", group.ID, "count", finished)
+	}
 }
 
 // validateDraftSeller refuses, on the seller_id field, a seller the group

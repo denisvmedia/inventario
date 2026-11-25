@@ -22,13 +22,38 @@ type CommodityDraftService struct {
 	now        func() time.Time
 }
 
+// staleDiscardAfter is how long a discard may run before FinishStaleDiscards
+// takes it as stopped. A discard takes seconds; it stops only when the server
+// dies or the database fails half way.
+const staleDiscardAfter = 10 * time.Minute
+
+// staleDiscardBatch is how many stopped discards one FinishStaleDiscards call
+// finishes at most.
+const staleDiscardBatch = 10
+
+// CommodityDraftServiceOption customizes a CommodityDraftService.
+type CommodityDraftServiceOption func(*CommodityDraftService)
+
+// WithCommodityDraftClock replaces the wall clock. Test-only.
+func WithCommodityDraftClock(fn func() time.Time) CommodityDraftServiceOption {
+	return func(s *CommodityDraftService) {
+		if fn != nil {
+			s.now = fn
+		}
+	}
+}
+
 // NewCommodityDraftService builds the service.
-func NewCommodityDraftService(factorySet *registry.FactorySet) *CommodityDraftService {
-	return &CommodityDraftService{
+func NewCommodityDraftService(factorySet *registry.FactorySet, opts ...CommodityDraftServiceOption) *CommodityDraftService {
+	s := &CommodityDraftService{
 		factorySet: factorySet,
 		events:     NewCommodityEventService(factorySet),
 		now:        time.Now,
 	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
 }
 
 func (s *CommodityDraftService) drafts(ctx context.Context) (registry.CommodityDraftRegistry, error) {
@@ -158,7 +183,9 @@ func (s *CommodityDraftService) Promote(ctx context.Context, id string, revision
 // released, each by a conditional update that a link added meanwhile
 // overrides, and the row is deleted last. A discard that stopped half way
 // leaves a draft being discarded, which no list shows; discarding it again
-// finishes the work.
+// finishes the work, and so does FinishStaleDiscards. The caller should pass
+// a context the client cannot cancel (context.WithoutCancel), so a client
+// that goes away does not stop the discard half way.
 func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 	reg, err := s.drafts(ctx)
 	if err != nil {
@@ -193,4 +220,28 @@ func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 		return errxtrace.Wrap("failed to delete draft", err)
 	}
 	return nil
+}
+
+// FinishStaleDiscards finishes the discards in the group that began more than
+// staleDiscardAfter ago and did not complete, at most staleDiscardBatch of
+// them, and returns how many it finished. Until then such a draft keeps its
+// files and its client key. A draft another discard finishes meanwhile
+// counts as finished.
+func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, error) {
+	reg, err := s.drafts(ctx)
+	if err != nil {
+		return 0, err
+	}
+	stale, err := reg.ListDiscarding(ctx, s.now().Add(-staleDiscardAfter), staleDiscardBatch)
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to list stopped discards", err)
+	}
+	finished := 0
+	for _, draft := range stale {
+		if err := s.Discard(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return finished, errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
+		}
+		finished++
+	}
+	return finished, nil
 }

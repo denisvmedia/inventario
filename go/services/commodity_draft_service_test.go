@@ -261,3 +261,42 @@ func TestFileLinkService_AttachToDraft(t *testing.T) {
 	_, _, err = f.links.Attach(f.ctx, late.ID, models.FileLinkDraft, draft.ID, "")
 	c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted, qt.Commentf("a promoted draft takes no more files"))
 }
+
+// TestCommodityDraftService_FinishStaleDiscards: a discard that stopped half
+// way is finished once it is ten minutes old, so its files go to Trash and
+// its client key is free again. A younger one may still be running and is
+// left alone, and so is an open draft.
+func TestCommodityDraftService_FinishStaleDiscards(t *testing.T) {
+	c := qt.New(t)
+	f := newDraftFixture(c)
+	stopped := f.draft(c, "stopped", "Drill")
+	photo := f.file(c, "photo", draftLink(stopped.ID))
+	open := f.draft(c, "open", "Saw")
+	_, err := f.regs.CommodityDraftRegistry.MarkDiscarding(f.ctx, stopped.ID)
+	c.Assert(err, qt.IsNil)
+
+	soon := services.NewCommodityDraftService(f.factorySet,
+		services.WithCommodityDraftClock(func() time.Time { return time.Now().Add(5 * time.Minute) }))
+	finished, err := soon.FinishStaleDiscards(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(finished, qt.Equals, 0)
+	_, err = f.regs.CommodityDraftRegistry.Get(f.ctx, stopped.ID)
+	c.Assert(err, qt.IsNil)
+
+	later := services.NewCommodityDraftService(f.factorySet,
+		services.WithCommodityDraftClock(func() time.Time { return time.Now().Add(11 * time.Minute) }))
+	finished, err = later.FinishStaleDiscards(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(finished, qt.Equals, 1)
+	_, err = f.regs.CommodityDraftRegistry.Get(f.ctx, stopped.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, photo.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = f.regs.CommodityDraftRegistry.Get(f.ctx, open.ID)
+	c.Assert(err, qt.IsNil)
+
+	again, created, err := f.drafts.Create(f.ctx, "stopped", models.CommodityDraftValues{"name": "Drill"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+	c.Assert(again.ID, qt.Not(qt.Equals), stopped.ID)
+}
