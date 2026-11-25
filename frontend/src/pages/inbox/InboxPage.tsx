@@ -283,7 +283,9 @@ function InboxList({ slug, reason, page, onPage, inbox, canWrite }: InboxListPro
                 entry={entry}
                 slug={slug}
                 canWrite={canWrite}
-                reviewContext={inboxReviewContext(slug, reviewPage(i))}
+                reviewContext={
+                  inbox.isPlaceholderData ? null : inboxReviewContext(slug, reviewPage(i))
+                }
               />
             </li>
           ))}
@@ -305,8 +307,10 @@ interface RowProps {
   entry: InboxEntry
   slug: string
   canWrite: boolean
-  // The list an item opened from the row walks.
-  reviewContext: ListContext
+  // The list an item opened from the row walks; null while the rows shown
+  // are the previous page's, kept on screen while the requested one loads,
+  // since the page they would name is not theirs.
+  reviewContext: ListContext | null
 }
 
 function InboxRow(props: RowProps) {

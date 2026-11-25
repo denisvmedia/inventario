@@ -442,4 +442,40 @@ describe("<InboxPage />", () => {
     expect(await screen.findByTestId("inbox-row-draft-d51")).toBeInTheDocument()
     expect(screen.queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument()
   })
+
+  it("opens an item without a walk while its row is the previous page's", async () => {
+    const many = Array.from({ length: 51 }, (_, i) =>
+      inboxHandlers.itemDraft(`c${i + 1}`, `Item ${i + 1}`)
+    )
+    const fake = inboxHandlers.backend(SLUG, many)
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage(`/g/${SLUG}/inbox?reason=item_draft`)
+    expect(await screen.findByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+    // Page 2 is held, so page 1 stays on screen while it loads.
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async ({ request }) => {
+        if (new URL(request.url).searchParams.get("page") === "2") await held
+        return undefined
+      })
+    )
+    await user.click(
+      within(screen.getByTestId("inbox-pagination")).getByRole("button", { name: "2" })
+    )
+    await user.click(screen.getByTestId("inbox-open-c1"))
+    const loc = await screen.findByTestId("loc")
+    // Page 2 would not hold the item: no list to walk rather than a wrong one.
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
+    expect(loc.textContent).not.toContain("from=")
+    release()
+  })
 })

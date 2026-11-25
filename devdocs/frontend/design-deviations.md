@@ -432,7 +432,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #2794 / PR (part 2 of #2794)
 - **Mock**: none, as for the Inbox page above.
-- **Reality**: The Inbox page header carries a primary **Review one by one** button (`ListChecks` icon) while there are items to review and the member may edit. It loads the first page of the Items to review list and opens its first item over the inbox, with the list as the item's `?from=` context. Item rows on every tab carry the same context, on the Items to review page that holds the item.
+- **Reality**: The Inbox page header carries a primary **Review one by one** button (`ListChecks` icon) while there are items to review and the member may edit. It loads the first page of the Items to review list and opens its first item over the inbox, with the list as the item's `?from=` context. Item rows on every tab carry the same context, on the Items to review page that holds the item; rows of the previous page, kept on screen while the next one loads, open the item without it.
 - **Why**: #2794 asks for a way through the items to review without the list in between. The button is the entry point to the review bar above.
 - **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the header button agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
