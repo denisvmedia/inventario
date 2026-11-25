@@ -100,6 +100,9 @@ export function TagPalette({ kind, values, onChange, inputId, testId }: TagPalet
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => {
             if (e.key !== "Enter") return
+            // Enter also ends an IME composition; adding here would turn a
+            // half-composed word into a tag.
+            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
             // Enter adds the tag; it must not also submit the form around it.
             e.preventDefault()
             addDraft()

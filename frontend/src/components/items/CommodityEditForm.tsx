@@ -137,8 +137,11 @@ export function CommodityEditForm({
     watch,
     setValue,
     getValues,
-    formState: { errors, isDirty },
+    formState: { errors, isDirty, isSubmitting },
   } = form
+  // The fields stay locked while a save runs: an edit typed meanwhile would
+  // not be in the request, and the reset after it would drop the edit.
+  const saving = isSubmitting || !!isPending
 
   async function persist(values: CommodityFormInput): Promise<boolean> {
     setServerError(null)
@@ -238,6 +241,7 @@ export function CommodityEditForm({
           size="sm"
           className="shrink-0 gap-1.5"
           onClick={openAllFields}
+          disabled={saving}
           data-testid="commodity-edit-all-fields"
         >
           <ListChecks className="size-3.5" aria-hidden="true" />
@@ -274,253 +278,263 @@ export function CommodityEditForm({
           e.preventDefault()
           void handleSave()
         }}
-        className="flex flex-col gap-5 py-2"
+        className="py-2"
         noValidate
       >
-        <div className="space-y-3">
-          <SectionLabel>{t("commodities:editForm.sections.identity")}</SectionLabel>
-          <EditField label={t("commodities:fields.name")} htmlFor="edit-name" error={errors.name}>
-            <Input id="edit-name" {...register("name")} aria-invalid={!!errors.name} />
-          </EditField>
-          <div className="grid grid-cols-2 gap-3">
+        <fieldset disabled={saving} className="flex min-w-0 flex-col gap-5">
+          <div className="space-y-3">
+            <SectionLabel>{t("commodities:editForm.sections.identity")}</SectionLabel>
+            <EditField label={t("commodities:fields.name")} htmlFor="edit-name" error={errors.name}>
+              <Input id="edit-name" {...register("name")} aria-invalid={!!errors.name} />
+            </EditField>
+            <div className="grid grid-cols-2 gap-3">
+              <EditField
+                label={t("commodities:fields.shortName")}
+                htmlFor="edit-short-name"
+                error={errors.short_name}
+              >
+                <Input
+                  id="edit-short-name"
+                  maxLength={40}
+                  className="font-mono text-sm"
+                  {...register("short_name")}
+                  aria-invalid={!!errors.short_name}
+                />
+              </EditField>
+              <EditField
+                label={t("commodities:fields.count")}
+                htmlFor="edit-count"
+                error={errors.count}
+              >
+                <Input
+                  id="edit-count"
+                  type="number"
+                  min={1}
+                  {...register("count")}
+                  aria-invalid={!!errors.count}
+                />
+              </EditField>
+            </div>
             <EditField
-              label={t("commodities:fields.shortName")}
-              htmlFor="edit-short-name"
-              error={errors.short_name}
+              label={t("commodities:fields.type")}
+              htmlFor="edit-category"
+              error={errors.type}
+            >
+              <Controller
+                control={control}
+                name="type"
+                render={({ field }) => (
+                  <Select value={field.value || undefined} onValueChange={field.onChange}>
+                    <SelectTrigger
+                      id="edit-category"
+                      className="w-full"
+                      aria-invalid={!!errors.type}
+                    >
+                      <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {COMMODITY_TYPES.map((tp) => {
+                        const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
+                        return (
+                          <SelectItem key={tp} value={tp}>
+                            <Icon aria-hidden="true" />
+                            {t(`commodities:type.${tp}`)}
+                          </SelectItem>
+                        )
+                      })}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+            </EditField>
+            <EditField
+              label={t("commodities:fields.serialNumber")}
+              htmlFor="edit-serial"
+              error={errors.serial_number}
             >
               <Input
-                id="edit-short-name"
-                maxLength={40}
+                id="edit-serial"
                 className="font-mono text-sm"
-                {...register("short_name")}
-                aria-invalid={!!errors.short_name}
+                {...register("serial_number")}
               />
             </EditField>
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <SectionLabel>{t("commodities:editForm.sections.location")}</SectionLabel>
+            <LocationAreaFields
+              areas={areas}
+              locations={locations}
+              areaId={watch("area_id") ?? ""}
+              onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
+              idPrefix="edit"
+              areaError={errors.area_id}
+            />
+          </div>
+
+          <Separator />
+
+          <div className="space-y-3">
+            <SectionLabel>{t("commodities:editForm.sections.purchase")}</SectionLabel>
             <EditField
-              label={t("commodities:fields.count")}
-              htmlFor="edit-count"
-              error={errors.count}
+              label={t("commodities:fields.purchaseDate")}
+              htmlFor="edit-purchased"
+              error={errors.purchase_date}
             >
               <Input
-                id="edit-count"
-                type="number"
-                min={1}
-                {...register("count")}
-                aria-invalid={!!errors.count}
+                id="edit-purchased"
+                type="date"
+                {...register("purchase_date")}
+                aria-invalid={!!errors.purchase_date}
               />
             </EditField>
-          </div>
-          <EditField
-            label={t("commodities:fields.type")}
-            htmlFor="edit-category"
-            error={errors.type}
-          >
-            <Controller
-              control={control}
-              name="type"
-              render={({ field }) => (
-                <Select value={field.value || undefined} onValueChange={field.onChange}>
-                  <SelectTrigger id="edit-category" className="w-full" aria-invalid={!!errors.type}>
-                    <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {COMMODITY_TYPES.map((tp) => {
-                      const Icon = COMMODITY_TYPE_ICONS[tp as CommodityTypeValue]
-                      return (
-                        <SelectItem key={tp} value={tp}>
-                          <Icon aria-hidden="true" />
-                          {t(`commodities:type.${tp}`)}
-                        </SelectItem>
-                      )
-                    })}
-                  </SelectContent>
-                </Select>
-              )}
-            />
-          </EditField>
-          <EditField
-            label={t("commodities:fields.serialNumber")}
-            htmlFor="edit-serial"
-            error={errors.serial_number}
-          >
-            <Input id="edit-serial" className="font-mono text-sm" {...register("serial_number")} />
-          </EditField>
-        </div>
-
-        <Separator />
-
-        <div className="space-y-3">
-          <SectionLabel>{t("commodities:editForm.sections.location")}</SectionLabel>
-          <LocationAreaFields
-            areas={areas}
-            locations={locations}
-            areaId={watch("area_id") ?? ""}
-            onAreaChange={(next) => setValue("area_id", next, { shouldDirty: true })}
-            idPrefix="edit"
-            areaError={errors.area_id}
-          />
-        </div>
-
-        <Separator />
-
-        <div className="space-y-3">
-          <SectionLabel>{t("commodities:editForm.sections.purchase")}</SectionLabel>
-          <EditField
-            label={t("commodities:fields.purchaseDate")}
-            htmlFor="edit-purchased"
-            error={errors.purchase_date}
-          >
-            <Input
-              id="edit-purchased"
-              type="date"
-              {...register("purchase_date")}
-              aria-invalid={!!errors.purchase_date}
-            />
-          </EditField>
-          <div className="grid grid-cols-2 gap-3">
-            <EditField
-              label={t("commodities:fields.originalPrice")}
-              htmlFor="edit-price"
-              error={errors.original_price ?? errors.original_price_currency}
-            >
-              <div className="flex gap-2">
+            <div className="grid grid-cols-2 gap-3">
+              <EditField
+                label={t("commodities:fields.originalPrice")}
+                htmlFor="edit-price"
+                error={errors.original_price ?? errors.original_price_currency}
+              >
+                <div className="flex gap-2">
+                  <PriceInput
+                    id="edit-price"
+                    symbol={purchaseSymbol}
+                    invalid={!!errors.original_price}
+                    {...register("original_price")}
+                  />
+                  <Controller
+                    control={control}
+                    name="original_price_currency"
+                    render={({ field }) => (
+                      <CurrencyCombobox
+                        id="edit-currency"
+                        value={field.value ?? ""}
+                        onChange={field.onChange}
+                        ariaInvalid={!!errors.original_price_currency}
+                        variant="compact"
+                      />
+                    )}
+                  />
+                </div>
+              </EditField>
+              <EditField
+                label={t("commodities:fields.currentPrice")}
+                htmlFor="edit-value"
+                error={errors.current_price}
+              >
                 <PriceInput
-                  id="edit-price"
-                  symbol={purchaseSymbol}
-                  invalid={!!errors.original_price}
-                  {...register("original_price")}
+                  id="edit-value"
+                  symbol={groupSymbol}
+                  invalid={!!errors.current_price}
+                  {...register("current_price")}
                 />
-                <Controller
-                  control={control}
-                  name="original_price_currency"
-                  render={({ field }) => (
-                    <CurrencyCombobox
-                      id="edit-currency"
-                      value={field.value ?? ""}
-                      onChange={field.onChange}
-                      ariaInvalid={!!errors.original_price_currency}
-                      variant="compact"
-                    />
-                  )}
+              </EditField>
+            </div>
+            {isForeignCurrency ? (
+              <EditField
+                label={t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
+                htmlFor="edit-converted-price"
+                hint={t("commodities:fields.convertedOriginalPriceHint")}
+                error={errors.converted_original_price}
+              >
+                <PriceInput
+                  id="edit-converted-price"
+                  symbol={groupSymbol}
+                  invalid={!!errors.converted_original_price}
+                  {...register("converted_original_price")}
                 />
-              </div>
-            </EditField>
-            <EditField
-              label={t("commodities:fields.currentPrice")}
-              htmlFor="edit-value"
-              error={errors.current_price}
-            >
-              <PriceInput
-                id="edit-value"
-                symbol={groupSymbol}
-                invalid={!!errors.current_price}
-                {...register("current_price")}
-              />
-            </EditField>
+              </EditField>
+            ) : null}
           </div>
-          {isForeignCurrency ? (
-            <EditField
-              label={t("commodities:fields.convertedOriginalPrice", { groupCurrency })}
-              htmlFor="edit-converted-price"
-              hint={t("commodities:fields.convertedOriginalPriceHint")}
-              error={errors.converted_original_price}
-            >
-              <PriceInput
-                id="edit-converted-price"
-                symbol={groupSymbol}
-                invalid={!!errors.converted_original_price}
-                {...register("converted_original_price")}
-              />
-            </EditField>
-          ) : null}
-        </div>
 
-        <Separator />
+          <Separator />
 
-        <div className="space-y-3">
-          <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
-          {/* A bundle (count > 1) carries no warranty (#1554). An empty
+          <div className="space-y-3">
+            <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
+            {/* A bundle (count > 1) carries no warranty (#1554). An empty
               field is disabled; a filled one stays editable so legacy data
               can be cleared. */}
-          <EditField
-            label={t("commodities:editForm.warrantyExpiry")}
-            htmlFor="edit-warranty-exp"
-            hint={
-              isBundle
-                ? t("commodities:trackingRestrictions.warrantyStepHint")
-                : t("commodities:editForm.warrantyExpiryHint")
-            }
-            error={errors.warranty_expires_at}
-          >
-            <Input
-              id="edit-warranty-exp"
-              type="date"
-              disabled={isBundle && !expiresAt?.trim()}
-              {...register("warranty_expires_at")}
-              aria-invalid={!!errors.warranty_expires_at}
-            />
-          </EditField>
-          <EditField
-            label={t("commodities:fields.warrantyNotes")}
-            htmlFor="edit-warranty-notes"
-            error={errors.warranty_notes}
-          >
-            <Textarea
-              id="edit-warranty-notes"
-              rows={2}
-              className="resize-none"
-              disabled={isBundle && !warrantyNotes?.trim()}
-              {...register("warranty_notes")}
-            />
-          </EditField>
-        </div>
-
-        <Separator />
-
-        <div className="space-y-3">
-          <SectionLabel>{t("commodities:editForm.sections.notesTags")}</SectionLabel>
-          <EditField
-            label={t("commodities:fields.comments")}
-            htmlFor="edit-notes"
-            error={errors.comments}
-          >
-            <Textarea
-              id="edit-notes"
-              rows={3}
-              className="resize-none"
-              {...register("comments")}
-              aria-invalid={!!errors.comments}
-            />
-          </EditField>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="edit-tags-input">{t("commodities:fields.tags")}</Label>
-            <TagPalette
-              kind="commodity"
-              values={watch("tags") ?? []}
-              onChange={(next) => setValue("tags", next, { shouldDirty: true })}
-              inputId="edit-tags-input"
-              testId="commodity-edit-tags"
-            />
+            <EditField
+              label={t("commodities:editForm.warrantyExpiry")}
+              htmlFor="edit-warranty-exp"
+              hint={
+                isBundle
+                  ? t("commodities:trackingRestrictions.warrantyStepHint")
+                  : t("commodities:editForm.warrantyExpiryHint")
+              }
+              error={errors.warranty_expires_at}
+            >
+              <Input
+                id="edit-warranty-exp"
+                type="date"
+                disabled={isBundle && !expiresAt?.trim()}
+                {...register("warranty_expires_at")}
+                aria-invalid={!!errors.warranty_expires_at}
+              />
+            </EditField>
+            <EditField
+              label={t("commodities:fields.warrantyNotes")}
+              htmlFor="edit-warranty-notes"
+              error={errors.warranty_notes}
+            >
+              <Textarea
+                id="edit-warranty-notes"
+                rows={2}
+                className="resize-none"
+                disabled={isBundle && !warrantyNotes?.trim()}
+                {...register("warranty_notes")}
+              />
+            </EditField>
           </div>
-        </div>
 
-        {hiddenFieldError ? (
-          <Alert variant="destructive" data-testid="commodity-edit-hidden-error">
-            <AlertDescription className="flex flex-wrap items-center gap-2">
-              {t("commodities:editForm.hiddenFieldError")}
-              <Button type="button" variant="outline" size="sm" onClick={openAllFields}>
-                {t("commodities:editForm.allFields")}
-              </Button>
-            </AlertDescription>
-          </Alert>
-        ) : null}
+          <Separator />
 
-        <ServerErrorBanner
-          error={serverError}
-          onRetry={() => void save()}
-          isRetrying={!!isPending}
-          testId="commodity-edit-error"
-        />
+          <div className="space-y-3">
+            <SectionLabel>{t("commodities:editForm.sections.notesTags")}</SectionLabel>
+            <EditField
+              label={t("commodities:fields.comments")}
+              htmlFor="edit-notes"
+              error={errors.comments}
+            >
+              <Textarea
+                id="edit-notes"
+                rows={3}
+                className="resize-none"
+                {...register("comments")}
+                aria-invalid={!!errors.comments}
+              />
+            </EditField>
+            <div className="flex flex-col gap-1.5">
+              <Label htmlFor="edit-tags-input">{t("commodities:fields.tags")}</Label>
+              <TagPalette
+                kind="commodity"
+                values={watch("tags") ?? []}
+                onChange={(next) => setValue("tags", next, { shouldDirty: true })}
+                inputId="edit-tags-input"
+                testId="commodity-edit-tags"
+              />
+            </div>
+          </div>
+
+          {hiddenFieldError ? (
+            <Alert variant="destructive" data-testid="commodity-edit-hidden-error">
+              <AlertDescription className="flex flex-wrap items-center gap-2">
+                {t("commodities:editForm.hiddenFieldError")}
+                <Button type="button" variant="outline" size="sm" onClick={openAllFields}>
+                  {t("commodities:editForm.allFields")}
+                </Button>
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <ServerErrorBanner
+            error={serverError}
+            onRetry={() => void save()}
+            isRetrying={!!isPending}
+            testId="commodity-edit-error"
+          />
+        </fieldset>
       </form>
 
       <div className="sticky bottom-0 z-10 flex flex-col gap-5 bg-background pt-5">
@@ -540,7 +554,7 @@ export function CommodityEditForm({
             form="commodity-edit-form"
             variant={nav.active ? "outline" : "default"}
             className="flex-1"
-            disabled={isPending}
+            disabled={saving}
             data-testid="commodity-edit-save"
           >
             {t("commodities:editForm.save")}
@@ -550,7 +564,7 @@ export function CommodityEditForm({
               type="button"
               className="flex-1 gap-1"
               onClick={handleSaveAndNext}
-              disabled={isPending || !nav.next}
+              disabled={saving || !nav.next}
               data-testid="commodity-edit-save-next"
             >
               {t("commodities:editForm.saveAndNext")}

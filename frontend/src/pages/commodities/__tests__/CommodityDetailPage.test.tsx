@@ -115,8 +115,9 @@ function itemRow(id: string, name: string): { id: string; type: string; attribut
 }
 
 // Items behind list, detail and update, so a save shows up in what the page
-// reads next. Returns the PUT bodies in order.
-function serveItems(rows: ReturnType<typeof itemRow>[]) {
+// reads next. Returns the PUT bodies in order; with `gate`, a PUT is recorded
+// at once and answered when the gate resolves.
+function serveItems(rows: ReturnType<typeof itemRow>[], opts: { gate?: Promise<void> } = {}) {
   const store = new Map(rows.map((r) => [r.id, { ...r, attributes: { ...r.attributes } }]))
   const puts: Array<{ id: string; attributes: Attrs }> = []
   server.use(
@@ -142,6 +143,7 @@ function serveItems(rows: ReturnType<typeof itemRow>[]) {
       const id = params.id as string
       const body = (await request.json()) as { data: { attributes: Attrs } }
       puts.push({ id, attributes: body.data.attributes })
+      await opts.gate
       const row = { id, type: "commodities", attributes: { ...body.data.attributes, id } }
       store.set(id, row)
       return HttpResponse.json({ data: row })
@@ -152,6 +154,14 @@ function serveItems(rows: ReturnType<typeof itemRow>[]) {
 
 const LIST = `/g/${SLUG}/commodities?q=mac`
 const FROM = `from=${encodeURIComponent(LIST)}`
+
+function gate(): { promise: Promise<void>; release: () => void } {
+  let release = () => {}
+  const promise = new Promise<void>((resolve) => {
+    release = resolve
+  })
+  return { promise, release }
+}
 
 beforeEach(() => {
   clearAuth()
@@ -381,6 +391,27 @@ describe("<CommodityDetailPage />", () => {
     expect(await screen.findByTestId("commodity-detail-tabs")).toBeInTheDocument()
   })
 
+  it("locks the edit form while its save is in flight (#2795)", async () => {
+    const user = userEvent.setup()
+    const held = gate()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")], { gate: held.promise })
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    const name = await screen.findByLabelText(/^name/i)
+    await user.clear(name)
+    await user.type(name, "MacBook Air")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    // An edit typed now would miss the request and be dropped after it.
+    expect(name).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-tags-option-home")).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-all-fields")).toBeDisabled()
+    expect(screen.getByTestId("commodity-edit-save")).toBeDisabled()
+
+    held.release()
+    expect(await screen.findByTestId("commodity-detail-tabs")).toBeInTheDocument()
+    expect(puts[0].attributes.name).toBe("MacBook Air")
+  })
+
   it("toggles a tag from the edit form's palette (#2795)", async () => {
     const user = userEvent.setup()
     const puts = serveItems([itemRow(ID, "MacBook Pro 16")])
@@ -571,6 +602,59 @@ describe("<CommodityDetailPage />", () => {
     await user.click(screen.getByTestId("commodity-quick-location-save"))
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0].attributes).not.toHaveProperty("area_id")
+  })
+
+  it("closes a quick edit when Next opens an item that is already loaded (#2795)", async () => {
+    const user = userEvent.setup()
+    const puts = serveItems([
+      itemRow("c0", "Mac mini"),
+      itemRow(ID, "MacBook Pro 16"),
+      itemRow("c2", "iMac"),
+    ])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}?${FROM}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
+    )
+    // Visit the next item once, so it is in the cache when Next opens it again.
+    await user.click(screen.getByTestId("commodity-detail-next"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("3 of 3")
+    )
+    await user.click(screen.getByTestId("commodity-detail-previous"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("2 of 3")
+    )
+
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "For the laptop")
+    await user.click(screen.getByTestId("commodity-detail-next"))
+
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-position")).toHaveTextContent("3 of 3")
+    )
+    expect(screen.queryByTestId("commodity-quick-notes")).toBeNull()
+    expect(screen.getByTestId("commodity-quick-edit-notes")).toBeInTheDocument()
+    expect(puts).toHaveLength(0)
+  })
+
+  it("keeps a notes editor opened while a tags save finishes (#2795)", async () => {
+    const user = userEvent.setup()
+    const held = gate()
+    const puts = serveItems([itemRow(ID, "MacBook Pro 16")], { gate: held.promise })
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-quick-edit-tags"))
+    await user.click(await screen.findByTestId("commodity-quick-tags-palette-option-home"))
+    await user.click(screen.getByTestId("commodity-quick-tags-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+
+    await user.click(screen.getByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Draft")
+    held.release()
+
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-detail-tags")).toHaveTextContent("Home")
+    )
+    expect(screen.getByTestId("commodity-quick-notes-input")).toHaveValue("Draft")
   })
 
   it("cancels a quick edit without saving (#2795)", async () => {

@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { useState } from "react"
 import { Route } from "react-router-dom"
-import { screen } from "@testing-library/react"
+import { fireEvent, screen } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -105,6 +105,21 @@ describe("<TagPalette />", () => {
       "aria-pressed",
       "true"
     )
+  })
+
+  it("leaves the draft alone when Enter confirms an IME composition", async () => {
+    const user = userEvent.setup()
+    renderPalette()
+    await screen.findByTestId("palette-option-work")
+    const input = screen.getByRole("textbox", { name: "New tag" })
+    await user.type(input, "ka")
+
+    fireEvent.keyDown(input, { key: "Enter", isComposing: true })
+    expect(screen.getByTestId("values")).toBeEmptyDOMElement()
+    expect(input).toHaveValue("ka")
+
+    fireEvent.keyDown(input, { key: "Enter" })
+    expect(screen.getByTestId("values")).toHaveTextContent(/^ka$/)
   })
 
   it("has no axe violations", async () => {

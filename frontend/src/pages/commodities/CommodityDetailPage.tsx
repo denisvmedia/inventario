@@ -268,8 +268,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // The step-by-step dialog, opened from the edit form's "All fields" with
   // the values entered so far. Null while closed.
   const [dialogDraft, setDialogDraft] = useState<Commodity | null>(null)
-  // The Details tab field being edited in place (#2795), if any.
-  const [quickEdit, setQuickEdit] = useState<QuickEditField | null>(null)
+  // The Details tab field being edited in place (#2795), if any, with the
+  // item it was opened on. Moving to another item, even one already loaded,
+  // closes it, so a draft never lands on the wrong item.
+  const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
+  const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
+  const setQuickEdit = (field: QuickEditField | null) =>
+    setQuickEditOn(field ? { id, field } : null)
   // #1448 quick-attach state. `pendingDropFiles` holds files seeded by
   // the page-level drop catcher; the upload dialog reads them on open
   // and queues them in the select step. The button-triggered open
@@ -493,13 +498,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   // A quick edit on the Details tab saves one field and keeps the rest of
-  // the record as it is. Resolves false when the save failed.
-  async function handleQuickSave(patch: Partial<Commodity>): Promise<boolean> {
+  // the record as it is. Resolves false when the save failed. On success it
+  // closes the editor that saved, and leaves alone one opened meanwhile.
+  async function handleQuickSave(
+    field: QuickEditField,
+    patch: Partial<Commodity>
+  ): Promise<boolean> {
     if (!commodity) return false
+    const savedOn = id
     try {
       await update.mutateAsync({ ...commodity, ...patch })
       toast.success(t("commodities:toast.updated"))
-      setQuickEdit(null)
+      setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
       return true
     } catch (err) {
       toast.error(parseServerError(err, t("commodities:quickEdit.error")))
@@ -1044,6 +1054,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             // tabs) instead of re-opening this sheet — see app/router.tsx.
             <>
               <DetailsTab
+                key={commodity.id}
                 commodity={commodity}
                 groupCurrency={groupCurrency}
                 purchaseCurrency={purchaseCurrency}
@@ -1074,6 +1085,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           ) : tab === "details" ? (
             <>
               <DetailsTab
+                key={commodity.id}
                 commodity={commodity}
                 groupCurrency={groupCurrency}
                 purchaseCurrency={purchaseCurrency}
@@ -1340,7 +1352,7 @@ interface DetailsTabProps {
   // currency migration), and the save that patches one field.
   quickEdit?: QuickEditField | null
   onQuickEdit?: (field: QuickEditField | null) => void
-  onQuickSave?: (patch: Partial<Commodity>) => Promise<boolean>
+  onQuickSave?: (field: QuickEditField, patch: Partial<Commodity>) => Promise<boolean>
   saving?: boolean
   areas?: AreaOption[]
   locations?: LocationOption[]
@@ -1376,7 +1388,8 @@ function DetailsTab({
   const tagsLabel = t("commodities:detail.fields.tags")
   const notesLabel = t("commodities:detail.fields.comments")
   const cancelQuickEdit = () => onQuickEdit?.(null)
-  const save = (patch: Partial<Commodity>) => onQuickSave?.(patch) ?? Promise.resolve(false)
+  const saveField = (field: QuickEditField) => (patch: Partial<Commodity>) =>
+    onQuickSave?.(field, patch) ?? Promise.resolve(false)
   // The pencil next to a field's label; hidden while that field is open.
   const editButton = (field: QuickEditField, label: string) =>
     onQuickEdit && quickEdit !== field ? (
@@ -1493,7 +1506,7 @@ function DetailsTab({
                 areas={areas}
                 locations={locations}
                 saving={saving}
-                onSave={save}
+                onSave={saveField("location")}
                 onCancel={cancelQuickEdit}
               />
             ) : (
@@ -1533,7 +1546,7 @@ function DetailsTab({
             <TagsQuickEditor
               commodity={commodity}
               saving={saving}
-              onSave={save}
+              onSave={saveField("tags")}
               onCancel={cancelQuickEdit}
             />
           ) : commodity.tags && commodity.tags.length > 0 ? (
@@ -1605,7 +1618,7 @@ function DetailsTab({
               commodity={commodity}
               label={notesLabel}
               saving={saving}
-              onSave={save}
+              onSave={saveField("notes")}
               onCancel={cancelQuickEdit}
             />
           ) : commodity.comments ? (
