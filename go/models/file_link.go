@@ -40,6 +40,13 @@ const (
 	// file whose only links are draft links is still a standalone file to
 	// every other part of the app.
 	FileLinkDraft FileLinkEntityType = "draft"
+	// FileLinkIntake holds a file for an intake source (#2810): a file a
+	// member dropped for the AI scan to read. The entity id is the source id
+	// and meta is "images" or "documents". The link keeps the file while the
+	// session needs it; the drafts made from the source get links of their
+	// own. Like a draft link it is not an ordinary link, and nobody attaches
+	// to it through the attachment API.
+	FileLinkIntake FileLinkEntityType = "intake"
 )
 
 // FileLinkMetaImages and the constants below are the buckets a link places a
@@ -76,7 +83,7 @@ func IsAttachableFileLinkType(entityType string) bool {
 // for an unknown type.
 func FileLinkMetaValues(entityType string) []string {
 	switch entityType {
-	case FileLinkCommodity, FileLinkDraft:
+	case FileLinkCommodity, FileLinkDraft, FileLinkIntake:
 		return []string{FileLinkMetaImages, FileLinkMetaDocuments}
 	case FileLinkLocation, FileLinkArea:
 		return []string{FileLinkMetaImages, FileLinkMetaFiles}
@@ -94,7 +101,7 @@ func DefaultFileLinkMeta(entityType string, category FileCategory) string {
 	if category == FileCategoryImages {
 		return FileLinkMetaImages
 	}
-	if entityType == FileLinkCommodity || entityType == FileLinkDraft {
+	if entityType == FileLinkCommodity || entityType == FileLinkDraft || entityType == FileLinkIntake {
 		return FileLinkMetaDocuments
 	}
 	return FileLinkMetaFiles
@@ -175,7 +182,7 @@ func (l *FileLink) ValidateWithContext(ctx context.Context) error {
 	}
 	return validation.ValidateStructWithContext(ctx, l,
 		validation.Field(&l.EntityType, rules.NotEmpty, validation.In(
-			FileLinkCommodity, FileLinkLocation, FileLinkArea, FileLinkExport, FileLinkDraft,
+			FileLinkCommodity, FileLinkLocation, FileLinkArea, FileLinkExport, FileLinkDraft, FileLinkIntake,
 		)),
 		validation.Field(&l.EntityID, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&l.Meta, rules.NotEmpty, validation.In(metas...)),

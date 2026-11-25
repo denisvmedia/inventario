@@ -51,6 +51,7 @@ type UserPurger struct {
 	reminders     registry.CommodityReminderRegistryFactory
 	reminderSends registry.CommodityReminderSendRegistry
 	drafts        registry.CommodityDraftRegistryFactory
+	intake        registry.IntakeRegistryFactory
 	files         registry.FileRegistryFactory
 	savedViews    registry.SavedViewRegistryFactory
 }
@@ -71,6 +72,7 @@ func NewUserPurger(
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
 	drafts registry.CommodityDraftRegistryFactory,
+	intake registry.IntakeRegistryFactory,
 	files registry.FileRegistryFactory,
 	savedViews registry.SavedViewRegistryFactory,
 ) *UserPurger {
@@ -88,6 +90,7 @@ func NewUserPurger(
 		reminders:     reminders,
 		reminderSends: reminderSends,
 		drafts:        drafts,
+		intake:        intake,
 		files:         files,
 		savedViews:    savedViews,
 	}
@@ -125,6 +128,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
 		{"commodity_drafts", func() error { return r.purgeCommodityDrafts(ctx, tenantID, userID) }},
+		{"intake_sessions", func() error { return r.purgeIntakeSessions(ctx, tenantID, userID) }},
 		// Where the user shows the views of others, then the views the user
 		// created, shared ones included: both carry a NOT NULL user column,
 		// like the postgres DELETEs.
@@ -268,6 +272,29 @@ func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tenantID, userID 
 			}
 		}
 		if err := reg.Delete(ctx, draft.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeIntakeSessions deletes the intake sessions the user created (#2810)
+// with their sources, candidates and file links, the same rows the postgres
+// purger removes.
+func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tenantID, userID string) error {
+	if r.intake == nil {
+		return nil
+	}
+	reg := r.intake.CreateServiceRegistry()
+	all, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, session := range all {
+		if session == nil || session.TenantID != tenantID || session.CreatedByUserID != userID {
+			continue
+		}
+		if err := reg.Delete(ctx, session.ID); err != nil {
 			return err
 		}
 	}

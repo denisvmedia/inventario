@@ -97,6 +97,14 @@ var purgeOrder = []func(t store.TableNames) string{
 	// the file_links DELETE above.
 	func(t store.TableNames) string { return string(t.CommodityDrafts()) },
 
+	// Intake sessions (#2810). Candidates and sources cascade from their
+	// session, but group_id -> location_groups is NO ACTION on all three,
+	// so they are deleted children first. Their file links are polymorphic
+	// and went with the file_links DELETE above.
+	func(t store.TableNames) string { return string(t.IntakeCandidates()) },
+	func(t store.TableNames) string { return string(t.IntakeSources()) },
+	func(t store.TableNames) string { return string(t.IntakeSessions()) },
+
 	// Currency-migration audit rows (#2095). Their FK to currency_migrations
 	// is ON DELETE CASCADE, but group_id -> location_groups is NO ACTION, so
 	// the purge must clear them explicitly. Dropped BEFORE currency_migrations
