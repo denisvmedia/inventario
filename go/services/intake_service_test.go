@@ -708,6 +708,70 @@ func TestIntake_RescanAfterInterruptedCreateDrafts(t *testing.T) {
 	}
 }
 
+// rescanOnCreateFactory hands out draft registries that run hook once,
+// right before the first draft is stored: a rescan that lands while
+// CreateDrafts is between reading the products and making a draft.
+type rescanOnCreateFactory struct {
+	registry.CommodityDraftRegistryFactory
+	hook *func()
+}
+
+func (f rescanOnCreateFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityDraftRegistry, error) {
+	inner, err := f.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return rescanOnCreateRegistry{CommodityDraftRegistry: inner, hook: f.hook}, nil
+}
+
+type rescanOnCreateRegistry struct {
+	registry.CommodityDraftRegistry
+	hook *func()
+}
+
+func (r rescanOnCreateRegistry) CreateOrGet(ctx context.Context, d models.CommodityDraft) (*models.CommodityDraft, bool, error) {
+	if h := *r.hook; h != nil {
+		*r.hook = nil
+		h()
+	}
+	return r.CommodityDraftRegistry.CreateOrGet(ctx, d)
+}
+
+// TestIntake_RescanDuringCreateDrafts: a rescan that replaces the products
+// after CreateDrafts read them does not leave a second draft per product.
+// The drafts made for the replaced products are discarded, and the products
+// of the new scan get one draft each.
+func TestIntake_RescanDuringCreateDrafts(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	session := f.create(c, "race", source(f.photo(c, "receipt-race")))
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	sourceID := session.Sources[0].Source.ID
+
+	var rescanErr error
+	hook := func() { _, rescanErr = f.intake.Rescan(f.ctx, session.Session.ID, sourceID) }
+	racingSet := *f.factorySet
+	racingSet.CommodityDraftRegistryFactory = rescanOnCreateFactory{CommodityDraftRegistryFactory: f.factorySet.CommodityDraftRegistryFactory, hook: &hook}
+	racing := services.NewIntakeService(&racingSet, f.scan, services.IntakeConfig{})
+	first, err := racing.CreateDrafts(f.ctx, session.Session.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(rescanErr, qt.IsNil, qt.Commentf("the rescan ran before any draft existed"))
+	c.Check(first.Created, qt.Equals, 0)
+	c.Check(f.drafts(c), qt.HasLen, 0, qt.Commentf("the drafts of the replaced products are discarded"))
+
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	done := must.Must(f.intake.CreateDrafts(f.ctx, session.Session.ID))
+	c.Check(done.Created, qt.Equals, 3)
+	names := map[string]int{}
+	for _, d := range f.drafts(c) {
+		names[d.Values.Title()]++
+	}
+	c.Check(names, qt.HasLen, 3)
+	for name, n := range names {
+		c.Check(n, qt.Equals, 1, qt.Commentf("drafts named %q", name))
+	}
+}
+
 // TestIntakeWorker_OffersTheGroupsItemTypes: the worker's scan classifies
 // into the group's item types, as the scan in the item form does.
 func TestIntakeWorker_OffersTheGroupsItemTypes(t *testing.T) {
