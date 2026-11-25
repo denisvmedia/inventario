@@ -417,7 +417,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 			originalPath:           "test-image.jpg",
 			mimeType:               "image/jpeg",
 			expectThumbnails:       true,
-			expectedThumbnailCount: 2, // small and medium
+			expectedThumbnailCount: 3, // small, medium and large
 		},
 		{
 			name:                   "PNG image should generate thumbnails",
@@ -427,7 +427,7 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 			originalPath:           "test-image.png",
 			mimeType:               "image/png",
 			expectThumbnails:       true,
-			expectedThumbnailCount: 2, // small and medium
+			expectedThumbnailCount: 3, // small, medium and large
 		},
 		{
 			name:                   "PDF should not generate thumbnails",
@@ -485,12 +485,15 @@ func TestFileSigningService_GenerateSignedURLsWithThumbnails(t *testing.T) {
 				c.Assert(thumbnails, qt.HasLen, tt.expectedThumbnailCount)
 				c.Assert(thumbnails["small"], qt.Not(qt.Equals), "")
 				c.Assert(thumbnails["medium"], qt.Not(qt.Equals), "")
+				c.Assert(thumbnails["large"], qt.Not(qt.Equals), "")
 
 				// Verify thumbnail URLs contain expected paths - current implementation uses /thumbnails/{fileID}/{size}
 				c.Assert(thumbnails["small"], qt.Contains, "/thumbnails/")
 				c.Assert(thumbnails["small"], qt.Contains, "/small")
 				c.Assert(thumbnails["medium"], qt.Contains, "/thumbnails/")
 				c.Assert(thumbnails["medium"], qt.Contains, "/medium")
+				c.Assert(thumbnails["large"], qt.Contains, "/thumbnails/")
+				c.Assert(thumbnails["large"], qt.Contains, "/large")
 			} else {
 				c.Assert(thumbnails, qt.HasLen, tt.expectedThumbnailCount)
 			}
@@ -522,6 +525,12 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 			expected: "/thumbnails/test-id/medium",
 		},
 		{
+			name:     "JPEG file large thumbnail",
+			fileID:   "test-id",
+			sizeName: "large",
+			expected: "/thumbnails/test-id/large",
+		},
+		{
 			name:     "File with UUID",
 			fileID:   "f47ac10b-58cc-4372-a567-0e02b2c3d479",
 			sizeName: "small",
@@ -550,12 +559,7 @@ func TestFileSigningService_GetThumbnailPath(t *testing.T) {
 			_, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-id", "")
 			c.Assert(err, qt.IsNil)
 
-			switch tt.sizeName {
-			case "small":
-				c.Assert(thumbnails["small"], qt.Contains, tt.expected)
-			case "medium":
-				c.Assert(thumbnails["medium"], qt.Contains, tt.expected)
-			}
+			c.Assert(thumbnails[tt.sizeName], qt.Contains, tt.expected)
 		})
 	}
 }
@@ -854,7 +858,7 @@ func TestFileSigningService_ThumbnailsCarryBinding(t *testing.T) {
 
 	originalURL, thumbnails, err := service.GenerateSignedURLsWithThumbnails(fileEntity, "user-1", "session-A")
 	c.Assert(err, qt.IsNil)
-	c.Assert(thumbnails, qt.HasLen, 2)
+	c.Assert(thumbnails, qt.HasLen, 3)
 
 	// Original URL must accept the mint binding and reject foreign ones.
 	parsed, err := url.Parse(originalURL)

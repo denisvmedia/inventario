@@ -3709,7 +3709,7 @@ export type paths = {
                     /** @description File ID */
                     fileID: string;
                     /** @description Thumbnail size */
-                    size: "small" | "medium";
+                    size: "small" | "medium" | "large";
                 };
                 cookie?: never;
             };

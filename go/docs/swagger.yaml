@@ -6728,6 +6728,7 @@ paths:
         enum:
         - small
         - medium
+        - large
         in: path
         name: size
         required: true

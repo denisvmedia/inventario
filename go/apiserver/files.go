@@ -922,7 +922,7 @@ func (api *filesAPI) downloadOriginalFile(w http.ResponseWriter, r *http.Request
 // @Tags files
 // @Produce image/jpeg
 // @Param fileID path string true "File ID"
-// @Param size path string true "Thumbnail size" Enums(small, medium)
+// @Param size path string true "Thumbnail size" Enums(small, medium, large)
 // @Success 200 {file} binary "Thumbnail image"
 // @Failure 404 {object} jsonapi.Errors "Not Found"
 // @Failure 500 {object} jsonapi.Errors "Internal Server Error"
@@ -937,7 +937,7 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Validate size parameter
-	if size != "small" && size != "medium" {
+	if !services.IsThumbnailSize(size) {
 		renderEntityError(w, r, ErrNotFound)
 		return
 	}
@@ -1003,8 +1003,9 @@ func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Re
 		return
 	}
 
-	// If no job exists or job failed, request thumbnail generation
-	if job == nil || job.Status == models.ThumbnailStatusFailed {
+	// Unless a job is already on its way, request one. A completed job with
+	// a missing thumbnail predates this size (see RequestThumbnailGeneration).
+	if job == nil || !job.Status.InFlight() {
 		_, err := thumbnailService.RequestThumbnailGeneration(r.Context(), fileID)
 		if err != nil {
 			// Log error but still serve placeholder
@@ -1051,7 +1052,9 @@ func placeholderFilename(size string) (string, bool) {
 	switch size {
 	case "small":
 		return "generating_small.gif", true
-	case "medium":
+	case "medium", "large":
+		// The placeholder is drawn scaled into the image's box, so the large
+		// size shares the medium animation.
 		return "generating_medium.gif", true
 	default:
 		return "", false

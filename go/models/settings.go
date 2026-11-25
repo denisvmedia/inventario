@@ -94,7 +94,8 @@ const (
 	SettingNameNotificationsChannelPush         SettingName = "notifications.channel.push"
 
 	// Per-user appearance preferences. `default_items_view` is consumed by
-	// the commodities list page as the initial view mode (grid / list).
+	// the commodities list page as the initial view mode (grid for photo
+	// cards, compact, or list).
 	// `preferred_display_currency` is a personal display-formatting hint;
 	// it is NOT used to override the per-group commodity currency on
 	// stored values (see deviations log in PR-A for the wiring scope).

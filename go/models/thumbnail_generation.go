@@ -22,6 +22,12 @@ func (s ThumbnailGenerationStatus) String() string {
 	return string(s)
 }
 
+// InFlight reports whether a job in this status is still going to render the
+// thumbnails: it is pending or processing.
+func (s ThumbnailGenerationStatus) InFlight() bool {
+	return s == ThumbnailStatusPending || s == ThumbnailStatusProcessing
+}
+
 // Enable RLS for multi-tenant isolation
 //ptah:schema:rls:enable table="thumbnail_generation_jobs" comment="Enable RLS for multi-tenant thumbnail generation job isolation"
 //ptah:schema:rls:policy name="thumbnail_generation_job_isolation" table="thumbnail_generation_jobs" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''" comment="Ensures thumbnail generation jobs can only be accessed and modified by their tenant and user with required contexts"

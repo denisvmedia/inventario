@@ -203,7 +203,7 @@ func (s *FileSigningService) generateSignedURL(fileID, fileExt, userID string, b
 // Return values:
 //   - original: the signed URL for the full-resolution file. Always
 //     populated when err is nil.
-//   - thumbnails: keyed by size name ("small", "medium"). Only carries
+//   - thumbnails: keyed by size name ("small", "medium", "large"). Only carries
 //     entries for sizes that could be signed; a missing entry simply
 //     means no thumbnail is available at that size and callers should
 //     fall back to `original`. Non-nil but empty when the file has no
@@ -229,12 +229,7 @@ func (s *FileSigningService) GenerateSignedURLsWithThumbnails(
 	// Generate thumbnail URLs if it's a supported image format
 	thumbnails = make(map[string]string)
 	if mimekit.IsImage(file.MIMEType) && (strings.HasPrefix(file.MIMEType, "image/jpeg") || strings.HasPrefix(file.MIMEType, "image/png")) {
-		thumbnailSizes := map[string]int{
-			"small":  150,
-			"medium": 300,
-		}
-
-		for sizeName := range thumbnailSizes {
+		for _, sizeName := range ThumbnailSizeNames() {
 			thumbnailURL, thumbErr := s.generateThumbnailSignedURL(file.ID, sizeName, userID, binding)
 			if thumbErr != nil {
 				// Don't fail if thumbnail URL generation fails — thumbnail

@@ -2682,7 +2682,8 @@ const docTemplate = `{
                     {
                         "enum": [
                             "small",
-                            "medium"
+                            "medium",
+                            "large"
                         ],
                         "type": "string",
                         "description": "Thumbnail size",

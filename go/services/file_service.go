@@ -8,6 +8,7 @@ import (
 	"image/jpeg"
 	"image/png"
 	"log/slog"
+	"maps"
 	"strings"
 
 	"github.com/go-extras/errx"
@@ -35,10 +36,7 @@ func NewFileService(factorySet *registry.FactorySet, uploadLocation string) *Fil
 		factorySet:     factorySet,
 		uploadLocation: uploadLocation,
 		imageProcessor: imageprocessor.NewDefault(),
-		thumbnailSizes: map[string]int{
-			"small":  150,
-			"medium": 300,
-		},
+		thumbnailSizes: maps.Clone(thumbnailSizes),
 	}
 }
 
@@ -599,7 +597,7 @@ func (s *FileService) DeleteFileIfUnlinked(ctx context.Context, fileID, ignoreEn
 // One bucket open per call — combines what `ThumbnailExists` and
 // `ThumbnailReadPath` did in separate passes.
 func (s *FileService) ResolveThumbnail(ctx context.Context, tenantID, fileID, size string) (path string, exists bool, err error) {
-	if size != "small" && size != "medium" {
+	if !IsThumbnailSize(size) {
 		return "", false, errxtrace.Classify(ErrInvalidThumbnailSize, errx.Attrs("size", size))
 	}
 
