@@ -41,7 +41,7 @@ import (
 const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
-	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
+	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member; the export checks the drafts document against the same limit (backup/export defaultMaxJSONDocBytes)
 	// The manifest carries the group's sellers (format 3.3) and item types
 	// (3.4), so it gets the same room as any other JSON document.
 	maxInbManifestBytes = maxJSONDocBytes

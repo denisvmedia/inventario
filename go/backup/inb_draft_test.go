@@ -219,6 +219,33 @@ func TestINBExport_PromotionDuringTheExportLosesNothing(t *testing.T) {
 	c.Check(items[itemUUID].Name, qt.Equals, "Half-done drill")
 }
 
+// TestINBExport_DraftsLargerThanARestoreAcceptsFailTheExport: a drafts
+// document over the restore's per-document limit fails the export before
+// anything is written, rather than publishing a backup that cannot be
+// restored.
+func TestINBExport_DraftsLargerThanARestoreAcceptsFailTheExport(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	export.SetMaxJSONDocBytesForTesting(c, 256)
+
+	svc := export.NewExportService(f.fs, inbUploadLocation, signer)
+	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
+	created := must.Must(expReg.Create(f.ctx, models.Export{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Type:                     models.ExportTypeFullDatabase,
+		Status:                   models.ExportStatusPending,
+		Description:              "too many drafts",
+	}))
+	err := svc.ProcessExport(f.ctx, created.ID)
+	c.Assert(err, qt.ErrorIs, export.ErrDraftsTooLarge)
+
+	failed := must.Must(expReg.Get(f.ctx, created.ID))
+	c.Check(failed.Status, qt.Equals, models.ExportStatusFailed)
+	c.Check(failed.ErrorMessage, qt.Contains, "discard the drafts you no longer need")
+	c.Check(failed.FilePath, qt.Equals, "")
+}
+
 func TestINBExport_SelectedItemsCarryNoDrafts(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
