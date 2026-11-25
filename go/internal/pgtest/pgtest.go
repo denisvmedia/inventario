@@ -33,7 +33,7 @@ import (
 	"testing"
 	"time"
 
-	embeddedpostgres "github.com/fergusstrange/embedded-postgres"
+	embeddedpostgres "github.com/fergusstrange/embedded-postgres/v2"
 )
 
 // DSNEnv is the override. Set it and Start hands it straight back, which is

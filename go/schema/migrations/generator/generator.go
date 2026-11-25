@@ -9,6 +9,7 @@ import (
 	"ptah.run/config"
 	"ptah.run/core/goschema"
 	"ptah.run/dbschema"
+	"ptah.run/engine/builtin"
 	"ptah.run/migration/generator"
 )
 
@@ -54,8 +55,16 @@ func (m *Generator) GenerateMigrationFiles(ctx context.Context, migrationName, m
 		}
 	}()
 
+	// The runtime carries the feature services and codecs the generator
+	// needs; Ptah requires one. The bundled one is what the ptah CLI uses.
+	runtime, err := builtin.New()
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to assemble the Ptah runtime", err)
+	}
+
 	// Use Ptah's native migration generator with database connection
 	opts := generator.GenerateMigrationOptions{
+		Runtime:       runtime,
 		GoEntitiesDir: m.goEntitiesDir,
 		DatabaseURL:   m.dbURL,
 		DBConn:        conn,
@@ -115,8 +124,13 @@ func (m *Generator) CheckPendingChanges(ctx context.Context) (bool, error) {
 func (m *Generator) GenerateSchemaSQL(ctx context.Context) ([]string, error) {
 	m.logger.Info("Generating schema SQL", "schema_dir", m.goEntitiesDir)
 
+	annotations, err := builtin.Annotations()
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to assemble the Ptah annotations", err)
+	}
+
 	// Parse Go entities from models directory
-	goSchema, err := goschema.ParseDir(m.goEntitiesDir)
+	goSchema, err := goschema.ParseDir(annotations, m.goEntitiesDir)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to parse Go schema", err)
 	}
@@ -126,7 +140,6 @@ func (m *Generator) GenerateSchemaSQL(ctx context.Context) ([]string, error) {
 		"fields", len(goSchema.Fields),
 		"indexes", len(goSchema.Indexes),
 		"enums", len(goSchema.Enums),
-		"extensions", len(goSchema.Extensions),
 	)
 
 	// For now, return a simple message indicating the schema was parsed
