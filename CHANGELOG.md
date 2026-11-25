@@ -31,8 +31,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   with `cf=<field id>:<op>[:<value>]` and sorts with `sort=cf.<field id>`,
   saved views keep both, and search reads text fields and option labels. AI
   scan fills the group's fields except money and links, after the member
-  reviews them, and promoting a draft checks and writes them with the new
-  item. Backups carry the fields, templates and values, also those of drafts
+  reviews them. A draft of a new item keeps the values typed in the Add item
+  dialog, and promoting it checks and writes them with the new item. Backups carry the fields, templates and values, also those of drafts
   (format 3.6), and a restore matches fields by name and type, creating the
   missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
