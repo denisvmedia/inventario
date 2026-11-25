@@ -3,6 +3,7 @@ package commodityquery_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
@@ -117,6 +118,89 @@ func TestList_PagesKeepTheTotal(t *testing.T) {
 	c.Check(listNames(page), qt.DeepEquals, []string{"Red B"})
 	c.Check(page.Total, qt.Equals, 3)
 	c.Check(page.Matches, qt.HasLen, 1)
+}
+
+// CountEach gives, per query, the total List reports for it, with no query,
+// with the lent-out filter the memory backend resolves to item IDs, and with
+// an item in Trash, which both leave out.
+func TestCountEach_MatchesTheListTotals(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	drill := seedItem(c, ctx, set, "Red drill", "red", "tools")
+	seedItem(c, ctx, set, "Red lamp", "red")
+	seedItem(c, ctx, set, "Saw", "tools")
+	_, err := set.CommodityLoanRegistry.Create(ctx, models.CommodityLoan{
+		CommodityID: drill.ID, BorrowerName: "Neighbor", LentAt: models.Date("2026-01-01"),
+	})
+	c.Assert(err, qt.IsNil)
+
+	qs := []commodityquery.Query{
+		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"red"}}},
+		{IncludeInactive: true, Text: "saw"},
+		{IncludeInactive: true, LentOut: new(true)},
+		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"none"}}},
+		{IncludeInactive: true, Trashed: true},
+	}
+	// An item in Trash is left out, as the list leaves it out.
+	trashed := seedItem(c, ctx, set, "Red trashed", "red")
+	_, err = set.CommodityRegistry.Trash(ctx, trashed.ID, "user-1", time.Now())
+	c.Assert(err, qt.IsNil)
+
+	counts, err := commodityquery.CountEach(ctx, set, qs)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 0, 1})
+	for i, q := range qs {
+		page, err := commodityquery.List(ctx, set, q, 0, 1)
+		c.Assert(err, qt.IsNil)
+		c.Check(counts[i], qt.Equals, page.Total, qt.Commentf("query %d", i))
+	}
+
+	none, err := commodityquery.CountEach(ctx, set, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(none, qt.HasLen, 0)
+}
+
+// The live and the Trash count of one batch are read together: while an item
+// goes to Trash and back, every batch counts it exactly once.
+func TestCountEach_CountsLiveAndTrashFromOneRead(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	item := seedItem(c, ctx, set, "Ladder")
+	qs := []commodityquery.Query{{IncludeInactive: true}, {IncludeInactive: true, Trashed: true}}
+
+	done := make(chan struct{})
+	moved := make(chan error, 1)
+	go func() {
+		defer close(moved)
+		for {
+			select {
+			case <-done:
+				return
+			default:
+			}
+			if _, err := set.CommodityRegistry.Trash(ctx, item.ID, "user-1", time.Now()); err != nil {
+				moved <- err
+				return
+			}
+			if _, err := set.CommodityRegistry.Restore(ctx, item.ID); err != nil {
+				moved <- err
+				return
+			}
+		}
+	}()
+	for range 2000 {
+		counts, err := commodityquery.CountEach(ctx, set, qs)
+		if err != nil {
+			close(done)
+			c.Fatal(err)
+		}
+		if counts[0]+counts[1] != 1 {
+			close(done)
+			c.Fatalf("live %d + Trash %d: the item was counted %d times", counts[0], counts[1], counts[0]+counts[1])
+		}
+	}
+	close(done)
+	c.Assert(<-moved, qt.IsNil)
 }
 
 func TestTagCounts_SetsTheTagFilterAside(t *testing.T) {

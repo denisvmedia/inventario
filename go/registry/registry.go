@@ -421,6 +421,11 @@ type CommodityRegistry interface {
 	// not apply.
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
+	// CountEach counts, for each entry of opts, the commodities it selects,
+	// as ListPaginated would report in its total, without reading the rows.
+	// The counts are read from one snapshot, so they describe one moment.
+	CountEach(ctx context.Context, opts []CommodityListOptions) ([]int, error)
+
 	// ListBrands returns the brands the commodities of the group carry, with
 	// how many carry each, for the brand input's suggestions. Every live
 	// commodity counts, drafts and inactive items included; items in Trash
@@ -998,7 +1003,24 @@ type TagRegistry interface {
 	//
 	// Pass newSlug == "" to keep the existing slug. Empty newLabel /
 	// newColor leave the corresponding fields untouched.
-	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error)
+	//
+	// Saved views name item tags by slug. When the slug of an item tag
+	// changes and rewriteViews is not nil, rewriteViews is called for every
+	// saved view of the tag's group, the personal views of every member
+	// included, and the views it changes are stored in the same transaction
+	// under the group's saved view lock. The rename holds the locks of its
+	// old and new slug until it commits, so another tag cannot take the
+	// freed slug while the views still name it: a view keeps following the
+	// tag it was saved with.
+	//
+	// It returns the tag as written and the slug it held when the lock was
+	// taken, which is the slug the references were rewritten from.
+	RenameAtomic(
+		ctx context.Context,
+		id, newLabel, newSlug string,
+		newColor models.TagColor,
+		rewriteViews SavedViewTagRewrite,
+	) (renamed *models.Tag, previousSlug string, err error)
 
 	// DeleteAtomic re-checks usage, strips JSONB references (when
 	// force=true), and deletes the tags row — all under a single
@@ -1239,6 +1261,85 @@ type SupplyLinkRegistry interface {
 	// Empty input returns an empty map; missing ids map to 0.
 	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
+
+// SavedViewTally counts the views of one group. CreateChecked and UpdateFunc
+// take it under the group's write lock, so a limit checked against it holds
+// when the write lands.
+type SavedViewTally struct {
+	// Own counts the views the registry's user created in the group.
+	Own int
+	// Shared counts the views shared with the group.
+	Shared int
+}
+
+// SavedViewPlacementPatch changes where a member shows a view. A nil field
+// keeps the stored value, or false when the member has no placement yet.
+type SavedViewPlacementPatch struct {
+	ShowInSidebar   *bool
+	ShowOnDashboard *bool
+}
+
+// SavedViewRegistry stores the saved views of one group and where each
+// member shows them. A user registry sees the views its user created and
+// every view shared with the group; Get, Update and Delete answer
+// ErrNotFound for another member's personal view, so a view a member cannot
+// see is indistinguishable from one that does not exist. Who may change a
+// view they can see is decided by the service. A service registry sees every
+// row of every group.
+type SavedViewRegistry interface {
+	// Create stores a view after every view of the group: its SortOrder is
+	// one past the highest in the group, whatever the caller set. Update
+	// keeps the stored SortOrder; Reorder is the only way to change it.
+	// Get, List, Update, Delete and Count follow the visibility rule above.
+	// Deleting a view deletes its placements.
+	Registry[models.SavedView]
+
+	// CreateChecked is Create under the group's write lock, for a user
+	// registry. check gets the tally taken under that lock; an error from
+	// it is returned and nothing is stored. When placement is not nil it is
+	// stored as the user's placement of the new view in the same
+	// transaction.
+	CreateChecked(ctx context.Context, view models.SavedView, placement *SavedViewPlacementPatch, check func(SavedViewTally) error) (*models.SavedView, error)
+
+	// UpdateFunc reads the visible view id under the group's write lock and
+	// writes back what mutate leaves of it. mutate also gets the tally taken
+	// under the lock; an error from it is returned and nothing is written.
+	// The id, tenant, group, creator, SortOrder and CreatedAt are kept
+	// whatever mutate does. When the view stops being shared, the
+	// placements other members had for it are deleted. When placement is
+	// not nil and the user still sees the view as written, it is stored as
+	// the user's placement in the same transaction, so the view and the
+	// placement are written together or not at all.
+	UpdateFunc(
+		ctx context.Context,
+		id string,
+		placement *SavedViewPlacementPatch,
+		mutate func(view *models.SavedView, tally SavedViewTally) error,
+	) (*models.SavedView, error)
+
+	// Placements returns the placements of the user registry's user for the
+	// views they see, keyed by view ID. A view without an entry is shown
+	// nowhere.
+	Placements(ctx context.Context) (map[string]models.SavedViewPlacement, error)
+
+	// SetPlacement changes where the user registry's user shows a view they
+	// see and returns the stored placement. An unknown or invisible view
+	// fails with ErrNotFound.
+	SetPlacement(ctx context.Context, viewID string, patch SavedViewPlacementPatch) (*models.SavedViewPlacement, error)
+
+	// Reorder gives the views named in ids, which must be visible and
+	// distinct, the positions they hold now, sorted and handed out in the
+	// order of ids. Views not named keep their positions, so a member can
+	// reorder the views they may edit without moving the others. An id that
+	// is unknown, invisible or repeated fails with ErrNotFound and nothing
+	// is changed.
+	Reorder(ctx context.Context, ids []string) error
+}
+
+// SavedViewTagRewrite returns the query a saved view gets when the item tag
+// slug from is renamed to to, and whether the view changed. See
+// TagRegistry.RenameAtomic.
+type SavedViewTagRewrite func(view models.SavedView, from, to string) (query string, changed bool)
 
 // MaintenanceListOptions narrows the result of
 // MaintenanceScheduleRegistry.ListPaginated.

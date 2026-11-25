@@ -108,6 +108,26 @@ func (r *CommodityRegistry) trashedItems(keep func(*models.Commodity) bool) []*m
 	return out
 }
 
+// liveAndTrashed returns the visible live items and the visible items in
+// Trash, read in one pass under the registry lock.
+func (r *CommodityRegistry) liveAndTrashed() (live, trashed []*models.Commodity) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		c := pair.Value
+		if c == nil || !r.isItemVisible(c) {
+			continue
+		}
+		cp := *c
+		if c.IsTrashed() {
+			trashed = append(trashed, &cp)
+		} else {
+			live = append(live, &cp)
+		}
+	}
+	return live, trashed
+}
+
 // ListTrashed returns a page of trashed items, most recently deleted first.
 func (r *CommodityRegistry) ListTrashed(_ context.Context, offset, limit int) ([]*models.Commodity, int, error) {
 	all := r.trashedItems(func(*models.Commodity) bool { return true })

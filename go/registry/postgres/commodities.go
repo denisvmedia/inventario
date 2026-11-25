@@ -383,6 +383,45 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
+// CountEach runs one COUNT(*) per entry of opts, with the WHERE clause of
+// ListPaginated, in one transaction.
+func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+	counts := make([]int, len(opts))
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	table := string(r.tableNames.Commodities())
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its query is built.
+	now := time.Now()
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Under the default READ COMMITTED every COUNT would read its own
+		// snapshot, and an item trashed between two of them would count in
+		// both or in neither. The transaction has run only SET LOCAL so far,
+		// so its isolation level can still change.
+		if _, err := tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+			return errxtrace.Wrap("failed to set the count snapshot", err)
+		}
+		for i, o := range opts {
+			if o.WarrantyNow.IsZero() {
+				o.WarrantyNow = now
+			}
+			where := commodityWhere(o, table, string(r.tableNames.CommodityLoans()))
+			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
+			n, err := countRows(ctx, tx, query, args...)
+			if err != nil {
+				return errxtrace.Wrap("failed to count commodities", err)
+			}
+			counts[i] = n
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count commodities", err)
+	}
+	return counts, nil
+}
+
 // CountTags counts the tags of the commodities opts selects in one query: a
 // LEFT JOIN LATERAL over the tags array yields one row per (commodity, tag),
 // and one row with a NULL slug for a commodity without tags, so grouping by

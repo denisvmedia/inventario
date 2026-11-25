@@ -171,7 +171,7 @@ func (k TagKind) Validate() error {
 //   - every other run of characters (spaces, punctuation, symbols, emoji)
 //     becomes a single '-', and leading and trailing '-' are dropped.
 //
-// frontend/src/features/tags/schemas.ts normaliseSlug implements the same
+// frontend/src/features/tags/slug.ts normaliseSlug implements the same
 // steps and is tested against the same table of cases; change both together.
 //
 // The result is empty when the input contains no usable characters
