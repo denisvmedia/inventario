@@ -71,3 +71,41 @@ func TestWarrantyReminderRegistry_CreateOnce_Race(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(ok, qt.IsFalse)
 }
+
+// A silent row keeps its threshold from being processed again, but
+// HasSentInRange ignores it: no email went out for it (#2805).
+func TestReminderRegistries_HasSentInRange_IgnoresSilentRows(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	owner := models.TenantGroupAwareEntityID{TenantID: "tenant-1", GroupID: "group-1", CreatedByUserID: "user-1"}
+
+	warranty := memory.NewWarrantyReminderRegistry()
+	_, err := warranty.CreateOnce(ctx, models.WarrantyReminder{TenantGroupAwareEntityID: owner, CommodityID: "c1", ThresholdDays: 60, Silent: true})
+	c.Assert(err, qt.IsNil)
+	sent, err := warranty.HasSent(ctx, "c1", 60)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sent, qt.IsTrue)
+	got, err := warranty.HasSentInRange(ctx, "c1", 30, 90)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsFalse)
+	_, err = warranty.CreateOnce(ctx, models.WarrantyReminder{TenantGroupAwareEntityID: owner, CommodityID: "c1", ThresholdDays: 45})
+	c.Assert(err, qt.IsNil)
+	got, err = warranty.HasSentInRange(ctx, "c1", 30, 90)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsTrue)
+
+	maintenance := memory.NewMaintenanceReminderRegistry()
+	_, err = maintenance.CreateOnce(ctx, models.MaintenanceReminder{TenantGroupAwareEntityID: owner, ScheduleID: "s1", ThresholdDays: 14, Silent: true})
+	c.Assert(err, qt.IsNil)
+	sent, err = maintenance.HasSent(ctx, "s1", 14)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sent, qt.IsTrue)
+	got, err = maintenance.HasSentInRange(ctx, "s1", 7, 30)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsFalse)
+	_, err = maintenance.CreateOnce(ctx, models.MaintenanceReminder{TenantGroupAwareEntityID: owner, ScheduleID: "s1", ThresholdDays: 7})
+	c.Assert(err, qt.IsNil)
+	got, err = maintenance.HasSentInRange(ctx, "s1", 7, 30)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.IsTrue)
+}

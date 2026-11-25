@@ -1,6 +1,7 @@
 package models_test
 
 import (
+	"context"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -83,6 +84,18 @@ func TestSettingsObject_Set_UnhappyPath(t *testing.T) {
 			field:         "",
 			value:         "value",
 			expectedError: `cannot set field "": no field with tag`,
+		},
+		{
+			name:          "string into a toggle",
+			field:         "notifications.warranty_expiry",
+			value:         "yes",
+			expectedError: `cannot set field "NotificationsWarrantyExpiry": .*value does not fit the field type`,
+		},
+		{
+			name:          "text in a lead-time list",
+			field:         "notifications.warranty_lead_times",
+			value:         []any{float64(30), "soon"},
+			expectedError: `cannot set field "NotificationsWarrantyLeadTimes": .*value does not fit the field type`,
 		},
 	}
 
@@ -318,4 +331,54 @@ func TestSettingsObject_EmptyValues(t *testing.T) {
 	debugInfo, err := settings.Get("uiconfig.show_debug_info")
 	c.Assert(err, qt.IsNil)
 	c.Assert(debugInfo, qt.DeepEquals, new(false))
+}
+
+// TestSettingsObject_LeadTimesFromJSON covers the shapes encoding/json
+// produces for the reminder lead times (#2805).
+func TestSettingsObject_LeadTimesFromJSON(t *testing.T) {
+	c := qt.New(t)
+	settings := &models.SettingsObject{}
+
+	c.Assert(settings.Set("notifications.warranty_lead_times", []any{float64(90), float64(30)}), qt.IsNil)
+	c.Assert(settings.NotificationsWarrantyLeadTimes, qt.DeepEquals, []int{90, 30})
+	c.Assert(settings.Set("notifications.loan_lead_time", float64(10)), qt.IsNil)
+	c.Assert(settings.NotificationsLoanLeadTime, qt.DeepEquals, new(10))
+
+	// null clears a value back to the default.
+	c.Assert(settings.Set("notifications.warranty_lead_times", nil), qt.IsNil)
+	c.Assert(settings.NotificationsWarrantyLeadTimes, qt.IsNil)
+}
+
+func TestSettingsObject_ValidateWithContext(t *testing.T) {
+	ctx := context.Background()
+	tests := []struct {
+		name     string
+		settings models.SettingsObject
+		wantErr  string
+	}{
+		{name: "nothing set", settings: models.SettingsObject{}},
+		{name: "valid lead times", settings: models.SettingsObject{
+			NotificationsWarrantyLeadTimes:    []int{90, 30, 1},
+			NotificationsMaintenanceLeadTimes: []int{365},
+			NotificationsLoanLeadTime:         new(60),
+		}},
+		{name: "zero is not a warranty lead time", settings: models.SettingsObject{NotificationsWarrantyLeadTimes: []int{30, 0}}, wantErr: ".*between 1 and 365 days.*"},
+		{name: "beyond a year", settings: models.SettingsObject{NotificationsMaintenanceLeadTimes: []int{366}}, wantErr: ".*between 1 and 365 days.*"},
+		{name: "duplicates", settings: models.SettingsObject{NotificationsWarrantyLeadTimes: []int{7, 7}}, wantErr: ".*must not repeat.*"},
+		{name: "too many", settings: models.SettingsObject{NotificationsWarrantyLeadTimes: []int{1, 2, 3, 4, 5, 6}}, wantErr: ".*at most 5.*"},
+		{name: "empty list", settings: models.SettingsObject{NotificationsWarrantyLeadTimes: []int{}}, wantErr: ".*at least one.*"},
+		{name: "loan lead time of zero", settings: models.SettingsObject{NotificationsLoanLeadTime: new(0)}, wantErr: ".*notificationsLoanLeadTime.*"},
+		{name: "loan lead time too long", settings: models.SettingsObject{NotificationsLoanLeadTime: new(61)}, wantErr: ".*notificationsLoanLeadTime.*"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := tt.settings.ValidateWithContext(ctx)
+			if tt.wantErr == "" {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.ErrorMatches, tt.wantErr)
+		})
+	}
 }

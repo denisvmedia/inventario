@@ -22,14 +22,24 @@ func TestWarrantyReminderThreshold_IsValid(t *testing.T) {
 	c := qt.New(t)
 
 	for _, threshold := range models.WarrantyReminderThresholds {
-		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("canonical threshold %d", threshold))
+		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("default threshold %d", threshold))
+	}
+	// Any per-user lead time from 1 to 365 days is valid (#2805).
+	for _, threshold := range []models.WarrantyReminderThreshold{1, 14, 45, 90, 365} {
+		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("threshold %d", threshold))
 	}
 
 	// 0 is the maintenance worker's "overdue" marker, not a warranty
 	// threshold — a row carrying it came from the wrong worker.
-	for _, threshold := range []models.WarrantyReminderThreshold{0, 1, 14, 45, 90, -7} {
+	for _, threshold := range []models.WarrantyReminderThreshold{0, 366, -7} {
 		c.Check(threshold.IsValid(), qt.IsFalse, qt.Commentf("threshold %d", threshold))
 	}
+}
+
+func TestDefaultLeadTimes(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(models.DefaultWarrantyLeadTimes(), qt.DeepEquals, []int{60, 30, 7})
+	c.Assert(models.DefaultMaintenanceLeadTimes(), qt.DeepEquals, []int{14, 7, 1})
 }
 
 func TestWarrantyReminder_ValidateWithContext(t *testing.T) {
@@ -82,11 +92,19 @@ func TestWarrantyReminder_ValidateWithContext(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "threshold off the canonical list",
+			name: "per-user lead time",
 			reminder: models.WarrantyReminder{
 				TenantGroupAwareEntityID: validReminderIDs(),
 				CommodityID:              "commodity-1",
 				ThresholdDays:            45,
+			},
+		},
+		{
+			name: "threshold beyond a year",
+			reminder: models.WarrantyReminder{
+				TenantGroupAwareEntityID: validReminderIDs(),
+				CommodityID:              "commodity-1",
+				ThresholdDays:            366,
 			},
 			wantErr: true,
 		},
@@ -120,10 +138,14 @@ func TestMaintenanceReminderThreshold_IsValid(t *testing.T) {
 	c := qt.New(t)
 
 	for _, threshold := range models.MaintenanceReminderThresholds {
-		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("canonical threshold %d", threshold))
+		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("default threshold %d", threshold))
+	}
+	// Any per-user lead time from 1 to 365 days is valid (#2805).
+	for _, threshold := range []models.MaintenanceReminderThreshold{2, 3, 30, 365} {
+		c.Check(threshold.IsValid(), qt.IsTrue, qt.Commentf("threshold %d", threshold))
 	}
 
-	for _, threshold := range []models.MaintenanceReminderThreshold{2, 3, 30, 60, -1} {
+	for _, threshold := range []models.MaintenanceReminderThreshold{366, -1} {
 		c.Check(threshold.IsValid(), qt.IsFalse, qt.Commentf("threshold %d", threshold))
 	}
 }
@@ -136,9 +158,12 @@ func TestMaintenanceReminderThreshold_Label(t *testing.T) {
 	c.Check(models.MaintenanceReminder1Day.Label(), qt.Equals, "1-day")
 	c.Check(models.MaintenanceReminderOverdue.Label(), qt.Equals, "overdue")
 
-	// Labels reach email copy, so an unknown threshold must produce
+	c.Check(models.MaintenanceReminderThreshold(3).Label(), qt.Equals, "3-day")
+
+	// Labels reach email copy, so an invalid threshold must produce
 	// nothing rather than a number the reader cannot interpret.
-	c.Check(models.MaintenanceReminderThreshold(3).Label(), qt.Equals, "")
+	c.Check(models.MaintenanceReminderThreshold(-2).Label(), qt.Equals, "")
+	c.Check(models.MaintenanceReminderThreshold(400).Label(), qt.Equals, "")
 
 	seen := make(map[string]bool, len(models.MaintenanceReminderThresholds))
 	for _, threshold := range models.MaintenanceReminderThresholds {
@@ -196,11 +221,19 @@ func TestMaintenanceReminder_ValidateWithContext(t *testing.T) {
 			wantErr: true,
 		},
 		{
-			name: "threshold off the canonical list",
+			name: "per-user lead time",
 			reminder: models.MaintenanceReminder{
 				TenantGroupAwareEntityID: validReminderIDs(),
 				ScheduleID:               "schedule-1",
 				ThresholdDays:            3,
+			},
+		},
+		{
+			name: "threshold beyond a year",
+			reminder: models.MaintenanceReminder{
+				TenantGroupAwareEntityID: validReminderIDs(),
+				ScheduleID:               "schedule-1",
+				ThresholdDays:            366,
 			},
 			wantErr: true,
 		},
@@ -302,4 +335,17 @@ func TestReminders_ValidateRequiresContext(t *testing.T) {
 	c.Check((&models.WarrantyReminder{}).Validate(), qt.ErrorIs, models.ErrMustUseValidateWithContext)
 	c.Check((&models.MaintenanceReminder{}).Validate(), qt.ErrorIs, models.ErrMustUseValidateWithContext)
 	c.Check((&models.StorageQuotaReminder{}).Validate(), qt.ErrorIs, models.ErrMustUseValidateWithContext)
+}
+
+func TestReminderThreshold_MetricLabel(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(models.WarrantyReminder60Days.MetricLabel(), qt.Equals, "60")
+	c.Assert(models.WarrantyReminder7Days.MetricLabel(), qt.Equals, "7")
+	c.Assert(models.WarrantyReminderThreshold(90).MetricLabel(), qt.Equals, "custom")
+	c.Assert(models.WarrantyReminderThreshold(365).MetricLabel(), qt.Equals, "custom")
+
+	c.Assert(models.MaintenanceReminder14Days.MetricLabel(), qt.Equals, "14")
+	c.Assert(models.MaintenanceReminder1Day.MetricLabel(), qt.Equals, "1")
+	c.Assert(models.MaintenanceReminderOverdue.MetricLabel(), qt.Equals, "0")
+	c.Assert(models.MaintenanceReminderThreshold(21).MetricLabel(), qt.Equals, "custom")
 }

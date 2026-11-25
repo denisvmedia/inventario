@@ -19,6 +19,20 @@ export const SETTING_NOTIFICATIONS_WEEKLY_DIGEST = "notifications.weekly_digest"
 export const SETTING_NOTIFICATIONS_PRICE_DROP = "notifications.price_drop"
 export const SETTING_NOTIFICATIONS_LOAN_REMINDER = "notifications.loan_reminder"
 export const SETTING_NOTIFICATIONS_ITEM_REMINDER = "notifications.item_reminder"
+// Per-user lead times for the built-in reminders (#2805). Unset means the
+// defaults below; the loan default comes from the server (`/system`).
+export const SETTING_NOTIFICATIONS_WARRANTY_LEAD_TIMES = "notifications.warranty_lead_times"
+export const SETTING_NOTIFICATIONS_MAINTENANCE_LEAD_TIMES = "notifications.maintenance_lead_times"
+export const SETTING_NOTIFICATIONS_LOAN_LEAD_TIME = "notifications.loan_lead_time"
+// Mirrors models.DefaultWarrantyLeadTimes / DefaultMaintenanceLeadTimes.
+export const DEFAULT_WARRANTY_LEAD_TIMES = [60, 30, 7]
+export const DEFAULT_MAINTENANCE_LEAD_TIMES = [14, 7, 1]
+// Fallback when /system has not answered yet; the server default is
+// --loan-reminder-due-soon-days.
+export const DEFAULT_LOAN_LEAD_TIME = 7
+// Limits, mirroring models.ReminderMaxLeadDays / LoanReminderMaxLeadDays.
+export const BUILTIN_LEAD_TIME_MAX_DAYS = 365
+export const LOAN_LEAD_TIME_MAX_DAYS = 60
 export const SETTING_NOTIFICATIONS_CHANNEL_EMAIL = "notifications.channel.email"
 export const SETTING_NOTIFICATIONS_CHANNEL_PUSH = "notifications.channel.push"
 export const SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW = "appearance.default_items_view"

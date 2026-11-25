@@ -106,10 +106,12 @@ account.
 
 The **Notifications** section lets you turn individual email/push reminders on
 or off — warranty expiry, maintenance, loans, the reminders you set on items,
-the weekly digest, price-drop alerts, and which channels to use. Those reminders
-tie into your inventory; see
-[Warranties, loans & maintenance](../warranties-loans-maintenance/) for what they
-cover.
+the weekly digest, price-drop alerts, and which channels to use. Under
+**Warranty expiry**, **Maintenance reminders**, and **Loan reminders**, a
+**Days before** field sets how far ahead you hear about each one. Those
+reminders tie into your inventory; see
+[Warranties, loans & maintenance](../warranties-loans-maintenance/#reminder-emails)
+for what they cover and the limits of each field.
 
 ### Weekly digest
 
