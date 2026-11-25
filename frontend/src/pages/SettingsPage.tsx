@@ -1159,9 +1159,6 @@ function LeadTimeRow({
   const value = stored && stored.length > 0 ? stored : defaults
   return (
     <LeadTimeField
-      // Re-keyed by the value in effect so a save, a rollback or the
-      // server default arriving resets the draft.
-      key={value.join(",")}
       id={`${cfg.testId}-field`}
       value={value}
       defaults={defaults}

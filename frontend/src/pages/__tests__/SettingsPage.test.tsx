@@ -647,6 +647,31 @@ describe("<SettingsPage />", () => {
       )
     })
 
+    it("keeps keyboard focus in the field after a save and after Use default", async () => {
+      server.use(...withGroupHandlers({}))
+      const patches = recordPatches((_field, body) =>
+        body === null ? {} : { notificationsWarrantyLeadTimes: body }
+      )
+      const user = await openNotifications()
+      const input = await screen.findByTestId("lead-times-warranty-input")
+      await user.clear(input)
+      await user.type(input, "90, 7{Enter}")
+      await waitFor(() => expect(patches).toHaveLength(1))
+      await screen.findByTestId("lead-times-warranty-reset")
+      expect(screen.getByTestId("lead-times-warranty-input")).toBe(input)
+      expect(input).toHaveFocus()
+
+      await user.tab()
+      expect(screen.getByTestId("lead-times-warranty-reset")).toHaveFocus()
+      await user.keyboard("{Enter}")
+      await waitFor(() => expect(patches).toHaveLength(2))
+      await waitFor(() =>
+        expect(screen.queryByTestId("lead-times-warranty-reset")).not.toBeInTheDocument()
+      )
+      expect(input).toHaveValue("60, 30, 7")
+      expect(input).toHaveFocus()
+    })
+
     it("explains a value it cannot save and sends nothing", async () => {
       server.use(...withGroupHandlers({}))
       const patches = recordPatches(() => ({}))

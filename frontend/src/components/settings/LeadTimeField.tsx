@@ -1,4 +1,4 @@
-import { useState, type KeyboardEvent } from "react"
+import { useRef, useState, type KeyboardEvent } from "react"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
@@ -22,8 +22,9 @@ interface LeadTimeFieldProps {
 
 // LeadTimeField is the "days before" input under a reminder row in
 // Settings → Notifications (#2805). It saves on blur or Enter; an empty
-// field or "Use default" goes back to the default. The parent keys it by
-// the stored value, so a saved or rolled-back value resets the draft.
+// field or "Use default" goes back to the default. A saved or rolled-back
+// value resets the draft. The field stays mounted through that, so a
+// keyboard user keeps focus in it.
 export function LeadTimeField({
   id,
   value,
@@ -39,6 +40,15 @@ export function LeadTimeField({
   const current = formatLeadTimes(value)
   const [draft, setDraft] = useState(current)
   const [error, setError] = useState<string | null>(null)
+  // The value in effect when the draft was last reset. A save, a rollback or
+  // the server default arriving changes it, and the draft follows.
+  const [shown, setShown] = useState(current)
+  if (shown !== current) {
+    setShown(current)
+    setDraft(current)
+    setError(null)
+  }
+  const inputRef = useRef<HTMLInputElement>(null)
   const hintId = `${id}-hint`
 
   function commit() {
@@ -76,6 +86,7 @@ export function LeadTimeField({
           {t("settings:notifications.leadTimes.label")}
         </Label>
         <Input
+          ref={inputRef}
           id={id}
           inputMode="numeric"
           autoComplete="off"
@@ -103,6 +114,9 @@ export function LeadTimeField({
               setError(null)
               setDraft(formatLeadTimes(defaults))
               onSave(null)
+              // The button goes away once the setting is back to the
+              // default; keep keyboard focus in the field.
+              inputRef.current?.focus()
             }}
             data-testid={`${testId}-reset`}
           >
