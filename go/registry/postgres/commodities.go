@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
@@ -343,6 +344,58 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	}
 
 	return commodities, total, nil
+}
+
+// CountTags counts the tags of the commodities opts selects in one query: a
+// LEFT JOIN LATERAL over the tags array yields one row per (commodity, tag),
+// and one row with a NULL slug for a commodity without tags, so grouping by
+// the slug gives every tag count plus, under NULL, the untagged count. The
+// WHERE clause is the list's, so the counts describe the same commodities.
+func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
+	commodities := string(r.tableNames.Commodities())
+	where := commodityWhere(opts, commodities, string(r.tableNames.CommodityLoans()))
+	sb := commodityTagCountsSelect(commodities)
+	query, args := addWhere(sb, where).Build()
+
+	counts := registry.CommodityTagCounts{Tags: map[string]int{}}
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to count commodity tags", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var slug sql.NullString
+			var n int
+			if err := rows.Scan(&slug, &n); err != nil {
+				return errxtrace.Wrap("failed to scan commodity tag count", err)
+			}
+			if slug.Valid {
+				counts.Tags[slug.String] = n
+			} else {
+				counts.Untagged = n
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return registry.CommodityTagCounts{}, errxtrace.Wrap("failed to count commodity tags", err)
+	}
+	return counts, nil
+}
+
+// commodityTagCountsSelect is the SELECT of CountTags without its WHERE.
+// COUNT(DISTINCT id) keeps a slug stored twice on one row from counting
+// twice.
+func commodityTagCountsSelect(commodities string) *sqlb.SelectBuilder {
+	sb := newSelect().
+		Select("t.slug", "COUNT(DISTINCT "+commodities+".id)").
+		From(commodities)
+	sb.JoinWithOption(sqlb.LeftJoin,
+		"LATERAL jsonb_array_elements_text(COALESCE("+commodities+".tags, '[]'::jsonb)) AS t(slug)",
+		"true")
+	sb.GroupBy("t.slug")
+	return sb
 }
 
 // commodityWhere assembles the WHERE clause for the filtered list queries.

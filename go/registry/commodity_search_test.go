@@ -172,3 +172,18 @@ func TestCommoditySearchFields_MatchTheGeneratedColumn(t *testing.T) {
 	}
 	c.Assert(args, qt.DeepEquals, registry.CommoditySearchFields)
 }
+
+func TestCountCommodityTags(t *testing.T) {
+	c := qt.New(t)
+	got := registry.CountCommodityTags([]*models.Commodity{
+		{Tags: models.ValuerSlice[string]{"red", "tools", "red"}},
+		{Tags: models.ValuerSlice[string]{"red"}},
+		{Tags: models.ValuerSlice[string]{}},
+		{},
+		nil,
+	})
+	c.Check(got, qt.DeepEquals, registry.CommodityTagCounts{
+		Tags:     map[string]int{"red": 2, "tools": 1},
+		Untagged: 2,
+	})
+}

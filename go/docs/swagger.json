@@ -3393,6 +3393,152 @@
                 }
             }
         },
+        "/g/{groupSlug}/commodities/tag-counts": {
+            "get": {
+                "description": "Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.\nTakes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Count commodity tags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search text, as for GET /commodities",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by commodity type, as for GET /commodities",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by status, as for GET /commodities",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by exact area ID",
+                        "name": "area_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only commodities with no area",
+                        "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include drafts and non-in_use commodities (default true)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by computed warranty status",
+                        "name": "warranty_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Warranty expires strictly before YYYY-MM-DD",
+                        "name": "warranty_expires_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by current loan state",
+                        "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "any"
+                        ],
+                        "type": "string",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tag_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags_exclude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Accepted and ignored",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityTagCountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported parameter or invalid value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/values": {
             "get": {
                 "description": "Get the total value of commodities globally, by location, and by area",
@@ -12078,6 +12224,14 @@
                 }
             }
         },
+        "jsonapi.CommodityTagCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/registry.CommodityTagCounts"
+                }
+            }
+        },
         "jsonapi.CurrencyMigrationPreviewAttributes": {
             "type": "object",
             "properties": {
@@ -15778,6 +15932,22 @@
                 },
                 "value": {
                     "type": "string"
+                }
+            }
+        },
+        "registry.CommodityTagCounts": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "description": "Tags maps a tag slug to the number of commodities carrying it. A slug\nno commodity in the set carries is absent.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "untagged": {
+                    "description": "Untagged counts the commodities without tags (a NULL tags column\nincluded).",
+                    "type": "integer"
                 }
             }
         },

@@ -246,6 +246,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2800 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent until the mock defines list error states.
 
+#### 2026-11-25 — Items list: Tags filter menu with counts
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar has search, type and status filters and the view toggle; there is no tag filter.
+- **Reality**: `frontend/src/components/tags/TagFilterMenu.tsx` adds a **Tags** toolbar button (same `Button size="sm"` outline/default shape and count `Badge` as the other filter dropdowns, with a `Tag` icon) that opens a `Popover` holding a `Command` list: a search box, an **All tags** / **Any tag** switch, a **No tags** row, then one row per item tag with a check/exclude mark, the tag's color dot, its label and its item count. A click requires a tag, a second click excludes it (crossed out, `Ban` mark), a third removes it; a footer says so and carries **Clear**. Counts load from `GET /commodities/tag-counts` when the menu opens. Fallback pattern: the `Popover` + `Command` combobox in [`design-mocks/src/components/CurrencyCombobox.tsx`](../../design-mocks/src/components/CurrencyCombobox.tsx).
+- **Why**: not present in mock. #2792 asks for a Tags dropdown with a search box, color and count per tag, all/any, "No tags" and click-again-to-exclude, and says the dropdown needs a mock or a recorded deviation.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws a tag filter.
+
+#### 2026-11-25 — Tags, area and type link to the filtered items list
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid cards and [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) draw item tags with `TagPill size="xs"` as plain spans; the area and the type on the item page are plain text.
+- **Reality**: `frontend/src/components/tags/TagPill.tsx` follows the mock's pill (sizes, `#` glyph, `bg-*/15` and `border-*/30` tones, using the `tag-*` color tokens that `TagBadge` already uses for real tag colors) and renders a `Link` when given an `href`, with `hover:opacity-80` and a focus outline. A tag on an item card adds itself to the list's current query (other filters kept, back to page 1); the pill sits above the card-wide link (`relative z-10 pointer-events-auto`), like the selection checkbox. The item page's Details tab links each tag to `?inactive=1&tags=<slug>`, the area value to `?area=<id>&inactive=1` and the type under the item name to `?type=<type>&inactive=1`, the last two with `hover:underline`.
+- **Why**: not present in mock. #2792 asks that a tag anywhere, and the type and area values on the item page, link to the items list filtered by them.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows interactive tags.
+
 #### 2026-11-25 — Item page: Reminders card on the Details tab
 
 - **Issue/PR**: #2805
@@ -325,6 +343,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Files & Attachments
 
+#### 2026-11-25 — Files page: "More tags" picker for any file tag
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) offers only the six curated `FILE_TAGS` pills in the toolbar.
+- **Reality**: `FilesListPage` keeps the curated pills and adds, after them, one pressed pill (with an `X`) per selected tag that has no curated pill, and a **More tags** button that opens `TagFilterMenu` over the group's file tags (search box, color dot, label; no counts, exclusion, all/any or "No tags", since the files endpoint has none of them). Only file tags are listed; item tags stay in their own namespace (#1928).
+- **Why**: not present in mock. #2792 asks that file browsing keep the curated tag shortcuts and also offer a searchable picker for any file tag, and that every condition in the URL stay visible.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws arbitrary file tag selection.
+
 #### 2026-11-25 — File detail sheet: "Linked to" lists every attachment, each with Remove attachment
 
 - **Issue/PR**: #2806 / PR #2827
@@ -398,6 +425,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Resolve when #1400 lands a proper Tags entity — pills then match by id again, and the i18n keys become tag-record labels.
 
 ### Tags
+
+#### 2026-11-25 — Tags page: tag names link to the filtered list
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) row label is plain text.
+- **Reality**: `TagRow` renders the `# label` as a `Link` with `hover:underline`: an item tag opens the items list with `?inactive=1&tags=<slug>`, so the list matches the row's item count, and a file tag opens the Files page with `?tags=<slug>`.
+- **Why**: not present in mock. #2792 asks that a tag in a row of the Tags page link to the list filtered by it.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows interactive tag rows.
 
 #### 2026-05-15 — Tags page: full-shape TagFormDialog preserved alongside inline create
 

@@ -12,6 +12,17 @@
     "button": "Vytvořit štítek"
   },
   "description": "Spravujte štítky, které můžete připojit k položkám a souborům. Přejmenování štítku přepíše jeho odkazy všude; smazání používaného štítku vyžaduje potvrzení.",
+  "filter": {
+    "clear": "Zrušit výběr",
+    "empty": "Žádné štítky nenalezeny.",
+    "excluded": "vyloučeno",
+    "excludeHint": "Dalším kliknutím na vybraný štítek ho vyloučíte.",
+    "match": "Položky musí mít",
+    "matchAll": "Všechny štítky",
+    "matchAny": "Některý štítek",
+    "noTags": "Bez štítků",
+    "search": "Hledat štítky…"
+  },
   "form": {
     "cancel": "Zrušit",
     "color": "Barva",

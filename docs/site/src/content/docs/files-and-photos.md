@@ -115,7 +115,8 @@ At the top of the Files page, category tiles (with **All** for everything) show
 a live count for each category — click one to filter to it. Below the search box
 is a row of tag pills (**Invoice**, **Warranty**, **Manual**, **Certificate**,
 and so on); click any of them to narrow the list to files carrying that tag, and
-**Clear all** to reset. You can change a file's category later — either from its
+**Clear all** to reset. **More tags** opens a searchable list of every file tag
+in the group, for tags that have no pill of their own. You can change a file's category later — either from its
 detail panel (via **Edit metadata**) or by selecting files and using
 **Move to…**.
 

@@ -12,6 +12,17 @@
     "button": "Create tag"
   },
   "description": "Manage labels you can attach to items and files. Renaming a tag rewrites its references everywhere; deleting one in use prompts you for confirmation.",
+  "filter": {
+    "clear": "Clear",
+    "empty": "No tags found.",
+    "excluded": "excluded",
+    "excludeHint": "Click a selected tag again to exclude it.",
+    "match": "Items must have",
+    "matchAll": "All tags",
+    "matchAny": "Any tag",
+    "noTags": "No tags",
+    "search": "Search tags…"
+  },
   "form": {
     "cancel": "Cancel",
     "color": "Color",

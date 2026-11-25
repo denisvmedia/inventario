@@ -124,6 +124,7 @@
     "showingRange": "Zobrazeno {{from}}–{{to}} z {{total}}",
     "uploadDate": "Nahráno {{date}}"
   },
+  "moreTags": "Další štítky",
   "review": {
     "backToList": "Zpět na soubory",
     "next": "Další soubor",

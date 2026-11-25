@@ -27,6 +27,21 @@ export function list(slug: string, items: unknown[] = [], covers?: Record<string
   ]
 }
 
+// tagCounts backs GET /commodities/tag-counts. onRequest sees the query
+// string, for tests that check which filters reach the counts.
+export function tagCounts(
+  slug: string,
+  data: { tags: Record<string, number>; untagged: number },
+  onRequest?: (params: URLSearchParams) => void
+) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/tag-counts`), ({ request }) => {
+      onRequest?.(new URL(request.url).searchParams)
+      return HttpResponse.json({ data })
+    }),
+  ]
+}
+
 export function detail(slug: string, id: string, item: unknown, cover?: CoverFixture) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () => {

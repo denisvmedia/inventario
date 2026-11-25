@@ -230,6 +230,32 @@ describe("<CommodityDetailPage />", () => {
     expect(screen.queryByText("work")).toBeNull()
   })
 
+  it("links tags, the area and the type to the filtered items list", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "work", label: "Work", color: "green" }]),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    const tag = await screen.findByRole("link", { name: "Work" })
+    // Each opens the list filtered by that alone, inactive items included.
+    expect(tag).toHaveAttribute("href", `/g/${SLUG}/commodities?inactive=1&tags=work`)
+    expect(tag.className).toContain("text-tag-green")
+    expect(screen.getByRole("link", { name: "tech" })).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?inactive=1&tags=tech`
+    )
+    expect(screen.getByTestId("commodity-detail-area-link")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?area=a1&inactive=1`
+    )
+    expect(screen.getByTestId("commodity-detail-type-link")).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities?type=electronics&inactive=1`
+    )
+  })
+
   it("renders the acquisition-frozen line after a currency migration", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

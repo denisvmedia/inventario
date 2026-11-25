@@ -14,6 +14,8 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCommodities } from "@/features/commodities/hooks"
+import { commodityTagHref } from "@/features/commodities/query"
+import { useCurrentGroup } from "@/features/group/GroupContext"
 import {
   type CreateTagRequest,
   type TagColor,
@@ -100,8 +102,20 @@ interface DialogState {
   tag?: TagEntity & { id: string }
 }
 
+// The list a tag row links to: the items list filtered by an item tag, the
+// files list filtered by a file tag.
+function tagListHref(groupSlug: string, kind: TagKind, slug: string): string | undefined {
+  if (!groupSlug || !slug) return undefined
+  if (kind === "file") {
+    return `/g/${encodeURIComponent(groupSlug)}/files?${new URLSearchParams({ tags: slug })}`
+  }
+  return commodityTagHref(groupSlug, slug)
+}
+
 export function TagsListPage() {
   const { t } = useTranslation(["tags", "common"])
+  const { currentGroup } = useCurrentGroup()
+  const groupSlug = currentGroup?.slug ?? ""
   const toast = useAppToast()
   const confirm = useConfirm()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -455,6 +469,7 @@ export function TagsListPage() {
                   <TagRow
                     tag={tag}
                     usage={usage}
+                    href={tagListHref(groupSlug, viewKind, tag.slug ?? "")}
                     previewItems={
                       viewKind === "commodity" ? (previewByTag.get(tag.slug ?? "") ?? []) : []
                     }
