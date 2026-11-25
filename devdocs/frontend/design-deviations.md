@@ -183,9 +183,45 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — asked to make the Items selection panel match the Files one.
 - **Reversion plan**: Permanent unless the upstream mock adopts a richer mass-action pattern; reconcile both surfaces together via the shared component if it does.
 
+#### 2026-11-24 — In-place item edit form: real fields, sticky actions, All fields
+
+- **Issue/PR**: #2795 / PR #2825
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) `ItemEditForm` replaces the detail panel's content with a sticky "Editing" header (back arrow, item name) and five sections: Identity (Item Name, Brand, Model, Category, Serial Number), Location (Location, Area), Purchase (Purchase Date, Purchase Price, Current Value), Warranty (Expiry Date, Warranty Notes), Notes & Tags (Notes, a tag palette of toggle buttons with removable pills under it). Cancel and Save Changes sit after a Separator at the end of the form.
+- **Reality**: `frontend/src/components/items/CommodityEditForm.tsx` keeps the layout, the section order, the element ids and the palette classes, and maps the mock's fields onto the commodity model: Brand and Model become Short name and Quantity (the model has neither brand nor model), Category is the item Type, Purchase Price gets the compact `CurrencyCombobox` beside it, and a foreign purchase currency adds the converted-price field the server requires. A bundle (quantity above 1) disables empty warranty fields, as the dialog does. The form is URL-driven (`/commodities/:id/edit`) in the page and in the sheet; on the full page it is a centered `max-w-2xl` column, and in the sheet its header keeps `pr-8` clear of the sheet's close button. The Separator and the Cancel / Save Changes row stick to the bottom of the view. Agent-suggested additions: an **All fields** ghost button in the header that opens the step-by-step dialog with the values typed so far (links, extra serial numbers, part numbers, status and draft are not on the mock's form); an alert with the same button when the server rejects a field the form does not show; a **Clear location** text button over the Location select; and a new-tag input with an Add button under the palette (`frontend/src/components/tags/TagPalette.tsx`), since the palette alone can only toggle tags the group already has.
+- **Why**: The issue asks for the mock's form 1:1; the field mapping is a backend data reality. The issue also asks for Save and Cancel to stay visible on a long form, hence the sticky row. The agent-suggested parts keep every field of the record reachable from the form and let a user unassign an item or add a first tag without leaving it.
+- **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements; All fields, the hidden-field alert, Clear location and the new-tag input are agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds these fields or controls; the field mapping is permanent while the model has no brand or model.
+
+#### 2026-11-24 — Item page: Previous / Next and Save and next over the originating list
+
+- **Issue/PR**: #2795 / PR #2825
+- **Mock**: Not present in mock. [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) shows one item at a time with no way to move to the next one from the panel or from `ItemEditForm`. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) outline icon buttons.
+- **Reality**: An item opened from the Items list carries the list in `?from=` (`frontend/src/lib/list-context.ts`, `frontend/src/features/commodities/listContext.ts`). The shared `frontend/src/components/ListPager.tsx` (outline `icon-sm` chevrons around an "N of M" position, also used by the file edit page) appears next to Back to items on the full page, in a strip above the header in the sheet (`pr-8`, clear of the close button), and at the right end of the edit form's header. The edit form's footer gains **Save and next** as the primary button, with Save Changes turned outline. Back to items returns to the list on the page holding the item, and an item that has left the list's results shows a one-line note. The walk is `frontend/src/hooks/useListNavigation.ts` from #2814.
+- **Why**: not present in mock. The issue asks for previous / next and "Save and next" following the originating list's filters and order.
+- **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` places list navigation on the item surfaces.
+
+#### 2026-11-24 — Quick edits on the item Details tab
+
+- **Issue/PR**: #2795 / PR #2825
+- **Mock**: Not present in mock. The Details rows of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) are read-only; the only way to change a field is the Edit button. Tags and notes rows are left out when empty. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) ghost `icon-xs` buttons and small Save / Cancel buttons.
+- **Reality**: `frontend/src/pages/commodities/CommodityDetailPage.tsx` puts a ghost `icon-xs` pencil next to the Location (Area on the full page), Tags and Notes labels, in the page and in the sheet. A pencil opens an editor in place of the value: the Location / Area selects from the edit form, the tag palette, or a textarea, with Save (enabled once the value changes) and Cancel. Save writes only that field. The Tags and Notes rows are always shown, with a dash when empty, so their pencils are there to click. The "Place in location" banner opens the location editor instead of the dialog. The pencils are hidden while a currency migration locks the group.
+- **Why**: not present in mock. The issue asks for quick edits of tags, location / area and notes on the item page.
+- **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds inline editing to the item details.
+
+#### 2026-11-24 — Item edit dialog: every step open, Save on every step
+
+- **Issue/PR**: #2795 / PR #2825
+- **Mock**: The mock edits an item in place (`ItemEditForm`); its step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item, with Continue on every step and the save button on the last one only.
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` in edit mode (opened from the edit form's **All fields**) marks every step visited on open, so any stepper segment can be clicked straight away, turns Continue into an outline button and shows **Save changes** on every step. A failed save opens the first step with an invalid field. The stepper tooltips no longer catch the pointer, so a quick click on a thin segment is not lost while the tooltip slides in.
+- **Why**: The issue asks for every step to be reachable in edit mode and for Save on every step.
+- **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent while the dialog stays the full editor behind All fields.
+
 #### 2026-11-25 — Search match line on item cards, list rows and search results
 
-- **Issue/PR**: #2800 / PR (pending)
+- **Issue/PR**: #2800 / PR #2826
 - **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid card header holds the title and the area line only; the table name cell holds name and short name. The search page is not in the mock (its result rows follow the [`CommandPalette`](../../design-mocks/src/components/CommandPalette.tsx) title-and-subtitle row). None of them says why an item matched a search.
 - **Reality**: With a search active, `frontend/src/components/items/SearchMatchHint.tsx` adds one muted `text-[11px]` truncated line under the area line of an items grid card, under the short name in the items table name cell, and under the short name in the area page's items grid and list (`AreaItemsPanel`). It reads `Serial number: SN-1234`, `Tag: Power tools` (the tag's label, not its slug) or a note excerpt. The search page's commodity subtitle shows the same text in place of `A-0042 · <short name>` when there is a match. Nothing is added when the name matched, since the title already shows it. The items search placeholder (items list and area items panel) reads "Search by name, serial or part number, tag, notes or asset ID…".
 - **Why**: not present in mock. The issue asks that a result say which field matched, "so a hit on a serial number is not a mystery".
@@ -194,7 +230,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Items list: alert for a filter the server refuses
 
-- **Issue/PR**: #2800 / PR (pending)
+- **Issue/PR**: #2800 / PR #2826
 - **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no error state for the list; the app shows a generic destructive `Alert` ("Could not load items") for any failed load.
 - **Reality**: When `GET /commodities` answers 400 with `code: "query.invalid_parameter"` (a hand-edited or outdated link), `CommoditiesListPage` shows a destructive `Alert` titled "This filter is not supported" that names the parameter and carries an outline **Clear filters** button, instead of the generic load error. Fallback pattern: the destructive `Alert` in [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx).
 - **Why**: not present in mock. The query contract of epic #2811, which #2800 implements, requires that unsupported filters fail clearly instead of being ignored; the page has to tell the user which part of the link it cannot apply and how to get back to a working list.

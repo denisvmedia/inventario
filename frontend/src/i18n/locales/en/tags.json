@@ -65,6 +65,12 @@
     "usageItems_other": "{{count}} items",
     "usageNone": "Not used yet"
   },
+  "palette": {
+    "add": "Add",
+    "newTagLabel": "New tag",
+    "newTagPlaceholder": "New tag…",
+    "remove": "Remove tag {{label}}"
+  },
   "removal": {
     "confirmAction": "Delete",
     "confirmDescription": "Remove the tag \"{{label}}\" from this group. This cannot be undone.",

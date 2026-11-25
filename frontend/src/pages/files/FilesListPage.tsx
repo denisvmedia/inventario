@@ -107,6 +107,23 @@ export function FilesListPage() {
   const items = useMemo(() => filesQuery.data?.files ?? [], [filesQuery.data?.files])
   const total = filesQuery.data?.total ?? 0
   const totalPages = total > 0 ? Math.max(1, Math.ceil(total / PAGE_SIZE)) : 1
+  // A page past the end (a save that took the last file off it, or an old
+  // link) goes to the last page that has files; the list would otherwise
+  // show an empty page with no pagination to leave it by.
+  const outOfRange =
+    !!filesQuery.data && !filesQuery.isPlaceholderData && page > 1 && page > totalPages
+  useEffect(() => {
+    if (!outOfRange) return
+    setSearchParams(
+      (prev) => {
+        const out = new URLSearchParams(prev)
+        if (totalPages > 1) out.set("page", String(totalPages))
+        else out.delete("page")
+        return out
+      },
+      { replace: true }
+    )
+  }, [outOfRange, totalPages, setSearchParams])
   const allSelectedOnPage = items.length > 0 && items.every((it) => selected.has(it.file.id))
   const hasFilters = !!search || tags.length > 0 || activeTile !== "all"
 

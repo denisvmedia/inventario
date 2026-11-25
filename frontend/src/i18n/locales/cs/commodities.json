@@ -576,5 +576,32 @@
     "expired": "Záruka vypršela",
     "expiring": "Brzy vyprší",
     "none": "Bez záruky"
+  },
+  "editForm": {
+    "allFields": "Všechna pole",
+    "editing": "Úpravy",
+    "hiddenFieldError": "Je třeba opravit pole, které tento formulář nezobrazuje. Otevřete všechna pole a opravte ho.",
+    "save": "Uložit změny",
+    "saveAndNext": "Uložit a další",
+    "sections": {
+      "identity": "Identita",
+      "location": "Umístění",
+      "notesTags": "Poznámky a štítky",
+      "purchase": "Nákup",
+      "warranty": "Záruka"
+    },
+    "stopEditing": "Ukončit úpravy",
+    "warrantyExpiry": "Konec záruky",
+    "warrantyExpiryHint": "Nechte prázdné, pokud záruka není"
+  },
+  "listNav": {
+    "label": "Položky v tomto seznamu",
+    "next": "Další položka",
+    "notInList": "Tato položka není mezi aktuálními výsledky seznamu.",
+    "previous": "Předchozí položka"
+  },
+  "quickEdit": {
+    "edit": "Upravit: {{field}}",
+    "error": "Změnu se nepodařilo uložit."
   }
 }

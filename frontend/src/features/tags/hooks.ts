@@ -149,6 +149,24 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
   })
 }
 
+// useTagCatalog lists every tag of a kind in the active group: the tag
+// palette offers them, useTagIndex and useTagLabel resolve slugs against
+// them. All share one cached query. Outside a group the query stays off and
+// `data` is undefined.
+//
+// The key sits under the group's tag namespace, so tag mutations and the
+// commodity / file writes that auto-create tags refresh it.
+export function useTagCatalog(kind: TagKind) {
+  const ctx = useOptionalCurrentGroup()
+  const groupSlug = ctx?.currentGroup?.slug ?? ""
+  return useQuery({
+    queryKey: tagKeys.labels(groupSlug, kind),
+    queryFn: ({ signal }) => listAllTags(kind, signal),
+    enabled: groupSlug.length > 0,
+    placeholderData: (prev) => prev,
+  })
+}
+
 // A tag as a slug stored on an item or file resolves to: the label the user
 // typed or gave it on the Tags page, and its color.
 export interface ResolvedTag {
@@ -166,23 +184,14 @@ export interface TagIndex {
   isLoading: boolean
 }
 
-// useTagIndex loads the group's tags of one kind once and resolves slugs
-// against them. It falls back to the slug while the catalogue loads,
-// outside a group, and for a slug with no tag row. Uses the optional group
-// hook so a component rendered outside <GroupProvider> (a dialog test
-// harness) just gets the slug back.
-//
-// The key sits under the group's tag namespace, so tag mutations and the
-// commodity / file writes that auto-create tags refresh it.
+// useTagIndex resolves slugs against the group's tags of one kind. It falls
+// back to the slug while the catalogue loads, outside a group, and for a slug
+// with no tag row. Uses the optional group hook so a component rendered
+// outside <GroupProvider> (a dialog test harness) just gets the slug back.
 export function useTagIndex(kind: TagKind): TagIndex {
   const ctx = useOptionalCurrentGroup()
   const groupSlug = ctx?.currentGroup?.slug ?? ""
-  const { data, isLoading } = useQuery({
-    queryKey: tagKeys.labels(groupSlug, kind),
-    queryFn: ({ signal }) => listAllTags(kind, signal),
-    enabled: groupSlug.length > 0,
-    placeholderData: (prev) => prev,
-  })
+  const { data, isLoading } = useTagCatalog(kind)
   // A Map, not an object literal: a slug such as "constructor" must not
   // resolve to an Object.prototype member.
   const { tags, bySlug } = useMemo(() => {
