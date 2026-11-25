@@ -49,6 +49,11 @@ func TestCommodityReminder_NextOccurrence(t *testing.T) {
 		{name: "yearly on 29 February falls on 28 February in a common year", dueOn: "2024-02-29", unit: models.ReminderRepeatYear, interval: 1, today: "2026-11-25", want: "2027-02-28", wantOK: true},
 		{name: "yearly on 29 February returns to 29 February in a leap year", dueOn: "2024-02-29", unit: models.ReminderRepeatYear, interval: 1, today: "2027-03-01", want: "2028-02-29", wantOK: true},
 		{name: "every 2 years skips the off year", dueOn: "2024-06-01", unit: models.ReminderRepeatYear, interval: 2, today: "2026-06-02", want: "2028-06-01", wantOK: true},
+
+		// More than 292 years back, where time.Duration saturates.
+		{name: "daily from 1700", dueOn: "1700-01-01", unit: models.ReminderRepeatDay, interval: 1, today: "2026-11-25", want: "2026-11-25", wantOK: true},
+		{name: "every 10 days from 1700", dueOn: "1700-01-01", unit: models.ReminderRepeatDay, interval: 10, today: "2026-11-25", want: "2026-11-28", wantOK: true},
+		{name: "weekly from year 226", dueOn: "0226-01-01", unit: models.ReminderRepeatWeek, interval: 1, today: "2026-11-25", want: "2026-11-29", wantOK: true},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -68,6 +73,9 @@ func TestDaysUntil(t *testing.T) {
 	c.Assert(models.DaysUntil("2026-11-26", now), qt.Equals, 1)
 	c.Assert(models.DaysUntil("2026-11-20", now), qt.Equals, -5)
 	c.Assert(models.DaysUntil("2027-11-25", now), qt.Equals, 365)
+	// Beyond the ~292 years a time.Duration can hold.
+	c.Assert(models.DaysUntil("1626-11-25", now), qt.Equals, -146097)
+	c.Assert(models.DaysUntil("2426-11-25", now), qt.Equals, 146097)
 }
 
 func TestCommodityReminder_NormalizeLeadTimes(t *testing.T) {
@@ -98,6 +106,31 @@ func TestCommodityReminder_ValidateWithContext(t *testing.T) {
 		{name: "valid", mutate: func(*models.CommodityReminder) {}},
 		{name: "missing title", mutate: func(r *models.CommodityReminder) { r.Title = "" }, wantErr: "title"},
 		{name: "bad date", mutate: func(r *models.CommodityReminder) { r.DueOn = "24.12.2026" }, wantErr: "due_on"},
+		{name: "year typo", mutate: func(r *models.CommodityReminder) { r.DueOn = "0226-12-24" }, wantErr: "due_on: the year must be between 1900 and 2200"},
+		{name: "year 1", mutate: func(r *models.CommodityReminder) { r.DueOn = "0001-01-01" }, wantErr: "due_on: the year must be between 1900 and 2200"},
+		{name: "year before 1900", mutate: func(r *models.CommodityReminder) { r.DueOn = "1899-12-31" }, wantErr: "due_on: the year must be between 1900 and 2200"},
+		{name: "year after 2200", mutate: func(r *models.CommodityReminder) { r.DueOn = "2201-01-01" }, wantErr: "due_on: the year must be between 1900 and 2200"},
+		{name: "first year allowed", mutate: func(r *models.CommodityReminder) { r.DueOn = "1900-01-01" }},
+		{name: "last year allowed", mutate: func(r *models.CommodityReminder) { r.DueOn = "2200-12-31" }},
+		{name: "lead time as long as the daily repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatDay, 3, models.ValuerSlice[int]{3}
+		}, wantErr: "remind_days_before: each lead time must be shorter than the repeat interval"},
+		{name: "lead time longer than the weekly repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatWeek, 1, models.ValuerSlice[int]{10, 1}
+		}, wantErr: "remind_days_before: each lead time must be shorter than the repeat interval"},
+		{name: "lead time inside the weekly repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatWeek, 1, models.ValuerSlice[int]{6, 0}
+		}},
+		{name: "lead time of a month on a monthly repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatMonth, 1, models.ValuerSlice[int]{28}
+		}, wantErr: "remind_days_before: each lead time must be shorter than the repeat interval"},
+		{name: "lead time inside a quarterly repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatMonth, 3, models.ValuerSlice[int]{60, 30}
+		}},
+		{name: "lead time of a year on a yearly repeat", mutate: func(r *models.CommodityReminder) {
+			r.RepeatUnit, r.RepeatInterval, r.RemindDaysBefore = models.ReminderRepeatYear, 1, models.ValuerSlice[int]{365}
+		}, wantErr: "remind_days_before: each lead time must be shorter than the repeat interval"},
+		{name: "any lead time on a one-off reminder", mutate: func(r *models.CommodityReminder) { r.RemindDaysBefore = models.ValuerSlice[int]{365} }},
 		{name: "no lead times", mutate: func(r *models.CommodityReminder) { r.RemindDaysBefore = nil }, wantErr: "remind_days_before"},
 		{name: "lead time out of range", mutate: func(r *models.CommodityReminder) { r.RemindDaysBefore = models.ValuerSlice[int]{366} }, wantErr: "remind_days_before"},
 		{name: "negative lead time", mutate: func(r *models.CommodityReminder) { r.RemindDaysBefore = models.ValuerSlice[int]{-1} }, wantErr: "remind_days_before"},

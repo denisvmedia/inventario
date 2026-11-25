@@ -137,8 +137,8 @@ An item reminder is a date you want to remember about one item that none of the 
 2. Click **Add reminder**.
 3. Fill in the **Add reminder** dialog:
    - **Title** — what the date is about, for example "Return window ends".
-   - **Date** — the date itself. For a repeating reminder this is the first occurrence.
-   - **Remind me (days before)** — one or more numbers of days, separated by commas, for example `30, 7, 1`. Use `0` for an email on the day itself. You can enter up to five values, each from 0 to 365.
+   - **Date** — the date itself, between the years 1900 and 2200. For a repeating reminder this is the first occurrence.
+   - **Remind me (days before)** — one or more numbers of days, separated by commas, for example `30, 7, 1`. Use `0` for an email on the day itself. You can enter up to five values, each from 0 to 365. On a repeating reminder each value must be shorter than the repeat interval, counting a month as 28 days and a year as 365: a weekly reminder takes values up to 6, a monthly one up to 27.
    - **Repeat** — **Does not repeat**, **Daily**, **Weekly**, **Monthly**, or **Yearly**. When the reminder repeats, an **Every** field sets the interval, so **Monthly** with **Every (months)** set to 3 means once a quarter.
 4. Click **Create**.
 
@@ -146,7 +146,7 @@ Each reminder on the card shows its title, its repeat rule, its lead times, and 
 
 A repeating reminder moves to its next date by itself once a date passes. A monthly reminder set on the 31st falls on the last day of shorter months (30 April, 28 or 29 February) and returns to the 31st when the month has one; a yearly reminder set on 29 February falls on 28 February in other years. A one-off reminder whose date has passed stays on the card with a **Passed** badge until you delete it.
 
-Deleting an item deletes its reminders.
+Deleting an item deletes its reminders. Deleting your account deletes the reminders you created, including those on items in a group you share.
 
 ## The Upcoming page
 

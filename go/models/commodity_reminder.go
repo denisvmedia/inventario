@@ -55,7 +55,15 @@ const (
 	ReminderMaxLeadTimes = 5
 	// ReminderMaxRepeatInterval caps "every N units".
 	ReminderMaxRepeatInterval = 999
+	// ReminderMinYear and ReminderMaxYear bound the year of a reminder's
+	// date. A year outside them is a typo (0226 for 2026) rather than a date
+	// anyone wants an email about.
+	ReminderMinYear = 1900
+	ReminderMaxYear = 2200
 )
+
+// secondsPerDay converts the distance between two UTC midnights to days.
+const secondsPerDay = 24 * 60 * 60
 
 // CommodityReminder is a dated reminder on an item: the end of a return
 // window, an insurance renewal, a vehicle inspection. It carries a title, a
@@ -170,8 +178,14 @@ func (r *CommodityReminder) NextOccurrence(now time.Time) (Date, bool) {
 // DaysUntil returns the whole days from today (the UTC date of now) to d;
 // negative when d is in the past.
 func DaysUntil(d Date, now time.Time) int {
-	t := d.ToTime()
-	return int(t.Sub(utcDay(now)).Hours() / 24)
+	return daysBetween(utcDay(now), d.ToTime())
+}
+
+// daysBetween returns the days from a to b, both UTC midnights. It works on
+// Unix seconds because time.Duration saturates at about 292 years, which a
+// date far in the past would exceed.
+func daysBetween(a, b time.Time) int {
+	return int((b.Unix() - a.Unix()) / secondsPerDay)
 }
 
 // utcDay truncates now to midnight UTC — the "today" every reminder worker
@@ -184,7 +198,7 @@ func utcDay(now time.Time) time.Time {
 // nextByDays returns the first anchor + k*step days on or after today.
 // anchor is before today.
 func nextByDays(anchor, today time.Time, step int) time.Time {
-	diff := int(today.Sub(anchor).Hours() / 24)
+	diff := daysBetween(anchor, today)
 	k := (diff + step - 1) / step
 	return anchor.AddDate(0, 0, k*step)
 }
@@ -238,11 +252,72 @@ func (r *CommodityReminder) ValidateWithContext(ctx context.Context) error {
 func (r *CommodityReminder) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, r,
 		validation.Field(&r.Title, rules.NotEmpty, validation.Length(1, ReminderTitleMaxLength)),
-		validation.Field(&r.DueOn, validation.Required, DateFormat),
-		validation.Field(&r.RemindDaysBefore, ReminderLeadTimesRule),
+		validation.Field(&r.DueOn, validation.Required, DateFormat, validation.By(validateReminderYear)),
+		validation.Field(&r.RemindDaysBefore, ReminderLeadTimesRule, validation.By(r.validateLeadTimesFitRepeat)),
 		validation.Field(&r.RepeatUnit, validation.Required, ReminderRepeatUnitRule),
 		validation.Field(&r.RepeatInterval, validation.Required, validation.Min(1), validation.Max(ReminderMaxRepeatInterval)),
 	)
+}
+
+// validateReminderYear rejects a date whose year is outside
+// ReminderMinYear..ReminderMaxYear. A malformed date passes; DateFormat
+// reports it.
+func validateReminderYear(value any) error {
+	d, ok := value.(Date)
+	if !ok || d == "" {
+		return nil
+	}
+	t, err := time.Parse(dateFormat, string(d))
+	if err != nil {
+		return nil
+	}
+	if t.Year() < ReminderMinYear || t.Year() > ReminderMaxYear {
+		return validation.NewError("validation_reminder_due_on_range", "the year must be between 1900 and 2200")
+	}
+	return nil
+}
+
+// ShortestRepeatDays returns the fewest days between two occurrences of a
+// repeating reminder, counting a month as 28 days and a year as 365, or 0
+// for a reminder that does not repeat.
+func (r *CommodityReminder) ShortestRepeatDays() int {
+	interval := max(r.RepeatInterval, 1)
+	switch r.RepeatUnit {
+	case ReminderRepeatDay:
+		return interval
+	case ReminderRepeatWeek:
+		return interval * 7
+	case ReminderRepeatMonth:
+		return interval * 28
+	case ReminderRepeatYear:
+		return interval * 365
+	default:
+		return 0
+	}
+}
+
+// validateLeadTimesFitRepeat rejects a lead time that is not shorter than
+// the repeat period. The next occurrence is never further away than the
+// period, so such a lead time would fire on the day after the previous
+// occurrence, not on the day the user asked for.
+func (r *CommodityReminder) validateLeadTimesFitRepeat(value any) error {
+	period := r.ShortestRepeatDays()
+	if period == 0 {
+		return nil
+	}
+	var days []int
+	switch v := value.(type) {
+	case ValuerSlice[int]:
+		days = v
+	case []int:
+		days = v
+	}
+	for _, d := range days {
+		if d >= period {
+			return validation.NewError("validation_reminder_lead_time_exceeds_repeat", "each lead time must be shorter than the repeat interval")
+		}
+	}
+	return nil
 }
 
 // ReminderLeadTimesRule checks a lead-time list: between one and

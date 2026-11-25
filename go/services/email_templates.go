@@ -459,8 +459,6 @@ func computeSubject(job emailJob, lang string) (string, bool) {
 	return subjectByTemplateType(job.TemplateType, lang)
 }
 
-// subjectByTemplateType returns the fixed subject for a template type in the
-// requested language, falling back to en when the (lang, type) is absent.
 // itemReminderSubjectPrefix returns the subject prefix put in front of an
 // item reminder's title.
 func itemReminderSubjectPrefix(lang string) string {
@@ -474,6 +472,8 @@ func itemReminderSubjectPrefix(lang string) string {
 	}
 }
 
+// subjectByTemplateType returns the fixed subject for a template type in the
+// requested language, falling back to en when the (lang, type) is absent.
 func subjectByTemplateType(tt emailTemplateType, lang string) (string, bool) {
 	if m, ok := emailSubjects[lang]; ok {
 		if s, ok := m[tt]; ok {
