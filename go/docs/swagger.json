@@ -3913,7 +3913,7 @@
         },
         "/g/{groupSlug}/commodities/{commodityID}/cover": {
             "patch": {
-                "description": "Sets the explicit cover-photo override (issue #1451 option B)\nor clears it when `attributes.file_id` is null/empty. The\nfile must already be attached to this commodity and be an\nimage.",
+                "description": "Sets the explicit cover-photo override (issue #1451 option B)\nor clears it when `attributes.file_id` is null/empty. The\nfile must already be attached to this commodity among its\nphotos and be an image.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],

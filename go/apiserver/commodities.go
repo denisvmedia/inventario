@@ -571,8 +571,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // for a commodity (issue #1451 option B). The body's `attributes.file_id`
 // is either:
 //
-//   - a non-empty string — must reference a file that is linked to this
-//     commodity and is an image. The handler validates
+//   - a non-empty string — must reference a file that is attached to this
+//     commodity among its photos and is an image. The handler validates
 //     and persists `commodities.cover_file_id`.
 //   - `null` or empty — clears the override. The first-photo path takes
 //     over on the next read.
@@ -695,8 +695,14 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 	if file == nil || file.File == nil {
 		return registry.ErrNotFound
 	}
-	if file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
+	link := file.LinkTo(models.FileLinkCommodity, commodityID)
+	if link == nil {
 		return validationError("file_id", "file is not attached to this commodity")
+	}
+	// A cover is one of the item's photos: the attachments in its images
+	// bucket, which the No photo filter counts as well.
+	if link.Meta != models.FileLinkMetaImages {
+		return validationError("file_id", "file is not attached to this commodity as a photo")
 	}
 	// Cover photos live in the `images` bucket only — both `Type=image`
 	// (MIME-derived, drives thumbnailing) and `Category=images` (user-

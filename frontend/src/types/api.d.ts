@@ -4868,8 +4868,8 @@ export type paths = {
          * Set or clear the commodity cover photo
          * @description Sets the explicit cover-photo override (issue #1451 option B)
          *     or clears it when `attributes.file_id` is null/empty. The
-         *     file must already be attached to this commodity and be an
-         *     image.
+         *     file must already be attached to this commodity among its
+         *     photos and be an image.
          */
         patch: {
             parameters: {

@@ -331,6 +331,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Changed
 
+- An item's cover photo is one of its photos: an image attached to the item
+  in another section of its Files tab can no longer be set as the cover, and
+  a cover set that way before shows the first photo instead. The No photo
+  filter counts the same photos
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
 - The upgrade runs one more database migration. It writes the descriptions of
   the row-level security policies and of the RLS helper functions into the
   database as comments (`COMMENT ON POLICY`, `COMMENT ON FUNCTION`). The models
