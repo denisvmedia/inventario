@@ -830,6 +830,9 @@ function AppearanceSection() {
               <SelectItem value="grid">
                 {t("settings:appearance.defaultViewOptions.grid")}
               </SelectItem>
+              <SelectItem value="compact">
+                {t("settings:appearance.defaultViewOptions.compact")}
+              </SelectItem>
               <SelectItem value="list">
                 {t("settings:appearance.defaultViewOptions.list")}
               </SelectItem>

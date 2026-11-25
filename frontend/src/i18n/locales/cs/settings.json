@@ -124,7 +124,8 @@
     "defaultViewHelp": "Nastaví výchozí rozvržení při otevření seznamu položek. Stále jej můžete přepnout pro danou relaci z panelu nástrojů.",
     "defaultViewLabel": "Výchozí zobrazení",
     "defaultViewOptions": {
-      "grid": "Mřížka",
+      "compact": "Kompaktní karty",
+      "grid": "Karty s fotografiemi",
       "list": "Seznam"
     },
     "densityHelp": "Kompaktní režim zhutní ovládací prvky záhlaví a seznamy. Uloženo na tomto zařízení.",

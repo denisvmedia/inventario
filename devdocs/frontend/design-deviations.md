@@ -35,6 +35,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
+
+- **Issue/PR**: #2797 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) draws the Items grid as `grid gap-4 sm:grid-cols-2 lg:grid-cols-3` cards with a 36px (`size-9`) icon tile beside the name, and a grid / list toggle of two icon buttons. There is no photo-forward card.
+- **Reality**: The toolbar toggle has three buttons: **Photo cards** (`LayoutGrid`, the default), **Compact cards** (`LayoutList`) and **List** (`List`). Compact cards and the list are the mock's grid and table unchanged. A photo card (`frontend/src/components/items/CommodityPhotoCard.tsx`) puts the cover on top at a fixed 4:3 ratio, under a muted box that shows the type icon when the item has no photo or the photo does not load, with the selection checkbox over its top-left corner; below it the name, the area, the status, warranty, loan and service pills, up to three tags, and the purchase date and value. The photo grid runs from two columns on a phone to six on a wide window, by container queries on the width the grid gets (`@xl:grid-cols-3 @3xl:grid-cols-4 @5xl:grid-cols-5 @6xl:grid-cols-6`), so the card stays about 180 to 280 px wide whether the sidebar is open or not. Photos load lazily with a `srcset` of the small (150 px), medium (300 px) and large (600 px) thumbnails. Settings → Appearance → Default view offers the three layouts. The layout buttons carry `aria-pressed` and a `title`.
+- **Why**: not present in mock. The issue asks for a photo-forward card, 4 to 6 columns on wide screens, and the current card kept as a compact variant. Making the photo cards the default, the area line on the card, and container queries instead of window breakpoints go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2797 by the 2026-11-24 goal to implement the open enhancements; the default layout, the area line and the container queries agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` draws a photo card; the compact card stays the mock's card.
+
+#### 2026-11-25 — Items per page choice (24 / 48 / 96) under the Items list
+
+- **Issue/PR**: #2797 / PR (pending)
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no pager and no page size; the app's `Pagination` under the list follows [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx).
+- **Reality**: When the list holds more than 24 items, a row under the list shows an **Items per page** `Select` (24, 48, 96; `size="sm"`, `w-20`) on the left and the pager on the right (stacked and centered on a phone). The size is the `per_page` URL parameter and is remembered on the device (`localStorage` key `commodities:pageSize`); changing it keeps the first item of the current page in view. An item opened from the list walks it with the same page breaks.
+- **Why**: not present in mock. The issue asks for the 24 / 48 / 96 choice. Remembering it on the device and keeping the position go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2797 by the 2026-11-24 goal to implement the open enhancements; the remembered size and the kept position agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a pager to the Items view.
+
+#### 2026-11-25 — Cover photo beside the details on the item page
+
+- **Issue/PR**: #2797 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) opens the header with a 48px (`size-12`) icon tile beside the title; photos appear only in the Files tab.
+- **Reality**: On the item page, an item with a cover shows it as a 4:3 panel (`frontend/src/components/items/CommodityCoverPanel.tsx`) left of the title and the pills (192px wide from `sm`, 224px from `lg`), and above them at full width on a phone; the action row stays below. With more than one photo, a chip in the corner says how many (`Images` icon, "3 photos"). The panel is a button with a focus ring: a click, Enter or Space opens the existing fullscreen `ImageViewer` on the cover, with Previous / Next through up to 48 of the item's photos. An item without a photo keeps the 48px type tile. The detail sheet shows the cover at 96px, without the viewer, and the 48px tile without a photo. The Files tab is unchanged.
+- **Why**: not present in mock. The issue asks for a cover image or a small gallery beside the details in addition to the Files tab. The photo count chip and the 96px cover in the sheet go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2797 by the 2026-11-24 goal to implement the open enhancements; the photo count chip and the sheet's 96px cover agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` draws a cover on the item page.
+
 #### 2026-11-25 — New location / New area entries in the item's Location and Area pickers
 
 - **Issue/PR**: #2796 / PR #2833

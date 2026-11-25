@@ -48,6 +48,7 @@ import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
 import { AssignLocationBanner } from "@/components/items/AssignLocationBanner"
+import { CommodityCoverPanel } from "@/components/items/CommodityCoverPanel"
 import { CommodityEditForm } from "@/components/items/CommodityEditForm"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { ListPager } from "@/components/ListPager"
@@ -740,111 +741,133 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             header in the mock. We do the same shape: avatar +
             title + short_name + type subtitle, then status pills
             below. Page mode keeps `gap-6` flow above so the
-            existing visual rhythm is unchanged. */}
-        <header className={isSheet ? "pt-6 pb-4" : ""}>
-          <div className="flex items-start gap-3">
-            <CommodityThumb
-              cover={commodity.cover}
-              type={type}
-              name={commodity.name}
-              size={48}
-              testId="commodity-detail-thumb"
+            existing visual rhythm is unchanged.
+            An item with a cover photo shows it larger than the mock's
+            48px tile (#2797, see design-deviations): beside the title
+            on the page, from `sm` up, above it on a phone; at 96px in
+            the sheet. */}
+        <header
+          className={
+            isSheet
+              ? "pt-6 pb-4"
+              : commodity.cover
+                ? "flex flex-col gap-4 sm:flex-row sm:items-start sm:gap-6"
+                : ""
+          }
+        >
+          {!isSheet && commodity.cover ? (
+            <CommodityCoverPanel
+              commodity={commodity}
+              className="w-full shrink-0 sm:w-48 lg:w-56"
             />
-            <div className="min-w-0 flex-1 pr-6">
-              <h1
-                className={cn(
-                  "font-semibold leading-tight tracking-tight",
-                  isSheet ? "text-lg" : "text-2xl"
-                )}
-                data-testid="commodity-detail-name"
-              >
-                {commodity.name}
-              </h1>
-              {commodity.short_name && commodity.short_name !== commodity.name ? (
-                <p
-                  className="text-xs font-mono text-muted-foreground mt-0.5"
-                  data-testid="commodity-detail-short-name"
-                >
-                  {commodity.short_name}
-                </p>
+          ) : null}
+          <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3">
+              {isSheet || !commodity.cover ? (
+                <CommodityThumb
+                  cover={commodity.cover}
+                  type={type}
+                  name={commodity.name}
+                  size={isSheet && commodity.cover ? 96 : 48}
+                  testId="commodity-detail-thumb"
+                />
               ) : null}
-              {type ? (
-                <p className="text-sm text-muted-foreground mt-0.5">
-                  {slug ? (
-                    // The items list with every item of this type, inactive
-                    // ones included, since this item may be one of them.
-                    <Link
-                      to={commodityListHref(slug, { types: [type], includeInactive: true })}
-                      className="hover:text-foreground hover:underline"
-                      data-testid="commodity-detail-type-link"
-                    >
-                      {t(`commodities:type.${type}`)}
-                    </Link>
-                  ) : (
-                    t(`commodities:type.${type}`)
+              <div className="min-w-0 flex-1 pr-6">
+                <h1
+                  className={cn(
+                    "font-semibold leading-tight tracking-tight",
+                    isSheet ? "text-lg" : "text-2xl"
                   )}
-                </p>
-              ) : null}
+                  data-testid="commodity-detail-name"
+                >
+                  {commodity.name}
+                </h1>
+                {commodity.short_name && commodity.short_name !== commodity.name ? (
+                  <p
+                    className="text-xs font-mono text-muted-foreground mt-0.5"
+                    data-testid="commodity-detail-short-name"
+                  >
+                    {commodity.short_name}
+                  </p>
+                ) : null}
+                {type ? (
+                  <p className="text-sm text-muted-foreground mt-0.5">
+                    {slug ? (
+                      // The items list with every item of this type, inactive
+                      // ones included, since this item may be one of them.
+                      <Link
+                        to={commodityListHref(slug, { types: [type], includeInactive: true })}
+                        className="hover:text-foreground hover:underline"
+                        data-testid="commodity-detail-type-link"
+                      >
+                        {t(`commodities:type.${type}`)}
+                      </Link>
+                    ) : (
+                      t(`commodities:type.${type}`)
+                    )}
+                  </p>
+                ) : null}
+              </div>
             </div>
-          </div>
 
-          {/* Status pills row — commodity status + warranty + days
+            {/* Status pills row — commodity status + warranty + days
               remaining. Mock places it inside SheetHeader directly
               under the title block (`pt-1`). */}
-          <div
-            className="flex flex-wrap items-center gap-2 pt-1"
-            data-testid="commodity-detail-pills"
-          >
-            {/* Asset ID (#2807): the number printed on the item's label.
+            <div
+              className="flex flex-wrap items-center gap-2 pt-1"
+              data-testid="commodity-detail-pills"
+            >
+              {/* Asset ID (#2807): the number printed on the item's label.
                 Not in the mock; see design-deviations. */}
-            {assetId ? (
-              <Badge
-                variant="outline"
-                className="font-mono text-xs"
-                title={t("commodities:detail.assetId")}
-                data-testid="commodity-detail-asset-id"
-              >
-                <span className="sr-only">{t("commodities:detail.assetId")} </span>
-                {assetId}
-              </Badge>
-            ) : null}
-            {status ? (
-              <span
-                className={cn(
-                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border",
-                  tone || "border-border text-foreground"
-                )}
-                data-testid="commodity-detail-status-pill"
-              >
-                <CircleDot className="size-3" aria-hidden="true" />
-                {t(`commodities:status.${status}`)}
-              </span>
-            ) : null}
-            {commodity.draft ? (
-              <Badge variant="outline" className="border-dashed text-xs">
-                {t("commodities:list.draftBadge")}
-              </Badge>
-            ) : null}
-            {/* #1554: bundles don't carry a warranty — hide the pill
+              {assetId ? (
+                <Badge
+                  variant="outline"
+                  className="font-mono text-xs"
+                  title={t("commodities:detail.assetId")}
+                  data-testid="commodity-detail-asset-id"
+                >
+                  <span className="sr-only">{t("commodities:detail.assetId")} </span>
+                  {assetId}
+                </Badge>
+              ) : null}
+              {status ? (
+                <span
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium border",
+                    tone || "border-border text-foreground"
+                  )}
+                  data-testid="commodity-detail-status-pill"
+                >
+                  <CircleDot className="size-3" aria-hidden="true" />
+                  {t(`commodities:status.${status}`)}
+                </span>
+              ) : null}
+              {commodity.draft ? (
+                <Badge variant="outline" className="border-dashed text-xs">
+                  {t("commodities:list.draftBadge")}
+                </Badge>
+              ) : null}
+              {/* #1554: bundles don't carry a warranty — hide the pill
                 + days-remaining row entirely so the header doesn't
                 advertise an attribute the row can't have. The
                 Warranty tab body shows the explanatory empty state. */}
-            {(commodity.count ?? 0) > 1 ? null : (
-              <>
-                <WarrantyBadge
-                  source={{ warranty_expires_at: commodity.warranty_expires_at }}
-                  data-testid="commodity-detail-warranty-pill"
-                />
-                {(() => {
-                  const days = warrantyDaysRemaining(commodity.warranty_expires_at)
-                  return days !== null && days > 0 ? (
-                    <span className="text-xs text-muted-foreground">
-                      {t("commodities:detail.warranty.daysRemaining", { count: days })}
-                    </span>
-                  ) : null
-                })()}
-              </>
-            )}
+              {(commodity.count ?? 0) > 1 ? null : (
+                <>
+                  <WarrantyBadge
+                    source={{ warranty_expires_at: commodity.warranty_expires_at }}
+                    data-testid="commodity-detail-warranty-pill"
+                  />
+                  {(() => {
+                    const days = warrantyDaysRemaining(commodity.warranty_expires_at)
+                    return days !== null && days > 0 ? (
+                      <span className="text-xs text-muted-foreground">
+                        {t("commodities:detail.warranty.daysRemaining", { count: days })}
+                      </span>
+                    ) : null
+                  })()}
+                </>
+              )}
+            </div>
           </div>
         </header>
 

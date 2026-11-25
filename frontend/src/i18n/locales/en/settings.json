@@ -124,7 +124,8 @@
     "defaultViewHelp": "Sets the initial layout when opening the Items list. You can still flip per-session from the toolbar.",
     "defaultViewLabel": "Default view",
     "defaultViewOptions": {
-      "grid": "Grid",
+      "compact": "Compact cards",
+      "grid": "Photo cards",
       "list": "List"
     },
     "densityHelp": "Compact tightens header controls and listings. Stored on this device.",
