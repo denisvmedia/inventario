@@ -1,13 +1,13 @@
 ---
 title: Warranties, loans & maintenance
-description: Track warranty expiry, lend items out, and schedule recurring maintenance — with email reminders before each date arrives.
+description: Track warranty expiry, lend items out, schedule recurring maintenance, and set your own reminders on items — with email reminders before each date arrives.
 ---
 
-Beyond *what* you own and *where* it lives, Inventario helps you stay on top of the things that have a clock attached: warranties that lapse, items you've lent to someone, and recurring care like filter or oil changes. Each of these has its own page in the sidebar so you can see everything at a glance, and Inventario can email you reminders before a date sneaks up on you.
+Beyond *what* you own and *where* it lives, Inventario helps you stay on top of the things that have a clock attached: warranties that lapse, items you've lent to someone, recurring care like filter or oil changes, and any other date you want to remember about an item. Each of these has its own page in the sidebar so you can see everything at a glance, and Inventario can email you reminders before a date sneaks up on you.
 
 ![The Warranties overview page, with summary cards counting items by warranty status and tabs for Expiring, Active, Expired and No Warranty](../../assets/screenshots/warranties.png)
 
-This guide covers all three. They share a pattern: a group-wide overview page in the sidebar for *seeing* what's coming up, and a tab on each item for *editing* the details.
+This guide covers all of them. They share a pattern: a group-wide overview page in the sidebar for *seeing* what's coming up, and a place on each item for *editing* the details. The [Upcoming](#the-upcoming-page) page puts every dated entry from all of them in one list.
 
 ## Warranties
 
@@ -127,6 +127,40 @@ Cards are tinted and badged by urgency: **Overdue** (with how many days) or **Du
 
 Open **Maintenance** in the sidebar for a group-wide table of every schedule, sorted by next-due date. Each row shows the item, the schedule title and its interval, the next-due date (with an **Overdue** or **Due soon** badge), and when it was last done. Click an item name to open its **Maintenance** tab. Rows that are overdue or due soon are highlighted so the urgent ones stand out.
 
+## Item reminders
+
+An item reminder is a date you want to remember about one item that none of the sections above covers: the end of a return window, an insurance renewal, a vehicle inspection, a subscription that renews. You give it a title and a date, choose how many days before the date you want an email, and optionally make it repeat.
+
+### Add a reminder
+
+1. Open the item. The **Reminders** card is on the **Details** tab, below the item's details.
+2. Click **Add reminder**.
+3. Fill in the **Add reminder** dialog:
+   - **Title** — what the date is about, for example "Return window ends".
+   - **Date** — the date itself, between the years 1900 and 2200. For a repeating reminder this is the first occurrence.
+   - **Remind me (days before)** — one or more numbers of days, separated by commas, for example `30, 7, 1`. Use `0` for an email on the day itself. You can enter up to five values, each from 0 to 365. On a repeating reminder each value must be shorter than the repeat interval, counting a month as 28 days and a year as 365: a weekly reminder takes values up to 6, a monthly one up to 27.
+   - **Repeat** — **Does not repeat**, **Daily**, **Weekly**, **Monthly**, or **Yearly**. When the reminder repeats, an **Every** field sets the interval, so **Monthly** with **Every (months)** set to 3 means once a quarter.
+4. Click **Create**.
+
+Each reminder on the card shows its title, its repeat rule, its lead times, and the next date with how many days are left. Use the pencil and bin buttons on a row to edit or delete it.
+
+A repeating reminder moves to its next date by itself once a date passes. A monthly reminder set on the 31st falls on the last day of shorter months (30 April, 28 or 29 February) and returns to the 31st when the month has one; a yearly reminder set on 29 February falls on 28 February in other years. A one-off reminder whose date has passed stays on the card with a **Passed** badge until you delete it.
+
+Deleting an item deletes its reminders. Deleting your account deletes the reminders you created, including those on items in a group you share.
+
+## The Upcoming page
+
+Open **Upcoming** in the sidebar for one list of everything with a date coming up in the group, oldest first:
+
+- item reminders, on their next date;
+- warranty expiries;
+- loans due back, including overdue ones;
+- maintenance due, including overdue schedules.
+
+![The Upcoming page listing item reminders, warranty expiries, loans and maintenance by date, with tabs for each kind and a period selector](../../assets/screenshots/upcoming.png)
+
+Use the tabs (**All**, **Reminders**, **Warranties**, **Loans**, **Maintenance**) to narrow the list, and the period selector to look **30 days**, **90 days**, or **12 months** ahead. Overdue loans and maintenance always show, whatever the period. Each row shows the item, what the date is, the date, and how many days are left or how long it is overdue; click it to open the item on the matching tab.
+
 ## Reminder emails
 
 Inventario sends reminder emails so you don't have to keep checking these pages:
@@ -134,11 +168,18 @@ Inventario sends reminder emails so you don't have to keep checking these pages:
 - **Warranties** — 60, 30, and 7 days before the expiry date.
 - **Loans** — when an item you've lent out is due back or overdue.
 - **Maintenance** — 14, 7, and 1 day before each due date.
+- **Item reminders** — on the days before the date that you chose for that reminder. They go to the person who created the reminder, as long as they are still a member of the group.
 
-You control which of these you receive under **Settings → Notifications**, where **Warranty expiry**, **Loan reminders**, and **Maintenance reminders** each have their own toggle, alongside the email and push channel settings. See [Settings & account](../settings-and-account/) for the full list.
+Each email for a date is sent once. If Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day.
+
+You control which of these you receive under **Settings → Notifications**, where **Warranty expiry**, **Maintenance reminders**, **Loan reminders**, and **Item reminders** each have their own toggle, alongside the email and push channel settings. See [Settings & account](../settings-and-account/) for the full list.
 
 :::caution
 Reminders are sent to the email address on your account, so make sure it's current. Paused maintenance schedules and returned loans don't generate reminders.
+:::
+
+:::note
+Reminders on custom date fields are not available yet. Use an item reminder for any other date you want to track.
 :::
 
 ## Related guides

@@ -172,6 +172,9 @@ const SavedViewsPage = lazy(() =>
 const WarrantiesListPage = lazy(() =>
   import("@/pages/warranties/WarrantiesListPage").then((m) => ({ default: m.WarrantiesListPage }))
 )
+const UpcomingPage = lazy(() =>
+  import("@/pages/upcoming/UpcomingPage").then((m) => ({ default: m.UpcomingPage }))
+)
 const ExportsListPage = lazy(() =>
   import("@/pages/exports/ExportsListPage").then((m) => ({ default: m.ExportsListPage }))
 )
@@ -422,6 +425,9 @@ export function AppRoutes() {
               {/* Maintenance reminders (#1368) — group-wide upcoming
                   maintenance, sorted by next_due_at. */}
               <Route path="maintenance" element={<MaintenanceListPage />} />
+              {/* Upcoming (#2805) — item reminders, warranty expiries, loan
+                  and maintenance due dates in one date-ordered list. */}
+              <Route path="upcoming" element={<UpcomingPage />} />
               {/* Reports (#1370). Landing + the print-capable insurance
                   report. The report reads its selection (mode / item /
                   location) from the query string. */}

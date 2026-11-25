@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>Hi {{.Name}},</p>
+{{- if eq .ReminderDaysLeft 0}}
+<p>Your reminder for <strong>{{.CommodityName}}</strong> is due <strong>today</strong>.</p>
+{{- else if eq .ReminderDaysLeft 1}}
+<p>Your reminder for <strong>{{.CommodityName}}</strong> is due <strong>tomorrow</strong>.</p>
+{{- else}}
+<p>Your reminder for <strong>{{.CommodityName}}</strong> is due in <strong>{{.ReminderDaysLeft}} days</strong>.</p>
+{{- end}}
+<p>Reminder: <strong>{{.ReminderTitle}}</strong><br/>
+Date: <strong>{{.ReminderDueDate}}</strong></p>
+{{- if .CommodityURL}}
+<p>You can review the item here: <a href="{{.CommodityURL}}">{{.CommodityURL}}</a></p>
+{{- end}}
+<p>You set this reminder on the item in Inventario. You can change or delete
+it on the item page.</p>
+</body>
+</html>

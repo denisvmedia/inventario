@@ -5,6 +5,7 @@ import (
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
 
@@ -34,6 +35,8 @@ type GroupPurger struct {
 	concurrencySlots     registry.UserConcurrencySlotRegistryFactory
 	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory
 	maintenanceReminders registry.MaintenanceReminderRegistry
+	reminders            registry.CommodityReminderRegistryFactory
+	reminderSends        registry.CommodityReminderSendRegistry
 	currencyMigrations   registry.CurrencyMigrationRegistryFactory
 	notificationPrefs    registry.GroupNotificationPrefRegistry
 	memberships          registry.GroupMembershipRegistry
@@ -61,6 +64,8 @@ func NewGroupPurger(
 	concurrencySlots registry.UserConcurrencySlotRegistryFactory,
 	maintenanceSchedules registry.MaintenanceScheduleRegistryFactory,
 	maintenanceReminders registry.MaintenanceReminderRegistry,
+	reminders registry.CommodityReminderRegistryFactory,
+	reminderSends registry.CommodityReminderSendRegistry,
 	currencyMigrations registry.CurrencyMigrationRegistryFactory,
 	notificationPrefs registry.GroupNotificationPrefRegistry,
 	memberships registry.GroupMembershipRegistry,
@@ -83,6 +88,8 @@ func NewGroupPurger(
 		concurrencySlots:     concurrencySlots,
 		maintenanceSchedules: maintenanceSchedules,
 		maintenanceReminders: maintenanceReminders,
+		reminders:            reminders,
+		reminderSends:        reminderSends,
 		currencyMigrations:   currencyMigrations,
 		notificationPrefs:    notificationPrefs,
 		memberships:          memberships,
@@ -166,6 +173,16 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// deletes explicitly to keep tenant + group scoping local.
 		{"maintenance_schedules", func() error {
 			reg := r.maintenanceSchedules.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Item reminder sends (#2805) before their reminders, reminders
+		// before commodities, as in the postgres purger.
+		{"commodity_reminder_sends", func() error {
+			return purgeReminderSends(ctx, r.reminders, r.reminderSends,
+				func(rem *models.CommodityReminder) bool { return rem.TenantID == tenantID && rem.GroupID == groupID })
+		}},
+		{"commodity_reminders", func() error {
+			reg := r.reminders.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Currency-migration audit rows (#2095) dropped before the migration
@@ -289,5 +306,29 @@ func (r *GroupPurger) purgeThumbnailChain(ctx context.Context, tenantID, groupID
 		}
 	}
 
+	return nil
+}
+
+// purgeReminderSends deletes the send records of every reminder that match
+// accepts. The memory send registry has no foreign key to cascade from, so
+// both purgers walk the reminders first.
+func purgeReminderSends(
+	ctx context.Context,
+	reminders registry.CommodityReminderRegistryFactory,
+	sends registry.CommodityReminderSendRegistry,
+	match func(*models.CommodityReminder) bool,
+) error {
+	all, err := reminders.CreateServiceRegistry().List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, rem := range all {
+		if rem == nil || !match(rem) {
+			continue
+		}
+		if _, err := sends.DeleteByReminder(ctx, rem.ID); err != nil {
+			return err
+		}
+	}
 	return nil
 }

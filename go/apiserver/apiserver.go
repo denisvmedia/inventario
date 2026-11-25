@@ -125,6 +125,16 @@ func newAPITokenComponents(
 	return svc, NewAPITokenAuthenticator(svc, audit, limiter, params.GlobalRateTrustedProxyNets)
 }
 
+// emailServiceOrStub returns svc, or the stub email service when none is
+// configured.
+func emailServiceOrStub(svc services.EmailService) services.EmailService {
+	if svc != nil {
+		return svc
+	}
+	slog.Warn("EmailService not provided; falling back to stub email service")
+	return services.NewStubEmailService()
+}
+
 // newUsersMeParams wires the /users/me route group: sessions, login history
 // and personal API token management.
 func newUsersMeParams(
@@ -595,11 +605,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// Create a shared audit service for use across multiple routes.
 	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
 
-	emailSvc := params.EmailService
-	if emailSvc == nil {
-		slog.Warn("EmailService not provided; falling back to stub email service")
-		emailSvc = services.NewStubEmailService()
-	}
+	emailSvc := emailServiceOrStub(params.EmailService)
 
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
@@ -880,6 +886,8 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 			r.With(contentWriteGate).Route("/services", GroupServices(params))
 			r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
+			r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
+			r.Route("/upcoming", Upcoming())
 			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
 			r.Route("/settings", Settings())
 			r.Route("/commodities/values", Values())

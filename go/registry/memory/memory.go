@@ -28,6 +28,7 @@ func NewFactorySet() *registry.FactorySet {
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
 	savedViewFactory := NewSavedViewRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
+	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -56,6 +57,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
 	fs.SavedViewRegistryFactory = savedViewFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
+	fs.CommodityReminderRegistryFactory = commodityReminderFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -125,6 +127,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry()
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
+	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	fs.GroupPurger = NewGroupPurger(
@@ -145,6 +148,8 @@ func NewFactorySet() *registry.FactorySet {
 		userConcurrencySlotFactory,
 		maintenanceScheduleFactory,
 		fs.MaintenanceReminderRegistry,
+		commodityReminderFactory,
+		fs.CommodityReminderSendRegistry,
 		fs.CurrencyMigrationRegistryFactory,
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,
@@ -164,6 +169,8 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupMembershipRegistry,
 		fs.SystemAdminGrantRegistry,
 		fs.GroupInviteAuditRegistry,
+		commodityReminderFactory,
+		fs.CommodityReminderSendRegistry,
 		savedViewFactory,
 	)
 	// SystemStats (#843): the memory backend is dev/test only and its

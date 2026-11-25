@@ -47,6 +47,8 @@ type UserPurger struct {
 	memberships   registry.GroupMembershipRegistry
 	adminGrants   registry.SystemAdminGrantRegistry
 	inviteAudit   registry.GroupInviteAuditRegistry
+	reminders     registry.CommodityReminderRegistryFactory
+	reminderSends registry.CommodityReminderSendRegistry
 	savedViews    registry.SavedViewRegistryFactory
 }
 
@@ -63,6 +65,8 @@ func NewUserPurger(
 	memberships registry.GroupMembershipRegistry,
 	adminGrants registry.SystemAdminGrantRegistry,
 	inviteAudit registry.GroupInviteAuditRegistry,
+	reminders registry.CommodityReminderRegistryFactory,
+	reminderSends registry.CommodityReminderSendRegistry,
 	savedViews registry.SavedViewRegistryFactory,
 ) *UserPurger {
 	return &UserPurger{
@@ -76,6 +80,8 @@ func NewUserPurger(
 		memberships:   memberships,
 		adminGrants:   adminGrants,
 		inviteAudit:   inviteAudit,
+		reminders:     reminders,
+		reminderSends: reminderSends,
 		savedViews:    savedViews,
 	}
 }
@@ -110,6 +116,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
+		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
 		// Saved views the user created, shared ones included: they carry a
 		// NOT NULL created_by_user_id, like the postgres DELETE.
 		{"saved_views", func() error { return r.purgeSavedViews(ctx, tenantID, userID) }},
@@ -224,6 +231,34 @@ func (r *UserPurger) purgeMemberships(ctx context.Context, tenantID, userID stri
 			continue
 		}
 		if err := r.memberships.Delete(ctx, m.GetID()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeCommodityReminders deletes the item reminders the user created and
+// their send records (#2805), the same rows the postgres purger removes: a
+// reminder emails only its author, so it leaves with the account.
+func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tenantID, userID string) error {
+	if r.reminders == nil {
+		return nil
+	}
+	reg := r.reminders.CreateServiceRegistry()
+	all, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, reminder := range all {
+		if reminder == nil || reminder.TenantID != tenantID || reminder.CreatedByUserID != userID {
+			continue
+		}
+		if r.reminderSends != nil {
+			if _, err := r.reminderSends.DeleteByReminder(ctx, reminder.ID); err != nil {
+				return err
+			}
+		}
+		if err := reg.Delete(ctx, reminder.ID); err != nil {
 			return err
 		}
 	}

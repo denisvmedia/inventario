@@ -95,6 +95,13 @@ type EmailService interface {
 	// template suppresses the link block.
 	SendMaintenanceReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, thresholdDays int) error
 
+	// SendItemReminderEmail requests delivery of a reminder the user set on
+	// an item (#2805). title is the reminder's title, dueDate the
+	// occurrence as YYYY-MM-DD, and daysLeft the whole days until it (0 for
+	// today). commodityURL is optional; when empty the template drops the
+	// link.
+	SendItemReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error
+
 	// SendFeedbackEmail requests delivery of an in-app feedback /
 	// support submission (#1387) to the configured support address.
 	// `to` is the operator-configured support inbox; `fromEmail` /
@@ -453,6 +460,25 @@ func (s *StubEmailService) SendMaintenanceReminderEmail(_ context.Context, to, n
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: maintenance reminder", attrs...)
+	return nil
+}
+
+// SendItemReminderEmail logs the item reminder event without dispatching
+// anything externally.
+func (s *StubEmailService) SendItemReminderEmail(_ context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+		"commodity_name", commodityName,
+		"title", title,
+		"due_date", dueDate,
+		"days_left", daysLeft,
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "commodity_url", commodityURL)
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: item reminder", attrs...)
 	return nil
 }
 

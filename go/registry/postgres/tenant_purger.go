@@ -124,6 +124,14 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// dropped before commodities.
 	func(t store.TableNames) string { return string(t.MaintenanceSchedules()) },
 
+	// Item reminder sends (#2805). reminder_id -> commodity_reminders
+	// CASCADE; dropped before the reminders.
+	func(t store.TableNames) string { return string(t.CommodityReminderSends()) },
+
+	// Item reminders (#2805). commodity_id -> commodities CASCADE; dropped
+	// before commodities.
+	func(t store.TableNames) string { return string(t.CommodityReminders()) },
+
 	// Currency-migration audit rows (#2095). migration_id ->
 	// currency_migrations CASCADE, commodity_id -> commodities SET NULL.
 	// Dropped before both currency_migrations and commodities.

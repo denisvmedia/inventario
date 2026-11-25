@@ -89,6 +89,13 @@ type MaintenanceScheduleRegistryFactory interface {
 	ServiceRegistryFactory[models.MaintenanceSchedule, MaintenanceScheduleRegistry]
 }
 
+// CommodityReminderRegistryFactory creates CommodityReminderRegistry
+// instances with proper context (#2805).
+type CommodityReminderRegistryFactory interface {
+	UserRegistryFactory[models.CommodityReminder, CommodityReminderRegistry]
+	ServiceRegistryFactory[models.CommodityReminder, CommodityReminderRegistry]
+}
+
 // RestoreOperationRegistryFactory creates RestoreOperationRegistry instances with proper context
 type RestoreOperationRegistryFactory interface {
 	UserRegistryFactory[models.RestoreOperation, RestoreOperationRegistry]
@@ -182,6 +189,7 @@ type FactorySet struct {
 	SupplyLinkRegistryFactory             SupplyLinkRegistryFactory
 	MaintenanceScheduleRegistryFactory    MaintenanceScheduleRegistryFactory
 	SavedViewRegistryFactory              SavedViewRegistryFactory // Saved item views; group-scoped, per-user visibility applied by the registry
+	CommodityReminderRegistryFactory      CommodityReminderRegistryFactory
 	ThumbnailGenerationJobRegistryFactory ThumbnailGenerationJobRegistryFactory
 	UserConcurrencySlotRegistryFactory    UserConcurrencySlotRegistryFactory
 	OperationSlotRegistryFactory          OperationSlotRegistryFactory
@@ -209,6 +217,7 @@ type FactorySet struct {
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	WeeklyDigestSendRegistry              WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the weekly digest worker idempotency store; service-mode only (#1391)
 	MaintenanceReminderRegistry           MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the maintenance reminder worker idempotency store; service-mode only (#1368)
+	CommodityReminderSendRegistry         CommodityReminderSendRegistry // CommodityReminderSendRegistry is the item reminder worker idempotency store; service-mode only (#2805)
 	CurrencyMigrationRegistryFactory      CurrencyMigrationRegistryFactory
 	CommodityScanAuditRegistry            CommodityScanAuditRegistry // AI vision scan audit log (#1720); service-mode (writes audit rows even when the calling RLS context has been cancelled)
 	// BackofficeUserRegistry persists platform-operator identities
@@ -332,6 +341,11 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		return nil, err
 	}
 
+	commodityReminderRegistry, err := fs.CommodityReminderRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	restoreOperationRegistry, err := fs.RestoreOperationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, err
@@ -377,6 +391,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		CommodityServiceRegistry:       commodityServiceRegistry,
 		SupplyLinkRegistry:             supplyLinkRegistry,
 		MaintenanceScheduleRegistry:    maintenanceScheduleRegistry,
+		CommodityReminderRegistry:      commodityReminderRegistry,
 		ThumbnailGenerationJobRegistry: thumbnailGenerationJobRegistry,
 		UserConcurrencySlotRegistry:    userConcurrencySlotRegistry,
 		OperationSlotRegistry:          operationSlotRegistry,
@@ -398,6 +413,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		WeeklyDigestSendRegistry:       fs.WeeklyDigestSendRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
+		CommodityReminderSendRegistry:  fs.CommodityReminderSendRegistry,
 		CurrencyMigrationRegistry:      currencyMigrationRegistry,
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,
@@ -423,6 +439,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		CommodityServiceRegistry:       fs.CommodityServiceRegistryFactory.CreateServiceRegistry(),
 		SupplyLinkRegistry:             fs.SupplyLinkRegistryFactory.CreateServiceRegistry(),
 		MaintenanceScheduleRegistry:    fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry(),
+		CommodityReminderRegistry:      fs.CommodityReminderRegistryFactory.CreateServiceRegistry(),
 		ThumbnailGenerationJobRegistry: fs.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry(),
 		UserConcurrencySlotRegistry:    fs.UserConcurrencySlotRegistryFactory.CreateServiceRegistry(),
 		OperationSlotRegistry:          fs.OperationSlotRegistryFactory.CreateServiceRegistry(),
@@ -444,6 +461,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		StorageQuotaReminderRegistry:   fs.StorageQuotaReminderRegistry,
 		WeeklyDigestSendRegistry:       fs.WeeklyDigestSendRegistry,
 		MaintenanceReminderRegistry:    fs.MaintenanceReminderRegistry,
+		CommodityReminderSendRegistry:  fs.CommodityReminderSendRegistry,
 		CurrencyMigrationRegistry:      fs.CurrencyMigrationRegistryFactory.CreateServiceRegistry(),
 		CommodityScanAuditRegistry:     fs.CommodityScanAuditRegistry,
 		SystemAdminGrantRegistry:       fs.SystemAdminGrantRegistry,

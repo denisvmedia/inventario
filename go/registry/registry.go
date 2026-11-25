@@ -1116,6 +1116,47 @@ type MaintenanceReminderRegistry interface {
 	DeleteBySchedule(ctx context.Context, scheduleID string) (int, error)
 }
 
+// CommodityReminderRegistry is the group-scoped registry of
+// commodity_reminders, the dated reminders a user sets on an item. In
+// service mode List returns every reminder across tenants; the reminder
+// worker reads it that way.
+type CommodityReminderRegistry interface {
+	Registry[models.CommodityReminder]
+
+	// ListByCommodity returns the reminders of one item, ordered by
+	// due_on ascending.
+	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityReminder, error)
+}
+
+// CommodityReminderSendRegistry records which reminder emails the worker
+// has claimed. One row per (reminder, occurrence, lead time); the unique
+// index on that tuple keeps an email from going out twice, across
+// restarts and across worker replicas. Rows go away with their reminder.
+//
+// All operations run under the background-worker RLS bypass. There is no
+// user-facing surface on this table.
+type CommodityReminderSendRegistry interface {
+	// HasSentAtOrBelow reports whether an email for the occurrence has
+	// already been claimed for a lead time of leadDays or less. Such an
+	// email is at least as recent as the one leadDays would send, so the
+	// worker skips the larger lead time.
+	HasSentAtOrBelow(ctx context.Context, reminderID string, occurrenceOn models.Date, leadDays int) (bool, error)
+
+	// CreateOnce claims the email for the send's (reminder, occurrence,
+	// lead time). It returns (true, nil) when this call inserted the row
+	// and the caller may send, and (false, nil) when the row already
+	// exists.
+	CreateOnce(ctx context.Context, send models.CommodityReminderSend) (bool, error)
+
+	// Release deletes a claim, so that the next sweep retries an email
+	// whose enqueue failed.
+	Release(ctx context.Context, reminderID string, occurrenceOn models.Date, leadDays int) error
+
+	// DeleteByReminder removes every row of a reminder and returns how many
+	// it removed. The purgers call it before they delete the reminder.
+	DeleteByReminder(ctx context.Context, reminderID string) (int, error)
+}
+
 type ThumbnailGenerationJobRegistry interface {
 	Registry[models.ThumbnailGenerationJob]
 
@@ -2586,6 +2627,7 @@ type Set struct {
 	CommodityServiceRegistry       CommodityServiceRegistry
 	SupplyLinkRegistry             SupplyLinkRegistry
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
+	CommodityReminderRegistry      CommodityReminderRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -2607,6 +2649,7 @@ type Set struct {
 	StorageQuotaReminderRegistry   StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the idempotency store for the storage quota warning worker; service-mode only (#1585)
 	WeeklyDigestSendRegistry       WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the idempotency store for the weekly digest worker; service-mode only (#1391)
 	MaintenanceReminderRegistry    MaintenanceReminderRegistry   // MaintenanceReminderRegistry is the idempotency store for the maintenance reminder worker; service-mode only (#1368)
+	CommodityReminderSendRegistry  CommodityReminderSendRegistry // CommodityReminderSendRegistry is the idempotency store for the item reminder worker; service-mode only (#2805)
 	CurrencyMigrationRegistry      CurrencyMigrationRegistry     // Currency migration operation rows + audit + HMAC token signing (issue #1550 / epic #202)
 	CommodityScanAuditRegistry     CommodityScanAuditRegistry    // CommodityScanAuditRegistry records every AI vision scan request (#1720); also backs the per-user rate limiter
 	SystemAdminGrantRegistry       SystemAdminGrantRegistry      // Platform-admin grant rows (#1784); no tenant scope, no HTTP write surface
@@ -2678,6 +2721,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.CommodityServiceRegistry, validation.Required),
 		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
+		validation.Field(&s.CommodityReminderRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

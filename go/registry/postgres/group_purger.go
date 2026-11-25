@@ -86,6 +86,12 @@ var purgeOrder = []func(t store.TableNames) string{
 	// FK cascade isn't relied on for tenant + group scoping.
 	func(t store.TableNames) string { return string(t.MaintenanceSchedules()) },
 
+	// Item reminder sends and item reminders (#2805). Both cascade from
+	// their parents; the explicit DELETEs keep tenant + group scoping in
+	// the purge transaction. Sends go first, reminders before commodities.
+	func(t store.TableNames) string { return string(t.CommodityReminderSends()) },
+	func(t store.TableNames) string { return string(t.CommodityReminders()) },
+
 	// Currency-migration audit rows (#2095). Their FK to currency_migrations
 	// is ON DELETE CASCADE, but group_id -> location_groups is NO ACTION, so
 	// the purge must clear them explicitly. Dropped BEFORE currency_migrations

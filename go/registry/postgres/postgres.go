@@ -41,6 +41,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.SupplyLinkRegistryFactory = NewSupplyLinkRegistry(dbx)
 	fs.SavedViewRegistryFactory = NewSavedViewRegistry(dbx)
 	fs.MaintenanceScheduleRegistryFactory = NewMaintenanceScheduleRegistry(dbx)
+	fs.CommodityReminderRegistryFactory = NewCommodityReminderRegistry(dbx)
 	fs.ExportRegistryFactory = NewExportRegistry(dbx)
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = NewRestoreOperationRegistry(dbx, restoreStepFactory)
@@ -80,6 +81,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry(dbx)
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry(dbx)
+	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry(dbx)
 	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistry(dbx)
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry(dbx)
 	// Back-office identities (issue #1785) — platform-operator users

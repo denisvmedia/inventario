@@ -486,13 +486,15 @@ describe("<SettingsPage />", () => {
     )
   })
 
-  it("notifications section renders all six toggle rows with mock-spec subgroup chrome", async () => {
+  it("notifications section renders every toggle row with mock-spec subgroup chrome", async () => {
     server.use(...withGroupHandlers({}))
     const user = userEvent.setup()
     renderSettings("/settings?g=household")
     await user.click(await screen.findByTestId("settings-nav-notifications"))
     expect(screen.getByTestId("notification-row-warranty-expiry")).toBeInTheDocument()
     expect(screen.getByTestId("notification-row-maintenance-reminder")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-loan-reminder")).toBeInTheDocument()
+    expect(screen.getByTestId("notification-row-item-reminder")).toBeInTheDocument()
     expect(screen.getByTestId("notification-row-weekly-digest")).toBeInTheDocument()
     expect(screen.getByTestId("notification-row-price-drop")).toBeInTheDocument()
     expect(screen.getByTestId("notification-row-channel-email")).toBeInTheDocument()
@@ -540,6 +542,38 @@ describe("<SettingsPage />", () => {
       expect(lastPatch).not.toBeNull()
       expect(lastPatch?.field).toBe("notifications.warranty_expiry")
       expect(lastPatch?.body).toBe(false)
+    })
+  })
+
+  it("reads the stored item reminder preference and patches notifications.item_reminder", async () => {
+    let lastPatch: { field: string; body: unknown } | null = null
+    server.use(
+      ...withGroupHandlers({ notificationsItemReminder: false }),
+      msw.patch(api("/g/household/settings/:field"), async ({ params, request }) => {
+        const body = (await request.json()) as unknown
+        lastPatch = { field: String(params.field), body }
+        return HttpResponse.json({ notificationsItemReminder: body })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await screen.findByTestId("settings-page")
+    await user.click(await screen.findByTestId("settings-nav-notifications"))
+    const row = await screen.findByTestId("notification-row-item-reminder", undefined, {
+      timeout: 4000,
+    })
+    const toggle = await waitFor(() => {
+      const t = row.querySelector("button[role='switch']") as HTMLButtonElement | null
+      expect(t).not.toBeNull()
+      expect(t?.hasAttribute("disabled")).toBe(false)
+      return t as HTMLButtonElement
+    })
+    // The stored value wins over the default (on).
+    expect(toggle).toHaveAttribute("aria-checked", "false")
+    await user.click(toggle)
+    await waitFor(() => {
+      expect(lastPatch?.field).toBe("notifications.item_reminder")
+      expect(lastPatch?.body).toBe(true)
     })
   })
 

@@ -56,6 +56,10 @@ const GROUP_SCOPED_PREFIXES = [
   // /maintenance surface plus the per-row PATCH / DELETE / done
   // endpoints mounted at /g/{slug}/maintenance/{id}*.
   "/maintenance",
+  // Item reminders (#2805): per-commodity paths ride /commodities; these
+  // cover the per-row PATCH / DELETE and the group-wide Upcoming list.
+  "/reminders",
+  "/upcoming",
   "/upload-slots",
   "/uploads",
   "/settings",

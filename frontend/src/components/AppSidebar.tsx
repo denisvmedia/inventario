@@ -1,4 +1,5 @@
 import {
+  BellRing,
   CalendarClock,
   ChevronsUpDown,
   FileBarChart,
@@ -107,6 +108,11 @@ const INVENTORY: NavEntry[] = [
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/commodities` : null),
     icon: Package,
     tourKey: "nav-items",
+  },
+  {
+    labelKey: "common:nav.upcoming",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/upcoming` : null),
+    icon: BellRing,
   },
   {
     labelKey: "common:nav.warranties",

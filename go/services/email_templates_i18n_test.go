@@ -47,6 +47,9 @@ func TestEmailTemplateRenderer_AllTypesAllLangsRender(t *testing.T) {
 		LoanDaysDelta:         5,
 		MaintenanceTitle:      "Oil change",
 		MaintenanceDueDate:    "2026-03-01",
+		ReminderTitle:         "Return window ends",
+		ReminderDueDate:       "2026-03-05",
+		ReminderDaysLeft:      4,
 		FeedbackType:          "Bug",
 		FromName:              "Alex",
 		FromEmail:             "alex@example.com",
@@ -69,7 +72,7 @@ func TestEmailTemplateRenderer_AllTypesAllLangsRender(t *testing.T) {
 		emailTemplatePasswordChange, emailTemplateWelcome, emailTemplateWarrantyReminder,
 		emailTemplateGroupInvite, emailTemplateStorageQuotaWarning, emailTemplateLoanReminder,
 		emailTemplateMaintenanceReminder, emailTemplateFeedback,
-		emailTemplateWeeklyDigest,
+		emailTemplateWeeklyDigest, emailTemplateItemReminder,
 	}
 	for _, lang := range []string{"en", "cs", "ru"} {
 		for _, tt := range types {
@@ -201,4 +204,46 @@ func TestEmailTemplateRenderer_LoanSubjectLocalized(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(pct.Subject, qt.Equals, "100% cotton is due back soon")
+}
+
+// TestEmailTemplateRenderer_ItemReminder pins the item reminder subject (the
+// reminder's title behind a localized prefix) and the today / tomorrow / N
+// days branches of the body (#2805).
+func TestEmailTemplateRenderer_ItemReminder(t *testing.T) {
+	renderer, err := newEmailTemplateRenderer()
+	qt.Assert(t, err, qt.IsNil)
+
+	cases := []struct {
+		name        string
+		lang        string
+		daysLeft    int
+		wantSubject string
+		wantText    string
+	}{
+		{"en in days", "en", 7, "Reminder: Insurance renewal", "is due in 7 days"},
+		{"en tomorrow", "en", 1, "Reminder: Insurance renewal", "is due tomorrow"},
+		{"en today", "en", 0, "Reminder: Insurance renewal", "is due today"},
+		{"cs in days", "cs", 7, "Připomínka: Insurance renewal", "nastane za 7 dní"},
+		{"ru today", "ru", 0, "Напоминание: Insurance renewal", "наступает сегодня"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rendered, err := renderer.render(emailJob{
+				TemplateType:     emailTemplateItemReminder,
+				To:               "user@example.com",
+				Name:             "Alex",
+				Language:         tc.lang,
+				CommodityName:    "Car",
+				ReminderTitle:    "Insurance renewal",
+				ReminderDueDate:  "2026-12-01",
+				ReminderDaysLeft: tc.daysLeft,
+			})
+			c.Assert(err, qt.IsNil)
+			c.Assert(rendered.Subject, qt.Equals, tc.wantSubject)
+			c.Assert(rendered.Text, qt.Contains, tc.wantText)
+			c.Assert(rendered.Text, qt.Contains, "2026-12-01")
+			c.Assert(rendered.Text, qt.Not(qt.Contains), "http")
+		})
+	}
 }
