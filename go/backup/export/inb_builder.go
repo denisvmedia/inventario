@@ -283,6 +283,16 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		b.areaUUIDByDBID[area.ID] = area.UUID
 	}
 
+	// The drafts are read before the items, in a transaction of their own.
+	// A promotion that commits between the two reads then leaves the archive
+	// with both the draft and the item it became, which restores as a
+	// duplicate the user can discard. Read the other way round, the item
+	// would be missing from the items read and the draft from the drafts
+	// read, and the archive would lose it.
+	if err := b.loadDrafts(scope); err != nil {
+		return err
+	}
+
 	commodities, err := b.loadCommodities()
 	if err != nil {
 		return err
@@ -306,11 +316,7 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		return err
 	}
 
-	// Before the files, which link to the drafts.
-	if err := b.loadDrafts(scope); err != nil {
-		return err
-	}
-
+	// After the drafts, which the files link to.
 	if err := b.indexFiles(); err != nil {
 		return err
 	}

@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
 	"strings"
@@ -20,6 +21,7 @@ import (
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // Open drafts of new items are in a whole-group backup (#2812, format 3.5),
@@ -167,6 +169,54 @@ func TestINBExport_Drafts(t *testing.T) {
 			c.Check(string(data), qt.Not(qt.Contains), d.UUID, qt.Commentf("%s carries draft %s", name, d.ClientKey))
 		}
 	}
+}
+
+// promoteBeforeItemsRead is a CommodityRegistryFactory that runs promote once,
+// right before the export opens the item registry: a promotion that commits
+// between the export's reads of the drafts and of the items.
+type promoteBeforeItemsRead struct {
+	registry.CommodityRegistryFactory
+	promote func()
+}
+
+func (f *promoteBeforeItemsRead) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
+	if promote := f.promote; promote != nil {
+		f.promote = nil
+		promote()
+	}
+	return f.CommodityRegistryFactory.CreateUserRegistry(ctx)
+}
+
+// TestINBExport_PromotionDuringTheExportLosesNothing: the drafts are read
+// before the items, so a draft promoted between the two reads is in the
+// archive both as the draft and as the item it became. Read the other way
+// round, it would be in neither.
+func TestINBExport_PromotionDuringTheExportLosesNothing(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+	var itemUUID string
+	f.fs.CommodityRegistryFactory = &promoteBeforeItemsRead{
+		CommodityRegistryFactory: f.fs.CommodityRegistryFactory,
+		promote: func() {
+			result := must.Must(drafts.Promote(f.ctx, f.draft.ID, f.draft.Revision, "promotion-during-export", models.Commodity{
+				Name: "Half-done drill", ShortName: "drill", Type: models.CommodityTypeEquipment, Count: 1,
+				Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD",
+			}))
+			itemUUID = result.Commodity.UUID
+		},
+	}
+
+	_, archive := f.runExport(c, signer)
+	c.Assert(itemUUID, qt.Not(qt.Equals), "")
+	_, jsons := innerMembers(c, archive)
+	var doc types.INBDraftsDoc
+	c.Assert(json.Unmarshal(jsons[types.INBDraftsMember], &doc), qt.IsNil)
+	c.Assert(doc.Drafts, qt.HasLen, 1)
+	c.Check(doc.Drafts[0].ClientKey, qt.Equals, "draft-in-backup")
+	_, items := manifestAndItems(c, archive)
+	c.Check(items[itemUUID].Name, qt.Equals, "Half-done drill")
 }
 
 func TestINBExport_SelectedItemsCarryNoDrafts(t *testing.T) {
