@@ -202,64 +202,7 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 		}
 	})
 
-	t.Run("trashed items", func(t *testing.T) {
-		c := qt.New(t)
-		env := newEnv(t)
-		seedSearchGroup(c, env)
-		at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
-		live, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{IncludeInactive: true})
-		c.Assert(err, qt.IsNil)
-		for _, cm := range live {
-			if cm.Name == "Red Toolbox" || cm.Name == "Kitchen Fridge" {
-				_, err := env.Commodities.Trash(env.Ctx, cm.ID, "registrytest", at)
-				c.Assert(err, qt.IsNil, qt.Commentf("trashing %s", cm.Name))
-			}
-		}
-
-		for _, tc := range []struct {
-			name   string
-			opts   registry.CommodityListOptions
-			want   []string
-			counts registry.CommodityTagCounts
-		}{
-			{name: "live by default", opts: registry.CommodityListOptions{},
-				want: []string{"Cordless Drill", "Garden Hose", "Old Phone"},
-				counts: registry.CommodityTagCounts{
-					Tags: map[string]int{"power-tools": 1, "red": 2}, Untagged: 1,
-				}},
-			{name: "live search", opts: registry.CommodityListOptions{Search: "red"},
-				want:   []string{"Cordless Drill", "Old Phone"},
-				counts: registry.CommodityTagCounts{Tags: map[string]int{"power-tools": 1, "red": 2}}},
-			{name: "trash only", opts: registry.CommodityListOptions{Trashed: true},
-				want: []string{"Kitchen Fridge", "Red Toolbox"},
-				counts: registry.CommodityTagCounts{
-					Tags: map[string]int{"kitchen": 1}, Untagged: 1,
-				}},
-			{name: "search in the trash", opts: registry.CommodityListOptions{Trashed: true, Search: "red"},
-				want:   []string{"Red Toolbox"},
-				counts: registry.CommodityTagCounts{Tags: map[string]int{}, Untagged: 1}},
-			{name: "tag filter in the trash", opts: registry.CommodityListOptions{
-				Trashed: true, Tags: registry.CommodityTagFilter{Include: []string{"kitchen"}},
-			}, want: []string{"Kitchen Fridge"},
-				counts: registry.CommodityTagCounts{Tags: map[string]int{"kitchen": 1}}},
-		} {
-			c.Run(tc.name, func(c *qt.C) {
-				opts := tc.opts
-				opts.IncludeInactive = true
-				got, total, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, opts)
-				c.Assert(err, qt.IsNil)
-				c.Check(names(got), qt.DeepEquals, tc.want)
-				c.Check(total, qt.Equals, len(tc.want))
-				for _, cm := range got {
-					c.Check(cm.IsTrashed(), qt.Equals, opts.Trashed, qt.Commentf("%s", cm.Name))
-				}
-
-				counts, err := env.Commodities.CountTags(env.Ctx, opts)
-				c.Assert(err, qt.IsNil)
-				c.Check(counts, qt.DeepEquals, tc.counts)
-			})
-		}
-	})
+	t.Run("trashed items", func(t *testing.T) { runTrashedItemsCase(t, newEnv) })
 
 	t.Run("tag labels stay within their kind", func(t *testing.T) {
 		c := qt.New(t)
@@ -469,4 +412,66 @@ func names(cs []*models.Commodity) []string {
 		out = append(out, cm.Name)
 	}
 	return out
+}
+
+// runTrashedItemsCase checks that the list and the tag counts read live items
+// by default and the items in Trash with CommodityListOptions.Trashed, with
+// the search and the tag filter applied the same way to both.
+func runTrashedItemsCase(t *testing.T, newEnv func(t *testing.T) CommoditySearchEnv) {
+	c := qt.New(t)
+	env := newEnv(t)
+	seedSearchGroup(c, env)
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	live, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{IncludeInactive: true})
+	c.Assert(err, qt.IsNil)
+	for _, cm := range live {
+		if cm.Name == "Red Toolbox" || cm.Name == "Kitchen Fridge" {
+			_, err := env.Commodities.Trash(env.Ctx, cm.ID, "registrytest", at)
+			c.Assert(err, qt.IsNil, qt.Commentf("trashing %s", cm.Name))
+		}
+	}
+
+	for _, tc := range []struct {
+		name   string
+		opts   registry.CommodityListOptions
+		want   []string
+		counts registry.CommodityTagCounts
+	}{
+		{name: "live by default", opts: registry.CommodityListOptions{},
+			want: []string{"Cordless Drill", "Garden Hose", "Old Phone"},
+			counts: registry.CommodityTagCounts{
+				Tags: map[string]int{"power-tools": 1, "red": 2}, Untagged: 1,
+			}},
+		{name: "live search", opts: registry.CommodityListOptions{Search: "red"},
+			want:   []string{"Cordless Drill", "Old Phone"},
+			counts: registry.CommodityTagCounts{Tags: map[string]int{"power-tools": 1, "red": 2}}},
+		{name: "trash only", opts: registry.CommodityListOptions{Trashed: true},
+			want: []string{"Kitchen Fridge", "Red Toolbox"},
+			counts: registry.CommodityTagCounts{
+				Tags: map[string]int{"kitchen": 1}, Untagged: 1,
+			}},
+		{name: "search in the trash", opts: registry.CommodityListOptions{Trashed: true, Search: "red"},
+			want:   []string{"Red Toolbox"},
+			counts: registry.CommodityTagCounts{Tags: map[string]int{}, Untagged: 1}},
+		{name: "tag filter in the trash", opts: registry.CommodityListOptions{
+			Trashed: true, Tags: registry.CommodityTagFilter{Include: []string{"kitchen"}},
+		}, want: []string{"Kitchen Fridge"},
+			counts: registry.CommodityTagCounts{Tags: map[string]int{"kitchen": 1}}},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			opts := tc.opts
+			opts.IncludeInactive = true
+			got, total, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, opts)
+			c.Assert(err, qt.IsNil)
+			c.Check(names(got), qt.DeepEquals, tc.want)
+			c.Check(total, qt.Equals, len(tc.want))
+			for _, cm := range got {
+				c.Check(cm.IsTrashed(), qt.Equals, opts.Trashed, qt.Commentf("%s", cm.Name))
+			}
+
+			counts, err := env.Commodities.CountTags(env.Ctx, opts)
+			c.Assert(err, qt.IsNil)
+			c.Check(counts, qt.DeepEquals, tc.counts)
+		})
+	}
 }

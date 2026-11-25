@@ -103,17 +103,16 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 
 	c.Run("trashed=true selects the items in Trash", func(c *qt.C) {
 		trashed := must.Must(commodityReg.Create(ctx, models.Commodity{
-			Name:                   "Hedge Shears",
-			ShortName:              "Shears",
-			Type:                   models.CommodityTypeOther,
-			OriginalPrice:          decimal.RequireFromString("5.00"),
-			OriginalPriceCurrency:  models.Currency("USD"),
-			ConvertedOriginalPrice: decimal.Zero,
-			CurrentPrice:           decimal.RequireFromString("5.00"),
-			Count:                  1,
-			Status:                 models.CommodityStatusInUse,
-			PurchaseDate:           models.ToPDate("2023-01-01"),
-			Tags:                   models.ValuerSlice[string]{"shed"},
+			Name:                  "Hedge Shears",
+			ShortName:             "Shears",
+			Type:                  models.CommodityTypeOther,
+			OriginalPrice:         new(decimal.RequireFromString("5.00")),
+			OriginalPriceCurrency: models.Currency("USD"),
+			CurrentPrice:          new(decimal.RequireFromString("5.00")),
+			Count:                 1,
+			Status:                models.CommodityStatusInUse,
+			PurchaseDate:          models.ToPDate("2023-01-01"),
+			Tags:                  models.ValuerSlice[string]{"shed"},
 		}))
 		must.Must(commodityReg.Trash(ctx, trashed.ID, testUser.ID, time.Now()))
 
