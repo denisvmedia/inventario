@@ -383,7 +383,7 @@ type CommodityRegistry interface {
 
 	// CountEach counts, for each entry of opts, the commodities it selects,
 	// as ListPaginated would report in its total, without reading the rows.
-	// The counts are taken in one transaction, so they describe one moment.
+	// The counts are read from one snapshot, so they describe one moment.
 	CountEach(ctx context.Context, opts []CommodityListOptions) ([]int, error)
 
 	// ListBrands returns the brands the commodities of the group carry, with
@@ -1252,8 +1252,16 @@ type SavedViewRegistry interface {
 	// under the lock; an error from it is returned and nothing is written.
 	// The id, tenant, group, creator, SortOrder and CreatedAt are kept
 	// whatever mutate does. When the view stops being shared, the
-	// placements other members had for it are deleted.
-	UpdateFunc(ctx context.Context, id string, mutate func(view *models.SavedView, tally SavedViewTally) error) (*models.SavedView, error)
+	// placements other members had for it are deleted. When placement is
+	// not nil and the user still sees the view as written, it is stored as
+	// the user's placement in the same transaction, so the view and the
+	// placement are written together or not at all.
+	UpdateFunc(
+		ctx context.Context,
+		id string,
+		placement *SavedViewPlacementPatch,
+		mutate func(view *models.SavedView, tally SavedViewTally) error,
+	) (*models.SavedView, error)
 
 	// Placements returns the placements of the user registry's user for the
 	// views they see, keyed by view ID. A view without an entry is shown

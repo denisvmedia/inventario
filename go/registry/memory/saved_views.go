@@ -310,6 +310,7 @@ func (r *SavedViewRegistry) update(ctx context.Context, view models.SavedView) (
 func (r *SavedViewRegistry) UpdateFunc(
 	ctx context.Context,
 	id string,
+	placement *registry.SavedViewPlacementPatch,
 	mutate func(view *models.SavedView, tally registry.SavedViewTally) error,
 ) (*models.SavedView, error) {
 	if r.userID == "" {
@@ -343,6 +344,9 @@ func (r *SavedViewRegistry) UpdateFunc(
 				delete(r.placements[id], userID)
 			}
 		}
+	}
+	if placement != nil && r.visible(updated) {
+		r.storePlacement(id, *placement)
 	}
 	return updated, nil
 }

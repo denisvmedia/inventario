@@ -269,6 +269,7 @@ func (r *SavedViewRegistry) Update(ctx context.Context, view models.SavedView) (
 func (r *SavedViewRegistry) UpdateFunc(
 	ctx context.Context,
 	id string,
+	placement *registry.SavedViewPlacementPatch,
 	mutate func(view *models.SavedView, tally registry.SavedViewTally) error,
 ) (*models.SavedView, error) {
 	if r.service {
@@ -312,6 +313,11 @@ func (r *SavedViewRegistry) UpdateFunc(
 			unpin := fmt.Sprintf(`DELETE FROM %s WHERE saved_view_id = $1 AND user_id <> $2`, r.tableNames.SavedViewPlacements())
 			if _, err := tx.ExecContext(ctx, unpin, id, next.CreatedByUserID); err != nil {
 				return errxtrace.Wrap("failed to remove saved view placements", err)
+			}
+		}
+		if placement != nil && (next.Shared || next.CreatedByUserID == r.createdByUserID) {
+			if _, err := r.upsertPlacement(ctx, tx, id, *placement); err != nil {
+				return err
 			}
 		}
 		updated = next

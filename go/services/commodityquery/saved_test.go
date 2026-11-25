@@ -125,7 +125,15 @@ func TestQuery_RenameTag(t *testing.T) {
 		{"merges into a tag already named", "tags=fragile,delicate", "fragile", "delicate", "tags=delicate", true},
 		{"not named", "tags=red", "fragile", "delicate", "tags=red", false},
 		{"no tag filter", "status=in_use", "fragile", "delicate", "status=in_use", false},
-		{"would contradict", "tags=fragile&tags_exclude=delicate", "fragile", "delicate", "tags=fragile&tags_exclude=delicate", false},
+		// delicate below names a deleted tag, which is on no item.
+		{
+			"an excluded deleted tag excluded nothing", "tags=fragile&tags_exclude=delicate,red", "fragile", "delicate",
+			"tags=delicate&tags_exclude=red", true,
+		},
+		{
+			"an included deleted tag added nothing under any", "tag_mode=any&tags=delicate,red&tags_exclude=fragile", "fragile", "delicate",
+			"tag_mode=any&tags=red&tags_exclude=delicate", true,
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -133,6 +141,28 @@ func TestQuery_RenameTag(t *testing.T) {
 			got, changed := parse(c, tc.raw).RenameTag(tc.from, tc.to)
 			c.Assert(changed, qt.Equals, tc.changed)
 			c.Assert(got.Encode(), qt.Equals, tc.want)
+			_, err := commodityquery.ParseSaved(got.Encode())
+			c.Assert(err, qt.IsNil)
+		})
+	}
+
+	// A view that required a deleted tag selected nothing, and no query the
+	// list accepts selects nothing: the rewrite stores one Parse refuses,
+	// so the view shows as broken rather than selecting the renamed tag's
+	// items, which it excluded.
+	for _, raw := range []string{
+		"tags=delicate&tags_exclude=fragile",
+		"tags=delicate,red&tags_exclude=fragile",
+		"tag_mode=any&tags=delicate&tags_exclude=fragile",
+	} {
+		t.Run("an included deleted tag selected nothing: "+raw, func(t *testing.T) {
+			c := qt.New(t)
+			got, changed := parse(c, raw).RenameTag("fragile", "delicate")
+			c.Assert(changed, qt.IsTrue)
+			c.Assert(got.Tags.Include, qt.Contains, "delicate")
+			c.Assert(got.Tags.Exclude, qt.DeepEquals, []string{"delicate"})
+			_, err := commodityquery.ParseSaved(got.Encode())
+			c.Assert(err, qt.ErrorMatches, `.*both required and excluded.*`)
 		})
 	}
 }

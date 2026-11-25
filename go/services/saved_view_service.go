@@ -77,8 +77,9 @@ type SavedViewEntry struct {
 	CanEdit   bool
 	CanDelete bool
 	// QueryError explains why the stored query cannot run: a parameter the
-	// contract no longer accepts, or a query version this server does not
-	// know. Such a view is not counted and does not open as a list; it is
+	// contract no longer accepts, a query version this server does not
+	// know, or a tag filter a rename left contradicting itself (see
+	// commodityquery.Query.RenameTag). Such a view is not counted and does not open as a list; it is
 	// shown as needing an update instead, so it never selects more, or
 	// other, items than it was saved with. Nil when the query runs.
 	QueryError *commodityquery.Error
@@ -297,7 +298,16 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 		return SavedViewEntry{}, err
 	}
 	if patch.changesView() {
-		updated, err := updateSavedView(ctx, reg, actor, id, patch)
+		// The placement is written in the view's transaction, so a failed
+		// placement write leaves the view as it was.
+		var placement *registry.SavedViewPlacementPatch
+		if patch.changesPlacement() {
+			placement = &registry.SavedViewPlacementPatch{
+				ShowInSidebar:   patch.ShowInSidebar,
+				ShowOnDashboard: patch.ShowOnDashboard,
+			}
+		}
+		updated, err := updateSavedView(ctx, reg, actor, id, patch, placement)
 		if err != nil {
 			return SavedViewEntry{}, err
 		}
@@ -307,6 +317,7 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 		if !updated.Shared && updated.CreatedByUserID != actor.UserID {
 			return entryFor(updated, models.SavedViewPlacement{}, actor), nil
 		}
+		return s.entry(ctx, reg, actor, id)
 	}
 	if patch.changesPlacement() {
 		_, err := reg.SetPlacement(ctx, id, registry.SavedViewPlacementPatch{
@@ -328,6 +339,7 @@ func updateSavedView(
 	actor SavedViewActor,
 	id string,
 	patch SavedViewPatch,
+	placement *registry.SavedViewPlacementPatch,
 ) (*models.SavedView, error) {
 	var query string
 	if patch.Query != nil {
@@ -336,7 +348,7 @@ func updateSavedView(
 			return nil, err
 		}
 	}
-	updated, err := reg.UpdateFunc(ctx, id, func(view *models.SavedView, tally registry.SavedViewTally) error {
+	updated, err := reg.UpdateFunc(ctx, id, placement, func(view *models.SavedView, tally registry.SavedViewTally) error {
 		if !canEdit(view, actor) {
 			return errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "not_editable"))
 		}
@@ -425,7 +437,7 @@ func (s *SavedViewService) Reorder(ctx context.Context, actor SavedViewActor, id
 // their dashboard, how many items its query selects. The counts use the
 // filter of the items list (commodityquery.CountEach over the request's
 // registry set), so the badge, the dashboard card and the opened list agree;
-// they are taken in one transaction without reading rows. A view whose query
+// they are read from one snapshot without reading rows. A view whose query
 // cannot run has no count.
 func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[string]int, error) {
 	reg, err := s.registry(ctx)

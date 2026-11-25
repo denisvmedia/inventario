@@ -2,6 +2,8 @@ package commodityquery
 
 import (
 	"slices"
+
+	"go.5x5.cz/inventario/registry"
 )
 
 // savedParams lists the parameters a saved view may keep: the filters and the
@@ -62,9 +64,17 @@ func (q Query) Encode() string {
 
 // RenameTag replaces the tag slug from with to wherever q names it and
 // reports whether q changed. It keeps a renamed tag in the filters that name
-// it. A rename that would put the same slug in both the included and the
-// excluded list leaves q unchanged, since that query selects nothing and
-// Parse refuses it.
+// it.
+//
+// A rename can only take a slug no live tag holds, so a q that already names
+// to names a deleted tag, and a deleted tag is on no item. When the rename
+// puts to in both lists, the copy that was there before selected nothing and
+// is dropped where that keeps what q selects: from the excluded list, or from
+// the included list under tag_mode=any when other included tags remain.
+// Otherwise q required a tag no item carried and selected nothing. No query
+// Parse accepts selects nothing, so to stays in both lists: Parse refuses the
+// result, and the view shows as broken instead of selecting items it did not
+// select before.
 func (q Query) RenameTag(from, to string) (Query, bool) {
 	if from == "" || to == "" || from == to {
 		return q, false
@@ -74,9 +84,13 @@ func (q Query) RenameTag(from, to string) (Query, bool) {
 	if !inChanged && !exChanged {
 		return q, false
 	}
-	for _, s := range include {
-		if slices.Contains(exclude, s) {
-			return q, false
+	if slices.Contains(include, to) && slices.Contains(exclude, to) {
+		isTo := func(s string) bool { return s == to }
+		switch {
+		case inChanged:
+			exclude = slices.DeleteFunc(slices.Clone(exclude), isTo)
+		case q.Tags.Mode == registry.TagMatchAny && len(include) > 1:
+			include = slices.DeleteFunc(slices.Clone(include), isTo)
 		}
 	}
 	q.Tags.Include = include

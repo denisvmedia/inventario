@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"sync"
 	"testing"
 	"time"
 
@@ -128,12 +129,27 @@ func TestTagService_Postgres_RenameRewritesViewsWithoutASecondConnection(t *test
 			dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
 			tags := services.NewTagService(postgres.NewFactorySet(dbx))
 
+			// On every exit the renames are canceled and waited for before
+			// the pool closes, so a hung rename neither outlives the test
+			// nor holds the pool open.
+			stop, cancel := context.WithCancel(context.Background())
+			var workers sync.WaitGroup
+			defer func() {
+				cancel()
+				workers.Wait()
+				_ = dbx.Close()
+				pool.Close()
+			}()
 			done := make(chan error, len(renames))
 			for _, r := range renames {
-				go func() {
-					_, err := tags.RenameTag(r.ctx, r.tag.ID, "Crimson", "crimson", r.tag.Color)
+				workers.Go(func() {
+					ctx, cancelRename := context.WithCancel(r.ctx)
+					defer cancelRename()
+					stopped := context.AfterFunc(stop, cancelRename)
+					defer stopped()
+					_, err := tags.RenameTag(ctx, r.tag.ID, "Crimson", "crimson", r.tag.Color)
 					done <- err
-				}()
+				})
 			}
 			deadline := time.After(30 * time.Second)
 			for range renames {
@@ -141,13 +157,9 @@ func TestTagService_Postgres_RenameRewritesViewsWithoutASecondConnection(t *test
 				case err := <-done:
 					c.Assert(err, qt.IsNil)
 				case <-deadline:
-					// The pool is left open: closing it would wait for the
-					// connection the hung rename holds.
 					c.Fatalf("a tag rename did not complete with %d pool connection(s)", tc.conns)
 				}
 			}
-			c.Assert(dbx.Close(), qt.IsNil)
-			pool.Close()
 
 			for _, r := range renames {
 				view, err := fx.factorySet.SavedViewRegistryFactory.MustCreateUserRegistry(r.ctx).Get(r.ctx, r.viewID)
@@ -156,4 +168,36 @@ func TestTagService_Postgres_RenameRewritesViewsWithoutASecondConnection(t *test
 			}
 		})
 	}
+}
+
+// UpdateFunc writes the view and the placement in one transaction: when the
+// placement cannot be stored, the view change is rolled back too. A user who
+// is not in the users table fails the placement's foreign key.
+func TestSavedViewRegistry_Postgres_UpdateFuncRollsBackTheViewWithThePlacement(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+	views := fx.factorySet.SavedViewRegistryFactory
+	shared, err := views.MustCreateUserRegistry(fx.ctxA).Create(fx.ctxA, models.SavedView{
+		Name:         "Team",
+		Icon:         models.SavedViewIconBookmark,
+		Entity:       models.SavedViewEntityCommodities,
+		QueryVersion: models.SavedViewQueryVersion,
+		Shared:       true,
+	})
+	c.Assert(err, qt.IsNil)
+
+	ghost := *fx.user
+	ghost.ID = "no-such-user"
+	ghostCtx := tagCtxFor(&ghost, fx.groupAID)
+	_, err = views.MustCreateUserRegistry(ghostCtx).UpdateFunc(ghostCtx, shared.ID,
+		&registry.SavedViewPlacementPatch{ShowInSidebar: new(true)},
+		func(v *models.SavedView, _ registry.SavedViewTally) error {
+			v.Name = "Renamed"
+			return nil
+		})
+	c.Assert(err, qt.ErrorMatches, `(?s).*failed to store saved view placement.*`)
+
+	got, err := views.MustCreateUserRegistry(fx.ctxA).Get(fx.ctxA, shared.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Name, qt.Equals, "Team", qt.Commentf("the view change was kept without its placement"))
 }

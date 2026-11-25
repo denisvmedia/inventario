@@ -392,6 +392,38 @@ func TestTagService_RenameTag_RewritesSavedViews(t *testing.T) {
 	c.Assert(got.View.Query, qt.Equals, "tags=delicate%2Cred")
 }
 
+// A view that required a tag that was then deleted selects nothing. When
+// the tag it excludes is renamed to the deleted tag's slug, the view would
+// select the renamed tag's items, which it excluded; it shows as broken
+// instead and is not counted.
+func TestTagService_RenameTag_ContradictingViewShowsAsBroken(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	ctx := savedViewCtx("alice")
+	alice := actor("alice", models.GroupRoleUser)
+	tags := services.NewTagService(f.factory)
+	created, err := tags.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"delicate", "fragile"})
+	c.Assert(err, qt.IsNil)
+	view, err := f.svc.Create(ctx, alice, viewInput("Delicate", "tags=delicate&tags_exclude=fragile", false))
+	c.Assert(err, qt.IsNil)
+	_, err = tags.DeleteTag(ctx, created["delicate"].ID, true)
+	c.Assert(err, qt.IsNil)
+
+	_, err = tags.RenameTag(ctx, created["fragile"].ID, "Delicate", "delicate", created["fragile"].Color)
+	c.Assert(err, qt.IsNil)
+
+	got, err := f.svc.Get(ctx, alice, view.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.QueryError, qt.IsNotNil)
+	c.Assert(got.QueryError.Param, qt.Equals, commodityquery.ParamTagsExclude)
+	set, err := f.factory.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	counts, err := f.svc.Counts(ctx, set)
+	c.Assert(err, qt.IsNil)
+	_, counted := counts[view.View.ID]
+	c.Assert(counted, qt.IsFalse)
+}
+
 func TestSavedViewService_Reorder(t *testing.T) {
 	c := qt.New(t)
 	f := newSavedViewFixture()

@@ -6,7 +6,6 @@ import (
 	"slices"
 	"strings"
 	"sync"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -277,23 +276,37 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		ctx := f.env.Ctx
 		full := errors.New("full")
 		// Alice has two views; the check lets her have three.
-		var created atomic.Int32
+		errs := make([]error, 6)
 		var wg sync.WaitGroup
-		for range 6 {
+		for i := range errs {
 			wg.Go(func() {
-				_, err := f.alice.CreateChecked(ctx, newView("Racing", "", false), nil, func(t registry.SavedViewTally) error {
+				_, errs[i] = f.alice.CreateChecked(ctx, newView("Racing", "", false), nil, func(t registry.SavedViewTally) error {
 					if t.Own >= 3 {
 						return full
 					}
 					return nil
 				})
-				if err == nil {
-					created.Add(1)
-				}
 			})
 		}
 		wg.Wait()
-		c.Assert(created.Load(), qt.Equals, int32(1))
+		var created int
+		for _, err := range errs {
+			if err == nil {
+				created++
+				continue
+			}
+			c.Assert(err, qt.ErrorIs, full, qt.Commentf("a create failed for another reason than the limit"))
+		}
+		c.Assert(created, qt.Equals, 1)
+		views, err := f.alice.List(ctx)
+		c.Assert(err, qt.IsNil)
+		racing := 0
+		for _, v := range views {
+			if v.Name == "Racing" {
+				racing++
+			}
+		}
+		c.Assert(racing, qt.Equals, 1, qt.Commentf("a refused create stored its view"))
 	})
 
 	t.Run("a tag rename waits for an update func and lands on top of it", func(t *testing.T) {
@@ -302,7 +315,8 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		ctx, bobCtx := f.env.Ctx, f.env.OtherCtx
 		tag := newTag(c, f.env, ctx, "sold-items")
 		done := make(chan error, 1)
-		_, err := f.alice.UpdateFunc(ctx, f.mine.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
+		finishedEarly := false
+		_, err := f.alice.UpdateFunc(ctx, f.mine.ID, nil, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			go func() {
 				_, _, err := f.env.Tags.MustCreateUserRegistry(bobCtx).RenameAtomic(bobCtx, tag.ID, "", "sold", "",
 					func(v models.SavedView, _, _ string) (string, bool) {
@@ -313,10 +327,17 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 			// Without the lock the rewrite would land here and the write
 			// below would put the old query back.
 			time.Sleep(100 * time.Millisecond)
+			select {
+			case err := <-done:
+				finishedEarly = true
+				done <- err
+			default:
+			}
 			v.Name = "Renamed under the lock"
 			return nil
 		})
 		c.Assert(err, qt.IsNil)
+		c.Assert(finishedEarly, qt.IsFalse, qt.Commentf("the rename finished while the update held the view"))
 		c.Assert(<-done, qt.IsNil)
 		got, err := f.alice.Get(ctx, f.mine.ID)
 		c.Assert(err, qt.IsNil)
@@ -328,7 +349,7 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		c := qt.New(t)
 		f := setup(t)
 		ctx := f.env.Ctx
-		updated, err := f.alice.UpdateFunc(ctx, f.mineLater.ID, func(v *models.SavedView, tally registry.SavedViewTally) error {
+		updated, err := f.alice.UpdateFunc(ctx, f.mineLater.ID, nil, func(v *models.SavedView, tally registry.SavedViewTally) error {
 			c.Check(tally, qt.Equals, registry.SavedViewTally{Own: 2, Shared: 1})
 			v.Name = "Renamed"
 			v.SortOrder = -1
@@ -347,7 +368,7 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		c.Assert(got.SortOrder, qt.Equals, f.mineLater.SortOrder)
 
 		refused := errors.New("not yours")
-		_, err = f.alice.UpdateFunc(ctx, f.mine.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
+		_, err = f.alice.UpdateFunc(ctx, f.mine.ID, nil, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			v.Name = "Never stored"
 			return refused
 		})
@@ -356,7 +377,7 @@ func runSavedViewCheckedWrites(t *testing.T, setup func(*testing.T) savedViewFix
 		c.Assert(err, qt.IsNil)
 		c.Assert(got.Name, qt.Equals, "Mine")
 
-		_, err = f.alice.UpdateFunc(ctx, f.bobPrivate.ID, func(*models.SavedView, registry.SavedViewTally) error {
+		_, err = f.alice.UpdateFunc(ctx, f.bobPrivate.ID, nil, func(*models.SavedView, registry.SavedViewTally) error {
 			return nil
 		})
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -409,7 +430,7 @@ func runSavedViewPlacements(t *testing.T, setup func(*testing.T) savedViewFixtur
 		_, err = f.bob.SetPlacement(bobCtx, f.bobShared.ID, registry.SavedViewPlacementPatch{ShowOnDashboard: new(true)})
 		c.Assert(err, qt.IsNil)
 
-		_, err = f.bob.UpdateFunc(bobCtx, f.bobShared.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
+		_, err = f.bob.UpdateFunc(bobCtx, f.bobShared.ID, nil, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			v.Shared = false
 			return nil
 		})
@@ -419,7 +440,7 @@ func runSavedViewPlacements(t *testing.T, setup func(*testing.T) savedViewFixtur
 		c.Assert(placements, qt.HasLen, 0)
 
 		// Shared again, it is in nobody else's sidebar until they put it there.
-		_, err = f.bob.UpdateFunc(bobCtx, f.bobShared.ID, func(v *models.SavedView, _ registry.SavedViewTally) error {
+		_, err = f.bob.UpdateFunc(bobCtx, f.bobShared.ID, nil, func(v *models.SavedView, _ registry.SavedViewTally) error {
 			v.Shared = true
 			return nil
 		})
@@ -430,6 +451,54 @@ func runSavedViewPlacements(t *testing.T, setup func(*testing.T) savedViewFixtur
 		placements, err = f.bob.Placements(bobCtx)
 		c.Assert(err, qt.IsNil)
 		c.Assert(placements[f.bobShared.ID].ShowOnDashboard, qt.IsTrue)
+	})
+
+	t.Run("update func stores the placement with the view", func(t *testing.T) {
+		c := qt.New(t)
+		f := setup(t)
+		ctx, bobCtx := f.env.Ctx, f.env.OtherCtx
+		updated, err := f.alice.UpdateFunc(ctx, f.bobShared.ID,
+			&registry.SavedViewPlacementPatch{ShowOnDashboard: new(true)},
+			func(v *models.SavedView, _ registry.SavedViewTally) error {
+				v.Name = "Renamed by Alice"
+				return nil
+			})
+		c.Assert(err, qt.IsNil)
+		c.Assert(updated.Name, qt.Equals, "Renamed by Alice")
+		placements, err := f.alice.Placements(ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(placements[f.bobShared.ID].ShowOnDashboard, qt.IsTrue)
+		c.Assert(placements[f.bobShared.ID].ShowInSidebar, qt.IsFalse, qt.Commentf("a nil field is false on insert"))
+
+		// A refused mutate stores neither.
+		refused := errors.New("refused")
+		_, err = f.alice.UpdateFunc(ctx, f.bobShared.ID,
+			&registry.SavedViewPlacementPatch{ShowOnDashboard: new(false)},
+			func(*models.SavedView, registry.SavedViewTally) error { return refused })
+		c.Assert(err, qt.ErrorIs, refused)
+		placements, err = f.alice.Placements(ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(placements[f.bobShared.ID].ShowOnDashboard, qt.IsTrue)
+
+		// A view the user no longer sees once written gets no placement:
+		// Alice unshares Bob's view.
+		_, err = f.alice.UpdateFunc(ctx, f.bobShared.ID,
+			&registry.SavedViewPlacementPatch{ShowInSidebar: new(true)},
+			func(v *models.SavedView, _ registry.SavedViewTally) error {
+				v.Shared = false
+				return nil
+			})
+		c.Assert(err, qt.IsNil)
+		placements, err = f.alice.Placements(ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(placements, qt.HasLen, 0)
+		views, err := f.env.Views.CreateServiceRegistry().List(bobCtx)
+		c.Assert(err, qt.IsNil)
+		for _, v := range views {
+			if v.ID == f.bobShared.ID {
+				c.Assert(v.Shared, qt.IsFalse)
+			}
+		}
 	})
 
 	t.Run("deleting a view deletes every placement of it", func(t *testing.T) {
@@ -622,7 +691,10 @@ func runSavedViewTagRenames(t *testing.T, setup func(*testing.T) savedViewFixtur
 		c.Assert(err, qt.IsNil)
 
 		entered, release := make(chan struct{}), make(chan struct{})
-		var hold sync.Once
+		var hold, unhold sync.Once
+		releaseOnce := func() { unhold.Do(func() { close(release) }) }
+		// A test that stops early must not leave the first rename waiting.
+		defer releaseOnce()
 		first := make(chan error, 1)
 		go func() {
 			_, _, err := f.env.Tags.MustCreateUserRegistry(ctx).RenameAtomic(ctx, red.ID, "", "crimson", "",
@@ -635,7 +707,13 @@ func runSavedViewTagRenames(t *testing.T, setup func(*testing.T) savedViewFixtur
 				})
 			first <- err
 		}()
-		<-entered
+		select {
+		case <-entered:
+		case err := <-first:
+			c.Fatalf("the first rename returned without rewriting a view: %v", err)
+		case <-time.After(30 * time.Second):
+			c.Fatal("the first rename never reached the view rewrite")
+		}
 		second := make(chan error, 1)
 		go func() {
 			_, _, err := f.env.Tags.MustCreateUserRegistry(bobCtx).RenameAtomic(bobCtx, scarlet.ID, "", "red", "", replaceTag)
@@ -644,7 +722,7 @@ func runSavedViewTagRenames(t *testing.T, setup func(*testing.T) savedViewFixtur
 		// Give the second rename time to take red if nothing stops it.
 		time.Sleep(200 * time.Millisecond)
 		held, heldErr := f.env.Tags.MustCreateUserRegistry(ctx).Get(ctx, scarlet.ID)
-		close(release)
+		releaseOnce()
 		c.Assert(<-first, qt.IsNil)
 		c.Assert(<-second, qt.IsNil)
 		c.Assert(heldErr, qt.IsNil)

@@ -379,6 +379,13 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 	// items whichever side of midnight its query is built.
 	now := time.Now()
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Under the default READ COMMITTED every COUNT would read its own
+		// snapshot, and an item trashed between two of them would count in
+		// both or in neither. The transaction has run only SET LOCAL so far,
+		// so its isolation level can still change.
+		if _, err := tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+			return errxtrace.Wrap("failed to set the count snapshot", err)
+		}
 		for i, o := range opts {
 			if o.WarrantyNow.IsZero() {
 				o.WarrantyNow = now

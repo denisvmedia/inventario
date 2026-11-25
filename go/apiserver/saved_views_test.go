@@ -212,8 +212,10 @@ func TestSavedViews_CountsAndReorder(t *testing.T) {
 	}
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &counts), qt.IsNil)
 	c.Assert(counts.Data.Counts[all] > 0, qt.IsTrue, qt.Commentf("counts: %v", counts.Data.Counts))
-	c.Assert(counts.Data.Counts[none], qt.Equals, 0)
-	_, counted := counts.Data.Counts[hidden]
+	noneCount, counted := counts.Data.Counts[none]
+	c.Assert(counted, qt.IsTrue, qt.Commentf("a placed view without matches still has a count"))
+	c.Assert(noneCount, qt.Equals, 0)
+	_, counted = counts.Data.Counts[hidden]
 	c.Assert(counted, qt.IsFalse)
 
 	// The count is the total the items list reports for the same query.
