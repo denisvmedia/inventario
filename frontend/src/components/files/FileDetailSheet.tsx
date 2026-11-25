@@ -119,7 +119,7 @@ export function FileDetailSheet({
     if (!ok) return
     try {
       await deleteMutation.mutateAsync(file.id)
-      toast.success(t("files:detail.deleteSuccess", { defaultValue: "File deleted" }))
+      toast.success(t("files:detail.deleteSuccess", { defaultValue: "File moved to the trash" }))
       onOpenChange(false)
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))

@@ -341,9 +341,9 @@ and the `worker_control.worker_type` column):
 `export`, `import`, `restore`, `thumbnail`, `refresh-token-cleanup`,
 `email-verification-cleanup`, `magic-link-token-cleanup`,
 `operation-slot-cleanup`, `login-event-retention`, `group-purge`,
-`orphan-file-gc`, `warranty-reminder`, `storage-quota-reminder`,
-`loan-reminder`, `maintenance-reminder`, `item-reminder`,
-`currency-migration`, `weekly-digest`.
+`orphan-file-gc`, `trash-purge`, `warranty-reminder`,
+`storage-quota-reminder`, `loan-reminder`, `maintenance-reminder`,
+`item-reminder`, `currency-migration`, `weekly-digest`.
 
 > Email delivery is intentionally **not** in this set — it is a Redis
 > subscriber rather than a polling worker, with a separate pause story.
@@ -411,8 +411,8 @@ The same control is exposed under the back-office-gated admin subtree
 
 ## 8. Orphan-file GC (#2237)
 
-`orphan-file-gc` is the **only destructive periodic worker** in the
-deployment. It exists as a backstop for residues the delete paths cannot
+`orphan-file-gc` and `trash-purge` (§9) are the two destructive periodic
+workers in the deployment. `orphan-file-gc` exists as a backstop for residues the delete paths cannot
 close by construction (they are row-first / blob-best-effort and
 multi-transaction, because the file→entity link is polymorphic and cannot
 carry an FK):
@@ -443,6 +443,7 @@ enumerated in the first place:
 | Class | Why it is never touched |
 | ----- | ----------------------- |
 | Standalone files (`linked_entity_type = ''`) | First-class since #2235; exported in backups. **"No link" is not "orphan."** The candidate predicate is a positive allowlist, so a standalone file cannot enter it. |
+| Files in Trash (`deleted_at` set) | Owned by `trash-purge` (§9). A link to an item in Trash also counts as a live link, so the files of a trashed item are never candidates. |
 | `export`-linked files | Owned by the backup subsystem's own lifecycle. The exports table is never probed, so a soft-deleted (recoverable) export can never be misread as "gone". |
 | Any unknown / future link type | Fails closed — kept until someone explicitly adds it to the allowlist. |
 | `t/<tenant>/files/` blobs | Upload, restore, and `inventario backfill blobs` are all **blob-first / row-second**, so a rowless blob is a normal transient state. Reclaiming these safely needs a provably-complete global keep-set; the failure mode is irreversible loss of the user's file bytes. Out of scope for an autonomous worker. (Crash-window blobs are still reclaimed — via the row sweep, which deletes the blob and thumbnails with the row.) |
@@ -453,8 +454,8 @@ enumerated in the first place:
 ### Rollout: report → delete
 
 The worker ships in **`report` mode and deletes nothing.** A false
-positive here is irreversible user data loss (`files` has no soft-delete
-column, and the row delete takes the blob and thumbnails with it), so the
+positive here is irreversible user data loss (the row delete bypasses Trash
+and takes the blob and thumbnails with it), so the
 predicate has to be observed against real data before it earns the right
 to delete.
 
@@ -514,6 +515,57 @@ inventario workers pause --type orphan-file-gc --reason "investigating a candida
 ```
 
 The sweep is skipped on the next tick; no restart needed.
+
+---
+
+## 9. Trash purge
+
+Deleting an item or a file moves it to the group's Trash
+(`deleted_at` / `deleted_by` set on the row); the blob stays in place and
+keeps counting toward the group's storage. A file deleted together with an
+item also records `deleted_with_commodity_id`, so restoring the item brings
+back exactly those files. Members restore entries from the Trash page; admins
+and owners can delete them for good there at any time.
+
+`trash-purge` deletes, across every group, the entries that have been in
+Trash longer than the retention. It runs in the `housekeeping` worker group,
+sweeps once at startup and then on every interval, in rounds of 100 items
+and 100 files until a round finds nothing.
+
+Purging an item deletes its row (the history, loans, services and
+maintenance schedules go with it through their foreign keys) and settles
+every file that went to Trash with it:
+
+- a file also linked to another item in Trash moves to that item;
+- a file linked to a live item, location or area comes back as live;
+- anything else is deleted, and its blob is removed only when no other file
+  row points at the same blob.
+
+Every step re-reads its state, so a sweep that stops halfway (crash,
+deploy, DB error) is finished by the next one. A failed sweep logs
+`Failed to purge expired Trash entries` and stops; a sweep that deleted
+something logs `Purged expired Trash entries` with the counts.
+
+### Knobs
+
+| Flag | Env | Default | Notes |
+| ---- | --- | ------- | ----- |
+| `--trash-retention` | `INVENTARIO_RUN_TRASH_RETENTION` | `720h` (30 days) | How long an entry stays in Trash. The Trash page shows the value in days. |
+| `--trash-purge-interval` | `INVENTARIO_RUN_TRASH_PURGE_INTERVAL` | `1h` | Sweep cadence. |
+
+Backups (`.inb` exports) leave Trash out. A full-replace restore empties
+the group's Trash first; a merge restore skips any item or file whose id is
+in Trash.
+
+### Stopping it
+
+```bash
+inventario workers pause --type trash-purge --reason "holding expired entries" \
+  --db-dsn postgres://user:pass@localhost:5432/inventario
+```
+
+Entries keep expiring while the worker is paused and are purged on the first
+sweep after it resumes.
 
 ---
 

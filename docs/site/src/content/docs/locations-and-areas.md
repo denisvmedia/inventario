@@ -129,14 +129,14 @@ To start a delete:
 When the container still holds items (or, for a location, areas), the **Delete** dialog offers two options. The safe option is selected by default:
 
 - **Keep items, just remove the area** / **Keep items, just remove the location** (the default) — the items stay in your inventory but become **un-located**. Only the container is removed. For a location this also removes its areas, but the items inside those areas survive — they just lose their area assignment.
-- **Delete everything** — permanently deletes the items inside *and their attached files*, along with the container. A file that is also attached to something you keep stays there.
+- **Delete everything** — moves the items inside, with their attached files, to the [Trash](../trash/) and deletes the container. A file that is also attached to something you keep stays there.
 
 Choose an option, then click **Delete**. If you change your mind, **Cancel**, press Escape, or click outside the dialog.
 
 ![The delete dialog for a non-empty location, offering "Keep items" versus "Delete everything"](../../assets/screenshots/location-delete-choice.png)
 
 :::caution
-**Delete everything** cannot be undone — the items inside and their attached files are permanently removed. When in doubt, keep the default and re-file the items later.
+The container itself, and the files attached directly to it, are deleted for good. The items can be restored from the [Trash](../trash/) for 30 days, but they come back without a location, because their area no longer exists. When in doubt, keep the default and re-file the items later.
 :::
 
 :::tip

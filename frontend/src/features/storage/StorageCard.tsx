@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import { ArrowRight, HardDrive } from "lucide-react"
+import { ArrowRight, HardDrive, Trash2 } from "lucide-react"
 
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -56,6 +56,20 @@ export function StorageCard() {
       {isPending ? <UsageSkeleton /> : null}
 
       {data ? <UsageBody data={data} /> : null}
+
+      {data && (data.breakdown.trash ?? 0) > 0 ? (
+        <p className="text-xs text-muted-foreground" data-testid="storage-card-trash">
+          <Trash2 className="mr-1 inline size-3.5 align-text-bottom" aria-hidden="true" />
+          {t("settings:storage.trashNote", { size: formatBytes(data.breakdown.trash) })}{" "}
+          <Link
+            to={`/g/${encodeURIComponent(slug)}/trash`}
+            className="font-medium text-primary hover:underline"
+            data-testid="storage-card-open-trash"
+          >
+            {t("settings:storage.openTrash")}
+          </Link>
+        </p>
+      ) : null}
 
       <Link
         to={`/g/${encodeURIComponent(slug)}/files`}

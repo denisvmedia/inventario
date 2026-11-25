@@ -24,16 +24,10 @@ import {
   uploadViaDialog,
 } from './includes/uploads.js'
 
-// Post-cutover (#1423) + post-#1448 quick-attach: cascade tests for the
-// unified file model. Two scenarios still worth covering at the e2e
-// level:
-//   1. Commodity delete cascades to every linked file row.
-//   2. Export delete cascades to its generated XML file row.
-// The Vue-era "multiple files" subtest is folded into #1 (we already
-// upload two files); the "no-files commodity delete" subtest is
-// dropped — it duplicates `commodity-simple-crud.spec.ts`.
-//
-// Replaces the legacy spec retired by #1474.
+// Cascade tests for the unified file model:
+//   1. Deleting a commodity moves every file linked to it into the trash
+//      with it: live reads 404, and the trash entry counts the files.
+//   2. Deleting an export removes its generated XML file row for good.
 test.describe('File deletion cascade', () => {
   const timestamp = Date.now()
   const testLocation = {
@@ -62,7 +56,7 @@ test.describe('File deletion cascade', () => {
   const imageFixture = path.join('files', 'image.jpg')
   const manualFixture = path.join('files', 'manual.pdf')
 
-  test('commodity delete removes its linked files (DB + UI)', async ({ page, recorder }) => {
+  test('commodity delete moves its linked files to the trash (DB + UI)', async ({ page, recorder }) => {
     let step = 1
     recorder.log(`Step ${step++}: creating location/area/commodity`)
     await navigateTo(page, recorder, TO_LOCATIONS)
@@ -122,11 +116,10 @@ test.describe('File deletion cascade', () => {
     await page.goto(commodityUrl)
     await deleteCommodity(page, recorder, testCommodity.name, BACK_TO_AREAS)
 
-    // After the cascade settles each file row is 404. Loop with a
-    // small retry so a slow BE cascade doesn't false-positive — but
-    // the BE should handle this synchronously, so a 5s budget per
-    // file is plenty.
-    recorder.log(`Step ${step++}: verifying files cascaded to 404`)
+    // Live reads leave the trashed files out. Loop with a small retry so a
+    // slow BE doesn't false-positive; the delete is synchronous, so a 5s
+    // budget per file is plenty.
+    recorder.log(`Step ${step++}: verifying live file reads return 404`)
     for (const fileId of fileIds) {
       let lastStatus = 200
       for (let attempt = 0; attempt < 10; attempt += 1) {
@@ -137,6 +130,25 @@ test.describe('File deletion cascade', () => {
       }
       expect(lastStatus, `post-delete GET /files/${fileId} should be 404`).toBe(404)
     }
+
+    recorder.log(`Step ${step++}: verifying the trash entry counts both files`)
+    const commodityId = commodityUrl.split('/').pop()?.split('?')[0] ?? ''
+    const trashResp = await page.request.get(`${apiBase}/trash/commodities?per_page=100`, {
+      headers,
+    })
+    expect(trashResp.status(), 'GET /trash/commodities').toBe(200)
+    const trashBody = (await trashResp.json()) as {
+      data: Array<{ id: string; meta: { file_count: number } }>
+    }
+    const entry = trashBody.data.find((e) => e.id === commodityId)
+    expect(entry, `commodity ${commodityId} should be in the trash`).toBeTruthy()
+    expect(entry?.meta.file_count).toBe(2)
+
+    recorder.log(`Step ${step++}: deleting the commodity from the trash for good`)
+    const purgeResp = await page.request.delete(`${apiBase}/trash/commodities/${commodityId}`, {
+      headers: { ...headers, 'X-CSRF-Token': auth.csrfToken },
+    })
+    expect(purgeResp.status(), 'DELETE /trash/commodities/{id}').toBe(204)
 
     recorder.log(`Step ${step++}: cleanup — area + location`)
     await navigateTo(page, recorder, TO_LOCATIONS)

@@ -348,6 +348,7 @@ export type CommodityEventKind =
   | "back_from_service"
   | "service_updated"
   | "deleted"
+  | "restored"
 
 export interface CommodityEventActor {
   id: string

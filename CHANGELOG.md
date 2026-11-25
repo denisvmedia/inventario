@@ -28,7 +28,22 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
-
+- Trash. Deleting an item, alone or in bulk, moves it to the group's Trash
+  with the files attached only to it; deleting a file moves it there too, and
+  so does "Delete everything" on a location or area for the items inside. The
+  new Trash page in the sidebar restores entries under the same id and asset
+  ID, deletes them for good, or empties the trash. Viewers see it, users
+  restore, admins and owners delete. A restored item gets back its history,
+  loans, services, schedules and the files that went with it, but not a file
+  deleted on its own earlier; an item whose area was deleted in the meantime
+  comes back without a location. While in Trash an item is left out of lists,
+  search, reports, totals and reminders. Trashed files still count toward
+  storage, shown as a separate Trash share on the storage card. Entries are
+  deleted for good after `--trash-retention` (default 30 days) by the new
+  `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
+  toasts have an Undo button. Backups leave Trash out, a full-replace restore
+  empties it, and a merge restore skips what is in it
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what
@@ -167,6 +182,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are written in INB format 3.0, which stores a shared file once; 2.x backups
   still restore
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+- `DELETE /commodities/{id}`, `POST /commodities/bulk-delete`,
+  `DELETE /files/{id}` and `POST /files/bulk-delete` move the entries to Trash
+  instead of removing them. Lists, search and the other live reads leave
+  trashed entries out; `GET /trash/commodities` and `GET /trash/files` list
+  them, with restore and purge endpoints under `/trash`. The storage usage
+  breakdown gains a `trash` bucket
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
 
 ### Changed
 

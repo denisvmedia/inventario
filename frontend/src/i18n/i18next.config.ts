@@ -27,6 +27,7 @@ import * as enSettings from "./locales/en/settings.json"
 import * as enStubs from "./locales/en/stubs.json"
 import * as enSupplies from "./locales/en/supplies.json"
 import * as enTags from "./locales/en/tags.json"
+import * as enTrash from "./locales/en/trash.json"
 import * as enWarranties from "./locales/en/warranties.json"
 
 // Locales we ship today. `cs` and `ru` are present as namespace stubs (mostly
@@ -64,6 +65,7 @@ export const I18N_NAMESPACES = [
   "backoffice",
   "reports",
   "landing",
+  "trash",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
@@ -97,6 +99,7 @@ const enResources = {
   backoffice: enBackoffice,
   reports: enReports,
   landing: enLanding,
+  trash: enTrash,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via

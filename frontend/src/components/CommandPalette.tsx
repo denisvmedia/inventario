@@ -10,6 +10,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Tag,
+  Trash2,
   User,
   Users,
 } from "lucide-react"
@@ -93,6 +94,11 @@ const NAVIGATION: PaletteEntry[] = [
     labelKey: "common:nav.system",
     to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,
+  },
+  {
+    labelKey: "common:nav.trash",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/trash` : null),
+    icon: Trash2,
   },
   {
     labelKey: "common:nav.profile",
