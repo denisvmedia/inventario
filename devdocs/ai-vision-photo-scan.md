@@ -52,6 +52,46 @@ When the provider is `none` (the default), the route stays mounted but returns
 `503` and the FE shows an "AI vision is unavailable" banner with a "Fill
 manually" fallback.
 
+### Batch intake (#2810)
+
+Add items from files reuses this pipeline from a background worker instead
+of the request.
+
+- Model: `go/models/intake.go`. An `intake_sessions` row is one drop, unique
+  per group and `client_key`, so a repeated create returns the stored
+  session. Each `intake_sources` row is one purchase (one file, or several
+  with `one_item`), linked to its files through `file_links` with entity type
+  `intake`. Each `intake_candidates` row is one detected product with its
+  field guesses, the member's choices (`selected`, `accepted_fields`,
+  `quantity`) and its outcome (`pending`, `created`, `skipped`, `failed`)
+  with the `draft_id`.
+- Worker: `go/services/intake_worker.go` (worker type `intake`) claims due
+  sources and calls `CommodityScanService.Scan` as the session's author, so
+  the per-user hourly limit, the per-call caps (`AI_VISION_MAX_PHOTOS` is the
+  most files of one purchase, `AI_VISION_MAX_PHOTO_BYTES` the largest file)
+  and the audit row apply as in the item form. A rate-limited source waits
+  (`wait_reason = rate_limited`) without using an attempt; a provider error
+  that may pass is retried with a delay and fails after three attempts. A
+  stored scan is never repeated unless the member asks for a rescan.
+- Service: `go/services/intake_service.go`. A batch takes at most 50 files
+  and a group at most 200 waiting purchases. `CreateDrafts` makes one draft
+  per selected candidate with the client key `intake:<candidate id>`, so a
+  retry after a lost answer returns the drafts it made. A draft takes the
+  candidate's own line amount, never the receipt total, and only the
+  accepted fields; it links the purchase's files.
+- HTTP: `go/apiserver/intake.go`, under `/g/{groupSlug}/intake`.
+- Backups leave sessions out: they are a work queue, and the drafts made from
+  them are in the backup. A file only a session holds is exported as a
+  standalone file, and a full-replace restore removes the group's sessions.
+
+A document delivered by another system (#2809) is meant to enter the same
+lifecycle: a session with origin `external` and one source carrying
+`external_system`, `external_instance` and `external_document_id`. That
+triple is unique per group (`idx_intake_sources_external`), so a replayed
+delivery finds its source through `IntakeRegistry.GetSourceByExternalID` or
+gets `registry.ErrAlreadyExists` from the unique index, and the worker,
+review and drafts then work as for an upload.
+
 ## Configuration reference
 
 All settings read from the `run` config section, i.e. the env var name is the
