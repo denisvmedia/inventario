@@ -213,27 +213,9 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 	if err != nil {
 		return nil, false, errxtrace.Wrap("failed to create file registry", err)
 	}
-	// Check everything before writing anything, so a refused session leaves
-	// no rows behind.
-	fileByID := map[string]*models.FileEntity{}
-	for _, src := range sources {
-		for _, fileID := range src.FileIDs {
-			file, err := files.Get(ctx, fileID)
-			if err != nil {
-				return nil, false, errxtrace.Wrap("failed to read intake file", err)
-			}
-			fileByID[fileID] = file
-		}
-		if src.ExternalDocumentID == "" {
-			continue
-		}
-		for _, existing := range st.sources {
-			if existing.GroupID == r.groupID && existing.ExternalSystem == src.ExternalSystem &&
-				existing.ExternalInstance == src.ExternalInstance && existing.ExternalDocumentID == src.ExternalDocumentID {
-				return nil, false, errxtrace.Classify(registry.ErrAlreadyExists,
-					errx.Attrs("entity_type", "intake_source", "external_document_id", src.ExternalDocumentID))
-			}
-		}
+	fileByID, err := r.checkNewSources(ctx, files, sources)
+	if err != nil {
+		return nil, false, err
 	}
 
 	now := time.Now()
@@ -281,6 +263,33 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 		}
 	}
 	return stored, true, nil
+}
+
+// checkNewSources checks the sources of a new session before anything is
+// written, so a refused session leaves no rows behind, and returns their
+// files by id. The caller holds state.mu.
+func (r *IntakeRegistry) checkNewSources(ctx context.Context, files registry.FileRegistry, sources []registry.IntakeSourceInput) (map[string]*models.FileEntity, error) {
+	fileByID := map[string]*models.FileEntity{}
+	for _, src := range sources {
+		for _, fileID := range src.FileIDs {
+			file, err := files.Get(ctx, fileID)
+			if err != nil {
+				return nil, errxtrace.Wrap("failed to read intake file", err)
+			}
+			fileByID[fileID] = file
+		}
+		if src.ExternalDocumentID == "" {
+			continue
+		}
+		for _, existing := range r.factory.state.sources {
+			if existing.GroupID == r.groupID && existing.ExternalSystem == src.ExternalSystem &&
+				existing.ExternalInstance == src.ExternalInstance && existing.ExternalDocumentID == src.ExternalDocumentID {
+				return nil, errxtrace.Classify(registry.ErrAlreadyExists,
+					errx.Attrs("entity_type", "intake_source", "external_document_id", src.ExternalDocumentID))
+			}
+		}
+	}
+	return fileByID, nil
 }
 
 // Delete deletes the session with its sources, candidates and the links of

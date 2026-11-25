@@ -2,6 +2,7 @@ package registrytest
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -143,7 +144,7 @@ func intakeContractQueueLimit(t *testing.T, env IntakeEnv) {
 	)
 	for i := range 4 {
 		wg.Go(func() {
-			_, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "race-" + string(rune('a'+i))}, []registry.IntakeSourceInput{{}}, 3)
+			_, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "race-" + strconv.Itoa(i)}, []registry.IntakeSourceInput{{}}, 3)
 			if err == nil && created {
 				mu.Lock()
 				made++
