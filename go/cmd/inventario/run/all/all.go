@@ -71,6 +71,12 @@ func (c *Command) run() error {
 	stopPause := bootstrap.StartPauseController(ctx, rs)
 	defer stopPause()
 
+	// File associations still in the legacy files.linked_entity_* columns
+	// move to file_links before any worker or the API reads attachments
+	// (#2806).
+	stopFileLinkMove := bootstrap.StartFileLinkMove(ctx, rs, c.cfg)
+	defer stopFileLinkMove()
+
 	stopEmail := bootstrap.StartEmailLifecycle(ctx, rs, c.cfg)
 	defer stopEmail()
 
@@ -129,6 +135,9 @@ func (c *Command) run() error {
 
 	stopAssetNumberBackfill := bootstrap.StartAssetNumberBackfill(ctx, rs, c.cfg)
 	defer stopAssetNumberBackfill()
+
+	stopFileChecksumBackfill := bootstrap.StartFileChecksumBackfill(ctx, rs, c.cfg)
+	defer stopFileChecksumBackfill()
 
 	// One-shot backfill of files.size_bytes for rows that pre-date #1388.
 	// Runs in a goroutine so a slow bucket walk can't delay readiness;

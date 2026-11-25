@@ -303,6 +303,7 @@ export function AreaDetailPage({ initialMode }: AreaDetailPageProps = {}) {
             <EntityFilesPanel
               linkedEntityType="area"
               linkedEntityId={id}
+              entityName={area.data?.name}
               onAttachClick={() => {
                 setPendingDropFiles([])
                 setUploadOpen(true)

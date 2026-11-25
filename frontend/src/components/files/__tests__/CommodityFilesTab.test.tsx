@@ -67,8 +67,7 @@ const photoFixture = {
   mime_type: "image/jpeg",
   category: "images",
   type: "image",
-  linked_entity_type: "commodity",
-  linked_entity_id: COMMODITY,
+  links: [{ entity_type: "commodity", entity_id: COMMODITY }],
   size_bytes: 1024 * 200,
   tags: [],
   created_at: "2026-04-01T10:00:00Z",
@@ -84,8 +83,7 @@ const invoiceFixture = {
   // `invoice` tag — the Invoices chip filters by that tag, not by category.
   category: "documents",
   type: "document",
-  linked_entity_type: "commodity",
-  linked_entity_id: COMMODITY,
+  links: [{ entity_type: "commodity", entity_id: COMMODITY }],
   size_bytes: 1024 * 64,
   tags: ["tax", "invoice"],
   created_at: "2026-04-02T10:00:00Z",
@@ -99,8 +97,7 @@ const documentFixture = {
   mime_type: "application/pdf",
   category: "documents",
   type: "document",
-  linked_entity_type: "commodity",
-  linked_entity_id: COMMODITY,
+  links: [{ entity_type: "commodity", entity_id: COMMODITY }],
   size_bytes: 1024 * 1024,
   tags: ["warranty"],
   created_at: "2026-04-03T10:00:00Z",
@@ -179,6 +176,16 @@ describe("<CommodityFilesTab />", () => {
     const zone = await screen.findByTestId("commodity-files-upload-zone")
     await user.click(zone)
     expect(onAttachClick).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the attach-an-existing-file dialog beside the upload zone", async () => {
+    const user = userEvent.setup()
+    const onAttachClick = vi.fn()
+    server.use(...seed([]))
+    renderTab({ onAttachClick })
+    await user.click(await screen.findByTestId("commodity-files-attach-existing"))
+    expect(await screen.findByTestId("attach-existing-dialog")).toBeInTheDocument()
+    expect(onAttachClick).not.toHaveBeenCalled()
   })
 
   it("renders files as a FileCard grid by default", async () => {
@@ -341,7 +348,7 @@ describe("<CommodityFilesTab />", () => {
         id: `other-${i}`,
         title: `Neighbour ${i}`,
         path: `neighbour-${i}`,
-        linked_entity_id: "com-2",
+        links: [{ entity_type: "commodity", entity_id: "com-2" }],
       },
     }))
     server.use(...seed([...mine, ...theirs]))

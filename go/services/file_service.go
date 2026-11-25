@@ -508,28 +508,84 @@ func (s *FileService) deletePhysicalFile(ctx context.Context, filePath string) e
 	return nil
 }
 
-// DeleteLinkedFiles deletes all files linked to a specific entity
-func (s *FileService) DeleteLinkedFiles(ctx context.Context, entityType, entityID string) error {
+// DetachEntityFiles removes an entity's attachments when the entity is
+// deleted. A file attached to another entity as well loses only this link; a
+// file that was attached to this entity alone is deleted, row and blob. The
+// entity-deletion paths call it after the entity row is gone: the links carry
+// no foreign key to the entity, so they are still there to be found, and a
+// retry after a crash finds the files it has not handled yet.
+func (s *FileService) DetachEntityFiles(ctx context.Context, entityType, entityID string) error {
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create file registry", err)
 	}
 
-	// Get all linked files for this entity
 	files, err := fileReg.ListByLinkedEntity(ctx, entityType, entityID)
 	if err != nil {
 		return errxtrace.Wrap("failed to get linked files", err)
 	}
 
-	// Delete all linked files (both physical and database records)
 	for _, file := range files {
-		err = s.DeleteFileWithPhysical(ctx, file.ID)
-		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return errxtrace.Wrap("failed to delete linked file", err)
+		deleted, err := s.DeleteFileIfUnlinked(ctx, file.ID, entityType, entityID)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to delete linked file", err, errx.Attrs("file_id", file.ID))
+		}
+		if deleted {
+			continue
+		}
+		// The file is attached elsewhere too: drop only this entity's link.
+		link := file.LinkTo(entityType, entityID)
+		if link == nil {
+			continue
+		}
+		if _, err := fileReg.RemoveLink(ctx, file.ID, link.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to remove file link", err, errx.Attrs("file_id", file.ID))
 		}
 	}
 
 	return nil
+}
+
+// DeleteFileIfUnlinked deletes a file, row and blob, when no link other than
+// those to (ignoreEntityType, ignoreEntityID) points at it, and reports whether
+// it did. A file that is attached elsewhere, also by a link added while this
+// runs, is kept. The blob cleanup follows the same row-first, best-effort
+// contract as DeleteFileWithPhysical.
+func (s *FileService) DeleteFileIfUnlinked(ctx context.Context, fileID, ignoreEntityType, ignoreEntityID string) (bool, error) {
+	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to create file registry", err)
+	}
+
+	file, err := fileReg.Get(ctx, fileID)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to get file entity", err)
+	}
+	for _, l := range file.Links {
+		if l.EntityType != ignoreEntityType || l.EntityID != ignoreEntityID {
+			return false, nil
+		}
+	}
+
+	if err := s.deleteThumbnailGenerationChain(ctx, fileID); err != nil {
+		return false, errxtrace.Wrap("failed to delete thumbnail generation chain", err)
+	}
+
+	deleted, err := fileReg.DeleteIfUnlinked(ctx, fileID, ignoreEntityType, ignoreEntityID)
+	if err != nil || !deleted {
+		return false, err
+	}
+
+	if file.File != nil && file.File.OriginalPath != "" {
+		if err := s.deletePhysicalFileAndThumbnails(ctx, file.TenantID, fileID, file.File.OriginalPath, file.File.MIMEType, nil); err != nil {
+			slog.WarnContext(ctx, "failed to delete physical blob after file row delete (best-effort)",
+				"file_id", fileID, "tenant_id", file.TenantID, "error", err.Error())
+		}
+	}
+	return true, nil
 }
 
 // ResolveThumbnail resolves the bucket-relative key from which a

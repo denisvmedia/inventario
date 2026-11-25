@@ -28,17 +28,22 @@ func seedOrphanFile(c *qt.C, fs *registry.FactorySet, tenantID, groupID, linkTyp
 func seedOrphanFileWithPath(c *qt.C, fs *registry.FactorySet, tenantID, groupID, linkType, linkID string, age time.Duration, originalPath string) string {
 	c.Helper()
 	now := time.Now()
+	// The link is as old as the file: a younger link would be a fresh
+	// attachment, which keeps a file out of the candidate set on its own.
+	var links []models.FileLink
+	if linkType != "" {
+		links = []models.FileLink{{EntityType: linkType, EntityID: linkID, CreatedAt: now.Add(-age)}}
+	}
 	f, err := fs.FileRegistryFactory.CreateServiceRegistry().Create(context.Background(), models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			TenantID: tenantID, GroupID: groupID, CreatedByUserID: "user-1",
 		},
-		Title:            "seeded",
-		Type:             models.FileTypeImage,
-		LinkedEntityType: linkType,
-		LinkedEntityID:   linkID,
-		CreatedAt:        now.Add(-age),
-		UpdatedAt:        now.Add(-age),
-		File:             &models.File{Path: "s", OriginalPath: originalPath, Ext: ".jpg", MIMEType: "image/jpeg"},
+		Title:     "seeded",
+		Type:      models.FileTypeImage,
+		Links:     links,
+		CreatedAt: now.Add(-age),
+		UpdatedAt: now.Add(-age),
+		File:      &models.File{Path: "s", OriginalPath: originalPath, Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
 	c.Assert(err, qt.IsNil)
 	return f.ID
@@ -46,9 +51,9 @@ func seedOrphanFileWithPath(c *qt.C, fs *registry.FactorySet, tenantID, groupID,
 
 // The memory backend must apply the SAME positive allowlist as the postgres
 // anti-join (#2237). It is an allowlist, not a negation, precisely so that a
-// STANDALONE file (linked_entity_type = "", first-class since #2235), an
-// export-linked file, and any unknown/future link type can never enter the
-// candidate set a destructive worker consumes.
+// STANDALONE file (no links, first-class since #2235), an export-linked file,
+// and any unknown/future link type can never enter the candidate set a
+// destructive worker consumes.
 func TestMemoryFileRegistry_ListOrphanCandidates_Allowlist(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -60,7 +65,6 @@ func TestMemoryFileRegistry_ListOrphanCandidates_Allowlist(t *testing.T) {
 		{"area orphan is a candidate", "area", "gone", true},
 		{"location orphan is a candidate", "location", "gone", true},
 		{"standalone file is NEVER a candidate (#2235)", "", "", false},
-		{"standalone with a stray id is NEVER a candidate", "", "gone", false},
 		{"export-linked file is NEVER a candidate", "export", "gone", false},
 		{"unknown link type fails closed", "widget", "gone", false},
 		{"malformed link (empty id) is data, not garbage", "commodity", "", false},

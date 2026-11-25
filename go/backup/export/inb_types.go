@@ -19,7 +19,13 @@ package export
 //
 // 2.1 (#2235) added the non-commodity files member (INBFilesName): files linked
 // to locations and areas, plus standalone files.
-const INBFormatVersion = "2.1"
+//
+// 3.0 lets one file be referenced from several places: a file attached to
+// several entities is referenced once per entity, and every reference names
+// the same archive path, whose bytes appear once, after the first document
+// that references them. A 2.x reader would keep only one of the references, or
+// report the later ones as missing members, so the major version changes.
+const INBFormatVersion = "3.0"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -225,7 +231,9 @@ type INBCommodity struct {
 
 // INBFileRef is a reference to a commodity-attached file. Path is the file's
 // location inside the inner tar (`files/<loc>/<commodity>/<bucket>/<name>`);
-// the actual bytes follow as a separate tar member at that path. Name is the
+// the actual bytes follow as a separate tar member at that path. A file
+// attached to several entities has one reference per entity, all with the same
+// ID and Path; the path is the one of the first reference written. Name is the
 // file's user-facing basename (the original File.Path stem) preserved so a
 // restore reproduces the original filename rather than the display Title or the
 // UUID. OriginalPath records the source blob key (informational) — the restore
@@ -253,12 +261,11 @@ type INBFilesDoc struct {
 }
 
 // INBEntityFileRef is a file reference that carries its OWN polymorphic link, so
-// the restore side can recreate the row with the original linked_entity_type /
-// linked_entity_id / linked_entity_meta instead of assuming a commodity
-// attachment (issue #2235).
+// the restore side can recreate the link with the original entity type, entity
+// and meta instead of assuming a commodity attachment (issue #2235).
 //
 // LinkedEntityID is the linked entity's IMMUTABLE UUID — never the volatile
-// files.linked_entity_id DB key, which is regenerated on restore. Restore maps
+// entity DB key, which is regenerated on restore. Restore maps
 // it back to the destination DB id through the location/area ID mapping.
 //
 // Type and Category are carried EXPLICITLY: models.FileCategoryFromContext has

@@ -8,6 +8,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry/postgres/store"
 )
 
 // One clause serves Search, ListPaginated and CountByCategory. A filter that
@@ -46,8 +47,9 @@ func TestFileWhereSQL(t *testing.T) {
 			name:     "the linked-entity pair",
 			linkType: &linkedType,
 			linkID:   &linkedID,
-			want:     "SELECT * FROM files WHERE linked_entity_type = $1 AND linked_entity_id = $2",
-			args:     []any{linkedType, linkedID},
+			want: "SELECT * FROM files WHERE EXISTS (SELECT 1 FROM file_links fl " +
+				"WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2)",
+			args: []any{linkedType, linkedID},
 		},
 		{
 			name:     "half a linked-entity pair applies nothing",
@@ -78,7 +80,7 @@ func TestFileWhereSQL(t *testing.T) {
 			linkType: &linkedType,
 			linkID:   &linkedID,
 			want: "SELECT * FROM files WHERE type = $1 AND category = $2 AND " +
-				"linked_entity_type = $3 AND linked_entity_id = $4 AND tags @> $5 AND " +
+				"EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $3 AND fl.entity_id = $4) AND tags @> $5 AND " +
 				"(title ILIKE $6 OR description ILIKE $7 OR path ILIKE $8 OR original_path ILIKE $9)",
 			args: []any{
 				fileType, category, linkedType, linkedID, []byte(`["invoice"]`),
@@ -90,7 +92,7 @@ func TestFileWhereSQL(t *testing.T) {
 			c := qt.New(t)
 
 			sb := newSelect().Select("*").From("files")
-			if where := fileWhere(tc.query, tc.fileType, tc.category, tc.tags, tc.linkType, tc.linkID); where != nil {
+			if where := fileWhere(store.DefaultTableNames, tc.query, tc.fileType, tc.category, tc.tags, tc.linkType, tc.linkID); where != nil {
 				sb.AddWhereClause(where)
 			}
 
@@ -108,21 +110,21 @@ func TestFileListPaginatedSQLSharesThePredicate(t *testing.T) {
 
 	linkedType := "commodity"
 	linkedID := "com-1"
-	where := fileWhere("", nil, nil, nil, &linkedType, &linkedID)
+	where := fileWhere(store.DefaultTableNames, "", nil, nil, nil, &linkedType, &linkedID)
 	c.Assert(where, qt.IsNotNil)
 
 	countSB := newSelect().Select("COUNT(*)").From("files")
 	countSB.AddWhereClause(where)
 	countSQL, countArgs := countSB.Build()
 	c.Check(countSQL, qt.Equals,
-		"SELECT COUNT(*) FROM files WHERE linked_entity_type = $1 AND linked_entity_id = $2")
+		"SELECT COUNT(*) FROM files WHERE EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2)")
 	c.Check(countArgs, qt.DeepEquals, []any{linkedType, linkedID})
 
 	dataSB := orderFilesNewestFirst(newSelect().Select("*").From("files")).Limit(24).Offset(48)
 	dataSB.AddWhereClause(where)
 	dataSQL, dataArgs := dataSB.Build()
 	c.Check(dataSQL, qt.Equals,
-		"SELECT * FROM files WHERE linked_entity_type = $1 AND linked_entity_id = $2 "+
+		"SELECT * FROM files WHERE EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2) "+
 			"ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4")
 	c.Check(dataArgs, qt.DeepEquals, []any{linkedType, linkedID, 24, 48})
 }

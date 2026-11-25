@@ -21,8 +21,7 @@ import (
 // under #1421 alongside the legacy `POST /uploads/commodities/{id}/images`
 // route it exercised. The migration path is: POST a multipart file to
 // the unified `/uploads/file` (creates an unlinked FileEntity) and then
-// PUT `/files/{id}` with `linked_entity_*` to attach the row to a
-// commodity / location. Cross-tenant access is blocked by the same
+// POST `/files/{id}/links` to attach the row to a commodity / location. Cross-tenant access is blocked by the same
 // group-scoped middleware that protects every other write — covered
 // by `apiserver/files` integration tests rather than re-tested here.
 

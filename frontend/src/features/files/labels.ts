@@ -74,3 +74,40 @@ export function useTagPillLabel(): (id: FileTagPillId) => string {
     }
   }
 }
+
+// useLinkTypeLabel names the kind of entity a file is attached to.
+export function useLinkTypeLabel(): (entityType: string | undefined) => string {
+  const { t } = useTranslation()
+  return (entityType) => {
+    switch (entityType) {
+      case "commodity":
+        return t("files:links.type.commodity", { defaultValue: "Item" })
+      case "location":
+        return t("files:links.type.location", { defaultValue: "Location" })
+      case "area":
+        return t("files:links.type.area", { defaultValue: "Area" })
+      default:
+        return entityType ?? ""
+    }
+  }
+}
+
+// useLinkSummary is the short "attached to" text of a file card or row: the
+// name of the first entity (its kind when the name is unknown), plus how
+// many more there are. Empty for a standalone file.
+export function useLinkSummary(): (
+  links: { entity_type?: string; entity_name?: string }[]
+) => string {
+  const { t } = useTranslation()
+  const typeLabel = useLinkTypeLabel()
+  return (links) => {
+    if (links.length === 0) return ""
+    const first = links[0]?.entity_name || typeLabel(links[0]?.entity_type)
+    if (links.length === 1) return first
+    return t("files:links.summary", {
+      first,
+      count: links.length - 1,
+      defaultValue: "{{first}} +{{count}}",
+    })
+  }
+}

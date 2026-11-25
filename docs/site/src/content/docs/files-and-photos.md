@@ -33,6 +33,25 @@ with an **Attach files** button.
 
 ![The attach files panel for adding files to an item, location, or area](../../assets/screenshots/attach-files.png)
 
+### Attach a file you already have
+
+One file can be attached to several items, locations, and areas: a receipt for
+three things bought together, a manual shared by every unit of the same model.
+Upload it once, then attach it wherever it belongs:
+
+- On an item's **Files** tab, click **Attach an existing file** next to the
+  upload zone.
+- On a location's or area's **Files** panel, click **Attach existing**.
+
+A dialog lists the files in your group. Search by title, description, or
+filename, and click **Attach** next to the file you want. Files already attached
+here show **Attached** instead. The dialog stays open, so you can attach several
+files in a row; click **Done** when you are finished.
+
+Attaching does not copy anything. It stays one file wherever it is attached:
+edit its title or tags once and every place shows the change, and it counts
+toward your group's storage once.
+
 The upload dialog itself runs in three quick steps:
 
 1. **Select** — drop files on the dropzone or click **Choose files**. Add as
@@ -45,6 +64,12 @@ The upload dialog itself runs in three quick steps:
 3. **Progress** — a progress bar tracks each file. When everything finishes,
    click **Close**.
 
+If your group already holds a file with exactly the same content, the progress
+row says so and names it. Click **Attach the existing file instead** to attach
+that file and drop the copy you just uploaded, or **Keep both** to keep the new
+copy. When you upload from the Files page, where there is nothing to attach to,
+the first button reads **Remove this copy**.
+
 ![The upload dialog with files queued and ready to upload](../../assets/screenshots/file-upload.png)
 
 Files are always optional. If you skip them while creating an item, you can add
@@ -53,7 +78,7 @@ them at any time from the item's **Files** tab.
 :::tip
 Attach files from *inside* the item, location, or area so they're linked to it.
 Files uploaded from the global Files page (below) aren't attached to anything in
-particular.
+particular until you attach them with **Attach an existing file**.
 :::
 
 ## The Files page
@@ -118,6 +143,8 @@ only applies to items, and only to image files.
     and fall back to the automatic pick.
 - You can also tick **Use as cover photo** on a photo in the upload dialog's
   **Adjust** step while attaching it to an item.
+- A photo attached to several items can be the cover of each of them. Removing
+  the photo's attachment to one item clears that item's cover choice only.
 
 :::note
 The star only shows in grid view, and only on photos.
@@ -162,16 +189,30 @@ from there.
 
 The file details panel shows the filename, category, type, when it was uploaded,
 any tags, and what the file is linked to. Tag chips are clickable — they take you
-to the Files page filtered to that tag. The action row gives you:
+to the Files page filtered to that tag.
+
+**Linked to** lists every item, location, and area the file is attached to. Each
+name opens that page. The **×** next to a name removes that attachment and
+nothing else: the file stays attached everywhere else, and once nothing is left
+it stays on the Files page as **Not attached to anything** until you delete it.
+
+The action row gives you:
 
 - **Open in new tab** — opens the file in your browser.
 - **Download** — saves a copy.
 - **Edit metadata** — opens the file's edit page, described below.
-- **Delete file** — removes the file permanently after a confirmation.
+- **Delete file** — removes the file permanently after a confirmation. The
+  confirmation names every place the file is attached to, because it disappears
+  from all of them.
 
 :::caution
-**Delete file** is permanent. The file is removed for good once you confirm.
+**Delete file** is permanent. The file is removed for good once you confirm. To
+take a file off one item only, remove that attachment instead.
 :::
+
+Deleting an item, a location, or an area removes its attachments. A file that is
+attached only there is deleted with it; a file that is also attached somewhere
+else stays there.
 
 ### Edit a file's details
 

@@ -6,6 +6,7 @@
 package apiserver
 
 import (
+	"context"
 	"time"
 
 	"github.com/spf13/cobra"
@@ -67,6 +68,13 @@ func (c *Command) run() error {
 	defer rs.CloseReadinessRedisPinger()
 	// Flush buffered Sentry events on shutdown (#844); no-op when disabled.
 	defer rs.SentryFlush(2 * time.Second)
+
+	// The API reads file attachments from file_links only, so associations
+	// still in the legacy columns move before it serves (#2806). A split
+	// deployment may run this in the workers process too; the move is safe to
+	// run concurrently.
+	stopFileLinkMove := bootstrap.StartFileLinkMove(context.Background(), rs, c.cfg)
+	defer stopFileLinkMove()
 
 	restoreStatus := restore.NewRegistryStatusQuerier(rs.FactorySet.CreateServiceRegistrySet())
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreStatus)

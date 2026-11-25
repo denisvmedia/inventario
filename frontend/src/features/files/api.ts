@@ -7,6 +7,7 @@ import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
 export type FileEntity = Schema<"models.FileEntity">
+export type FileLink = Schema<"models.FileLink">
 export type FileCategory = Schema<"models.FileCategory">
 export type FileType = Schema<"models.FileType">
 export type FileCategoryCounts = Schema<"jsonapi.FileCategoryCounts">
@@ -153,15 +154,79 @@ export interface UpdateFileRequest {
   tags?: string[]
   path?: string
   category?: FileCategory
-  linked_entity_type?: string
-  linked_entity_id?: string
-  linked_entity_meta?: string
 }
 
-// Update file metadata. The BE re-derives `Type` and `Category` server-
-// side when MIME info is available; we still send `Category` so explicit
-// re-categorisation works regardless of MIME (a PDF that the user
-// classifies as Photos via the picker, say).
+// The entity kinds a user can attach a file to. Backup export bundles carry
+// an "export" link too, but that one is never created or removed here.
+export type FileLinkEntityType = "commodity" | "location" | "area"
+
+export interface AttachFileRequest {
+  entityType: FileLinkEntityType
+  entityId: string
+  // Bucket on the entity's Files tab. Omitted, the BE picks "images" for an
+  // image and the entity's document bucket for anything else.
+  meta?: string
+}
+
+// Attach an existing file to an entity. Only a link is created: no upload, no
+// new file row. Attaching to an entity the file is already attached to is a
+// no-op on the BE (200 instead of 201), so a retry is safe.
+export async function attachFile(
+  fileId: string,
+  req: AttachFileRequest
+): Promise<FileEntity & { id: string }> {
+  const body = await http.post<FileDetailEnvelope>(`/files/${encodeURIComponent(fileId)}/links`, {
+    data: {
+      type: "file-links",
+      attributes: { entity_type: req.entityType, entity_id: req.entityId, meta: req.meta },
+    },
+  })
+  if (!body.attributes) {
+    throw new Error(`Malformed POST /files/${fileId}/links response: missing attributes`)
+  }
+  return { ...body.attributes, id: body.id ?? fileId }
+}
+
+// Remove one attachment. The file itself stays; when this was its last
+// attachment it is a standalone file afterwards.
+export async function detachFile(
+  fileId: string,
+  linkId: string
+): Promise<FileEntity & { id: string }> {
+  const body = await http.del<FileDetailEnvelope>(
+    `/files/${encodeURIComponent(fileId)}/links/${encodeURIComponent(linkId)}`
+  )
+  if (!body?.attributes) {
+    throw new Error(
+      `Malformed DELETE /files/${fileId}/links/${linkId} response: missing attributes`
+    )
+  }
+  return { ...body.attributes, id: body.id ?? fileId }
+}
+
+// Other files of the group with the same content (same SHA-256), newest
+// first. Empty while the file's checksum is not known yet.
+export async function listFileDuplicates(
+  fileId: string,
+  signal?: AbortSignal
+): Promise<ListedFile[]> {
+  const body = await http.get<FilesListEnvelope>(
+    `/files/${encodeURIComponent(fileId)}/duplicates`,
+    { signal }
+  )
+  const signed = body.meta?.signed_urls ?? {}
+  return (body.data ?? []).map((file) => ({ file, signedUrl: signed[file.id] }))
+}
+
+// The links of a file that a user manages: everything but the export link of
+// a backup bundle.
+export function ordinaryLinks(file: Pick<FileEntity, "links">): FileLink[] {
+  return (file.links ?? []).filter((l) => l.entity_type !== "export")
+}
+
+// Update file metadata. The BE derives `Type` from the MIME type and does
+// not take `category` here: a file's category follows the bucket of its
+// first attachment (POST /files/{id}/links).
 export async function updateFile(
   id: string,
   req: UpdateFileRequest

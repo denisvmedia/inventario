@@ -46,4 +46,5 @@ export const fileKeys = {
   categoryCounts: (slug: string, opts?: Omit<ListFilesOptions, "category" | "page" | "perPage">) =>
     [...fileKeys.group(slug), "category-counts", countsKeySuffix(opts)] as const,
   detail: (slug: string, id: string) => [...fileKeys.group(slug), "detail", id] as const,
+  duplicates: (slug: string, id: string) => [...fileKeys.group(slug), "duplicates", id] as const,
 }

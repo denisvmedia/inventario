@@ -198,16 +198,14 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 
 	// Create file entities for images
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "image1",
-		Description:      "Test image 1",
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "image1",
+		Description: "Test image 1",
+		Type:        models.FileTypeImage,
+		Category:    models.FileCategoryImages,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "images"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "image1",
 			OriginalPath: "image1.jpg",
@@ -217,16 +215,14 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "image2",
-		Description:      "Test image 2",
-		Type:             models.FileTypeImage,
-		Category:         models.FileCategoryImages,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "images",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "image2",
+		Description: "Test image 2",
+		Type:        models.FileTypeImage,
+		Category:    models.FileCategoryImages,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "images"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "image2",
 			OriginalPath: "image2.jpg",
@@ -237,15 +233,13 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 
 	// Create file entities for invoices
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "invoice1",
-		Description:      "Test invoice 1",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "invoices",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "invoice1",
+		Description: "Test invoice 1",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "invoices"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "invoice1",
 			OriginalPath: "invoice1.pdf",
@@ -255,15 +249,13 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "invoice2",
-		Description:      "Test invoice 2",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "invoices",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "invoice2",
+		Description: "Test invoice 2",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "invoices"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "invoice2",
 			OriginalPath: "invoice2.pdf",
@@ -274,15 +266,13 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 
 	// Create file entities for manuals
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "manual1",
-		Description:      "Test manual 1",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "manuals",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "manual1",
+		Description: "Test manual 1",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "manuals"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "manual1",
 			OriginalPath: "manual1.pdf",
@@ -292,15 +282,13 @@ func populateFileRegistryWithTestData(ctx context.Context, fileRegistry registry
 	}))
 
 	must.Must(fileRegistry.Create(ctx, models.FileEntity{
-		Title:            "manual2",
-		Description:      "Test manual 2",
-		Type:             models.FileTypeDocument,
-		Tags:             []string{},
-		LinkedEntityType: "commodity",
-		LinkedEntityID:   commodities[0].ID,
-		LinkedEntityMeta: "manuals",
-		CreatedAt:        now,
-		UpdatedAt:        now,
+		Title:       "manual2",
+		Description: "Test manual 2",
+		Type:        models.FileTypeDocument,
+		Tags:        []string{},
+		Links:       []models.FileLink{{EntityType: "commodity", EntityID: commodities[0].ID, Meta: "manuals"}},
+		CreatedAt:   now,
+		UpdatedAt:   now,
 		File: &models.File{
 			Path:         "manual2",
 			OriginalPath: "manual2.pdf",

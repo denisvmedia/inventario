@@ -48,8 +48,12 @@ var purgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.RestoreOperations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },
 
-	// Generic group-scoped files (linked by polymorphic entity_type/id, no FK chain).
-	// (Legacy commodity-scoped images/invoices/manuals tables were dropped under #1421.)
+	// File links (#2806). file_id -> files is ON DELETE CASCADE, but the
+	// explicit DELETE keeps tenant + group scoping in the purge transaction
+	// rather than relying on the files cascade.
+	func(t store.TableNames) string { return string(t.FileLinks()) },
+
+	// Generic group-scoped files, attached to entities through file_links.
 	func(t store.TableNames) string { return string(t.Files()) },
 
 	// Audit timelines belonging to commodities (#1450). FK to commodities is

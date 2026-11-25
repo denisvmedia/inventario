@@ -5,14 +5,14 @@ import { Button } from "@/components/ui/button"
 import { Card } from "@/components/ui/card"
 import { Checkbox } from "@/components/ui/checkbox"
 import { FadeInImage } from "@/components/ui/fade-in-image"
-import type { FileEntity, URLData } from "@/features/files/api"
+import { ordinaryLinks, type FileEntity, type URLData } from "@/features/files/api"
 import {
   FILE_CATEGORY_TILES,
   FILE_TAG_PILLS,
   getFileVisualMeta,
   isImageMime,
 } from "@/features/files/constants"
-import { useCategoryLabel, useTagPillLabel } from "@/features/files/labels"
+import { useCategoryLabel, useLinkSummary, useTagPillLabel } from "@/features/files/labels"
 import { formatBytes, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -77,6 +77,7 @@ export function FileCard({
   const { t } = useTranslation()
   const categoryLabelOf = useCategoryLabel()
   const tagLabelOf = useTagPillLabel()
+  const linkSummary = useLinkSummary()
   const title = file.title?.trim() || file.path?.trim() || file.id
   const visual = getFileVisualMeta(file)
   const FallbackIcon = visual.icon
@@ -105,7 +106,7 @@ export function FileCard({
     }
   })
   const sizeStr = file.size_bytes ? formatBytes(file.size_bytes) : ""
-  const linkedLabel = file.linked_entity_type?.trim() || ""
+  const linkedLabel = linkSummary(ordinaryLinks(file))
   // Star is only shown for photos and only when the parent wired up a
   // mutation handler. The auto-pick branch surfaces the same star with
   // an outline + tooltip "Pin as cover", so the user can promote the

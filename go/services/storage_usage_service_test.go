@@ -88,6 +88,38 @@ func (s *stubFileRegistry) SumSizeBreakdownByGroup(context.Context, string, stri
 	panic("not implemented")
 }
 
+func (s *stubFileRegistry) AddLink(context.Context, models.FileLink) (*models.FileLink, bool, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) RemoveLink(context.Context, string, string) (*models.FileLink, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) RemoveLinksToEntity(context.Context, string, string) ([]string, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) DeleteIfUnlinked(context.Context, string, string, string) (bool, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListByChecksum(context.Context, string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) ListPendingChecksum(context.Context, string, int) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) SetChecksum(context.Context, string, string) error {
+	panic("not implemented")
+}
+
+func (s *stubFileRegistry) MoveLegacyLinks(context.Context, int) (int, error) {
+	panic("not implemented")
+}
+
 var _ registry.FileRegistry = (*stubFileRegistry)(nil)
 
 func TestStorageUsageService_TotalsAndQuota(t *testing.T) {

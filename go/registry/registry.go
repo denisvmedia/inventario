@@ -395,11 +395,61 @@ type FileRegistry interface {
 	// ListByType returns files filtered by type
 	ListByType(ctx context.Context, fileType models.FileType) ([]*models.FileEntity, error)
 
-	// ListByLinkedEntity returns files linked to a specific entity
+	// ListByLinkedEntity returns the files linked to an entity through
+	// file_links, newest first.
 	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
 
-	// ListByLinkedEntityAndMeta returns files linked to a specific entity with specific metadata
+	// ListByLinkedEntityAndMeta returns the files whose link to the entity
+	// carries the given meta (bucket), newest first.
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
+
+	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
+	// Meta come from the argument; the registry sets the ids, tenant, group,
+	// creator and created_at. Idempotent: when the file is already linked to
+	// that entity the stored link is returned with created=false and left
+	// unchanged. The caller is responsible for checking that the target exists
+	// in the file's group.
+	AddLink(ctx context.Context, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// RemoveLink removes one link of a file and returns it. ErrNotFound when
+	// the file carries no link with that id. Removing a file's last link
+	// leaves a standalone file; the file itself is never deleted here.
+	RemoveLink(ctx context.Context, fileID, linkID string) (*models.FileLink, error)
+
+	// RemoveLinksToEntity removes every link to the entity and returns the ids
+	// of the files that lost one. The entity-deletion paths call it after the
+	// entity row is gone, then delete the files left without links.
+	RemoveLinksToEntity(ctx context.Context, entityType, entityID string) ([]string, error)
+
+	// DeleteIfUnlinked deletes the file row only when no link points at it,
+	// ignoring the links to the entity named by ignoreEntityType and
+	// ignoreEntityID (empty strings ignore nothing); those go with the row.
+	// The check and the delete hold the row lock, so a link added concurrently
+	// keeps the file. Reports whether the row was deleted. Like Delete, it does
+	// not touch the blob: callers go through FileService.DeleteFileIfUnlinked.
+	DeleteIfUnlinked(ctx context.Context, id, ignoreEntityType, ignoreEntityID string) (bool, error)
+
+	// ListByChecksum returns the files whose SHA-256 equals sha256, newest
+	// first. An empty checksum matches nothing.
+	ListByChecksum(ctx context.Context, sha256 string) ([]*models.FileEntity, error)
+
+	// ListPendingChecksum returns up to limit files that have a blob but no
+	// checksum yet, ordered by id and starting after afterID, for the startup
+	// checksum pass. Service mode only.
+	ListPendingChecksum(ctx context.Context, afterID string, limit int) ([]*models.FileEntity, error)
+
+	// SetChecksum stores a file's SHA-256 when it has none. It writes only that
+	// column, so it cannot overwrite a concurrent metadata edit. Service mode
+	// only.
+	SetChecksum(ctx context.Context, id, sha256 string) error
+
+	// MoveLegacyLinks moves the single link that up to limit files still carry
+	// in their legacy linked_entity_* columns into file_links, and empties those
+	// columns in the same transaction, so a row is moved exactly once and a
+	// rerun is a no-op. Rows whose legacy link has a type but no id carry no
+	// usable link and are only emptied. Returns how many rows it processed;
+	// zero means nothing is left. Service mode only.
+	MoveLegacyLinks(ctx context.Context, limit int) (int, error)
 
 	// ListByGroup returns every file belonging to the given (tenant_id,
 	// group_id) tuple. Used by the group purge worker to find physical blobs
@@ -461,43 +511,38 @@ type FileRegistry interface {
 	ListPendingSizeBackfill(ctx context.Context, limit int) ([]*models.FileEntity, error)
 
 	// ListOrphanCandidates streams up to limit file rows that *may* be
-	// orphans — rows whose linked_entity_type/linked_entity_id points at
-	// an entity that no longer exists (#2237). It is the discovery half
-	// of the orphan-file GC; the worker independently re-verifies every
-	// candidate before deleting anything, so this is a filter, never an
-	// authorization to delete.
+	// orphans — files whose every link points at an entity that no longer
+	// exists (#2237). It is the discovery half of the orphan-file GC; the
+	// worker independently re-verifies every candidate before deleting
+	// anything, so this is a filter, never an authorization to delete.
 	//
 	// The predicate implementations MUST honour, exactly:
 	//
-	//   1. linked_entity_type IN ('commodity', 'area', 'location') — a
-	//      positive ALLOWLIST, never a negation. The empty string is a
-	//      legitimate STANDALONE file (#2235: first-class, exported in
-	//      backups) and 'export' belongs to the backup subsystem's own
-	//      lifecycle; both — and any unknown/future link type — MUST be
-	//      excluded. A predicate shaped `linked_entity_id IS NULL OR NOT
-	//      EXISTS(...)` would silently eat every standalone file in the
-	//      installation.
-	//   2. linked_entity_id <> '' — a set type with an empty id is
-	//      malformed data, not garbage. It is EXCLUDED here, which means
-	//      KEPT and never surfaced to the worker: no probe can prove an
-	//      empty id absent, so such a row must never enter a candidate
-	//      set a destructive worker consumes. (The worker re-asserts the
-	//      same rule as defence-in-depth — the query is a filter, never
-	//      an authorization — so its malformed_link skip reason is
-	//      unreachable while this predicate holds, and stays correct if
-	//      the predicate is ever relaxed.)
-	//   3. BOTH created_at < olderThan AND updated_at < olderThan.
-	//      updated_at is the load-bearing one: PUT /files/{id} stamps it
-	//      with the app wall clock, so a file attached concurrently with
-	//      an entity delete is immune for the whole age window.
-	//   4. No row with id = linked_entity_id exists in the table named by
-	//      linked_entity_type.
+	//   1. The file has at least one link, and every link's entity_type is
+	//      in ('commodity', 'area', 'location') — a positive ALLOWLIST,
+	//      never a negation. A file with no link is a legitimate
+	//      STANDALONE file (#2235: first-class, exported in backups) and an
+	//      'export' link belongs to the backup subsystem's own lifecycle;
+	//      both — and any unknown/future link type — MUST be excluded. A
+	//      predicate shaped `NOT EXISTS (live link)` alone would silently
+	//      eat every standalone file in the installation.
+	//   2. No link has an empty entity_id — such a link is malformed data,
+	//      not garbage. Its file is EXCLUDED here, which means KEPT and
+	//      never surfaced to the worker: no probe can prove an empty id
+	//      absent. (The worker re-asserts the same rule as
+	//      defence-in-depth.)
+	//   3. The file's created_at AND updated_at, and every link's
+	//      created_at, are older than olderThan. A link created moments
+	//      ago — a file attached concurrently with an entity delete — keeps
+	//      the file for the whole age window.
+	//   4. For every link, no row with id = entity_id exists in the table
+	//      named by entity_type.
 	//
 	// SERVICE-MODE ONLY. The existence check must see every tenant and
-	// group: PUT /files/{id} does not validate the link target's group,
-	// so a file legitimately linked to an entity in ANOTHER group exists
-	// in production. A group-scoped (RLS) implementation would read that
-	// live entity as nonexistent and hand the GC a live file to delete.
+	// group: links created before the attach endpoint checked the target's
+	// group can point at an entity in ANOTHER group. A group-scoped (RLS)
+	// implementation would read that live entity as nonexistent and hand
+	// the GC a live file to delete.
 	//
 	// Implementations may return fewer rows than limit but never more,
 	// and must order deterministically by the (created_at, id) KEYSET,
@@ -569,9 +614,10 @@ func (c OrphanCandidateCursor) IsZero() bool {
 
 // StorageBreakdown is the per-bucket byte count returned by
 // FileRegistry.SumSizeBreakdown. Images / Documents / Other mirror
-// models.FileCategory; Exports is files where
-// linked_entity_type='export' (export bundles, removed from Other to
-// keep the user-meaningful tile semantics intact).
+// models.FileCategory; Exports is files carrying an export link (export
+// bundles, removed from Other to keep the user-meaningful tile semantics
+// intact). Every stored file counts once, however many entities it is
+// attached to.
 //
 // #1622 dropped the `invoices` bucket — legacy invoice rows are
 // reclassified into Documents and carry the `invoice` tag.
@@ -2374,9 +2420,9 @@ type BackofficeUserMFASecretRegistry interface {
 
 // GroupPurger hard-deletes every row whose group_id references the given
 // LocationGroup, in a FK-safe order: restore_steps, restore_operations,
-// exports, files, commodities, areas, locations and finally group_memberships.
-// `files` is purged before `commodities` because file rows reference
-// commodities polymorphically via (linked_entity_type, linked_entity_id) —
+// exports, file_links, files, commodities, areas, locations and finally
+// group_memberships. `files` is purged before `commodities` because file links
+// reference commodities polymorphically via (entity_type, entity_id) —
 // dropping commodities first leaves orphan rows visible to RLS-bypass queries.
 // (The legacy commodity-scoped images/invoices/manuals tables were dropped
 // under #1421 — their data lives in `files` now.) It is intentionally a separate abstraction
