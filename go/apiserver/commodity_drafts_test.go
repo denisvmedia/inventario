@@ -112,12 +112,15 @@ func TestCommodityDraftsAPI_Lifecycle(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 	var item jsonapi.CommodityResponse
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
+	c.Assert(item.Data, qt.IsNotNil)
 	itemID := item.Data.ID
 
 	rr = env.do(http.MethodPost, "/drafts/"+draftID+"/promote", draftPromoteBody("2", "Drill", areaID))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
-	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
-	c.Assert(item.Data.ID, qt.Equals, itemID)
+	var retried jsonapi.CommodityResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &retried), qt.IsNil)
+	c.Assert(retried.Data, qt.IsNotNil)
+	c.Assert(retried.Data.ID, qt.Equals, itemID)
 	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore+1)
 
 	// Another device that promotes with its own key learns that the draft
