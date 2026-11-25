@@ -224,6 +224,11 @@ type CommodityListOptions struct {
 	// are hidden, so a caller does not combine it with LentOut
 	// (services/commodityquery refuses the pair).
 	Trashed bool
+	// DraftsOnly keeps only the items marked as draft (Commodity.Draft),
+	// whatever their status. The default view hides drafts, so a caller
+	// sets IncludeInactive with it; without it nothing matches. It is not
+	// part of the item query contract: the inbox reads it (#2794).
+	DraftsOnly bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.

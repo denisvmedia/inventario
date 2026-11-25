@@ -970,6 +970,9 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// Saved views carry no write gate: viewers keep personal views too;
 		// the service checks who may share and edit.
 		r.Route("/saved-views", SavedViews(params, groupService))
+		// The inbox (#2794) only reads; its entries are cleared through
+		// /drafts and /commodities, which carry their own gates.
+		r.Route("/inbox", Inbox())
 	}
 }
 

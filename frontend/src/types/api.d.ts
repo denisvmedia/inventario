@@ -7800,6 +7800,118 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the inbox
+         * @description The records of the group that still need attention, one entry per record with
+         *     every reason it is there for. The default inbox holds unfinished work only: open
+         *     drafts of new items (reason draft, kind draft) and items marked as draft, whose
+         *     review is not complete (reason item_draft, kind commodity). Missing information
+         *     such as no location, no photo or an unknown price does not put an item here.
+         *     Entries are ordered by their first reason in the order draft, item_draft; drafts
+         *     most recently saved first, items most recently added first. meta.entries counts
+         *     the entries the reason filter keeps; meta.counts describes the whole inbox and
+         *     counts each record once in total, whatever its number of reasons. Every member of
+         *     the group can read it.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Keep the entries with this reason */
+                    reason?: "draft" | "item_draft";
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Entries per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxResponse"];
+                    };
+                };
+                /** @description Unknown reason (query.invalid_parameter) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/inbox/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the inbox
+         * @description How many records of the group need attention, for the sidebar and the dashboard.
+         *     total counts each record once, whatever its number of reasons; reasons counts,
+         *     per reason, the records that have it. The counts cover only what the group holds,
+         *     so they agree with GET /g/{groupSlug}/inbox.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxCountResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/item-types": {
         parameters: {
             query?: never;
@@ -14956,6 +15068,54 @@ export type components = {
              * @enum {string}
              */
             type?: "exports";
+        };
+        "jsonapi.InboxCountResponse": {
+            data?: components["schemas"]["jsonapi.InboxCounts"];
+        };
+        "jsonapi.InboxCounts": {
+            reasons?: {
+                [key: string]: number;
+            };
+            /** @example 3 */
+            total?: number;
+        };
+        "jsonapi.InboxEntry": {
+            /**
+             * @description FileCount is the number of live files attached to a draft; 0 for an
+             *     item.
+             * @example 1
+             */
+            file_count?: number;
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            id?: string;
+            /**
+             * @example draft
+             * @enum {string}
+             */
+            kind?: "draft" | "commodity";
+            /**
+             * @description Reasons holds at least one reason, each once, in display order.
+             * @example [
+             *       "draft"
+             *     ]
+             */
+            reasons?: ("draft" | "item_draft")[];
+            /** @example Cordless drill */
+            title?: string;
+            /**
+             * @description UpdatedAt is when the record was last saved; drafts carry it, items
+             *     do not.
+             */
+            updated_at?: string | null;
+        };
+        "jsonapi.InboxMeta": {
+            counts?: components["schemas"]["jsonapi.InboxCounts"];
+            /** @example 2 */
+            entries?: number;
+        };
+        "jsonapi.InboxResponse": {
+            data?: components["schemas"]["jsonapi.InboxEntry"][];
+            meta?: components["schemas"]["jsonapi.InboxMeta"];
         };
         "jsonapi.InviteInfoAttr": {
             expired?: boolean;
