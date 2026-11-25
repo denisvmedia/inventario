@@ -110,7 +110,11 @@ export default defineConfig({
         {
           label: 'Data & sharing',
           translations: { cs: 'Data a sdílení', ru: 'Данные и доступ' },
-          items: [{ slug: 'backup-and-restore' }, { slug: 'groups-and-sharing' }],
+          items: [
+            { slug: 'backup-and-restore' },
+            { slug: 'documents-from-other-systems' },
+            { slug: 'groups-and-sharing' },
+          ],
         },
         {
           label: 'Account',

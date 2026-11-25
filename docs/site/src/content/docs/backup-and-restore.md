@@ -38,8 +38,8 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them. It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files and drafts are only included in a **Full database** export, since there's no parent to bring them along.
+   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them, and the record of the [documents other systems sent](../documents-from-other-systems/). It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file.
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files, drafts and the record of documents other systems sent are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup. A file attached to several items is stored in the archive once and comes back attached to each of them that the backup includes.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
@@ -95,7 +95,7 @@ A file from the backup that your group no longer has and that is attached only t
 items in your trash goes to the trash with them, so restoring the item brings it
 back.
 
-**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. The same goes for [drafts of new items](../items/#drafts-of-a-new-item): the group's drafts are replaced with the ones in the backup. Batches of files [added from files](../items/#add-items-from-files) are removed and not restored, since backups do not carry them.
+**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. The same goes for [drafts of new items](../items/#drafts-of-a-new-item): the group's drafts are replaced with the ones in the backup. Batches of files [added from files](../items/#add-items-from-files) are removed and not restored, since backups do not carry them. The record of the documents other systems sent is replaced with the one in the backup, see [Documents from other systems](#documents-from-other-systems).
 
 ### Drafts
 
@@ -108,6 +108,20 @@ log; a file that only such a draft used comes back as a standalone file. So do
 the files of a draft that cannot be restored, which the restore log counts as
 an error. A backup made before drafts were included has none, so a merge
 leaves your drafts as they are.
+
+### Documents from other systems
+
+Inventario remembers each document [another system sent](../documents-from-other-systems/),
+so that sending it again makes no second draft. A restore brings that record
+back, linked to the restored draft or item, so a document sent again after the
+restore still makes nothing. A document whose draft or item the backup does
+not bring back stays known, and sending it again still makes nothing.
+
+The two merge strategies keep the record your group already has for a
+document and say so in the restore log. **Full replace** replaces the group's
+record with the backup's, so after restoring a backup that has none, for
+example one made before Inventario kept it, a document sent again makes a new
+draft. A dry run writes no record.
 
 ### Sellers
 

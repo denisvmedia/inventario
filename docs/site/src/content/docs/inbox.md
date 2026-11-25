@@ -26,7 +26,7 @@ to show.
 
 | Reason | What it is | What clears it |
 | --- | --- | --- |
-| **Draft** | A [draft of a new item](../items/#drafts-of-a-new-item), saved but not added as an item yet. | **Continue** and add the item, or **Discard**. |
+| **Draft** | A [draft of a new item](../items/#drafts-of-a-new-item), saved but not added as an item yet, or a draft made from a [document another system sent](../documents-from-other-systems/). | **Continue** and add the item, or **Discard**. |
 | **Marked as draft** | An item whose **Save as draft** switch is on (see [Drafts of an existing item](../items/#drafts-of-an-existing-item)). | **Mark as reviewed**. |
 | **Added from files** | A batch of files you [added from files](../items/#add-items-from-files) that is not finished: a file waits for its scan or could not be read, or a product waits for your decision or for its draft. | **Review** the batch and create the drafts, retry the files that failed, or remove the batch. |
 
@@ -48,6 +48,11 @@ newest first. A long inbox is split into pages of 50 rows.
 
 See [Save as draft](../items/#save-as-draft) for how drafts are saved and
 shared between devices.
+
+A draft that another system sent, for example Paperless-ngx, says so in its
+row, such as **From Paperless-ngx**, and links to the document there when the
+system sent its address. See
+[Documents from other systems](../documents-from-other-systems/).
 
 ## Review an item
 
