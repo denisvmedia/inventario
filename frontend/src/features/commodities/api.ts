@@ -25,7 +25,6 @@ export interface CommodityCover {
 // the response meta — so the field is optional and comes from the API
 // helpers below.
 export type Commodity = Schema<"models.Commodity"> & { cover?: CommodityCover }
-export type CommodityType = Schema<"models.CommodityType">
 export type CommodityStatus = Schema<"models.CommodityStatus">
 
 interface CommodityResource {

@@ -233,6 +233,12 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
   return qs ? `${base}?${qs}` : base
 }
 
+// Link to the items list showing every item of one type, by the type's
+// slug, inactive ones included, so the list matches the type's item count.
+export function commodityTypeHref(slug: string, typeSlug: string): string {
+  return commodityListHref(slug, { includeInactive: true, types: [typeSlug] })
+}
+
 // Link to the items list showing every item that carries one tag, inactive
 // ones included, so the list matches the tag's item count.
 export function commodityTagHref(slug: string, tagSlug: string): string {

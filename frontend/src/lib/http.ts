@@ -43,6 +43,8 @@ const GROUP_SCOPED_PREFIXES = [
   "/files",
   "/exports",
   "/tags",
+  // The group's item types (#2802).
+  "/item-types",
   // /loans and /loans/counts (#1452). The per-commodity loan paths are
   // rewritten via the /commodities prefix above; this entry handles the
   // group-wide /lent surface + the bulk-counts endpoint.

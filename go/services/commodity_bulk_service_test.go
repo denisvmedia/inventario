@@ -139,7 +139,8 @@ func withTags(tags ...string) func(*models.Commodity) {
 
 func parsePatch(c *qt.C, in services.CommodityPatchInput) services.CommodityPatch {
 	c.Helper()
-	patch, err := services.ParseCommodityPatch(c.Context(), in)
+	f := newBulkFixture(c)
+	patch, err := services.ParseCommodityPatch(f.ctx, f.set.ItemTypeRegistry, in)
 	c.Assert(err, qt.IsNil)
 	return patch
 }
@@ -169,12 +170,39 @@ func TestParseCommodityPatch_Refuses(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			c := qt.New(t)
-			_, err := services.ParseCommodityPatch(c.Context(), tt.in)
+			f := newBulkFixture(c)
+			_, err := services.ParseCommodityPatch(f.ctx, f.set.ItemTypeRegistry, tt.in)
 			errs, ok := errors.AsType[validation.Errors](err)
 			c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
 			c.Assert(errs[tt.field], qt.IsNotNil, qt.Commentf("errs = %v", errs))
 		})
 	}
+}
+
+// A type to set is one of the group's item types. A group nobody has opened
+// since the types became a list has none stored yet, and still takes a
+// built-in type.
+func TestParseCommodityPatch_TypeIsOneOfTheGroupsTypes(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	types := f.set.ItemTypeRegistry
+	c.Assert(must.Must(types.Count(f.ctx)), qt.Equals, 0)
+
+	patch, err := services.ParseCommodityPatch(f.ctx, types, services.CommodityPatchInput{Type: new("electronics")})
+	c.Assert(err, qt.IsNil)
+	c.Check(*patch.Type, qt.Equals, models.CommodityTypeElectronics)
+
+	_, err = services.ParseCommodityPatch(f.ctx, types, services.CommodityPatchInput{Type: new("vehicle")})
+	errs, ok := errors.AsType[validation.Errors](err)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+	verr, ok := errors.AsType[validation.Error](errs["type"])
+	c.Assert(ok, qt.IsTrue, qt.Commentf("errs = %v", errs))
+	c.Check(verr.Code(), qt.Equals, services.ItemTypeUnknownCode)
+
+	must.Must(types.Create(f.ctx, models.ItemType{Name: "Vehicle"}))
+	patch, err = services.ParseCommodityPatch(f.ctx, types, services.CommodityPatchInput{Type: new("vehicle")})
+	c.Assert(err, qt.IsNil)
+	c.Check(*patch.Type, qt.Equals, models.CommodityType("vehicle"))
 }
 
 func TestParseCommodityPatch_NormalizesTags(t *testing.T) {

@@ -42,8 +42,8 @@ const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
 	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
-	// The manifest carries the group's sellers (format 3.3), so it gets the
-	// same room as any other JSON document.
+	// The manifest carries the group's sellers (format 3.3) and item types
+	// (3.4), so it gets the same room as any other JSON document.
 	maxInbManifestBytes = maxJSONDocBytes
 )
 
@@ -493,7 +493,20 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 		return errxtrace.Wrap("failed to decode manifest document", err)
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
+	if err := w.restoreItemTypes(manifest.ItemTypes); err != nil {
+		return err
+	}
 	return w.restoreSellers(manifest.Sellers)
+}
+
+// restoreItemTypes maps the archived item types onto the destination group's
+// before the first item names one (#2802).
+func (w *inbWalker) restoreItemTypes(archived []types.INBItemType) error {
+	resolver, err := w.proc.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	return resolver.importArchived(w.ctx, archived, w.stats)
 }
 
 // restoreSellers finds or creates the destination seller of each archived
@@ -691,6 +704,14 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	commodity.SellerID = nil
 	if sellerID, ok := w.sellerIDs[c.SellerID]; ok && c.SellerID != "" {
 		commodity.SellerID = &sellerID
+	}
+
+	resolver, err := l.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	if commodity.Type, err = resolver.resolve(w.ctx, commodity.Type, w.stats); err != nil {
+		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("commodity_id", c.ID))
 	}
 
 	// Mirror the XML restore: when the commodity's original currency matches the

@@ -566,6 +566,7 @@
       "ascending": "ascending",
       "deletedArea": "Deleted area",
       "deletedTag": "{{condition}} (deleted)",
+      "deletedType": "{{type}} (deleted)",
       "descending": "descending",
       "inactive": "Inactive included",
       "notTag": "Not {{tag}}",
@@ -672,7 +673,9 @@
       "sellers_other": "{{count}} sellers of this view were deleted.",
       "tags_one": "Tag {{tags}} no longer exists.",
       "tags_other": "Tags {{tags}} no longer exist.",
-      "title": "Refers to deleted things"
+      "title": "Refers to deleted things",
+      "types_one": "An item type of this view was deleted.",
+      "types_other": "{{count}} item types of this view were deleted."
     },
     "suggestions": {
       "add": "Add",

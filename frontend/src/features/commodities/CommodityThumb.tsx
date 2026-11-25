@@ -1,13 +1,11 @@
+import type { LucideIcon } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { FadeInImage } from "@/components/ui/fade-in-image"
 import { cn } from "@/lib/utils"
-import {
-  COMMODITY_TYPE_FALLBACK_ICON,
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
 import type { CommodityCover } from "@/features/commodities/api"
+import { BUILTIN_ITEM_TYPE_ICON_LOOKUP } from "@/features/itemTypes/display"
+import { ITEM_TYPE_FALLBACK_ICON } from "@/features/itemTypes/icons"
 
 // The thumbnail sizes the BE renders (services/thumbnail_sizes.go), by the
 // longest side in pixels. The cover carries one signed URL per size.
@@ -23,8 +21,12 @@ export type CommodityThumbVariant = "small" | "medium" | "large" | "auto"
 
 export interface CommodityThumbProps {
   cover?: CommodityCover
-  // Type drives the Lucide icon fallback; mirrors `COMMODITY_TYPE_ICONS`.
-  type?: CommodityTypeValue
+  // The item type's slug, shown as data-commodity-type.
+  type?: string
+  // The icon shown without a photo: the item type's icon, which the caller
+  // resolves from the group's types (useItemTypeLookup). Without it a
+  // built-in slug shows its default icon and anything else a generic one.
+  icon?: LucideIcon
   // Visible name used as the alt text. Falls back to a generic
   // "Commodity photo" when omitted so screen readers always have
   // something to announce.
@@ -88,6 +90,7 @@ function thumbnailSrcSet(cover: CommodityCover): string | undefined {
 export function CommodityThumb({
   cover,
   type,
+  icon,
   name,
   size,
   fill = false,
@@ -113,7 +116,7 @@ export function CommodityThumb({
     setFailed(false)
   }, [url])
 
-  const Icon = type ? COMMODITY_TYPE_ICONS[type] : COMMODITY_TYPE_FALLBACK_ICON
+  const Icon = icon ?? BUILTIN_ITEM_TYPE_ICON_LOOKUP[type ?? ""] ?? ITEM_TYPE_FALLBACK_ICON
   const showImage = Boolean(url) && !failed
   // Icon glyph scales with the slot; cap at ~50% so it reads as a
   // pictogram inside the rounded-lg tile rather than dominating it.

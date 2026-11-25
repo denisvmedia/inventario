@@ -1,6 +1,8 @@
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
+import { FieldError } from "@/components/FieldError"
+import { ItemTypeField } from "@/components/itemTypes/ItemTypeField"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -11,29 +13,27 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
-import {
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+
+// The type the server refused for a bulk change, with the reason to show.
+export interface BulkTypeError {
+  slug: string
+  message: string
+}
 
 export interface BulkTypeDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   /** How many items the change applies to. */
   count: number
-  onSubmit: (type: CommodityTypeValue) => Promise<void>
+  /** An item type slug of the group. */
+  onSubmit: (type: string) => Promise<void>
   isPending?: boolean
+  // Shown on the field while the refused type stays selected.
+  error?: BulkTypeError | null
 }
 
-// Sets the type of several items.
+// Sets the type of several items, picked from the group's item types with
+// the edit form's type field.
 export function BulkTypeDialog(props: BulkTypeDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
@@ -42,9 +42,16 @@ export function BulkTypeDialog(props: BulkTypeDialogProps) {
   )
 }
 
-function BulkTypeForm({ onOpenChange, count, onSubmit, isPending = false }: BulkTypeDialogProps) {
+function BulkTypeForm({
+  onOpenChange,
+  count,
+  onSubmit,
+  isPending = false,
+  error,
+}: BulkTypeDialogProps) {
   const { t } = useTranslation()
-  const [type, setType] = useState<CommodityTypeValue | "">("")
+  const [type, setType] = useState("")
+  const errorMessage = error && error.slug === type ? error.message : undefined
 
   return (
     <DialogContent className="sm:max-w-md" data-testid="bulk-type-dialog">
@@ -61,22 +68,15 @@ function BulkTypeForm({ onOpenChange, count, onSubmit, isPending = false }: Bulk
       >
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="bulk-type-select">{t("commodities:fields.type")}</Label>
-          <Select value={type || undefined} onValueChange={(v) => setType(v as CommodityTypeValue)}>
-            <SelectTrigger id="bulk-type-select" className="w-full" data-testid="bulk-type-select">
-              <SelectValue placeholder={t("commodities:fields.typePlaceholder")} />
-            </SelectTrigger>
-            <SelectContent>
-              {COMMODITY_TYPES.map((tp) => {
-                const Icon = COMMODITY_TYPE_ICONS[tp]
-                return (
-                  <SelectItem key={tp} value={tp}>
-                    <Icon aria-hidden="true" />
-                    {t(`commodities:type.${tp}`)}
-                  </SelectItem>
-                )
-              })}
-            </SelectContent>
-          </Select>
+          <ItemTypeField
+            id="bulk-type-select"
+            value={type}
+            onChange={setType}
+            invalid={!!errorMessage}
+            errorMessage={errorMessage}
+            ariaDescribedBy={errorMessage ? "bulk-type-error" : undefined}
+          />
+          <FieldError id="bulk-type-error" testId="bulk-type-error" message={errorMessage} />
         </div>
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>

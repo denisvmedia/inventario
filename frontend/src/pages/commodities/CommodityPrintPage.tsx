@@ -10,12 +10,9 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useCommodity } from "@/features/commodities/hooks"
 import { formatPrice } from "@/features/commodities/price"
-import {
-  COMMODITY_TYPE_FALLBACK_ICON,
-  COMMODITY_TYPE_ICONS,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { ITEM_TYPE_FALLBACK_ICON } from "@/features/itemTypes/icons"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { useTagLabel } from "@/features/tags/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
 
@@ -34,6 +31,7 @@ export function CommodityPrintPage() {
   const detail = useCommodity(id, { enabled })
   const areas = useAreas({ enabled })
   const tagLabel = useTagLabel("commodity")
+  const itemTypes = useItemTypeLookup()
   const commodity = detail.data?.commodity
 
   useEffect(() => {
@@ -66,8 +64,8 @@ export function CommodityPrintPage() {
     )
   }
 
-  const type = commodity.type as CommodityTypeValue | undefined
-  const TypeIcon = (type && COMMODITY_TYPE_ICONS[type]) || COMMODITY_TYPE_FALLBACK_ICON
+  const itemType = itemTypes.get(commodity.type)
+  const TypeIcon = itemType?.Icon ?? ITEM_TYPE_FALLBACK_ICON
   // Per the BE: `original_price` lives in `original_price_currency`;
   // `converted_original_price` and `current_price` are in the group
   // group currency. Use both.
@@ -111,7 +109,7 @@ export function CommodityPrintPage() {
             <header className="mb-6 flex items-start gap-4 border-b border-border pb-6">
               <div
                 className="flex size-12 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground"
-                data-commodity-type={type ?? "unknown"}
+                data-commodity-type={commodity.type || "unknown"}
               >
                 <TypeIcon className="size-6" aria-hidden="true" />
               </div>
@@ -119,7 +117,7 @@ export function CommodityPrintPage() {
                 <h1 className="text-2xl font-bold tracking-tight">{commodity.name}</h1>
                 <p className="mt-1 text-sm text-muted-foreground">
                   {commodity.short_name ? `${commodity.short_name} · ` : ""}
-                  {type ? t(`commodities:type.${type}`) : ""}
+                  {itemType?.label ?? ""}
                 </p>
               </div>
               <p

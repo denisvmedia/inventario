@@ -177,7 +177,7 @@ func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.
 	}
 	attrs := input.Data.Attributes
 
-	patch, err := services.ParseCommodityPatch(r.Context(), commodityPatchInput(attrs.Patch))
+	patch, err := services.ParseCommodityPatch(r.Context(), regSet.ItemTypeRegistry, commodityPatchInput(attrs.Patch))
 	if err != nil {
 		if isValidationError(err) {
 			unprocessableEntityError(w, r, err)

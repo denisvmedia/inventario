@@ -86,6 +86,7 @@ Once your first item is in, here's how to make the most of Inventario:
 - **[Locations & areas](../locations-and-areas/)** — set up the physical places (a house, a garage, a shelf) where your items live.
 - **[Tags](../tags/)** — flexible labels like "fragile" or "to sell" that work across items, independent of where things are stored.
 - **[Sellers](../sellers/)** — the shops and people you bought from, with everything bought from each.
+- **[Item types](../item-types/)** — your group's own list of item types, with names and icons.
 - **[Files & photos](../files-and-photos/)** — attach receipts, manuals, and photos, and browse every file in one place.
 - **[Warranties, loans & maintenance](../warranties-loans-maintenance/)** — track what's under warranty, what you've lent out, and upcoming upkeep.
 - **[Reports](../reports/)** — generate insurance and inventory views you can print or share.

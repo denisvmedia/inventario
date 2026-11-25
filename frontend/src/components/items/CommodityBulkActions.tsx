@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next"
 import { ChevronDown, QrCode, Trash2 } from "lucide-react"
 
 import { BulkResultDialog } from "@/components/items/BulkResultDialog"
-import { BulkTypeDialog } from "@/components/items/BulkTypeDialog"
+import { BulkTypeDialog, type BulkTypeError } from "@/components/items/BulkTypeDialog"
 import { StatusTransitionDialog } from "@/components/items/StatusTransitionDialog"
 import { BulkTagsDialog, type BulkTagsChange } from "@/components/tags/BulkTagsDialog"
 import { BulkActionBar } from "@/components/ui/bulk-action-bar"
@@ -43,12 +43,17 @@ import {
 import { commodityHref } from "@/features/commodities/listContext"
 import { commodityQueryParam, type CommodityQuery } from "@/features/commodities/query"
 import type { CommoditySelectionControls, SelectionVersion } from "@/features/commodities/selection"
+import { ITEM_TYPE_UNKNOWN_FIELD } from "@/features/itemTypes/api"
 import { labelsPageHref } from "@/features/labels/links"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import type { ListContext } from "@/lib/list-context"
-import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
+import {
+  extractTopLevelErrorCodes,
+  getServerErrorCode,
+  getServerErrorMeta,
+} from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 
@@ -136,6 +141,7 @@ export function CommodityBulkActions({
   const bulkUpdate = useBulkUpdateCommodities()
 
   const [dialog, setDialog] = useState<DialogKind | null>(null)
+  const [typeError, setTypeError] = useState<BulkTypeError | null>(null)
   const [target, setTarget] = useState<Target | null>(null)
   const [statusTarget, setStatusTarget] = useState<TerminalBulkStatus | null>(null)
   const [moveArea, setMoveArea] = useState("")
@@ -165,6 +171,7 @@ export function CommodityBulkActions({
 
   function openDialog(kind: DialogKind) {
     dialogSession.current += 1
+    setTypeError(null)
     setTarget(currentTarget())
     setDialog(kind)
   }
@@ -317,6 +324,16 @@ export function CommodityBulkActions({
           ? t("commodities:toast.bulkSelectionSwapped")
           : t("commodities:toast.bulkSelectionChanged", { expected, matched })
       )
+      return
+    }
+    // A type the group no longer has (another member deleted it): the dialog
+    // stays open and says so on the field, which fetches the types again.
+    if (
+      action.kind === "update" &&
+      action.patch.type &&
+      extractTopLevelErrorCodes(err)?.type?.code === ITEM_TYPE_UNKNOWN_FIELD
+    ) {
+      setTypeError({ slug: action.patch.type, message: "errors:validation.item_type_unknown" })
       return
     }
     if (code === "bulk.too_many") {
@@ -604,6 +621,7 @@ export function CommodityBulkActions({
         }}
         count={target?.count ?? 0}
         isPending={pending}
+        error={typeError}
         onSubmit={async (type) => {
           await submit({ kind: "update", patch: { type } })
         }}

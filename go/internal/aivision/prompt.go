@@ -44,6 +44,14 @@ func UserPromptHeader(req ScanRequest) string {
 	if req.HintFromUser != "" {
 		fmt.Fprintf(&b, "User hint: %s\n", req.HintFromUser)
 	}
+	b.WriteString("Allowed values for \"type\", each followed by the name the user knows it by:\n")
+	for _, t := range req.itemTypes() {
+		if t.Name == "" || t.Name == t.Slug {
+			fmt.Fprintf(&b, "- %s\n", t.Slug)
+			continue
+		}
+		fmt.Fprintf(&b, "- %s (%s)\n", t.Slug, t.Name)
+	}
 	b.WriteString("\nReturn the JSON object now.")
 	return b.String()
 }
@@ -55,8 +63,9 @@ func UserPromptHeader(req ScanRequest) string {
 //
 // The schema is deliberately permissive on confidence (number, 0..1
 // inclusive) and on optional fields. Required: nothing — every field is
-// optional so the model is free to omit anything it can't read.
-func ResponseSchema() map[string]any {
+// optional so the model is free to omit anything it can't read. The values
+// allowed for "type" are the slugs of req's item types.
+func ResponseSchema(req ScanRequest) map[string]any {
 	fieldGuessString := map[string]any{
 		"type": "object",
 		"properties": map[string]any{
@@ -115,11 +124,14 @@ func ResponseSchema() map[string]any {
 		}
 	}
 
-	// commodityTypes mirrors models.CommodityType* and the FE COMMODITY_TYPES
-	// constant. Hardcoded so this vendor-neutral leaf package stays free of a
-	// domain-model dependency; the FE's isKnownType is the authoritative gate,
-	// so any drift only costs a dropped type guess, never a bad write.
-	commodityTypes := []string{"white_goods", "electronics", "equipment", "furniture", "clothes", "other"}
+	// commodityTypes are the slugs of the group's item types. The FE checks
+	// a guess against the same list before it pre-fills the form, so a guess
+	// outside it only costs a dropped type, never a bad write.
+	options := req.itemTypes()
+	commodityTypes := make([]string, 0, len(options))
+	for _, t := range options {
+		commodityTypes = append(commodityTypes, t.Slug)
+	}
 
 	// documentTypes are the kinds a scanned document can be classified as.
 	// `invoice` and `manual` map to the tags of the same name; the rest are
@@ -206,8 +218,8 @@ func ResponseSchema() map[string]any {
 // ResponseSchemaJSON returns the schema serialised as JSON bytes, which
 // is the form OpenAI's response_format and Anthropic's tool input_schema
 // expect.
-func ResponseSchemaJSON() ([]byte, error) {
-	return json.Marshal(ResponseSchema())
+func ResponseSchemaJSON(req ScanRequest) ([]byte, error) {
+	return json.Marshal(ResponseSchema(req))
 }
 
 // rawScanResponse mirrors the JSON shape promised by the schema. Both

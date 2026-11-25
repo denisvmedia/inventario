@@ -17,6 +17,7 @@ import {
   areaHandlers,
   commodityHandlers,
   groupHandlers,
+  itemTypeHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { bulkResultResponse } from "@/test/handlers/commodities"
@@ -145,6 +146,70 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("commodities-bulk-bar")).not.toBeInTheDocument()
     )
+  })
+
+  it("offers the group's item types and says on the field when one was deleted meanwhile", async () => {
+    const user = userEvent.setup()
+    const vehicle = {
+      id: "type-vehicle",
+      slug: "vehicle",
+      name: "Vehicle",
+      icon: "car",
+      builtin: false,
+      item_count: 0,
+      trashed_item_count: 0,
+    }
+    let typeRequests = 0
+    let types = [...itemTypeHandlers.builtins(), vehicle]
+    const requests: Record<string, unknown>[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      msw.get(apiUrl(`/g/${SLUG}/item-types`), () => {
+        typeRequests++
+        return HttpResponse.json({
+          data: types.map((t) => ({ id: t.id, type: "item_types", attributes: t })),
+        })
+      }),
+      ...commodityHandlers.bulkUpdate(SLUG, {
+        onRequest: (a) => requests.push(a),
+        respond: () =>
+          HttpResponse.json(
+            {
+              errors: [
+                {
+                  status: "Unprocessable Entity",
+                  error: {
+                    error: { type: "no item type with this slug in the group" },
+                    errorCodes: { type: { code: "item_type_unknown" } },
+                    type: "validation.Errors",
+                  },
+                },
+              ],
+            },
+            { status: 422 }
+          ),
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await openEditMenuItem(user, "commodities-bulk-edit-type")
+    const dialog = await screen.findByTestId("bulk-type-dialog")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Vehicle$/i })
+
+    // Another member deletes the type before the change is sent.
+    types = itemTypeHandlers.builtins()
+    const before = typeRequests
+    await user.click(within(dialog).getByTestId("bulk-type-confirm"))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0].patch).toEqual({ type: "vehicle" })
+    expect(await within(dialog).findByTestId("bulk-type-error")).toHaveTextContent(
+      "This type is not in the group."
+    )
+    expect(within(dialog).getByTestId("bulk-type-select")).toHaveAttribute("aria-invalid", "true")
+    await waitFor(() => expect(typeRequests).toBeGreaterThan(before))
+    expect(await within(dialog).findByTestId("bulk-type-select-gone")).toBeInTheDocument()
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it("selects every matching item and sends the query, not ids", async () => {

@@ -163,6 +163,28 @@ func TestCommodityBulkUpdate_Refused(t *testing.T) {
 	}
 }
 
+// A bulk set-type names one of the group's item types. Another slug is
+// refused as a whole with a 422 on type, before any item changes, with the
+// code the item forms localize.
+func TestCommodityBulkUpdate_TypeTheGroupDoesNotHave(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	drill := env.bulkItem("Bulk Typed Drill")
+	setType := bulkBody(map[string]any{"ids": []string{drill.ID}, "patch": map[string]any{"type": "vehicle"}})
+
+	rr := env.do(http.MethodPost, "/commodities/bulk-update", setType)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.type.code"), "item_type_unknown")
+	c.Assert(env.getItem(drill.ID).Type, qt.Equals, models.CommodityTypeOther)
+
+	set := getRegistrySetFromParams(env.params, env.user)
+	must.Must(set.ItemTypeRegistry.Create(context.Background(), models.ItemType{Name: "Vehicle"}))
+	rr = env.do(http.MethodPost, "/commodities/bulk-update", setType)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{drill.ID})
+	c.Assert(env.getItem(drill.ID).Type, qt.Equals, models.CommodityType("vehicle"))
+}
+
 func TestCommodityBulkUpdate_ViewerIsRefused(t *testing.T) {
 	c := qt.New(t)
 	env := newTrashAPIEnv(c)

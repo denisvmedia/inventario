@@ -86,7 +86,7 @@ The form is split across the five steps. Only a handful of fields are required
 | **Brand** | Who made it, e.g. "Bosch". Up to 100 characters. As you type, the brands already used in your group are suggested, most used first; pick one with a click or with the arrow keys and Enter. |
 | **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Compact cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. Photo cards show "Brand · Model" under the name when the item has either. |
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
-| **Type** * | **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, or **Other**. |
+| **Type** * | One of your group's [item types](../item-types/). A new group starts with **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, and **Other**. Choose **New type** at the end of the list to add one without leaving the form. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
 | **Location** / **Area** | Only when you edit an item; a new item is placed after it is saved. Where the item lives: pick a location first, then an area. Both are optional. Owners and administrators can also add a new location or area from the pickers. See [Locations & areas](../locations-and-areas/). |
 | **Status** * | Starts as **In Use** (see [Status lifecycle](#status-lifecycle)). |
@@ -414,7 +414,7 @@ The **All Items** page lists every item in your group. Across the top you have:
   model, serial number (including extra serial numbers), part number, tag,
   notes, warranty notes, status note, or asset ID (`A-0042`). See [Searching for
   items](#searching-for-items).
-- **Type** — filter by one or more item types.
+- **Type** — filter by one or more of your group's [item types](../item-types/).
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
   **Written Off**.
 - **Area** — narrow to a single area, or **All areas**.
@@ -539,12 +539,12 @@ matches the view, and the **Views** menu offers **Save changes** (to update the
 view) and **Revert to saved** (to go back to it). **Close view** keeps the
 current filters and leaves the view.
 
-If a view refers to an area, a tag or a seller that was deleted, it still opens
-and still applies that condition, so it shows what still matches (often
-nothing, for a deleted area or seller). The **Views** button shows a warning,
-and the menu says what no longer exists; on the **Saved views** page the
-condition reads **Deleted area** or **Deleted seller**, or a tag is marked
-**(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+If a view refers to an area, a tag, a seller or an [item type](../item-types/)
+that was deleted, it still opens and still applies that condition, so it shows
+what still matches (often nothing, for a deleted area, seller or type). The
+**Views** button shows a warning, and the menu says what no longer exists; on
+the **Saved views** page the condition reads **Deleted area** or **Deleted
+seller**, or a tag or an item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in
@@ -609,7 +609,8 @@ On the **All Items** page you can act on several items at once:
        then click **Apply**. You can also type a new tag to add. Tags you do
        not pick stay on each item as they are, so this never replaces an
        item's tags.
-     - **Type…** — pick a type and click **Set type**.
+     - **Type…** — pick one of your group's [item types](../item-types/), or add
+       one with **New type**, and click **Set type**.
      - Under **Set status**, a status. **Lost**, **Disposed**, and
        **Written Off** open the same dialog as a single change, for the
        **date** and an optional **note**. An item that already has that

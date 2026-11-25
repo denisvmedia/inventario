@@ -43,6 +43,10 @@ type RestoreOperationProcessor struct {
 	// keyed by their immutable UUID. Populated once on the first call to
 	// validateCommodityOwnershipInDB.
 	commodityUUIDMap map[string]*models.Commodity
+
+	// itemTypes maps archived item type slugs onto the destination group's
+	// types (#2802); created on first use by itemTypeResolver.
+	itemTypes *itemTypeResolver
 }
 
 // NewRestoreOperationProcessor builds a processor. The signer is consumed by the

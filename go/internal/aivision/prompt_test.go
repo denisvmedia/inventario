@@ -14,7 +14,7 @@ import (
 // the multiple_items warning code.
 func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	c := qt.New(t)
-	schema := aivision.ResponseSchema()
+	schema := aivision.ResponseSchema(aivision.ScanRequest{})
 
 	props := schema["properties"].(map[string]any)
 
@@ -123,4 +123,29 @@ func TestToScanResult_FlatItems(t *testing.T) {
 	c.Assert(res.Fields["name"].Value, qt.Equals, "Pampers")
 	c.Assert(res.Items[0].Fields["original_price"].Value, qt.Equals, float64(434))
 	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Calculator")
+}
+
+// The schema enum and the prompt follow the group's item types, so a custom
+// type can be guessed by meaning and its slug stays the stored value.
+func TestResponseSchemaAndPrompt_UseTheGroupsItemTypes(t *testing.T) {
+	c := qt.New(t)
+	req := aivision.ScanRequest{ItemTypes: []aivision.ItemTypeOption{
+		{Slug: "electronics", Name: "Electronics"},
+		{Slug: "vehicle", Name: "Vehicle"},
+		{Slug: "автомобиль", Name: "Автомобиль"},
+	}}
+
+	schema := aivision.ResponseSchema(req)
+	fields := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	typeEnum := fields[aivision.FieldNameType].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)["enum"].([]string)
+	c.Assert(typeEnum, qt.DeepEquals, []string{"electronics", "vehicle", "автомобиль"})
+
+	header := aivision.UserPromptHeader(req)
+	c.Check(header, qt.Contains, "- vehicle (Vehicle)\n")
+	c.Check(header, qt.Contains, "- автомобиль (Автомобиль)\n")
+	c.Check(header, qt.Not(qt.Contains), "white_goods")
+
+	// Without types the built-in ones apply.
+	builtin := aivision.UserPromptHeader(aivision.ScanRequest{})
+	c.Check(builtin, qt.Contains, "- white_goods (Appliance)\n")
 }

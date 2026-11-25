@@ -1,41 +1,7 @@
-// Hard-coded enum values + display metadata for commodities. The values
-// must match models.CommodityType / models.CommodityStatus on the BE
-// (kept in sync via openapi codegen — see src/types/api.d.ts). Adding
-// a new value here without a matching BE migration would generate
-// requests the server rejects.
-
-import { Armchair, Laptop, Package, Refrigerator, Shirt, Wrench } from "lucide-react"
-import type { LucideIcon } from "lucide-react"
-
-export const COMMODITY_TYPES = [
-  "white_goods",
-  "electronics",
-  "equipment",
-  "furniture",
-  "clothes",
-  "other",
-] as const
-
-export type CommodityTypeValue = (typeof COMMODITY_TYPES)[number]
-
-// Lucide icon per commodity type — the single source of truth that
-// every commodity-type visual (list card, list row, filter dropdown,
-// type select, print header, thumbnail fallback, detail header) reads.
-// Lucide is preferred over emoji because it scales with text size,
-// inherits `currentColor` for theme-aware rendering (light/dark/
-// high-contrast), and avoids cross-platform font-fallback variation
-// in the rendered glyph (#1392). `COMMODITY_TYPE_FALLBACK_ICON` is the
-// generic-package icon used when the type is missing or unknown.
-export const COMMODITY_TYPE_ICONS: Record<CommodityTypeValue, LucideIcon> = {
-  white_goods: Refrigerator,
-  electronics: Laptop,
-  equipment: Wrench,
-  furniture: Armchair,
-  clothes: Shirt,
-  other: Package,
-}
-
-export const COMMODITY_TYPE_FALLBACK_ICON: LucideIcon = Package
+// Hard-coded enum values + display metadata for commodities. The status
+// values must match models.CommodityStatus on the BE (kept in sync via
+// openapi codegen — see src/types/api.d.ts). Item types belong to each
+// group and live in features/itemTypes.
 
 export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "written_off"] as const
 

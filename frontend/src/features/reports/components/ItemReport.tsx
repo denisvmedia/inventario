@@ -14,9 +14,10 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { brandedName } from "@/features/commodities/brand"
-import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { warrantyStatus } from "@/features/commodities/constants"
 import { commodityValue, formatPrice } from "@/features/commodities/price"
 import type { ListedFile } from "@/features/files/api"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -28,7 +29,7 @@ import { reportSubtitle } from "../subtitle"
 // ItemReport is the single-item insurance report body (#1370). Mirrors
 // the design mock's ItemReport, adapted to real fields: the title is the
 // brand and the name, the subtitle the model (the short name for an item
-// without one), category → `type` enum, currency via the group / purchase
+// without one), category → the item type, currency via the group / purchase
 // currencies, warranty via the canonical WARRANTY_STATUS_CONFIG.
 interface ItemReportProps {
   commodity: Commodity
@@ -60,7 +61,8 @@ export function ItemReport({
 }: ItemReportProps) {
   const { t } = useTranslation()
   const noValue = t("reports:insurance.noValue")
-  const type = commodity.type as CommodityTypeValue | undefined
+  const itemTypes = useItemTypeLookup()
+  const typeLabel = itemTypes.get(commodity.type)?.label
   const status = warrantyStatus({ warranty_expires_at: commodity.warranty_expires_at })
   const wConfig = WARRANTY_STATUS_CONFIG[status]
   const WarrantyIcon = wConfig.icon
@@ -86,7 +88,7 @@ export function ItemReport({
     {
       icon: Tag,
       label: t("reports:insurance.fields.type"),
-      value: type ? t(`commodities:type.${type}`) : noValue,
+      value: typeLabel || noValue,
     },
     {
       icon: Hash,

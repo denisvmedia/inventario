@@ -31,6 +31,23 @@ var (
 	// inside the lock-protected delete path.
 	ErrTagInUse = errx.NewSentinel("tag is in use")
 
+	// ErrItemTypeInUse signals that items of the group, those in Trash
+	// included, still have the item type a delete names, and the delete
+	// gave no type to move them to (#2802).
+	ErrItemTypeInUse = errx.NewSentinel("item type is in use")
+
+	// ErrLastItemType signals a delete of the only item type of a group. A
+	// group always keeps one, so that an item can always be given a type.
+	ErrLastItemType = errx.NewSentinel("cannot delete the last item type of a group")
+
+	// ErrUnknownItemType signals an item write whose type is not a slug of
+	// one of the group's item types.
+	ErrUnknownItemType = errx.NewSentinel("unknown item type")
+
+	// ErrItemTypeLimit signals a create in a group that already has
+	// models.MaxItemTypesPerGroup item types.
+	ErrItemTypeLimit = errx.NewSentinel("the group has the most item types it can keep")
+
 	// ErrLoanAlreadyOpen signals that a commodity already has an open
 	// (returned_at IS NULL) loan and the service refused to create a
 	// second one. The handler maps it to 409 Conflict so the FE can

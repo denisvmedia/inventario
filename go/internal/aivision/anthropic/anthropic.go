@@ -272,7 +272,7 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *anthropicRequest {
 			{
 				Name:        toolName,
 				Description: "Record the structured product extraction the assistant inferred from the photos or documents.",
-				InputSchema: aivision.ResponseSchema(),
+				InputSchema: aivision.ResponseSchema(req),
 			},
 		},
 		ToolChoice: toolChoicePayload{Type: "tool", Name: toolName},

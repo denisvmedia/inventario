@@ -923,8 +923,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 // Per-resource role gates (#1533): reads stay viewer+ (membership is checked
 // by GroupSlugResolverMiddleware). Writes split by resource — structural
 // resources (locations, areas, exports) require admin+; content resources
-// (commodities, files, tags, sellers, loans, services) require user+. Each
-// gate is method-conditional — GET/HEAD/OPTIONS bypass the role check.
+// (commodities, files, tags, sellers, item types, loans, services) require
+// user+. Each gate is method-conditional — GET/HEAD/OPTIONS bypass the role
+// check.
 func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupService *services.GroupService, auditSvc services.AuditLogger) func(r chi.Router) {
 	structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
 	contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
@@ -942,6 +943,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.With(contentWriteGate).Route("/files", Files(params))
 		r.With(contentWriteGate).Route("/tags", Tags(params))
 		r.With(contentWriteGate).Route("/sellers", Sellers())
+		r.With(contentWriteGate).Route("/item-types", ItemTypes())
 		r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 		r.With(contentWriteGate).Route("/services", GroupServices(params))
 		r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))

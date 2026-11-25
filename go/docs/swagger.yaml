@@ -2869,6 +2869,131 @@ definitions:
       data:
         $ref: '#/definitions/jsonapi.InviteInfoData'
     type: object
+  jsonapi.ItemTypeDeleteMeta:
+    properties:
+      reassigned_items:
+        example: 4
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemTypeDeleteResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/jsonapi.ItemTypeDeleteMeta'
+    type: object
+  jsonapi.ItemTypeRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeRequestDataWrapper'
+    type: object
+  jsonapi.ItemTypeRequestData:
+    properties:
+      icon:
+        example: car
+        type: string
+      name:
+        example: Vehicle
+        type: string
+    type: object
+  jsonapi.ItemTypeRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeResponseData'
+    type: object
+  jsonapi.ItemTypeResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeView'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemTypeUpdateRequestDataWrapper'
+    type: object
+  jsonapi.ItemTypeUpdateRequestData:
+    properties:
+      icon:
+        type: string
+      name:
+        type: string
+    type: object
+  jsonapi.ItemTypeUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemTypeUpdateRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - item_types
+        example: item_types
+        type: string
+    type: object
+  jsonapi.ItemTypeView:
+    properties:
+      builtin:
+        example: true
+        type: boolean
+      created_at:
+        type: string
+      icon:
+        example: laptop
+        type: string
+      item_count:
+        example: 3
+        format: int64
+        type: integer
+      name:
+        example: ""
+        type: string
+      slug:
+        example: electronics
+        type: string
+      trashed_item_count:
+        description: |-
+          TrashedItemCount is the number of items in Trash with this type.
+          Deleting the type moves them along with the others.
+        example: 0
+        format: int64
+        type: integer
+      updated_at:
+        type: string
+    type: object
+  jsonapi.ItemTypesMeta:
+    properties:
+      item_types:
+        example: 6
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemTypesResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.ItemTypeResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.ItemTypesMeta'
+    type: object
   jsonapi.LoanCommodityRef:
     properties:
       id:
@@ -4572,7 +4697,13 @@ definitions:
           type: string
         type: array
       type:
-        $ref: '#/definitions/models.CommodityType'
+        description: |-
+          Type is the slug of one of the group's item types (see ItemType). An
+          item keeps the slug, not the type's id: a slug never changes, so the
+          item query's type filter, saved views and backups that name it stay
+          valid when the type is renamed.
+        example: electronics
+        type: string
       urls:
         type: string
       uuid:
@@ -4770,22 +4901,6 @@ definitions:
     - CommodityStatusLost
     - CommodityStatusDisposed
     - CommodityStatusWrittenOff
-  models.CommodityType:
-    enum:
-    - white_goods
-    - electronics
-    - equipment
-    - furniture
-    - clothes
-    - other
-    type: string
-    x-enum-varnames:
-    - CommodityTypeWhiteGoods
-    - CommodityTypeElectronics
-    - CommodityTypeEquipment
-    - CommodityTypeFurniture
-    - CommodityTypeClothes
-    - CommodityTypeOther
   models.CurrencyMigration:
     properties:
       commodity_count:
@@ -10448,6 +10563,185 @@ paths:
       summary: File category counts
       tags:
       - files
+  /g/{groupSlug}/item-types:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The item types of the group: the built-in ones first in their fixed order, then the others by name.
+        Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypesResponse'
+      summary: List item types
+      tags:
+      - item-types
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
+        The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+        A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type object
+        in: body
+        name: itemType
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ItemTypeRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Item type created
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "409":
+          description: Another item type of the group has this name, or the group
+            has 100 item types
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create an item type
+      tags:
+      - item-types
+  /g/{groupSlug}/item-types/{itemTypeID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
+        then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      - description: ID of the item type the deleted type's items move to
+        in: query
+        name: reassign_to
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Deleted; meta.reassigned_items counts the items moved
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeDeleteResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The type is in use and no reassign_to was given, or it is the
+            group's last type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: reassign_to names no other type of the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete an item type
+      tags:
+      - item-types
+    get:
+      consumes:
+      - application/vnd.api+json
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get an item type
+      tags:
+      - item-types
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Attributes left out keep their value. The slug never changes, so
+        items, filters and saved views keep working after a rename. An empty name
+        on a built-in type gives it back its default name.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Item type ID
+        in: path
+        name: itemTypeID
+        required: true
+        type: string
+      - description: Item type patch
+        in: body
+        name: itemType
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.ItemTypeUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemTypeResponse'
+        "404":
+          description: Item type not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Another item type of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update an item type
+      tags:
+      - item-types
   /g/{groupSlug}/loans:
     get:
       consumes:

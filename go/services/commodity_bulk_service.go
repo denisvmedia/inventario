@@ -10,6 +10,8 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
@@ -142,18 +144,33 @@ func uniqueIDs(ids []string) []string {
 	return out
 }
 
-// CheckCommodityType reports whether an item may be given type t: nil, a
-// validation.Error saying why not, or the error that kept it from checking.
-// It is the one check of a type value outside the item model. Making the item
-// types a per-group list (#2802) changes it together with
-// models.CommodityType.Validate, which every item save runs, the bulk path
-// included (Commodity.ValidateWithContext).
-func CheckCommodityType(_ context.Context, t models.CommodityType) error {
+// CheckCommodityType reports whether an item of the group types belongs to
+// may be given type t: nil, a validation.Error saying why not, or the error
+// that kept it from checking. A type is one of the group's item types
+// (#2802). The built-in types are seeded first, since GetBySlug does not
+// seed them and a group nobody has opened since the types became a list has
+// none yet. Every item write checks the type again in its own transaction;
+// this check lets a bulk patch with an unknown type fail as a whole, before
+// any item changes, instead of once per item.
+func CheckCommodityType(ctx context.Context, types registry.ItemTypeRegistry, t models.CommodityType) error {
 	if !t.IsValid() {
 		return validation.NewError("invalid_type", "invalid type")
 	}
+	if _, err := types.EnsureBuiltins(ctx); err != nil {
+		return errxtrace.Wrap("failed to seed item types", err)
+	}
+	if _, err := types.GetBySlug(ctx, t); err != nil {
+		if errors.Is(err, registry.ErrNotFound) {
+			return validation.NewError(ItemTypeUnknownCode, "no item type with this slug in the group")
+		}
+		return errxtrace.Wrap("failed to look up item type", err, errx.Attrs("item_type", string(t)))
+	}
 	return nil
 }
+
+// ItemTypeUnknownCode is the validation code of a type the group does not
+// have, on an item form and on a bulk patch alike.
+const ItemTypeUnknownCode = "item_type_unknown"
 
 // ValidateCommodityStatusTransition enforces the rule of a status change
 // that needs the previous status, which the item model does not carry:
@@ -217,11 +234,13 @@ type CommodityStatusChange struct {
 	Note   string
 }
 
-// ParseCommodityPatch checks in and returns the patch it describes. It has
-// no side effects: tags to add that do not exist yet are created by
-// CommodityBulkService.EnsureTags. The error is a validation.Errors keyed by
-// tags, type, status, status_date and status_note.
-func ParseCommodityPatch(ctx context.Context, in CommodityPatchInput) (CommodityPatch, error) {
+// ParseCommodityPatch checks in and returns the patch it describes; types is
+// the item types of the items' group, which a type to set must be one of.
+// Apart from seeding a group's built-in types, it has no side effects: tags
+// to add that do not exist yet are created by CommodityBulkService.EnsureTags.
+// The error is a validation.Errors keyed by tags, type, status, status_date
+// and status_note.
+func ParseCommodityPatch(ctx context.Context, types registry.ItemTypeRegistry, in CommodityPatchInput) (CommodityPatch, error) {
 	var patch CommodityPatch
 	errs := validation.Errors{}
 
@@ -233,7 +252,7 @@ func ParseCommodityPatch(ctx context.Context, in CommodityPatchInput) (Commodity
 
 	if in.Type != nil {
 		t := models.CommodityType(*in.Type)
-		if err := CheckCommodityType(ctx, t); err != nil {
+		if err := CheckCommodityType(ctx, types, t); err != nil {
 			if _, ok := errors.AsType[validation.Error](err); !ok {
 				return CommodityPatch{}, err
 			}
