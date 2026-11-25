@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { http, HttpResponse } from "msw"
+import { delay, http, HttpResponse } from "msw"
 
 import { DraftsCard } from "@/components/items/DraftsCard"
 import { AuthProvider } from "@/features/auth/AuthContext"
@@ -21,7 +21,7 @@ const groups: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
 
-function members(role: "viewer" | "user") {
+function members(role: "viewer" | "user" | "admin" | "owner") {
   return http.get(apiUrl("/groups/g1/members"), () =>
     HttpResponse.json({
       data: [
@@ -143,5 +143,35 @@ describe("<DraftsCard />", () => {
       expect(within(row).queryByTestId("draft-resume-d1")).not.toBeInTheDocument()
     )
     expect(within(row).queryByTestId("draft-discard-d1")).not.toBeInTheDocument()
+  })
+
+  it("offers no actions while the member's role is loading", async () => {
+    const fake = draftHandlers.backend(SLUG, [{ id: "d1", values: { name: "Lamp" } }])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      http.get(apiUrl("/groups/g1/members"), async () => {
+        await delay("infinite")
+        return HttpResponse.json({ data: [] })
+      }),
+      ...fake.handlers
+    )
+    renderCard()
+    const row = await screen.findByTestId("draft-row-d1")
+    expect(within(row).queryByTestId("draft-resume-d1")).not.toBeInTheDocument()
+    expect(within(row).queryByTestId("draft-discard-d1")).not.toBeInTheDocument()
+  })
+
+  it.each(["admin", "owner"] as const)("offers an %s the actions", async (role) => {
+    const fake = draftHandlers.backend(SLUG, [{ id: "d1", values: { name: "Lamp" } }])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members(role),
+      ...fake.handlers
+    )
+    renderCard()
+    expect(await screen.findByTestId("draft-resume-d1")).toBeInTheDocument()
+    expect(screen.getByTestId("draft-discard-d1")).toBeInTheDocument()
   })
 })

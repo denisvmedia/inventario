@@ -87,6 +87,7 @@ export function useDiscardDraft() {
 export interface PromoteDraftInput {
   id: string
   revision: number
+  promotionKey: string
   values: CreateCommodityRequest
 }
 
@@ -95,7 +96,8 @@ export function usePromoteDraft() {
   const slug = useSlug()
   const invalidateDrafts = useInvalidateDrafts()
   return useMutation<Commodity & { id: string }, Error, PromoteDraftInput>({
-    mutationFn: ({ id, revision, values }) => promoteDraft(id, revision, values),
+    mutationFn: ({ id, revision, promotionKey, values }) =>
+      promoteDraft(id, revision, promotionKey, values),
     onSuccess: () =>
       Promise.all([
         invalidateDrafts(),
@@ -105,10 +107,22 @@ export function usePromoteDraft() {
   })
 }
 
-// The server draft a finished form came from.
+// The server draft a form saves to, with the revision its values are based
+// on. A finished form also names its promotion key: the same key for every
+// attempt until one succeeds, so a retry after a lost response gets the
+// item the first attempt made.
 export interface DraftRef {
   id: string
   revision: number
+  promotionKey?: string
+}
+
+// newPromotionKey stands in for a caller that keeps no key: its attempts
+// cannot be told apart from another device's.
+function newPromotionKey(): string {
+  return typeof crypto !== "undefined" && crypto.randomUUID
+    ? `promote:${crypto.randomUUID()}`
+    : `promote:${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}`
 }
 
 // useSubmitNewItem creates an item, or promotes the draft the form was
@@ -120,7 +134,12 @@ export function useSubmitNewItem() {
     isPending: create.isPending || promote.isPending,
     submit: (values: CreateCommodityRequest, draft?: DraftRef): Promise<Commodity> =>
       draft
-        ? promote.mutateAsync({ id: draft.id, revision: draft.revision, values })
+        ? promote.mutateAsync({
+            id: draft.id,
+            revision: draft.revision,
+            promotionKey: draft.promotionKey ?? newPromotionKey(),
+            values,
+          })
         : create.mutateAsync(values),
   }
 }

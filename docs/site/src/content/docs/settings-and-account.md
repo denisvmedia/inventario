@@ -71,7 +71,9 @@ A couple of things to know:
   places, exports, tags or sellers), it needs to be removed first. This
   includes a tag or a seller you added there, even when other members use it on
   their own items. Item reminders you set in a shared group are deleted
-  with your account, since they only ever emailed you. Once deletion succeeds
+  with your account, since they only ever emailed you. So are the
+  [drafts of new items](../items/#drafts-of-a-new-item) you started; the
+  files saved with them are kept as standalone files. Once deletion succeeds
   you're signed out immediately.
 
 For more on groups, roles, and inviting people, see

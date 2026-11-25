@@ -204,7 +204,8 @@ while there are none.
 - **Continue** opens the draft in the **Add item** dialog with its values and
   files. Turn **Save as draft** on and click **Save draft** to save your
   changes, or finish the item and click **Add item** to create it. The draft's
-  files move to the new item, and the draft is gone.
+  files move to the new item, and the draft is gone. Clicking **Add item**
+  again after a lost connection does not create a second item.
 - **Discard** deletes the draft. Its files that nothing else uses go to the
   [Trash](../trash/), where you can restore them as standalone files. Files
   that are also attached to something else stay where they are.
@@ -216,11 +217,22 @@ A draft is not an item. It is not in item lists, counts, search results,
 reports, reminders, or [backups](../backup-and-restore/), and it never
 expires. The files saved with a draft are ordinary files: you find them on the
 [Files](../files-and-photos/) page, and backups include them as standalone
-files.
+files. A [full replace restore](../backup-and-restore/#pick-a-strategy)
+deletes the group's drafts, and
+[deleting your account](../settings-and-account/) deletes the drafts you
+started; in both cases their files are kept as standalone files.
 
 If someone saves the same draft on another device after you opened it, saving
 yours does not overwrite theirs. The dialog says that the draft changed and
-offers **Load the newer version** or **Save as a new draft**.
+offers **Load the newer version** or **Save as a new draft**. A new draft gets
+the files saved with the old one too; the old draft keeps them as well.
+
+If the draft was finished or discarded on another device after you opened it,
+**Save draft** and **Add item** do not save to it, and the dialog says so.
+**Save as a new draft** keeps what you entered as a draft of its own. For a
+draft that became an item, **Open item** goes to that item instead and drops
+what you entered in the dialog. A finished draft does not come back in the
+**Drafts** card.
 
 A draft keeps the [seller](../sellers/) you picked. If someone deletes that
 seller before you finish, the **Seller** field says so, and the item is not
@@ -242,7 +254,7 @@ copy stays on this device only; to continue on another device, save a draft.
 
 - If a draft cannot be saved, for example while you are offline, the dialog
   says so and keeps your input on this device. Click **Retry** when you are
-  back online.
+  back online. A file that was already uploaded is not uploaded again.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
 

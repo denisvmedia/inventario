@@ -95,7 +95,7 @@ A file from the backup that your group no longer has and that is attached only t
 items in your trash goes to the trash with them, so restoring the item brings it
 back.
 
-**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. Drafts of new items stay, but the files saved with them are wiped too; the backup brings them back as standalone files, no longer attached to the draft.
+**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. [Drafts of new items](../items/#drafts-of-a-new-item) are deleted too, since a backup does not include them. The files saved with them are wiped as well; the backup brings them back as standalone files.
 
 ### Sellers
 

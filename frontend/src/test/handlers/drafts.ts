@@ -17,8 +17,12 @@ export interface FakeDraft {
   title: string
   values: Record<string, unknown>
   revision: number
-  status: "open" | "promoted"
+  // "discarding" is a draft whose discard has started: hidden from the list
+  // and GET, refused by every write.
+  status: "open" | "promoted" | "discarding"
   promoted_commodity_id?: string
+  // The key of the promotion that finished the draft.
+  promotion_key?: string
   updated_at: string
 }
 
@@ -47,6 +51,12 @@ export interface FakeDraftsBackend {
   // cannot read the name or size from the request; a test that needs them
   // queues them here. An upload with nothing queued gets a made-up name.
   nextUploads: { name: string; size: number; sha256?: string }[]
+  // When set, the next attaches fail with this status.
+  failAttach: number | null
+  // When set, the server applies the next request of that kind and the
+  // client never gets the answer (a network error), as on a dropped
+  // connection. Each flag is cleared once used.
+  loseResponse: { create?: boolean; put?: boolean; promote?: boolean }
   // Counts of create calls, including idempotent repeats.
   creates: number
   handlers: ReturnType<typeof http.get>[]
@@ -97,10 +107,22 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
     uploads: 0,
     failUploads: null,
     nextUploads: [],
+    failAttach: null,
+    loseResponse: {},
     creates: 0,
     handlers: [],
   }
   const find = (id: string) => state.drafts.find((d) => d.id === id)
+  const notFound = () => HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+  // lose applies the flag of kind once: the answer the server built is
+  // dropped on the way to the client.
+  const lose = (kind: keyof FakeDraftsBackend["loseResponse"], answer: Response) => {
+    if (!state.loseResponse[kind]) return answer
+    state.loseResponse[kind] = false
+    return HttpResponse.error()
+  }
+  const promoted = (d: FakeDraft) =>
+    coded(409, "draft.promoted", { commodity_id: d.promoted_commodity_id ?? "" })
 
   state.handlers = [
     http.get(apiUrl(`${base}/drafts`), ({ request }) => {
@@ -114,7 +136,7 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
     }),
     http.get(apiUrl(`${base}/drafts/:id`), ({ params }) => {
       const d = find(String(params.id))
-      if (!d) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+      if (!d || d.status === "discarding") return notFound()
       return one(state, d)
     }),
     http.post(apiUrl(`${base}/drafts`), async ({ request }) => {
@@ -124,7 +146,8 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       }
       const { client_key, values } = body.data.attributes
       const existing = state.drafts.find((d) => d.client_key === client_key)
-      if (existing) return one(state, existing)
+      if (existing?.status === "discarding") return coded(409, "draft.discarded")
+      if (existing) return lose("create", one(state, existing))
       const d: FakeDraft = {
         id: `draft-new-${++seq}`,
         client_key,
@@ -135,7 +158,7 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
         updated_at: now(),
       }
       state.drafts.push(d)
-      return one(state, d, 201)
+      return lose("create", one(state, d, 201))
     }),
     http.put(apiUrl(`${base}/drafts/:id`), async ({ params, request }) => {
       const d = find(String(params.id))
@@ -144,9 +167,8 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
         data: { attributes: { revision: number; values: Record<string, unknown> } }
       }
       const { revision, values } = body.data.attributes
-      if (d.status === "promoted") {
-        return coded(409, "draft.promoted", { commodity_id: d.promoted_commodity_id ?? "" })
-      }
+      if (d.status === "promoted") return promoted(d)
+      if (d.status === "discarding") return coded(409, "draft.discarded")
       if (revision !== d.revision) {
         return coded(409, "draft.revision_conflict", { revision: String(d.revision) })
       }
@@ -154,7 +176,7 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       d.title = titleOf(values)
       d.revision++
       d.updated_at = now()
-      return one(state, d)
+      return lose("put", one(state, d))
     }),
     http.delete(apiUrl(`${base}/drafts/:id`), ({ params }) => {
       const id = String(params.id)
@@ -169,10 +191,15 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       if (!d) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
       const body = (await request.json()) as {
         data: { attributes: Record<string, unknown> }
-        meta: { revision: number }
+        meta: { revision: number; promotion_key?: string }
       }
       state.promotions.push({ id: d.id, body })
+      const key = body.meta.promotion_key
+      if (!key) return HttpResponse.json({ errors: [{ status: "422" }] }, { status: 422 })
+      if (d.status === "discarding") return coded(409, "draft.discarded")
       if (d.status === "promoted") {
+        // Only the promotion that finished the draft gets the item back.
+        if (key !== d.promotion_key) return promoted(d)
         return HttpResponse.json({
           data: {
             id: d.promoted_commodity_id,
@@ -187,6 +214,7 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       const itemId = `item-from-${d.id}`
       d.status = "promoted"
       d.promoted_commodity_id = itemId
+      d.promotion_key = key
       for (const f of state.files) {
         for (const l of f.links) {
           if (l.entity_type === "draft" && l.entity_id === d.id) {
@@ -195,15 +223,18 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
           }
         }
       }
-      return HttpResponse.json(
-        {
-          data: {
-            id: itemId,
-            type: "commodities",
-            attributes: { ...body.data.attributes, id: itemId },
+      return lose(
+        "promote",
+        HttpResponse.json(
+          {
+            data: {
+              id: itemId,
+              type: "commodities",
+              attributes: { ...body.data.attributes, id: itemId },
+            },
           },
-        },
-        { status: 201 }
+          { status: 201 }
+        )
       )
     }),
     http.post(apiUrl(`${base}/uploads/file`), () => {
@@ -239,6 +270,20 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       const body = (await request.json()) as {
         data: { attributes: { entity_type: string; entity_id: string; meta?: string } }
       }
+      const { entity_type, entity_id } = body.data.attributes
+      if (entity_type === "draft") {
+        const d = find(entity_id)
+        if (!d) return HttpResponse.json({ errors: [{ status: "422" }] }, { status: 422 })
+        if (d.status === "promoted") return promoted(d)
+        if (d.status === "discarding") return coded(409, "draft.discarded")
+      }
+      if (state.failAttach) {
+        return HttpResponse.json({ errors: [{ status: "500" }] }, { status: state.failAttach })
+      }
+      const existing = f.links.find(
+        (l) => l.entity_type === entity_type && l.entity_id === entity_id
+      )
+      if (existing) return HttpResponse.json({ id: f.id, type: "files", attributes: f })
       f.links.push({ id: `link-${++seq}`, file_id: f.id, ...body.data.attributes })
       return HttpResponse.json({ id: f.id, type: "files", attributes: f }, { status: 201 })
     }),

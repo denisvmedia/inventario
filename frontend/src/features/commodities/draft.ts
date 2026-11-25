@@ -12,6 +12,7 @@
 // move. The dialog re-imports every symbol below.
 import { attachFile, uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
+import { HttpError } from "@/lib/http"
 import type { CommodityStatusValue, CommodityTypeValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
@@ -30,6 +31,9 @@ export interface PendingFile {
   id: string
   file: File
   tags: string[]
+  // The server file an earlier draft save uploaded for this entry (#2812),
+  // so a retry attaches it instead of uploading the bytes again.
+  uploadedFileId?: string
 }
 
 // newPendingId mints a stable id for a staged file row. Prefers
@@ -233,19 +237,32 @@ export async function uploadPendingFiles(
   commodityId: string,
   onError: (entry: PendingFile, err: unknown) => void
 ): Promise<void> {
+  const place = async (entry: PendingFile, fileId: string) => {
+    const category = categoryFromMime(entry.file.type)
+    if (entry.tags.length > 0) {
+      await updateFile(fileId, { tags: entry.tags })
+    }
+    await attachFile(fileId, {
+      entityType: "commodity",
+      entityId: commodityId,
+      // "other" names no bucket, so the file keeps its category.
+      meta: category === "other" ? undefined : category,
+    })
+  }
   const work = pending.map(async (entry) => {
     try {
-      const result = await uploadFile(entry.file)
-      const category = categoryFromMime(entry.file.type)
-      if (entry.tags.length > 0) {
-        await updateFile(result.file.id, { tags: entry.tags })
+      // A file a draft save already uploaded is attached as it is, unless
+      // it was deleted since.
+      if (entry.uploadedFileId) {
+        try {
+          await place(entry, entry.uploadedFileId)
+          return
+        } catch (err) {
+          if (!(err instanceof HttpError && err.status === 404)) throw err
+        }
       }
-      await attachFile(result.file.id, {
-        entityType: "commodity",
-        entityId: commodityId,
-        // "other" names no bucket, so the file keeps its category.
-        meta: category === "other" ? undefined : category,
-      })
+      const result = await uploadFile(entry.file)
+      await place(entry, result.file.id)
     } catch (err) {
       onError(entry, err)
     }

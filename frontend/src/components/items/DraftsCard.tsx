@@ -38,7 +38,8 @@ export function DraftsCard() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const role = useMyGroupRole()
-  const canWrite = role !== "viewer"
+  // Members who may edit content; nobody while the role is still loading.
+  const canWrite = role === "user" || role === "admin" || role === "owner"
   const [expanded, setExpanded] = useState(false)
   const drafts = useDrafts({ perPage: expanded ? MAX_PAGE : COLLAPSED_COUNT })
   const discard = useDiscardDraft()

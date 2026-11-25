@@ -11,6 +11,8 @@ import type { Commodity, CreateCommodityRequest } from "@/features/commodities/a
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import type { Schema } from "@/types"
 
+import { parseDraftValues } from "./values"
+
 type DraftView = Schema<"jsonapi.CommodityDraftView">
 type DraftEnvelope = Schema<"jsonapi.CommodityDraftResponse">
 type DraftsEnvelope = Schema<"jsonapi.CommodityDraftsResponse">
@@ -43,13 +45,41 @@ export interface DraftListOptions {
 
 export const DRAFT_REVISION_CONFLICT = "draft.revision_conflict"
 export const DRAFT_PROMOTED = "draft.promoted"
+export const DRAFT_DISCARDED = "draft.discarded"
+
+// DraftStateError is a draft refusal the client found itself rather than
+// read from an error response: a retried create that returns a draft
+// another device has saved or finished since. The helpers below treat it
+// like the server's coded 409.
+export class DraftStateError extends Error {
+  readonly code: string
+  readonly meta: Record<string, string>
+  constructor(code: string, meta: Record<string, string> = {}) {
+    super(code)
+    this.name = "DraftStateError"
+    this.code = code
+    this.meta = meta
+  }
+}
+
+function codeOf(err: unknown): string | null {
+  if (err instanceof DraftStateError) return err.code
+  return getServerErrorCode(err)
+}
+
+function metaOf(err: unknown): Record<string, string> | null {
+  if (err instanceof DraftStateError) return err.meta
+  return getServerErrorMeta(err)
+}
 
 function toDraft(id: string | undefined, view: DraftView | undefined): Draft {
   return {
     id: id ?? view?.id ?? "",
     clientKey: view?.client_key ?? "",
     title: view?.title ?? "",
-    values: (view?.values ?? {}) as DraftValues,
+    // Read leniently: a value the form cannot use falls back to the
+    // form's default instead of breaking the dialog.
+    values: parseDraftValues(view?.values),
     revision: view?.revision ?? 0,
     status: view?.status === "promoted" ? "promoted" : "open",
     promotedCommodityId: view?.promoted_commodity_id || undefined,
@@ -107,15 +137,18 @@ export async function discardDraft(id: string): Promise<void> {
 type CommodityEnvelope = Schema<"jsonapi.CommodityResponse">
 
 // promoteDraft creates the item from the finished form and moves the
-// draft's files to it. Repeating it returns the same item.
+// draft's files to it. promotionKey identifies this promotion: repeating it
+// with the same key returns the same item, while another key gets
+// DRAFT_PROMOTED, so a second device cannot land on the first one's item.
 export async function promoteDraft(
   id: string,
   revision: number,
+  promotionKey: string,
   values: CreateCommodityRequest
 ): Promise<Commodity & { id: string }> {
   const body = await http.post<CommodityEnvelope>(`/drafts/${encodeURIComponent(id)}/promote`, {
     data: { type: "commodities", attributes: values },
-    meta: { revision },
+    meta: { revision, promotion_key: promotionKey },
   })
   if (!body.data?.id || !body.data.attributes) {
     throw new Error(`Malformed POST /drafts/${id}/promote response: missing id or attributes`)
@@ -137,13 +170,20 @@ export async function listDraftFiles(id: string, signal?: AbortSignal): Promise<
 // isRevisionConflict reports a save refused because the draft changed
 // elsewhere, with the revision the server has now.
 export function revisionConflict(err: unknown): { revision: number } | null {
-  if (getServerErrorCode(err) !== DRAFT_REVISION_CONFLICT) return null
-  const raw = getServerErrorMeta(err)?.revision
+  if (codeOf(err) !== DRAFT_REVISION_CONFLICT) return null
+  const raw = metaOf(err)?.revision
   return { revision: raw === undefined ? 0 : Number(raw) }
 }
 
-// promotedConflict reports a draft that already became an item.
+// promotedConflict reports a draft that already became an item, with the
+// item when the server names it.
 export function promotedConflict(err: unknown): { commodityId?: string } | null {
-  if (getServerErrorCode(err) !== DRAFT_PROMOTED) return null
-  return { commodityId: getServerErrorMeta(err)?.commodity_id || undefined }
+  if (codeOf(err) !== DRAFT_PROMOTED) return null
+  return { commodityId: metaOf(err)?.commodity_id || undefined }
+}
+
+// discardedConflict reports a draft that is being or has been discarded
+// elsewhere.
+export function discardedConflict(err: unknown): boolean {
+  return codeOf(err) === DRAFT_DISCARDED
 }

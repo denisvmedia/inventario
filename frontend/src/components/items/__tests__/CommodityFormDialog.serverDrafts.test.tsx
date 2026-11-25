@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import { Route } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { Route, useLocation } from "react-router-dom"
+import { fireEvent, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
@@ -26,6 +26,11 @@ const groups: Schema<"models.LocationGroup">[] = [
 const areas = [{ id: "a1", name: "Garage", location_id: "l1" }]
 const locations = [{ id: "l1", name: "Home" }]
 
+function Probe() {
+  const loc = useLocation()
+  return <div data-testid="loc">{loc.pathname}</div>
+}
+
 function renderForm(
   props: {
     resumeDraftId?: string
@@ -39,25 +44,28 @@ function renderForm(
   renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/new`,
     routes: (
-      <Route
-        path="/g/:groupSlug/commodities/new"
-        element={
-          <GroupProvider>
-            <CommodityFormDialog
-              open
-              onOpenChange={onOpenChange}
-              mode="create"
-              areas={areas}
-              locations={locations}
-              defaultCurrency="USD"
-              onSubmit={onSubmit as never}
-              draftKey={DRAFT_KEY}
-              serverDrafts
-              resumeDraftId={props.resumeDraftId}
-            />
-          </GroupProvider>
-        }
-      />
+      <>
+        <Route
+          path="/g/:groupSlug/commodities/new"
+          element={
+            <GroupProvider>
+              <CommodityFormDialog
+                open
+                onOpenChange={onOpenChange}
+                mode="create"
+                areas={areas}
+                locations={locations}
+                defaultCurrency="USD"
+                onSubmit={onSubmit as never}
+                draftKey={DRAFT_KEY}
+                serverDrafts
+                resumeDraftId={props.resumeDraftId}
+              />
+            </GroupProvider>
+          }
+        />
+        <Route path="/g/:groupSlug/commodities/:id" element={<Probe />} />
+      </>
     ),
   })
   return { onSubmit, onOpenChange }
@@ -66,6 +74,31 @@ function renderForm(
 async function fillManually(user: ReturnType<typeof userEvent.setup>) {
   await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
   return screen.findByLabelText(/^Name$/i)
+}
+
+// openResumed opens draft id in the form and waits until its name shows.
+async function openResumed(id: string, name: string, props: Parameters<typeof renderForm>[0] = {}) {
+  const rendered = renderForm({ ...props, resumeDraftId: id })
+  const input = await screen.findByLabelText(/^Name$/i)
+  await waitFor(() => expect(input).toHaveValue(name))
+  return { ...rendered, input }
+}
+
+async function walkToFiles(user: ReturnType<typeof userEvent.setup>) {
+  for (const step of ["purchase", "warranty", "tags", "files"]) {
+    await user.click(screen.getByTestId("commodity-form-next"))
+    if (step === "purchase") await screen.findByLabelText(/Purchase date/i)
+    if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
+    if (step === "tags") await screen.findByTestId("commodity-tags-input")
+    if (step === "files") await screen.findByTestId("commodity-form-files-step")
+  }
+}
+
+// promoteRefusal is the 409 the server answers a promotion with.
+function refusal(code: string, meta: Record<string, string> = {}) {
+  return new HttpError("refused", 409, `/g/${SLUG}/drafts/d1/promote`, {
+    errors: [{ status: "409", code, meta }],
+  })
 }
 
 beforeEach(() => {
@@ -139,7 +172,12 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Couch", type: "furniture", draft: false })
-    expect(draft).toEqual({ id: "d1", revision: 3 })
+    // The promotion names its key, kept for a retry until it succeeds.
+    expect(draft).toEqual({
+      id: "d1",
+      revision: 3,
+      promotionKey: expect.stringMatching(/^promote:/),
+    })
   })
 
   it("shows a seller deleted while the draft was open on the Seller field", async () => {
@@ -188,7 +226,7 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Drill", seller_id: "s-gone" })
-    expect(draft).toEqual({ id: "d1", revision: 2 })
+    expect(draft).toMatchObject({ id: "d1", revision: 2 })
     // The form goes back to Purchase, where the field still says why.
     expect(await screen.findByTestId("commodity-seller-gone")).toBeInTheDocument()
   })
@@ -243,5 +281,201 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await user.click(screen.getByTestId("draft-save-retry"))
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
     expect(fake.drafts.map((d) => d.values.name)).toEqual(["Kettle"])
+  })
+
+  it("finishes a save whose response was lost instead of reporting a conflict", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange, input } = await openResumed("d1", "Lamp")
+    await user.type(input, " shade")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    // The server stores the save; the answer never arrives.
+    fake.loseResponse.put = true
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    await screen.findByTestId("draft-save-error")
+    expect(fake.drafts[0].revision).toBe(2)
+    // The retry is based on revision 1, which the server has moved past
+    // with these same values: the save is done, not a conflict.
+    await user.click(screen.getByTestId("draft-save-retry"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(screen.queryByTestId("draft-save-conflict")).not.toBeInTheDocument()
+    expect(fake.drafts[0]).toMatchObject({ revision: 2, values: { name: "Lamp shade" } })
+  })
+
+  it("offers the item when the draft was finished elsewhere, and keeps the input as a new draft", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange, input } = await openResumed("d1", "Lamp")
+    // Another device finishes the draft.
+    fake.drafts[0].status = "promoted"
+    fake.drafts[0].promoted_commodity_id = "item-7"
+    await user.type(input, " shade")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    const alert = await screen.findByTestId("draft-save-promoted")
+    expect(alert).toHaveTextContent("This draft is already an item")
+    expect(screen.queryByTestId("draft-save-retry")).not.toBeInTheDocument()
+    expect(screen.getByTestId("draft-promoted-open-item")).toBeInTheDocument()
+    await user.click(screen.getByTestId("draft-conflict-save-new"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(2)
+    expect(fake.drafts[1]).toMatchObject({ status: "open", values: { name: "Lamp shade" } })
+  })
+
+  it("sends the same promotion key when Add item is clicked again", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        revision: 1,
+        values: { name: "Lamp", short_name: "Lamp", type: "furniture" },
+      },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValueOnce(new HttpError("unavailable", 503, `/g/${SLUG}/drafts/d1/promote`, {}))
+      .mockResolvedValueOnce({ id: "item-from-d1" })
+    await openResumed("d1", "Lamp", { onSubmit })
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await user.click(await screen.findByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(2))
+    const keys = (onSubmit as ReturnType<typeof vi.fn>).mock.calls.map(
+      ([, draft]) => (draft as { promotionKey: string }).promotionKey
+    )
+    expect(keys[0]).toMatch(/^promote:/)
+    expect(keys[1]).toBe(keys[0])
+  })
+
+  it("opens the item a draft became elsewhere", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp", type: "furniture" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(refusal("draft.promoted", { commodity_id: "item-7" }))
+    const { onOpenChange } = await openResumed("d1", "Lamp", { onSubmit })
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-promoted")
+    await user.click(screen.getByTestId("draft-promoted-open-item"))
+    expect(onOpenChange).toHaveBeenCalledWith(false)
+    expect(await screen.findByTestId("loc")).toHaveTextContent(`/g/${SLUG}/commodities/item-7`)
+  })
+
+  it("keeps the input as a new draft when the draft was discarded elsewhere", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { input } = await openResumed("d1", "Lamp")
+    fake.drafts[0].status = "discarding"
+    await user.type(input, " shade")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    expect(await screen.findByTestId("draft-save-discarded")).toHaveTextContent(/discarded/i)
+    await user.click(screen.getByTestId("draft-conflict-save-new"))
+    await waitFor(() => expect(fake.drafts).toHaveLength(2))
+    expect(fake.drafts[1].values).toMatchObject({ name: "Lamp shade" })
+  })
+
+  it("links the files saved with the old draft to the new one", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
+    ])
+    fake.files.push({
+      id: "file-photo",
+      path: "lamp",
+      ext: ".jpg",
+      size_bytes: 10,
+      category: "images",
+      tags: [],
+      links: [
+        {
+          id: "link-1",
+          file_id: "file-photo",
+          entity_type: "draft",
+          entity_id: "d1",
+          meta: "images",
+        },
+      ],
+    })
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange, input } = await openResumed("d1", "Lamp")
+    fake.drafts[0].revision = 2
+    await user.type(input, " (mine)")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    await screen.findByTestId("draft-save-conflict")
+    await user.click(screen.getByTestId("draft-conflict-save-new"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    const created = fake.drafts[1]
+    expect(created.values).toMatchObject({ name: "Lamp (mine)" })
+    expect(fake.files[0].links.map((l) => l.entity_id)).toEqual(["d1", created.id])
+  })
+
+  it("opens a draft whose values the form cannot use", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Lamp", short_name: null, count: 2, tags: "x" } },
+    ])
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    await openResumed("d1", "Lamp")
+    expect(screen.getByLabelText(/^Short name$/i)).toHaveValue("")
+  })
+
+  it("runs one save when Enter and Save draft come together", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(await fillManually(user), "Kettle")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await walkToFiles(user)
+    const fileInput = screen
+      .getByTestId("commodity-files-dropzone")
+      .querySelector("input[type=file]") as HTMLInputElement
+    fireEvent.keyDown(fileInput, { key: "Enter" })
+    fireEvent.keyDown(fileInput, { key: "Enter" })
+    fireEvent.click(screen.getByTestId("commodity-form-save-draft"))
+    await waitFor(() => expect(fake.drafts).toHaveLength(1))
+    await waitFor(() => expect(screen.queryByTestId("draft-save-error")).not.toBeInTheDocument())
+    expect(fake.creates).toBe(1)
+  })
+
+  it("attaches a file uploaded by a failed save on retry, without uploading it again", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { onOpenChange } = renderForm()
+    await user.type(await fillManually(user), "Kettle")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await walkToFiles(user)
+    const fileInput = screen
+      .getByTestId("commodity-files-dropzone")
+      .querySelector("input[type=file]") as HTMLInputElement
+    await user.upload(fileInput, new File(["png"], "kettle.png", { type: "image/png" }))
+    fake.failAttach = 500
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    expect(await screen.findByTestId("draft-save-error")).toHaveTextContent("kettle.png")
+    expect(fake.uploads).toBe(1)
+    fake.failAttach = null
+    await user.click(screen.getByTestId("draft-save-retry"))
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.uploads).toBe(1)
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: fake.drafts[0].id }),
+    ])
   })
 })

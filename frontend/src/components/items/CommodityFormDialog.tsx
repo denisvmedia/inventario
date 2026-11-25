@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
+import { useNavigate } from "react-router-dom"
 import { Controller, useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import {
@@ -92,7 +93,14 @@ import {
 import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { DraftSaveAlert, type DraftSaveState } from "@/components/items/DraftSaveAlert"
 import { suggestShortName } from "@/features/commodities/shortName"
-import { getDraft, revisionConflict, type DraftValues } from "@/features/drafts/api"
+import {
+  discardedConflict,
+  DraftStateError,
+  getDraft,
+  promotedConflict,
+  revisionConflict,
+  type DraftValues,
+} from "@/features/drafts/api"
 import {
   useDraft,
   useDraftFiles,
@@ -102,6 +110,8 @@ import {
 import {
   clearDraftSession,
   clientKeyFor,
+  forgetBaseRevision,
+  promotionKeyFor,
   readBaseRevision,
   replaceClientKey,
   sameDraftValues,
@@ -387,6 +397,14 @@ export function CommodityFormDialog({
   // Whether the short name was typed by the user (or set by the AI scan);
   // until then it follows the name (#2812).
   const shortNameEdited = useRef(false)
+  // A server save in flight. Every path into saveToServer (the buttons,
+  // Enter on the last step, the close confirm) checks it, so one save runs
+  // at a time even before the disabled buttons render.
+  const savingRef = useRef(false)
+  // The draft whose saved files a "save as a new draft" links to the new
+  // one, kept until a save has linked them all.
+  const carryFromRef = useRef<string | null>(null)
+  const navigate = useNavigate()
 
   const defaults = useMemo<CommodityFormInput>(
     () => buildDefaults(initialValues, defaultCurrency, defaultDraft),
@@ -669,30 +687,58 @@ export function CommodityFormDialog({
   // (#2812). It resolves true once the draft holds everything; otherwise
   // the form shows why, and the input stays here and in local recovery.
   async function saveToServer(opts: { asNew?: boolean } = {}): Promise<boolean> {
-    if (!localKey) return false
+    if (!localKey || savingRef.current) return false
+    savingRef.current = true
     setDraftSave({ kind: "saving" })
     setServerError(null)
     const values = getValues() as DraftValues
     writeDraft(localKey, values)
-    const clientKey = opts.asNew ? replaceClientKey(localKey) : clientKeyFor(localKey)
+    let target = serverDraft
+    let clientKey: string
+    if (opts.asNew) {
+      // A new draft of its own: a new client key and no base revision. After
+      // a conflict the old draft still exists, and its saved files are
+      // linked to the new one too. A draft that became an item keeps its
+      // files with the item; a discarded draft's files go to Trash.
+      carryFromRef.current = draftSave.kind === "conflict" && serverDraft ? serverDraft.id : null
+      target = null
+      setServerDraft(null)
+      forgetBaseRevision(localKey)
+      clientKey = replaceClientKey(localKey)
+    } else {
+      clientKey = clientKeyFor(localKey)
+    }
     try {
       const result = await saveDraftWithFiles({
-        draft: opts.asNew ? null : serverDraft,
+        draft: target,
         clientKey,
+        lastSavedRevision: readBaseRevision(localKey) ?? 1,
         values,
         pendingFiles,
+        carryFilesFrom: carryFromRef.current,
+        onFileUploaded: (entry, fileId) =>
+          setPendingFiles((prev) =>
+            prev.map((pending) =>
+              pending.id === entry.id ? { ...pending, uploadedFileId: fileId } : pending
+            )
+          ),
         onFileSaved: (entry) =>
           setPendingFiles((prev) => prev.filter((pending) => pending.id !== entry.id)),
       })
       setServerDraft({ id: result.draft.id, revision: result.draft.revision })
       writeBaseRevision(localKey, result.draft.revision)
       void invalidateDrafts()
-      if (result.failedFiles.length > 0) {
-        const first = result.failedFiles[0].error
+      if (result.failedCarried.length === 0) carryFromRef.current = null
+      const failedNames = [
+        ...result.failedCarried,
+        ...result.failedFiles.map((f) => f.entry.file.name),
+      ]
+      if (failedNames.length > 0) {
+        const first = result.failedFiles[0]?.error
         setDraftSave({
           kind: "error",
           message: classifyServerError(first, t("commodities:drafts.saveFailed")).message,
-          failedFiles: result.failedFiles.map((f) => f.entry.file.name),
+          failedFiles: failedNames,
         })
         return false
       }
@@ -705,17 +751,56 @@ export function CommodityFormDialog({
       toast.success(t("commodities:drafts.saved"))
       return true
     } catch (err) {
-      if (revisionConflict(err)) {
-        setDraftSave({ kind: "conflict" })
-        return false
-      }
-      setDraftSave({
-        kind: "error",
-        message: classifyServerError(err, t("commodities:drafts.saveFailed")).message,
-        failedFiles: [],
-      })
+      showDraftRefusal(err, t("commodities:drafts.saveFailed"))
       return false
+    } finally {
+      savingRef.current = false
     }
+  }
+
+  // showDraftRefusal puts a failed save or promotion of the draft in the
+  // draft alert: a conflict with another device's save, a draft finished or
+  // discarded elsewhere, or any other failure with Retry.
+  function showDraftRefusal(err: unknown, fallback: string) {
+    if (revisionConflict(err)) {
+      // A retried create can find a draft another device saved since; the
+      // form then works on that draft, so "Load the newer version" can load
+      // it.
+      const foundId = err instanceof DraftStateError ? err.meta.draft_id : undefined
+      if (foundId && localKey) {
+        setServerDraft({ id: foundId, revision: readBaseRevision(localKey) ?? 1 })
+      }
+      setDraftSave({ kind: "conflict" })
+      return
+    }
+    const promoted = promotedConflict(err)
+    if (promoted) {
+      setDraftSave({ kind: "promoted", commodityId: promoted.commodityId })
+      return
+    }
+    if (discardedConflict(err)) {
+      setDraftSave({ kind: "discarded" })
+      return
+    }
+    setDraftSave({
+      kind: "error",
+      message: classifyServerError(err, fallback).message,
+      failedFiles: [],
+    })
+  }
+
+  // openPromotedItem leaves the form for the item the draft became on
+  // another device. What this form held is dropped from this device; Save
+  // as a new draft is the way to keep it.
+  function openPromotedItem(commodityId: string) {
+    if (localKey) {
+      clearDraft(localKey)
+      void clearPendingFiles(localKey)
+      clearDraftSession(localKey)
+    }
+    onOpenChange(false)
+    const slug = activeSlug ?? ""
+    navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(commodityId)}`)
   }
 
   async function saveDraftAndClose(opts: { asNew?: boolean } = {}) {
@@ -770,7 +855,13 @@ export function CommodityFormDialog({
   const submit = async (values: CommodityFormInput) => {
     setServerError(null)
     try {
-      const created = await onSubmit(toRequest(values, defaultCurrency), serverDraft ?? undefined)
+      // A promotion carries the slot's promotion key, the same for every
+      // attempt until one succeeds.
+      const draftRef =
+        serverDraft && localKey
+          ? { ...serverDraft, promotionKey: promotionKeyFor(localKey) }
+          : (serverDraft ?? undefined)
+      const created = await onSubmit(toRequest(values, defaultCurrency), draftRef)
       // Anonymous flow (#1988): the wrapper's onSubmit has just stashed
       // the draft + the pending-first-item marker and is about to redirect
       // to login. We must NOT clear the draft, NOT upload files (there is
@@ -817,8 +908,11 @@ export function CommodityFormDialog({
       // The draft was saved elsewhere after this form loaded it: the
       // draft alert offers to load that version or keep this one as a
       // new draft, as for a save.
-      if (serverDraft && revisionConflict(err)) {
-        setDraftSave({ kind: "conflict" })
+      if (
+        serverDraft &&
+        (revisionConflict(err) || promotedConflict(err) || discardedConflict(err))
+      ) {
+        showDraftRefusal(err, t("commodities:form.serverError"))
         return
       }
       // Map BE field-level validation errors back onto RHF fields
@@ -1289,6 +1383,7 @@ export function CommodityFormDialog({
             onRetry={() => void saveDraftAndClose()}
             onLoadNewer={() => void loadNewerDraft()}
             onSaveAsNew={() => void saveDraftAndClose({ asNew: true })}
+            onOpenItem={openPromotedItem}
           />
 
           <ServerErrorBanner
