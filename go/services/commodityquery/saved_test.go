@@ -2,6 +2,7 @@ package commodityquery_test
 
 import (
 	"errors"
+	"slices"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -84,6 +85,27 @@ func TestSavedParams_AreFilterParams(t *testing.T) {
 	filters := commodityquery.FilterParams()
 	for _, p := range commodityquery.SavedParams() {
 		c.Assert(filters, qt.Contains, p)
+	}
+}
+
+// Every filter the list understands is either kept by a saved view or left
+// out on purpose. A new filter fails here until someone decides which: added
+// to savedParams (and to the saved view code of the frontend, which maps the
+// API name to the page URL and names the condition), or listed below with the
+// reason.
+func TestFilterParams_AreSavedOrLeftOutOnPurpose(t *testing.T) {
+	c := qt.New(t)
+	leftOut := map[string]string{
+		commodityquery.ParamWarrantyExpiresBefore: "an absolute date; a view uses warranty_status, computed on every run",
+		commodityquery.ParamTrashed:               "Trash is its own page, not a list a view opens",
+	}
+	saved := commodityquery.SavedParams()
+	for _, p := range commodityquery.FilterParams() {
+		_, out := leftOut[p]
+		c.Check(slices.Contains(saved, p) || out, qt.IsTrue,
+			qt.Commentf("filter parameter %q is neither saved nor left out on purpose", p))
+		c.Check(slices.Contains(saved, p) && out, qt.IsFalse,
+			qt.Commentf("filter parameter %q is both saved and left out", p))
 	}
 }
 
