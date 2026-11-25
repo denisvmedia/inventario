@@ -70,6 +70,9 @@ func adminPing(w http.ResponseWriter, r *http.Request) {
 // next use.
 type AdminParams struct {
 	FactorySet *registry.FactorySet
+	// APITokenService revokes a user's personal API tokens when the user is
+	// blocked or their sessions are revoked (#2808). Nil skips that step.
+	APITokenService *services.APITokenService
 	// BackofficeUserRegistry backs the RequireBackofficeAuth middleware
 	// that gates every cross-tenant admin route (issue #1785, Phase 3).
 	// Held separately from the tenant FactorySet entry so the
@@ -183,6 +186,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		blacklist:    params.Blacklist,
 		auditService: params.AuditService,
+		apiTokens:    params.APITokenService,
 	}
 	groupsAPI := &adminGroupsAPI{
 		factorySet:   params.FactorySet,

@@ -400,11 +400,22 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Personal API tokens go before the second factor does: one minted with a
+	// stolen session must not survive the recovery step, and a failure here
+	// leaves MFA on rather than reporting it off with the tokens still live.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "mfa_disable"); err != nil {
+		errMsg := "failed to revoke API tokens"
+		api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, false, r, &errMsg)
+		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
+		return
+	}
+
 	if err := api.mfaRegistry.DeleteByUser(r.Context(), user.TenantID, user.ID); err != nil {
 		slog.Error("MFA disable: delete row failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to disable MFA", http.StatusInternalServerError)
 		return
 	}
+	sweepAPITokens(r, api.apiTokens, api.auditService, user.ID, user.TenantID, "mfa_disable")
 
 	// Invalidate every existing session for the user — same shape as
 	// change-password (auth.go::handleChangePassword). The threat
@@ -426,7 +437,6 @@ func (api *AuthAPI) handleMFADisable(w http.ResponseWriter, r *http.Request) {
 			slog.Error("MFA disable: failed to blacklist user tokens", "user_id", user.ID, "error", blErr)
 		}
 	}
-
 	api.logAuth(r.Context(), "mfa_disable", &user.ID, &user.TenantID, true, r, nil)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "MFA disabled"})
 }
@@ -687,14 +697,32 @@ func (api *AuthAPI) issueMFALoginSession(w http.ResponseWriter, r *http.Request,
 // remaining-codes slice. Returns true iff one of the codes verified.
 //
 // The *http.Request is threaded through so failed attempts keep IP +
-// User-Agent in the audit log (#1645 review). Backup-code consumption
-// goes through ConsumeBackupCodeAtomic — a row-level lock around the
-// "find matching hash → rewrite slice" sequence so two concurrent
-// requests racing on the same code can never both succeed.
+// User-Agent in the audit log (#1645 review). The verification itself is
+// consumeMFACode, shared with the API token step-up.
 func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *models.UserMFASecret, totpCode, backupCode, action string) bool {
-	ctx := r.Context()
+	if consumeMFACode(r.Context(), api.mfaService, api.mfaRegistry, user, row, totpCode, backupCode) {
+		return true
+	}
+	errMsg := "invalid mfa code"
+	api.logAuth(r.Context(), action, &user.ID, &user.TenantID, false, r, &errMsg)
+	return false
+}
+
+// consumeMFACode tries the TOTP code first, then the backup code, and reports
+// whether one of them verified and was consumed. Backup-code consumption goes
+// through ConsumeBackupCodeAtomic — a row-level lock around the "find matching
+// hash → rewrite slice" sequence so two concurrent requests racing on the same
+// code can never both succeed. It writes no audit row; callers do.
+func consumeMFACode(
+	ctx context.Context,
+	mfaService *services.MFAService,
+	mfaRegistry registry.UserMFASecretRegistry,
+	user *models.User,
+	row *models.UserMFASecret,
+	totpCode, backupCode string,
+) bool {
 	if totpCode != "" {
-		consumed, abort := api.consumeTOTPCode(ctx, user, row, totpCode)
+		consumed, abort := consumeTOTPCode(ctx, mfaService, mfaRegistry, user, row, totpCode)
 		if abort {
 			return false
 		}
@@ -702,14 +730,14 @@ func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *m
 			return true
 		}
 		// A non-consumed TOTP — a wrong code, or a replayed code that lost
-		// the CAS — falls through to the backup-code path and the shared
-		// invalid-code audit/return below, so a replay is logged and
+		// the CAS — falls through to the backup-code path and the caller's
+		// shared invalid-code audit/return, so a replay is logged and
 		// rejected identically to a wrong code.
 	}
 	if backupCode != "" {
-		matcher := api.mfaService.MatchBackupCode(backupCode)
+		matcher := mfaService.MatchBackupCode(backupCode)
 		if matcher != nil {
-			ok, err := api.mfaRegistry.ConsumeBackupCodeAtomic(
+			ok, err := mfaRegistry.ConsumeBackupCodeAtomic(
 				ctx, user.TenantID, user.ID, time.Now(), matcher,
 			)
 			if err != nil {
@@ -721,8 +749,6 @@ func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *m
 			}
 		}
 	}
-	errMsg := "invalid mfa code"
-	api.logAuth(ctx, action, &user.ID, &user.TenantID, false, r, &errMsg)
 	return false
 }
 
@@ -735,8 +761,15 @@ func (api *AuthAPI) consumeAnyMFACode(r *http.Request, user *models.User, row *m
 // consumed=false. abort is true on an already-logged infrastructure
 // failure, signalling the caller to reject the request. The CAS also
 // stamps last_used_at, so no separate bump is needed.
-func (api *AuthAPI) consumeTOTPCode(ctx context.Context, user *models.User, row *models.UserMFASecret, totpCode string) (consumed, abort bool) {
-	matchedStep, ok, err := api.mfaService.VerifyTOTPStep(*row, totpCode)
+func consumeTOTPCode(
+	ctx context.Context,
+	mfaService *services.MFAService,
+	mfaRegistry registry.UserMFASecretRegistry,
+	user *models.User,
+	row *models.UserMFASecret,
+	totpCode string,
+) (consumed, abort bool) {
+	matchedStep, ok, err := mfaService.VerifyTOTPStep(*row, totpCode)
 	if err != nil {
 		slog.Error("MFA verify path: totp check failed", "user_id", user.ID, "error", err)
 		return false, true
@@ -744,7 +777,7 @@ func (api *AuthAPI) consumeTOTPCode(ctx context.Context, user *models.User, row 
 	if !ok {
 		return false, false
 	}
-	won, casErr := api.mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.TenantID, user.ID, matchedStep, time.Now())
+	won, casErr := mfaRegistry.MarkTOTPStepUsedAtomic(ctx, user.TenantID, user.ID, matchedStep, time.Now())
 	if casErr != nil {
 		slog.Error("MFA verify path: totp step CAS failed", "user_id", user.ID, "error", casErr)
 		return false, true

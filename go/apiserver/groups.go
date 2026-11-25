@@ -10,6 +10,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -101,6 +102,16 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 				return
 			}
 
+			// A personal API token restricted to one group reaches that group
+			// only (#2808). Checked before membership so the answer does not
+			// depend on whether the owner happens to be a member of the other
+			// group. The membership and role checks below still run for the
+			// token's own group on every request.
+			if !apiTokenAllowsGroup(r, group.ID) {
+				renderAPITokenGroupNotAllowed(w, r)
+				return
+			}
+
 			isMember, err := groupService.CheckGroupMembership(r.Context(), group.ID, user.ID)
 			if err != nil {
 				slog.Error("GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
@@ -150,6 +161,13 @@ func groupCtx(groupService *services.GroupService) func(http.Handler) http.Handl
 
 			if group.TenantID != user.TenantID {
 				renderEntityError(w, r, registry.ErrNotFound)
+				return
+			}
+
+			// Same group restriction as GroupSlugResolverMiddleware, for the
+			// /groups/{groupID} subtree.
+			if !apiTokenAllowsGroup(r, group.ID) {
+				renderAPITokenGroupNotAllowed(w, r)
 				return
 			}
 
@@ -300,6 +318,8 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 	}
 	return func(r chi.Router) {
+		r.Use(apiTokenAllowlist(groupsAPITokenRoutes()))
+
 		r.Get("/", api.listGroups)
 		r.Post("/", api.createGroup)
 
@@ -342,6 +362,21 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 	}
 }
 
+// groupsAPITokenRoutes lists the /groups routes a personal API token may use:
+// the group list, one group, its members and a member's photo, all GET. The
+// rest of /groups refuses tokens, the admin subtree in particular, because it
+// returns invite links that any account in the tenant can redeem. The
+// handlers here are never called; only the patterns are matched.
+func groupsAPITokenRoutes() chi.Routes {
+	allowed := chi.NewRouter()
+	never := func(http.ResponseWriter, *http.Request) {}
+	allowed.Get("/", never)
+	allowed.Get("/{groupID}", never)
+	allowed.Get("/{groupID}/members", never)
+	allowed.Get("/{groupID}/members/{memberUserID}/avatar", never)
+	return allowed
+}
+
 // Invites returns the route handler for invite info and acceptance.
 // GET /{token} is public (the invitee is typically unauthenticated at first);
 // POST /{token}/accept requires authentication and is wrapped with the caller's
@@ -378,6 +413,10 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 		internalServerError(w, r, err)
 		return
 	}
+	// A personal API token restricted to one group lists that group only.
+	groups = slices.DeleteFunc(groups, func(g *models.LocationGroup) bool {
+		return !apiTokenAllowsGroup(r, g.ID)
+	})
 
 	// Populate LocationGroup.MembersCount with one aggregate round-trip
 	// so the sidebar GroupSelector and any other client can render

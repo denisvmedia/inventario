@@ -28,9 +28,11 @@ slow way:
 - **Most data is group-scoped.** Items, locations, areas and files live under
   `/api/v1/g/{groupSlug}/…`. A request to the unscoped path will not find
   them.
-- **Authentication is a bearer token** from `POST /api/v1/auth/login`, and
-  **mutating requests also need a CSRF token** returned by the same call, sent
-  as `X-CSRF-Token`. A 403 on a POST that looks correct is usually this.
+- **The web app authenticates with a session**: a bearer token from
+  `POST /api/v1/auth/login`, and **mutating requests also need a CSRF token**
+  returned by the same call, sent as `X-CSRF-Token`. A 403 on a POST that
+  looks correct is usually this. A script should not do this; give it a
+  [personal API token](../api-tokens/) instead.
 - **File downloads use short-lived signed URLs** rather than the bearer token,
   so a link you captured will stop working. Ask for a fresh one.
 

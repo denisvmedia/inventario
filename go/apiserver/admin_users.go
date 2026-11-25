@@ -146,6 +146,7 @@ type adminUsersAPI struct {
 	factorySet   *registry.FactorySet
 	blacklist    services.TokenBlacklister
 	auditService services.AuditLogger
+	apiTokens    *services.APITokenService
 }
 
 // listTenantUsers returns a paginated, filtered, sorted listing of
@@ -425,7 +426,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 		// fires for peer-admin re-blocks. Runs above the
 		// admin-without-force guard so re-blocking an already-blocked
 		// peer admin is a 200 no-op rather than a surprising 422.
-		cascadeErrMsg := api.revokeLiveSessions(r, target.ID)
+		cascadeErrMsg := api.revokeLiveSessions(r, target)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, false)
 		api.writeUserEnvelope(w, r, http.StatusOK, target)
 		return
@@ -471,7 +472,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// invariant; the cascade failures get logged for operator
 	// awareness and the audit row records ErrMsg if either step
 	// blipped.
-	cascadeErrMsg := api.revokeLiveSessions(r, target.ID)
+	cascadeErrMsg := api.revokeLiveSessions(r, target)
 	api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, cascadeErrMsg == "", cascadeErrMsg, forced)
 	// Reuse the targetIsAdmin lookup the --force guard already did
 	// instead of doing a second SystemAdminGrantRegistry.Exists call
@@ -646,7 +647,8 @@ func decoderAtEOF(dec *json.Decoder) bool {
 // step blipped; both steps run regardless of the other's outcome so a
 // transient refresh-token failure doesn't keep stale access tokens
 // alive.
-func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, userID string) string {
+func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.User) string {
+	userID := target.ID
 	var msgs []string
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {
@@ -675,6 +677,13 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, userID string) str
 			slog.Warn("admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "blacklist_user_tokens: "+err.Error())
 		}
+	}
+	// Personal API tokens (#2808) are live sessions too, and the longest-lived
+	// ones: a blocked user's script must stop with the user. They go after the
+	// blacklist stamp: a token being minted reads that stamp after its insert
+	// (createAPIToken), so a mint this revocation misses sees the stamp.
+	if err := revokeAllAPITokens(r, api.apiTokens, api.auditService, userID, target.TenantID, "admin_revoke_sessions"); err != nil {
+		msgs = append(msgs, "revoke_api_tokens: "+err.Error())
 	}
 	return strings.Join(msgs, "; ")
 }

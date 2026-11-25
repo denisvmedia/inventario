@@ -30,6 +30,10 @@ type AuthEvent struct {
 	Success  bool
 	Request  *http.Request
 	ErrMsg   *string
+	// EntityType / EntityID name the object the event is about, when there
+	// is one (e.g. "api_token" and the token id). Optional.
+	EntityType *string
+	EntityID   *string
 }
 
 // AdminEvent carries the fields LogAdmin persists into an audit row.
@@ -126,9 +130,12 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 		Action:         ev.Action,
 		UserID:         ev.UserID,
 		TenantID:       ev.TenantID,
+		EntityType:     ev.EntityType,
+		EntityID:       ev.EntityID,
 		Success:        ev.Success,
 		ErrorMessage:   ev.ErrMsg,
 		ImpersonatedBy: impersonatorFromContext(ctx),
+		APITokenID:     apiTokenIDFromContext(ctx),
 	}
 
 	if ev.Request != nil {
@@ -172,6 +179,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 		Success:        ev.Success,
 		ErrorMessage:   ev.ErrMsg,
 		ImpersonatedBy: impersonatorFromContext(ctx),
+		APITokenID:     apiTokenIDFromContext(ctx),
 	}
 
 	if ev.Request != nil {
@@ -314,6 +322,19 @@ func prefixUpToRuneCount(s string, n int) string {
 // Returns nil for the common case where no impersonation is active.
 func ImpersonatorIDFromContext(ctx context.Context) *string {
 	return impersonatorFromContext(ctx)
+}
+
+// apiTokenIDFromContext returns the id of the personal API token that
+// authenticated the request, or nil for any other caller. Every audit row
+// written while serving a token request carries it, so "the user did this"
+// and "the user's script did this" stay distinguishable without each call site
+// knowing how the request was authenticated.
+func apiTokenIDFromContext(ctx context.Context) *string {
+	token := appctx.APITokenFromContext(ctx)
+	if token == nil || token.ID == "" {
+		return nil
+	}
+	return new(token.ID)
 }
 
 // impersonatorFromContext returns the operator id stored in the
