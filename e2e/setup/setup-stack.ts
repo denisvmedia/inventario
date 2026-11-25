@@ -194,6 +194,14 @@ export async function startBackend(): Promise<void> {
         // flow can exercise the happy path.
         INVENTARIO_RUN_SUPPORT_EMAIL:
           process.env.INVENTARIO_RUN_SUPPORT_EMAIL ?? "support@e2e.test",
+        // The deterministic mock AI provider, as in docker-compose.e2e.yaml:
+        // batch intake (#2810) scans on the server, so its spec needs a
+        // provider the browser cannot stand in for. No key, no spend, no
+        // hourly limit.
+        INVENTARIO_RUN_AI_VISION_PROVIDER:
+          process.env.INVENTARIO_RUN_AI_VISION_PROVIDER ?? "mock",
+        INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR:
+          process.env.INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR ?? "0",
         // Opt the seed into the system-admin fixture (sysadmin@test-org.com)
         // so the admin-section e2e suite (#1758) can authenticate as a
         // platform admin. OFF by default in the binary — the /api/v1/seed
