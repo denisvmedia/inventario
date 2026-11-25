@@ -67,10 +67,18 @@ A couple of things to know:
   export or back up anything you want to keep first. A couple of cases are
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
-  and if you still own items shared inside a group someone else owns, those need
-  to be removed first. Item reminders you set in a shared group are deleted
-  with your account, since they only ever emailed you. Once deletion succeeds
-  you're signed out immediately.
+  and if you created anything inside a group someone else owns (items, files,
+  places, exports, tags or sellers), it needs to be removed first. This
+  includes a tag or a seller you added there, even when other members use it on
+  their own items. [Item types](../item-types/) you added to a shared group
+  stay with the group and pass to its owner, so they don't block deletion.
+  Item reminders you set in a shared group are deleted with your account,
+  since they only ever emailed you. So are the
+  [drafts of new items](../items/#drafts-of-a-new-item) you started there. A
+  file saved with one of those drafts counts like any other file: one you
+  uploaded needs to be removed first, and one another member uploaded stays in
+  the group as a standalone file. Once deletion succeeds you're signed out
+  immediately.
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).

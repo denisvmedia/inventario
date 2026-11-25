@@ -41,8 +41,9 @@ import {
 } from "@/lib/server-error"
 import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
-import { COMMODITY_TYPES, type CommodityTypeValue } from "@/features/commodities/constants"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { BRAND_MAX_LEN, MODEL_MAX_LEN } from "@/features/commodities/schemas"
+import { SELLER_NAME_MAX } from "@/features/sellers/api"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
   ScanFieldGuess,
@@ -113,7 +114,11 @@ export interface ScanAcceptedValues {
   short_name?: string
   brand?: string
   model?: string
-  type?: CommodityTypeValue
+  // The seller's name. The dialog picks the group's seller of that name, or
+  // offers to create one.
+  seller?: string
+  // The slug of one of the group's item types.
+  type?: string
   original_price?: string
   original_price_currency?: string
   serial_number?: string
@@ -172,6 +177,7 @@ export function AiScanStep({
   anonymous = false,
 }: AiScanStepProps) {
   const { t } = useTranslation()
+  const itemTypes = useItemTypeLookup()
   const [photos, setPhotos] = useState<StagedPhoto[]>([])
   const [stagingError, setStagingError] = useState<string | null>(null)
   const [result, setResult] = useState<ScanResult | null>(null)
@@ -296,10 +302,17 @@ export function AiScanStep({
     const ac = new AbortController()
     abortRef.current = ac
     try {
-      const r = await scan.mutateAsync({
+      const scanned = await scan.mutateAsync({
         photos: photos.map((p) => p.file),
         signal: ac.signal,
       })
+      // Sellers belong to a group, and the anonymous flow has none to put
+      // the seller in, so the seller goes into the comments there.
+      const r = anonymous
+        ? sellerIntoComments(scanned, (name) =>
+            t("commodities:form.step.ai.sellerComment", { name })
+          )
+        : scanned
       // Nothing usable came back (an unreadable document, or a model
       // truncation). Don't drop the user into a green-but-empty "review" —
       // keep them on the offer with a retry hint.
@@ -387,8 +400,13 @@ export function AiScanStep({
             out.model = value.trim().slice(0, MODEL_MAX_LEN)
           }
           break
+        case "seller":
+          if (typeof value === "string" && value.trim() !== "") {
+            out.seller = value.trim().replace(/\s+/g, " ").slice(0, SELLER_NAME_MAX)
+          }
+          break
         case "type":
-          if (typeof value === "string" && isKnownType(value)) {
+          if (typeof value === "string" && itemTypes.has(value)) {
             out.type = value
           }
           break
@@ -813,6 +831,8 @@ interface ChoosePanelProps {
 // single item goes straight to review).
 function ChoosePanel({ items, onChoose, onSkip }: ChoosePanelProps) {
   const { t } = useTranslation()
+  const itemTypes = useItemTypeLookup()
+  const typeLabel = (slug: string) => itemTypes.get(slug)?.label ?? slug
   return (
     <div className="flex flex-col gap-3" data-testid="commodity-form-ai-choose">
       <div className="flex items-center gap-2 rounded-lg border border-primary/20 bg-primary/5 px-3 py-2.5">
@@ -824,7 +844,7 @@ function ChoosePanel({ items, onChoose, onSkip }: ChoosePanelProps) {
       </p>
       <div className="flex flex-col gap-2">
         {items.map((item, i) => {
-          const summary = chooseItemSummary(item)
+          const summary = chooseItemSummary(item, typeLabel)
           return (
             <button
               key={i}
@@ -869,10 +889,10 @@ function chooseItemTitle(item: ScanItem): string | null {
 
 // chooseItemSummary builds a one-line "type · price · serial" summary so
 // the user can tell similar candidates apart. Empty when nothing useful.
-function chooseItemSummary(item: ScanItem): string {
+function chooseItemSummary(item: ScanItem, typeLabel: (slug: string) => string): string {
   const parts: string[] = []
   const type = item.fields.type?.value
-  if (typeof type === "string" && type.trim() !== "") parts.push(type)
+  if (typeof type === "string" && type.trim() !== "") parts.push(typeLabel(type))
   const price = item.fields.original_price?.value
   if (typeof price === "number" && Number.isFinite(price)) {
     const currency = item.fields.original_price_currency?.value
@@ -938,6 +958,7 @@ function ReviewPanel({
     "type",
     "serial_number",
     "purchase_date",
+    "seller",
     "warranty_expires_at",
     "original_price",
     "original_price_currency",
@@ -1060,6 +1081,7 @@ function ReviewRow({
   currencyUnknown,
 }: ReviewRowProps) {
   const { t } = useTranslation()
+  const itemTypes = useItemTypeLookup()
   const confidence = guess.confidence
   const confidenceBand: "high" | "medium" | "low" =
     confidence >= 0.75 ? "high" : confidence >= 0.5 ? "medium" : "low"
@@ -1099,7 +1121,7 @@ function ReviewRow({
             className="mt-1 truncate text-sm font-medium"
             data-testid={`commodity-form-ai-row-${fieldKey}-value`}
           >
-            {formatGuessValue(fieldKey, guess.value)}
+            {formatGuessValue(fieldKey, guess.value, (slug) => itemTypes.get(slug)?.label ?? slug)}
           </p>
           {currencyUnknown ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1142,6 +1164,8 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "brand"
     case "model":
       return "model"
+    case "seller":
+      return "seller"
     case "type":
       return "type"
     case "serial_number":
@@ -1163,9 +1187,14 @@ function fieldLabelKey(field: ScanFieldName): string {
   }
 }
 
-function formatGuessValue(field: ScanFieldName, value: unknown): string {
+function formatGuessValue(
+  field: ScanFieldName,
+  value: unknown,
+  typeLabel: (slug: string) => string
+): string {
   if (value === null || value === undefined) return "—"
   if (Array.isArray(value)) return value.join(", ")
+  if (field === "type" && typeof value === "string") return typeLabel(value)
   if (field === "original_price_currency" && typeof value === "string") {
     const meta = currencyMeta(value)
     return `${meta.code} — ${meta.name}`
@@ -1231,8 +1260,34 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
   }
 }
 
-function isKnownType(value: string): value is CommodityTypeValue {
-  return (COMMODITY_TYPES as readonly string[]).includes(value)
+// sellerIntoComments moves the scanned seller into the comments, as a line of
+// its own after any comment the scan read. The merged comment keeps the more
+// confident of the two guesses, so a confident seller is not left unchecked
+// behind a weak comment, or the other way round.
+function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => string): ScanResult {
+  const fold = (fields: ScanResultFields): ScanResultFields => {
+    const { seller, ...rest } = fields
+    const name = seller?.value.trim() ?? ""
+    if (!seller || !name) return rest
+    const line = sellerLine(name)
+    const comments = rest.comments
+    const text = comments?.value.trim() ?? ""
+    return {
+      ...rest,
+      comments:
+        comments && text
+          ? {
+              value: `${text}\n${line}`,
+              confidence: Math.max(comments.confidence, seller.confidence),
+            }
+          : { value: line, confidence: seller.confidence },
+    }
+  }
+  return {
+    ...result,
+    fields: fold(result.fields),
+    items: result.items.map((item) => ({ ...item, fields: fold(item.fields) })),
+  }
 }
 
 // defaultAcceptedFor pre-checks every field the model is reasonably sure

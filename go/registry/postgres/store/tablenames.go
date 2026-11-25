@@ -35,13 +35,18 @@ type TableNames struct {
 	CommodityLoans           func() TableName
 	CommodityServices        func() TableName
 	CommoditySupplyLinks     func() TableName
+	SavedViews               func() TableName
+	SavedViewPlacements      func() TableName
 	WarrantyReminders        func() TableName
 	StorageQuotaReminders    func() TableName
 	WeeklyDigestSends        func() TableName
 	MaintenanceSchedules     func() TableName
 	MaintenanceReminders     func() TableName
 	CommodityReminders       func() TableName
+	Sellers                  func() TableName
+	ItemTypes                func() TableName
 	CommodityReminderSends   func() TableName
+	CommodityDrafts          func() TableName
 	CurrencyMigrations       func() TableName
 	CurrencyMigrationAudit   func() TableName
 	CommodityScanAudits      func() TableName
@@ -86,13 +91,18 @@ var DefaultTableNames = TableNames{
 	CommodityLoans:           func() TableName { return "commodity_loans" },
 	CommodityServices:        func() TableName { return "commodity_services" },
 	CommoditySupplyLinks:     func() TableName { return "commodity_supply_links" },
+	SavedViews:               func() TableName { return "saved_views" },
+	SavedViewPlacements:      func() TableName { return "saved_view_placements" },
 	WarrantyReminders:        func() TableName { return "warranty_reminders" },
 	StorageQuotaReminders:    func() TableName { return "storage_quota_reminders" },
 	WeeklyDigestSends:        func() TableName { return "weekly_digest_sends" },
 	MaintenanceSchedules:     func() TableName { return "maintenance_schedules" },
 	MaintenanceReminders:     func() TableName { return "maintenance_reminders" },
 	CommodityReminders:       func() TableName { return "commodity_reminders" },
+	Sellers:                  func() TableName { return "sellers" },
+	ItemTypes:                func() TableName { return "item_types" },
 	CommodityReminderSends:   func() TableName { return "commodity_reminder_sends" },
+	CommodityDrafts:          func() TableName { return "commodity_drafts" },
 	CurrencyMigrations:       func() TableName { return "currency_migrations" },
 	CurrencyMigrationAudit:   func() TableName { return "currency_migration_audit_rows" },
 	CommodityScanAudits:      func() TableName { return "commodity_scan_audits" },

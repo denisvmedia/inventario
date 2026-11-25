@@ -126,7 +126,6 @@ describe("<CommodityFormDialog />", () => {
     })
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
-    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
     // Save as a draft: this test is about step navigation, not about
     // the rules a reviewed item has to meet.
@@ -174,7 +173,6 @@ describe("<CommodityFormDialog />", () => {
     // Walk to extras step by filling required basics + skipping purchase.
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Stand")
-    await user.type(screen.getByLabelText(/^Short name$/i), "Stand")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
@@ -210,7 +208,6 @@ describe("<CommodityFormDialog />", () => {
     })
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "X")
-    await user.type(screen.getByLabelText(/^Short name$/i), "X")
     await pickSelect(user, /^Type$/i, /^Other$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
@@ -689,7 +686,6 @@ describe("<CommodityFormDialog />", () => {
     // schema's whenNotDraft block off so Continue stays unblocked).
     await walkPastAi(user)
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
-    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickSelect(user, /^Type$/i, /^Furniture$/i)
     await user.click(screen.getByLabelText(/Save as draft/i))
     // Step through Basics → Purchase → Warranty → Extras → Files.

@@ -3,7 +3,7 @@ title: Groups and sharing
 description: Keep separate inventories in groups, set each one's currency, and invite people with the right role.
 ---
 
-Inventario organises everything you track into **groups**. A group is a complete, self-contained inventory — its own [locations and areas](../locations-and-areas/), [items](../items/), [files](../files-and-photos/), [tags](../tags/), and [backups](../backup-and-restore/). You can belong to several groups at once (your home, a holiday flat, a small business), switch between them whenever you like, and invite other people into any group with a role that decides what they can do.
+Inventario organises everything you track into **groups**. A group is a complete, self-contained inventory — its own [locations and areas](../locations-and-areas/), [items](../items/), [files](../files-and-photos/), [tags](../tags/), [sellers](../sellers/), [item types](../item-types/), and [backups](../backup-and-restore/). You can belong to several groups at once (your home, a holiday flat, a small business), switch between them whenever you like, and invite other people into any group with a role that decides what they can do.
 
 ![The Members page showing the member list, role permissions card, and member stats](../../assets/screenshots/members.png)
 
@@ -72,6 +72,8 @@ Each member of a group has one **role** that controls what they can do. The **Me
 | **Viewer** | Can view all items, but cannot make any changes. |
 
 A group can have more than one owner. The **Members** page also shows quick stats at the top: total **Members**, **Admins & Owners**, and **Pending invites**.
+
+Every member, viewers included, can keep personal [saved views](../items/#saved-views) of the item list. Sharing a view with the group takes the **User** role or higher, and administrators and owners can change or delete any shared view. A shared view shares the filter only: each member sees the items their own access allows. Sharing does not put the view in anyone's sidebar or on their Dashboard; each member decides that for themselves.
 
 :::note
 If you're a User or Viewer, you can see the member list but you won't see the invite, role-change, or remove controls — those are limited to admins and owners.

@@ -59,6 +59,7 @@
     "invalid_tag_kind": "druh musí být jeden z: commodity, file",
     "invalid_type": "neplatný typ",
     "invalid_warranty_threshold": "neplatný práh připomínky záruky",
+    "item_type_unknown": "Tento typ ve skupině není.",
     "quantity_forbids_warranty": "záruku nelze sledovat u položek s množstvím větším než 1",
     "quantity_forbids_warranty_notes": "poznámky k záruce nelze nastavit u položek s množstvím větším než 1",
     "sale_price_required_for_sold": "prodejní cena je povinná při označení jako prodáno",

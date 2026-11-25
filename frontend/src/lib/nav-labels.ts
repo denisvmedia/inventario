@@ -17,6 +17,8 @@ export function useNavLabel(labelKey: string): string {
   switch (labelKey) {
     case "common:nav.dashboard":
       return t("common:nav.dashboard")
+    case "common:nav.inbox":
+      return t("common:nav.inbox")
     case "common:nav.locations":
       return t("common:nav.locations")
     case "common:nav.items":
@@ -33,6 +35,10 @@ export function useNavLabel(labelKey: string): string {
       return t("common:nav.inService")
     case "common:nav.tags":
       return t("common:nav.tags")
+    case "common:nav.sellers":
+      return t("common:nav.sellers")
+    case "common:nav.itemTypes":
+      return t("common:nav.itemTypes")
     case "common:nav.files":
       return t("common:nav.files")
     case "common:nav.members":

@@ -17,6 +17,8 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  savedViewHandlers,
+  sellerHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
@@ -89,7 +91,9 @@ beforeEach(() => {
   // would otherwise issue an unhandled request the moment the group
   // context resolves. Tests that care about the value override this with
   // their own `server.use(settingsStub({...}))` later in the case.
-  server.use(settingsStub())
+  server.use(settingsStub(), ...sellerHandlers.list(SLUG, []))
+  // The toolbar's saved views control lists the group's views.
+  server.use(...savedViewHandlers.none(SLUG))
 })
 
 describe("<CommoditiesListPage />", () => {
@@ -473,8 +477,8 @@ describe("<CommoditiesListPage />", () => {
     renderList()
     await screen.findByTestId("commodity-card")
     await user.click(screen.getByTestId("commodities-filter-type"))
-    // Furniture is one of the static type options rendered with its
-    // Lucide icon from COMMODITY_TYPE_ICONS (#1392).
+    // Furniture is one of the group's item types (the built-in ones the
+    // default MSW handler serves), listed with its icon.
     await user.click(await screen.findByRole("menuitemcheckbox", { name: /Furniture/i }))
     // After toggling, the badge counter on the trigger flips to 1.
     await waitFor(() => {
@@ -624,9 +628,8 @@ describe("<CommoditiesListPage />", () => {
 
   it("submits a new item via the create dialog and clears the form", async () => {
     // Replays the regression that motivated #1629: walk past the
-    // initial AI placeholder step, fill Basics (Name + Short name +
-    // Type), skip Save-as-draft so the schema's
-    // whenNotDraft fields stay optional, walk Purchase → Warranty →
+    // initial AI placeholder step, fill Basics (Name and Type; the
+    // short name follows the name), walk Purchase → Warranty →
     // Extras → Files, then submit. After 201 the dialog closes and
     // the page navigates to /commodities/:newId.
     const user = userEvent.setup()
@@ -693,11 +696,7 @@ describe("<CommoditiesListPage />", () => {
     // is the canonical "skip the scanner" affordance.
     await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
-    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
-    // Save-as-draft so purchase_date + price triad stay optional —
-    // the test asserts the navigation contract, not the schema.
-    await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     // Walk Purchase → Warranty → Extras → Files.
     await screen.findByLabelText(/Purchase date/i)
@@ -725,7 +724,7 @@ describe("<CommoditiesListPage />", () => {
           short_name: "Couch",
           type: "furniture",
           status: "in_use",
-          draft: true,
+          draft: false,
         },
       },
     })
@@ -1057,6 +1056,42 @@ describe("<CommoditiesListPage />", () => {
       expect(last.get("lent_out")).toBe("true")
       expect(last.get("tags")).toBe("garage,red")
     })
+  })
+
+  it("filters by seller from the Seller menu and sends every picked seller (#2804)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...sellerHandlers.list(SLUG, [
+        { id: "s1", name: "Hardware Store", item_count: 1 },
+        { id: "s2", name: "Corner Market", item_count: 0 },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?seller=s1&seller=gone`)
+    await screen.findByTestId("commodity-card")
+    await waitFor(() =>
+      expect(new URLSearchParams(queries[0]).getAll("seller_id")).toEqual(["gone", "s1"])
+    )
+
+    await user.click(screen.getByTestId("commodities-filter-seller"))
+    const menu = await screen.findByRole("menu")
+    expect(within(menu).getByRole("menuitemcheckbox", { name: "Hardware Store" })).toBeChecked()
+    // A deleted seller's id stays listed, so the filter can be cleared.
+    expect(within(menu).getByRole("menuitemcheckbox", { name: "Deleted seller" })).toBeChecked()
+    await user.click(within(menu).getByRole("menuitemcheckbox", { name: "Corner Market" }))
+    await waitFor(() =>
+      expect(new URLSearchParams(queries[queries.length - 1]).getAll("seller_id")).toEqual([
+        "gone",
+        "s1",
+        "s2",
+      ])
+    )
   })
 
   it("links each tag on a card to the list filtered by that tag", async () => {

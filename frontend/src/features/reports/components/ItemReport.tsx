@@ -1,24 +1,35 @@
-import { Calendar, DollarSign, Hash, MapPin, Package, Tag, type LucideIcon } from "lucide-react"
+import {
+  Calendar,
+  DollarSign,
+  Hash,
+  MapPin,
+  Package,
+  Store,
+  Tag,
+  type LucideIcon,
+} from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { brandedName } from "@/features/commodities/brand"
-import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { warrantyStatus } from "@/features/commodities/constants"
 import { commodityValue, formatPrice } from "@/features/commodities/price"
 import type { ListedFile } from "@/features/files/api"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
+import { UnavailableNote } from "./UnavailableNote"
 import { filesToPhotos } from "../photos"
 import { reportSubtitle } from "../subtitle"
 
 // ItemReport is the single-item insurance report body (#1370). Mirrors
 // the design mock's ItemReport, adapted to real fields: the title is the
 // brand and the name, the subtitle the model (the short name for an item
-// without one), category → `type` enum, currency via the group / purchase
+// without one), category → the item type, currency via the group / purchase
 // currencies, warranty via the canonical WARRANTY_STATUS_CONFIG.
 interface ItemReportProps {
   commodity: Commodity
@@ -28,6 +39,9 @@ interface ItemReportProps {
   imageSize: PhotoSize
   // "{Location} · {Area}" breadcrumb for the item's area.
   areaLabel: string
+  // The seller the item was bought from, "" for none, null when the sellers
+  // could not be loaded (the cell stays empty with a note).
+  sellerName?: string | null
   // Group currency: the estimated value is in it.
   groupCurrency: string
   // Purchase currency — `original_price` lives here.
@@ -40,13 +54,15 @@ export function ItemReport({
   imageFiles,
   imageSize,
   areaLabel,
+  sellerName = "",
   groupCurrency,
   purchaseCurrency,
   generatedDate,
 }: ItemReportProps) {
   const { t } = useTranslation()
   const noValue = t("reports:insurance.noValue")
-  const type = commodity.type as CommodityTypeValue | undefined
+  const itemTypes = useItemTypeLookup()
+  const typeLabel = itemTypes.get(commodity.type)?.label
   const status = warrantyStatus({ warranty_expires_at: commodity.warranty_expires_at })
   const wConfig = WARRANTY_STATUS_CONFIG[status]
   const WarrantyIcon = wConfig.icon
@@ -68,11 +84,11 @@ export function ItemReport({
     formatCurrency
   )
 
-  const details: { icon: LucideIcon; label: string; value: string }[] = [
+  const details: { icon: LucideIcon; label: string; value: string; note?: string }[] = [
     {
       icon: Tag,
       label: t("reports:insurance.fields.type"),
-      value: type ? t(`commodities:type.${type}`) : noValue,
+      value: typeLabel || noValue,
     },
     {
       icon: Hash,
@@ -86,6 +102,18 @@ export function ItemReport({
         ? formatDate(commodity.purchase_date, { style: "long" })
         : noValue,
     },
+    sellerName === null
+      ? {
+          icon: Store,
+          label: t("reports:insurance.fields.seller"),
+          value: "",
+          note: t("reports:insurance.sellerUnavailable"),
+        }
+      : {
+          icon: Store,
+          label: t("reports:insurance.fields.seller"),
+          value: sellerName || noValue,
+        },
     {
       icon: MapPin,
       label: t("reports:insurance.fields.location"),
@@ -155,14 +183,15 @@ export function ItemReport({
           {t("reports:insurance.sections.itemDetails")}
         </h2>
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-          {details.map(({ icon: Icon, label, value }) => (
+          {details.map(({ icon: Icon, label, value, note }) => (
             <div key={label} className="flex items-start gap-3">
               <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-0.5 text-sm font-medium">{value}</p>
+                {value ? <p className="mt-0.5 text-sm font-medium">{value}</p> : null}
+                {note ? <UnavailableNote text={note} /> : null}
               </div>
             </div>
           ))}

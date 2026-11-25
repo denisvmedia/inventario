@@ -38,6 +38,7 @@ type filesAuthzEnv struct {
 	// otherGroup belongs to the SAME tenant as the owner but a different
 	// user, so a request for it passes the tenant boundary and has to be
 	// stopped by membership alone.
+	otherGroup     *models.LocationGroup
 	otherGroupSlug string
 	otherGroupTok  string
 }
@@ -83,6 +84,7 @@ func newFilesAuthzEnv(c *qt.C) *filesAuthzEnv {
 		ownerFileID:    file.ID,
 		strangerTok:    createTestJWTToken(stranger.ID),
 		strangerSlug:   strangerGroup.Slug,
+		otherGroup:     neighbourGroup,
 		otherGroupSlug: neighbourGroup.Slug,
 		otherGroupTok:  createTestJWTToken(neighbour.ID),
 	}

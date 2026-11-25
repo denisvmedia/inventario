@@ -28,8 +28,10 @@
     "groupManage": "Skupina",
     "groupPersonal": "Osobní",
     "groupReports": "Sestavy",
+    "groupSavedViews": "Uložené pohledy",
     "inService": "V provozu",
     "items": "Všechny položky",
+    "itemTypes": "Typy položek",
     "lent": "Zapůjčeno",
     "locations": "Umístění",
     "maintenance": "Údržba",
@@ -43,7 +45,9 @@
     "trash": "Koš",
     "upcoming": "Nadcházející",
     "warranties": "Záruky",
-    "help": "Nápověda"
+    "help": "Nápověda",
+    "sellers": "Prodejci",
+    "inbox": "Schránka"
   },
   "onboarding": {
     "ariaLabel": "Prohlídka produktu",

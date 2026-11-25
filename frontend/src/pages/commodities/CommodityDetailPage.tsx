@@ -24,6 +24,7 @@ import {
   Pencil,
   Printer,
   QrCode,
+  Store,
   Tag,
   Trash2,
   TriangleAlert,
@@ -88,7 +89,6 @@ import {
   TERMINAL_COMMODITY_STATUSES,
   warrantyStatus,
   type CommodityStatusValue,
-  type CommodityTypeValue,
   type CommodityWarrantyStatus,
   type TerminalCommodityStatusValue,
 } from "@/features/commodities/constants"
@@ -118,13 +118,19 @@ import type { Commodity } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import {
   commodityHref,
   commoditiesListSource,
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
-import { commodityListHref, commodityTagHref } from "@/features/commodities/query"
+import {
+  commodityListHref,
+  commoditySellerHref,
+  commodityTagHref,
+} from "@/features/commodities/query"
+import { useSellers } from "@/features/sellers/hooks"
 import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -239,6 +245,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const detail = useCommodity(id, { enabled })
   const areas = useAreas({ enabled })
   const locations = useLocations({ enabled })
+  const itemTypes = useItemTypeLookup()
   const update = useUpdateCommodity(id)
   const remove = useDeleteCommodity()
   const undoDelete = useUndoItemDelete()
@@ -472,7 +479,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 
   const status = commodity.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-  const type = commodity.type as CommodityTypeValue | undefined
+  const type = commodity.type
+  const typeLabel = itemTypes.get(type)?.label ?? ""
   // Per the BE, `original_price` is denominated in the purchase
   // currency (`original_price_currency`); `converted_original_price`
   // and `current_price` are denominated in the group currency.
@@ -772,6 +780,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 <CommodityThumb
                   cover={commodity.cover}
                   type={type}
+                  icon={itemTypes.get(type)?.Icon}
                   name={commodity.name}
                   size={isSheet && commodity.cover ? 96 : 48}
                   testId="commodity-detail-thumb"
@@ -813,10 +822,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                         className="hover:text-foreground hover:underline"
                         data-testid="commodity-detail-type-link"
                       >
-                        {t(`commodities:type.${type}`)}
+                        {typeLabel}
                       </Link>
                     ) : (
-                      t(`commodities:type.${type}`)
+                      typeLabel
                     )}
                   </p>
                 ) : null}
@@ -1431,7 +1440,11 @@ function DetailsTab({
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
   const tagIndex = useTagIndex("commodity")
+  const sellers = useSellers()
   const noValue = t("commodities:detail.noValue")
+  const seller = commodity.seller_id
+    ? sellers.data?.find((s) => s.id === commodity.seller_id)
+    : undefined
   const areaText = (isSheetVariant: boolean) => (isSheetVariant ? areaLabel : areaName) || noValue
   // Tags, the area and the type link to the items list filtered by them
   // alone, inactive items included.
@@ -1489,6 +1502,29 @@ function DetailsTab({
       value: commodity.purchase_date
         ? formatDate(commodity.purchase_date as string, { style: "short" })
         : noValue,
+    },
+    {
+      icon: Store,
+      label: t("commodities:detail.fields.seller"),
+      testId: "commodity-detail-seller",
+      // The seller links to the items list of everything bought from it.
+      value: seller ? (
+        groupSlug ? (
+          <Link
+            to={commoditySellerHref(groupSlug, seller.id)}
+            className="hover:underline"
+            data-testid="commodity-detail-seller-link"
+          >
+            {seller.name}
+          </Link>
+        ) : (
+          seller.name
+        )
+      ) : commodity.seller_id && sellers.isLoading ? (
+        "…"
+      ) : (
+        noValue
+      ),
     },
     {
       icon: DollarSign,

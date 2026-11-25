@@ -65,7 +65,8 @@ export function BulkActionBar({
         ) : null}
         <span>{label}</span>
       </div>
-      <div className="flex items-center gap-2">{children}</div>
+      {/* Wraps on a phone, where the actions do not fit one row. */}
+      <div className="flex flex-wrap items-center gap-2">{children}</div>
     </div>
   )
 }

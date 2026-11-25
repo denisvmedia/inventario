@@ -57,6 +57,14 @@ export default defineConfig({
       //   match by the field the BE reports (registry.CommoditySearchField),
       //   via `t(\`commodities:searchMatch.field.${match.field}\`)`. (#2800)
       "commodities:searchMatch.field.*",
+      // commodities:savedViews.icons.* — SaveViewDialog names each icon of
+      //   the picker via `t(\`commodities:savedViews.icons.${name}\`)` over
+      //   SAVED_VIEW_ICON_NAMES (models.ValidSavedViewIcons on the BE).
+      "commodities:savedViews.icons.*",
+      // The name rules of SaveViewDialog hand their message keys to
+      //   FieldError, which translates them; the extractor sees no t() call.
+      "commodities:savedViews.dialog.nameRequired",
+      "commodities:savedViews.dialog.nameTooLong",
       "common:nav.*",
       // errors:validation.* — backend field-validation messages keyed by the
       //   BE's stable validation code, resolved via
@@ -96,6 +104,10 @@ export default defineConfig({
       //   are plain strings surfaced through <FieldError>. Same pattern as
       //   auth:validation.*. (#2805)
       "reminders:validation.*",
+      // sellers:validation.* — zod messages in features/sellers/schemas.ts and
+      //   the name-taken message SellerFormDialog sets on a 409, surfaced
+      //   through <FieldError>. Same pattern as auth:validation.*. (#2804)
+      "sellers:validation.*",
       // settings:notifications.{groups,rows,errors}.* — NotificationsSection
       //   builds keys from a NOTIFICATION_GROUPS registry (group ids:
       //   reminders/updates/channels; row ids: warrantyExpiry,
@@ -261,6 +273,13 @@ export default defineConfig({
       "tags:stats.*",
       "tags:color.*",
       "tags:validation.*",
+      // itemTypes:validation.* — zod messages in features/itemTypes/schemas.ts
+      //   and the required / taken messages ItemTypeFormDialog sets, surfaced
+      //   through <FieldError>. Same pattern as auth:validation.*. (#2802)
+      // itemTypes:icons.* — ItemTypeIconPicker labels each icon via
+      //   `t(\`itemTypes:icons.${key}\`)` over ITEM_TYPE_ICON_KEYS.
+      "itemTypes:validation.*",
+      "itemTypes:icons.*",
       "tags:list.usageItems*",
       "tags:list.usageFiles*",
       "tags:usage.items*",

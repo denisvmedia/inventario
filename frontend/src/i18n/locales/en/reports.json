@@ -22,6 +22,7 @@
     "fields": {
       "location": "Location",
       "purchaseDate": "Purchase Date",
+      "seller": "Seller",
       "serialNumber": "Serial Number",
       "type": "Type"
     },
@@ -50,6 +51,7 @@
     },
     "selectItem": "Select item…",
     "selectLocation": "Select location…",
+    "sellerUnavailable": "Could not load the seller.",
     "title": "Insurance Report",
     "warranty": {
       "expires": "expires {{date}}",

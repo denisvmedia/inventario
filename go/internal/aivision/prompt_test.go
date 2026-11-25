@@ -14,7 +14,7 @@ import (
 // the multiple_items warning code.
 func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	c := qt.New(t)
-	schema := aivision.ResponseSchema()
+	schema := aivision.ResponseSchema(aivision.ScanRequest{})
 
 	props := schema["properties"].(map[string]any)
 
@@ -43,9 +43,11 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	// "short_name" carries the 40-char cap that mirrors the form limit.
 	c.Assert(fieldValue(aivision.FieldNameShortName)["maxLength"], qt.Equals, 40)
 
-	// "brand" and "model" carry the 100-char caps of the item's fields.
+	// "brand" and "model" carry the 100-char caps of the item's fields,
+	// "seller" the cap of a seller's name.
 	c.Assert(fieldValue(aivision.FieldNameBrand)["maxLength"], qt.Equals, 100)
 	c.Assert(fieldValue(aivision.FieldNameModel)["maxLength"], qt.Equals, 100)
+	c.Assert(fieldValue(aivision.FieldNameSeller)["maxLength"], qt.Equals, 100)
 
 	// "warranty_expires_at" and "tags" are part of the extracted set.
 	_, hasWarranty := fields[aivision.FieldNameWarrantyExpiresAt]
@@ -121,4 +123,29 @@ func TestToScanResult_FlatItems(t *testing.T) {
 	c.Assert(res.Fields["name"].Value, qt.Equals, "Pampers")
 	c.Assert(res.Items[0].Fields["original_price"].Value, qt.Equals, float64(434))
 	c.Assert(res.Items[1].Fields["name"].Value, qt.Equals, "Calculator")
+}
+
+// The schema enum and the prompt follow the group's item types, so a custom
+// type can be guessed by meaning and its slug stays the stored value.
+func TestResponseSchemaAndPrompt_UseTheGroupsItemTypes(t *testing.T) {
+	c := qt.New(t)
+	req := aivision.ScanRequest{ItemTypes: []aivision.ItemTypeOption{
+		{Slug: "electronics", Name: "Electronics"},
+		{Slug: "vehicle", Name: "Vehicle"},
+		{Slug: "автомобиль", Name: "Автомобиль"},
+	}}
+
+	schema := aivision.ResponseSchema(req)
+	fields := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	typeEnum := fields[aivision.FieldNameType].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)["enum"].([]string)
+	c.Assert(typeEnum, qt.DeepEquals, []string{"electronics", "vehicle", "автомобиль"})
+
+	header := aivision.UserPromptHeader(req)
+	c.Check(header, qt.Contains, "- vehicle (Vehicle)\n")
+	c.Check(header, qt.Contains, "- автомобиль (Автомобиль)\n")
+	c.Check(header, qt.Not(qt.Contains), "white_goods")
+
+	// Without types the built-in ones apply.
+	builtin := aivision.UserPromptHeader(aivision.ScanRequest{})
+	c.Check(builtin, qt.Contains, "- white_goods (Appliance)\n")
 }

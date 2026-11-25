@@ -97,8 +97,20 @@ place. From here you can:
 Selecting a file opens its **details** panel on the right. The list keeps its
 search, filters, and page behind the panel, so closing the panel puts you back
 where you were. Tick the checkboxes on the cards (or the list rows) to select
-several at once — a bar appears letting you **Move to…** a different category
-or **Delete selected**.
+several at once — a bar appears letting you **Move to…** a different category,
+change their **Tags…**, or **Delete selected**.
+
+**Tags…** opens two tag lists: under **Add tags**, pick tags or type a new one
+to put on every selected file; under **Remove tags**, pick tags to take off.
+Tags you pick in neither list stay on each file as they are. Files whose tags
+could not be changed stay selected, so you can open **Tags…** again to retry
+just those. When no file changed, a message says why: the files already had the
+tags you added, or none of them had the tags you removed.
+
+Files are sent in batches of 100. If a batch gets no answer, or fails on the
+server, the message says how many files may have changed; they stay selected,
+so check them before you send the change again. This holds for the first
+batch too, and for 100 files or fewer, which go in one batch.
 
 ## Categories and filters
 
@@ -193,9 +205,13 @@ any tags, and what the file is linked to. Tag chips are clickable — they take 
 to the Files page filtered to that tag.
 
 **Linked to** lists every item, location, and area the file is attached to. Each
-name opens that page. The **×** next to a name removes that attachment and
-nothing else: the file stays attached everywhere else, and once nothing is left
-it stays on the Files page as **Not attached to anything** until you delete it.
+name opens that page. A file saved with a
+[draft of a new item](../items/#drafts-of-a-new-item) lists the draft as
+**Draft:** and its name (just **Draft** when it has none); that link opens the
+draft in the **Add item** dialog. The **×** next to a name removes that
+attachment and nothing else: the file stays attached everywhere else, and once
+nothing is left it stays on the Files page as **Not attached to anything**
+until you delete it.
 
 The action row gives you:
 
@@ -267,7 +283,7 @@ item dialog.
    well, and so does a receipt or invoice PDF.
 3. Click **Scan files**. AI reads them — you can **Cancel** while it works.
 4. On **Review extracted details**, each field (name, brand, model, type,
-   price, serial number, purchase date, warranty expiry, tags, and more) shows
+   price, serial number, purchase date, seller, warranty expiry, tags, and more) shows
    what AI found, with a confidence label. Untick anything that looks wrong.
 5. Click **Use these values** to pre-fill the form, then finish and save the
    item as usual.
@@ -279,8 +295,10 @@ A few things to know:
 - If AI finds **more than one product** (for example, on a multi-item receipt),
   it asks you to **Choose which item to add** and pre-fills that one — you can
   add the others separately afterwards.
-- When a receipt or invoice is read, the seller's name is put into the item's
-  **comments** (there's no separate seller field).
+- When a receipt or invoice names the seller, the item names your group's
+  seller with that name. If your group has no such seller, the **Purchase**
+  step offers to create it; nothing is created until you agree (see
+  [Sellers read by AI](../sellers/#sellers-read-by-ai)).
 - If a price's currency isn't on the server's supported list, it won't be
   pre-filled, and the review step tells you so.
 - Scanning is **rate-limited** to keep usage fair, so you may occasionally be

@@ -201,6 +201,27 @@ type ScanInput struct {
 	Photos                []ScanPhotoInput
 	HintFromUser          string
 	PreferredCurrencyCode string
+	// ItemTypes are the group's item types the model classifies into.
+	// Empty means the built-in ones.
+	ItemTypes []ScanItemType
+}
+
+// ScanItemType is an item type offered to the model: the slug an item
+// stores and the name the group knows it by.
+type ScanItemType struct {
+	Slug string
+	Name string
+}
+
+func (in ScanInput) itemTypeOptions() []aivision.ItemTypeOption {
+	if len(in.ItemTypes) == 0 {
+		return nil
+	}
+	out := make([]aivision.ItemTypeOption, 0, len(in.ItemTypes))
+	for _, t := range in.ItemTypes {
+		out = append(out, aivision.ItemTypeOption{Slug: t.Slug, Name: t.Name})
+	}
+	return out
 }
 
 // ScanPhotoInput is a single photo plus its detected MIME type.
@@ -310,6 +331,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 		Photos:                photos,
 		HintFromUser:          in.HintFromUser,
 		PreferredCurrencyCode: in.PreferredCurrencyCode,
+		ItemTypes:             in.itemTypeOptions(),
 	})
 	latencyMS := clampInt32FromInt64(int64(s.now().Sub(start) / time.Millisecond))
 
@@ -422,6 +444,7 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 		Photos:                photos,
 		HintFromUser:          in.HintFromUser,
 		PreferredCurrencyCode: in.PreferredCurrencyCode,
+		ItemTypes:             in.itemTypeOptions(),
 	})
 	if providerErr != nil {
 		return nil, classifyProviderErr(providerErr)

@@ -282,7 +282,7 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
 				// type-mismatched values to warnings, so non-strict
 				// output is safe to consume.
 				Strict: false,
-				Schema: aivision.ResponseSchema(),
+				Schema: aivision.ResponseSchema(req),
 			},
 		},
 	}

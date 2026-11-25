@@ -31,6 +31,23 @@ var (
 	// inside the lock-protected delete path.
 	ErrTagInUse = errx.NewSentinel("tag is in use")
 
+	// ErrItemTypeInUse signals that items of the group, those in Trash
+	// included, still have the item type a delete names, and the delete
+	// gave no type to move them to (#2802).
+	ErrItemTypeInUse = errx.NewSentinel("item type is in use")
+
+	// ErrLastItemType signals a delete of the only item type of a group. A
+	// group always keeps one, so that an item can always be given a type.
+	ErrLastItemType = errx.NewSentinel("cannot delete the last item type of a group")
+
+	// ErrUnknownItemType signals an item write whose type is not a slug of
+	// one of the group's item types.
+	ErrUnknownItemType = errx.NewSentinel("unknown item type")
+
+	// ErrItemTypeLimit signals a create in a group that already has
+	// models.MaxItemTypesPerGroup item types.
+	ErrItemTypeLimit = errx.NewSentinel("the group has the most item types it can keep")
+
 	// ErrLoanAlreadyOpen signals that a commodity already has an open
 	// (returned_at IS NULL) loan and the service refused to create a
 	// second one. The handler maps it to 409 Conflict so the FE can
@@ -152,4 +169,21 @@ var (
 	// decide whether to issue a 501 (MFAEnforced=true, no secret) vs.
 	// a MFA challenge (MFAEnforced=true, secret present).
 	ErrBackofficeMFASecretNotFound = errx.NewSentinel("backoffice MFA secret not found", ErrNotFound)
+
+	// ErrDraftRevisionConflict is returned when a draft save or promotion
+	// names a revision other than the draft's current one: another tab or
+	// device saved the draft in between. The handler maps it to 409 with
+	// the current revision so the client can reload instead of overwriting
+	// newer input (#2812).
+	ErrDraftRevisionConflict = errx.NewSentinel("the draft was changed by another save")
+
+	// ErrDraftPromoted is returned when a save, a discard, an attachment or
+	// a promotion with another promotion key reaches a draft that has
+	// already become an item (#2812).
+	ErrDraftPromoted = errx.NewSentinel("the draft has already been turned into an item")
+
+	// ErrDraftDiscarded is returned when a save, a promotion, an attachment
+	// or a create with its client key reaches a draft whose discard has
+	// begun (#2812).
+	ErrDraftDiscarded = errx.NewSentinel("the draft is being discarded")
 )

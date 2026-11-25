@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
@@ -22,6 +23,14 @@ type CommodityRegistryFactory struct {
 	baseCommodityRegistry *Registry[models.Commodity, *models.Commodity]
 	areaRegistry          *AreaRegistryFactory // required dependency for relationship tracking
 	assetNumbers          *sync.Mutex          // shared by every registry the factory creates
+	// sellers is set by NewSellerRegistryFactory. When set, a write that
+	// names a seller fails unless the writer's group can see that seller,
+	// as the postgres registry checks under row-level security.
+	sellers *SellerRegistryFactory
+	// itemTypes is set by NewItemTypeRegistryFactory. When set, a write
+	// fails unless its type is one of the group's item types, as the
+	// postgres registry checks inside the write's transaction.
+	itemTypes *ItemTypeRegistryFactory
 }
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
@@ -30,6 +39,8 @@ type CommodityRegistry struct {
 
 	userID       string
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
+	sellers      *SellerRegistryFactory
+	itemTypes    *ItemTypeRegistryFactory
 	// assetNumbers serializes every write of AssetNumber, standing in for
 	// the per-group advisory lock of the postgres registry: Create holds it
 	// from computing the next number until the row is stored.
@@ -84,6 +95,8 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		Registry:     userRegistry,
 		userID:       user.ID,
 		areaRegistry: areaRegistry,
+		sellers:      f.sellers,
+		itemTypes:    f.itemTypes,
 		assetNumbers: f.assetNumbers,
 	}, nil
 }
@@ -109,8 +122,22 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 		Registry:     serviceRegistry,
 		userID:       "", // Clear userID to bypass user filtering
 		areaRegistry: areaRegistry,
+		sellers:      f.sellers,
+		itemTypes:    f.itemTypes,
 		assetNumbers: f.assetNumbers,
 	}
+}
+
+// checkSeller verifies that sellerID, when set, names a seller the
+// registry's group can see.
+func (r *CommodityRegistry) checkSeller(ctx context.Context, sellerID *string) error {
+	if sellerID == nil || r.sellers == nil {
+		return nil
+	}
+	if _, err := r.sellers.newRegistry(r.userID, r.groupID).Get(ctx, *sellerID); err != nil {
+		return errxtrace.Wrap("failed to get seller", err)
+	}
+	return nil
 }
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
@@ -131,6 +158,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986): empty and nil both
 	// mean unassigned, matching the postgres registry and the IS NULL filter.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
+	if err := r.checkSeller(ctx, commodity.SellerID); err != nil {
+		return nil, err
+	}
 
 	// Every row written now tells an unknown price from a zero one.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -151,6 +182,12 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
 	commodity.AssetNumber = new(r.pickAssetNumber(groupID, requested))
 
+	unlockType, err := r.lockItemType(ctx, groupID, commodity.TenantID, commodity.Type)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockType()
+
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
@@ -164,6 +201,41 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	}
 
 	return newCommodity, nil
+}
+
+// lockItemType checks that slug names an item type of groupID and holds the
+// item type lock for reading until the returned function is called, so a
+// type delete cannot run between the check and the write.
+func (r *CommodityRegistry) lockItemType(ctx context.Context, groupID, tenantID string, slug models.CommodityType) (func(), error) {
+	if r.itemTypes == nil {
+		return func() {}, nil
+	}
+	if tenantID == "" {
+		if user := appctx.UserFromContext(ctx); user != nil {
+			tenantID = user.TenantID
+		}
+	}
+	return r.itemTypes.lockForItemWrite(ctx, tenantID, groupID, r.userID, slug)
+}
+
+// lockItemTypesForUpdate read-locks the item types for an update of
+// commodity and reports whether its type is one of the item's group's
+// types. The group comes from the registry, or for the service registry
+// from the stored row.
+func (r *CommodityRegistry) lockItemTypesForUpdate(ctx context.Context, commodity models.Commodity) (func(), bool) {
+	if r.itemTypes == nil {
+		return func() {}, true
+	}
+	groupID, tenantID := r.groupID, commodity.TenantID
+	if stored, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
+		groupID, tenantID = stored.GroupID, stored.TenantID
+	}
+	if tenantID == "" {
+		if user := appctx.UserFromContext(ctx); user != nil {
+			tenantID = user.TenantID
+		}
+	}
+	return r.itemTypes.lockForItemUpdate(ctx, tenantID, groupID, r.userID, commodity.Type)
 }
 
 // ListByGroup returns every commodity in (tenantID, groupID), regardless
@@ -312,6 +384,11 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	r.assetNumbers.Lock()
 	defer r.assetNumbers.Unlock()
 
+	// The item types stay read-locked until the write, so a type delete
+	// cannot move the item in between.
+	unlockTypes, typeKnown := r.lockItemTypesForUpdate(ctx, commodity)
+	defer unlockTypes()
+
 	// Get the existing commodity to check if AreaID changed AND to
 	// preserve the server-managed acquisition columns and asset number
 	// (whatever the caller sent must be ignored).
@@ -319,6 +396,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		if existingCommodity.AreaID != nil {
 			oldAreaID = *existingCommodity.AreaID
+		}
+		// A changed type must be one of the group's item types.
+		if existingCommodity.Type != commodity.Type && !typeKnown {
+			return nil, errxtrace.Classify(registry.ErrUnknownItemType, errx.Attrs("type", string(commodity.Type)))
 		}
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
@@ -332,6 +413,10 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
 	// stored as nil and the area-tracking below sees a single canonical form.
 	commodity.NormalizeAreaID()
+	commodity.NormalizeSellerID()
+	if err := r.checkSeller(ctx, commodity.SellerID); err != nil {
+		return nil, err
+	}
 
 	// The caller's prices tell unknown from zero, whatever the row held.
 	registry.NormalizeCommodityPrices(ctx, &commodity)
@@ -396,6 +481,23 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return filtered[start:end], total, nil
 }
 
+// ListIDs returns the ids of at most limit commodities opts selects.
+func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.CommodityListOptions, limit int) ([]string, error) {
+	all, err := r.listCandidates(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	filtered := filterCommodities(all, opts)
+	ids := make([]string, 0, min(len(filtered), max(limit, 0)))
+	for _, c := range filtered {
+		if len(ids) >= limit {
+			break
+		}
+		ids = append(ids, c.ID)
+	}
+	return ids, nil
+}
+
 // CountTags counts the tags of the commodities opts selects.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
 	all, err := r.listCandidates(ctx, opts)
@@ -403,6 +505,30 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 		return registry.CommodityTagCounts{}, err
 	}
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
+}
+
+func (r *CommodityRegistry) CountEach(_ context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+	counts := make([]int, len(opts))
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	// The live items and the items in Trash come from one read, so a live
+	// and a Trash count of one batch agree on where every item is.
+	live, trashed := r.liveAndTrashed()
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its turn comes.
+	now := time.Now()
+	for i, o := range opts {
+		all := live
+		if o.Trashed {
+			all = trashed
+		}
+		if o.WarrantyNow.IsZero() {
+			o.WarrantyNow = now
+		}
+		counts[i] = len(filterCommodities(all, o))
+	}
+	return counts, nil
 }
 
 // ListBrands returns the brands of the group's commodities, see
@@ -460,6 +586,29 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 // outer loop body stays under the gocognit threshold. `openSet` is the
 // pre-computed map form of OpenLoanCommodityIDs lifted by the caller
 // to keep the LentOut membership check O(1) per row.
+// commodityMatchesDefaultView applies the default view's hiding rules.
+func commodityMatchesDefaultView(c *models.Commodity, opts registry.CommodityListOptions) bool {
+	// Default view hides drafts. The explicit Statuses filter never
+	// overrides this — drafts are orthogonal to status.
+	if !opts.IncludeInactive && c.Draft {
+		return false
+	}
+	// Default view also hides non-in_use commodities, but only when
+	// the caller hasn't explicitly chosen which statuses to show.
+	// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
+	// supported "show drafts-excluded sold items" combination.
+	return opts.IncludeInactive || len(opts.Statuses) > 0 || c.Status == models.CommodityStatusInUse
+}
+
+// commodityMatchesSeller applies the SellerIDs filter (#2804): no IDs keep
+// every item, otherwise the item's seller has to be one of them.
+func commodityMatchesSeller(c *models.Commodity, sellerIDs []string) bool {
+	if len(sellerIDs) == 0 {
+		return true
+	}
+	return c.SellerID != nil && slices.Contains(sellerIDs, *c.SellerID)
+}
+
 // commodityMatchesArea applies the AreaID / Unassigned filter (issue #1986). An
 // explicit AreaID wins over Unassigned; Unassigned alone keeps only area-less
 // rows. No filter set → always matches.
@@ -475,16 +624,10 @@ func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOption
 }
 
 func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, terms []string, now time.Time, openSet map[string]struct{}) bool {
-	// Default view hides drafts. The explicit Statuses filter never
-	// overrides this — drafts are orthogonal to status.
-	if !opts.IncludeInactive && c.Draft {
+	if !commodityMatchesDefaultView(c, opts) {
 		return false
 	}
-	// Default view also hides non-in_use commodities, but only when
-	// the caller hasn't explicitly chosen which statuses to show.
-	// Setting `IncludeInactive=false` + `Statuses=["sold"]` is a
-	// supported "show drafts-excluded sold items" combination.
-	if !opts.IncludeInactive && len(opts.Statuses) == 0 && c.Status != models.CommodityStatusInUse {
+	if opts.DraftsOnly && !c.Draft {
 		return false
 	}
 	if len(opts.Types) > 0 && !slices.Contains(opts.Types, c.Type) {
@@ -494,6 +637,9 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 		return false
 	}
 	if !commodityMatchesArea(c, opts) {
+		return false
+	}
+	if !commodityMatchesSeller(c, opts.SellerIDs) {
 		return false
 	}
 	if _, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels); !ok {

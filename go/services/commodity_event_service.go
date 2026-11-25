@@ -289,6 +289,7 @@ func genericUpdateChanged(before, after *models.Commodity) bool {
 		before.ShortName != after.ShortName ||
 		before.Brand != after.Brand ||
 		before.Model != after.Model ||
+		!ptrEq(before.SellerID, after.SellerID) ||
 		before.Type != after.Type ||
 		before.Count != after.Count ||
 		before.SerialNumber != after.SerialNumber ||
@@ -324,26 +325,61 @@ func snapshotCreated(c *models.Commodity) models.CommodityEventPayload {
 	}
 }
 
-// snapshotForUpdate captures the fields the timeline UI renders for a
-// generic "updated" diff. The subset is deliberately narrower than
-// snapshotCreated — we only persist what the FE will actually format,
-// otherwise a later schema rev that changes a non-displayed field would
-// trigger empty-looking "updated" rows.
+// snapshotForUpdate captures the fields of a generic "updated" diff: every
+// field genericUpdateChanged compares, so the timeline can tell which ones
+// changed (it names the sellers of an edit that changed only the seller).
+// A field missing here would make an edit of it look like no change.
+// Empty lists are stored as null, so an empty list and a missing one
+// compare equal.
 func snapshotForUpdate(c *models.Commodity) models.CommodityEventPayload {
 	return models.CommodityEventPayload{
-		"name":         c.Name,
-		"short_name":   c.ShortName,
-		"brand":        c.Brand,
-		"model":        c.Model,
-		"type":         string(c.Type),
-		"count":        c.Count,
-		"comments":     c.Comments,
-		"draft":        c.Draft,
-		"serial":       c.SerialNumber,
-		"tags":         []string(c.Tags),
-		"extra_serial": []string(c.ExtraSerialNumbers),
-		"part_numbers": []string(c.PartNumbers),
+		"name":            c.Name,
+		"short_name":      c.ShortName,
+		"brand":           c.Brand,
+		"model":           c.Model,
+		"seller_id":       ptrString(c.SellerID),
+		"type":            string(c.Type),
+		"count":           c.Count,
+		"comments":        c.Comments,
+		"draft":           c.Draft,
+		"serial":          c.SerialNumber,
+		"purchase_date":   pdateString(c.PurchaseDate),
+		"registered_date": pdateString(c.RegisteredDate),
+		"tags":            nilIfEmpty([]string(c.Tags)),
+		"extra_serial":    nilIfEmpty([]string(c.ExtraSerialNumbers)),
+		"part_numbers":    nilIfEmpty([]string(c.PartNumbers)),
+		"urls":            urlStrings(c.URLs),
 	}
+}
+
+// pdateString renders a nullable date for an event payload, "" when unset.
+func pdateString(d models.PDate) string {
+	if d == nil {
+		return ""
+	}
+	return string(*d)
+}
+
+func nilIfEmpty(s []string) []string {
+	if len(s) == 0 {
+		return nil
+	}
+	return s
+}
+
+// urlStrings renders the item's links for an event payload, in order, as
+// urlsEqual compares them.
+func urlStrings(urls models.ValuerSlice[*models.URL]) []string {
+	if len(urls) == 0 {
+		return nil
+	}
+	out := make([]string, len(urls))
+	for i, u := range urls {
+		if u != nil {
+			out[i] = u.String()
+		}
+	}
+	return out
 }
 
 // decimalString turns a decimal.Decimal into its plain text representation —

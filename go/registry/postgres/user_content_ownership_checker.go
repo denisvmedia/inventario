@@ -41,6 +41,8 @@ func NewUserContentOwnershipCheckerWithTableNames(dbx *sqlx.DB, tableNames store
 // embed TenantGroupAwareEntityID — every one carries tenant_id, group_id and a
 // NOT NULL created_by_user_id FK to users(id). location_groups is handled
 // separately below (it has no group_id and uses the `created_by` column).
+// item_types is left out: a type is group configuration, and UserPurger
+// hands the ones the user created to another member of the group.
 var contentTablesByCreatedByUserID = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.Commodities()) },
 	func(t store.TableNames) string { return string(t.Files()) },
@@ -49,6 +51,7 @@ var contentTablesByCreatedByUserID = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.Locations()) },
 	func(t store.TableNames) string { return string(t.Exports()) },
 	func(t store.TableNames) string { return string(t.Tags()) },
+	func(t store.TableNames) string { return string(t.Sellers()) },
 }
 
 // HasRetainedOwnedContent runs one read-only transaction with an EXISTS query

@@ -7,6 +7,7 @@
 // go/registry/commodity_search.go (what a search term and a tag filter
 // match). devdocs/item-query-contract.md describes the whole contract,
 // including how the page URL names map onto the API names.
+import { normaliseSlug } from "@/features/tags/slug"
 import type { Schema } from "@/types"
 
 import type { ListCommoditiesOptions } from "./api"
@@ -33,6 +34,8 @@ export interface CommodityQuery {
   statuses: string[]
   areaId: string
   unassigned: boolean
+  // Items bought from one of these sellers, by seller id.
+  sellerIds: string[]
   // The list page hides drafts and inactive items unless this is set.
   includeInactive: boolean
   warrantyStatuses: string[]
@@ -67,6 +70,7 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   statuses: [],
   areaId: "",
   unassigned: false,
+  sellerIds: [],
   includeInactive: false,
   warrantyStatuses: [],
   lentOut: false,
@@ -84,6 +88,7 @@ const URL_PARAM = {
   status: "status",
   area: "area",
   unassigned: "unassigned",
+  seller: "seller",
   inactive: "inactive",
   warranty: "warranty",
   lentOut: "lent_out",
@@ -158,6 +163,7 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
     statuses: unique(params.getAll(URL_PARAM.status).filter(Boolean)),
     areaId: params.get(URL_PARAM.area) ?? "",
     unassigned: flag(params, URL_PARAM.unassigned, unreadable),
+    sellerIds: unique(params.getAll(URL_PARAM.seller).filter(Boolean)),
     includeInactive: flag(params, URL_PARAM.inactive, unreadable),
     warrantyStatuses: unique(params.getAll(URL_PARAM.warranty).filter(Boolean)),
     lentOut: flag(params, URL_PARAM.lentOut, unreadable),
@@ -187,6 +193,7 @@ export function writeCommodityQuery(
   for (const v of query.statuses) next.append(URL_PARAM.status, v)
   if (query.areaId) next.set(URL_PARAM.area, query.areaId)
   if (query.unassigned) next.set(URL_PARAM.unassigned, "1")
+  for (const v of query.sellerIds) next.append(URL_PARAM.seller, v)
   if (query.includeInactive) next.set(URL_PARAM.inactive, "1")
   for (const v of query.warrantyStatuses) next.append(URL_PARAM.warranty, v)
   if (query.lentOut) next.set(URL_PARAM.lentOut, "1")
@@ -226,6 +233,12 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
   return qs ? `${base}?${qs}` : base
 }
 
+// Link to the items list showing every item of one type, by the type's
+// slug, inactive ones included, so the list matches the type's item count.
+export function commodityTypeHref(slug: string, typeSlug: string): string {
+  return commodityListHref(slug, { includeInactive: true, types: [typeSlug] })
+}
+
 // Link to the items list showing every item that carries one tag, inactive
 // ones included, so the list matches the tag's item count.
 export function commodityTagHref(slug: string, tagSlug: string): string {
@@ -233,6 +246,12 @@ export function commodityTagHref(slug: string, tagSlug: string): string {
     includeInactive: true,
     tags: { ...DEFAULT_COMMODITY_QUERY.tags, include: [tagSlug] },
   })
+}
+
+// Link to the items list showing every item bought from one seller,
+// inactive ones included, so the list matches the seller's item count.
+export function commoditySellerHref(slug: string, sellerId: string): string {
+  return commodityListHref(slug, { includeInactive: true, sellerIds: [sellerId] })
 }
 
 // The tag-filter parameters whose value can be unreadable.
@@ -273,6 +292,7 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.statuses.length > 0 ||
     query.areaId !== "" ||
     query.unassigned ||
+    query.sellerIds.length > 0 ||
     query.includeInactive ||
     query.warrantyStatuses.length > 0 ||
     query.lentOut ||
@@ -292,6 +312,7 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     statuses: query.statuses,
     areaId: query.areaId || undefined,
     unassigned: query.unassigned || undefined,
+    sellerIds: query.sellerIds.length > 0 ? query.sellerIds : undefined,
     includeInactive: query.includeInactive,
     warrantyStatuses: query.warrantyStatuses.length > 0 ? query.warrantyStatuses : undefined,
     lentOut: query.lentOut ? true : undefined,
@@ -303,6 +324,14 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     sortDesc: query.sortDesc,
     unreadable: apiUnreadable(query.unreadable),
   }
+}
+
+// The query as a bulk request names its items (CommoditySelection): the API
+// query string of the list options, without a page. The server parses it
+// with the same contract as GET /commodities, so it selects the items the
+// list shows.
+export function commodityQueryParam(query: CommodityQuery): string {
+  return listOptionsToParams(commodityQueryToListOptions(query)).toString()
 }
 
 // The unreadable values under their API names, or undefined when there are
@@ -338,6 +367,7 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   }
   if (opts.lentOut !== undefined) params.set("lent_out", opts.lentOut ? "true" : "false")
   if (opts.unassigned) params.set("unassigned", "true")
+  for (const id of sorted(opts.sellerIds)) params.append("seller_id", id)
   if (opts.tags && opts.tags.length > 0) {
     params.set("tags", sorted(opts.tags).join(","))
     if (opts.tagMode === "any") params.set("tag_mode", "any")
@@ -353,6 +383,92 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   const unreadable = opts.unreadable ?? {}
   for (const name of Object.keys(unreadable).sort()) params.set(name, unreadable[name])
   return params
+}
+
+// The API query string of query, the form a saved view stores: the list
+// options without paging, in the parameter names of GET /commodities. The
+// sort and include_inactive are always written, so the string says exactly
+// what the list shows. Unreadable values are written as they are, and the
+// server refuses them.
+export function commodityQueryToApiQuery(query: CommodityQuery): string {
+  return listOptionsToParams(commodityQueryToListOptions(query)).toString()
+}
+
+// The page-URL name of each API parameter a saved view can hold, for the
+// parameters whose names differ.
+const API_TO_URL_PARAM: Record<string, string> = {
+  area_id: URL_PARAM.area,
+  seller_id: URL_PARAM.seller,
+  warranty_status: URL_PARAM.warranty,
+}
+
+// Reads the API query string of a saved view back into a query. An absent
+// include_inactive is the server default (inactive items included), so it
+// reads as includeInactive; the rest maps name for name. Parameters outside
+// the contract are ignored: the server only stores queries it parsed.
+export function commodityQueryFromApiQuery(raw: string): CommodityQuery {
+  const api = new URLSearchParams(raw)
+  const page = new URLSearchParams()
+  for (const [name, value] of api) {
+    if (name === "include_inactive") continue
+    const urlName = API_TO_URL_PARAM[name] ?? name
+    if (COMMODITY_QUERY_URL_PARAMS.includes(urlName)) page.append(urlName, value)
+  }
+  const inactive = (api.get("include_inactive") ?? "").toLowerCase()
+  if (inactive !== "false" && inactive !== "0") page.set(URL_PARAM.inactive, "1")
+  return parseCommodityQuery(page)
+}
+
+// The first parameter of a stored API query that commodityQueryFromApiQuery
+// drops or reads as something else, or undefined when the list reads all of
+// it. A parameter the list does not know yet (a filter a newer server added)
+// or a value it cannot show (an unknown sort field) is caught here: a list
+// opened without it would show more, or other, items than the view. The
+// query read back may add parameters the stored one leaves at their default
+// (the sort, include_inactive), so only the stored parameters are compared.
+export function unreadApiQueryParam(raw: string): string | undefined {
+  const stored = apiQueryValues(raw)
+  const read = apiQueryValues(commodityQueryToApiQuery(commodityQueryFromApiQuery(raw)))
+  for (const [name, values] of stored) {
+    if (read.get(name) !== values) return name
+  }
+  return undefined
+}
+
+// The values of each parameter of an API query, as a set: repeated and
+// comma-joined values are split and sorted, and the search text is trimmed
+// (the server splits it into terms).
+function apiQueryValues(raw: string): Map<string, string> {
+  const params = new URLSearchParams(raw)
+  const out = new Map<string, string>()
+  for (const name of new Set(params.keys())) {
+    const values = params
+      .getAll(name)
+      .flatMap((v) => (name === "tags" || name === "tags_exclude" ? v.split(",") : [v]))
+      .map((v) => (name === "q" ? v.trim() : v))
+    out.set(name, JSON.stringify(values.sort()))
+  }
+  return out
+}
+
+// Whether a and b select the same items in the same order, compared in the
+// form a saved view stores. The server stores tag slugs normalized and
+// without repeats, so a list showing tags=Fragile still shows a view that
+// stores tags=fragile.
+export function sameCommodityQuery(a: CommodityQuery, b: CommodityQuery): boolean {
+  return commodityQueryToApiQuery(storedTags(a)) === commodityQueryToApiQuery(storedTags(b))
+}
+
+function storedTags(query: CommodityQuery): CommodityQuery {
+  const stored = (slugs: string[]) => [...new Set(slugs.map(normaliseSlug))]
+  return {
+    ...query,
+    tags: {
+      ...query.tags,
+      include: stored(query.tags.include),
+      exclude: stored(query.tags.exclude),
+    },
+  }
 }
 
 // Why an item matched the search text: the field and the value in it.

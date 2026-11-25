@@ -125,6 +125,16 @@ func newAPITokenComponents(
 	return svc, NewAPITokenAuthenticator(svc, audit, limiter, params.GlobalRateTrustedProxyNets)
 }
 
+// emailServiceOrStub returns svc, or the stub email service when none is
+// configured.
+func emailServiceOrStub(svc services.EmailService) services.EmailService {
+	if svc != nil {
+		return svc
+	}
+	slog.Warn("EmailService not provided; falling back to stub email service")
+	return services.NewStubEmailService()
+}
+
 // newUsersMeParams wires the /users/me route group: sessions, login history
 // and personal API token management.
 func newUsersMeParams(
@@ -282,6 +292,10 @@ type Params struct {
 	// (legacy behaviour) and APIServer() logs a one-time startup warning so
 	// operators know the installation-wide business gauges are exposed.
 	MetricsToken string
+
+	// CommodityDraftServiceOptions configure the draft service behind the
+	// draft and inbox routes. Tests set the clock with them.
+	CommodityDraftServiceOptions []services.CommodityDraftServiceOption
 
 	// ThumbnailService queues thumbnail jobs when a thumbnail is requested
 	// before it exists, and holds the per-user rate limit for that. The
@@ -606,11 +620,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// Create a shared audit service for use across multiple routes.
 	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
 
-	emailSvc := params.EmailService
-	if emailSvc == nil {
-		slog.Warn("EmailService not provided; falling back to stub email service")
-		emailSvc = services.NewStubEmailService()
-	}
+	emailSvc := emailServiceOrStub(params.EmailService)
 
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
@@ -867,48 +877,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
 		// registry set is built with group context.
 		groupScopedMiddlewares := createGroupAwareMiddlewares(params.JWTSecret, params.FactorySet, blacklist, csrfSvc, groupService, apiTokenAuth)
-		// Per-resource role gates (#1533): reads stay viewer+ (membership
-		// is checked by GroupSlugResolverMiddleware). Writes split by
-		// resource — structural resources (locations, areas, exports)
-		// require admin+; content resources (commodities, files, tags,
-		// loans, services) require user+. Each gate is method-conditional
-		// — GET/HEAD/OPTIONS bypass the role check.
-		structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
-		contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
-		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", func(r chi.Router) {
-			r.With(structuralWriteGate).Route("/locations", Locations(params))
-			r.With(structuralWriteGate).Route("/areas", Areas(params))
-			// Commodity write paths are guarded by requireGroupNotMigrating
-			// (issue #202 §3.2) so an in-flight currency migration locks
-			// concurrent edits with HTTP 423. The middleware is a no-op
-			// when the feature flag is off. Restoring from Trash writes
-			// items too, so the Trash routes wait the same way; reads there
-			// are viewer+, restores user+, deleting for good admin+.
-			migrationLock := requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})
-			r.With(migrationLock, contentWriteGate).Route("/commodities", Commodities(params))
-			r.With(contentWriteGate).Route("/files", Files(params))
-			r.With(contentWriteGate).Route("/tags", Tags(params))
-			r.With(contentWriteGate).Route("/loans", GroupLoans(params))
-			r.With(contentWriteGate).Route("/services", GroupServices(params))
-			r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
-			r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
-			r.Route("/upcoming", Upcoming())
-			r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
-			r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService))
-			r.Route("/settings", Settings())
-			r.Route("/commodities/values", Values())
-			r.Route("/upload-slots", UploadSlots(params.FactorySet))
-			r.Route("/search", Search(params.EntityService))
-			// Currency-migration endpoints are always mounted so swagger
-			// stays consistent regardless of flag state. Each handler
-			// returns 404 when params.FeatureCurrencyMigration is false,
-			// keeping the surface inert in production (#202 §8) until
-			// the operator flips the flag on.
-			r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
-			r.Route("/storage-usage", StorageUsage())
-			r.Route("/plan", GroupPlan())
-			r.Route("/notifications", GroupNotifications(params.FactorySet))
-		})
+		r.With(groupScopedMiddlewares...).Route("/g/{groupSlug}", groupDataRoutes(params, restoreStatus, groupService, auditSvc))
 
 		// Uploads need special middleware without content type restrictions (group-scoped).
 		// GroupSlugResolverMiddleware runs BEFORE RegistrySetMiddleware so the
@@ -950,6 +919,65 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		Handle("/*", FrontendHandler())
 
 	return r
+}
+
+// groupDataRoutes mounts the group-scoped data routes under
+// /api/v1/g/{groupSlug}.
+//
+// Per-resource role gates (#1533): reads stay viewer+ (membership is checked
+// by GroupSlugResolverMiddleware). Writes split by resource — structural
+// resources (locations, areas, exports) require admin+; content resources
+// (commodities, files, tags, sellers, item types, loans, services) require
+// user+. Each gate is method-conditional — GET/HEAD/OPTIONS bypass the role
+// check.
+func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupService *services.GroupService, auditSvc services.AuditLogger) func(r chi.Router) {
+	structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
+	contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
+	return func(r chi.Router) {
+		r.With(structuralWriteGate).Route("/locations", Locations(params))
+		r.With(structuralWriteGate).Route("/areas", Areas(params))
+		// Commodity write paths are guarded by requireGroupNotMigrating
+		// (issue #202 §3.2) so an in-flight currency migration locks
+		// concurrent edits with HTTP 423. The middleware is a no-op
+		// when the feature flag is off. Restoring from Trash writes
+		// items too, so the Trash routes wait the same way; reads there
+		// are viewer+, restores user+, deleting for good admin+.
+		migrationLock := requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})
+		r.With(migrationLock, contentWriteGate).Route("/commodities", Commodities(params))
+		// Drafts (#2812): promoting one creates an item, so the
+		// currency-migration lock applies as on /commodities.
+		r.With(migrationLock, contentWriteGate).Route("/drafts", Drafts(params, groupService))
+		r.With(contentWriteGate).Route("/files", Files(params))
+		r.With(contentWriteGate).Route("/tags", Tags(params))
+		r.With(contentWriteGate).Route("/sellers", Sellers())
+		r.With(contentWriteGate).Route("/item-types", ItemTypes())
+		r.With(contentWriteGate).Route("/loans", GroupLoans(params))
+		r.With(contentWriteGate).Route("/services", GroupServices(params))
+		r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
+		r.With(contentWriteGate).Route("/reminders", GroupReminders(params))
+		r.Route("/upcoming", Upcoming())
+		r.With(structuralWriteGate).Route("/exports", Exports(params, restoreStatus))
+		r.With(migrationLock, contentWriteGate).Route("/trash", Trash(params, groupService))
+		r.Route("/settings", Settings())
+		r.Route("/commodities/values", Values())
+		r.Route("/upload-slots", UploadSlots(params.FactorySet))
+		r.Route("/search", Search(params.EntityService))
+		// Currency-migration endpoints are always mounted so swagger
+		// stays consistent regardless of flag state. Each handler
+		// returns 404 when params.FeatureCurrencyMigration is false,
+		// keeping the surface inert in production (#202 §8) until
+		// the operator flips the flag on.
+		r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
+		r.Route("/storage-usage", StorageUsage())
+		r.Route("/plan", GroupPlan())
+		r.Route("/notifications", GroupNotifications(params.FactorySet))
+		// Saved views carry no write gate: viewers keep personal views too;
+		// the service checks who may share and edit.
+		r.Route("/saved-views", SavedViews(params, groupService))
+		// The inbox (#2794) shows records only; its entries are cleared
+		// through /drafts and /commodities, which carry their own gates.
+		r.Route("/inbox", Inbox(params, groupService))
+	}
 }
 
 // RLSContextMiddleware validates user context for RLS security

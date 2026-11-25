@@ -14,6 +14,8 @@ import enExports from "./locales/en/exports.json"
 import enFeedback from "./locales/en/feedback.json"
 import enFiles from "./locales/en/files.json"
 import enGroups from "./locales/en/groups.json"
+import enInbox from "./locales/en/inbox.json"
+import enItemTypes from "./locales/en/itemTypes.json"
 import enLanding from "./locales/en/landing.json"
 import enLoans from "./locales/en/loans.json"
 import enLocations from "./locales/en/locations.json"
@@ -22,6 +24,7 @@ import enMembers from "./locales/en/members.json"
 import enReminders from "./locales/en/reminders.json"
 import enReports from "./locales/en/reports.json"
 import enSearch from "./locales/en/search.json"
+import enSellers from "./locales/en/sellers.json"
 import enServices from "./locales/en/services.json"
 import enSettings from "./locales/en/settings.json"
 import enStubs from "./locales/en/stubs.json"
@@ -47,6 +50,8 @@ export const I18N_NAMESPACES = [
   "commodities",
   "files",
   "tags",
+  "sellers",
+  "itemTypes",
   "loans",
   "maintenance",
   "reminders",
@@ -66,6 +71,7 @@ export const I18N_NAMESPACES = [
   "reports",
   "landing",
   "trash",
+  "inbox",
 ] as const
 export type I18nNamespace = (typeof I18N_NAMESPACES)[number]
 
@@ -81,6 +87,8 @@ const enResources = {
   commodities: enCommodities,
   files: enFiles,
   tags: enTags,
+  sellers: enSellers,
+  itemTypes: enItemTypes,
   loans: enLoans,
   maintenance: enMaintenance,
   reminders: enReminders,
@@ -100,6 +108,7 @@ const enResources = {
   reports: enReports,
   landing: enLanding,
   trash: enTrash,
+  inbox: enInbox,
 } as const
 
 // Lazy backend for cs/ru only. We list cs and ru explicitly via

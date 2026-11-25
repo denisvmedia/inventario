@@ -12,6 +12,46 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- An Inbox page lists what in the group is still unfinished: the drafts of
+  new items and the items marked as draft. Each row says why it is there and
+  offers the step that clears it: Continue opens a draft in the Add item
+  dialog over the inbox, Discard deletes it, and Mark as reviewed turns an
+  item's draft switch off, with Undo. Tabs filter by reason. The sidebar entry
+  shows the number of records that need attention, counting each record once,
+  and the dashboard shows a "Needs attention" card while there are any. A
+  Missing details section links the No location and untagged item lists,
+  which stay out of the inbox: a missing detail is not unfinished work. The
+  Items page shows a line with an Open inbox button in place of the Drafts
+  card. The new API is `GET /inbox` (paged, filtered by `reason`) and
+  `GET /inbox/count`
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
+- Save as draft in the Add item dialog saves the form and its files on the
+  server as a draft of the group, so an item started on one device can be
+  finished on another. Nothing is required to save a draft; a **Save draft**
+  button is on every step while the switch is on. The Inbox lists the
+  group's drafts with Continue and Discard. Finishing a
+  draft creates exactly one item and moves the draft's files to it, and a save
+  repeated after a lost response does not make a second draft. Discarding
+  sends the files nothing else uses to the Trash. A save made on another
+  device since the draft was opened is not overwritten: the dialog offers to
+  load it or save as a new draft, which gets the old draft's files too. A
+  draft finished or discarded on another device is not saved over: the dialog
+  offers to open the item or save as a new draft. Drafts stay out of item
+  lists, counts, search, reports, saved views and reminders. A draft's type
+  must be one of the group's item types. A whole-group backup carries the open
+  drafts with their files (format 3.5; a 3.4 reader restores it without them).
+  A restore links a draft to the restored area, seller and files and maps its
+  type as it maps an item's; a merge keeps a draft the group already has and
+  reports it in the restore log, and a full replace replaces the group's
+  drafts with the backup's. Deleting an account deletes the drafts its user started; files
+  other members saved with them stay as standalone files. The short name of a
+  new item follows the name until one is typed. The new API is `/drafts`
+  (list, create with a client key, save with a revision, discard, promote with
+  a promotion key that makes a retry return the same item). The dialog no
+  longer creates items flagged as drafts; editing an item keeps that switch
+  ([#2812](https://github.com/denisvmedia/inventario/issues/2812)).
+
 - An item has a brand and a model, both optional text of up to 100
   characters. Cards, list rows and the item page show "Brand · Model" under
   the name, the insurance reports put the brand in the item's title and the
@@ -20,6 +60,70 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `GET /commodities/brands` endpoint. AI scan fills both, and backups carry
   them (format 3.2; a 3.1 archive restores with them empty)
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
+- Sellers. A group keeps the shops and people it buys from, each with a name
+  (unique in the group, ignoring case and extra spaces), a website, a contact
+  and a note, on a new Sellers page that counts the items bought from each
+  and links to them. An item names its seller in the Purchase step and the
+  edit form, where "New seller" creates one without leaving the form. The
+  items list filters by one or more sellers (`seller_id` on
+  `GET /commodities`), the item page and the insurance reports show the
+  seller, and deleting a seller keeps its items without a seller. The item
+  History records a change of seller. AI scan fills the seller when the group
+  has one with the name it read and otherwise offers to create it, instead of
+  writing the name into the comments; a draft from the public landing page,
+  which has no group yet, still gets the seller in its comments. Backups
+  carry the sellers (format 3.3) and a restore links items to the group's
+  sellers by name, creating the missing ones
+  ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
+- Bulk edits on the items list. The bulk-action bar has an Edit menu that adds
+  and removes tags (an item keeps the tags the change does not name), sets the
+  type, and changes the status with the same date and note dialog as a single
+  change; sold is left out, since each item needs its own sale price. After the
+  whole page is selected, "Select all N matching items" selects every item the
+  search and filters match, on every page, for every bulk action but label
+  printing. It is offered when 1 to 500 items match and the list could tell
+  which items those are; otherwise a bulk action works on the items selected
+  one by one or a page at a time. Each item goes through the checks of a
+  single change and gets its own history event. When some items fail, a dialog
+  lists them with the reason, keeps them selected and offers a retry of those
+  items alone. The new
+  `POST /commodities/bulk-update` takes ids or a query of the item query
+  contract with the number and the digest of the items it was seen to match
+  (`meta.selection_digest` of `GET /commodities`), and refuses with 409 when
+  the query selects other items by then, even as many; `bulk-move` and
+  `bulk-delete` take the same selection, and all three answer with the items
+  that changed, were skipped as unchanged, or failed with a reason (a
+  validation failure names the field and the rule, so the app can say it in
+  the user's language). A query may select up to 500 items. `bulk-move` to an
+  area that does not exist is refused with 422 before any item changes.
+  `POST /trash/commodities/restore` gives each failure a code as well:
+  `not_found` for an item that is not in the trash, `failed` otherwise. The
+  Files page's bulk bar gains **Tags…**, which adds and removes tags on the
+  selected files the same way, through the new `POST /files/bulk-update`
+  ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).
+
+- Item types are a list each group keeps, instead of a fixed set of six. Every
+  group starts with the six built-in types, seeded at startup for existing
+  groups and on first use for new ones; members see their names in their own
+  language until someone renames them. A new Item types page adds, renames and
+  deletes types, each with a name (up to 50 characters, unique in the group)
+  and one of 38 icons, and counts the items of each type, Trash included.
+  Deleting a type that items have moves them to a type the member picks, which
+  is also how two types are merged; a group keeps at least one type and at
+  most 100 (409 `item_type.limit`). A type stays with the group when the
+  member who added it deletes their account. The item forms pick from the
+  group's types and create one with "New type". Items keep their type:
+  `commodities.type` stays the type's slug, so the `type` filter, saved views,
+  the reports and the icons work as before. The API gains
+  `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an item write
+  with a type the group does not have fails with 422 `item_type.unknown`; a
+  bulk type change picks from the group's types and refuses another with 422
+  on `type` before any item changes. AI scan offers the group's types. Backups
+  carry the types (format 3.4) and a restore matches them by slug, then by
+  name, creating the missing ones
+  ([#2802](https://github.com/denisvmedia/inventario/issues/2802)).
 
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,
@@ -58,6 +162,19 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Saved views. **Views** on the items list keeps the current filters, search,
+  sort and layout under a name, in the sidebar with an item count, on the
+  Dashboard as a card with the count and the first items, or both. An open
+  view tells when the list no longer matches it and offers **Save changes**
+  and **Revert to saved**; a view naming a deleted area or tag still opens and
+  says what no longer exists. Views are personal unless shared with the group
+  (User role or higher), and sharing a view grants no access to items. Each
+  member chooses which views, their own or shared, show in their sidebar and on
+  their Dashboard. Warranty filters stay relative to the day the view is
+  opened. The Dashboard suggests a few views to start with, and **Saved views**
+  (`/g/:slug/views`) lists, edits, reorders and deletes them. New endpoints: `/g/{slug}/saved-views` and
+  `/g/{slug}/saved-views/counts`
+  ([#2793](https://github.com/denisvmedia/inventario/issues/2793)).
 - Your own lead times for warranty, maintenance and loan reminders. Under
   Settings → Notifications, the Warranty expiry and Maintenance reminders rows
   take up to five "days before" values from 1 to 365, and the Loan reminders

@@ -26,6 +26,7 @@
     "fields": {
       "location": "Umístění",
       "purchaseDate": "Datum pořízení",
+      "seller": "Prodejce",
       "serialNumber": "Sériové číslo",
       "type": "Typ"
     },
@@ -56,6 +57,7 @@
     },
     "selectItem": "Vyberte položku…",
     "selectLocation": "Vyberte umístění…",
+    "sellerUnavailable": "Prodejce se nepodařilo načíst.",
     "title": "Pojistná zpráva",
     "warranty": {
       "expires": "platí do {{date}}",

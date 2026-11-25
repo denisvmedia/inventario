@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { sellerKeys } from "@/features/sellers/keys"
 import { tagKeys } from "@/features/tags/keys"
 import { useInvalidateTrash } from "@/features/trash/hooks"
 
 import {
   bulkDeleteCommodities,
   bulkMoveCommodities,
+  bulkUpdateCommodities,
   createCommodity,
   deleteCommodity,
   getCommoditiesValue,
@@ -20,10 +22,13 @@ import {
   updateCommodity,
   type CommoditiesValue,
   type Commodity,
+  type CommodityBulkPatch,
+  type CommodityBulkResult,
   type CommodityCover,
   type CommodityEvent,
   type CommodityEventKind,
   type CommodityMeta,
+  type CommoditySelection,
   type CreateCommodityRequest,
   type ListCommoditiesOptions,
   type UpdateCommodityRequest,
@@ -56,6 +61,7 @@ export function useCommodities(opts: ListCommoditiesOptions = {}, query: QueryOp
     total: number
     covers: Record<string, CommodityCover>
     matches: Record<string, CommoditySearchMatch[]>
+    selectionDigest: string
   }>({
     queryKey: commodityKeys.list(slug, opts),
     queryFn: ({ signal }) => listCommodities({ ...opts, signal }),
@@ -261,14 +267,26 @@ function useInvalidateTags() {
   return () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
 }
 
+// The Sellers page shows how many items each seller has, so a write that can
+// pick, change or clear an item's seller, or move an item to Trash, refreshes
+// the group's seller queries too.
+function useInvalidateSellers() {
+  const qc = useQueryClient()
+  const { currentGroup } = useCurrentGroup()
+  const slug = currentGroup?.slug ?? ""
+  return () => qc.invalidateQueries({ queryKey: sellerKeys.group(slug) })
+}
+
 export function useCreateCommodity() {
   const invalidate = useInvalidate()
   const invalidateTags = useInvalidateTags()
+  const invalidateSellers = useInvalidateSellers()
   return useMutation<Commodity, Error, CreateCommodityRequest>({
     mutationFn: (req) => createCommodity(req),
     onSuccess: () => {
       invalidate.all()
       invalidateTags()
+      invalidateSellers()
     },
   })
 }
@@ -278,6 +296,7 @@ export function useUpdateCommodity(id: string) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const invalidateTags = useInvalidateTags()
+  const invalidateSellers = useInvalidateSellers()
   const detailKey = commodityKeys.detail(slug, id)
   return useMutation<Commodity, Error, UpdateCommodityRequest>({
     mutationFn: (req) => updateCommodity(id, req),
@@ -294,20 +313,23 @@ export function useUpdateCommodity(id: string) {
       })
       qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
       invalidateTags()
+      invalidateSellers()
     },
   })
 }
 
 // Deleting moves the item to Trash, so the Trash lists and the storage
-// breakdown change with it.
+// breakdown change with it, and its seller counts one item fewer.
 export function useDeleteCommodity() {
   const invalidate = useInvalidate()
   const invalidateTrash = useInvalidateTrash()
+  const invalidateSellers = useInvalidateSellers()
   return useMutation<void, Error, string>({
     mutationFn: (id) => deleteCommodity(id),
     onSuccess: () => {
       invalidate.all()
       invalidateTrash()
+      invalidateSellers()
     },
   })
 }
@@ -331,29 +353,50 @@ export function useSetCommodityCover(id: string) {
   })
 }
 
+// The bulk hooks refresh the list when the request settles, failed or
+// not: a 409 bulk.selection_changed means the list on screen is out of date.
 export function useBulkDeleteCommodities() {
   const invalidate = useInvalidate()
   const invalidateTrash = useInvalidateTrash()
-  return useMutation<void, Error, string[]>({
-    mutationFn: (ids) => bulkDeleteCommodities(ids),
-    onSuccess: () => {
+  const invalidateSellers = useInvalidateSellers()
+  return useMutation<CommodityBulkResult, Error, CommoditySelection>({
+    mutationFn: (selection) => bulkDeleteCommodities(selection),
+    onSettled: () => {
       invalidate.all()
       invalidateTrash()
+      invalidateSellers()
     },
   })
 }
 
 interface BulkMoveVars {
-  ids: string[]
+  selection: CommoditySelection
   areaId: string
 }
 
 export function useBulkMoveCommodities() {
   const invalidate = useInvalidate()
-  return useMutation<void, Error, BulkMoveVars>({
-    mutationFn: ({ ids, areaId }) => bulkMoveCommodities(ids, areaId),
-    onSuccess: () => {
+  return useMutation<CommodityBulkResult, Error, BulkMoveVars>({
+    mutationFn: ({ selection, areaId }) => bulkMoveCommodities(selection, areaId),
+    onSettled: () => {
       invalidate.all()
+    },
+  })
+}
+
+interface BulkUpdateVars {
+  selection: CommoditySelection
+  patch: CommodityBulkPatch
+}
+
+export function useBulkUpdateCommodities() {
+  const invalidate = useInvalidate()
+  const invalidateTags = useInvalidateTags()
+  return useMutation<CommodityBulkResult, Error, BulkUpdateVars>({
+    mutationFn: ({ selection, patch }) => bulkUpdateCommodities(selection, patch),
+    onSettled: () => {
+      invalidate.all()
+      invalidateTags()
     },
   })
 }

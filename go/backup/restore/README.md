@@ -16,7 +16,7 @@ The decode body splits by build tag; everything around it is format-agnostic.
 - `service.go` — the thin `RestoreService` that constructs a processor.
 - `worker.go`, `status_querier.go` — background worker and a query-only status helper.
 
-An `.inb` archive (see the `export` package) is an outer tar of `payload.tar.gz.sig` + `payload.tar.gz`. On restore the payload is spooled to a temp file while a streaming SHA-256 digest is computed, the signature is verified **before** inflate, the manifest's format version is gated, and only then is the inner tar walked: per-location JSON members recreate entities, `files/_index.json` registers the non-commodity files, and `files/...` members stream their bytes into a re-minted tenant blob key. A bad/missing signature, a non-`.inb` upload, or any framing violation fails the restore hard.
+An `.inb` archive (see the `export` package) is an outer tar of `payload.tar.gz.sig` + `payload.tar.gz`. On restore the payload is spooled to a temp file while a streaming SHA-256 digest is computed, the signature is verified **before** inflate, the manifest's format version is gated, and only then is the inner tar walked: per-location JSON members recreate entities, `files/_drafts.json` recreates the open drafts of new items, `files/_index.json` registers the non-commodity files, and `files/...` members stream their bytes into a re-minted tenant blob key. A bad/missing signature, a non-`.inb` upload, or any framing violation fails the restore hard.
 
 ### Format-version gate
 
@@ -24,7 +24,7 @@ Before `prepareRestore` runs — i.e. before a `full_replace` wipes anything —
 
 ### Linked-entity resolution
 
-Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`); a standalone file resolves to no link at all (#2235). A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
+Every file reference carries its linked entity's **immutable UUID**, never a DB key. At byte time the walker maps it to the destination DB id through `IDMapping` (`Commodities` / `Locations` / `Areas`) or, for a draft, through the drafts the walker restored; a standalone file resolves to no link at all (#2235), and so does a link to a draft the walker did not recreate. A reference whose entity never landed is dropped with a counted error rather than persisted with a dangling `linked_entity_id`. A link to a draft is the exception: when the archive does not carry the draft, or the walker kept the group's draft with that client key, the link is dropped without an error, and a file with no other link is restored as a standalone file. A draft that fails to restore counts one error of its own, and its links are dropped the same way. This is why the exporter emits `files/_index.json` after every location member — the mapping only fills as the location documents are applied.
 
 ## Key Features
 
@@ -43,7 +43,7 @@ Every file reference carries its linked entity's **immutable UUID**, never a DB 
 
 ### 4. File Data Restoration
 - File members are streamed into a re-minted tenant blob key, `t/<tenant>/files/<file-uuid><ext>` (never the archive path or source key), so an archive always lands in the importing tenant's namespace
-- Commodity attachments, location-/area-linked files and standalone files all round-trip, each recreated with its original `linked_entity_type` / `linked_entity_id` / `linked_entity_meta` (#2235)
+- Commodity attachments, location-, area- and draft-linked files and standalone files all round-trip, each recreated with its original `linked_entity_type` / `linked_entity_id` / `linked_entity_meta` (#2235)
 - A declared file reference whose member never arrives fails the restore (`ErrMissingFileMembers`) rather than silently dropping data
 - Cover-photo cross-references (#1451) are patched after all files are restored
 
@@ -83,7 +83,7 @@ Background worker that manages restore processing:
 - Configurable poll interval (default: 10 seconds) and max-concurrency (default: 1)
 
 #### `.inb` Schemas (`types/types_inb.go`)
-Decoded counterparts to the export-side `.inb` documents (kept in sync with `backup/export/inb_types.go`): `INBLocationDoc`, `INBLocation`, `INBArea`, `INBCommodity`, `INBFileRef`, `INBUnassignedDoc`, `INBFilesDoc`, `INBEntityFileRef`, `INBFileLink`, plus the member-name constants `INBManifestMember`, `INBUnassignedMember`, `INBFilesMember`.
+Decoded counterparts to the export-side `.inb` documents (kept in sync with `backup/export/inb_types.go`): `INBLocationDoc`, `INBLocation`, `INBArea`, `INBCommodity`, `INBFileRef`, `INBUnassignedDoc`, `INBDraftsDoc`, `INBDraft`, `INBFilesDoc`, `INBEntityFileRef`, `INBFileLink`, plus the member-name constants `INBManifestMember`, `INBUnassignedMember`, `INBDraftsMember`, `INBFilesMember`.
 
 #### Restore Types (`types/types.go`)
 - **RestoreOptions**: `Strategy`, `IncludeFileData`, `DryRun`
@@ -100,11 +100,12 @@ types.RestoreStrategyFullReplace // "full_replace"
 - **Use Case**: Complete replacement from backup
 - **Risk**: All current data is lost
 
-`clearExistingData` runs three passes, in order (see `processor_shared.go`):
+`clearExistingData` runs four passes, in order (see `processor_shared.go`):
 
 1. `DeleteLocationRecursive` per location — cascades areas, their commodities, and the files of that subtree.
 2. `DeleteCommodityRecursive` per **surviving** commodity. Commodities are enumerated directly because `commodity.area_id` is nullable since #1986: an area-less commodity is unreachable through the location → area recursion, so before #2236 its row survived the wipe while the file sweep still deleted its attachments — a zombie item with no files, whose preserved UUID then collided with the archive's own copy on re-create.
-3. A type-agnostic sweep of the remaining file rows + blobs, catching standalone files and any orphan.
+3. The group's drafts, in every state, with their file links. The archive's open drafts take their place: `files/_drafts.json` recreates them and `files/_index.json` links their files to them again.
+4. A type-agnostic sweep of the remaining file rows + blobs, catching standalone files and any orphan.
 
 Files with `linked_entity_type = "export"` are skipped by the sweep: that is the archive being restored, plus the backup history — not user inventory.
 
@@ -123,6 +124,10 @@ types.RestoreStrategyMergeUpdate // "merge_update"
 - **Behavior**: Creates missing items, updates existing ones
 - **Risk**: Medium — existing data may be overwritten
 - **Matching**: Based on immutable UUIDs with update capability
+
+### Drafts
+
+`files/_drafts.json` (format 3.5) holds the group's open drafts of new items. The walker recreates each one with new ids and the archived revision and timestamps (through `registry.WithRestoredDraft`). Its `area_id` and `seller_id` values carry UUIDs and are mapped to the restored area and seller; one that maps to nothing is left out. Its `type` is mapped onto the group's item types as an item's is: the same slug, the type with the archived name, or a type the restore creates; a kept draft creates no type. Its tags are created in the group if missing, as for an item. In a merge, a draft whose client key the group already has is kept as it is, and the restore log gets a skipped step for it that says whether the group's draft is open, already an item, or being discarded. A draft that fails to restore is a counted error. A link to a draft the walker did not recreate (kept, failed, or not in the archive) is left out without an error, and a file that only such drafts use is restored as a standalone file.
 
 ## Data Flow
 

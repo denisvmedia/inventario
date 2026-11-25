@@ -3,6 +3,7 @@
 // `getCommoditiesValue()`; the items page (#1410) extends with full CRUD
 // + bulk + filter/sort/search query params (BE shipped together with the
 // FE in #1410).
+import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -24,7 +25,6 @@ export interface CommodityCover {
 // the response meta — so the field is optional and comes from the API
 // helpers below.
 export type Commodity = Schema<"models.Commodity"> & { cover?: CommodityCover }
-export type CommodityType = Schema<"models.CommodityType">
 export type CommodityStatus = Schema<"models.CommodityStatus">
 
 interface CommodityResource {
@@ -48,6 +48,7 @@ interface CommoditiesListResponse {
     total_pages?: number
     covers?: Record<string, CoverPayload>
     matches?: Record<string, CommoditySearchMatch[]>
+    selection_digest?: string
   }
 }
 
@@ -130,6 +131,9 @@ export interface ListCommoditiesOptions {
   // with no area ("no location"). The toolbar chip toggles between
   // undefined and true; ignored by the BE when areaId is also set.
   unassigned?: boolean
+  // Seller filter (#2804), by seller id; OR-ed at the BE. The API param is
+  // `seller_id` (repeatable).
+  sellerIds?: string[]
   // Tag filter, by slug; see CommodityTagFilter in ./query. noTags cannot
   // be combined with tags or tagsExclude (the BE answers 400).
   tags?: string[]
@@ -162,11 +166,17 @@ function envelope(attrs: Partial<Commodity>) {
 //
 // `matches` carries `meta.matches`: per commodity id, the fields the search
 // text was found in. It is empty when the request has no search text.
+//
+// `selectionDigest` carries `meta.selection_digest`: a digest of the ids of
+// every item the query matches, on every page, which a bulk action on "all
+// matching" sends back (CommoditySelection). It is empty when a bulk action
+// cannot take the query (no items, more than MAX_BULK_QUERY_ITEMS, Trash).
 export async function listCommodities(options: ListCommoditiesOptions = {}): Promise<{
   commodities: Commodity[]
   total: number
   covers: Record<string, CommodityCover>
   matches: Record<string, CommoditySearchMatch[]>
+  selectionDigest: string
 }> {
   const qs = listOptionsToParams(options).toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
@@ -186,6 +196,7 @@ export async function listCommodities(options: ListCommoditiesOptions = {}): Pro
     total: body.meta?.commodities ?? body.data?.length ?? 0,
     covers,
     matches: body.meta?.matches ?? {},
+    selectionDigest: body.meta?.selection_digest ?? "",
   }
 }
 
@@ -442,25 +453,140 @@ export async function listCommodityEvents(
   }
 }
 
-// Bulk delete: BE binds `BulkIDsRequest` (jsonapi/bulk.go) which
-// requires the `{data:{type,attributes:{ids}}}` JSON:API envelope —
-// passing `{ids}` flat used to 422 with "missing data.attributes".
-// Discovered while writing the e2e bulk-delete round-trip in #1449.
-export async function bulkDeleteCommodities(ids: string[]): Promise<void> {
-  await http.post<void>("/commodities/bulk-delete", {
-    data: { type: "commodities", attributes: { ids } },
-  })
+// The items of a bulk action: the ids the user picked, or every item a list
+// query matches ("Select all N matching"). A query goes in the API form of
+// the item query contract (commodityQueryParam) with the number of items the
+// user saw it match and the list's selection digest of them. The server runs
+// the query again and refuses with 409 bulk.selection_changed when it
+// selects other items (more, fewer, or as many with one swapped), so a
+// confirmed action never reaches items the user did not see.
+export type CommoditySelection =
+  { ids: string[] } | { query: string; expectedCount: number; expectedDigest: string }
+
+// The server's limits on one bulk request (go/jsonapi/bulk.go and
+// go/services/commodity_bulk_service.go).
+export const MAX_BULK_IDS = 100
+export const MAX_BULK_QUERY_ITEMS = 500
+
+export type CommodityBulkPatch = Schema<"jsonapi.CommodityBulkPatch">
+export type CommodityBulkStatusValue = NonNullable<
+  Schema<"jsonapi.CommodityBulkStatusPatch">["value"]
+>
+// The server's codes, plus two for an action sent in several requests that
+// stopped when one failed: unknown, the item was in the request that failed,
+// so it may have changed; not_sent, it was in a later request, so it did not.
+export type CommodityBulkFailureCode =
+  NonNullable<Schema<"jsonapi.BulkResultFail">["code"]> | "unknown" | "not_sent"
+
+export interface CommodityBulkFailure {
+  id: string
+  name: string
+  code: CommodityBulkFailureCode
+  /** The server's English message. */
+  error: string
+  /** With invalid: the field the validation refused, e.g. short_name. */
+  field?: string
+  /** With invalid: the validator's code, e.g. validation_required. */
+  reason?: string
 }
 
-// Bulk move: relocates the listed commodities to a single target area.
-// Same envelope shape as bulk-delete (BulkMoveRequest, with the
-// destination area_id under attributes). BE returns the updated rows;
-// we don't propagate them — the optimistic cache update in the hook
-// is enough.
-export async function bulkMoveCommodities(ids: string[], areaId: string): Promise<void> {
-  await http.post<void>("/commodities/bulk-move", {
-    data: { type: "commodities", attributes: { ids, area_id: areaId } },
-  })
+// What a bulk action did to each item: changed it, left it as it was
+// because it already had what the action sets, or could not change it.
+// Notes add to changed items: files_kept says a deleted item went to Trash
+// while some of its files stayed live.
+export interface CommodityBulkResult {
+  succeeded: string[]
+  skipped: { id: string; name: string }[]
+  failed: CommodityBulkFailure[]
+  notes: { id: string; name: string; code: string }[]
+}
+
+type BulkResultEnvelope = Schema<"jsonapi.BulkResultResponse">
+
+function emptyBulkResult(): CommodityBulkResult {
+  return { succeeded: [], skipped: [], failed: [], notes: [] }
+}
+
+function readBulkResult(body: BulkResultEnvelope | undefined): CommodityBulkResult {
+  const attrs = body?.data?.attributes
+  return {
+    succeeded: attrs?.succeeded ?? [],
+    skipped: (attrs?.skipped ?? []).map((s) => ({ id: s.id ?? "", name: s.name ?? "" })),
+    failed: (attrs?.failed ?? []).map((f) => ({
+      id: f.id ?? "",
+      name: f.name ?? "",
+      code: f.code ?? "failed",
+      error: f.error ?? "",
+      field: f.field || undefined,
+      reason: f.reason || undefined,
+    })),
+    notes: (attrs?.notes ?? []).map((n) => ({
+      id: n.id ?? "",
+      name: n.name ?? "",
+      code: n.code ?? "",
+    })),
+  }
+}
+
+// postBulk sends one bulk action. An id list longer than the server takes
+// in one request goes in several, one after the other, all to the group
+// active when the action started, and the results are merged. When a
+// request fails without an answer, its items are reported as unknown, since
+// the server may have changed some of them, and the items after it as
+// not_sent (sendInChunks). A query always goes in one request, since the
+// server resolves it.
+async function postBulk(
+  path: string,
+  selection: CommoditySelection,
+  extra: Record<string, unknown>
+): Promise<CommodityBulkResult> {
+  const post = pinnedPost<BulkResultEnvelope>(path)
+  const send = async (attributes: Record<string, unknown>) =>
+    readBulkResult(
+      await post({ data: { type: "commodities", attributes: { ...attributes, ...extra } } })
+    )
+  if ("query" in selection) {
+    return send({
+      query: selection.query,
+      expected_count: selection.expectedCount,
+      expected_digest: selection.expectedDigest,
+    })
+  }
+  const { parts, unknown, unsent } = await sendInChunks(selection.ids, MAX_BULK_IDS, (ids) =>
+    send({ ids })
+  )
+  const merged = emptyBulkResult()
+  for (const part of parts) {
+    merged.succeeded.push(...part.succeeded)
+    merged.skipped.push(...part.skipped)
+    merged.failed.push(...part.failed)
+    merged.notes.push(...part.notes)
+  }
+  for (const id of unknown) merged.failed.push({ id, name: "", code: "unknown", error: "" })
+  for (const id of unsent) merged.failed.push({ id, name: "", code: "not_sent", error: "" })
+  return merged
+}
+
+// Moves the selected items to Trash, each as deleting one item does.
+export function bulkDeleteCommodities(selection: CommoditySelection): Promise<CommodityBulkResult> {
+  return postBulk("/commodities/bulk-delete", selection, {})
+}
+
+// Puts the selected items into one area. An item already there is skipped.
+export function bulkMoveCommodities(
+  selection: CommoditySelection,
+  areaId: string
+): Promise<CommodityBulkResult> {
+  return postBulk("/commodities/bulk-move", selection, { area_id: areaId })
+}
+
+// Changes the tags, type or status of the selected items. Tags are added
+// and removed, never replaced; a part the patch leaves out stays as it is.
+export function bulkUpdateCommodities(
+  selection: CommoditySelection,
+  patch: CommodityBulkPatch
+): Promise<CommodityBulkResult> {
+  return postBulk("/commodities/bulk-update", selection, { patch })
 }
 
 // Returns the global / per-location / per-area value totals for the

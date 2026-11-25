@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -11,7 +12,6 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/jellydator/validation"
-	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/validationctx"
@@ -28,6 +28,7 @@ type commoditiesAPI struct {
 	tagService    *services.TagService
 	coverService  *services.CommodityCoverService
 	eventService  *services.CommodityEventService
+	bulkService   *services.CommodityBulkService
 	factorySet    *registry.FactorySet
 }
 
@@ -47,6 +48,7 @@ type commoditiesAPI struct {
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
+// @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
 // @Param tags query []string false "Only items with these tag slugs (comma-separated or repeated); see tag_mode" collectionFormat(multi)
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
@@ -92,12 +94,43 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	covers := api.resolveCoversForList(r, regSet.FileRegistry, result.Commodities)
 
+	digest := listSelectionDigest(r.Context(), regSet, query, offset, result)
+
 	resp := jsonapi.NewCommoditiesResponseWithCovers(result.Commodities, result.Total, page, perPage, covers).
-		WithMatches(result.Matches)
+		WithMatches(result.Matches).
+		WithSelectionDigest(digest)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
 	}
+}
+
+// listSelectionDigest returns the digest of the items a list query selects,
+// on every page, for a bulk action on all of them (meta.selection_digest).
+// It is empty when a bulk action cannot take the query (in Trash, no items,
+// more than services.MaxBulkQueryItems), when the ids read do not add up to
+// the total the list counted, and when reading them fails: the digest is
+// optional, so a failed lookup is logged and the page renders without it.
+func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commodityquery.Query, offset int, result commodityquery.Page) string {
+	if query.Trashed || result.Total == 0 || result.Total > services.MaxBulkQueryItems {
+		return ""
+	}
+	if offset == 0 && len(result.Commodities) == result.Total {
+		ids := make([]string, 0, len(result.Commodities))
+		for _, c := range result.Commodities {
+			ids = append(ids, c.ID)
+		}
+		return commodityquery.Digest(ids)
+	}
+	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, result.Total)
+	if err != nil {
+		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "err", err)
+		return ""
+	}
+	if !ok {
+		return ""
+	}
+	return digest
 }
 
 // countCommodityTags counts, per tag, the items a query selects with its tag
@@ -115,6 +148,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Param status query []string false "Filter by status, as for GET /commodities" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area"
+// @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true)"
 // @Param warranty_status query []string false "Filter by computed warranty status" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Warranty expires strictly before YYYY-MM-DD"
@@ -346,6 +380,11 @@ func (api *commoditiesAPI) createCommodity(w http.ResponseWriter, r *http.Reques
 		commodity.Tags = models.ValuerSlice[string](slugs)
 	}
 
+	if err := validateCommoditySeller(r.Context(), registrySet.SellerRegistry, commodity.SellerID); err != nil {
+		renderSellerWriteError(w, r, err)
+		return
+	}
+
 	// Use standardized registry access
 	commodityReg := registrySet.CommodityRegistry
 
@@ -396,32 +435,6 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 	}
 
 	w.WriteHeader(http.StatusNoContent)
-}
-
-// validateForwardStatusTransition enforces the #1611 cross-field rule
-// that needs the previous row's status (which the model layer doesn't
-// carry): leaving in_use requires status_date, and marking as sold
-// additionally requires sale_price. Returns nil when the transition is
-// not "leaving in_use" or all required fields are present. Per-row
-// invariants (sale_price only when sold, status_date only when not
-// in_use) stay at the model layer via ValidateWithContext.
-func validateForwardStatusTransition(prev, next models.CommodityStatus, statusDate models.PDate, salePrice *decimal.Decimal) error {
-	if prev != models.CommodityStatusInUse || next == models.CommodityStatusInUse {
-		return nil
-	}
-	if statusDate == nil || string(*statusDate) == "" {
-		return validation.Errors{
-			"status_date": validation.NewError("status_date_required_on_transition",
-				"status date is required when leaving in_use"),
-		}
-	}
-	if next == models.CommodityStatusSold && salePrice == nil {
-		return validation.Errors{
-			"sale_price": validation.NewError("sale_price_required_for_sold",
-				"sale price is required when marking as sold"),
-		}
-	}
-	return nil
 }
 
 // updateCommodity updates a commodity.
@@ -497,7 +510,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 	// three metadata fields when flipping back to in_use). Pre-existing
 	// terminal rows with NULL metadata stay valid on edits that don't
 	// change the status.
-	if err := validateForwardStatusTransition(commodity.Status, updateData.Status, updateData.StatusDate, updateData.SalePrice); err != nil {
+	if err := services.ValidateCommodityStatusTransition(commodity.Status, updateData.Status, updateData.StatusDate, updateData.SalePrice); err != nil {
 		unprocessableEntityError(w, r, err)
 		return
 	}
@@ -518,6 +531,11 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 			renderQuantityBumpBlockers(w, r, blockers)
 			return
 		}
+	}
+
+	if err := validateCommoditySeller(r.Context(), registrySet.SellerRegistry, updateData.SellerID); err != nil {
+		renderSellerWriteError(w, r, err)
+		return
 	}
 
 	// Use UpdateWithUser to ensure proper user context and validation
@@ -705,103 +723,6 @@ func validationError(field, msg string) error {
 // `images` / `invoices` / `manuals` SQL tables stay until ops run the
 // #1399 backfill in production; that drop is a separate follow-up.
 
-// bulkDeleteCommodities moves a list of commodities to Trash in a single
-// request.
-// @Summary Bulk-delete commodities
-// @Description Move every commodity whose id appears in the body to Trash.
-// @Description The response lists succeeded vs. failed ids so the frontend
-// @Description can render partial-failure UX without parsing per-id HTTP
-// @Description statuses.
-// @Tags commodities
-// @Accept json-api
-// @Produce json-api
-// @Param groupSlug path string true "Group slug"
-// @Param body body jsonapi.BulkIDsRequest true "List of commodity IDs to delete"
-// @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
-// @Failure 422 {object} jsonapi.Errors "Bad request body"
-// @Router /g/{groupSlug}/commodities/bulk-delete [post].
-func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.Request) {
-	var input jsonapi.BulkIDsRequest
-	if err := render.Bind(r, &input); err != nil {
-		unprocessableEntityError(w, r, err)
-		return
-	}
-
-	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
-	failed := make([]jsonapi.BulkResultFail, 0)
-	for _, id := range input.Data.Attributes.IDs {
-		if _, err := api.trashService.TrashCommodity(r.Context(), id); err != nil {
-			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
-			continue
-		}
-		succeeded = append(succeeded, id)
-	}
-
-	render.Status(r, http.StatusOK)
-	if err := render.Render(w, r, jsonapi.NewBulkResultResponse("commodities", succeeded, failed)); err != nil {
-		internalServerError(w, r, err)
-	}
-}
-
-// bulkMoveCommodities reassigns a list of commodities to a new area in
-// a single request.
-// @Summary Bulk-move commodities to a new area
-// @Description Update every commodity whose id appears in the body to
-// @Description belong to the supplied area_id.
-// @Tags commodities
-// @Accept json-api
-// @Produce json-api
-// @Param groupSlug path string true "Group slug"
-// @Param body body jsonapi.BulkMoveRequest true "List of commodity IDs and the destination area_id"
-// @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
-// @Failure 422 {object} jsonapi.Errors "Bad request body"
-// @Router /g/{groupSlug}/commodities/bulk-move [post].
-func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Request) {
-	registrySet := RegistrySetFromContext(r.Context())
-	if registrySet == nil {
-		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
-		return
-	}
-
-	var input jsonapi.BulkMoveRequest
-	if err := render.Bind(r, &input); err != nil {
-		unprocessableEntityError(w, r, err)
-		return
-	}
-
-	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
-	failed := make([]jsonapi.BulkResultFail, 0)
-	for _, id := range input.Data.Attributes.IDs {
-		commodity, err := registrySet.CommodityRegistry.Get(r.Context(), id)
-		if err != nil {
-			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
-			continue
-		}
-		before := *commodity
-		// BulkMove always targets a concrete area (required & non-empty,
-		// validated at jsonapi/bulk.go). AreaID is now a *string on the
-		// model, so take the address of the wire value.
-		aid := input.Data.Attributes.AreaID
-		commodity.AreaID = &aid
-		updated, err := registrySet.CommodityRegistry.Update(r.Context(), *commodity)
-		if err != nil {
-			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
-			continue
-		}
-		// #1450: emit one event per affected commodity (per the issue's
-		// "Bulk-move / bulk-delete emit one event per affected commodity"
-		// requirement). EmitUpdated detects the area change and produces
-		// a `moved` row.
-		api.eventService.EmitUpdated(r.Context(), &before, updated)
-		succeeded = append(succeeded, id)
-	}
-
-	render.Status(r, http.StatusOK)
-	if err := render.Render(w, r, jsonapi.NewBulkResultResponse("commodities", succeeded, failed)); err != nil {
-		internalServerError(w, r, err)
-	}
-}
-
 func Commodities(params Params) func(r chi.Router) {
 	fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
 	api := &commoditiesAPI{
@@ -812,15 +733,16 @@ func Commodities(params Params) func(r chi.Router) {
 		eventService:  services.NewCommodityEventService(params.FactorySet),
 		factorySet:    params.FactorySet,
 	}
+	api.bulkService = services.NewCommodityBulkService(api.tagService, api.eventService, api.trashService)
 
 	return func(r chi.Router) {
 		r.With(paginate).Get("/", api.listCommodities) // GET /commodities
-		// Bulk endpoints (#1330 PR 5.5). Mounted before `/{commodityID}`
-		// so chi's static-vs-param-route matcher routes `/bulk-delete`
-		// and `/bulk-move` here rather than treating those slugs as a
-		// commodity id.
+		// Bulk endpoints. Mounted before `/{commodityID}` so chi's
+		// static-vs-param-route matcher routes `/bulk-*` here rather than
+		// treating those slugs as a commodity id.
 		r.Post("/bulk-delete", api.bulkDeleteCommodities) // POST /commodities/bulk-delete
 		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
+		r.Post("/bulk-update", api.bulkUpdateCommodities) // POST /commodities/bulk-update
 		r.Get("/tag-counts", api.countCommodityTags)      // GET /commodities/tag-counts
 		r.Get("/brands", api.listCommodityBrands)         // GET /commodities/brands
 		r.Route("/{commodityID}", func(r chi.Router) {

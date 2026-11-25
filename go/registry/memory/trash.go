@@ -108,6 +108,26 @@ func (r *CommodityRegistry) trashedItems(keep func(*models.Commodity) bool) []*m
 	return out
 }
 
+// liveAndTrashed returns the visible live items and the visible items in
+// Trash, read in one pass under the registry lock.
+func (r *CommodityRegistry) liveAndTrashed() (live, trashed []*models.Commodity) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		c := pair.Value
+		if c == nil || !r.isItemVisible(c) {
+			continue
+		}
+		cp := *c
+		if c.IsTrashed() {
+			trashed = append(trashed, &cp)
+		} else {
+			live = append(live, &cp)
+		}
+	}
+	return live, trashed
+}
+
 // ListTrashed returns a page of trashed items, most recently deleted first.
 func (r *CommodityRegistry) ListTrashed(_ context.Context, offset, limit int) ([]*models.Commodity, int, error) {
 	all := r.trashedItems(func(*models.Commodity) bool { return true })
@@ -382,6 +402,46 @@ func (r *FileRegistry) Trash(_ context.Context, id, deletedBy, withCommodityID s
 			f.DeletedWithCommodityID = new(withCommodityID)
 		}
 	})
+}
+
+// TrashUnlessHeld mirrors the postgres method. The links are checked and
+// the file changed under the write lock. Without the commodity factory a
+// link to an item cannot be shown to be in Trash, so it holds the file.
+func (r *FileRegistry) TrashUnlessHeld(_ context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	f, ok := r.items.Get(id)
+	if !ok || !r.isItemVisible(f) || !isLiveFile(f) {
+		return false, nil
+	}
+	links := slices.Clone(r.links.byFile[id])
+	slices.SortStableFunc(links, func(a, b models.FileLink) int {
+		if c := a.CreatedAt.Compare(b.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	withItem := ""
+	for _, l := range links {
+		if l.EntityType == entityType && l.EntityID == entityID {
+			continue
+		}
+		if l.EntityType != models.FileLinkCommodity || !r.itemInTrash(l.EntityID) {
+			return false, nil
+		}
+		if withItem == "" {
+			withItem = l.EntityID
+		}
+	}
+	next := *f
+	next.DeletedAt = new(at.UTC())
+	next.DeletedBy = new(deletedBy)
+	next.DeletedWithCommodityID = nil
+	if withItem != "" {
+		next.DeletedWithCommodityID = new(withItem)
+	}
+	r.items.Set(id, &next)
+	return true, nil
 }
 
 // Restore makes a trashed file live again.

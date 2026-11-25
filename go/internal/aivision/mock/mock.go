@@ -213,6 +213,7 @@ func DefaultResult() aivision.ScanResult {
 			aivision.FieldNameShortName:             {Value: "WH-Sample", Confidence: 0.78},
 			aivision.FieldNameBrand:                 {Value: "Sample Audio", Confidence: 0.84},
 			aivision.FieldNameModel:                 {Value: "WH-100", Confidence: 0.72},
+			aivision.FieldNameSeller:                {Value: "Sample Electronics Store", Confidence: 0.66},
 			aivision.FieldNameType:                  {Value: "electronics", Confidence: 0.95},
 			aivision.FieldNameOriginalPrice:         {Value: 199.99, Confidence: 0.80},
 			aivision.FieldNameOriginalPriceCurrency: {Value: "USD", Confidence: 0.85},

@@ -33,6 +33,7 @@ const (
 	ParamStatus                = "status"
 	ParamAreaID                = "area_id"
 	ParamUnassigned            = "unassigned"
+	ParamSellerID              = "seller_id"
 	ParamIncludeInactive       = "include_inactive"
 	ParamWarrantyStatus        = "warranty_status"
 	ParamWarrantyExpiresBefore = "warranty_expires_before"
@@ -51,6 +52,7 @@ const (
 	MaxTextRunes = 200
 	MaxTerms     = 10
 	MaxTags      = 50
+	MaxSellers   = 50
 )
 
 // Query is a validated item filter plus its sort. The zero value is not the
@@ -67,6 +69,9 @@ type Query struct {
 	// and is ignored when AreaID is set.
 	AreaID     string
 	Unassigned bool
+	// SellerIDs keeps items bought from one of the sellers (OR within the
+	// list). An ID no seller has matches no item.
+	SellerIDs []string
 	// IncludeInactive, when false, hides drafts and, unless Statuses is
 	// set, items that are not in use. Default true.
 	IncludeInactive bool
@@ -119,7 +124,7 @@ func paramError(param, value, reason string) *Error {
 // filterParams lists every parameter Parse understands.
 var filterParams = []string{
 	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
-	ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
+	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
 	ParamLentOut, ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
 	ParamTrashed, ParamSort,
 }
@@ -149,7 +154,7 @@ func Parse(values url.Values, reserved ...string) (Query, error) {
 	p := parser{values: values, reserved: reserved}
 
 	steps := []func(*Query) error{
-		p.text, p.types, p.statuses, p.area, p.flags, p.warranty, p.tags, p.sort,
+		p.text, p.types, p.statuses, p.area, p.sellers, p.flags, p.warranty, p.tags, p.sort,
 	}
 	for _, step := range steps {
 		if err := step(&q); err != nil {
@@ -265,10 +270,10 @@ func (p parser) text(q *Query) error {
 	return nil
 }
 
-// types accepts any value: an item type nobody uses matches no item, which
-// is an applied condition rather than a dropped one. The set of types is not
-// checked against models.CommodityType so the contract does not have to
-// change when a group defines its own types (#2802).
+// types accepts any value: an item type slug nobody uses matches no item,
+// which is an applied condition rather than a dropped one. Item types are
+// per group (#2802), so the parser, which knows no group, does not check
+// the slugs against a list.
 func (p parser) types(q *Query) error {
 	for _, v := range p.list(ParamType) {
 		t := models.CommodityType(v)
@@ -303,6 +308,22 @@ func (p parser) area(q *Query) error {
 		return err
 	}
 	q.Unassigned = unassigned != nil && *unassigned
+	return nil
+}
+
+// sellers reads the seller filter. Like types, it does not check that a
+// seller with the ID exists: an unknown ID matches no item, which is an
+// applied condition.
+func (p parser) sellers(q *Query) error {
+	for _, v := range p.list(ParamSellerID) {
+		if slices.Contains(q.SellerIDs, v) {
+			continue
+		}
+		q.SellerIDs = append(q.SellerIDs, v)
+		if len(q.SellerIDs) > MaxSellers {
+			return paramError(ParamSellerID, "", fmt.Sprintf("must list at most %d sellers", MaxSellers))
+		}
+	}
 	return nil
 }
 
@@ -443,6 +464,9 @@ func (q Query) Values() url.Values {
 	if q.Unassigned {
 		v.Set(ParamUnassigned, "true")
 	}
+	for _, id := range q.SellerIDs {
+		v.Add(ParamSellerID, id)
+	}
 	if !q.IncludeInactive {
 		v.Set(ParamIncludeInactive, "false")
 	}
@@ -488,6 +512,7 @@ func (q Query) ListOptions() registry.CommodityListOptions {
 		Statuses:              q.Statuses,
 		AreaID:                q.AreaID,
 		Unassigned:            q.Unassigned,
+		SellerIDs:             q.SellerIDs,
 		Search:                q.Text,
 		Tags:                  q.Tags,
 		IncludeInactive:       q.IncludeInactive,

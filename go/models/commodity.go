@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
@@ -54,9 +55,15 @@ var (
 	_ validation.Validatable = (*CommodityType)(nil)
 )
 
+// CommodityType is the slug of one of the item types of the item's group
+// (see ItemType). The six built-in types keep the slugs below; a type a
+// member adds gets a slug made from its name. Whether a slug names a type of
+// the group is checked by the registries, inside the write's transaction;
+// the model checks only its shape.
 type CommodityType string
 
-// Commodity types. Adding a new type? Don't forget to update IsValid() method.
+// The slugs of the built-in item types, seeded in every group (see
+// BuiltinItemTypes).
 const (
 	CommodityTypeWhiteGoods  CommodityType = "white_goods"
 	CommodityTypeElectronics CommodityType = "electronics"
@@ -66,17 +73,21 @@ const (
 	CommodityTypeOther       CommodityType = "other"
 )
 
+// IsValid reports whether c has the shape of an item type slug: lowercase
+// letters and digits, in runs separated by single hyphens or underscores, at
+// most MaxItemTypeSlugRunes runes.
 func (c CommodityType) IsValid() bool {
-	switch c {
-	case CommodityTypeWhiteGoods,
-		CommodityTypeElectronics,
-		CommodityTypeEquipment,
-		CommodityTypeFurniture,
-		CommodityTypeClothes,
-		CommodityTypeOther:
-		return true
-	}
-	return false
+	s := string(c)
+	return s != "" &&
+		utf8.RuneCountInString(s) <= MaxItemTypeSlugRunes &&
+		itemTypeSlugPattern.MatchString(s) &&
+		strings.ToLower(s) == s
+}
+
+// IsBuiltin reports whether c is the slug of a built-in item type.
+func (c CommodityType) IsBuiltin() bool {
+	_, ok := builtinItemTypeBySlug[c]
+	return ok
 }
 
 func (c CommodityType) Validate() error {
@@ -133,8 +144,12 @@ type Commodity struct {
 	// text.
 	//ptah:schema:field name="model" type="TEXT" not_null="true" default=""
 	Model string `json:"model" db:"model"`
+	// Type is the slug of one of the group's item types (see ItemType). An
+	// item keeps the slug, not the type's id: a slug never changes, so the
+	// item query's type filter, saved views and backups that name it stay
+	// valid when the type is renamed.
 	//ptah:schema:field name="type" type="TEXT" not_null="true"
-	Type CommodityType `json:"type" db:"type"`
+	Type CommodityType `json:"type" db:"type" swaggertype:"string" example:"electronics"`
 	// AreaID is the area the commodity is filed under. Nullable (issue
 	// #1986): a commodity may be created with no area and later
 	// un-assigned. Mirrors CoverFileID's nullable-FK pointer style. No
@@ -145,6 +160,13 @@ type Commodity struct {
 	AreaID *string `json:"area_id,omitempty" db:"area_id"`
 	//ptah:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
+	// SellerID is the seller the item was bought from (#2804), or nil.
+	// Deleting the seller leaves the item without one. The seller must be in
+	// the item's group: the postgres registry looks it up under the group's
+	// row-level security before every write, since the foreign key alone
+	// would accept a seller of any group.
+	//ptah:schema:field name="seller_id" type="TEXT" foreign="sellers(id)" foreign_key_name="fk_commodity_seller" on_delete="SET NULL"
+	SellerID *string `json:"seller_id,omitempty" db:"seller_id"`
 	// OriginalPrice is the purchase price in OriginalPriceCurrency, null when
 	// unknown. Each of the three prices can be unknown on its own, and
 	// unknown is not zero: a gift's price is unknown, a free item's is 0. A
@@ -529,8 +551,17 @@ type CommodityIndexes struct {
 	//ptah:schema:index name="idx_commodities_tenant_area" fields="tenant_id,area_id" table="commodities"
 	_ int
 
+	// The seller filter of the items list and the item counts per seller.
+	//ptah:schema:index name="idx_commodities_seller" fields="seller_id" table="commodities"
+	_ int
+
 	// Composite index for tenant + status queries
 	//ptah:schema:index name="idx_commodities_tenant_status" fields="tenant_id,status" table="commodities"
+	_ int
+
+	// The type filter of the items list, the item counts per type, and the
+	// in-use check and reassignment when an item type is deleted.
+	//ptah:schema:index name="idx_commodities_group_type" fields="group_id,type" table="commodities"
 	_ int
 
 	// Composite index for tenant+group RLS-filtered queries (e.g. list-by-group)
@@ -596,6 +627,14 @@ type CommodityIndexes struct {
 
 func (*Commodity) Validate() error {
 	return ErrMustUseValidateWithContext
+}
+
+// NormalizeSellerID collapses an explicit empty seller to nil, as
+// NormalizeAreaID does for the area.
+func (a *Commodity) NormalizeSellerID() {
+	if a.SellerID != nil && *a.SellerID == "" {
+		a.SellerID = nil
+	}
 }
 
 // NormalizeAreaID collapses an explicit empty area to nil so "" and a nil

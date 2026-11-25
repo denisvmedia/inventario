@@ -190,6 +190,8 @@ export interface CreateCommodityParams {
   comments?: string
   brand?: string
   model?: string
+  /** The id of a seller of the group (#2804). */
+  sellerId?: string
 }
 
 /**
@@ -240,6 +242,7 @@ export async function createCommodityViaAPI(
   if (params.comments) attributes.comments = params.comments
   if (params.brand) attributes.brand = params.brand
   if (params.model) attributes.model = params.model
+  if (params.sellerId) attributes.seller_id = params.sellerId
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),
     data: {
@@ -257,6 +260,26 @@ export async function createCommodityViaAPI(
   const body = await resp.json()
   expect(body?.data?.id, 'createCommodityViaAPI: response missing data.id').toBeTruthy()
   return { id: body.data.id as string, name: params.name }
+}
+
+/**
+ * GET a live commodity's attributes by id.
+ */
+export async function getCommodityViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  id: string,
+): Promise<Record<string, unknown>> {
+  const resp = await request.get(
+    `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
+    { headers: authHeaders(auth) },
+  )
+  if (!resp.ok()) {
+    throw new Error(`getCommodityViaAPI: GET /commodities/${id} → ${resp.status()} ${await resp.text()}`)
+  }
+  const body = await resp.json()
+  return (body?.data?.attributes ?? {}) as Record<string, unknown>
 }
 
 /**

@@ -26,7 +26,26 @@
     "selected_one": "{{count}} vybrán",
     "selected_few": "{{count}} vybrány",
     "selected_many": "{{count}} vybráno",
-    "selected_other": "{{count}} vybráno"
+    "selected_other": "{{count}} vybráno",
+    "tagsButton": "Štítky…",
+    "tagsDescription": "Přidejte souborům štítky nebo jim je odeberte. Štítky, které nevyberete, zůstanou beze změny.",
+    "tagsError": "Štítky se nepodařilo změnit.",
+    "tagsNotPresent": "Žádný z vybraných souborů tyto štítky neměl.",
+    "tagsPartial": "Štítky změněny u {{succeeded}}, {{failed}} se nepodařilo. Neúspěšné soubory zůstávají vybrané, takže to můžete zkusit znovu.",
+    "tagsTitle_one": "Upravit štítky {{count}} souboru",
+    "tagsTitle_few": "Upravit štítky {{count}} souborů",
+    "tagsTitle_many": "Upravit štítky {{count}} souborů",
+    "tagsTitle_other": "Upravit štítky {{count}} souborů",
+    "tagsUnchanged": "Vybrané soubory už tyto štítky měly.",
+    "tagsUnchangedBoth": "Vybrané soubory už měly štítky k přidání a žádný neměl štítky k odebrání.",
+    "tagsUnknown_one": "Pro {{count}} soubor nepřišla odpověď, jeho štítky se možná změnily. Zkontrolujte seznam.",
+    "tagsUnknown_few": "Pro {{count}} soubory nepřišla odpověď, jejich štítky se možná změnily. Zkontrolujte seznam.",
+    "tagsUnknown_many": "Pro {{count}} souboru nepřišla odpověď, jejich štítky se možná změnily. Zkontrolujte seznam.",
+    "tagsUnknown_other": "Pro {{count}} souborů nepřišla odpověď, jejich štítky se možná změnily. Zkontrolujte seznam.",
+    "tagsUpdated_one": "Štítky změněny u {{count}} souboru.",
+    "tagsUpdated_few": "Štítky změněny u {{count}} souborů.",
+    "tagsUpdated_many": "Štítky změněny u {{count}} souborů.",
+    "tagsUpdated_other": "Štítky změněny u {{count}} souborů."
   },
   "categoryAll": "Vše",
   "categoryDocuments": "Dokumenty",
@@ -236,6 +255,7 @@
     "titleWithName": "Připojit existující soubor k {{name}}"
   },
   "links": {
+    "draftName": "Koncept: {{name}}",
     "remove": "Odebrat přílohu z {{name}}",
     "removed": "Odebráno z {{name}}",
     "removedLast": "Odebráno z {{name}}. Soubor zůstává na stránce Soubory.",
@@ -248,7 +268,8 @@
     "type": {
       "area": "Oblast",
       "commodity": "Položka",
-      "location": "Lokace"
+      "location": "Lokace",
+      "draft": "Koncept"
     }
   }
 }

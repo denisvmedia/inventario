@@ -36,6 +36,11 @@ const INBUnassignedMember = "unassigned-commodities.json"
 // so the walker MUST match it before the generic `files/` byte-member case.
 const INBFilesMember = "files/_index.json"
 
+// INBDraftsMember is the inner-tar member name of the drafts document (format
+// 3.5). Kept in sync with backup/export.INBDraftsName. It lives under the
+// `files/` prefix too, so the walker matches it before the file-bytes case.
+const INBDraftsMember = "files/_drafts.json"
+
 // INBPricesKeepZero is the first format version (MAJOR, MINOR) whose archives
 // write a known zero price as "0" and leave an unknown price out. Kept in sync
 // with backup/export.INBFormatVersion.
@@ -91,8 +96,36 @@ type INBManifest struct {
 	// FilesFile names the non-commodity files member (issue #2235), or "" when
 	// the archive carries none. Informational here — restore dispatches by
 	// member name, so a 2.0 archive without this field round-trips unchanged.
-	FilesFile  string           `json:"filesFile,omitempty"`
+	FilesFile string `json:"filesFile,omitempty"`
+	// DraftsFile names the drafts member (format 3.5). Informational, like
+	// FilesFile.
+	DraftsFile string `json:"draftsFile,omitempty"`
+	// Sellers are the archived sellers (format 3.3), absent from older
+	// archives. Restore finds or creates each one before the first item.
+	Sellers []INBSeller `json:"sellers,omitempty"`
+	// ItemTypes are the archived item types (format 3.4), absent from older
+	// archives. Restore maps each onto the destination group's types before
+	// the first item.
+	ItemTypes  []INBItemType    `json:"itemTypes,omitempty"`
 	Statistics INBManifestStats `json:"statistics"`
+}
+
+// INBItemType is an archived item type keyed by its slug, which
+// INBCommodity.Type holds. Mirrors backup/export.INBItemType.
+type INBItemType struct {
+	Slug string `json:"slug"`
+	Name string `json:"name,omitempty"`
+	Icon string `json:"icon,omitempty"`
+}
+
+// INBSeller is an archived seller keyed by its immutable UUID. Mirrors
+// backup/export.INBSeller.
+type INBSeller struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Website string `json:"website,omitempty"`
+	Contact string `json:"contact,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 // INBSignatureInfo is the informational signature descriptor.
@@ -152,11 +185,14 @@ type INBArea struct {
 // INBCommodity is a commodity row keyed by immutable UUID; AreaID is the parent
 // area UUID. The three file-reference arrays carry the attached files.
 type INBCommodity struct {
-	ID                     string   `json:"id"`
-	Name                   string   `json:"name"`
-	ShortName              string   `json:"shortName,omitempty"`
-	Brand                  string   `json:"brand,omitempty"`
-	Model                  string   `json:"model,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ShortName string `json:"shortName,omitempty"`
+	Brand     string `json:"brand,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// SellerID is the archived seller's UUID; the processor resolves it
+	// through the manifest's sellers, so ConvertToCommodity leaves it out.
+	SellerID               string   `json:"sellerId,omitempty"`
 	Type                   string   `json:"type,omitempty"`
 	AreaID                 string   `json:"areaId"`
 	Count                  int      `json:"count"`
@@ -235,6 +271,39 @@ type INBFilesDoc struct {
 	Files []INBEntityFileRef `json:"files"`
 }
 
+// INBDraftsDoc is the drafts document (format 3.5). Mirrors
+// backup/export.INBDraftsDoc.
+type INBDraftsDoc struct {
+	Drafts []INBDraft `json:"drafts"`
+}
+
+// INBDraft is an archived open draft of a new item. ID is the draft's
+// archive UUID, which the draft links of the files member name. The area_id
+// and seller_id values carry the UUIDs of the archived area and seller.
+// Mirrors backup/export.INBDraft.
+type INBDraft struct {
+	ID        string                      `json:"id"`
+	ClientKey string                      `json:"clientKey"`
+	Values    models.CommodityDraftValues `json:"values"`
+	Revision  int                         `json:"revision"`
+	CreatedAt string                      `json:"createdAt,omitempty"`
+	UpdatedAt string                      `json:"updatedAt,omitempty"`
+}
+
+// Timestamps returns the archived creation and save times. A malformed
+// timestamp is an error; an absent one is zero, for the registry to fill.
+func (d *INBDraft) Timestamps() (createdAt, updatedAt time.Time, err error) {
+	createdAt, err = parseInbTimestamp(d.CreatedAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, errxtrace.Wrap("invalid createdAt", err, errx.Attrs("draft_id", d.ID))
+	}
+	updatedAt, err = parseInbTimestamp(d.UpdatedAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("draft_id", d.ID))
+	}
+	return createdAt, updatedAt, nil
+}
+
 // INBEntityFileRef is a file reference carrying its own polymorphic link (issue
 // #2235). LinkedEntityID is the linked location/area's IMMUTABLE UUID, which the
 // processor maps to the destination DB id; "" marks a standalone file. Type and
@@ -253,7 +322,7 @@ type INBEntityFileRef struct {
 }
 
 // INBFileLink is the resolved destination link for a restored file (issue #2235).
-// Type is "commodity" | "location" | "area" | "" (standalone); DBID is the
+// Type is "commodity" | "location" | "area" | "draft" | "" (standalone); DBID is the
 // destination entity's DB id (already mapped from the archive UUID) and Meta its
 // bucket. FileType / Category are the archived models values, used verbatim when
 // present and re-derived from the linked context only for older archives that did

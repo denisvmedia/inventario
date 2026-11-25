@@ -132,6 +132,10 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// before commodities.
 	func(t store.TableNames) string { return string(t.CommodityReminders()) },
 
+	// Drafts (#2812). group_id -> location_groups and created_by_user_id ->
+	// users NO ACTION; no other table references them.
+	func(t store.TableNames) string { return string(t.CommodityDrafts()) },
+
 	// Currency-migration audit rows (#2095). migration_id ->
 	// currency_migrations CASCADE, commodity_id -> commodities SET NULL.
 	// Dropped before both currency_migrations and commodities.
@@ -160,6 +164,17 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// Tags (#2095). tenant_id + group_id, no incoming FK left now that the
 	// inventory rows that referenced them are gone.
 	func(t store.TableNames) string { return string(t.Tags()) },
+
+	// Saved view placements, then the views. group_id -> location_groups
+	// and the user columns -> users NO ACTION; cleared before both.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
+	func(t store.TableNames) string { return string(t.SavedViews()) },
+	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
+	// them are gone.
+	func(t store.TableNames) string { return string(t.Sellers()) },
+	// Item types (#2802). tenant_id + group_id; the commodities whose type
+	// named them are gone.
+	func(t store.TableNames) string { return string(t.ItemTypes()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups NO ACTION; cleared before location_groups.

@@ -26,7 +26,9 @@ Backups are not part of this: deleting an export removes it for good (see
 [Backup & restore](../backup-and-restore/#manage-and-delete-exports)).
 
 Right after you delete items, the message at the bottom of the screen has an
-**Undo** button that restores them straight away.
+**Undo** button that restores them straight away. If a restore gets no answer
+for some of them, a warning says how many may have been restored; check the
+trash for the rest.
 
 ## While something is in the trash
 
@@ -52,7 +54,7 @@ The page has two tabs:
 - **Items** lists deleted items, with how many files went to the trash with
   each one and how much space they take.
 - **Files** lists files you deleted on their own, with the items, locations,
-  or areas they were attached to.
+  areas or drafts they were attached to.
 
 Each row shows when it was deleted and by whom, and the date it will be
 deleted for good.

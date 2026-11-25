@@ -25,7 +25,9 @@ type GroupPurger struct {
 	commodityLoans       registry.CommodityLoanRegistryFactory
 	commodityServices    registry.CommodityServiceRegistryFactory
 	supplyLinks          registry.SupplyLinkRegistryFactory
+	savedViews           registry.SavedViewRegistryFactory
 	tags                 registry.TagRegistryFactory
+	sellers              registry.SellerRegistryFactory
 	exports              registry.ExportRegistryFactory
 	restoreOperations    registry.RestoreOperationRegistryFactory
 	restoreSteps         registry.RestoreStepRegistryFactory
@@ -36,9 +38,19 @@ type GroupPurger struct {
 	maintenanceReminders registry.MaintenanceReminderRegistry
 	reminders            registry.CommodityReminderRegistryFactory
 	reminderSends        registry.CommodityReminderSendRegistry
+	drafts               registry.CommodityDraftRegistryFactory
 	currencyMigrations   registry.CurrencyMigrationRegistryFactory
 	notificationPrefs    registry.GroupNotificationPrefRegistry
 	memberships          registry.GroupMembershipRegistry
+	// itemTypes is set by SetItemTypeFactory. The purge drops a group's
+	// types without the delete rules, which would keep the last one.
+	itemTypes *ItemTypeRegistryFactory
+}
+
+// SetItemTypeFactory attaches the item types the purge drops with the
+// group (#2802).
+func (r *GroupPurger) SetItemTypeFactory(itemTypes *ItemTypeRegistryFactory) {
+	r.itemTypes = itemTypes
 }
 
 // NewGroupPurger wires a GroupPurger to the registry factories that own the
@@ -53,7 +65,9 @@ func NewGroupPurger(
 	commodityLoans registry.CommodityLoanRegistryFactory,
 	commodityServices registry.CommodityServiceRegistryFactory,
 	supplyLinks registry.SupplyLinkRegistryFactory,
+	savedViews registry.SavedViewRegistryFactory,
 	tags registry.TagRegistryFactory,
+	sellers registry.SellerRegistryFactory,
 	exports registry.ExportRegistryFactory,
 	restoreOperations registry.RestoreOperationRegistryFactory,
 	restoreSteps registry.RestoreStepRegistryFactory,
@@ -64,6 +78,7 @@ func NewGroupPurger(
 	maintenanceReminders registry.MaintenanceReminderRegistry,
 	reminders registry.CommodityReminderRegistryFactory,
 	reminderSends registry.CommodityReminderSendRegistry,
+	drafts registry.CommodityDraftRegistryFactory,
 	currencyMigrations registry.CurrencyMigrationRegistryFactory,
 	notificationPrefs registry.GroupNotificationPrefRegistry,
 	memberships registry.GroupMembershipRegistry,
@@ -76,7 +91,9 @@ func NewGroupPurger(
 		commodityLoans:       commodityLoans,
 		commodityServices:    commodityServices,
 		supplyLinks:          supplyLinks,
+		savedViews:           savedViews,
 		tags:                 tags,
+		sellers:              sellers,
 		exports:              exports,
 		restoreOperations:    restoreOperations,
 		restoreSteps:         restoreSteps,
@@ -87,6 +104,7 @@ func NewGroupPurger(
 		maintenanceReminders: maintenanceReminders,
 		reminders:            reminders,
 		reminderSends:        reminderSends,
+		drafts:               drafts,
 		currencyMigrations:   currencyMigrations,
 		notificationPrefs:    notificationPrefs,
 		memberships:          memberships,
@@ -182,6 +200,11 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 			reg := r.reminders.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
+		// Drafts (#2812), as in the postgres purger.
+		{"commodity_drafts", func() error {
+			reg := r.drafts.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
 		// Currency-migration audit rows (#2095) dropped before the migration
 		// rows. The audit slice is bespoke (not a generic registry), so use
 		// the Piece-A service-mode DeleteAuditRowsByGroup which mirrors the
@@ -229,6 +252,28 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		{"tags", func() error {
 			reg := r.tags.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Saved views: group_id -> location_groups is NO ACTION, like the
+		// postgres purger's explicit DELETE. Deleting a view deletes the
+		// placements every member had for it.
+		{"saved_views", func() error {
+			reg := r.savedViews.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Sellers (#2804). Dropped after the commodities that pointed at
+		// them, mirroring the postgres order.
+		{"sellers", func() error {
+			reg := r.sellers.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Item types (#2802), after the commodities whose type named them.
+		{"item_types", func() error {
+			if r.itemTypes != nil {
+				r.itemTypes.purgeWhere(func(t *models.ItemType) bool {
+					return t.TenantID == tenantID && t.GroupID == groupID
+				})
+			}
+			return nil
 		}},
 		// Per-user/per-group notification overrides (#2095). The registry is
 		// service-mode only (not TenantGroupAware), so use the Piece-A

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
-import { Calendar } from "lucide-react"
+import { Calendar, type LucideIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
@@ -13,11 +13,7 @@ import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import type { Commodity } from "@/features/commodities/api"
 import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
-import {
-  COMMODITY_STATUS_TONES,
-  type CommodityStatusValue,
-  type CommodityTypeValue,
-} from "@/features/commodities/constants"
+import { COMMODITY_STATUS_TONES, type CommodityStatusValue } from "@/features/commodities/constants"
 import { commodityHref } from "@/features/commodities/listContext"
 import { formatPrice } from "@/features/commodities/price"
 import type { CommoditySearchMatch } from "@/features/commodities/query"
@@ -35,6 +31,8 @@ export interface CommodityCardProps {
   onToggleSelected: (id: string) => void
   onPreview: (id: string) => void
   areaName: (id?: string) => string
+  // The icon of an item type, by slug.
+  typeIcon: (type?: string) => LucideIcon | undefined
   tagLabel: (slug: string) => string
   resolveTag: (slug: string) => ResolvedTag
   tagHref: (tagSlug: string) => string | undefined
@@ -90,6 +88,7 @@ export function CommodityPhotoCard({
   onToggleSelected,
   onPreview,
   areaName,
+  typeIcon,
   tagLabel,
   resolveTag,
   tagHref,
@@ -142,7 +141,8 @@ export function CommodityPhotoCard({
         <CommodityThumb
           fill
           cover={row.cover}
-          type={row.type as CommodityTypeValue | undefined}
+          type={row.type}
+          icon={typeIcon(row.type)}
           name={row.name}
           sizes={PHOTO_CARD_IMAGE_SIZES}
           className="rounded-none"

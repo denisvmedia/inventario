@@ -35,7 +35,7 @@ An **item** is anything you want to keep track of — an appliance, a laptop, a 
 Items don't have to be placed in a location to be saved. If you skip that, the item appears with a small banner offering to **Place in location** — you can do that whenever you like, or leave it unassigned.
 :::
 
-If you're trying Inventario from the public landing page before creating an account, you can draft your first item right there. After you sign up, the app finishes adding it for you — your draft is never lost.
+If you're trying Inventario from the public landing page before creating an account, you can draft your first item right there. Until you sign up, it is kept in this browser only: closing the form offers **Keep on this device**, which takes you to sign in. After you sign up, the app finishes adding it for you — your draft is never lost.
 
 See [Items](../items/) for a full reference to every field.
 
@@ -85,6 +85,8 @@ Once your first item is in, here's how to make the most of Inventario:
 
 - **[Locations & areas](../locations-and-areas/)** — set up the physical places (a house, a garage, a shelf) where your items live.
 - **[Tags](../tags/)** — flexible labels like "fragile" or "to sell" that work across items, independent of where things are stored.
+- **[Sellers](../sellers/)** — the shops and people you bought from, with everything bought from each.
+- **[Item types](../item-types/)** — your group's own list of item types, with names and icons.
 - **[Files & photos](../files-and-photos/)** — attach receipts, manuals, and photos, and browse every file in one place.
 - **[Warranties, loans & maintenance](../warranties-loans-maintenance/)** — track what's under warranty, what you've lent out, and upcoming upkeep.
 - **[Reports](../reports/)** — generate insurance and inventory views you can print or share.

@@ -4072,6 +4072,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
                     q?: string;
                     /** @description Only items with these tag slugs (comma-separated or repeated); see tag_mode */
@@ -4234,10 +4236,10 @@ export type paths = {
         put?: never;
         /**
          * Bulk-delete commodities
-         * @description Move every commodity whose id appears in the body to Trash.
-         *     The response lists succeeded vs. failed ids so the frontend
-         *     can render partial-failure UX without parsing per-id HTTP
-         *     statuses.
+         * @description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
+         *     A retry sends the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4249,10 +4251,10 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs to delete */
+            /** @description The items to delete */
             requestBody: {
                 content: {
-                    "application/vnd.api+json": components["schemas"]["jsonapi.BulkIDsRequest"];
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkDeleteRequest"];
                 };
             };
             responses: {
@@ -4265,7 +4267,25 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4293,8 +4313,10 @@ export type paths = {
         put?: never;
         /**
          * Bulk-move commodities to a new area
-         * @description Update every commodity whose id appears in the body to
-         *     belong to the supplied area_id.
+         * @description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
+         *     An area_id that is not an area of the group is refused with 422 before any item changes.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     A retry sends the same area_id with the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4306,7 +4328,7 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs and the destination area_id */
+            /** @description The items and the destination area_id */
             requestBody: {
                 content: {
                     "application/vnd.api+json": components["schemas"]["jsonapi.BulkMoveRequest"];
@@ -4322,7 +4344,122 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update commodities
+         * @description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:
+         *     a status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,
+         *     so a type or tag change in the same patch gets no event of its own.
+         *
+         *     The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
+         *     (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
+         *     `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
+         *     `in_use` takes neither: send it without `date` and `note` (a non-empty one is refused with 422), and it clears
+         *     the status date, note and sale price. `sold` is refused, since it needs a sale price for each item.
+         *     An item that already has the status keeps its status date and note: the patch does not change them,
+         *     even when it sends another date or note. The other parts of the patch still apply to that item.
+         *     A part left out of the patch is left unchanged.
+         *
+         *     The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
+         *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
+         *     `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
+         *     GET /commodities returned for it. The query is run when the request arrives and may select no items
+         *     in Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this
+         *     check comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items
+         *     within that limit (more, fewer, or as many with one swapped), the request fails with 409
+         *     bulk.selection_changed. Either way nothing changes.
+         *
+         *     The response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).
+         *     To retry, send the same patch again with the failed ids as `ids`, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The items and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4469,6 +4606,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
                     include_inactive?: boolean;
                     /** @description Filter by computed warranty status */
@@ -6055,6 +6194,381 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/drafts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List drafts
+         * @description The group's open drafts, most recently saved first. A draft is an unfinished
+         *     item saved on the server; it is not an item and appears in no item list, count
+         *     or search. A whole-group export in the .inb format (3.5 and later) carries the
+         *     open drafts; a selected-items export and the legacy XML export do not. When a
+         *     member who can edit items lists the drafts, the discards that stopped more than
+         *     ten minutes ago are finished first. That is best effort: at most 10 per request,
+         *     and a failure is logged, not returned. A 200 therefore does not mean that every
+         *     stopped discard finished or that the client_key of a discarded draft is free.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Drafts per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a draft
+         * @description Save unfinished form values as a new draft. The values are stored as given and
+         *     are not validated as an item. client_key is the client's identity for the draft:
+         *     a create with a key the group already has returns that draft with 200 instead of
+         *     making another one, so a retry after a lost response is safe. A key whose draft
+         *     is being discarded answers 409 draft.discarded. Known fields of the item form
+         *     must have the type the form uses (text, a number or numeric text, a list of
+         *     text, true or false); a field of another type is refused with 422 on
+         *     values.<field>. A type in values.type must be one of the group's item types
+         *     (422 item_type_unknown on values.type otherwise).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Draft */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description A draft with this client key already exists */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/drafts/{draftID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a draft
+         * @description One draft with its values and revision. A promoted draft is returned too, with
+         *     its values cleared and the id of the item it became. A draft being discarded
+         *     answers 404. Its files are listed by GET
+         *     /g/{groupSlug}/files?linked_entity_type=draft&linked_entity_id={draftID}.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        /**
+         * Save a draft
+         * @description Replace the values of an open draft. revision is the revision the values were
+         *     based on; the response carries the next one. A save based on an older revision
+         *     is refused with 409 draft.revision_conflict and the current revision in meta, so
+         *     a stale tab cannot overwrite newer input. A promoted draft answers 409
+         *     draft.promoted, a draft being discarded 409 draft.discarded. The values are
+         *     checked as on create.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Values and revision */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftSaveRequest"];
+                };
+            };
+            responses: {
+                /** @description Saved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Stale revision, promoted draft, or draft being discarded */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        /**
+         * Discard a draft
+         * @description Delete an open draft. Its files that nothing else uses go to Trash, where they
+         *     can be restored as standalone files until the Trash retention runs out; files
+         *     attached elsewhere only lose the link to the draft. A file attached only to the
+         *     draft and to an item that is already in Trash goes to Trash with that item:
+         *     restoring the item brings the file back. A promoted draft answers 409
+         *     draft.promoted. Once the discard has begun the draft can no longer be saved,
+         *     promoted or given files; repeating a discard that did not finish completes it.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Discarded */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Promoted draft */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/drafts/{draftID}/promote": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Finish a draft
+         * @description Create the item from the finished form and move the draft's files to it, in one
+         *     step. The body is the item as for POST /g/{groupSlug}/commodities, validated the
+         *     same way, and meta.revision is the draft revision it was based on (409
+         *     draft.revision_conflict when it is stale). meta.promotion_key is required: a key
+         *     the client makes for this promotion (a UUID) and sends again on every retry until
+         *     one succeeds. A repeat with the key of the promotion that happened creates nothing
+         *     and returns the item with 200, so a retry after a lost response is safe; any other
+         *     key, or the same key once that item no longer exists, answers 409 draft.promoted
+         *     with meta.commodity_id. A draft being discarded answers 409 draft.discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Draft ID */
+                    draftID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Finished item and draft revision */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftPromoteRequest"];
+                };
+            };
+            responses: {
+                /** @description The draft was already promoted to this item */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Item created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Draft not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Stale revision, draft promoted by another request, or draft being discarded */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/exports": {
         parameters: {
             query?: never;
@@ -6095,7 +6609,9 @@ export type paths = {
         put?: never;
         /**
          * Create an export
-         * @description create a new export
+         * @description Create a new export. A whole-group export in the .inb format (3.5 and later)
+         *     carries the group's open drafts and the files saved with them; a selected-items
+         *     export and the legacy XML export do not.
          */
         post: {
             parameters: {
@@ -6760,6 +7276,69 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/files/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update files
+         * @description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:
+         *     unlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name
+         *     stay on each file, and the title, description and file name stay as they are.
+         *     `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
+         *     A tag cannot be in both lists, and each list holds at most 50 tags.
+         *
+         *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).
+         *     A retry sends the same patch with the failed ids, in batches of at most 100.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The files and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.FileBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Bad request body or patch */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files/category-counts": {
         parameters: {
             query?: never;
@@ -7024,7 +7603,9 @@ export type paths = {
          *     new file, no upload, no storage charge. Attaching a file to an
          *     entity it is already attached to is a no-op and answers 200.
          *     The entity must be in the same group as the file. A backup
-         *     export file cannot be attached.
+         *     export file cannot be attached. A draft must be open: a promoted
+         *     draft answers 409 draft.promoted with meta.commodity_id, a draft
+         *     being discarded 409 draft.discarded.
          */
         post: {
             parameters: {
@@ -7065,6 +7646,15 @@ export type paths = {
                 };
                 /** @description File not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The draft is promoted or being discarded */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -7208,6 +7798,384 @@ export type paths = {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/inbox": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the inbox
+         * @description The records of the group that still need attention, one entry per record with
+         *     every reason it is there for. The default inbox holds unfinished work only: open
+         *     drafts of new items (reason draft, kind draft) and items marked as draft, whose
+         *     review is not complete (reason item_draft, kind commodity). Missing information
+         *     such as no location, no photo or an unknown price does not put an item here.
+         *     Entries are ordered by their first reason in the order draft, item_draft; drafts
+         *     most recently saved first, items most recently added first. meta.entries counts
+         *     the entries the reason filter keeps; meta.counts describes the whole inbox and
+         *     counts each record once in total, whatever its number of reasons. Every member of
+         *     the group can read it. When a member who can edit items reads it, the draft
+         *     discards that stopped more than ten minutes ago are finished first, as for
+         *     GET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Keep the entries with this reason */
+                    reason?: "draft" | "item_draft";
+                    /** @description Page number */
+                    page?: number;
+                    /** @description Entries per page (at most 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxResponse"];
+                    };
+                };
+                /** @description Unknown reason (query.invalid_parameter) */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/inbox/count": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the inbox
+         * @description How many records of the group need attention, for the sidebar and the dashboard.
+         *     total counts each record once, whatever its number of reasons; reasons counts,
+         *     per reason, the records that have it. The counts cover only what the group holds,
+         *     so they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished
+         *     first, as for GET /g/{groupSlug}/inbox.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxCountResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/item-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List item types
+         * @description The item types of the group: the built-in ones first in their fixed order, then the others by name.
+         *     Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create an item type
+         * @description The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
+         *     The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+         *     A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Item type object */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeRequest"];
+                };
+            };
+            responses: {
+                /** @description Item type created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Another item type of the group has this name, or the group has 100 item types */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/item-types/{itemTypeID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an item type */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete an item type
+         * @description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
+         *     then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+         */
+        delete: {
+            parameters: {
+                query?: {
+                    /** @description ID of the item type the deleted type's items move to */
+                    reassign_to?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted; meta.reassigned_items counts the items moved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeDeleteResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The type is in use and no reassign_to was given, or it is the group's last type */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description reassign_to names no other type of the group */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update an item type
+         * @description Attributes left out keep their value. The slug never changes, so items, filters and saved views keep working after a rename. An empty name on a built-in type gives it back its default name.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Item type patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Another item type of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/g/{groupSlug}/loans": {
@@ -8023,6 +8991,372 @@ export type paths = {
         };
         trace?: never;
     };
+    "/g/{groupSlug}/saved-views": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List saved views
+         * @description The member's own saved views and every view shared with the group, ordered by position, then name. meta.limits carries the limits the server keeps.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a saved view
+         * @description Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.
+         *     show_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Saved view attributes */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewResponse"];
+                    };
+                };
+                /** @description Sharing needs the user role (saved_view.forbidden) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Invalid attributes, an invalid query (query.invalid_parameter) or a limit reached (saved_view.limit_reached) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/saved-views/counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the items of saved views
+         * @description Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.
+         *     Each count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewCountsResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/saved-views/reorder": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reorder saved views
+         * @description Put the listed views in the given order among the positions they hold now; views left out keep their positions. Every view must be one the member may edit.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Saved view IDs in the new order */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewReorderRequest"];
+                };
+            };
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description A listed view may not be changed (saved_view.forbidden) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description A listed view was not found or is listed twice */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Invalid payload */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/saved-views/{savedViewID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get a saved view
+         * @description One saved view: the member's own, or one shared with the group. Another member's personal view is a 404.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Saved view ID */
+                    savedViewID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewResponse"];
+                    };
+                };
+                /** @description Saved view not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete a saved view
+         * @description Remove a saved view. A member may delete the views they created; admins may delete any shared view.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Saved view ID */
+                    savedViewID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not allowed to delete this view (saved_view.forbidden) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Saved view not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a saved view
+         * @description Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.
+         *     The member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.
+         *     show_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Saved view ID */
+                    savedViewID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Saved view attributes to change */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SavedViewResponse"];
+                    };
+                };
+                /** @description Not allowed to change this view (saved_view.forbidden) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Saved view not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Invalid attributes, an invalid query (query.invalid_parameter) or a limit reached (saved_view.limit_reached) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/search": {
         parameters: {
             query?: never;
@@ -8063,6 +9397,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
                     include_inactive?: boolean;
                     /** @description Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR */
@@ -8111,6 +9447,245 @@ export type paths = {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List sellers
+         * @description The sellers of the group sorted by name, each with the number of items bought from it (drafts and inactive items included, items in Trash left out).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Keep sellers whose name contains this text, ignoring case */
+                    q?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellersResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a seller
+         * @description The name is required and unique in the group, ignoring case and runs of spaces. The website, when set, is an absolute http(s) URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Seller object */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SellerRequest"];
+                };
+            };
+            responses: {
+                /** @description Seller created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Another seller of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/sellers/{sellerID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a seller */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete a seller
+         * @description Deletes the seller. The items bought from it are kept and no longer name a seller.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a seller
+         * @description Attributes left out keep their value. The merged seller is validated as on create.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Seller patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SellerUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Another seller of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/g/{groupSlug}/services": {
@@ -8947,7 +10522,9 @@ export type paths = {
          * Restore items from Trash
          * @description Restores every item whose id appears in the body. The response
          *     lists the restored ids, the failures, and the restored items
-         *     that came back without an area.
+         *     that came back without an area. A failure's code is not_found
+         *     when the item is not in Trash (restored already, never deleted,
+         *     or not in the group), and failed for any other error.
          */
         post: {
             parameters: {
@@ -12222,7 +13799,13 @@ export type components = {
         };
         "jsonapi.BulkMoveAttributes": {
             area_id?: string;
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
             ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
         };
         "jsonapi.BulkMoveRequest": {
             data?: components["schemas"]["jsonapi.BulkMoveRequestData"];
@@ -12233,6 +13816,16 @@ export type components = {
         };
         "jsonapi.BulkResultAttrs": {
             failed?: components["schemas"]["jsonapi.BulkResultFail"][];
+            /**
+             * @description Notes adds to succeeded ids something the caller should know. Absent
+             *     when there is nothing to add.
+             */
+            notes?: components["schemas"]["jsonapi.BulkResultNote"][];
+            /**
+             * @description Skipped lists the ids the action left as they were because there was
+             *     nothing to change. Absent when there are none.
+             */
+            skipped?: components["schemas"]["jsonapi.BulkResultSkip"][];
             succeeded?: string[];
         };
         "jsonapi.BulkResultData": {
@@ -12241,11 +13834,53 @@ export type components = {
             type?: string;
         };
         "jsonapi.BulkResultFail": {
+            /**
+             * @description Code classifies the failure: not_found (the item does not exist or is
+             *     in Trash), invalid (the change does not pass the item's validation;
+             *     Error says why) or failed (anything else).
+             * @enum {string}
+             */
+            code?: "not_found" | "invalid" | "failed";
             error?: string;
+            /**
+             * @description Field and Reason come with invalid: the field the validation refused
+             *     and the validator's code for why (for example short_name and
+             *     validation_required), so a client can say it in the user's language.
+             *     Error is the English message.
+             * @example short_name
+             */
+            field?: string;
             id?: string;
+            /** @description Name is the item's name when the item could be read. */
+            name?: string;
+            /** @example validation_required */
+            reason?: string;
+        };
+        "jsonapi.BulkResultNote": {
+            /**
+             * @description Code is files_kept: the item went to Trash, but moving its files there
+             *     failed, so some of them stayed live.
+             * @enum {string}
+             */
+            code?: "files_kept";
+            id?: string;
+            name?: string;
         };
         "jsonapi.BulkResultResponse": {
             data?: components["schemas"]["jsonapi.BulkResultData"];
+        };
+        "jsonapi.BulkResultSkip": {
+            id?: string;
+            name?: string;
+            /**
+             * @description Reason is unchanged: the item already had what the action sets.
+             * @enum {string}
+             */
+            reason?: "unchanged";
+        };
+        "jsonapi.BulkTagsPatch": {
+            add?: string[];
+            remove?: string[];
         };
         "jsonapi.CommoditiesMeta": {
             /**
@@ -12283,6 +13918,18 @@ export type components = {
              */
             per_page?: number;
             /**
+             * @description SelectionDigest names the set of items the query selects, on every
+             *     page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
+             *     bulk action on the query sends it back unchanged as expected_digest,
+             *     and is refused when the query no longer selects exactly these items.
+             *     Omitted when the query selects no items, more than a bulk action takes
+             *     (500), or items in Trash, and when the items changed while the list was
+             *     read or the lookup failed; a client then offers no bulk action on the
+             *     query.
+             * @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+             */
+            selection_digest?: string;
+            /**
              * Format: int64
              * @example 1
              */
@@ -12294,6 +13941,64 @@ export type components = {
         };
         "jsonapi.CommodityBrandsResponse": {
             data?: components["schemas"]["registry.CommodityBrandCount"][];
+        };
+        "jsonapi.CommodityBulkDeleteRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkDeleteRequestData"];
+        };
+        "jsonapi.CommodityBulkDeleteRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkSelection"];
+            /** @example commodities */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkPatch": {
+            /**
+             * @description Status changes the status, with the date and note a single status
+             *     change records.
+             */
+            status?: components["schemas"]["jsonapi.CommodityBulkStatusPatch"];
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
+            /**
+             * @description Type sets the item type.
+             * @example electronics
+             */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkSelection": {
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
+            ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkStatusPatch": {
+            /** @example 2026-11-25 */
+            date?: string;
+            note?: string;
+            /**
+             * @example disposed
+             * @enum {string}
+             */
+            value?: "in_use" | "lost" | "disposed" | "written_off";
+        };
+        "jsonapi.CommodityBulkUpdateAttributes": {
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.CommodityBulkPatch"];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkUpdateRequestData"];
+        };
+        "jsonapi.CommodityBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkUpdateAttributes"];
+            /** @example commodities */
+            type?: string;
         };
         "jsonapi.CommodityCover": {
             file_id?: string;
@@ -12328,6 +14033,100 @@ export type components = {
              * @enum {string}
              */
             type?: "commodities";
+        };
+        "jsonapi.CommodityDraftCreateAttributes": {
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            client_key: string;
+            values?: Record<string, never>;
+        };
+        "jsonapi.CommodityDraftCreateRequest": {
+            data: components["schemas"]["jsonapi.CommodityDraftCreateRequestData"];
+        };
+        "jsonapi.CommodityDraftCreateRequestData": {
+            attributes: components["schemas"]["jsonapi.CommodityDraftCreateAttributes"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftPromoteMeta": {
+            /** @example 6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10 */
+            promotion_key: string;
+            /** @example 3 */
+            revision: number;
+        };
+        "jsonapi.CommodityDraftPromoteRequest": {
+            data: components["schemas"]["jsonapi.CommodityData"];
+            meta: components["schemas"]["jsonapi.CommodityDraftPromoteMeta"];
+        };
+        "jsonapi.CommodityDraftResponse": {
+            data?: components["schemas"]["jsonapi.CommodityDraftResponseData"];
+        };
+        "jsonapi.CommodityDraftResponseData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftView"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type?: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftSaveAttributes": {
+            /** @example 3 */
+            revision: number;
+            values?: Record<string, never>;
+        };
+        "jsonapi.CommodityDraftSaveRequest": {
+            data: components["schemas"]["jsonapi.CommodityDraftSaveRequestData"];
+        };
+        "jsonapi.CommodityDraftSaveRequestData": {
+            attributes: components["schemas"]["jsonapi.CommodityDraftSaveAttributes"];
+            id?: string;
+            /**
+             * @example commodity_drafts
+             * @enum {string}
+             */
+            type: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftView": {
+            /**
+             * @description ClientKey identifies the draft for the client that created it; unique
+             *     in the group.
+             */
+            client_key?: string;
+            created_at?: string;
+            /** @example 2 */
+            file_count?: number;
+            id?: string;
+            promoted_at?: string;
+            /**
+             * @description PromotedCommodityID is the item the draft became. The item can be
+             *     deleted later, so there is no foreign key.
+             */
+            promoted_commodity_id?: string;
+            /** @description Revision starts at 1 and increases with every save and the promotion. */
+            revision?: number;
+            /** @description Status is open until the draft is promoted or its discard begins. */
+            status?: components["schemas"]["models.CommodityDraftStatus"];
+            /** @example Cordless drill */
+            title?: string;
+            updated_at?: string;
+            uuid?: string;
+            /** @description Values is the form state as entered. */
+            values?: components["schemas"]["models.CommodityDraftValues"];
+        };
+        "jsonapi.CommodityDraftsMeta": {
+            /**
+             * Format: int64
+             * @example 3
+             */
+            drafts?: number;
+        };
+        "jsonapi.CommodityDraftsResponse": {
+            data?: components["schemas"]["jsonapi.CommodityDraftView"][];
+            meta?: components["schemas"]["jsonapi.CommodityDraftsMeta"];
         };
         "jsonapi.CommodityEventActor": {
             email?: string;
@@ -13041,6 +14840,21 @@ export type components = {
             data?: components["schemas"]["jsonapi.ExportResponseData"][];
             meta?: components["schemas"]["jsonapi.ExportsMeta"];
         };
+        "jsonapi.FileBulkPatch": {
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
+        };
+        "jsonapi.FileBulkUpdateAttributes": {
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.FileBulkPatch"];
+        };
+        "jsonapi.FileBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.FileBulkUpdateRequestData"];
+        };
+        "jsonapi.FileBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.FileBulkUpdateAttributes"];
+            /** @example files */
+            type?: string;
+        };
         "jsonapi.FileCategoryBytes": {
             /**
              * Format: int64
@@ -13098,7 +14912,7 @@ export type components = {
              * @example commodity
              * @enum {string}
              */
-            entity_type?: "commodity" | "location" | "area";
+            entity_type?: "commodity" | "location" | "area" | "draft";
             /**
              * @example documents
              * @enum {string}
@@ -13258,6 +15072,54 @@ export type components = {
              */
             type?: "exports";
         };
+        "jsonapi.InboxCountResponse": {
+            data?: components["schemas"]["jsonapi.InboxCounts"];
+        };
+        "jsonapi.InboxCounts": {
+            reasons?: {
+                [key: string]: number;
+            };
+            /** @example 3 */
+            total?: number;
+        };
+        "jsonapi.InboxEntry": {
+            /**
+             * @description FileCount is the number of live files attached to a draft; 0 for an
+             *     item.
+             * @example 1
+             */
+            file_count?: number;
+            /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
+            id?: string;
+            /**
+             * @example draft
+             * @enum {string}
+             */
+            kind?: "draft" | "commodity";
+            /**
+             * @description Reasons holds at least one reason, each once, in display order.
+             * @example [
+             *       "draft"
+             *     ]
+             */
+            reasons?: ("draft" | "item_draft")[];
+            /** @example Cordless drill */
+            title?: string;
+            /**
+             * @description UpdatedAt is when the record was last saved; drafts carry it, items
+             *     do not.
+             */
+            updated_at?: string | null;
+        };
+        "jsonapi.InboxMeta": {
+            counts?: components["schemas"]["jsonapi.InboxCounts"];
+            /** @example 2 */
+            entries?: number;
+        };
+        "jsonapi.InboxResponse": {
+            data?: components["schemas"]["jsonapi.InboxEntry"][];
+            meta?: components["schemas"]["jsonapi.InboxMeta"];
+        };
         "jsonapi.InviteInfoAttr": {
             expired?: boolean;
             group_icon?: string;
@@ -13274,6 +15136,97 @@ export type components = {
         };
         "jsonapi.InviteInfoResponse": {
             data?: components["schemas"]["jsonapi.InviteInfoData"];
+        };
+        "jsonapi.ItemTypeDeleteMeta": {
+            /**
+             * Format: int64
+             * @example 4
+             */
+            reassigned_items?: number;
+        };
+        "jsonapi.ItemTypeDeleteResponse": {
+            meta?: components["schemas"]["jsonapi.ItemTypeDeleteMeta"];
+        };
+        "jsonapi.ItemTypeRequest": {
+            data?: components["schemas"]["jsonapi.ItemTypeRequestDataWrapper"];
+        };
+        "jsonapi.ItemTypeRequestData": {
+            /** @example car */
+            icon?: string;
+            /** @example Vehicle */
+            name?: string;
+        };
+        "jsonapi.ItemTypeRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeRequestData"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeResponse": {
+            data?: components["schemas"]["jsonapi.ItemTypeResponseData"];
+        };
+        "jsonapi.ItemTypeResponseData": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeView"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeUpdateRequest": {
+            data?: components["schemas"]["jsonapi.ItemTypeUpdateRequestDataWrapper"];
+        };
+        "jsonapi.ItemTypeUpdateRequestData": {
+            icon?: string;
+            name?: string;
+        };
+        "jsonapi.ItemTypeUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeUpdateRequestData"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeView": {
+            /** @example true */
+            builtin?: boolean;
+            created_at?: string;
+            /** @example laptop */
+            icon?: string;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            item_count?: number;
+            /** @example  */
+            name?: string;
+            /** @example electronics */
+            slug?: string;
+            /**
+             * Format: int64
+             * @description TrashedItemCount is the number of items in Trash with this type.
+             *     Deleting the type moves them along with the others.
+             * @example 0
+             */
+            trashed_item_count?: number;
+            updated_at?: string;
+        };
+        "jsonapi.ItemTypesMeta": {
+            /**
+             * Format: int64
+             * @example 6
+             */
+            item_types?: number;
+        };
+        "jsonapi.ItemTypesResponse": {
+            data?: components["schemas"]["jsonapi.ItemTypeResponseData"][];
+            meta?: components["schemas"]["jsonapi.ItemTypesMeta"];
         };
         "jsonapi.LoanCommodityRef": {
             id?: string;
@@ -13641,6 +15594,164 @@ export type components = {
         "jsonapi.RestoreOperationsResponse": {
             data?: components["schemas"]["jsonapi.RestoreOperationResponseData"][];
         };
+        "jsonapi.SavedViewAttributes": {
+            can_delete?: boolean;
+            can_edit?: boolean;
+            created_at?: string;
+            /**
+             * @description Entity is the list the view filters; only "commodities" exists.
+             * @example commodities
+             * @enum {string}
+             */
+            entity?: "commodities";
+            /** @example shield */
+            icon?: string;
+            /**
+             * @description Layout is grid (photo cards), compact, list, or empty for the
+             *     viewer's default.
+             * @example list
+             * @enum {string}
+             */
+            layout?: "" | "grid" | "compact" | "list";
+            /** @example Expiring warranties */
+            name?: string;
+            /** @description Owned is true for the views the requesting member created. */
+            owned?: boolean;
+            /**
+             * @description Query is the canonical query string of the view in the parameter
+             *     names of GET /commodities, without the leading "?".
+             * @example warranty_status=expiring&sort=name
+             */
+            query?: string;
+            /**
+             * @description QueryError is set when the stored query cannot run; such a view has
+             *     no count and should be edited before it is opened.
+             */
+            query_error?: components["schemas"]["jsonapi.SavedViewQueryError"];
+            /** @example 1 */
+            query_version?: number;
+            shared?: boolean;
+            /**
+             * @description ShowInSidebar and ShowOnDashboard are where the requesting member
+             *     shows the view. Each member places the views they see on their own.
+             */
+            show_in_sidebar?: boolean;
+            show_on_dashboard?: boolean;
+            /** @example 0 */
+            sort_order?: number;
+            updated_at?: string;
+        };
+        "jsonapi.SavedViewCounts": {
+            counts?: {
+                [key: string]: number;
+            };
+        };
+        "jsonapi.SavedViewCountsResponse": {
+            data?: components["schemas"]["jsonapi.SavedViewCounts"];
+        };
+        "jsonapi.SavedViewData": {
+            attributes?: components["schemas"]["jsonapi.SavedViewAttributes"];
+            id?: string;
+            /**
+             * @example saved_views
+             * @enum {string}
+             */
+            type?: "saved_views";
+        };
+        "jsonapi.SavedViewLimits": {
+            /** @description CanShare is true when the requesting member may share views. */
+            can_share?: boolean;
+            /** @example 60 */
+            max_name_length?: number;
+            /** @example 50 */
+            max_per_user?: number;
+            /** @example 50 */
+            max_shared?: number;
+        };
+        "jsonapi.SavedViewQueryError": {
+            /** @example warranty_expires_before */
+            parameter?: string;
+            /** @example is not available in a saved view */
+            reason?: string;
+        };
+        "jsonapi.SavedViewReorderRequest": {
+            data?: components["schemas"]["jsonapi.SavedViewReorderRequestData"];
+        };
+        "jsonapi.SavedViewReorderRequestAttributes": {
+            ids?: string[];
+        };
+        "jsonapi.SavedViewReorderRequestData": {
+            attributes?: components["schemas"]["jsonapi.SavedViewReorderRequestAttributes"];
+            /**
+             * @example saved_views_reorder
+             * @enum {string}
+             */
+            type?: "saved_views_reorder";
+        };
+        "jsonapi.SavedViewRequest": {
+            data?: components["schemas"]["jsonapi.SavedViewRequestDataWrapper"];
+        };
+        "jsonapi.SavedViewRequestData": {
+            /** @example shield */
+            icon?: string;
+            /**
+             * @example list
+             * @enum {string}
+             */
+            layout?: "" | "grid" | "compact" | "list";
+            /** @example Expiring warranties */
+            name?: string;
+            /** @example warranty_status=expiring */
+            query?: string;
+            shared?: boolean;
+            show_in_sidebar?: boolean;
+            show_on_dashboard?: boolean;
+        };
+        "jsonapi.SavedViewRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SavedViewRequestData"];
+            id?: string;
+            /**
+             * @example saved_views
+             * @enum {string}
+             */
+            type?: "saved_views";
+        };
+        "jsonapi.SavedViewResponse": {
+            data?: components["schemas"]["jsonapi.SavedViewData"];
+        };
+        "jsonapi.SavedViewUpdateRequest": {
+            data?: components["schemas"]["jsonapi.SavedViewUpdateRequestDataWrapper"];
+        };
+        "jsonapi.SavedViewUpdateRequestData": {
+            icon?: string;
+            layout?: string;
+            name?: string;
+            query?: string;
+            shared?: boolean;
+            show_in_sidebar?: boolean;
+            show_on_dashboard?: boolean;
+        };
+        "jsonapi.SavedViewUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SavedViewUpdateRequestData"];
+            id?: string;
+            /**
+             * @example saved_views
+             * @enum {string}
+             */
+            type?: "saved_views";
+        };
+        "jsonapi.SavedViewsMeta": {
+            limits?: components["schemas"]["jsonapi.SavedViewLimits"];
+            /**
+             * Format: int64
+             * @example 3
+             */
+            total?: number;
+        };
+        "jsonapi.SavedViewsResponse": {
+            data?: components["schemas"]["jsonapi.SavedViewData"][];
+            meta?: components["schemas"]["jsonapi.SavedViewsMeta"];
+        };
         "jsonapi.SearchMeta": {
             entity_type?: string;
             /**
@@ -13656,6 +15767,86 @@ export type components = {
         "jsonapi.SearchResponse": {
             data?: unknown;
             meta?: components["schemas"]["jsonapi.SearchMeta"];
+        };
+        "jsonapi.SellerRequest": {
+            data?: components["schemas"]["jsonapi.SellerRequestDataWrapper"];
+        };
+        "jsonapi.SellerRequestData": {
+            /** @example orders@hardware.example */
+            contact?: string;
+            /** @example Hardware Store */
+            name?: string;
+            note?: string;
+            /** @example https://hardware.example */
+            website?: string;
+        };
+        "jsonapi.SellerRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SellerRequestData"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerResponse": {
+            data?: components["schemas"]["jsonapi.SellerResponseData"];
+        };
+        "jsonapi.SellerResponseData": {
+            attributes?: components["schemas"]["jsonapi.SellerView"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerUpdateRequest": {
+            data?: components["schemas"]["jsonapi.SellerUpdateRequestDataWrapper"];
+        };
+        "jsonapi.SellerUpdateRequestData": {
+            contact?: string;
+            name?: string;
+            note?: string;
+            website?: string;
+        };
+        "jsonapi.SellerUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SellerUpdateRequestData"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerView": {
+            /** @description Contact is free text: an email address, a phone number, a person. */
+            contact?: string;
+            created_at?: string;
+            id?: string;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            item_count?: number;
+            /** @description Name is the seller as shown on items and in the sellers list. */
+            name?: string;
+            note?: string;
+            updated_at?: string;
+            uuid?: string;
+            /** @description Website is an absolute http(s) URL, or empty. */
+            website?: string;
+        };
+        "jsonapi.SellersMeta": {
+            /**
+             * Format: int64
+             * @example 12
+             */
+            sellers?: number;
+        };
+        "jsonapi.SellersResponse": {
+            data?: components["schemas"]["jsonapi.SellerResponseData"][];
+            meta?: components["schemas"]["jsonapi.SellersMeta"];
         };
         "jsonapi.ServiceCommodityRef": {
             id?: string;
@@ -14222,6 +16413,14 @@ export type components = {
              *     currency — sale-side currency reporting is out of scope for #1611.
              */
             sale_price?: number;
+            /**
+             * @description SellerID is the seller the item was bought from (#2804), or nil.
+             *     Deleting the seller leaves the item without one. The seller must be in
+             *     the item's group: the postgres registry looks it up under the group's
+             *     row-level security before every write, since the foreign key alone
+             *     would accept a seller of any group.
+             */
+            seller_id?: string;
             serial_number?: string;
             short_name?: string;
             status?: components["schemas"]["models.CommodityStatus"];
@@ -14242,7 +16441,14 @@ export type components = {
              */
             status_note?: string;
             tags?: string[];
-            type?: components["schemas"]["models.CommodityType"];
+            /**
+             * @description Type is the slug of one of the group's item types (see ItemType). An
+             *     item keeps the slug, not the type's id: a slug never changes, so the
+             *     item query's type filter, saved views and backups that name it stay
+             *     valid when the type is renamed.
+             * @example electronics
+             */
+            type?: string;
             urls?: string;
             uuid?: string;
             /**
@@ -14253,6 +16459,11 @@ export type components = {
              */
             warranty_expires_at?: string;
             warranty_notes?: string;
+        };
+        /** @enum {string} */
+        "models.CommodityDraftStatus": "open" | "promoted" | "discarding";
+        "models.CommodityDraftValues": {
+            [key: string]: unknown;
         };
         /** @enum {string} */
         "models.CommodityEventKind": "created" | "updated" | "status_changed" | "moved" | "price_changed" | "cover_changed" | "lent_out" | "returned" | "loan_updated" | "loan_reminder_sent" | "sent_for_service" | "back_from_service" | "service_updated" | "deleted" | "restored";
@@ -14381,8 +16592,6 @@ export type components = {
         };
         /** @enum {string} */
         "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
-        /** @enum {string} */
-        "models.CommodityType": "white_goods" | "electronics" | "equipment" | "furniture" | "clothes" | "other";
         "models.CurrencyMigration": {
             /** @description CommodityCount is the number of rows actually mutated by the worker. */
             commodity_count?: number;

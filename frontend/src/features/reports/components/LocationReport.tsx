@@ -1,11 +1,12 @@
-import { Building2, Calendar, DollarSign, Hash, Package } from "lucide-react"
+import { Building2, Calendar, DollarSign, Hash, Package, Store } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
 import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity, CommodityCover } from "@/features/commodities/api"
 import { brandedName } from "@/features/commodities/brand"
-import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { warrantyStatus } from "@/features/commodities/constants"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import {
   commodityValue,
   formatPrice,
@@ -15,6 +16,7 @@ import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
+import { UnavailableNote } from "./UnavailableNote"
 import { aggregateLocationTotals } from "../aggregate"
 import { coverToPhotos } from "../photos"
 import { reportSubtitle } from "../subtitle"
@@ -36,6 +38,9 @@ interface LocationReportProps {
   covers: Record<string, CommodityCover>
   // "{Location} · {Area}" resolver for each item's area_id.
   areaLabelFor: (areaId?: string) => string
+  // The name of the seller an item was bought from, "" for none, null when
+  // the sellers could not be loaded (the cell stays empty with a note).
+  sellerNameFor?: (sellerId?: string) => string | null
   imageSize: PhotoSize
   groupCurrency: string
   generatedDate: string
@@ -48,11 +53,13 @@ export function LocationReport({
   commodities,
   covers,
   areaLabelFor,
+  sellerNameFor = () => "",
   imageSize,
   groupCurrency,
   generatedDate,
 }: LocationReportProps) {
   const { t } = useTranslation()
+  const itemTypes = useItemTypeLookup()
   const noValue = t("reports:insurance.noValue")
   const totals = aggregateLocationTotals(commodities, groupCurrency)
 
@@ -119,7 +126,7 @@ export function LocationReport({
 
       {/* Per-item sections */}
       {commodities.map((item, idx) => {
-        const type = item.type as CommodityTypeValue | undefined
+        const typeLabel = itemTypes.get(item.type)?.label
         const status = warrantyStatus({ warranty_expires_at: item.warranty_expires_at })
         const wConfig = WARRANTY_STATUS_CONFIG[status]
         const WarrantyIcon = wConfig.icon
@@ -153,7 +160,7 @@ export function LocationReport({
               <div>
                 <div className="mb-1 flex items-center gap-2">
                   <span className="text-xs font-semibold uppercase tracking-widest text-muted-foreground">
-                    {type ? t(`commodities:type.${type}`) : noValue}
+                    {typeLabel || noValue}
                   </span>
                   <span className="text-xs text-muted-foreground">·</span>
                   <span className="text-xs text-muted-foreground">
@@ -206,6 +213,12 @@ export function LocationReport({
                   value={
                     item.purchase_date ? formatDate(item.purchase_date, { style: "long" }) : noValue
                   }
+                />
+                <SellerDetail
+                  label={t("reports:insurance.fields.seller")}
+                  name={sellerNameFor(item.seller_id)}
+                  noValue={noValue}
+                  unavailable={t("reports:insurance.sellerUnavailable")}
                 />
               </div>
             </div>
@@ -284,11 +297,13 @@ function ItemDetail({
   label,
   value,
   mono,
+  note,
 }: {
   icon: typeof Package
   label: string
   value: string
   mono?: boolean
+  note?: string
 }) {
   return (
     <div className="flex items-start gap-3">
@@ -297,8 +312,31 @@ function ItemDetail({
       </div>
       <div>
         <p className="text-xs text-muted-foreground">{label}</p>
-        <p className={cn("text-sm font-medium", mono ? "font-mono tabular-nums" : "")}>{value}</p>
+        {value ? (
+          <p className={cn("text-sm font-medium", mono ? "font-mono tabular-nums" : "")}>{value}</p>
+        ) : null}
+        {note ? <UnavailableNote text={note} /> : null}
       </div>
     </div>
+  )
+}
+
+// SellerDetail is the seller cell of an item: its name, "—" for none, or
+// empty with a note when the sellers could not be loaded (name === null).
+function SellerDetail({
+  label,
+  name,
+  noValue,
+  unavailable,
+}: {
+  label: string
+  name: string | null
+  noValue: string
+  unavailable: string
+}) {
+  return name === null ? (
+    <ItemDetail icon={Store} label={label} value="" note={unavailable} />
+  ) : (
+    <ItemDetail icon={Store} label={label} value={name || noValue} />
   )
 }

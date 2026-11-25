@@ -1,0 +1,71 @@
+{
+  "create": "Nový prodejce",
+  "description": "Obchody a lidé, od kterých jste položky koupili.",
+  "dialog": {
+    "contactLabel": "Kontakt",
+    "contactPlaceholder": "Telefon, e-mail nebo adresa",
+    "createSubmit": "Vytvořit prodejce",
+    "createTitle": "Nový prodejce",
+    "description": "Obchod nebo člověk, od kterého skupina nakupuje. Každé jméno se ve skupině použije jen jednou.",
+    "editSubmit": "Uložit změny",
+    "editTitle": "Upravit prodejce",
+    "errorGeneric": "Prodejce se nepodařilo uložit.",
+    "nameLabel": "Název",
+    "namePlaceholder": "např. Železářství",
+    "noteLabel": "Poznámka",
+    "notePlaceholder": "Zákaznické číslo, otevírací doba, cokoli užitečného",
+    "submitting": "Ukládání…",
+    "useExisting": "Použít {{name}}",
+    "websiteLabel": "Web"
+  },
+  "list": {
+    "delete": "Smazat {{name}}",
+    "edit": "Upravit {{name}}",
+    "empty": "Zatím žádní prodejci. Přidejte je zde nebo v kroku Nákup u položky.",
+    "emptyFiltered": "Hledání „{{query}}“ neodpovídá žádný prodejce.",
+    "loadError": "Prodejce se nepodařilo načíst.",
+    "results_few": "{{count}} výsledky",
+    "results_many": "{{count}} výsledku",
+    "results_one": "{{count}} výsledek",
+    "results_other": "{{count}} výsledků",
+    "total_few": "{{count}} prodejci",
+    "total_many": "{{count}} prodejce",
+    "total_one": "{{count}} prodejce",
+    "total_other": "{{count}} prodejců",
+    "usageItems_few": "{{count}} položky",
+    "usageItems_many": "{{count}} položky",
+    "usageItems_one": "{{count}} položka",
+    "usageItems_other": "{{count}} položek",
+    "usageNone": "Zatím bez položek"
+  },
+  "removal": {
+    "confirmAction": "Smazat prodejce",
+    "confirmDescription": "Prodejce {{name}} nemá žádné položky. Bude ze skupiny odstraněn.",
+    "confirmTitle": "Smazat {{name}}?",
+    "inUseDescription_few": "Od prodejce {{name}} jsou {{count}} položky. Položky zůstanou, jen už nebudou mít prodejce.",
+    "inUseDescription_many": "Od prodejce {{name}} je {{count}} položky. Položky zůstanou, jen už nebudou mít prodejce.",
+    "inUseDescription_one": "Od prodejce {{name}} je {{count}} položka. Položka zůstane, jen už nebude mít prodejce.",
+    "inUseDescription_other": "Od prodejce {{name}} je {{count}} položek. Položky zůstanou, jen už nebudou mít prodejce."
+  },
+  "search": {
+    "clear": "Vymazat hledání",
+    "label": "Hledat prodejce",
+    "placeholder": "Hledat prodejce…"
+  },
+  "title": "Prodejci",
+  "toast": {
+    "created": "Prodejce vytvořen",
+    "deleteError": "Prodejce se nepodařilo smazat.",
+    "deleted": "Prodejce smazán",
+    "updated": "Prodejce upraven"
+  },
+  "validation": {
+    "contactTooLong": "Použijte nejvýše 500 znaků.",
+    "nameRequired": "Zadejte název.",
+    "nameTaken": "Tento název už má jiný prodejce této skupiny.",
+    "nameTooLong": "Použijte nejvýše 100 znaků.",
+    "noteTooLong": "Použijte nejvýše 2000 znaků.",
+    "websiteInvalid": "Zadejte celou webovou adresu začínající http:// nebo https://.",
+    "websiteTooLong": "Použijte nejvýše 2048 znaků."
+  }
+}

@@ -41,8 +41,10 @@ import (
 const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
-	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
-	maxInbManifestBytes   = 4 << 20  // 4 MiB for the manifest pre-scan
+	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member; the export checks the drafts document against the same limit (backup/export defaultMaxJSONDocBytes)
+	// The manifest carries the group's sellers (format 3.3) and item types
+	// (3.4), so it gets the same room as any other JSON document.
+	maxInbManifestBytes = maxJSONDocBytes
 )
 
 // maxSupportedInbMajor is the highest `.inb` format MAJOR version this build can
@@ -55,11 +57,12 @@ const maxSupportedInbMajor = 3
 
 var (
 	// ErrJSONDocTooLarge is returned when a JSON document member (a location
-	// document, the area-less commodities document of #1986, or the
-	// non-commodity files document of #2235) declares a size above
-	// maxJSONDocBytes. Without a per-member cap one document could claim up to
-	// the 8 GiB total and OOM the worker via io.ReadAll. The failing member name
-	// is attached, so the message stays diagnosable across all three.
+	// document, the area-less commodities document of #1986, the drafts
+	// document, or the non-commodity files document of #2235) declares a size
+	// above maxJSONDocBytes. Without a per-member cap one document could claim
+	// up to the 8 GiB total and OOM the worker via io.ReadAll. The failing
+	// member name is attached, so the message stays diagnosable across all of
+	// them.
 	ErrJSONDocTooLarge = errx.NewSentinel("backup JSON document exceeds the maximum allowed size")
 
 	// ErrMissingFileMembers is returned when one or more declared commodity file
@@ -254,6 +257,8 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		delivered: map[string]string{},
 		parked:    map[string]bool{},
 
+		draftIDs: map[string]string{},
+
 		priceReading: types.PricesOmitZero,
 	}
 
@@ -439,6 +444,18 @@ type inbWalker struct {
 	// reading for archives without a manifest, and the manifest, which the
 	// exporter always writes first, sets it from its format version.
 	priceReading types.PriceReading
+
+	// sellerIDs maps an archived seller's UUID to the destination seller's
+	// DB id, filled from the manifest. An item's seller is set only through
+	// this map, so an archive can never point an item at a seller it did not
+	// carry.
+	sellerIDs map[string]string
+
+	// draftIDs maps an archived draft's UUID to the restored draft's DB id.
+	// A link to an archived draft that is not in it (a draft a merge kept,
+	// one that failed to restore, one the archive does not carry) is left
+	// out without an error.
+	draftIDs map[string]string
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -454,6 +471,9 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		// Non-commodity files document (issue #2235). It lives UNDER the `files/`
 		// prefix, so it must be matched before the file-bytes case below.
 		return w.handleFilesMember(hdr, r)
+	case hdr.Name == types.INBDraftsMember:
+		// Drafts document (format 3.5), also under `files/`.
+		return w.handleDraftsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
 	case hdr.Name == types.INBUnassignedMember:
@@ -485,6 +505,60 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 		return errxtrace.Wrap("failed to decode manifest document", err)
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
+	if err := w.restoreItemTypes(manifest.ItemTypes); err != nil {
+		return err
+	}
+	return w.restoreSellers(manifest.Sellers)
+}
+
+// restoreItemTypes maps the archived item types onto the destination group's
+// before the first item names one (#2802).
+func (w *inbWalker) restoreItemTypes(archived []types.INBItemType) error {
+	resolver, err := w.proc.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	return resolver.importArchived(w.ctx, archived, w.stats)
+}
+
+// restoreSellers finds or creates the destination seller of each archived
+// seller and records the mapping. A seller is matched by name, the way the
+// group keeps seller names unique, so a restore into a group that already
+// has the seller reuses it and leaves its fields as they are. A dry run
+// writes nothing and maps nothing, and an archived seller that fails
+// validation is counted as an error and its items restore without a seller.
+func (w *inbWalker) restoreSellers(archived []types.INBSeller) error {
+	w.sellerIDs = map[string]string{}
+	if len(archived) == 0 || w.options.DryRun || w.proc.factorySet.SellerRegistryFactory == nil {
+		return nil
+	}
+	reg, err := w.proc.factorySet.SellerRegistryFactory.CreateUserRegistry(w.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create seller registry", err)
+	}
+	for _, a := range archived {
+		if a.ID == "" {
+			continue
+		}
+		if existing, err := reg.GetByName(w.ctx, a.Name); err == nil {
+			w.sellerIDs[a.ID] = existing.ID
+			continue
+		} else if !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to look up seller", err, errx.Attrs("seller_id", a.ID))
+		}
+		seller := models.Seller{Name: a.Name, Website: a.Website, Contact: a.Contact, Note: a.Note}
+		seller.Normalize()
+		if err := seller.ValidateFields(w.ctx); err != nil {
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("seller %s: %v", a.ID, err))
+			continue
+		}
+		created, err := reg.Create(w.ctx, seller)
+		if err != nil {
+			return errxtrace.Wrap("failed to create seller", err, errx.Attrs("seller_id", a.ID))
+		}
+		w.sellerIDs[a.ID] = created.ID
+	}
 	return nil
 }
 
@@ -637,6 +711,20 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	// Area is optional (issue #1986): a nil actualAreaID leaves the row
 	// area-less; otherwise pin it to the resolved destination area DB ID.
 	commodity.AreaID = actualAreaID
+	// The seller resolves through the manifest's sellers only; an unknown
+	// one leaves the item without a seller.
+	commodity.SellerID = nil
+	if sellerID, ok := w.sellerIDs[c.SellerID]; ok && c.SellerID != "" {
+		commodity.SellerID = &sellerID
+	}
+
+	resolver, err := l.itemTypeResolver(w.ctx, w.options)
+	if err != nil {
+		return err
+	}
+	if commodity.Type, err = resolver.resolve(w.ctx, commodity.Type, w.stats); err != nil {
+		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("commodity_id", c.ID))
+	}
 
 	// Mirror the XML restore: when the commodity's original currency matches the
 	// group currency, a converted price does not apply (the validator rejects a
@@ -760,7 +848,10 @@ func (w *inbWalker) registerRef(ref types.INBFileRef, link inbFileLink) error {
 // reference that arrived after the file's bytes. The attach is idempotent, so a
 // retried restore never duplicates a link.
 func (w *inbWalker) linkDeliveredFile(fileUUID string, ref types.INBFileRef, link inbFileLink) error {
-	if link.linkedType == "" {
+	if fileUUID == "" || link.linkedType == "" || w.isUnrestoredDraft(link) {
+		// fileUUID is empty, in a dry run only, for bytes that arrived
+		// before any reference could use them; they were dropped with a
+		// counted error.
 		return nil
 	}
 	dbID, ok := w.resolveLinkedDBID(link)
@@ -885,6 +976,8 @@ func (w *inbWalker) resolveLinkedDBID(link inbFileLink) (string, bool) {
 		dbID, found = w.idMapping.Locations[link.entityUUID]
 	case "area":
 		dbID, found = w.idMapping.Areas[link.entityUUID]
+	case models.FileLinkDraft:
+		dbID, found = w.draftIDs[link.entityUUID]
 	default:
 		return "", false
 	}
@@ -904,6 +997,17 @@ func (w *inbWalker) handleFileMember(hdr *tar.Header, r io.Reader) error {
 		// A file member with no matching reference is rejected — restoring it
 		// would create an orphan blob with no owning row.
 		_, _ = io.Copy(io.Discard, r)
+		if w.options.DryRun {
+			// A dry run of a full replace restores no item, so the bytes of
+			// an item's file match no reference. They still count as
+			// delivered there, so a later reference to the same file (a
+			// draft's) does not fail the run as a missing member. A real
+			// restore leaves them out: a later reference then waits for
+			// bytes that never come and fails the restore with
+			// ErrMissingFileMembers, rather than restoring that entity
+			// without its file.
+			w.delivered[hdr.Name] = ""
+		}
 		w.stats.ErrorCount++
 		w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("file member %s has no matching reference", hdr.Name))
 		return nil
@@ -1049,7 +1153,9 @@ func (w *inbWalker) finishFileRow(action fileAction, fileUUID, fileID string, li
 func (w *inbWalker) resolveLinks(pending *inbPendingFile) (links []types.INBFileLink, standalone bool, holderID string) {
 	live := false
 	for _, link := range pending.links {
-		if link.linkedType == "" {
+		if link.linkedType == "" || w.isUnrestoredDraft(link) {
+			// A file only drafts the restore did not recreate used is
+			// restored as a standalone file rather than lost.
 			standalone = true
 			continue
 		}
