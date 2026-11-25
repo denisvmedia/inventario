@@ -82,6 +82,10 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 			reg := fs.SellerRegistryFactory.CreateServiceRegistry()
 			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Seller])
 		}},
+		{"item_types", func() (bool, error) {
+			reg := fs.ItemTypeRegistryFactory.CreateServiceRegistry()
+			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.ItemType])
+		}},
 		// location_groups the user CREATED that are not being purged. The group's
 		// own id is the exclusion key (it has no group_id), and the authorship
 		// column is `created_by`.

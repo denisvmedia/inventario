@@ -6255,6 +6255,258 @@
                 }
             }
         },
+        "/g/{groupSlug}/item-types": {
+            "get": {
+                "description": "The item types of the group: the built-in ones first in their fixed order, then the others by name.\nEach carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "List item types",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypesResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.\nThe slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Create an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item type object",
+                        "name": "itemType",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Item type created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Another item type of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/item-types/{itemTypeID}": {
+            "get": {
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Get an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;\nthen every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Delete an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "ID of the item type the deleted type's items move to",
+                        "name": "reassign_to",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted; meta.reassigned_items counts the items moved",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeDeleteResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The type is in use and no reassign_to was given, or it is the group's last type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "reassign_to names no other type of the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Attributes left out keep their value. The slug never changes, so items, filters and saved views keep working after a rename. An empty name on a built-in type gives it back its default name.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "item-types"
+                ],
+                "summary": "Update an item type",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item type ID",
+                        "name": "itemTypeID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item type patch",
+                        "name": "itemType",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemTypeResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item type not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Another item type of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/loans": {
             "get": {
                 "description": "List loans across the current group with optional state filter.",
@@ -13959,6 +14211,188 @@
                 }
             }
         },
+        "jsonapi.ItemTypeDeleteMeta": {
+            "type": "object",
+            "properties": {
+                "reassigned_items": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 4
+                }
+            }
+        },
+        "jsonapi.ItemTypeDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeDeleteMeta"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string",
+                    "example": "car"
+                },
+                "name": {
+                    "type": "string",
+                    "example": "Vehicle"
+                }
+            }
+        },
+        "jsonapi.ItemTypeRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeResponseData"
+                }
+            }
+        },
+        "jsonapi.ItemTypeResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ItemTypeUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemTypeUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_types"
+                    ],
+                    "example": "item_types"
+                }
+            }
+        },
+        "jsonapi.ItemTypeView": {
+            "type": "object",
+            "properties": {
+                "builtin": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "icon": {
+                    "type": "string",
+                    "example": "laptop"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "name": {
+                    "type": "string",
+                    "example": ""
+                },
+                "slug": {
+                    "type": "string",
+                    "example": "electronics"
+                },
+                "trashed_item_count": {
+                    "description": "TrashedItemCount is the number of items in Trash with this type.\nDeleting the type moves them along with the others.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.ItemTypesMeta": {
+            "type": "object",
+            "properties": {
+                "item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 6
+                }
+            }
+        },
+        "jsonapi.ItemTypesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemTypeResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemTypesMeta"
+                }
+            }
+        },
         "jsonapi.LoanCommodityRef": {
             "type": "object",
             "properties": {
@@ -15892,7 +16326,9 @@
                     }
                 },
                 "type": {
-                    "$ref": "#/definitions/models.CommodityType"
+                    "description": "Type is the slug of one of the group's item types (see ItemType). An\nitem keeps the slug, not the type's id: a slug never changes, so the\nitem query's type filter, saved views and backups that name it stay\nvalid when the type is renamed.",
+                    "type": "string",
+                    "example": "electronics"
                 },
                 "urls": {
                     "type": "string"
@@ -16077,25 +16513,6 @@
                 "CommodityStatusLost",
                 "CommodityStatusDisposed",
                 "CommodityStatusWrittenOff"
-            ]
-        },
-        "models.CommodityType": {
-            "type": "string",
-            "enum": [
-                "white_goods",
-                "electronics",
-                "equipment",
-                "furniture",
-                "clothes",
-                "other"
-            ],
-            "x-enum-varnames": [
-                "CommodityTypeWhiteGoods",
-                "CommodityTypeElectronics",
-                "CommodityTypeEquipment",
-                "CommodityTypeFurniture",
-                "CommodityTypeClothes",
-                "CommodityTypeOther"
             ]
         },
         "models.CurrencyMigration": {

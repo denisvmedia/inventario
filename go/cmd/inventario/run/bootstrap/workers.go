@@ -653,6 +653,25 @@ func StartAssetNumberBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	}
 }
 
+// itemTypeBackfillRetryInterval spaces the retries of a failed item type
+// backfill pass.
+const itemTypeBackfillRetryInterval = time.Minute
+
+// StartItemTypeBackfill seeds, in the background, the built-in item types of
+// the groups that have none (see services.BackfillItemTypes). The returned
+// stop function cancels the pass and waits for it to return.
+func StartItemTypeBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	ctx, cancel := context.WithCancel(ctx)
+	var wg sync.WaitGroup
+	wg.Go(func() {
+		services.BackfillItemTypes(ctx, rs.FactorySet, itemTypeBackfillRetryInterval)
+	})
+	return func() {
+		cancel()
+		wg.Wait()
+	}
+}
+
 // fileLinkMoveRetryInterval spaces the retries of a failed legacy file link
 // move.
 const fileLinkMoveRetryInterval = time.Minute

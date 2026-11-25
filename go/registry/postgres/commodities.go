@@ -141,6 +141,11 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		if err := assignAssetNumberInTx(ctx, tx, r.tableNames.Commodities(), row, requestedAssetNumber); err != nil {
 			return err
 		}
+		// The type must be one of the group's item types; the check locks
+		// it against a concurrent delete until this insert commits.
+		if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, row.TenantID, row.GroupID, row.Type); err != nil {
+			return err
+		}
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
@@ -755,6 +760,15 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			return err
 		}
 		commodity.AssetNumber = row.AssetNumber
+		// A changed type must be one of the group's item types. The new
+		// type's row is locked after the item's, and a type delete locks
+		// the deleted type before the items it moves; an update never
+		// waits for the type it leaves, so the orders cannot deadlock.
+		if row.Type != stored.Type {
+			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
+				return err
+			}
+		}
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {

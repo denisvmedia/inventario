@@ -1294,6 +1294,67 @@ type SellerRegistry interface {
 	ItemCounts(ctx context.Context) (map[string]int, error)
 }
 
+// ItemTypeUsage counts the items of a group that have one item type.
+type ItemTypeUsage struct {
+	// Live counts the items outside Trash, drafts and inactive items
+	// included.
+	Live int
+	// Trashed counts the items in Trash.
+	Trashed int
+}
+
+// Total is the number of items, in Trash or not, that have the type.
+func (u ItemTypeUsage) Total() int {
+	return u.Live + u.Trashed
+}
+
+// ItemTypeRegistry is the group-scoped registry of item types (#2802).
+//
+// Create and Update normalize the type (models.ItemType.Normalize) and fail
+// with ErrAlreadyExists when another type of the group has the same name
+// key. Create gives the type a slug made from its name, unique in the
+// group and never one of a built-in type, unless the caller sets one (the
+// backup restore keeps the archived slug when it is free). Update keeps the
+// stored slug.
+//
+// A group with no item types has never been seeded: the user registry's
+// List, Create and the commodity registries' writes of a built-in slug seed
+// the built-in types into it first. Delete is DeleteReassigning without a
+// target.
+type ItemTypeRegistry interface {
+	Registry[models.ItemType]
+
+	// GetBySlug returns the type with the given slug, or ErrNotFound.
+	GetBySlug(ctx context.Context, slug models.CommodityType) (*models.ItemType, error)
+
+	// GetByName returns the type whose name key equals the key of name, or
+	// ErrNotFound. A built-in type with no name of its own is found by its
+	// English default name.
+	GetByName(ctx context.Context, name string) (*models.ItemType, error)
+
+	// ItemCounts returns, per type slug, how many items of the group have
+	// that type. A slug without items is absent from the map.
+	ItemCounts(ctx context.Context) (map[models.CommodityType]ItemTypeUsage, error)
+
+	// DeleteReassigning deletes the type with id. When items of the group,
+	// those in Trash included, have it, they are first given the type
+	// reassignTo, in the same transaction, and the count of moved items is
+	// returned; with an empty reassignTo the delete fails with
+	// ErrItemTypeInUse instead. A reassignTo that is not another type of
+	// the group fails with ErrInvalidInput. The last type of a group cannot
+	// be deleted (ErrLastItemType).
+	DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error)
+
+	// EnsureBuiltins seeds the built-in types into the registry's group when
+	// the group has no item types, and returns how many it created.
+	EnsureBuiltins(ctx context.Context) (int, error)
+
+	// BackfillBuiltins seeds the built-in types into every group that has
+	// no item types, one group per transaction, and returns how many types
+	// it created. Service registry only.
+	BackfillBuiltins(ctx context.Context) (int, error)
+}
+
 // CommodityReminderSendRegistry records which reminder emails the worker
 // has claimed. One row per (reminder, occurrence, lead time); the unique
 // index on that tuple keeps an email from going out twice, across
@@ -2802,6 +2863,7 @@ type Set struct {
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
 	SellerRegistry                 SellerRegistry
+	ItemTypeRegistry               ItemTypeRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -2897,6 +2959,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
+		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

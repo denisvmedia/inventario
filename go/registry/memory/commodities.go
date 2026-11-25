@@ -26,6 +26,10 @@ type CommodityRegistryFactory struct {
 	// names a seller fails unless the writer's group can see that seller,
 	// as the postgres registry checks under row-level security.
 	sellers *SellerRegistryFactory
+	// itemTypes is set by NewItemTypeRegistryFactory. When set, a write
+	// fails unless its type is one of the group's item types, as the
+	// postgres registry checks inside the write's transaction.
+	itemTypes *ItemTypeRegistryFactory
 }
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
@@ -35,6 +39,7 @@ type CommodityRegistry struct {
 	userID       string
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
 	sellers      *SellerRegistryFactory
+	itemTypes    *ItemTypeRegistryFactory
 	// assetNumbers serializes every write of AssetNumber, standing in for
 	// the per-group advisory lock of the postgres registry: Create holds it
 	// from computing the next number until the row is stored.
@@ -90,6 +95,7 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		userID:       user.ID,
 		areaRegistry: areaRegistry,
 		sellers:      f.sellers,
+		itemTypes:    f.itemTypes,
 		assetNumbers: f.assetNumbers,
 	}, nil
 }
@@ -116,6 +122,7 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 		userID:       "", // Clear userID to bypass user filtering
 		areaRegistry: areaRegistry,
 		sellers:      f.sellers,
+		itemTypes:    f.itemTypes,
 		assetNumbers: f.assetNumbers,
 	}
 }
@@ -174,6 +181,12 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
 	commodity.AssetNumber = new(r.pickAssetNumber(groupID, requested))
 
+	unlockType, err := r.lockItemType(ctx, groupID, commodity.TenantID, commodity.Type)
+	if err != nil {
+		return nil, err
+	}
+	defer unlockType()
+
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
@@ -187,6 +200,21 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	}
 
 	return newCommodity, nil
+}
+
+// lockItemType checks that slug names an item type of groupID and holds the
+// item type lock for reading until the returned function is called, so a
+// type delete cannot run between the check and the write.
+func (r *CommodityRegistry) lockItemType(ctx context.Context, groupID, tenantID string, slug models.CommodityType) (func(), error) {
+	if r.itemTypes == nil {
+		return func() {}, nil
+	}
+	if tenantID == "" {
+		if user := appctx.UserFromContext(ctx); user != nil {
+			tenantID = user.TenantID
+		}
+	}
+	return r.itemTypes.lockForItemWrite(ctx, tenantID, groupID, r.userID, slug)
 }
 
 // ListByGroup returns every commodity in (tenantID, groupID), regardless
@@ -342,6 +370,14 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	if existingCommodity, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
 		if existingCommodity.AreaID != nil {
 			oldAreaID = *existingCommodity.AreaID
+		}
+		// A changed type must be one of the group's item types.
+		if existingCommodity.Type != commodity.Type {
+			unlockType, err := r.lockItemType(ctx, existingCommodity.GroupID, existingCommodity.TenantID, commodity.Type)
+			if err != nil {
+				return nil, err
+			}
+			defer unlockType()
 		}
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)

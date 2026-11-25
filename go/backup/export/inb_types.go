@@ -43,7 +43,12 @@ package export
 // knows them before the first item names one, and because a new top-level
 // member would reach an older reader's location handler. A 3.2 reader
 // restores a 3.3 archive without sellers.
-const INBFormatVersion = "3.3"
+//
+// 3.4 adds the group's item types to the manifest (INBManifest.ItemTypes).
+// An item's type stays the slug it was, so a 3.3 reader restores a 3.4
+// archive as before: the built-in types restore and an item whose type is a
+// custom one fails as an item of an unknown type would.
+const INBFormatVersion = "3.4"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -129,8 +134,20 @@ type INBManifest struct {
 	// Sellers are the group's sellers (format 3.3): every seller in a
 	// whole-group export, and the sellers the exported items name in a
 	// selected-items export. Omitted when there is none.
-	Sellers    []INBSeller      `json:"sellers,omitempty"`
+	Sellers []INBSeller `json:"sellers,omitempty"`
+	// ItemTypes are the group's item types (format 3.4): every type in a
+	// whole-group export, and the types the exported items have in a
+	// selected-items export.
+	ItemTypes  []INBItemType    `json:"itemTypes,omitempty"`
 	Statistics INBManifestStats `json:"statistics"`
+}
+
+// INBItemType is an item type keyed by its slug, which INBCommodity.Type
+// holds. Name is empty for a built-in type that keeps its default name.
+type INBItemType struct {
+	Slug string `json:"slug"`
+	Name string `json:"name,omitempty"`
+	Icon string `json:"icon,omitempty"`
 }
 
 // INBSeller is a seller keyed by its immutable UUID, which

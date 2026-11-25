@@ -7214,6 +7214,268 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/item-types": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List item types
+         * @description The item types of the group: the built-in ones first in their fixed order, then the others by name.
+         *     Each carries the number of items of that type and, separately, the number in Trash. The first request seeds the built-in types into a group that has none.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypesResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create an item type
+         * @description The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
+         *     The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Item type object */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeRequest"];
+                };
+            };
+            responses: {
+                /** @description Item type created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Another item type of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/item-types/{itemTypeID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get an item type */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete an item type
+         * @description Deletes the type. A type that items still have, in Trash included, is refused with 409 item_type.in_use unless reassign_to names another type of the group;
+         *     then every item of the deleted type gets that type first, in the same transaction. The group's last type cannot be deleted (409 item_type.last).
+         */
+        delete: {
+            parameters: {
+                query?: {
+                    /** @description ID of the item type the deleted type's items move to */
+                    reassign_to?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted; meta.reassigned_items counts the items moved */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeDeleteResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The type is in use and no reassign_to was given, or it is the group's last type */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description reassign_to names no other type of the group */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update an item type
+         * @description Attributes left out keep their value. The slug never changes, so items, filters and saved views keep working after a rename. An empty name on a built-in type gives it back its default name.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Item type ID */
+                    itemTypeID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Item type patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
+                    };
+                };
+                /** @description Item type not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Another item type of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/loans": {
         parameters: {
             query?: never;
@@ -13520,6 +13782,97 @@ export type components = {
         "jsonapi.InviteInfoResponse": {
             data?: components["schemas"]["jsonapi.InviteInfoData"];
         };
+        "jsonapi.ItemTypeDeleteMeta": {
+            /**
+             * Format: int64
+             * @example 4
+             */
+            reassigned_items?: number;
+        };
+        "jsonapi.ItemTypeDeleteResponse": {
+            meta?: components["schemas"]["jsonapi.ItemTypeDeleteMeta"];
+        };
+        "jsonapi.ItemTypeRequest": {
+            data?: components["schemas"]["jsonapi.ItemTypeRequestDataWrapper"];
+        };
+        "jsonapi.ItemTypeRequestData": {
+            /** @example car */
+            icon?: string;
+            /** @example Vehicle */
+            name?: string;
+        };
+        "jsonapi.ItemTypeRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeRequestData"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeResponse": {
+            data?: components["schemas"]["jsonapi.ItemTypeResponseData"];
+        };
+        "jsonapi.ItemTypeResponseData": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeView"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeUpdateRequest": {
+            data?: components["schemas"]["jsonapi.ItemTypeUpdateRequestDataWrapper"];
+        };
+        "jsonapi.ItemTypeUpdateRequestData": {
+            icon?: string;
+            name?: string;
+        };
+        "jsonapi.ItemTypeUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.ItemTypeUpdateRequestData"];
+            id?: string;
+            /**
+             * @example item_types
+             * @enum {string}
+             */
+            type?: "item_types";
+        };
+        "jsonapi.ItemTypeView": {
+            /** @example true */
+            builtin?: boolean;
+            created_at?: string;
+            /** @example laptop */
+            icon?: string;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            item_count?: number;
+            /** @example  */
+            name?: string;
+            /** @example electronics */
+            slug?: string;
+            /**
+             * Format: int64
+             * @description TrashedItemCount is the number of items in Trash with this type.
+             *     Deleting the type moves them along with the others.
+             * @example 0
+             */
+            trashed_item_count?: number;
+            updated_at?: string;
+        };
+        "jsonapi.ItemTypesMeta": {
+            /**
+             * Format: int64
+             * @example 6
+             */
+            item_types?: number;
+        };
+        "jsonapi.ItemTypesResponse": {
+            data?: components["schemas"]["jsonapi.ItemTypeResponseData"][];
+            meta?: components["schemas"]["jsonapi.ItemTypesMeta"];
+        };
         "jsonapi.LoanCommodityRef": {
             id?: string;
             name?: string;
@@ -14575,7 +14928,14 @@ export type components = {
              */
             status_note?: string;
             tags?: string[];
-            type?: components["schemas"]["models.CommodityType"];
+            /**
+             * @description Type is the slug of one of the group's item types (see ItemType). An
+             *     item keeps the slug, not the type's id: a slug never changes, so the
+             *     item query's type filter, saved views and backups that name it stay
+             *     valid when the type is renamed.
+             * @example electronics
+             */
+            type?: string;
             urls?: string;
             uuid?: string;
             /**
@@ -14714,8 +15074,6 @@ export type components = {
         };
         /** @enum {string} */
         "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
-        /** @enum {string} */
-        "models.CommodityType": "white_goods" | "electronics" | "equipment" | "furniture" | "clothes" | "other";
         "models.CurrencyMigration": {
             /** @description CommodityCount is the number of rows actually mutated by the worker. */
             commodity_count?: number;

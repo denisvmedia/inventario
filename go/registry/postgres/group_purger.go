@@ -125,6 +125,9 @@ var purgeOrder = []func(t store.TableNames) string{
 	// Sellers (#2804). group_id -> location_groups is NO ACTION. Dropped
 	// after commodities, whose seller_id pointed at them.
 	func(t store.TableNames) string { return string(t.Sellers()) },
+	// Item types (#2802). group_id -> location_groups is NO ACTION. Dropped
+	// after the commodities whose type named them.
+	func(t store.TableNames) string { return string(t.ItemTypes()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups is NO ACTION, so they must be cleared explicitly

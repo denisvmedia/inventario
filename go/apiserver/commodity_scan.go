@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"log/slog"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -246,6 +247,7 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 	}
 
 	in.PreferredCurrencyCode = preferredCurrencyFromContext(r.Context())
+	in.ItemTypes = scanItemTypesFromContext(r.Context())
 
 	// The constructor permits a nil service so the route can stay
 	// mounted in a "feature gated off" deployment; calling Scan on it
@@ -381,6 +383,27 @@ func preferredCurrencyFromContext(ctx context.Context) string {
 		return ""
 	}
 	return string(group.GroupCurrency)
+}
+
+// scanItemTypesFromContext lists the group's item types for the scan
+// prompt (#2802). A built-in type that keeps its default name is offered
+// under its English name. When the list cannot be read the scan goes on
+// with the built-in types rather than failing.
+func scanItemTypesFromContext(ctx context.Context) []services.ScanItemType {
+	regSet := RegistrySetFromContext(ctx)
+	if regSet == nil || regSet.ItemTypeRegistry == nil {
+		return nil
+	}
+	types, err := regSet.ItemTypeRegistry.List(ctx)
+	if err != nil {
+		slog.Warn("commodity scan: item types unavailable, offering the built-in ones", "error", err.Error())
+		return nil
+	}
+	out := make([]services.ScanItemType, 0, len(types))
+	for _, t := range types {
+		out = append(out, services.ScanItemType{Slug: string(t.Slug), Name: t.DisplayName()})
+	}
+	return out
 }
 
 // errBadMultipart is the sentinel wrapper for multipart-parsing errors.
