@@ -20,6 +20,8 @@ export interface StoredPendingFile {
   id: string
   file: File
   tags: string[]
+  // Set once a server draft save uploaded the file (#2812).
+  uploadedFileId?: string
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -83,7 +85,8 @@ export async function loadPendingFiles(key: string): Promise<StoredPendingFile[]
         typeof entry === "object" &&
         typeof (entry as StoredPendingFile).id === "string" &&
         (entry as StoredPendingFile).file instanceof File &&
-        Array.isArray((entry as StoredPendingFile).tags)
+        Array.isArray((entry as StoredPendingFile).tags) &&
+        ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
     )
   } catch (err) {
     console.warn("[pending-files] load failed", err)

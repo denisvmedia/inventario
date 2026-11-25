@@ -38,8 +38,8 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files are only included in a **Full database** export, since there's no parent to bring them along.
+   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them.
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files and drafts are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup. A file attached to several items is stored in the archive once and comes back attached to each of them that the backup includes.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
@@ -95,7 +95,19 @@ A file from the backup that your group no longer has and that is attached only t
 items in your trash goes to the trash with them, so restoring the item brings it
 back.
 
-**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup.
+**Full replace** removes your current data before importing, including everything in the [Trash](../trash/), so Inventario shows a clear warning before you run it. Use it only when you really want the backup to become the source of truth. It really does mean *everything*: items with no area assigned, files attached to a location or area, and standalone files are all wiped and then restored from the backup. The same goes for [drafts of new items](../items/#drafts-of-a-new-item): the group's drafts are replaced with the ones in the backup.
+
+### Drafts
+
+A restore brings back the [drafts of new items](../items/#drafts-of-a-new-item)
+in the backup with the files saved with them, linked to the restored area and
+seller. A draft's item type is matched to your group's types
+[the same way an item's is](#item-types). The two merge strategies keep a draft your group already has (the same
+draft, saved again since the backup, for example) and say so in the restore
+log; a file that only such a draft used comes back as a standalone file. So do
+the files of a draft that cannot be restored, which the restore log counts as
+an error. A backup made before drafts were included has none, so a merge
+leaves your drafts as they are.
 
 ### Sellers
 

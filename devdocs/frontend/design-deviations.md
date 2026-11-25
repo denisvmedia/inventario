@@ -35,6 +35,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has the **Save as draft** `Switch` row on the form steps (L554–L569); with it on, the last step's primary button reads "Save Draft" (L702–L711) and the earlier steps keep Continue. The mock has no notice about where a draft is saved, no conflict handling, and no list of files already saved with a draft.
+- **Reality**: In create mode for a signed-in user (`serverDrafts`), turning the switch on adds a primary **Save draft** button on every form step and turns Continue into an outline button; it saves the form and the staged files as a server draft without checking the form, then closes. A draft opened with **Continue** skips the Fill with AI step, opens on Basics with the switch off, and hides the fields behind "Opening the draft…" until the draft has loaded. Below the steps, a destructive `Alert` "Draft not saved to the server" names the files that did not upload and has a **Retry** button; a destructive `Alert` "This draft changed elsewhere" has two outline buttons, **Load the newer version** and **Save as a new draft**. When the draft was finished elsewhere, **Save draft** or **Add item** shows a destructive `Alert` "This draft is already an item" with **Open item** and **Save as a new draft**; when it was discarded elsewhere, "This draft was discarded" with **Save as a new draft**. Under the switch, default `Alert`s say "Restored from this device" (input kept locally that the server lacks), "Draft not found" or "This draft is already an item". The Files step lists "Saved with this draft" rows with the pending-file row's anatomy, without the tags input. The close confirm says the draft is saved for any device, reads **Discard changes** when a draft is being continued, and for the anonymous landing-page form reads **Keep on this device** with copy about signing in.
+- **Why**: The issue asks for quick capture without the full validation, explicit handling of a stale save from another tab or device, and copy that tells local recovery from a server save. The notices compose existing `Alert` and `Button` primitives from [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). Save draft on every step (rather than on the last step only) and opening a continued draft on Basics with the switch off go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; Save draft on every step and the continued-draft opening agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws server drafts; otherwise permanent.
+
+#### 2026-11-25 — Drafts card on the Items page
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no list of drafts.
+- **Reality**: `frontend/src/components/items/DraftsCard.tsx` renders a `Card` between the page header and the toolbar, only while the group has drafts. The title "Drafts" carries a secondary `Badge` with the count, and a `CardDescription` says drafts can be continued on any device. Each row shows the draft's name (an italic muted "Untitled draft" when it has none), "Saved {relative time}" and a paperclip with the file count, then an outline small **Continue** button and a ghost icon button (`Trash2`) that discards after the confirm dialog. The card lists five drafts; a ghost small "Show all N" in `CardAction` lists up to 100. Viewers see the rows without the buttons.
+- **Why**: not present in mock. The issue asks that drafts can be found and resumed on another device, with the inbox of #2794 as the later home; the card follows the `Card` anatomy in [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). The placement above the toolbar and the five-row cap are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; placement and the row cap agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Move the list into the inbox when #2794 lands.
+
+#### 2026-11-25 — Short name follows the name in the Add item dialog
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has an independent Short name input with a 20-character limit (L215–L216).
+- **Reality**: In create mode the short name is filled from the name as the user types it, cut to whole words of up to 20 characters (counted as code points, so an emoji counts once), until the user types in the short name field or the AI scan supplies one. Edit mode leaves the short name alone. The field keeps its 40-character limit, the server's.
+- **Why**: The issue asks for a short name derived from the title that keeps a manual choice. The 20-character cut follows the mock's limit and is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the 20-character cut agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent.
+
 #### 2026-11-25 — Views control on the items list toolbar
 
 - **Issue/PR**: #2793 / #2839
@@ -487,6 +514,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The issue asks for "Linked to" with several entries in the file panel and for "remove attachment" and "delete file" as separate actions, with the delete action explaining the affected associations.
 - **Approved by**: user (explicit) — pre-approved for #2806 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` models a file with several attachments.
+
+#### 2026-11-25 — Files name the draft they are saved with
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) "Attached to" names an item, a location or an area; the mock has no drafts.
+- **Reality**: A link to an open draft reads "Draft: {name}" ("Draft" when the draft has no name) everywhere a file's attachments are named: the "Linked to" list of `FileLinksList.tsx`, where it has the `FilePen` icon and links to `/commodities/new?draft={id}`, the summary on file cards, list rows and the Attach existing file dialog, the Files tab of the Trash, and the Delete confirmation. The label comes from `useLinkName` in `frontend/src/features/files/labels.ts`. The server leaves out a link to a draft being discarded, so such a file reads "Not attached to anything" until the discard finishes.
+- **Why**: not present in mock. A file saved with a draft is in the Files list; naming the draft lets the user find and continue it, and tells them that deleting the file takes it off the draft. The "Draft:" prefix keeps a draft from being taken for an item of the same name. Showing the draft rather than "Not attached to anything" is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the label agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws draft attachments.
 
 #### 2026-11-25 — "Attach an existing file" on the item Files tab and the location/area files panel
 

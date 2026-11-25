@@ -6,8 +6,10 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -17,9 +19,11 @@ import (
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/backup/export"
+	"go.5x5.cz/inventario/backup/restore/processor"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // Open drafts of new items are in a whole-group backup (#2812, format 3.5),
@@ -167,6 +171,81 @@ func TestINBExport_Drafts(t *testing.T) {
 			c.Check(string(data), qt.Not(qt.Contains), d.UUID, qt.Commentf("%s carries draft %s", name, d.ClientKey))
 		}
 	}
+}
+
+// promoteBeforeItemsRead is a CommodityRegistryFactory that runs promote once,
+// right before the export opens the item registry: a promotion that commits
+// between the export's reads of the drafts and of the items.
+type promoteBeforeItemsRead struct {
+	registry.CommodityRegistryFactory
+	promote func()
+}
+
+func (f *promoteBeforeItemsRead) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
+	if promote := f.promote; promote != nil {
+		f.promote = nil
+		promote()
+	}
+	return f.CommodityRegistryFactory.CreateUserRegistry(ctx)
+}
+
+// TestINBExport_PromotionDuringTheExportLosesNothing: the drafts are read
+// before the items, so a draft promoted between the two reads is in the
+// archive both as the draft and as the item it became. Read the other way
+// round, it would be in neither.
+func TestINBExport_PromotionDuringTheExportLosesNothing(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	drafts := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+	var itemUUID string
+	f.fs.CommodityRegistryFactory = &promoteBeforeItemsRead{
+		CommodityRegistryFactory: f.fs.CommodityRegistryFactory,
+		promote: func() {
+			result := must.Must(drafts.Promote(f.ctx, f.draft.ID, f.draft.Revision, "promotion-during-export", models.Commodity{
+				Name: "Half-done drill", ShortName: "drill", Type: models.CommodityTypeEquipment, Count: 1,
+				Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD",
+			}))
+			itemUUID = result.Commodity.UUID
+		},
+	}
+
+	_, archive := f.runExport(c, signer)
+	c.Assert(itemUUID, qt.Not(qt.Equals), "")
+	_, jsons := innerMembers(c, archive)
+	var doc types.INBDraftsDoc
+	c.Assert(json.Unmarshal(jsons[types.INBDraftsMember], &doc), qt.IsNil)
+	c.Assert(doc.Drafts, qt.HasLen, 1)
+	c.Check(doc.Drafts[0].ClientKey, qt.Equals, "draft-in-backup")
+	_, items := manifestAndItems(c, archive)
+	c.Check(items[itemUUID].Name, qt.Equals, "Half-done drill")
+}
+
+// TestINBExport_DraftsLargerThanARestoreAcceptsFailTheExport: a drafts
+// document over the restore's per-document limit fails the export before
+// anything is written, rather than publishing a backup that cannot be
+// restored.
+func TestINBExport_DraftsLargerThanARestoreAcceptsFailTheExport(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	export.SetMaxJSONDocBytesForTesting(c, 256)
+
+	svc := export.NewExportService(f.fs, inbUploadLocation, signer)
+	expReg := must.Must(f.fs.ExportRegistryFactory.CreateUserRegistry(f.ctx))
+	created := must.Must(expReg.Create(f.ctx, models.Export{
+		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "tenant-a", GroupID: f.group.ID, CreatedByUserID: f.user.ID},
+		Type:                     models.ExportTypeFullDatabase,
+		Status:                   models.ExportStatusPending,
+		Description:              "too many drafts",
+	}))
+	err := svc.ProcessExport(f.ctx, created.ID)
+	c.Assert(err, qt.ErrorIs, export.ErrDraftsTooLarge)
+
+	failed := must.Must(expReg.Get(f.ctx, created.ID))
+	c.Check(failed.Status, qt.Equals, models.ExportStatusFailed)
+	c.Check(failed.ErrorMessage, qt.Contains, "discard the drafts you no longer need")
+	c.Check(failed.FilePath, qt.Equals, "")
 }
 
 func TestINBExport_SelectedItemsCarryNoDrafts(t *testing.T) {
@@ -440,6 +519,25 @@ func TestINBRestore_ArchiveWithoutDrafts(t *testing.T) {
 	c.Check(draftLink(f.fileByUUID(c, photo), draft.ID), qt.IsNotNil)
 }
 
+// TestINBRestore_FullReplaceWithoutADraftRegistry: a factory set without a
+// draft registry restores a backup that carries drafts. The drafts are left
+// out and the full replace still clears and restores everything else.
+func TestINBRestore_FullReplaceWithoutADraftRegistry(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+	f.fs.CommodityDraftRegistryFactory = nil
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(f.commodityByUUID(c, f.tvUUID).Name, qt.Not(qt.Equals), "")
+	receipt := f.fileByUUID(c, f.receipt)
+	c.Assert(receipt.Links, qt.HasLen, 1)
+	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+}
+
 // TestINBRestore_DryRunWritesNoDrafts: a dry run reports the drafts it would
 // restore and changes none. A dry run of a full replace restores no item, so
 // the receipt's bytes, stored under the TV, match no reference; the draft's
@@ -472,32 +570,93 @@ func TestINBRestore_DryRunWritesNoDrafts(t *testing.T) {
 // as a standalone file, and the receipt it shared with the TV stays on the
 // TV.
 func TestINBRestore_FailedDraftKeepsItsFiles(t *testing.T) {
+	tests := []struct {
+		name    string
+		corrupt func(*types.INBDraft)
+	}{
+		{"an invalid client key", func(d *types.INBDraft) { d.ClientKey = "not a valid key" }},
+		// The next save would overflow the 32-bit revision column.
+		{"a revision a save would overflow", func(d *types.INBDraft) { d.Revision = math.MaxInt32 }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			signer := testSigner(c)
+			f := newDraftFixture(c)
+			_, archive := f.runExport(c, signer)
+
+			broken := rewriteInnerMember(c, signer, archive, types.INBDraftsMember, func(body []byte) []byte {
+				var doc types.INBDraftsDoc
+				c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
+				c.Assert(doc.Drafts, qt.HasLen, 1)
+				tc.corrupt(&doc.Drafts[0])
+				return must.Must(json.Marshal(doc))
+			})
+			key := "t/tenant-a/restores/drafts-failed.inb"
+			writeArchive(c, f.inbFixture, key, broken)
+
+			final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+			c.Assert(err, qt.IsNil)
+			c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+			c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the draft itself is an error"))
+			steps := must.Must(f.fs.RestoreStepRegistryFactory.CreateServiceRegistry().ListByRestoreOperation(f.ctx, final.ID))
+			var draftsStep []string
+			for _, s := range steps {
+				if s.Name == "Drafts" {
+					draftsStep = append(draftsStep, s.Reason)
+				}
+			}
+			c.Check(draftsStep, qt.DeepEquals, []string{"0 restored, 0 kept as they were, 1 failed"})
+
+			c.Check(f.draftsByKey(c), qt.HasLen, 0)
+			photo := f.fileByUUID(c, f.photo)
+			c.Check(photo.Links, qt.HasLen, 0)
+			receipt := f.fileByUUID(c, f.receipt)
+			c.Assert(receipt.Links, qt.HasLen, 1)
+			c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+		})
+	}
+}
+
+// TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile: when the TV fails
+// to restore, the receipt's bytes, stored under the TV, match no reference.
+// The draft's later reference to the receipt then finds no bytes, and a real
+// restore fails as a missing member rather than restoring the draft without
+// the receipt.
+func TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
 	f := newDraftFixture(c)
 	_, archive := f.runExport(c, signer)
 
-	broken := rewriteInnerMember(c, signer, archive, types.INBDraftsMember, func(body []byte) []byte {
-		var doc types.INBDraftsDoc
+	_, jsons := innerMembers(c, archive)
+	var member string
+	for name, body := range jsons {
+		if strings.HasPrefix(name, "location-") && bytes.Contains(body, []byte(f.tvUUID)) {
+			member = name
+		}
+	}
+	c.Assert(member, qt.Not(qt.Equals), "")
+	broken := rewriteInnerMember(c, signer, archive, member, func(body []byte) []byte {
+		var doc map[string]any
 		c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
-		c.Assert(doc.Drafts, qt.HasLen, 1)
-		doc.Drafts[0].ClientKey = "not a valid key"
+		items, _ := doc["commodities"].([]any)
+		found := false
+		for _, it := range items {
+			if item, ok := it.(map[string]any); ok && item["id"] == f.tvUUID {
+				item["name"] = ""
+				found = true
+			}
+		}
+		c.Assert(found, qt.IsTrue)
 		return must.Must(json.Marshal(doc))
 	})
-	key := "t/tenant-a/restores/drafts-failed.inb"
+	key := "t/tenant-a/restores/drafts-item-failed.inb"
 	writeArchive(c, f.inbFixture, key, broken)
 
 	final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
-	c.Assert(err, qt.IsNil)
-	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
-	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the draft itself is an error"))
-
-	c.Check(f.draftsByKey(c), qt.HasLen, 0)
-	photo := f.fileByUUID(c, f.photo)
-	c.Check(photo.Links, qt.HasLen, 0)
-	receipt := f.fileByUUID(c, f.receipt)
-	c.Assert(receipt.Links, qt.HasLen, 1)
-	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+	c.Assert(err, qt.ErrorIs, processor.ErrMissingFileMembers)
+	c.Check(final.Status, qt.Equals, models.RestoreStatusFailed)
 }
 
 // TestINBRestore_MergeReportsWhyADraftWasKept: the restore log says what
