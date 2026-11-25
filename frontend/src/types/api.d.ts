@@ -4072,9 +4072,17 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
-                    /** @description Case-insensitive substring match on name + short_name; a query that reads as an asset ID (A-0042, 42) also matches that asset number */
+                    /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
                     q?: string;
-                    /** @description Include drafts and non-in_use commodities (default false hides them) */
+                    /** @description Only items with these tag slugs (comma-separated or repeated); see tag_mode */
+                    tags?: string[];
+                    /** @description How tags combine: all (default) or any */
+                    tag_mode?: "all" | "any";
+                    /** @description Only items with none of these tag slugs (comma-separated or repeated) */
+                    tags_exclude?: string[];
+                    /** @description Only items with no tags; cannot be combined with tags or tags_exclude */
+                    no_tags?: boolean;
+                    /** @description Include drafts and non-in_use commodities (default true; false hides them) */
                     include_inactive?: boolean;
                     /** @description Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
                     sort?: string;
@@ -4101,6 +4109,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.CommoditiesResponse"];
+                    };
+                };
+                /** @description Unsupported parameter or invalid value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -7678,12 +7695,14 @@ export type paths = {
         };
         /**
          * Advanced search
-         * @description Perform advanced search across commodities, files, and other entities
+         * @description Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
+         *     Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
+         *     Drafts and inactive items are included unless include_inactive=false.
          */
         get: {
             parameters: {
                 query: {
-                    /** @description Search query; for commodities, a query that reads as an asset ID (A-0042, 42) also matches that asset number */
+                    /** @description Search text; for commodities, white-space separated terms that must all match (see GET /commodities) */
                     q: string;
                     /** @description Entity type to search */
                     type?: "commodities" | "files" | "areas" | "locations";
@@ -7691,10 +7710,30 @@ export type paths = {
                     limit?: number;
                     /** @description Number of results to skip */
                     offset?: number;
-                    /** @description Filter by tags (comma-separated) */
+                    /** @description Filter by tags (comma-separated); for commodities see tag_mode */
                     tags?: string;
-                    /** @description Tag operator */
-                    operator?: "AND" | "OR";
+                    /** @description Commodities only: how tags combine, all (default) or any */
+                    tag_mode?: "all" | "any";
+                    /** @description Commodities only: only items with none of these tag slugs (comma-separated or repeated) */
+                    tags_exclude?: string[];
+                    /** @description Commodities only: only items with no tags; cannot be combined with tags or tags_exclude */
+                    no_tags?: boolean;
+                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    status?: string[];
+                    /** @description Commodities only: filter by exact area ID */
+                    area_id?: string;
+                    /** @description Commodities only: only items with no area (ignored when area_id is set) */
+                    unassigned?: boolean;
+                    /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
+                    include_inactive?: boolean;
+                    /** @description Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR */
+                    warranty_status?: string[];
+                    /** @description Commodities only: restrict to items whose warranty expires strictly before YYYY-MM-DD */
+                    warranty_expires_before?: string;
+                    /** @description Commodities only: true = only items currently lent, false = only items not lent */
+                    lent_out?: boolean;
+                    /** @description Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
+                    sort?: string;
                 };
                 header?: never;
                 path: {
@@ -7712,6 +7751,15 @@ export type paths = {
                     };
                     content: {
                         "application/vnd.api+json": components["schemas"]["jsonapi.SearchResponse"];
+                    };
+                };
+                /** @description Missing q, unsupported parameter or invalid value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
             };
@@ -11195,6 +11243,14 @@ export type components = {
                 [key: string]: components["schemas"]["jsonapi.CommodityCover"];
             };
             /**
+             * @description Matches maps commodity id → the fields the search text (`q`) was
+             *     found in, so the list can say why an item matched. Omitted when the
+             *     request has no `q`.
+             */
+            matches?: {
+                [key: string]: components["schemas"]["registry.CommoditySearchMatch"][];
+            };
+            /**
              * Format: int64
              * @example 1
              */
@@ -12417,6 +12473,13 @@ export type components = {
         };
         "jsonapi.SearchMeta": {
             entity_type?: string;
+            /**
+             * @description Matches maps result id → the fields the query was found in. Only
+             *     the commodities search fills it.
+             */
+            matches?: {
+                [key: string]: components["schemas"]["registry.CommoditySearchMatch"][];
+            };
             query?: string;
             total?: number;
         };
@@ -13588,6 +13651,12 @@ export type components = {
             name?: string;
             updated_at?: string;
             uuid?: string;
+        };
+        /** @enum {string} */
+        "registry.CommoditySearchField": "asset_id" | "name" | "short_name" | "serial_number" | "extra_serial_numbers" | "part_numbers" | "tags" | "comments" | "warranty_notes" | "status_note";
+        "registry.CommoditySearchMatch": {
+            field?: components["schemas"]["registry.CommoditySearchField"];
+            value?: string;
         };
         "registry.StorageBreakdown": {
             documents?: number;

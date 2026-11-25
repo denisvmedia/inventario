@@ -211,6 +211,12 @@ func extractDBFields(t reflect.Type, v reflect.Value, fields, placeholders *[]st
 		if dbTag == "" || dbTag == "-" {
 			continue
 		}
+		// `dbwrite:"false"` marks a column the database computes (a
+		// generated column): it is read back by SELECT but must never
+		// appear in an INSERT or UPDATE, which PostgreSQL rejects.
+		if field.Tag.Get("dbwrite") == "false" {
+			continue
+		}
 
 		*fields = append(*fields, dbTag)
 		*placeholders = append(*placeholders, ":"+dbTag)

@@ -115,6 +115,37 @@ describe("<SearchPage />", () => {
     await waitFor(() => expect(screen.getByTestId("group-locations-empty")).toBeInTheDocument())
   })
 
+  it("says where the query matched and links to the list with inactive items (#2800)", async () => {
+    server.use(
+      groupsHandler,
+      userHandler,
+      msw.get(api("/g/household/search"), ({ request }) => {
+        const type = new URL(request.url).searchParams.get("type")
+        if (type === "commodities") {
+          return HttpResponse.json({
+            data: [{ id: "c1", name: "Hedge trimmer", short_name: "Trimmer" }],
+            meta: {
+              total: 1,
+              entity_type: "commodities",
+              matches: { c1: [{ field: "serial_number", value: "HT-7788" }] },
+            },
+          })
+        }
+        return HttpResponse.json({ data: [], meta: { total: 0, entity_type: type } })
+      })
+    )
+    renderSearch("/g/household/search?q=ht-77")
+    expect(await screen.findByTestId("result-commodity-c1")).toHaveTextContent(
+      "Serial number: HT-7788"
+    )
+    // /search counts drafts and inactive items, so the list it links to
+    // has to show them too.
+    expect(screen.getByTestId("group-commodities-see-all")).toHaveAttribute(
+      "href",
+      "/g/household/commodities?q=ht-77&inactive=1"
+    )
+  })
+
   it("finds an item by its asset ID from the flat search response (#2807)", async () => {
     server.use(
       groupsHandler,

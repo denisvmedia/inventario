@@ -900,6 +900,136 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByTestId("nav-sentinel-path")).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
   })
 
+  it("says where the search text matched when it is not the name (#2800)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "pt", label: "Power tools", color: "blue" }]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () =>
+        HttpResponse.json({
+          data: [
+            commodityRes("c1", { name: "Drill", serial_number: "SN-123" }),
+            commodityRes("c2", { name: "Saw", tags: ["pt"] }),
+            commodityRes("c3", { name: "Power sander" }),
+          ],
+          meta: {
+            commodities: 3,
+            matches: {
+              c1: [{ field: "serial_number", value: "SN-123" }],
+              c2: [{ field: "tags", value: "pt" }],
+              c3: [{ field: "name", value: "Power sander" }],
+            },
+          },
+        })
+      )
+    )
+    renderList(`/g/${SLUG}/commodities?q=po`)
+    await waitFor(() => expect(screen.getAllByTestId("commodity-card").length).toBe(3))
+    const [drill, saw, sander] = screen.getAllByTestId("commodity-card")
+    expect(within(drill).getByTestId("commodity-search-match")).toHaveTextContent(
+      "Serial number: SN-123"
+    )
+    // A tag match shows the tag's label, not its slug.
+    expect(await within(saw).findByText("Tag: Power tools")).toBeInTheDocument()
+    // The name is the card title already; no hint.
+    expect(within(sander).queryByTestId("commodity-search-match")).toBeNull()
+  })
+
+  it("sends the tag filter from the URL and keeps it on other filter changes", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?tags=red,garage&tag_mode=any&tags_exclude=broken`)
+    await screen.findByTestId("commodity-card")
+    await waitFor(() => {
+      const first = new URLSearchParams(queries[0])
+      expect(first.get("tags")).toBe("garage,red")
+      expect(first.get("tag_mode")).toBe("any")
+      expect(first.get("tags_exclude")).toBe("broken")
+    })
+
+    await user.click(screen.getByTestId("commodities-filter-lent-out"))
+    await waitFor(() => {
+      const last = new URLSearchParams(queries[queries.length - 1])
+      expect(last.get("lent_out")).toBe("true")
+      expect(last.get("tags")).toBe("garage,red")
+    })
+  })
+
+  it("explains a filter the server refuses instead of a generic error", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        if (new URL(request.url).searchParams.has("status")) {
+          return HttpResponse.json(
+            {
+              errors: [
+                {
+                  status: "Bad Request",
+                  code: "query.invalid_parameter",
+                  meta: { parameter: "status", reason: "unknown status" },
+                },
+              ],
+            },
+            { status: 400 }
+          )
+        }
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?status=broken`)
+    const alert = await screen.findByTestId("commodities-invalid-query")
+    expect(alert).toHaveTextContent("(status)")
+    expect(screen.queryByTestId("commodities-error")).toBeNull()
+
+    await user.click(within(alert).getByRole("button", { name: "Clear filters" }))
+    expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+  })
+
+  it("sends an unreadable flag as written, so the server can refuse it", async () => {
+    const user = userEvent.setup()
+    const sent: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        const lentOut = new URL(request.url).searchParams.get("lent_out")
+        sent.push(lentOut ?? "")
+        if (lentOut === "maybe") {
+          return HttpResponse.json(
+            {
+              errors: [
+                {
+                  status: "Bad Request",
+                  code: "query.invalid_parameter",
+                  meta: { parameter: "lent_out", reason: "must be true or false" },
+                },
+              ],
+            },
+            { status: 400 }
+          )
+        }
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?lent_out=maybe`)
+    const alert = await screen.findByTestId("commodities-invalid-query")
+    expect(alert).toHaveTextContent("(lent_out)")
+    expect(sent).toContain("maybe")
+
+    await user.click(within(alert).getByRole("button", { name: "Clear filters" }))
+    expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+  })
+
   it("has no axe violations on the empty state", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

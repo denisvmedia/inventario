@@ -358,8 +358,10 @@ button so you can put it back into active use at any time.
 
 The **All Items** page lists every item in your group. Across the top you have:
 
-- **Search** — type in the search box to match by name, short name, or asset ID
-  (`A-0042`).
+- **Search** — type in the search box to find items by name, short name, serial
+  number (including extra serial numbers), part number, tag, notes, warranty
+  notes, status note, or asset ID (`A-0042`). See [Searching for
+  items](#searching-for-items).
 - **Type** — filter by one or more item types.
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
   **Written Off**.
@@ -376,8 +378,37 @@ A **Grid view** / **List view** toggle switches the layout.
 
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a
-filtered view.
+filtered view. If a link asks for a filter the list can't apply (for example a
+status that doesn't exist), the page says which part of the link it can't use
+and offers **Clear filters** instead of showing a list that ignores it.
 :::
+
+### Searching for items
+
+The search box on **All Items**, the one on an area's page, and the search page
+all search items the same way:
+
+- **Every word must match**, each in any field. `drill garage` finds an item
+  named "Drill" that has the tag "Garage", but not an item that only has one of
+  the two words.
+- Put a phrase in **double quotes** to match it as a whole: `"power drill"`.
+- Upper and lower case don't matter, and a word matches anywhere inside a field:
+  `1234` finds the serial number `SN-1234`.
+- A word matches a **tag** by its name, so a search for `fragile` finds items
+  tagged "Fragile". Only item tags count; file tags don't.
+- A word that is an asset ID (`A-0042`, `#42`, `42`) also finds that item.
+
+When an item matched on something other than its name, a line under the name
+says where, for example **Serial number: SN-1234**, **Tag: Garage**, or a short
+piece of the notes.
+
+The **All Items** page hides inactive items unless **Show inactive** is on, so
+it can show fewer results than the search page, which includes them. The
+search page's link to all matching items turns **Show inactive** on, so it
+lists the same items.
+
+Searching for a specific field, such as `serial:ABC123`, and searching the text
+inside attached PDFs are not available yet.
 
 ## Select, move, and delete in bulk
 
