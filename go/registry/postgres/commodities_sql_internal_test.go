@@ -264,6 +264,6 @@ func TestCommodityTagCountsSQL(t *testing.T) {
 	c.Check(query, qt.Equals,
 		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+
 			"LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(commodities.tags, '[]'::jsonb)) AS t(slug) ON true "+
-			"WHERE draft = $1 AND status = $2 AND (search_text ILIKE $3) GROUP BY t.slug")
+			"WHERE deleted_at IS NULL AND draft = $1 AND status = $2 AND (search_text ILIKE $3) GROUP BY t.slug")
 	c.Check(args, qt.DeepEquals, []any{false, "in_use", "%drill%"})
 }
