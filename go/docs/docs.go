@@ -13590,6 +13590,13 @@ const docTemplate = `{
         "jsonapi.CommodityScanAttributes": {
             "type": "object",
             "properties": {
+                "custom_fields": {
+                    "description": "CustomFields are the values read for the group's custom fields\n(#2803), keyed by field ID, in the form an item write takes them: a\nstring for text, long text, URL, date and a select field's option ID,\na number, or a boolean. Absent when the scan read none.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
                 "fields": {
                     "type": "object",
                     "additionalProperties": {
@@ -13632,6 +13639,12 @@ const docTemplate = `{
         "jsonapi.CommodityScanItem": {
             "type": "object",
             "properties": {
+                "custom_fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
                 "fields": {
                     "type": "object",
                     "additionalProperties": {

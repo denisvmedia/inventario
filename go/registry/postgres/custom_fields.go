@@ -152,7 +152,9 @@ func (r *CustomFieldRegistry) Create(ctx context.Context, def models.CustomField
 	if err := def.ValidateFields(ctx); err != nil {
 		return nil, errxtrace.Wrap("invalid custom field", err)
 	}
-	now := time.Now()
+	// Postgres keeps microseconds, so the returned field matches what a
+	// later read gives.
+	now := time.Now().Truncate(time.Microsecond)
 	def.CreatedAt = now
 	def.UpdatedAt = now
 	templates := def.Templates
@@ -199,7 +201,7 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 		def.TenantGroupAwareEntityID = stored.TenantGroupAwareEntityID
 		def.Type = stored.Type
 		def.CreatedAt = stored.CreatedAt
-		def.UpdatedAt = time.Now()
+		def.UpdatedAt = time.Now().Truncate(time.Microsecond)
 		def.Normalize()
 		if err := def.ValidateFields(ctx); err != nil {
 			return errxtrace.Wrap("invalid custom field", err)
@@ -408,7 +410,7 @@ func (r *CustomFieldRegistry) insertTemplatesInTx(
 ) error {
 	// The entries carry the field's author, whoever edits the template:
 	// they are part of the field.
-	now := time.Now()
+	now := time.Now().Truncate(time.Microsecond)
 	txReg := store.NewTxRegistry[models.ItemTypeCustomField](tx, r.tableNames.ItemTypeCustomFields())
 	for _, t := range templates {
 		row := models.ItemTypeCustomField{
