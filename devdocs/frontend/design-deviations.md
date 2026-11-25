@@ -1200,9 +1200,9 @@ _None yet._
 
 - **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
-- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
-- **Why**: not present in mock. #2804 asks for the seller in the insurance report.
-- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values. When the sellers cannot be loaded, the seller of an item that has one stays empty with a small muted "Could not load the seller." line (`UnavailableNote`, hidden in print), and the rest of the report renders.
+- **Why**: not present in mock. #2804 asks for the seller in the insurance report. A failed sellers request should not take the whole report down (review of #2844).
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; the empty cell with a note asked for in the #2844 review
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller to the report.
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so
