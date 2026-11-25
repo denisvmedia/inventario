@@ -4,6 +4,7 @@ import { cleanup, configure } from "@testing-library/react"
 import { toHaveNoViolations } from "jest-axe"
 
 import { resetGlobalMockSpies } from "./global-mocks"
+import { installNodeFormDataFetch } from "./node-form-data"
 import { server } from "./server"
 import { initI18n } from "@/i18n"
 import { markBootRefreshAttemptedForTests } from "@/features/auth/bootRefresh"
@@ -151,14 +152,19 @@ if (!Element.prototype.releasePointerCapture) {
 // (statically imported by i18next.config.ts), so this resolves in a single
 // microtask and every useTranslation() in test render returns real strings
 // instead of the bare keys.
+//
+// installNodeFormDataFetch wraps the fetch msw just patched, so uploads reach
+// the handlers with their files intact (see node-form-data.ts).
+let restoreFetch: () => void = () => {}
 beforeAll(async () => {
   await initI18n({ lng: "en" })
-  server.listen({ onUnhandledRequest: "error" })
+  server.listen({ onUnhandledFrame: "error" })
+  restoreFetch = installNodeFormDataFetch()
 })
 // Default the OAuth-callback boot-refresh (#1394) into the "already attempted"
 // state for every test. Without this stamp, every test that mounts
 // <AuthProvider> with no access token would fire a speculative POST
-// /auth/refresh on mount, and MSW's `onUnhandledRequest: "error"` would
+// /auth/refresh on mount, and MSW's `onUnhandledFrame: "error"` would
 // surface as a test failure unless every test added a handler. Tests that
 // specifically exercise the boot-refresh path import
 // `__resetBootRefreshForTests` from features/auth/bootRefresh and reset the
@@ -184,4 +190,7 @@ afterEach(() => {
   document.documentElement.removeAttribute("data-density")
   window.localStorage.clear()
 })
-afterAll(() => server.close())
+afterAll(() => {
+  restoreFetch()
+  server.close()
+})

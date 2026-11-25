@@ -337,7 +337,7 @@ describe("<LocationDetailPage />", () => {
       ...areaHandlers.list(SLUG, []),
       // EntityFilesPanel mounts unconditionally on the location
       // detail page once location.data resolves. Without this stub
-      // its background GET /files would hit MSW's onUnhandledRequest:
+      // its background GET /files would hit MSW's onUnhandledFrame:
       // "error" hook (set in src/test/setup.ts) and surface as a
       // post-test warning even if the assertions complete first.
       ...fileHandlers.list(SLUG, []),

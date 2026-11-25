@@ -46,7 +46,7 @@ beforeEach(() => {
   __resetHttpForTests()
   setAccessToken("good-token")
   // The card reads has_password via useHasPassword → useCurrentUser → /auth/me
-  // (#1395 unlink guard). With server.listen({ onUnhandledRequest: "error" })
+  // (#1395 unlink guard). With server.listen({ onUnhandledFrame: "error" })
   // every render must answer it; default to a password-backed user so the
   // unlink confirmation has a surviving method. Tests that need the
   // OAuth-only (has_password=false) shape override this with their own
