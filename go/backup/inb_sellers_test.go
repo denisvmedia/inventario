@@ -67,7 +67,7 @@ func TestINBExport_Sellers(t *testing.T) {
 	_, archive := f.runExport(c, signer)
 	manifest, items := manifestAndItems(c, archive)
 
-	c.Check(manifest.Version, qt.Equals, "3.3")
+	c.Check(manifest.Version, qt.Equals, "3.4")
 	// A whole-group export carries every seller, the one without items too.
 	c.Check(manifest.Sellers, qt.DeepEquals, []types.INBSeller{
 		{ID: f.shop.UUID, Name: "Hardware Store", Website: "https://hw.example", Contact: "Ann", Note: "cash only"},

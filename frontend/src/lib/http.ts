@@ -67,6 +67,7 @@ const GROUP_SCOPED_PREFIXES = [
   "/settings",
   "/search",
   "/storage-usage",
+  "/saved-views",
   // /trash: the Trash lists, restore, delete for good, and DELETE
   // /trash to empty it.
   "/trash",

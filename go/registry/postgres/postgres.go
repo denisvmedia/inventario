@@ -39,6 +39,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.CommodityLoanRegistryFactory = NewCommodityLoanRegistry(dbx)
 	fs.CommodityServiceRegistryFactory = NewCommodityServiceRegistry(dbx)
 	fs.SupplyLinkRegistryFactory = NewSupplyLinkRegistry(dbx)
+	fs.SavedViewRegistryFactory = NewSavedViewRegistry(dbx)
 	fs.MaintenanceScheduleRegistryFactory = NewMaintenanceScheduleRegistry(dbx)
 	fs.CommodityReminderRegistryFactory = NewCommodityReminderRegistry(dbx)
 	fs.CommodityDraftRegistryFactory = NewCommodityDraftRegistry(dbx)

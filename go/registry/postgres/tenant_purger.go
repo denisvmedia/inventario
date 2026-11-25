@@ -165,6 +165,10 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// inventory rows that referenced them are gone.
 	func(t store.TableNames) string { return string(t.Tags()) },
 
+	// Saved view placements, then the views. group_id -> location_groups
+	// and the user columns -> users NO ACTION; cleared before both.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
+	func(t store.TableNames) string { return string(t.SavedViews()) },
 	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
 	// them are gone.
 	func(t store.TableNames) string { return string(t.Sellers()) },

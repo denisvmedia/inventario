@@ -381,6 +381,18 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// A shared saved view placed in its creator's sidebar: group_id and the
+	// user columns of both rows are NO ACTION.
+	_, err = fs.SavedViewRegistryFactory.MustCreateUserRegistry(ctx).CreateChecked(ctx, models.SavedView{
+		Name:         "Purged view",
+		Icon:         models.SavedViewIconBookmark,
+		Entity:       models.SavedViewEntityCommodities,
+		Query:        "status=in_use",
+		QueryVersion: models.SavedViewQueryVersion,
+		Shared:       true,
+	}, &registry.SavedViewPlacementPatch{ShowInSidebar: new(true)}, nil)
+	c.Assert(err, qt.IsNil)
+
 	// -- purge, then prove the group row can finally be removed -------------
 
 	err = fs.GroupPurger.PurgeGroupDependents(context.Background(), tenantID, groupID)

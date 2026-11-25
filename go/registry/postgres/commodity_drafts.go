@@ -120,7 +120,7 @@ func (r *CommodityDraftRegistry) Count(ctx context.Context) (int, error) {
 // Create stores a new open draft. A client key the group already has fails
 // on the unique index; CreateOrGet is the idempotent form.
 func (r *CommodityDraftRegistry) Create(ctx context.Context, draft models.CommodityDraft) (*models.CommodityDraft, error) {
-	resetNewDraft(&draft, time.Now())
+	resetNewDraft(ctx, &draft, time.Now())
 	created, err := r.newSQLRegistry().Create(ctx, draft, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity draft", err)
@@ -129,8 +129,9 @@ func (r *CommodityDraftRegistry) Create(ctx context.Context, draft models.Commod
 }
 
 // resetNewDraft sets the server-managed fields of a draft about to be
-// created.
-func resetNewDraft(draft *models.CommodityDraft, now time.Time) {
+// created: open, revision 1, created now, or the archived revision and
+// timestamps of a draft a backup restore recreates.
+func resetNewDraft(ctx context.Context, draft *models.CommodityDraft, now time.Time) {
 	draft.Status = models.CommodityDraftOpen
 	draft.Revision = 1
 	draft.PromotedCommodityID = nil
@@ -138,6 +139,11 @@ func resetNewDraft(draft *models.CommodityDraft, now time.Time) {
 	draft.PromotionKey = nil
 	draft.CreatedAt = now
 	draft.UpdatedAt = now
+	if restored, ok := registry.RestoredDraftFromContext(ctx, now); ok {
+		draft.Revision = restored.Revision
+		draft.CreatedAt = restored.CreatedAt
+		draft.UpdatedAt = restored.UpdatedAt
+	}
 	if draft.Values == nil {
 		draft.Values = models.CommodityDraftValues{}
 	}
@@ -161,7 +167,7 @@ func (r *CommodityDraftRegistry) CreateOrGet(ctx context.Context, draft models.C
 		return nil, false, store.ErrCreatedByUserIDRequired
 	}
 
-	resetNewDraft(&draft, time.Now())
+	resetNewDraft(ctx, &draft, time.Now())
 	draft.ID = generateID()
 	draft.UUID = generateID()
 	draft.TenantID = r.tenantID

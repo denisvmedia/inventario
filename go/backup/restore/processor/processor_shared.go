@@ -429,10 +429,9 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 //     above, so before #2236 its row survived a full_replace while the file sweep
 //     below still deleted its attachments (a zombie item with no files) — and its
 //     preserved UUID then collided with the archive's own copy on re-create.
-//  3. The group's drafts (#2812), in every state, with their file links. A
-//     backup holds no drafts, so after the restore the group has none, as the
-//     archive says. The files of a draft are files of the group: the archive
-//     carries them as standalone files.
+//  3. The group's drafts (#2812), in every state, with their file links. The
+//     archive's open drafts take their place: the drafts member recreates
+//     them, and the files member links their files to them again.
 //  4. A type-agnostic sweep of the remaining files (rows + blobs), which catches
 //     standalone files and any orphan. linked_entity_type='export' is skipped:
 //     that is the archive being restored plus the backup history, not inventory.

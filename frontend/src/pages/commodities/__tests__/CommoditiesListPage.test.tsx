@@ -17,6 +17,7 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  savedViewHandlers,
   sellerHandlers,
   tagHandlers,
 } from "@/test/handlers"
@@ -91,6 +92,8 @@ beforeEach(() => {
   // context resolves. Tests that care about the value override this with
   // their own `server.use(settingsStub({...}))` later in the case.
   server.use(settingsStub(), ...sellerHandlers.list(SLUG, []))
+  // The toolbar's saved views control lists the group's views.
+  server.use(...savedViewHandlers.none(SLUG))
 })
 
 describe("<CommoditiesListPage />", () => {

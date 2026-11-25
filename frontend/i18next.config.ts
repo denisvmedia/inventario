@@ -57,6 +57,14 @@ export default defineConfig({
       //   match by the field the BE reports (registry.CommoditySearchField),
       //   via `t(\`commodities:searchMatch.field.${match.field}\`)`. (#2800)
       "commodities:searchMatch.field.*",
+      // commodities:savedViews.icons.* — SaveViewDialog names each icon of
+      //   the picker via `t(\`commodities:savedViews.icons.${name}\`)` over
+      //   SAVED_VIEW_ICON_NAMES (models.ValidSavedViewIcons on the BE).
+      "commodities:savedViews.icons.*",
+      // The name rules of SaveViewDialog hand their message keys to
+      //   FieldError, which translates them; the extractor sees no t() call.
+      "commodities:savedViews.dialog.nameRequired",
+      "commodities:savedViews.dialog.nameTooLong",
       "common:nav.*",
       // errors:validation.* — backend field-validation messages keyed by the
       //   BE's stable validation code, resolved via

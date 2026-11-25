@@ -62,6 +62,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the 20-character cut agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Permanent.
 
+#### 2026-11-25 — Views control on the items list toolbar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no saved views: its toolbar ends with the grid/list toggle.
+- **Reality**: `frontend/src/features/saved-views/SavedViewControl.tsx` sits in the toolbar before the grid/list buttons, an outline `Button size="sm"` with a `Bookmark` icon and **Views**, opening a `DropdownMenu` like the toolbar's filter menus and the menus catalogued in `UIShowcaseView`. It saves the current filter, sort and layout through `SaveViewDialog` (name, a 16-icon picker built on the Radix radio group, so it takes one tab stop and the arrow keys choose, Sidebar / Dashboard / Share checkboxes), lists the member's views and links to the manage page. While a view is open (`saved_view=<id>` in the page URL) the button turns `secondary` and shows the view's icon and name, a `bg-primary` dot when the list no longer matches the view, and a `text-status-expiring` warning icon when the view names a deleted area, tag or seller (sellers are checked only once the group's sellers have loaded); the menu then offers **Save changes**, **Revert to saved** and **Close view**, and a notice lists what no longer exists. A view whose stored query cannot run, or holds a parameter this client cannot read, is a disabled menu entry with a warning icon and is never opened, by the menu or by Revert; while the page URL names one, the menu explains it and offers only **Close view**, and the page shows a destructive `Alert` (title, the parameter, **Close view**) in place of the items, as it does for an invalid query. While the saved views fail to load and none are cached, a page URL that names a view shows a destructive `Alert` with **Try again** and **Close view** in place of the items. The page passes the control through one `savedViews` slot of its toolbar.
+- **Why**: not present in mock. #2793 asks for a Save view control on the items list; the changed marker, revert and the deleted-reference notice follow from the issue's "opening, editing and returning preserves context" and "show what no longer matches" requirements.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views.
+
+#### 2026-11-25 — Saved views page (`/g/:slug/views`)
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: none; the mock has no saved views.
+- **Reality**: `frontend/src/pages/saved-views/SavedViewsPage.tsx` is a `Page width="narrow"` with one `Card` of rows (the row pattern of the dashboard lists): icon tile, the view name as a link, a **Personal** / **Shared** badge, the item count, the conditions as outline badges (`features/saved-views/QueryConditions.tsx`, a condition naming something deleted in the `status-expiring` tone and saying so in its text: "Deleted area", "Deleted seller", or "(deleted)" after a tag; a seller reads "Seller <name>"), ghost icon toggles for Sidebar (`PanelLeft`) and Dashboard (`LayoutDashboard`) that set the member's own placement on every row, shared views of others included, and a `MoreHorizontal` menu with Edit, Move up, Move down and Delete for the views the member may change. Reached from the Views menu and the gear on the sidebar section; it is not in the sidebar's nav lists.
+- **Why**: not present in mock. A member needs one place to rename, reorder, unpin and delete views, including views that are on neither the sidebar nor the dashboard; the issue does not name the surface, so the page is agent-suggested.
+- **Approved by**: agent-suggested; listed in the PR for the owner (the feature itself is pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements).
+- **Reversion plan**: Follow the mock once `inventario-design` draws view management, or fold the page into Settings if the owner prefers.
+
 #### 2026-11-25 — Brand and model on the item: inputs, suggestions, cards, item page, search
 
 - **Issue/PR**: #2804 / PR #2840
@@ -356,6 +374,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Reconcile when the upstream mock adds a reminders surface to the item page.
 
 ### Dashboard / Overview
+
+#### 2026-11-25 — Saved view cards and suggested views on the dashboard
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) goes from the stat cards straight to Expiring Warranties and Recently Added; it has no user-defined cards.
+- **Reality**: `frontend/src/components/dashboard/SavedViewsSection.tsx` renders between the stat cards and the two-up grid. Each view the member put on their own dashboard gets a `Card` in a `lg:grid-cols-2` grid, built like Recently Added: icon and name as the title, the item count as the description (the rows' own total once they load, the counts endpoint's until then), an **Open** ghost button as `CardAction`, and the first five items as rows that open the item sheet. While the member keeps no view of their own other than these, a **Start with a saved view** card lists ready-made views (Expiring warranties, Lent out, Without a location, Untagged), each with an **Add** button that saves it to the sidebar and the dashboard, and an `X` that dismisses the card for the group (localStorage).
+- **Why**: not present in mock. #2793 asks for a dashboard widget whose count matches the sidebar and the opened list, and for a small useful initial set without dashboard building.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws dashboard widgets.
 
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
 
@@ -789,6 +816,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
 ### Navigation & App shell
+
+#### 2026-11-25 — Saved views section in the sidebar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has fixed groups (Inventory, Group, Reports, Personal) and no per-row counts.
+- **Reality**: `frontend/src/features/saved-views/SidebarSavedViews.tsx` adds a **Saved views** `SidebarGroup` between Inventory and Group, listing the views the member pinned to their own sidebar (placement is per member; sharing pins a view for nobody else) in the group's order, each with its icon and a `SidebarMenuBadge` count (the shadcn primitive the mock vendors in [`design-mocks/src/components/ui/sidebar.tsx`](../../design-mocks/src/components/ui/sidebar.tsx) but does not use). A `SidebarGroupAction` gear opens the saved views page. The row is active while the items list shows that view. A view whose stored query cannot run is an `aria-disabled` row with a warning icon instead of a link. The group is left out while no view is pinned.
+- **Why**: not present in mock. #2793 asks for views in the sidebar with a count that matches the opened list.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views in its sidebar.
 
 #### 2026-11-25 — Sellers entry in the sidebar and the command palette
 

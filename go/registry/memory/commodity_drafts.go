@@ -118,6 +118,11 @@ func (r *CommodityDraftRegistry) newDraft(ctx context.Context, draft models.Comm
 	draft.PromotionKey = nil
 	draft.CreatedAt = now
 	draft.UpdatedAt = now
+	if restored, ok := registry.RestoredDraftFromContext(ctx, now); ok {
+		draft.Revision = restored.Revision
+		draft.CreatedAt = restored.CreatedAt
+		draft.UpdatedAt = restored.UpdatedAt
+	}
 	created, err := r.Registry.CreateWithUser(ctx, draft)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity draft", err)
