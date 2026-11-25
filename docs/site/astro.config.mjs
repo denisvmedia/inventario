@@ -98,6 +98,7 @@ export default defineConfig({
             { slug: 'items' },
             { slug: 'locations-and-areas' },
             { slug: 'tags' },
+            { slug: 'sellers' },
             { slug: 'files-and-photos' },
             { slug: 'warranties-loans-maintenance' },
             { slug: 'reports' },

@@ -24,6 +24,7 @@ import {
   Pencil,
   Printer,
   QrCode,
+  Store,
   Tag,
   Trash2,
   TriangleAlert,
@@ -124,7 +125,12 @@ import {
   commoditiesListSource,
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
-import { commodityListHref, commodityTagHref } from "@/features/commodities/query"
+import {
+  commodityListHref,
+  commoditySellerHref,
+  commodityTagHref,
+} from "@/features/commodities/query"
+import { useSellers } from "@/features/sellers/hooks"
 import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -1431,7 +1437,11 @@ function DetailsTab({
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
   const tagIndex = useTagIndex("commodity")
+  const sellers = useSellers()
   const noValue = t("commodities:detail.noValue")
+  const seller = commodity.seller_id
+    ? sellers.data?.find((s) => s.id === commodity.seller_id)
+    : undefined
   const areaText = (isSheetVariant: boolean) => (isSheetVariant ? areaLabel : areaName) || noValue
   // Tags, the area and the type link to the items list filtered by them
   // alone, inactive items included.
@@ -1489,6 +1499,29 @@ function DetailsTab({
       value: commodity.purchase_date
         ? formatDate(commodity.purchase_date as string, { style: "short" })
         : noValue,
+    },
+    {
+      icon: Store,
+      label: t("commodities:detail.fields.seller"),
+      testId: "commodity-detail-seller",
+      // The seller links to the items list of everything bought from it.
+      value: seller ? (
+        groupSlug ? (
+          <Link
+            to={commoditySellerHref(groupSlug, seller.id)}
+            className="hover:underline"
+            data-testid="commodity-detail-seller-link"
+          >
+            {seller.name}
+          </Link>
+        ) : (
+          seller.name
+        )
+      ) : commodity.seller_id && sellers.isLoading ? (
+        "…"
+      ) : (
+        noValue
+      ),
     },
     {
       icon: DollarSign,

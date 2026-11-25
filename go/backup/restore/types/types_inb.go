@@ -91,8 +91,21 @@ type INBManifest struct {
 	// FilesFile names the non-commodity files member (issue #2235), or "" when
 	// the archive carries none. Informational here — restore dispatches by
 	// member name, so a 2.0 archive without this field round-trips unchanged.
-	FilesFile  string           `json:"filesFile,omitempty"`
+	FilesFile string `json:"filesFile,omitempty"`
+	// Sellers are the archived sellers (format 3.3), absent from older
+	// archives. Restore finds or creates each one before the first item.
+	Sellers    []INBSeller      `json:"sellers,omitempty"`
 	Statistics INBManifestStats `json:"statistics"`
+}
+
+// INBSeller is an archived seller keyed by its immutable UUID. Mirrors
+// backup/export.INBSeller.
+type INBSeller struct {
+	ID      string `json:"id"`
+	Name    string `json:"name"`
+	Website string `json:"website,omitempty"`
+	Contact string `json:"contact,omitempty"`
+	Note    string `json:"note,omitempty"`
 }
 
 // INBSignatureInfo is the informational signature descriptor.
@@ -152,11 +165,14 @@ type INBArea struct {
 // INBCommodity is a commodity row keyed by immutable UUID; AreaID is the parent
 // area UUID. The three file-reference arrays carry the attached files.
 type INBCommodity struct {
-	ID                     string   `json:"id"`
-	Name                   string   `json:"name"`
-	ShortName              string   `json:"shortName,omitempty"`
-	Brand                  string   `json:"brand,omitempty"`
-	Model                  string   `json:"model,omitempty"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ShortName string `json:"shortName,omitempty"`
+	Brand     string `json:"brand,omitempty"`
+	Model     string `json:"model,omitempty"`
+	// SellerID is the archived seller's UUID; the processor resolves it
+	// through the manifest's sellers, so ConvertToCommodity leaves it out.
+	SellerID               string   `json:"sellerId,omitempty"`
 	Type                   string   `json:"type,omitempty"`
 	AreaID                 string   `json:"areaId"`
 	Count                  int      `json:"count"`

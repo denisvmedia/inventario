@@ -1,0 +1,62 @@
+{
+  "create": "New seller",
+  "description": "The shops and people your items were bought from.",
+  "dialog": {
+    "contactLabel": "Contact",
+    "contactPlaceholder": "Phone, email or address",
+    "createSubmit": "Create seller",
+    "createTitle": "New seller",
+    "description": "A shop or person the group buys from. Each name is used once in the group.",
+    "editSubmit": "Save changes",
+    "editTitle": "Edit seller",
+    "errorGeneric": "Could not save the seller.",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Hardware Store",
+    "noteLabel": "Note",
+    "notePlaceholder": "Customer number, opening hours, anything worth keeping",
+    "submitting": "Saving…",
+    "websiteLabel": "Website"
+  },
+  "list": {
+    "delete": "Delete {{name}}",
+    "edit": "Edit {{name}}",
+    "empty": "No sellers yet. Add one here, or from the Purchase step of an item.",
+    "emptyFiltered": "No sellers match “{{query}}”.",
+    "loadError": "Could not load the sellers.",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "total_one": "{{count}} seller",
+    "total_other": "{{count}} sellers",
+    "usageItems_one": "{{count}} item",
+    "usageItems_other": "{{count}} items",
+    "usageNone": "No items yet"
+  },
+  "removal": {
+    "confirmAction": "Delete seller",
+    "confirmDescription": "No item names {{name}}. The seller is removed from the group.",
+    "confirmTitle": "Delete {{name}}?",
+    "inUseDescription_one": "{{count}} item was bought from {{name}}. The item stays and no longer names a seller.",
+    "inUseDescription_other": "{{count}} items were bought from {{name}}. The items stay and no longer name a seller."
+  },
+  "search": {
+    "clear": "Clear search",
+    "label": "Search sellers",
+    "placeholder": "Search sellers…"
+  },
+  "title": "Sellers",
+  "toast": {
+    "created": "Seller created",
+    "deleted": "Seller deleted",
+    "deleteError": "Could not delete the seller.",
+    "updated": "Seller updated"
+  },
+  "validation": {
+    "contactTooLong": "Use at most 500 characters.",
+    "nameRequired": "Enter a name.",
+    "nameTaken": "Another seller of this group has this name.",
+    "nameTooLong": "Use at most 100 characters.",
+    "noteTooLong": "Use at most 2000 characters.",
+    "websiteInvalid": "Enter a full web address that starts with http:// or https://.",
+    "websiteTooLong": "Use at most 2048 characters."
+  }
+}

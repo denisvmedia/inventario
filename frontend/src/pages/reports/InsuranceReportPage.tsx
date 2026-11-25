@@ -21,6 +21,7 @@ import { useAllCommodities, useCommodity } from "@/features/commodities/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
+import { useSellers } from "@/features/sellers/hooks"
 import { ItemReport } from "@/features/reports/components/ItemReport"
 import { LocationReport } from "@/features/reports/components/LocationReport"
 import type { PhotoSize } from "@/features/reports/components/PhotoSection"
@@ -61,6 +62,7 @@ export function InsuranceReportPage() {
   const locationParam = searchParams.get("location") ?? ""
 
   const areas = useAreas({ enabled })
+  const sellers = useSellers()
   const locations = useLocations({ enabled })
   // Both modes read the group's commodity list — item mode to populate the
   // selector, location mode to render and total the location's items. A
@@ -138,6 +140,13 @@ export function InsuranceReportPage() {
       return locationName ? `${locationName} · ${area.name}` : area.name
     }
   }, [areas.data, locations.data])
+
+  // The name of the seller an item was bought from, "" for none.
+  const sellerNameFor = useMemo(() => {
+    const nameById = new Map<string, string>()
+    for (const s of sellers.data ?? []) nameById.set(s.id, s.name ?? "")
+    return (sellerId?: string) => (sellerId ? (nameById.get(sellerId) ?? "") : "")
+  }, [sellers.data])
 
   // Location mode: filter commodities to those whose area belongs to the
   // selected location.
@@ -368,6 +377,7 @@ export function InsuranceReportPage() {
                     imageFiles={imageFilesQuery.data?.files ?? []}
                     imageSize={photoSize}
                     areaLabel={areaLabelFor(commodity.area_id)}
+                    sellerName={sellerNameFor(commodity.seller_id)}
                     groupCurrency={groupCurrency}
                     purchaseCurrency={commodity.original_price_currency ?? groupCurrency}
                     generatedDate={generatedDate}
@@ -383,6 +393,7 @@ export function InsuranceReportPage() {
                   commodities={locationCommodities}
                   covers={covers}
                   areaLabelFor={areaLabelFor}
+                  sellerNameFor={sellerNameFor}
                   imageSize={photoSize}
                   groupCurrency={groupCurrency}
                   generatedDate={generatedDate}

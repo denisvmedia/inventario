@@ -37,12 +37,21 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Brand and model on the item: inputs, suggestions, cards, item page, search
 
-- **Issue/PR**: #2804 / PR (pending)
+- **Issue/PR**: #2804 / PR #2840
 - **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step puts Brand and Model side by side under Short name (L1042–L1049). `BrandInput` (L916–L958) suggests up to six names from the fixed `ALL_BRANDS` list that start with the typed text, and `ModelInput` (L960–L1002) suggests models of the chosen brand from `BRAND_MODELS`. [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) shows `{brand} · {model}` as the sheet description (L658–L660) and plain Brand / Model inputs in `ItemEditForm` (L468–L473). [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid card: `{brand} · {model}` as `CardDescription`, then `area | value` in `CardContent` (L454–L466); list row subtitle `{brand} · {area}` (L507–L509); search placeholder "Search items, brands…" (L226).
 - **Reality**: `frontend/src/components/items/BrandModelFields.tsx` renders the two inputs, with the mock's grid, under Short name in the step dialog and under Name in the edit form, so the edit form now carries Brand and Model as the mock does, next to the Short name and Quantity it already had. `BrandInput.tsx` keeps the mock's popover classes but takes its suggestions from `GET /commodities/brands`: the brands the group's items carry that contain the typed text anywhere, ignoring case, most used first, at most six; it is a `combobox` with a `listbox`, and the arrow keys and Enter pick a suggestion. The edit form gets the same suggestions. Model has no suggestions. Grid cards follow the mock (brand · model as the description, area in the content row, with the existing purchase-date chip beside it); the items table, the area page's grid and list, and the item page header show brand · model as the line under the name. An item with neither shows its short name in that place; the photo cards of #2797 show the brand · model line above the area only when the item has either, and the item page keeps the short name and the type line around it. The search match line (#2800) now sits under the brand · model line. The items search placeholder reads "Search by name, brand, model, serial or part number, tag, notes or asset ID…". The AI scan review lists Brand and Model rows after Short name.
 - **Why**: The issue asks for the fields, for "brand · model" on cards, and for brand suggestions from the brands the group already uses (the mock's fixed list is placeholder data). Matching anywhere in the brand, the suggestions in the edit form, the short-name fallback and keeping the list row's subtitle as brand · model (the table has its own area column) are agent-suggested. Model suggestions are left out: the issue asks only for brand suggestions, and a per-brand model list would need a second endpoint.
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; substring matching, edit-form suggestions, keyboard selection and the short-name fallback agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Add model suggestions if the mock's `ModelInput` is wanted with real data; otherwise permanent. The short-name fallback stays while brand and model are optional.
+
+#### 2026-11-25 — Seller on the item: picker with New seller, AI suggestion, items-list filter, Details row
+
+- **Issue/PR**: #2804 / PR (pending)
+- **Mock**: No seller anywhere in the mock. The Purchase step of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has Purchase Date and Purchase Price only (L1158–L1180); `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has Purchase Date (L516–L517) and the Details tab a `DetailRow` for it (L793). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar has Type and Status `DropdownMenu` filters (L234–L297).
+- **Reality**: `frontend/src/components/sellers/SellerField.tsx` is a `Select` of the group's sellers under Purchase date, in the Purchase step and in the edit form's Purchase section, with **Clear seller** next to the label. The list ends with a `SelectSeparator` and **New seller** (a `Plus` icon), which opens `SellerFormDialog` over the form and selects the seller it created, the pattern of the Location picker (#2796). When the AI scan reads a seller the group does not have, a dashed box under the picker (`Sparkles` icon) names it with a **Create seller** button, or **Use {name}** when a seller with that name exists by then; nothing is created on its own. The scan review lists a Seller row after Purchase date. The items toolbar gets a **Seller** `DropdownMenu` of checkbox items, built like the Type filter, after Location; it shows once the group has a seller or the URL filters by one, and lists an unknown id as "Deleted seller" so it can be cleared. The Details tab shows a Seller row (`Store` icon) after Purchase date, linking to the items list filtered by the seller with inactive items shown.
+- **Why**: not present in mock. #2804 asks for a seller per item, created on the fly from the form, a filter on the items list, and the AI scan filling the seller. The suggestion box instead of creating the scanned seller, the "Deleted seller" entry and the Details link are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a seller field.
 
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
 
@@ -245,7 +254,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The issue asks for the mock's form 1:1; the field mapping is a backend data reality. The issue also asks for Save and Cancel to stay visible on a long form, hence the sticky row. The agent-suggested parts keep every field of the record reachable from the form and let a user unassign an item or add a first tag without leaving it.
 - **Approved by**: user (explicit) — pre-approved for #2795 by the 2026-11-24 goal to implement the open enhancements; All fields, the hidden-field alert, Clear location and the new-tag input are agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds these fields or controls; the field mapping is permanent while the model has no brand or model.
-- **Resolved**: 2026-11-25, PR (pending) — in part: Brand and Model are on the form, next to Short name and Quantity (#2804).
+- **Resolved**: 2026-11-25, PR #2840 — in part: Brand and Model are on the form, next to Short name and Quantity (#2804).
 
 #### 2026-11-24 — Item page: Previous / Next and Save and next over the originating list
 
@@ -526,6 +535,17 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested — issue #1539 §1 calls out chips as "Effort M (chips need item-tag join)", signalling the maintainer expects a non-trivial path; client-side aggregation is the lowest-cost option.
 - **Reversion plan**: If usage grows past the 500-row window often enough to be visibly wrong (chips empty even though `usage.commodities > 0`), expose a `/commodities?tags=<slug>` BE filter and switch the page to one query per visible tag (or batch via `/tags/{slug}/sample`). The map shape on the FE stays.
 
+### Sellers
+
+#### 2026-11-25 — Sellers page
+
+- **Issue/PR**: #2804 / PR (pending)
+- **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
+- **Reality**: `frontend/src/pages/sellers/SellersListPage.tsx` at `/g/:slug/sellers` follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New seller**, a search box that filters by name on the client (`?q=`), and a card of `SellerRow`s with a `Store` icon, the name (a link to the items list filtered by the seller, inactive items shown), the website host as an external link, "N items · contact", the note, and edit / delete buttons on hover. `SellerFormDialog` takes name, website, contact and note. Deleting asks for confirmation and names the number of items that lose the seller.
+- **Why**: not present in mock. #2804 asks for a page listing the sellers with their item counts, and for a confirmation naming the count before a seller is deleted.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds a sellers view.
+
 ### Forms & Validation
 
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions
@@ -733,6 +753,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds the row.
 
 ### Navigation & App shell
+
+#### 2026-11-25 — Sellers entry in the sidebar and the command palette
+
+- **Issue/PR**: #2804 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Sellers entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Sellers** (`Store` icon) after Tags in the Group section, linking to `/g/:slug/sellers`. `CommandPalette.tsx` lists the same entry after Tags. Both resolve the label through `lib/nav-labels.ts` (`common:nav.sellers`).
+- **Why**: not present in mock. #2804 asks for a page listing the sellers.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Move the row if `inventario-design` places sellers elsewhere.
 
 #### 2026-11-25 — Trash entry in the sidebar and the command palette
 
@@ -1120,7 +1149,16 @@ _None yet._
 - **Why**: Backend data-model constraints (no brand/model columns, `type` not `category`, per-group immutable currency from #202/#1550, covers-not-galleries on the list endpoint), missing shadcn primitives (`ToggleGroup`), and the established `CommodityPrintPage` precedent (Shell-mounted print route, chrome hidden via `@media print`). The issue's broader full-inventory / filtered scope was deliberately deferred to match the design mock's two-mode shape.
 - **Approved by**: agent-suggested-then-user-confirmed.
 - **Reversion plan**: Permanent for the data-model-bound divergences (brand/model, category→type, currency, covers). The `ToggleGroup` segmented-button substitution resolves to 1:1 if/when a `toggle-group.tsx` primitive is vendored. The issue's full-inventory / filtered report scope is a future follow-up if requested.
-- **Resolved**: 2026-11-25, PR (pending) — divergence (2) back to 1:1: the title is `{brand} {name}` (the name alone when it already starts with the brand) and the subtitle the model, falling back to the short name for an item without a model (#2804).
+- **Resolved**: 2026-11-25, PR #2840 — divergence (2) back to 1:1: the title is `{brand} {name}` (the name alone when it already starts with the brand) and the subtitle the model, falling back to the short name for an item without a model (#2804).
+
+#### 2026-11-25 — Seller row in the insurance reports
+
+- **Issue/PR**: #2804 / PR (pending)
+- **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
+- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
+- **Why**: not present in mock. #2804 asks for the seller in the insurance report.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds a seller to the report.
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so
 
