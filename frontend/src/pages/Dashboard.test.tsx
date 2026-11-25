@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { Route, useLocation } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 import i18next from "i18next"
@@ -9,7 +9,7 @@ import { DashboardPage } from "@/pages/Dashboard"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { commodityHandlers, groupHandlers } from "@/test/handlers"
+import { commodityHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -48,6 +48,8 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  server.use(...savedViewHandlers.none(SLUG))
+  localStorage.removeItem(`savedViews:suggestionsDismissed:${SLUG}`)
 })
 
 describe("<DashboardPage />", () => {
@@ -399,5 +401,77 @@ describe("<DashboardPage />", () => {
       expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("1")
     )
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<DashboardPage /> — saved views", () => {
+  it("shows each view put on the dashboard with its count and first items", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", { name: "Drill", status: "in_use" }),
+        commodityResource("c2", { name: "Saw", status: "in_use" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 }),
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv1", name: "Tools", query: "type=equipment", show_on_dashboard: true },
+        { id: "sv2", name: "Hidden", query: "lent_out=true", show_on_dashboard: false },
+      ]),
+      // A count from another refresh than the rows: the card states the
+      // rows' own total once they load.
+      ...savedViewHandlers.counts(SLUG, { sv1: 12, sv2: 1 })
+    )
+    renderDashboard()
+
+    const card = await screen.findByTestId("dashboard-saved-view")
+    expect(card).toHaveTextContent("Tools")
+    expect(screen.getAllByTestId("dashboard-saved-view")).toHaveLength(1)
+    expect(await within(card).findAllByTestId("dashboard-saved-view-row")).toHaveLength(2)
+    expect(within(card).getByTestId("dashboard-saved-view-count")).toHaveTextContent("2 items")
+    expect(within(card).getByTestId("dashboard-saved-view-open").getAttribute("href")).toContain(
+      "saved_view=sv1"
+    )
+    // A member with views of their own gets no suggestions.
+    expect(screen.queryByTestId("dashboard-suggested-views")).not.toBeInTheDocument()
+  })
+
+  it("offers ready-made views to a member without any and adds one", async () => {
+    const user = userEvent.setup()
+    let sent: Record<string, unknown> | undefined
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 }),
+      ...savedViewHandlers.create(SLUG, "sv1", (attrs) => {
+        sent = attrs
+      })
+    )
+    renderDashboard()
+
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    await user.click(within(card).getByTestId("dashboard-suggested-view-add-expiringWarranties"))
+    await waitFor(() => expect(sent).toBeDefined())
+    expect(sent).toMatchObject({
+      name: "Expiring warranties",
+      icon: "shield",
+      query: "include_inactive=false&sort=name&warranty_status=expiring",
+      shared: false,
+      show_in_sidebar: true,
+      show_on_dashboard: true,
+    })
+  })
+
+  it("keeps the suggestions away once dismissed", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+
+    await user.click(await screen.findByTestId("dashboard-suggested-views-dismiss"))
+    expect(screen.queryByTestId("dashboard-suggested-views")).not.toBeInTheDocument()
+    expect(localStorage.getItem(`savedViews:suggestionsDismissed:${SLUG}`)).toBe("1")
   })
 })

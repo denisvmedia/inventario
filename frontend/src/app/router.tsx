@@ -175,6 +175,9 @@ const MaintenanceListPage = lazy(() =>
     default: m.MaintenanceListPage,
   }))
 )
+const SavedViewsPage = lazy(() =>
+  import("@/pages/saved-views/SavedViewsPage").then((m) => ({ default: m.SavedViewsPage }))
+)
 const WarrantiesListPage = lazy(() =>
   import("@/pages/warranties/WarrantiesListPage").then((m) => ({ default: m.WarrantiesListPage }))
 )
@@ -413,6 +416,7 @@ export function AppRoutes() {
               <Route path="files/:id" element={<FilesListPage />} />
               <Route path="files/:id/edit" element={<FileEditPage />} />
               <Route path="tags" element={<TagsListPage />} />
+              <Route path="views" element={<SavedViewsPage />} />
               <Route path="sellers" element={<SellersListPage />} />
               <Route path="item-types" element={<ItemTypesListPage />} />
               <Route path="lent" element={<LoansListPage />} />

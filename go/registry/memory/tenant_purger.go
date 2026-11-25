@@ -187,6 +187,11 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.TagRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Tag])
 		}},
+		// Saved views; deleting a view deletes its placements.
+		{"saved_views", func() error {
+			reg := fs.SavedViewRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.SavedView])
+		}},
 		{"sellers", func() error {
 			reg := fs.SellerRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Seller])

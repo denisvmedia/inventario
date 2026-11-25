@@ -61,6 +61,7 @@ import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
 
 interface NavEntry {
@@ -400,6 +401,8 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}
+
+        {showGroupSections ? <SidebarSavedViews onNavigate={closeMobileSidebar} /> : null}
 
         {showGroupSections ? (
           <SidebarGroup data-testid="sidebar-manage-group">

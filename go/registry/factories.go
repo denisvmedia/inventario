@@ -76,6 +76,12 @@ type SupplyLinkRegistryFactory interface {
 	ServiceRegistryFactory[models.SupplyLink, SupplyLinkRegistry]
 }
 
+// SavedViewRegistryFactory creates SavedViewRegistry instances with proper context.
+type SavedViewRegistryFactory interface {
+	UserRegistryFactory[models.SavedView, SavedViewRegistry]
+	ServiceRegistryFactory[models.SavedView, SavedViewRegistry]
+}
+
 // MaintenanceScheduleRegistryFactory creates MaintenanceScheduleRegistry
 // instances with proper context (#1368).
 type MaintenanceScheduleRegistryFactory interface {
@@ -196,6 +202,7 @@ type FactorySet struct {
 	CommodityServiceRegistryFactory       CommodityServiceRegistryFactory
 	SupplyLinkRegistryFactory             SupplyLinkRegistryFactory
 	MaintenanceScheduleRegistryFactory    MaintenanceScheduleRegistryFactory
+	SavedViewRegistryFactory              SavedViewRegistryFactory // Saved item views; group-scoped, per-user visibility applied by the registry
 	CommodityReminderRegistryFactory      CommodityReminderRegistryFactory
 	SellerRegistryFactory                 SellerRegistryFactory
 	ItemTypeRegistryFactory               ItemTypeRegistryFactory

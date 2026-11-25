@@ -26,6 +26,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
+	savedViewFactory := NewSavedViewRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
@@ -52,6 +53,10 @@ func NewFactorySet() *registry.FactorySet {
 	commodityServiceFactory.SetCommodityFactory(commodityFactory)
 	maintenanceScheduleFactory.SetCommodityFactory(commodityFactory)
 
+	// A tag rename rewrites the saved views that name the tag under the
+	// rename's mutex.
+	tagFactory.SetSavedViewFactory(savedViewFactory)
+
 	fs := &registry.FactorySet{}
 	fs.LocationRegistryFactory = locationFactory
 	fs.AreaRegistryFactory = areaFactory
@@ -63,6 +68,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityLoanRegistryFactory = commodityLoanFactory
 	fs.CommodityServiceRegistryFactory = commodityServiceFactory
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
+	fs.SavedViewRegistryFactory = savedViewFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
 	fs.CommodityReminderRegistryFactory = commodityReminderFactory
 	fs.SellerRegistryFactory = sellerFactory
@@ -148,6 +154,7 @@ func NewFactorySet() *registry.FactorySet {
 		commodityLoanFactory,
 		commodityServiceFactory,
 		supplyLinkFactory,
+		savedViewFactory,
 		tagFactory,
 		sellerFactory,
 		exportFactory,
@@ -183,6 +190,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupInviteAuditRegistry,
 		commodityReminderFactory,
 		fs.CommodityReminderSendRegistry,
+		savedViewFactory,
 	)
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request

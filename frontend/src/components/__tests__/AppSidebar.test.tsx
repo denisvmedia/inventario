@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { apiUrl, authHandlers, groupHandlers } from "@/test/handlers"
+import { apiUrl, authHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -48,6 +48,8 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  // The sidebar lists the group's saved views.
+  server.use(...savedViewHandlers.none("household"), ...savedViewHandlers.none("office"))
 })
 
 describe("<AppSidebar /> — group-section gating (#1886)", () => {
@@ -160,5 +162,71 @@ describe("<AppSidebar /> — user menu avatar (#1382)", () => {
         "/api/v1/avatars/u1?sig=a"
       )
     )
+  })
+})
+
+describe("<AppSidebar /> — saved views", () => {
+  it("lists the views pinned to the sidebar with their item counts", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...savedViewHandlers.list("household", [
+        { id: "sv1", name: "Expiring", query: "warranty_status=expiring", show_in_sidebar: true },
+        { id: "sv2", name: "Not pinned", query: "lent_out=true", show_in_sidebar: false },
+      ]),
+      ...savedViewHandlers.counts("household", { sv1: 7, sv2: 3 })
+    )
+    renderSidebar("/g/household")
+
+    const section = await screen.findByTestId("sidebar-saved-views")
+    const links = within(section).getAllByTestId("sidebar-saved-view")
+    expect(links).toHaveLength(1)
+    expect(links[0]).toHaveTextContent("Expiring")
+    const href = links[0].getAttribute("href") ?? ""
+    expect(href).toContain("/g/household/commodities?")
+    expect(href).toContain("saved_view=sv1")
+    expect(href).toContain("warranty=expiring")
+    await waitFor(() =>
+      expect(within(section).getByTestId("sidebar-saved-view-count")).toHaveTextContent("7")
+    )
+    expect(within(section).getByTestId("sidebar-saved-views-manage")).toHaveAttribute(
+      "href",
+      "/g/household/views"
+    )
+  })
+
+  // The list would drop the condition it cannot read and show more than the
+  // view, so the entry is not a link.
+  it("lists a view whose stored query cannot run without a link", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...savedViewHandlers.list("household", [
+        {
+          id: "sv3",
+          name: "Old warranties",
+          query: "type=electronics&warranty_expires_before=2026-12-01",
+          show_in_sidebar: true,
+          query_error: { parameter: "warranty_expires_before", reason: "is not available" },
+        },
+      ]),
+      ...savedViewHandlers.counts("household", {})
+    )
+    renderSidebar("/g/household")
+
+    const section = await screen.findByTestId("sidebar-saved-views")
+    const entry = within(section).getByTestId("sidebar-saved-view-unavailable")
+    expect(entry).toHaveTextContent("Old warranties")
+    expect(entry).toHaveAttribute("aria-disabled", "true")
+    expect(entry.closest("a")).toBeNull()
+    expect(within(entry).getByRole("img", { name: "Needs an update" })).toBeInTheDocument()
+    expect(within(section).queryByTestId("sidebar-saved-view")).not.toBeInTheDocument()
+  })
+
+  it("leaves the section out while no view is pinned", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    await waitFor(() => expect(screen.getByTestId("sidebar-inventory-group")).toBeInTheDocument())
+    expect(screen.queryByTestId("sidebar-saved-views")).not.toBeInTheDocument()
   })
 })

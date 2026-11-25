@@ -513,6 +513,155 @@
     "edit": "Edit {{field}}",
     "error": "Couldn't save the change."
   },
+  "savedViews": {
+    "conditions": {
+      "ascending": "ascending",
+      "deletedArea": "Deleted area",
+      "deletedTag": "{{condition}} (deleted)",
+      "descending": "descending",
+      "inactive": "Inactive included",
+      "notTag": "Not {{tag}}",
+      "seller": "Seller {{seller}}",
+      "sort": "Sorted by {{field}}, {{direction}}",
+      "tag": "Tag {{tag}}",
+      "tagAny": "Any of: {{tag}}",
+      "text": "Search “{{text}}”",
+      "untagged": "No tags"
+    },
+    "dashboard": {
+      "count_one": "{{count}} item",
+      "count_other": "{{count}} items",
+      "empty": "No items match this view right now.",
+      "error": "Could not load the items of this view.",
+      "open": "Open"
+    },
+    "delete": {
+      "confirm": "Delete view",
+      "description": "The view goes away. The items it showed stay as they are.",
+      "sharedDescription": "The view goes away for everyone in the group. The items it showed stay as they are.",
+      "title": "Delete “{{name}}”?"
+    },
+    "dialog": {
+      "create": "Save view",
+      "createDescription": "Keeps the current filters, sort and layout under a name.",
+      "createTitle": "Save view",
+      "editDescription": "To change the filters, open the view, adjust the list and choose Save changes.",
+      "editTitle": "Edit view",
+      "failed": "Could not save the view.",
+      "forbidden": "You cannot make this change to the view.",
+      "icon": "Icon",
+      "invalidQuery": "A filter of this list cannot be kept in a view ({{parameter}}). Change the filters and try again.",
+      "limitReached": "You have reached the number of views you can keep. Delete a view to save a new one.",
+      "name": "Name",
+      "namePlaceholder": "e.g. Expiring warranties",
+      "nameRequired": "Enter a name.",
+      "nameTooLong": "Use at most {{max}} characters.",
+      "placement": "Show in",
+      "save": "Save",
+      "shared": "Share with the group",
+      "sharedHint": "Everyone in the group finds the view in the Views menu and on the Saved views page. It shows in their sidebar or on their dashboard only after they put it there. Each member still sees only the items they can see.",
+      "sharedNeedsRole": "Only members with the user role or higher can share views.",
+      "showInSidebar": "Sidebar",
+      "showOnDashboard": "Dashboard"
+    },
+    "icons": {
+      "alert": "Alert",
+      "archive": "Archive",
+      "banknote": "Banknote",
+      "bookmark": "Bookmark",
+      "car": "Car",
+      "clock": "Clock",
+      "gift": "Gift",
+      "heart": "Heart",
+      "home": "Home",
+      "map-pin": "Map pin",
+      "package": "Package",
+      "shield": "Shield",
+      "star": "Star",
+      "tag": "Tag",
+      "wrench": "Wrench",
+      "zap": "Lightning"
+    },
+    "menu": {
+      "button": "Views",
+      "changed": "Changed",
+      "changedHint": "The list differs from the saved view.",
+      "close": "Close view",
+      "manage": "Manage views",
+      "revert": "Revert to saved",
+      "save": "Save view…",
+      "saveAsNew": "Save as new view…",
+      "saveChanges": "Save changes",
+      "unchangedHint": "The list shows the saved view.",
+      "views": "Saved views"
+    },
+    "page": {
+      "actions": "Actions for {{name}}",
+      "delete": "Delete",
+      "documentTitle": "Saved views",
+      "edit": "Edit",
+      "emptyDescription": "Filter the items list, then choose Views → Save view to keep the filter here.",
+      "emptyTitle": "No saved views yet",
+      "errorDescription": "Reload the page or try again in a moment.",
+      "errorTitle": "Could not load saved views",
+      "heading": "Saved views",
+      "moveDown": "Move down",
+      "moveUp": "Move up",
+      "openItems": "Open items list",
+      "personal": "Personal",
+      "shared": "Shared",
+      "subtitle": "Filters kept under a name. Personal views are yours alone; shared views show to the whole group, and each member sees only the items they can see."
+    },
+    "queryError": {
+      "long": "This view has a filter that can no longer run ({{parameter}}). Delete it and save the filter again from the items list.",
+      "short": "Needs an update",
+      "title": "This view cannot be opened"
+    },
+    "stale": {
+      "area": "The area of this view was deleted.",
+      "hint": "The marked conditions refer to something that was deleted. The view still applies them, so it shows what still matches.",
+      "sellers_one": "A seller of this view was deleted.",
+      "sellers_other": "{{count}} sellers of this view were deleted.",
+      "tags_one": "Tag {{tags}} no longer exists.",
+      "tags_other": "Tags {{tags}} no longer exist.",
+      "title": "Refers to deleted things"
+    },
+    "suggestions": {
+      "add": "Add",
+      "description": "Keep a filter one click away in the sidebar and here. You can change or delete it later.",
+      "dismiss": "Dismiss suggestions",
+      "expiringWarranties": {
+        "description": "Items whose warranty ends soon",
+        "name": "Expiring warranties"
+      },
+      "lentOut": {
+        "description": "Items currently on loan",
+        "name": "Lent out"
+      },
+      "noLocation": {
+        "description": "Items not placed in an area",
+        "name": "Without a location"
+      },
+      "title": "Start with a saved view",
+      "untagged": {
+        "description": "Items that carry no tag",
+        "name": "Untagged"
+      }
+    },
+    "toast": {
+      "created": "Saved view “{{name}}”",
+      "createFailed": "Could not save the view.",
+      "deleted": "Deleted view “{{name}}”",
+      "deleteFailed": "Could not delete the view.",
+      "reorderFailed": "Could not move the view.",
+      "updated": "Updated view “{{name}}”",
+      "updateFailed": "Could not update the view."
+    },
+    "unavailable": {
+      "description": "The list stays hidden until the view loads, so it never shows items the view leaves out.",
+      "title": "This view could not be loaded"
+    }
+  },
   "searchMatch": {
     "field": {
       "asset_id": "Asset ID",
