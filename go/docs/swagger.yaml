@@ -695,6 +695,13 @@ definitions:
         type: string
       go_version:
         type: string
+      loan_reminder_due_soon_days:
+        description: |-
+          LoanReminderDueSoonDays is the server-wide default for how many days
+          before the due date the loan reminder goes out
+          (--loan-reminder-due-soon-days). A user's
+          notifications.loan_lead_time setting replaces it for them.
+        type: integer
       memory_usage:
         type: string
       num_cpu:
@@ -5019,8 +5026,14 @@ definitions:
         type: boolean
       notificationsItemReminder:
         type: boolean
+      notificationsLoanLeadTime:
+        type: integer
       notificationsLoanReminder:
         type: boolean
+      notificationsMaintenanceLeadTimes:
+        items:
+          type: integer
+        type: array
       notificationsMaintenanceReminder:
         type: boolean
       notificationsPriceDrop:
@@ -5032,6 +5045,15 @@ definitions:
           etc.). Transactional senders — password reset, email verification —
           never consult these and so cannot be opted out.
         type: boolean
+      notificationsWarrantyLeadTimes:
+        description: |-
+          Lead times for the built-in reminders, in days before the date. Nil
+          means the defaults (see SettingNameNotificationsWarrantyLeadTimes).
+          The maintenance overdue reminder is not a lead time and always
+          applies.
+        items:
+          type: integer
+        type: array
       notificationsWeeklyDigest:
         type: boolean
       showDebugInfo:

@@ -39,8 +39,29 @@
  * orthogonal to the acceptance criterion and is already insured against
  * by the unit-test coverage above.
  */
-import { expect } from "@playwright/test";
+import { expect, type Page } from "@playwright/test";
 import { test as authTest } from "../fixtures/app-fixture.js";
+import {
+  extractApiAuth,
+  resolveActiveGroup,
+} from "./includes/commodities-api.js";
+
+const WARRANTY_LEAD_TIMES = "notifications.warranty_lead_times";
+
+function waitForLeadTimesPatch(page: Page) {
+  return page.waitForResponse(
+    (r) =>
+      r.request().method() === "PATCH" &&
+      r.url().includes(`/settings/${WARRANTY_LEAD_TIMES}`),
+  );
+}
+
+async function openNotifications(page: Page) {
+  await page.goto("/settings");
+  await page
+    .locator('[data-testid="settings-nav-notifications"]')
+    .click({ timeout: 30000 });
+}
 
 authTest.describe("Settings — notification preferences surface (#1643)", () => {
   authTest(
@@ -90,6 +111,63 @@ authTest.describe("Settings — notification preferences surface (#1643)", () =>
       await expect(
         page.locator('[data-testid="coming-soon-banner-maintenanceReminders"]'),
       ).toHaveCount(0);
+    },
+  );
+
+  // Per-user lead times (#2805). The lead-time field renders only once the
+  // group's settings have loaded, so waiting for its value also waits out
+  // the group slug race described in the file header.
+  authTest(
+    "warranty lead times save, survive a reload and reset to the default",
+    async ({ page, request }) => {
+      const auth = await extractApiAuth(page);
+      const group = await resolveActiveGroup(request, auth);
+      // Start from the default even if an earlier run stopped halfway.
+      const resetViaAPI = () =>
+        request.patch(
+          `/api/v1/g/${encodeURIComponent(group.slug)}/settings/${WARRANTY_LEAD_TIMES}`,
+          {
+            headers: {
+              "Content-Type": "application/vnd.api+json",
+              Authorization: `Bearer ${auth.accessToken}`,
+              "X-CSRF-Token": auth.csrfToken,
+            },
+            data: "null",
+          },
+        );
+      expect((await resetViaAPI()).status()).toBe(200);
+      try {
+        await openNotifications(page);
+        const input = page.getByTestId("lead-times-warranty-input");
+        await expect(input).toHaveValue("60, 30, 7", { timeout: 30000 });
+
+        const saved = waitForLeadTimesPatch(page);
+        await input.fill("14, 90");
+        await input.press("Enter");
+        expect((await saved).status()).toBe(200);
+        await expect(input).toHaveValue("90, 14");
+
+        await page.reload();
+        await openNotifications(page);
+        await expect(input).toHaveValue("90, 14", { timeout: 30000 });
+
+        // A value out of range is explained and not sent.
+        await input.fill("0");
+        await input.press("Enter");
+        await expect(
+          page.getByTestId("lead-times-warranty").getByRole("alert"),
+        ).toBeVisible();
+
+        const reset = waitForLeadTimesPatch(page);
+        await page.getByTestId("lead-times-warranty-reset").click();
+        expect((await reset).status()).toBe(200);
+        await expect(input).toHaveValue("60, 30, 7");
+        await expect(page.getByTestId("lead-times-warranty-reset")).toHaveCount(
+          0,
+        );
+      } finally {
+        await resetViaAPI();
+      }
     },
   );
 });

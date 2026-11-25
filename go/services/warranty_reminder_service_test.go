@@ -196,31 +196,31 @@ func TestWarrantyReminderService_RemindOnce_TickClock(t *testing.T) {
 	c.Assert(emailSvc.snapshot(), qt.HasLen, 0)
 
 	// Tick 2: jump the clock so the warranty has 30 days remaining.
-	// matchedThresholds returns [60, 30] → two reminders, partitioned
-	// 1+1 across the threshold breakdown.
+	// matchedThresholds returns [60, 30]. The sweep missed the 60-day
+	// mark, so only the closest reached lead time is emailed: the 60-day
+	// row is written without an email.
 	tick2 := now.AddDate(0, 0, 35)
 	stats, err = svc.RemindOnce(ctx, tick2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.Failed, qt.Equals, 0)
-	c.Assert(stats.Sent(), qt.Equals, 2)
-	c.Assert(stats.SentByThreshold[models.WarrantyReminder60Days], qt.Equals, 1)
+	c.Assert(stats.Sent(), qt.Equals, 1)
 	c.Assert(stats.SentByThreshold[models.WarrantyReminder30Days], qt.Equals, 1)
 	calls := emailSvc.snapshot()
-	c.Assert(calls, qt.HasLen, 2)
-	thresholdsSeen := []int{calls[0].thresholdDays, calls[1].thresholdDays}
-	c.Assert(thresholdsSeen, qt.ContentEquals, []int{60, 30})
-	for _, k := range calls {
-		c.Assert(k.commodityName, qt.Equals, "fridge")
-	}
+	c.Assert(calls, qt.HasLen, 1)
+	c.Assert(calls[0].thresholdDays, qt.Equals, 30)
+	c.Assert(calls[0].commodityName, qt.Equals, "fridge")
+	sent60, err := factorySet.WarrantyReminderRegistry.HasSent(ctx, out.ID, 60)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sent60, qt.IsTrue)
 
 	// Tick 3: re-run at the same clock — idempotency row blocks the
 	// second emission. Counter stays at 0; email service stays at the
-	// same 2 calls.
+	// same call.
 	stats, err = svc.RemindOnce(ctx, tick2)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.Failed, qt.Equals, 0)
 	c.Assert(stats.Sent(), qt.Equals, 0)
-	c.Assert(emailSvc.snapshot(), qt.HasLen, 2)
+	c.Assert(emailSvc.snapshot(), qt.HasLen, 1)
 }
 
 // TestWarrantyReminderService_RemindOnce_EnqueueFailureRetries
@@ -249,12 +249,13 @@ func TestWarrantyReminderService_RemindOnce_EnqueueFailureRetries(t *testing.T) 
 	failing := &failingEmailService{}
 	svc := services.NewWarrantyReminderService(factorySet, failing, nil)
 
-	// Tick 1: every enqueue fails → no row, failed counter ticks once
-	// per matched threshold (60 + 30 → 2).
+	// Tick 1: 60 and 30 both match; 30 is the closest reached lead time
+	// and the only one emailed. Its enqueue fails → no 30-day row, one
+	// failure. The 60-day row is written without an email.
 	stats, err := svc.RemindOnce(ctx, now)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats.Sent(), qt.Equals, 0)
-	c.Assert(stats.Failed, qt.Equals, 2)
+	c.Assert(stats.Failed, qt.Equals, 1)
 
 	// Tick 2 (queue back online): the row was never persisted, so
 	// next sweep can still try — and now succeeds.
@@ -262,8 +263,9 @@ func TestWarrantyReminderService_RemindOnce_EnqueueFailureRetries(t *testing.T) 
 	svc2 := services.NewWarrantyReminderService(factorySet, recording, nil)
 	stats, err = svc2.RemindOnce(ctx, now)
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.Sent(), qt.Equals, 2,
-		qt.Commentf("after a queue outage the next sweep must replay both reminders"))
+	c.Assert(stats.Sent(), qt.Equals, 1,
+		qt.Commentf("after a queue outage the next sweep must replay the reminder"))
+	c.Assert(stats.SentByThreshold[models.WarrantyReminder30Days], qt.Equals, 1)
 	c.Assert(stats.Failed, qt.Equals, 0)
 }
 

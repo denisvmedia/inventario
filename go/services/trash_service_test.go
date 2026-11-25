@@ -503,12 +503,16 @@ func TestTrashService_NoWarrantyRemindersWhileTrashed(t *testing.T) {
 	c.Assert(stats.Sent(), qt.Equals, 0)
 	c.Assert(emails.snapshot(), qt.HasLen, 0)
 
-	// Restored, the item is due its 60- and 30-day reminders again.
+	// Restored, the item is due its reminder again: one email for the
+	// closest lead time reached, 30 days.
 	_, err = f.trash.RestoreCommodity(f.ctx, kettle.ID)
 	c.Assert(err, qt.IsNil)
 	stats, err = reminders.RemindOnce(f.ctx, now)
 	c.Assert(err, qt.IsNil)
-	c.Assert(stats.Sent(), qt.Equals, 2)
+	c.Assert(stats.Sent(), qt.Equals, 1)
+	sent := emails.snapshot()
+	c.Assert(sent, qt.HasLen, 1)
+	c.Assert(sent[0].thresholdDays, qt.Equals, 30)
 }
 
 func TestTrashService_NoMaintenanceRemindersWhileTrashed(t *testing.T) {

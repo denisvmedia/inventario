@@ -93,6 +93,15 @@ function applyOptimisticPatch(
     case "notifications.item_reminder":
       next.notificationsItemReminder = value as boolean
       break
+    case "notifications.warranty_lead_times":
+      next.notificationsWarrantyLeadTimes = (value as number[] | null) ?? undefined
+      break
+    case "notifications.maintenance_lead_times":
+      next.notificationsMaintenanceLeadTimes = (value as number[] | null) ?? undefined
+      break
+    case "notifications.loan_lead_time":
+      next.notificationsLoanLeadTime = (value as number | null) ?? undefined
+      break
     case "notifications.channel.email":
       next.notificationsChannelEmail = value as boolean
       break

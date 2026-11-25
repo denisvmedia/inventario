@@ -48,6 +48,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- Your own lead times for warranty, maintenance and loan reminders. Under
+  Settings → Notifications, the Warranty expiry and Maintenance reminders rows
+  take up to five "days before" values from 1 to 365, and the Loan reminders
+  row takes one value from 1 to 60 for the items you lend. Each member of a
+  group keeps their own choice. Unset, the defaults stay as they were: 60, 30
+  and 7 days for warranties, 14, 7 and 1 for maintenance, and
+  `--loan-reminder-due-soon-days` for loans, which `/system` now reports as
+  `loan_reminder_due_soon_days`
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 - Trash. Deleting an item, alone or in bulk, moves it to the group's Trash
   with the files attached only to it; deleting a file moves it there too, and
   so does "Delete everything" on a location or area for the items inside. The
@@ -203,6 +212,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are written in INB format 3.0, which stores a shared file once; 2.x backups
   still restore
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+- Warranty and maintenance reminders send one email for the closest lead time
+  reached, the way item reminders do. If the server was down, or a lead time
+  was added after it had passed, the email for that closest lead time still
+  goes out, late. Farther lead times that had already passed are not sent,
+  and a longer lead time is not sent after a shorter one. Raising a lead time
+  therefore does not email every item that is already closer than it. The
+  `threshold` label of `inventario_warranty_reminders_sent_total` and
+  `inventario_maintenance_reminders_sent_total` is `custom` for a lead time
+  other than the defaults
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 - `DELETE /commodities/{id}`, `POST /commodities/bulk-delete`,
   `DELETE /files/{id}` and `POST /files/bulk-delete` move the entries to Trash
   instead of removing them. Lists, search and the other live reads leave
@@ -233,6 +252,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   app reads camelCase (`notificationsWarrantyExpiry`), so after a reload the
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- A warranty, maintenance or loan reminder is no longer dropped when a
+  recipient's account cannot be read for a moment, for example during a
+  database restart. The reminder is retried on the next sweep instead of
+  going out without that recipient, or, for a loan, being marked as sent
+  with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 - The item delete dialog and the area delete dialog showed raw keys such as
   "delete.title" instead of their text

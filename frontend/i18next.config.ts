@@ -105,6 +105,10 @@ export default defineConfig({
       "settings:notifications.groups.*",
       "settings:notifications.rows.*",
       "settings:notifications.errors.*",
+      // settings:notifications.leadTimes.errors.* — validateLeadTimes in
+      //   features/settings/leadTimes.ts returns the key and LeadTimeField
+      //   resolves it with t(result.errorKey).
+      "settings:notifications.leadTimes.errors.*",
       // settings:storage.breakdown.* — StorageCard maps over BREAKDOWN_KEYS
       //   (photos/invoices/documents/exports/other) and resolves each label
       //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only

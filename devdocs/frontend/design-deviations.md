@@ -722,6 +722,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds the row.
 
+#### 2026-11-25 — Settings → Notifications: "Days before" field under three reminder rows
+
+- **Issue/PR**: #2805
+- **Mock**: [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `NotificationsSection` rows are a label, a description and a Switch. The Warranty expiry description states fixed lead times ("60, 30, and 7 days before").
+- **Reality**: The **Warranty expiry**, **Maintenance reminders** and **Loan reminders** rows show a **Days before** field under the description (`LeadTimeField` in `frontend/src/components/settings/LeadTimeField.tsx`, `data-testid="lead-times-{warranty,maintenance,loan}"`): a small label, an `h-8` Input holding comma-separated days, a link-style **Use default (…)** button while a custom value is stored, and a hint line that turns into the validation message. It saves on blur or Enter and is disabled while the row's Switch is off. The Warranty expiry description no longer lists fixed days, and the Maintenance description mentions the overdue email.
+- **Why**: Not present in mock. Lead times became per-user settings in #2805. The field reuses the Input, Label and link Button from the UIShowcase forms section and keeps the row's existing anatomy, so the Switch stays in place.
+- **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
+
 ### Navigation & App shell
 
 #### 2026-11-25 — Trash entry in the sidebar and the command palette

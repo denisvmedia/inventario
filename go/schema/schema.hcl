@@ -2514,6 +2514,10 @@ table "maintenance_reminders" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
   }
+  column "silent" {
+    type = BOOLEAN
+    default = "false"
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -3737,6 +3741,10 @@ table "warranty_reminders" {
   column "sent_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
+  }
+  column "silent" {
+    type = BOOLEAN
+    default = "false"
   }
   column "tenant_id" {
     type = TEXT
