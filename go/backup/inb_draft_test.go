@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"math"
 	"strings"
 	"testing"
 	"time"
@@ -550,32 +551,52 @@ func TestINBRestore_DryRunWritesNoDrafts(t *testing.T) {
 // as a standalone file, and the receipt it shared with the TV stays on the
 // TV.
 func TestINBRestore_FailedDraftKeepsItsFiles(t *testing.T) {
-	c := qt.New(t)
-	signer := testSigner(c)
-	f := newDraftFixture(c)
-	_, archive := f.runExport(c, signer)
+	tests := []struct {
+		name    string
+		corrupt func(*types.INBDraft)
+	}{
+		{"an invalid client key", func(d *types.INBDraft) { d.ClientKey = "not a valid key" }},
+		// The next save would overflow the 32-bit revision column.
+		{"a revision a save would overflow", func(d *types.INBDraft) { d.Revision = math.MaxInt32 }},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			signer := testSigner(c)
+			f := newDraftFixture(c)
+			_, archive := f.runExport(c, signer)
 
-	broken := rewriteInnerMember(c, signer, archive, types.INBDraftsMember, func(body []byte) []byte {
-		var doc types.INBDraftsDoc
-		c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
-		c.Assert(doc.Drafts, qt.HasLen, 1)
-		doc.Drafts[0].ClientKey = "not a valid key"
-		return must.Must(json.Marshal(doc))
-	})
-	key := "t/tenant-a/restores/drafts-failed.inb"
-	writeArchive(c, f.inbFixture, key, broken)
+			broken := rewriteInnerMember(c, signer, archive, types.INBDraftsMember, func(body []byte) []byte {
+				var doc types.INBDraftsDoc
+				c.Assert(json.Unmarshal(body, &doc), qt.IsNil)
+				c.Assert(doc.Drafts, qt.HasLen, 1)
+				tc.corrupt(&doc.Drafts[0])
+				return must.Must(json.Marshal(doc))
+			})
+			key := "t/tenant-a/restores/drafts-failed.inb"
+			writeArchive(c, f.inbFixture, key, broken)
 
-	final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
-	c.Assert(err, qt.IsNil)
-	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
-	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the draft itself is an error"))
+			final, err := restoreInbWithOptions(c, f.inbFixture, signer, key, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+			c.Assert(err, qt.IsNil)
+			c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+			c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("only the draft itself is an error"))
+			steps := must.Must(f.fs.RestoreStepRegistryFactory.CreateServiceRegistry().ListByRestoreOperation(f.ctx, final.ID))
+			var draftsStep []string
+			for _, s := range steps {
+				if s.Name == "Drafts" {
+					draftsStep = append(draftsStep, s.Reason)
+				}
+			}
+			c.Check(draftsStep, qt.DeepEquals, []string{"0 restored, 0 kept as they were, 1 failed"})
 
-	c.Check(f.draftsByKey(c), qt.HasLen, 0)
-	photo := f.fileByUUID(c, f.photo)
-	c.Check(photo.Links, qt.HasLen, 0)
-	receipt := f.fileByUUID(c, f.receipt)
-	c.Assert(receipt.Links, qt.HasLen, 1)
-	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+			c.Check(f.draftsByKey(c), qt.HasLen, 0)
+			photo := f.fileByUUID(c, f.photo)
+			c.Check(photo.Links, qt.HasLen, 0)
+			receipt := f.fileByUUID(c, f.receipt)
+			c.Assert(receipt.Links, qt.HasLen, 1)
+			c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+		})
+	}
 }
 
 // TestINBRestore_FailedItemFailsTheDraftThatSharesItsFile: when the TV fails
