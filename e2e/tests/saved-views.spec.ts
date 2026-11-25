@@ -193,7 +193,7 @@ test.describe("Saved views (#2793)", () => {
 
     await page.goto(`/g/${encodeURIComponent(slug)}/views`);
     const row = page.getByTestId("saved-view-row").filter({ hasText: name });
-    await expect(row.locator('[data-stale="true"]')).toHaveText(`Tag gone-${run}`);
+    await expect(row.locator('[data-stale="true"]')).toHaveText(`Tag gone-${run} (deleted)`);
     await row.getByRole("link", { name }).click();
 
     await expect(page.getByTestId("commodities-empty-filtered")).toBeVisible();

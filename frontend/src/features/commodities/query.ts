@@ -7,7 +7,7 @@
 // go/registry/commodity_search.go (what a search term and a tag filter
 // match). devdocs/item-query-contract.md describes the whole contract,
 // including how the page URL names map onto the API names.
-import { normaliseSlug } from "@/features/tags/schemas"
+import { normaliseSlug } from "@/features/tags/slug"
 import type { Schema } from "@/types"
 
 import type { ListCommoditiesOptions } from "./api"
