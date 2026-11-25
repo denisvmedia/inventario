@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -23,6 +24,7 @@ import (
 	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/internal/textutils"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // inbBuilder accumulates the per-location JSON documents + their commodity file
@@ -332,6 +334,11 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		return err
 	}
 
+	// After the items, the drafts and the fields, whose links it reads.
+	if err := b.loadTrashedLinkTargets(commodities); err != nil {
+		return err
+	}
+
 	// After the drafts, which the files link to.
 	if err := b.indexFiles(); err != nil {
 		return err
@@ -519,10 +526,57 @@ func (b *inbBuilder) loadCustomFields() error {
 	return nil
 }
 
+// loadTrashedLinkTargets adds to commodityUUIDByDBID the items in Trash that
+// an item link of commodities or of a draft names, so the archive keeps the
+// link. A restore sets it when the destination has the item outside Trash,
+// and counts it as an error otherwise.
+func (b *inbBuilder) loadTrashedLinkTargets(commodities []*models.Commodity) error {
+	missing := map[string]bool{}
+	note := func(id string) string {
+		if id != "" && b.commodityUUIDByDBID[id] == "" {
+			missing[id] = true
+		}
+		return id
+	}
+	for _, com := range commodities {
+		for id, raw := range com.CustomFields {
+			var target string
+			if d := b.customFieldByID[id]; d != nil && d.Type == models.CustomFieldTypeItemLink && json.Unmarshal(raw, &target) == nil {
+				note(target)
+			}
+		}
+	}
+	for _, draft := range b.drafts {
+		entries, _ := draft.Values["custom_fields"].(map[string]any)
+		for id, entry := range entries {
+			if d := b.customFieldByID[id]; d != nil && d.Type == models.CustomFieldTypeItemLink {
+				models.MapDraftCustomFieldReference(entry, note)
+			}
+		}
+	}
+	if len(missing) == 0 {
+		return nil
+	}
+	comReg, err := b.svc.factorySet.CommodityRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create commodity registry", err)
+	}
+	for _, id := range slices.Sorted(maps.Keys(missing)) {
+		trashed, err := comReg.GetTrashed(b.ctx, id)
+		switch {
+		case errors.Is(err, registry.ErrNotFound):
+			continue
+		case err != nil:
+			return errxtrace.Wrap("failed to look up a linked item in Trash", err, errx.Attrs("commodity_id", id))
+		}
+		b.commodityUUIDByDBID[trashed.ID] = trashed.UUID
+	}
+	return nil
+}
+
 // archiveCustomFields returns com's custom field values keyed by the field's
 // UUID. An item link value names the linked item's UUID instead of its DB
-// id; a link to an item outside the export's reach (in Trash) is left out,
-// since a restore could not link to it.
+// id, also when the linked item is in Trash (see loadTrashedLinkTargets).
 func (b *inbBuilder) archiveCustomFields(com *models.Commodity) map[string]json.RawMessage {
 	if len(com.CustomFields) == 0 {
 		return nil

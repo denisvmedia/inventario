@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -91,7 +92,7 @@ func TestINBExport_CustomFields(t *testing.T) {
 
 	tv := items[f.tvUUID]
 	c.Check(string(tv.CustomFields[f.serial.UUID]), qt.Equals, `"SN-42"`)
-	c.Check(string(tv.CustomFields[f.size.UUID]), qt.Equals, `0`)
+	c.Check(string(tv.CustomFields[f.size.UUID]), qt.Equals, `"0"`)
 	c.Check(string(tv.CustomFields[f.link.UUID]), qt.Equals, `"`+f.remoteUUID+`"`, qt.Commentf("a link names the item's UUID"))
 }
 
@@ -105,7 +106,7 @@ func TestINBRoundTrip_CustomFieldsAreRecreated(t *testing.T) {
 	// create them again.
 	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
 	for _, d := range []*models.CustomFieldDefinition{f.serial, f.fuel, f.size, f.link, f.idle} {
-		must.Must(fields.DeleteWithValues(f.ctx, d.ID))
+		must.Must(fields.DeleteWithValues(f.ctx, d.ID, registry.AnyValueCount))
 	}
 
 	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
@@ -125,7 +126,7 @@ func TestINBRoundTrip_CustomFieldsAreRecreated(t *testing.T) {
 	remote := f.commodityByUUID(c, f.remoteUUID)
 	c.Check(string(tv.CustomFields[restored["Serial"].ID]), qt.Equals, `"SN-42"`)
 	c.Check(string(tv.CustomFields[restored["Fuel"].ID]), qt.Equals, `"`+f.fuel.Options[1].ID+`"`)
-	c.Check(string(tv.CustomFields[restored["Size"].ID]), qt.Equals, `0`, qt.Commentf("a zero is a value"))
+	c.Check(string(tv.CustomFields[restored["Size"].ID]), qt.Equals, `"0"`, qt.Commentf("a zero is a value"))
 	c.Check(string(tv.CustomFields[restored["Remote"].ID]), qt.Equals, `"`+remote.ID+`"`, qt.Commentf("the link names the restored item"))
 }
 
@@ -142,7 +143,7 @@ func TestINBRoundTrip_CustomFieldsAreMatchedByName(t *testing.T) {
 	fuel.Options = models.ValuerSlice[models.CustomFieldOption]{{ID: f.fuel.Options[0].ID, Label: "Gasoline"}}
 	fuel.Templates = nil
 	must.Must(fields.Update(f.ctx, fuel))
-	must.Must(fields.DeleteWithValues(f.ctx, f.size.ID))
+	must.Must(fields.DeleteWithValues(f.ctx, f.size.ID, registry.AnyValueCount))
 	size := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "size", Type: models.CustomFieldTypeText}))
 
 	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
@@ -150,16 +151,102 @@ func TestINBRoundTrip_CustomFieldsAreMatchedByName(t *testing.T) {
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
 
 	gotFuel := must.Must(fields.Get(f.ctx, f.fuel.ID))
-	c.Assert(gotFuel.Options, qt.HasLen, 3, qt.Commentf("the archived options the field lacks are added: %v", gotFuel.Options))
-	c.Check(gotFuel.Options[0].Label, qt.Equals, "Gasoline")
-	c.Check(gotFuel.Options[1].Label, qt.Equals, "Petrol")
-	c.Check(gotFuel.Options[2].Label, qt.Equals, "Diesel")
+	c.Check(gotFuel.Options, qt.DeepEquals, models.ValuerSlice[models.CustomFieldOption]{
+		{ID: f.fuel.Options[0].ID, Label: "Gasoline"},
+		{ID: f.fuel.Options[1].ID, Label: "Diesel"},
+	}, qt.Commentf("the relabeled option is the archived Petrol; the dropped one comes back with its ID"))
 
 	tv := f.commodityByUUID(c, f.tvUUID)
-	c.Check(string(tv.CustomFields[f.fuel.ID]), qt.Equals, `"`+gotFuel.Options[2].ID+`"`)
+	c.Check(string(tv.CustomFields[f.fuel.ID]), qt.Equals, `"`+f.fuel.Options[1].ID+`"`)
 	_, hasSize := tv.CustomFields[size.ID]
 	c.Check(hasSize, qt.IsFalse, qt.Commentf("a field of another type takes no archived value"))
 	c.Check(final.ErrorCount > 0, qt.IsTrue)
+}
+
+// A field renamed since the backup is matched by its UUID: the restore
+// neither creates a second field nor moves the values off the field a saved
+// view or a template names.
+func TestINBRoundTrip_RenamedCustomFieldIsMatchedByUUID(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newCustomFieldFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	serial := *f.serial
+	serial.Name = "Serial number"
+	serial.Templates = nil
+	must.Must(fields.Update(f.ctx, serial))
+	fuel := *f.fuel
+	fuel.Name = "Fuel type"
+	fuel.Options = models.ValuerSlice[models.CustomFieldOption]{{ID: f.fuel.Options[0].ID, Label: "Petrol"}, {ID: f.fuel.Options[1].ID, Label: "Gasoil"}}
+	fuel.Templates = nil
+	must.Must(fields.Update(f.ctx, fuel))
+
+	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 0, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	c.Check(must.Must(fields.Count(f.ctx)), qt.Equals, 5)
+	c.Check(must.Must(fields.Get(f.ctx, f.serial.ID)).Name, qt.Equals, "Serial number", qt.Commentf("the group's name stays"))
+	c.Check(must.Must(fields.Get(f.ctx, f.fuel.ID)).Options, qt.HasLen, 2)
+	tv := f.commodityByUUID(c, f.tvUUID)
+	c.Check(string(tv.CustomFields[f.serial.ID]), qt.Equals, `"SN-42"`)
+	c.Check(string(tv.CustomFields[f.fuel.ID]), qt.Equals, `"`+f.fuel.Options[1].ID+`"`)
+}
+
+// A dry run writes no field, but counts each archived field the restore
+// would refuse.
+func TestINBRestore_DryRunCountsCustomFieldConflicts(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newCustomFieldFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	must.Must(fields.DeleteWithValues(f.ctx, f.size.ID, registry.AnyValueCount))
+	must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "size", Type: models.CustomFieldTypeText}))
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{
+		Strategy: string(types.RestoreStrategyMergeAdd),
+		DryRun:   true,
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("the Size field of another type"))
+	c.Check(must.Must(fields.Count(f.ctx)), qt.Equals, 5)
+}
+
+// A link to an item in Trash stays in the archive. A restore that cannot
+// link to that item leaves the link out and counts it.
+func TestINBRoundTrip_LinkToAnItemInTrash(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	src := newCustomFieldFixture(c)
+	comReg := must.Must(src.fs.CommodityRegistryFactory.CreateUserRegistry(src.ctx))
+	remote := src.commodityByUUID(c, src.remoteUUID)
+	must.Must(comReg.Trash(src.ctx, remote.ID, src.user.ID, time.Now()))
+
+	blobKey, archive := src.runExport(c, signer)
+	_, items := manifestAndItems(c, archive)
+	c.Check(string(items[src.tvUUID].CustomFields[src.link.UUID]), qt.Equals, `"`+src.remoteUUID+`"`)
+
+	groupB := must.Must(src.fs.LocationGroupRegistry.Create(src.ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		Slug:                must.Must(models.GenerateGroupSlug()),
+		Name:                "Group B",
+		Status:              models.LocationGroupStatusActive,
+		GroupCurrency:       "USD",
+		CreatedBy:           src.user.ID,
+	}))
+	dst := &inbFixture{fs: src.fs, ctx: appctx.WithGroup(appctx.WithUser(src.ctx, src.user), groupB), user: src.user, group: groupB}
+	final, err := restoreInbWithOptions(c, dst, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("the link to the item in Trash"))
+	tv := dst.commodityByUUID(c, src.tvUUID)
+	c.Check(tv.CustomFields, qt.HasLen, 3, qt.Commentf("every value but the link restores: %v", tv.CustomFields))
 }
 
 func TestINBRestore_DryRunCreatesNoCustomFields(t *testing.T) {
@@ -169,7 +256,7 @@ func TestINBRestore_DryRunCreatesNoCustomFields(t *testing.T) {
 	blobKey, _ := f.runExport(c, signer)
 
 	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
-	must.Must(fields.DeleteWithValues(f.ctx, f.idle.ID))
+	must.Must(fields.DeleteWithValues(f.ctx, f.idle.ID, registry.AnyValueCount))
 
 	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{
 		Strategy: string(types.RestoreStrategyMergeAdd),
@@ -199,7 +286,7 @@ func TestINBRestore_FullGroupLeavesOutTheTemplatesOfMissingTypes(t *testing.T) {
 	blobKey, _ := f.runExport(c, signer)
 
 	other := must.Must(itemTypes.GetBySlug(f.ctx, models.CommodityTypeOther))
-	must.Must(fields.DeleteWithValues(f.ctx, plate.ID))
+	must.Must(fields.DeleteWithValues(f.ctx, plate.ID, registry.AnyValueCount))
 	must.Must(itemTypes.DeleteReassigning(f.ctx, vehicle.ID, other.ID))
 	for i := must.Must(itemTypes.Count(f.ctx)); i < models.MaxItemTypesPerGroup; i++ {
 		must.Must(itemTypes.Create(f.ctx, models.ItemType{Name: fmt.Sprintf("Kind %d", i)}))
