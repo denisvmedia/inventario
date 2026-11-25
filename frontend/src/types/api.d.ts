@@ -4234,10 +4234,9 @@ export type paths = {
         put?: never;
         /**
          * Bulk-delete commodities
-         * @description Move every commodity whose id appears in the body to Trash.
-         *     The response lists succeeded vs. failed ids so the frontend
-         *     can render partial-failure UX without parsing per-id HTTP
-         *     statuses.
+         * @description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     The response lists succeeded and failed ids.
          */
         post: {
             parameters: {
@@ -4249,10 +4248,10 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs to delete */
+            /** @description The items to delete */
             requestBody: {
                 content: {
-                    "application/vnd.api+json": components["schemas"]["jsonapi.BulkIDsRequest"];
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkDeleteRequest"];
                 };
             };
             responses: {
@@ -4265,7 +4264,25 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4293,8 +4310,8 @@ export type paths = {
         put?: never;
         /**
          * Bulk-move commodities to a new area
-         * @description Update every commodity whose id appears in the body to
-         *     belong to the supplied area_id.
+         * @description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
          */
         post: {
             parameters: {
@@ -4306,7 +4323,7 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs and the destination area_id */
+            /** @description The items and the destination area_id */
             requestBody: {
                 content: {
                     "application/vnd.api+json": components["schemas"]["jsonapi.BulkMoveRequest"];
@@ -4322,7 +4339,113 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update commodities
+         * @description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).
+         *
+         *     The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
+         *     (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
+         *     `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
+         *     `in_use` clears the status date and note. `sold` is refused, since it needs a sale price for each item.
+         *     A part left out of the patch is left unchanged.
+         *
+         *     The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
+         *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count`,
+         *     the number of items the caller saw it select. The query is run when the request arrives; when it
+         *     selects a different number of items the request fails with 409 and changes nothing, and it may
+         *     select at most 500 items and no items in Trash.
+         *
+         *     The response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The items and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects a different number of items than expected_count */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body or patch, or bulk.too_many: the query selects more than 500 items */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -12222,7 +12345,11 @@ export type components = {
         };
         "jsonapi.BulkMoveAttributes": {
             area_id?: string;
+            /** @example 37 */
+            expected_count?: number;
             ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
         };
         "jsonapi.BulkMoveRequest": {
             data?: components["schemas"]["jsonapi.BulkMoveRequestData"];
@@ -12233,6 +12360,11 @@ export type components = {
         };
         "jsonapi.BulkResultAttrs": {
             failed?: components["schemas"]["jsonapi.BulkResultFail"][];
+            /**
+             * @description Skipped lists the ids the action left as they were because there was
+             *     nothing to change. Absent when there are none.
+             */
+            skipped?: components["schemas"]["jsonapi.BulkResultSkip"][];
             succeeded?: string[];
         };
         "jsonapi.BulkResultData": {
@@ -12241,11 +12373,29 @@ export type components = {
             type?: string;
         };
         "jsonapi.BulkResultFail": {
+            /**
+             * @description Code classifies the failure: not_found (the item does not exist or is
+             *     in Trash), invalid (the change does not pass the item's validation;
+             *     Error says why) or failed (anything else).
+             * @enum {string}
+             */
+            code?: "not_found" | "invalid" | "failed";
             error?: string;
             id?: string;
+            /** @description Name is the item's name when the item could be read. */
+            name?: string;
         };
         "jsonapi.BulkResultResponse": {
             data?: components["schemas"]["jsonapi.BulkResultData"];
+        };
+        "jsonapi.BulkResultSkip": {
+            id?: string;
+            name?: string;
+            /**
+             * @description Reason is unchanged: the item already had what the action sets.
+             * @enum {string}
+             */
+            reason?: "unchanged";
         };
         "jsonapi.CommoditiesMeta": {
             /**
@@ -12294,6 +12444,64 @@ export type components = {
         };
         "jsonapi.CommodityBrandsResponse": {
             data?: components["schemas"]["registry.CommodityBrandCount"][];
+        };
+        "jsonapi.CommodityBulkDeleteRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkDeleteRequestData"];
+        };
+        "jsonapi.CommodityBulkDeleteRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkSelection"];
+            /** @example commodities */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkPatch": {
+            /**
+             * @description Status changes the status, with the date and note a single status
+             *     change records.
+             */
+            status?: components["schemas"]["jsonapi.CommodityBulkStatusPatch"];
+            tags?: components["schemas"]["jsonapi.CommodityBulkTagsPatch"];
+            /**
+             * @description Type sets the item type.
+             * @example electronics
+             */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkSelection": {
+            /** @example 37 */
+            expected_count?: number;
+            ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkStatusPatch": {
+            /** @example 2026-11-25 */
+            date?: string;
+            note?: string;
+            /**
+             * @example disposed
+             * @enum {string}
+             */
+            value?: "in_use" | "lost" | "disposed" | "written_off";
+        };
+        "jsonapi.CommodityBulkTagsPatch": {
+            add?: string[];
+            remove?: string[];
+        };
+        "jsonapi.CommodityBulkUpdateAttributes": {
+            /** @example 37 */
+            expected_count?: number;
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.CommodityBulkPatch"];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkUpdateRequestData"];
+        };
+        "jsonapi.CommodityBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkUpdateAttributes"];
+            /** @example commodities */
+            type?: string;
         };
         "jsonapi.CommodityCover": {
             file_id?: string;

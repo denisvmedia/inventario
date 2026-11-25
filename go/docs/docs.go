@@ -3279,7 +3279,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-delete": {
             "post": {
-                "description": "Move every commodity whose id appears in the body to Trash.\nThe response lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
+                "description": "Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.\nThe items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nThe response lists succeeded and failed ids.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3299,12 +3299,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "List of commodity IDs to delete",
+                        "description": "The items to delete",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                            "$ref": "#/definitions/jsonapi.CommodityBulkDeleteRequest"
                         }
                     }
                 ],
@@ -3315,8 +3315,20 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.BulkResultResponse"
                         }
                     },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects a different number of items than expected_count",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
-                        "description": "Bad request body",
+                        "description": "Bad request body, or bulk.too_many: the query selects more than 500 items",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -3326,7 +3338,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-move": {
             "post": {
-                "description": "Update every commodity whose id appears in the body to\nbelong to the supplied area_id.",
+                "description": "Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.\nThe items are given as ids (at most 100) or as a query of the item query contract with the number of items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3346,7 +3358,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "List of commodity IDs and the destination area_id",
+                        "description": "The items and the destination area_id",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -3362,8 +3374,79 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.BulkResultResponse"
                         }
                     },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects a different number of items than expected_count",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
-                        "description": "Bad request body",
+                        "description": "Bad request body, or bulk.too_many: the query selects more than 500 items",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/bulk-update": {
+            "post": {
+                "description": "Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).\n\nThe patch: ` + "`" + `tags.add` + "`" + ` and ` + "`" + `tags.remove` + "`" + ` add and remove tags without touching the others\n(` + "`" + `add` + "`" + ` takes slugs or the text of a new tag, at most 50 per list); ` + "`" + `type` + "`" + ` sets the type;\n` + "`" + `status` + "`" + ` sets the status with ` + "`" + `date` + "`" + ` (required for every status but in_use) and an optional ` + "`" + `note` + "`" + `.\n` + "`" + `in_use` + "`" + ` clears the status date and note. ` + "`" + `sold` + "`" + ` is refused, since it needs a sale price for each item.\nA part left out of the patch is left unchanged.\n\nThe items are given as ` + "`" + `ids` + "`" + ` (at most 100) or as ` + "`" + `query` + "`" + `, a query string of the item query contract\n(the filter parameters of GET /commodities, without page and per_page), with ` + "`" + `expected_count` + "`" + `,\nthe number of items the caller saw it select. The query is run when the request arrives; when it\nselects a different number of items the request fails with 409 and changes nothing, and it may\nselect at most 500 items and no items in Trash.\n\nThe response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Bulk-update commodities",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The items and the patch",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityBulkUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "The query is not a valid item query, or selects items in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "bulk.selection_changed: the query selects a different number of items than expected_count",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body or patch, or bulk.too_many: the query selects more than 500 items",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11605,11 +11688,19 @@ const docTemplate = `{
                 "area_id": {
                     "type": "string"
                 },
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
                 "ids": {
                     "type": "array",
                     "items": {
                         "type": "string"
                     }
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
                 }
             }
         },
@@ -11641,6 +11732,13 @@ const docTemplate = `{
                         "$ref": "#/definitions/jsonapi.BulkResultFail"
                     }
                 },
+                "skipped": {
+                    "description": "Skipped lists the ids the action left as they were because there was\nnothing to change. Absent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.BulkResultSkip"
+                    }
+                },
                 "succeeded": {
                     "type": "array",
                     "items": {
@@ -11666,10 +11764,23 @@ const docTemplate = `{
         "jsonapi.BulkResultFail": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Code classifies the failure: not_found (the item does not exist or is\nin Trash), invalid (the change does not pass the item's validation;\nError says why) or failed (anything else).",
+                    "type": "string",
+                    "enum": [
+                        "not_found",
+                        "invalid",
+                        "failed"
+                    ]
+                },
                 "error": {
                     "type": "string"
                 },
                 "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the item's name when the item could be read.",
                     "type": "string"
                 }
             }
@@ -11679,6 +11790,24 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.BulkResultData"
+                }
+            }
+        },
+        "jsonapi.BulkResultSkip": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "reason": {
+                    "description": "Reason is unchanged: the item already had what the action sets.",
+                    "type": "string",
+                    "enum": [
+                        "unchanged"
+                    ]
                 }
             }
         },
@@ -11746,6 +11875,147 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/registry.CommodityBrandCount"
                     }
+                }
+            }
+        },
+        "jsonapi.CommodityBulkDeleteRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkDeleteRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkDeleteRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkSelection"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "commodities"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkPatch": {
+            "type": "object",
+            "properties": {
+                "status": {
+                    "description": "Status changes the status, with the date and note a single status\nchange records.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.CommodityBulkStatusPatch"
+                        }
+                    ]
+                },
+                "tags": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkTagsPatch"
+                },
+                "type": {
+                    "description": "Type sets the item type.",
+                    "type": "string",
+                    "example": "electronics"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkSelection": {
+            "type": "object",
+            "properties": {
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkStatusPatch": {
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string",
+                    "example": "2026-11-25"
+                },
+                "note": {
+                    "type": "string"
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "in_use",
+                        "lost",
+                        "disposed",
+                        "written_off"
+                    ],
+                    "example": "disposed"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkTagsPatch": {
+            "type": "object",
+            "properties": {
+                "add": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "remove": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateAttributes": {
+            "type": "object",
+            "properties": {
+                "expected_count": {
+                    "type": "integer",
+                    "example": 37
+                },
+                "ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "patch": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkPatch"
+                },
+                "query": {
+                    "type": "string",
+                    "example": "status=in_use\u0026tags=garage\u0026include_inactive=false"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkUpdateRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityBulkUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityBulkUpdateAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "commodities"
                 }
             }
         },
