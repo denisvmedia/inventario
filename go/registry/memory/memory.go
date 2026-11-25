@@ -30,7 +30,7 @@ func NewFactorySet() *registry.FactorySet {
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	commodityDraftFactory := NewCommodityDraftRegistryFactory(commodityFactory, fileFactory)
-	intakeFactory := NewIntakeRegistryFactory(fileFactory)
+	intakeFactory := NewIntakeRegistryFactory(fileFactory, commodityDraftFactory)
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()

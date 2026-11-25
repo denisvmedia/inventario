@@ -226,6 +226,15 @@ type ScanItemType struct {
 	Name string
 }
 
+// ScanItemTypes turns a group's item types into the options a scan offers.
+func ScanItemTypes(types []*models.ItemType) []ScanItemType {
+	out := make([]ScanItemType, 0, len(types))
+	for _, t := range types {
+		out = append(out, ScanItemType{Slug: string(t.Slug), Name: t.DisplayName()})
+	}
+	return out
+}
+
 func (in ScanInput) itemTypeOptions() []aivision.ItemTypeOption {
 	if len(in.ItemTypes) == 0 {
 		return nil

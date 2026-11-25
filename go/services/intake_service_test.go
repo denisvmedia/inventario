@@ -24,11 +24,12 @@ import (
 // scriptedProvider is the mock AI provider with a call counter and a queue
 // of errors returned before it answers. No test calls a real provider.
 type scriptedProvider struct {
-	mu    sync.Mutex
-	inner *mock.Provider
-	calls int
-	hints []string
-	errs  []error
+	mu        sync.Mutex
+	inner     *mock.Provider
+	calls     int
+	hints     []string
+	itemTypes [][]aivision.ItemTypeOption
+	errs      []error
 }
 
 func newScriptedProvider() *scriptedProvider {
@@ -42,6 +43,7 @@ func (p *scriptedProvider) Scan(ctx context.Context, req aivision.ScanRequest) (
 	p.mu.Lock()
 	p.calls++
 	p.hints = append(p.hints, req.HintFromUser)
+	p.itemTypes = append(p.itemTypes, req.ItemTypes)
 	var err error
 	if len(p.errs) > 0 {
 		err, p.errs = p.errs[0], p.errs[1:]
@@ -444,7 +446,7 @@ func TestIntake_RateLimitWaits(t *testing.T) {
 	c.Check(detail.Summary.RateLimited, qt.Equals, 2)
 	for _, src := range detail.Sources {
 		if src.Source.Status == models.IntakeSourcePending {
-			c.Check(src.Source.Attempts, qt.Equals, 0)
+			c.Check(src.Source.CountedAttempts(), qt.Equals, 0)
 			c.Check(src.Source.WaitReason, qt.Equals, models.IntakeWaitRateLimited)
 		}
 	}
@@ -574,6 +576,9 @@ func TestIntake_CreateSession_Validation(t *testing.T) {
 	c.Check(limits.MaxQueuedPerGroup, qt.Equals, 4)
 	c.Check(limits.MaxFilesPerSource, qt.Equals, 2)
 	c.Check(limits.Enabled, qt.IsTrue)
+	// The accepted types are the ones a file can be uploaded as: the scan
+	// reads HEIC photos, the upload does not take them.
+	c.Check(limits.AcceptedMIMETypes, qt.DeepEquals, []string{"application/pdf", "image/jpeg", "image/png", "image/webp"})
 }
 
 func errorsAsValidation(err error) (validation.Errors, bool) {
@@ -632,4 +637,109 @@ func TestIntakeWorker_PauseAndMissingBlob(t *testing.T) {
 	c.Check(src.Status, qt.Equals, models.IntakeSourceFailed)
 	c.Check(src.ErrorCode, qt.Equals, services.IntakeErrorFileUnreadable)
 	c.Check(f.provider.callCount(), qt.Equals, 0)
+}
+
+// outcomeFailingFactory hands out intake registries whose first
+// SetCandidateOutcome(created) fails, as when the request stops after the
+// draft was made and before its outcome was written.
+type outcomeFailingFactory struct {
+	registry.IntakeRegistryFactory
+	failed *bool
+}
+
+func (f outcomeFailingFactory) CreateUserRegistry(ctx context.Context) (registry.IntakeRegistry, error) {
+	inner, err := f.IntakeRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return outcomeFailingRegistry{IntakeRegistry: inner, failed: f.failed}, nil
+}
+
+type outcomeFailingRegistry struct {
+	registry.IntakeRegistry
+	failed *bool
+}
+
+func (r outcomeFailingRegistry) SetCandidateOutcome(ctx context.Context, id string, outcome models.IntakeCandidateOutcome, draftID *string, code string) (*models.IntakeCandidate, error) {
+	if outcome == models.IntakeCandidateCreated && !*r.failed {
+		*r.failed = true
+		return nil, context.Canceled
+	}
+	return r.IntakeRegistry.SetCandidateOutcome(ctx, id, outcome, draftID, code)
+}
+
+// TestIntake_RescanAfterInterruptedCreateDrafts: a CreateDrafts that stops
+// after making a draft and before recording it leaves the product pending.
+// A rescan of the purchase is refused, since it would replace the product
+// and the next CreateDrafts would make a second draft; the refusal records
+// the draft, and the next CreateDrafts finishes the rest without duplicates.
+func TestIntake_RescanAfterInterruptedCreateDrafts(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	session := f.create(c, "dup", source(f.photo(c, "receipt-dup")))
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	sourceID := session.Sources[0].Source.ID
+
+	failed := false
+	interruptedSet := *f.factorySet
+	interruptedSet.IntakeRegistryFactory = outcomeFailingFactory{IntakeRegistryFactory: f.factorySet.IntakeRegistryFactory, failed: &failed}
+	interrupted := services.NewIntakeService(&interruptedSet, f.scan, services.IntakeConfig{})
+	_, err := interrupted.CreateDrafts(f.ctx, session.Session.ID)
+	c.Assert(err, qt.ErrorIs, context.Canceled)
+	c.Assert(f.drafts(c), qt.HasLen, 1, qt.Commentf("the draft of the first product was made"))
+	c.Assert(f.get(c, f.ctx, session.Session.ID).Summary.DraftsCreated, qt.Equals, 0)
+
+	_, err = f.intake.Rescan(f.ctx, session.Session.ID, sourceID)
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceHasDrafts)
+	recorded := f.get(c, f.ctx, session.Session.ID)
+	c.Check(recorded.Summary.DraftsCreated, qt.Equals, 1, qt.Commentf("the refusal records the draft"))
+	c.Check(recorded.Sources[0].Source.Status, qt.Equals, models.IntakeSourceScanned)
+
+	done := must.Must(f.intake.CreateDrafts(f.ctx, session.Session.ID))
+	c.Check(done.Created, qt.Equals, 2, qt.Commentf("the recorded product is not touched again"))
+	c.Check(done.Detail.Summary.DraftsCreated, qt.Equals, 3)
+	names := map[string]int{}
+	for _, d := range f.drafts(c) {
+		names[d.Values.Title()]++
+	}
+	c.Check(names, qt.HasLen, 3)
+	for name, n := range names {
+		c.Check(n, qt.Equals, 1, qt.Commentf("drafts named %q", name))
+	}
+}
+
+// TestIntakeWorker_OffersTheGroupsItemTypes: the worker's scan classifies
+// into the group's item types, as the scan in the item form does.
+func TestIntakeWorker_OffersTheGroupsItemTypes(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	types := must.Must(f.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	boat := must.Must(types.Create(f.ctx, models.ItemType{Name: "Boat"}))
+	f.create(c, "types", source(f.photo(c, "dinghy")))
+
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	f.provider.mu.Lock()
+	defer f.provider.mu.Unlock()
+	c.Assert(f.provider.itemTypes, qt.HasLen, 1)
+	c.Check(f.provider.itemTypes[0], qt.Contains, aivision.ItemTypeOption{Slug: string(boat.Slug), Name: boat.DisplayName()})
+}
+
+// TestIntakeWorker_StuckWindowFollowsTheProviderTimeout: a claim whose
+// worker died is taken back once the provider deadline and a margin have
+// passed, not before.
+func TestIntakeWorker_StuckWindowFollowsTheProviderTimeout(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixtureWith(c, services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100, Timeout: time.Minute}, services.IntakeConfig{})
+	session := f.create(c, "stuck", source(f.photo(c, "lamp")))
+	worker := services.NewIntakeWorker(f.factorySet, f.scan, f.uploadLocation, services.WithIntakeClock(f.clock))
+	// A worker claims the source and dies.
+	_, err := f.factorySet.IntakeRegistryFactory.CreateServiceRegistry().ClaimNextSource(context.Background(), time.Now())
+	c.Assert(err, qt.IsNil)
+
+	f.ahead = 2 * time.Minute
+	c.Check(worker.Tick(context.Background()), qt.Equals, 0, qt.Commentf("the claim may still be working"))
+	f.ahead = 4 * time.Minute
+	c.Check(worker.Tick(context.Background()), qt.Equals, 1)
+	c.Check(f.get(c, f.ctx, session.Session.ID).Sources[0].Source.Status, qt.Equals, models.IntakeSourceScanned)
+	c.Check(f.provider.callCount(), qt.Equals, 1)
 }

@@ -1,0 +1,55 @@
+{
+  "continueLabel": "Pokračovat: {{title}}",
+  "dashboard": {
+    "title": "Vyžaduje pozornost: {{total}}"
+  },
+  "empty": {
+    "description": "Uložené koncepty a položky označené jako koncept tu čekají, dokud je nedokončíte.",
+    "filteredTitle": "Z tohoto důvodu tu nic není",
+    "title": "Nic nevyžaduje pozornost"
+  },
+  "itemDraftHint": "Zkontrolujte její údaje a označte ji jako zkontrolovanou.",
+  "markReviewed": "Označit jako zkontrolovanou",
+  "markReviewedLabel": "Označit jako zkontrolovanou: {{title}}",
+  "missing": {
+    "description": "Volitelné kontroly. Neznámý údaj neznamená, že položka není dokončená, proto tyto seznamy nejsou součástí schránky ani jejího počtu.",
+    "noLocation": "Položky bez umístění",
+    "title": "Chybějící údaje",
+    "untagged": "Položky bez štítků"
+  },
+  "openInbox": "Otevřít schránku",
+  "openItem": "Otevřít položku",
+  "reason": {
+    "draft": "Koncept",
+    "itemDraft": "Označeno jako koncept",
+    "other": "Vyžaduje pozornost"
+  },
+  "reviewed": "„{{title}}“ označeno jako zkontrolované",
+  "reviewFailed": "Položku se nepodařilo označit jako zkontrolovanou.",
+  "sidebarCount_few": "{{count}} vyžadují pozornost",
+  "sidebarCount_many": "{{count}} vyžaduje pozornost",
+  "sidebarCount_one": "{{count}} vyžaduje pozornost",
+  "sidebarCount_other": "{{count}} vyžaduje pozornost",
+  "subtitle": "Nedokončená práce v této skupině. U každé položky je uvedeno, proč tu je, a krok, který ji vyřeší.",
+  "summary": {
+    "drafts_one": "{{count}} koncept k dokončení",
+    "drafts_few": "{{count}} koncepty k dokončení",
+    "drafts_many": "{{count}} konceptu k dokončení",
+    "drafts_other": "{{count}} konceptů k dokončení",
+    "review_one": "{{count}} položka ke kontrole",
+    "review_few": "{{count}} položky ke kontrole",
+    "review_many": "{{count}} položky ke kontrole",
+    "review_other": "{{count}} položek ke kontrole"
+  },
+  "tabs": {
+    "all": "Vše",
+    "allCount": "Vše ({{n}})",
+    "draft": "Koncepty",
+    "draftCount": "Koncepty ({{n}})",
+    "itemDraft": "Ke kontrole",
+    "itemDraftCount": "Ke kontrole ({{n}})"
+  },
+  "title": "Schránka",
+  "undo": "Zpět",
+  "undoFailed": "Položku se nepodařilo znovu označit jako koncept."
+}

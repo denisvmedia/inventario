@@ -21,12 +21,14 @@ import (
 
 // IntakeRegistryFactory creates IntakeRegistry instances (#2810). All
 // registries it creates share the session map of base and the source and
-// candidate maps of state. Postgres links the files of a new session in the
-// same transaction; the memory backend holds the file factory instead.
+// candidate maps of state. Postgres links the files of a new session and
+// looks up drafts in the same transaction; the memory backend holds the file
+// and draft factories instead.
 type IntakeRegistryFactory struct {
-	base        *Registry[models.IntakeSession, *models.IntakeSession]
-	state       *intakeState
-	fileFactory *FileRegistryFactory
+	base         *Registry[models.IntakeSession, *models.IntakeSession]
+	state        *intakeState
+	fileFactory  *FileRegistryFactory
+	draftFactory *CommodityDraftRegistryFactory
 }
 
 // intakeState holds the sources and candidates. mu serializes every
@@ -50,14 +52,15 @@ var (
 	_ registry.IntakeRegistryFactory = (*IntakeRegistryFactory)(nil)
 )
 
-func NewIntakeRegistryFactory(fileFactory *FileRegistryFactory) *IntakeRegistryFactory {
+func NewIntakeRegistryFactory(fileFactory *FileRegistryFactory, draftFactory *CommodityDraftRegistryFactory) *IntakeRegistryFactory {
 	return &IntakeRegistryFactory{
 		base: NewRegistry[models.IntakeSession, *models.IntakeSession](),
 		state: &intakeState{
 			sources:    map[string]*models.IntakeSource{},
 			candidates: map[string]*models.IntakeCandidate{},
 		},
-		fileFactory: fileFactory,
+		fileFactory:  fileFactory,
+		draftFactory: draftFactory,
 	}
 }
 
@@ -160,7 +163,7 @@ func copyIntakeCandidate(cand *models.IntakeCandidate) *models.IntakeCandidate {
 // Create stores a session without sources. CreateSession is the form the
 // service uses; Create exists for the Registry contract.
 func (r *IntakeRegistry) Create(ctx context.Context, session models.IntakeSession) (*models.IntakeSession, error) {
-	stored, _, err := r.CreateSession(ctx, session, nil)
+	stored, _, err := r.CreateSession(ctx, session, nil, 0)
 	return stored, err
 }
 
@@ -185,8 +188,11 @@ func (r *IntakeRegistry) GetSessionByClientKey(ctx context.Context, clientKey st
 }
 
 // CreateSession mirrors the postgres method.
-func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.IntakeSession, sources []registry.IntakeSourceInput) (*models.IntakeSession, bool, error) {
+func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.IntakeSession, sources []registry.IntakeSourceInput, maxQueued int) (*models.IntakeSession, bool, error) {
 	if err := r.requireGroup(); err != nil {
+		return nil, false, err
+	}
+	if err := registry.CheckIntakeSourceInputs(sources); err != nil {
 		return nil, false, err
 	}
 	st := r.factory.state
@@ -196,32 +202,20 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 	if existing, err := r.GetSessionByClientKey(ctx, session.ClientKey); err == nil {
 		return existing, false, nil
 	}
+	if maxQueued > 0 {
+		queued := r.countQueued()
+		if queued+len(sources) > maxQueued {
+			return nil, false, errxtrace.Classify(registry.ErrIntakeQueueFull, errx.Attrs("queued", queued, "limit", maxQueued))
+		}
+	}
 
 	files, err := r.factory.fileFactory.createUserFileRegistry(ctx)
 	if err != nil {
 		return nil, false, errxtrace.Wrap("failed to create file registry", err)
 	}
-	// Check everything before writing anything, so a refused session leaves
-	// no rows behind.
-	fileByID := map[string]*models.FileEntity{}
-	for _, src := range sources {
-		for _, fileID := range src.FileIDs {
-			file, err := files.Get(ctx, fileID)
-			if err != nil {
-				return nil, false, errxtrace.Wrap("failed to read intake file", err)
-			}
-			fileByID[fileID] = file
-		}
-		if src.ExternalDocumentID == "" {
-			continue
-		}
-		for _, existing := range st.sources {
-			if existing.GroupID == r.groupID && existing.ExternalSystem == src.ExternalSystem &&
-				existing.ExternalInstance == src.ExternalInstance && existing.ExternalDocumentID == src.ExternalDocumentID {
-				return nil, false, errxtrace.Classify(registry.ErrAlreadyExists,
-					errx.Attrs("entity_type", "intake_source", "external_document_id", src.ExternalDocumentID))
-			}
-		}
+	fileByID, err := r.checkNewSources(ctx, files, sources)
+	if err != nil {
+		return nil, false, err
 	}
 
 	now := time.Now()
@@ -269,6 +263,33 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 		}
 	}
 	return stored, true, nil
+}
+
+// checkNewSources checks the sources of a new session before anything is
+// written, so a refused session leaves no rows behind, and returns their
+// files by id. The caller holds state.mu.
+func (r *IntakeRegistry) checkNewSources(ctx context.Context, files registry.FileRegistry, sources []registry.IntakeSourceInput) (map[string]*models.FileEntity, error) {
+	fileByID := map[string]*models.FileEntity{}
+	for _, src := range sources {
+		for _, fileID := range src.FileIDs {
+			file, err := files.Get(ctx, fileID)
+			if err != nil {
+				return nil, errxtrace.Wrap("failed to read intake file", err)
+			}
+			fileByID[fileID] = file
+		}
+		if src.ExternalDocumentID == "" {
+			continue
+		}
+		for _, existing := range r.factory.state.sources {
+			if existing.GroupID == r.groupID && existing.ExternalSystem == src.ExternalSystem &&
+				existing.ExternalInstance == src.ExternalInstance && existing.ExternalDocumentID == src.ExternalDocumentID {
+				return nil, errxtrace.Classify(registry.ErrAlreadyExists,
+					errx.Attrs("entity_type", "intake_source", "external_document_id", src.ExternalDocumentID))
+			}
+		}
+	}
+	return fileByID, nil
 }
 
 // Delete deletes the session with its sources, candidates and the links of
@@ -478,19 +499,26 @@ func (r *IntakeRegistry) ResumeSession(_ context.Context, sessionID string, now 
 		if !r.visible(src.GroupID) || src.SessionID != sessionID {
 			continue
 		}
-		if src.Status != models.IntakeSourceCanceled && src.Status != models.IntakeSourceFailed {
+		switch {
+		case src.Status == models.IntakeSourceCanceled && src.ClaimedAt != nil:
+			// A scan that runs keeps its claim: the cancel is undone.
+			src.Status = models.IntakeSourceScanning
+			src.UpdatedAt = now
+		case src.Status == models.IntakeSourceCanceled, src.Status == models.IntakeSourceFailed:
+			requeueIntakeSource(src, now)
+		default:
 			continue
 		}
-		requeueIntakeSource(src, now)
 		n++
 	}
 	return n, nil
 }
 
-// requeueIntakeSource puts a source back in the queue with a fresh count of attempts.
+// requeueIntakeSource puts a source back in the queue with a fresh allowance
+// of attempts.
 func requeueIntakeSource(src *models.IntakeSource, now time.Time) {
 	src.Status = models.IntakeSourcePending
-	src.Attempts = 0
+	src.RetryBase = src.Attempts
 	src.NextAttemptAt = now
 	src.ClaimedAt = nil
 	src.WaitReason = ""
@@ -506,11 +534,14 @@ func (r *IntakeRegistry) RescanSource(_ context.Context, id string, now time.Tim
 	if !ok || !r.visible(src.GroupID) {
 		return nil, intakeNotFound("intake_source", id)
 	}
-	if src.Status.IsQueued() {
+	if src.Status.IsQueued() || src.InScan() {
 		return nil, errxtrace.Classify(registry.ErrIntakeSourceBusy, errx.Attrs("entity_id", id))
 	}
 	for _, cand := range st.candidates {
-		if cand.SourceID == id && cand.Outcome == models.IntakeCandidateCreated {
+		if cand.SourceID != id {
+			continue
+		}
+		if cand.Outcome == models.IntakeCandidateCreated || r.factory.draftFactory.hasLiveDraftWithKey(cand.GroupID, cand.DraftClientKey()) {
 			return nil, errxtrace.Classify(registry.ErrIntakeSourceHasDrafts, errx.Attrs("entity_id", id))
 		}
 	}
@@ -529,30 +560,47 @@ func (r *IntakeRegistry) CountQueued(_ context.Context) (int, error) {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
+	return r.countQueued(), nil
+}
+
+// countQueued counts the visible queued sources; the caller holds state.mu.
+func (r *IntakeRegistry) countQueued() int {
 	n := 0
-	for _, src := range st.sources {
+	for _, src := range r.factory.state.sources {
 		if r.visible(src.GroupID) && src.Status.IsQueued() {
 			n++
 		}
 	}
-	return n, nil
+	return n
 }
 
-func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time) (int, error) {
+func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
 	n := 0
 	for _, src := range st.sources {
-		if !r.visible(src.GroupID) || src.Status != models.IntakeSourceScanning {
+		if !r.visible(src.GroupID) {
 			continue
 		}
-		if src.ClaimedAt != nil && !src.ClaimedAt.Before(claimedBefore) {
+		stuck := src.ClaimedAt == nil || src.ClaimedAt.Before(claimedBefore)
+		switch {
+		case src.Status == models.IntakeSourceScanning && stuck:
+			src.ClaimedAt = nil
+			if maxAttempts > 0 && src.CountedAttempts() >= maxAttempts {
+				src.Status = models.IntakeSourceFailed
+				src.WaitReason = ""
+				src.ErrorCode = errorCode
+			} else {
+				src.Status = models.IntakeSourcePending
+				src.NextAttemptAt = now
+				src.WaitReason = models.IntakeWaitRetry
+			}
+		case src.Status == models.IntakeSourceCanceled && src.ClaimedAt != nil && stuck:
+			src.ClaimedAt = nil
+		default:
 			continue
 		}
-		src.Status = models.IntakeSourcePending
-		src.NextAttemptAt = now
-		src.ClaimedAt = nil
 		src.UpdatedAt = now
 		n++
 	}
@@ -587,25 +635,23 @@ func (r *IntakeRegistry) ClaimNextSource(_ context.Context, now time.Time) (*mod
 // scanning, or canceled after the claim, with the same attempt.
 func (r *IntakeRegistry) inScan(sourceID string, attempt int) (*models.IntakeSource, error) {
 	src, ok := r.factory.state.sources[sourceID]
-	if !ok || !r.visible(src.GroupID) || src.Attempts != attempt {
+	if !ok || !r.visible(src.GroupID) || src.Attempts != attempt || !src.InScan() {
 		return nil, errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", sourceID))
 	}
-	switch {
-	case src.Status == models.IntakeSourceScanning:
-		return src, nil
-	case src.Status == models.IntakeSourceCanceled && src.ClaimedAt != nil:
-		return src, nil
-	}
-	return nil, errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", sourceID))
+	return src, nil
 }
 
-// scanning is inScan for an outcome a canceled scan does not take.
+// scanning is inScan for an outcome a canceled scan does not take: a source
+// canceled during the scan only loses the claim, so a resume can queue it
+// again, and ErrIntakeSourceChanged is returned.
 func (r *IntakeRegistry) scanning(sourceID string, attempt int) (*models.IntakeSource, error) {
 	src, err := r.inScan(sourceID, attempt)
 	if err != nil {
 		return nil, err
 	}
 	if src.Status != models.IntakeSourceScanning {
+		src.ClaimedAt = nil
+		src.UpdatedAt = time.Now()
 		return nil, errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", sourceID))
 	}
 	return src, nil
@@ -671,8 +717,8 @@ func (r *IntakeRegistry) RequeueSource(_ context.Context, sourceID string, attem
 	src.NextAttemptAt = next
 	src.ClaimedAt = nil
 	src.WaitReason = waitReason
-	if waitReason == models.IntakeWaitRateLimited && src.Attempts > 0 {
-		src.Attempts--
+	if waitReason == models.IntakeWaitRateLimited && src.RetryBase < src.Attempts {
+		src.RetryBase++
 	}
 	src.UpdatedAt = time.Now()
 	return nil

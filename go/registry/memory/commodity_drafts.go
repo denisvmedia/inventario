@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"slices"
 	"strings"
 	"sync"
@@ -48,6 +49,20 @@ func NewCommodityDraftRegistryFactory(commodityFactory *CommodityRegistryFactory
 		commodityFactory: commodityFactory,
 		fileFactory:      fileFactory,
 	}
+}
+
+// hasLiveDraftWithKey reports whether the group has a draft with the client
+// key that is not being discarded.
+func (f *CommodityDraftRegistryFactory) hasLiveDraftWithKey(groupID, clientKey string) bool {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		d := pair.Value
+		if d.GroupID == groupID && d.ClientKey == clientKey && d.Status != models.CommodityDraftDiscarding {
+			return true
+		}
+	}
+	return false
 }
 
 func (f *CommodityDraftRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.CommodityDraftRegistry {
@@ -212,6 +227,18 @@ func (r *CommodityDraftRegistry) ListOpen(ctx context.Context, offset, limit int
 	offset = min(max(offset, 0), total)
 	end := min(offset+max(limit, 0), total)
 	return open[offset:end], total, nil
+}
+
+func (r *CommodityDraftRegistry) OpenIDs(ctx context.Context) ([]string, error) {
+	open, _, err := r.ListOpen(ctx, 0, math.MaxInt)
+	if err != nil {
+		return nil, err
+	}
+	ids := make([]string, 0, len(open))
+	for _, d := range open {
+		ids = append(ids, d.ID)
+	}
+	return ids, nil
 }
 
 // checkOpen mirrors the postgres check.

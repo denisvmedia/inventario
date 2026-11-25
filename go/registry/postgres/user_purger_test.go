@@ -146,7 +146,7 @@ func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
 	receipt := fx.file(c, "receipt.pdf", 10)
 	session, _, err := intake.CreateSession(fx.ctx,
 		models.IntakeSession{ClientKey: "leaving", Origin: models.IntakeOriginUpload},
-		[]registry.IntakeSourceInput{{FileIDs: []string{receipt.ID}}})
+		[]registry.IntakeSourceInput{{FileIDs: []string{receipt.ID}}}, 0)
 	c.Assert(err, qt.IsNil)
 	linked, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
 	c.Assert(err, qt.IsNil)

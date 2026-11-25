@@ -15,7 +15,6 @@ import { parseDraftValues } from "./values"
 
 type DraftView = Schema<"jsonapi.CommodityDraftView">
 type DraftEnvelope = Schema<"jsonapi.CommodityDraftResponse">
-type DraftsEnvelope = Schema<"jsonapi.CommodityDraftsResponse">
 
 // The form values a draft carries. Anything the form had at save time;
 // a draft saved by another client may hold fewer keys.
@@ -33,16 +32,6 @@ export interface Draft {
   promotedCommodityId?: string
   fileCount: number
   updatedAt: string
-}
-
-export interface DraftsPage {
-  drafts: Draft[]
-  total: number
-}
-
-export interface DraftListOptions {
-  page?: number
-  perPage?: number
 }
 
 export const DRAFT_REVISION_CONFLICT = "draft.revision_conflict"
@@ -97,21 +86,6 @@ function toDraft(id: string | undefined, view: DraftView | undefined): Draft {
 
 function fromEnvelope(body: DraftEnvelope): Draft {
   return toDraft(body.data?.id, body.data?.attributes)
-}
-
-export async function listDrafts(
-  opts: DraftListOptions = {},
-  signal?: AbortSignal
-): Promise<DraftsPage> {
-  const params = new URLSearchParams()
-  if (opts.page !== undefined) params.set("page", String(opts.page))
-  if (opts.perPage !== undefined) params.set("per_page", String(opts.perPage))
-  const qs = params.toString()
-  const body = await http.get<DraftsEnvelope>(qs ? `/drafts?${qs}` : "/drafts", { signal })
-  return {
-    drafts: (body.data ?? []).map((view) => toDraft(view.id, view)),
-    total: body.meta?.drafts ?? 0,
-  }
 }
 
 export async function getDraft(id: string, signal?: AbortSignal): Promise<Draft> {

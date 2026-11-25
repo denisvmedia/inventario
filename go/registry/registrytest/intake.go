@@ -2,6 +2,7 @@ package registrytest
 
 import (
 	"context"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -14,13 +15,22 @@ import (
 
 // IntakeEnv is what RunIntakeContract needs from a backend: the user
 // registry of one empty group with the context that carries the group scope,
-// the service registry the worker uses, and the group's file registry.
+// the service registry the worker uses, and the group's file and draft
+// registries.
 type IntakeEnv struct {
 	Ctx     context.Context
 	Intake  registry.IntakeRegistry
 	Service registry.IntakeRegistry
 	Files   registry.FileRegistry
+	Drafts  registry.CommodityDraftRegistry
 }
+
+// intakeTestMaxAttempts and intakeTestStuckCode are what the contract passes
+// to SweepStuckSources.
+const (
+	intakeTestMaxAttempts = 3
+	intakeTestStuckCode   = "provider_error"
+)
 
 // RunIntakeContract checks the intake lifecycle a backend's IntakeRegistry
 // implements (#2810): idempotent create by client key with the source files
@@ -33,13 +43,17 @@ func RunIntakeContract(t *testing.T, newEnv func(t *testing.T) IntakeEnv) {
 		run  func(t *testing.T, env IntakeEnv)
 	}{
 		{"create is idempotent and links the files", intakeContractCreate},
+		{"create keeps the queue within its limit", intakeContractQueueLimit},
 		{"external identity is unique in the group", intakeContractExternalIdentity},
 		{"the worker claims, stores and finishes scans", intakeContractWorkerLifecycle},
 		{"two workers never claim the same source", intakeContractConcurrentClaim},
 		{"the sweep requeues a stuck scan and drops its late result", intakeContractStuckSweep},
+		{"the sweep fails a source that keeps getting stuck", intakeContractStuckSweepLimit},
 		{"cancel stops the queue and resume retries only unfinished sources", intakeContractCancelResume},
+		{"cancel and resume during a scan keep a single claim", intakeContractCancelResumeInScan},
 		{"review and outcomes of a candidate", intakeContractReviewOutcomes},
 		{"rescan replaces the candidates", intakeContractRescan},
+		{"rescan is refused for a draft the outcome missed", intakeContractRescanUnrecordedDraft},
 		{"delete takes sources, candidates and links but not files", intakeContractDelete},
 		{"sessions list newest first", intakeContractListOrder},
 	}
@@ -58,7 +72,7 @@ func intakeContractCreate(t *testing.T, env IntakeEnv) {
 	session, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch-1"}, []registry.IntakeSourceInput{
 		{FileIDs: []string{receipt.ID}},
 		{FileIDs: []string{photo.ID}, OneItem: true},
-	})
+	}, 0)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsTrue)
 	c.Assert(session.ID, qt.Not(qt.Equals), "")
@@ -66,7 +80,7 @@ func intakeContractCreate(t *testing.T, env IntakeEnv) {
 
 	again, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch-1"}, []registry.IntakeSourceInput{
 		{FileIDs: []string{receipt.ID}},
-	})
+	}, 0)
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsFalse)
 	c.Assert(again.ID, qt.Equals, session.ID)
@@ -98,17 +112,58 @@ func intakeContractCreate(t *testing.T, env IntakeEnv) {
 
 	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch-2"}, []registry.IntakeSourceInput{
 		{FileIDs: []string{"missing-file"}},
-	})
+	}, 0)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = env.Intake.GetSessionByClientKey(env.Ctx, "batch-2")
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("a refused create leaves no session"))
+}
+
+func intakeContractQueueLimit(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	_, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "first"}, []registry.IntakeSourceInput{{}, {}}, 3)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "second"}, []registry.IntakeSourceInput{{}, {}}, 3)
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeQueueFull)
+	_, err = env.Intake.GetSessionByClientKey(env.Ctx, "second")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("a refused create leaves no session"))
+
+	// A replay is not a new batch: it returns the session whatever the
+	// queue holds.
+	_, created, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "first"}, []registry.IntakeSourceInput{{}, {}}, 1)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsFalse)
+
+	// Sessions created at once share the room: with one place left, one of
+	// them gets it.
+	var (
+		wg   sync.WaitGroup
+		mu   sync.Mutex
+		made int
+	)
+	for i := range 4 {
+		wg.Go(func() {
+			_, created, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "race-" + strconv.Itoa(i)}, []registry.IntakeSourceInput{{}}, 3)
+			if err == nil && created {
+				mu.Lock()
+				made++
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	c.Assert(made, qt.Equals, 1)
+	queued, err := env.Intake.CountQueued(env.Ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(queued, qt.Equals, 3)
 }
 
 func intakeContractExternalIdentity(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
 	doc := registry.IntakeSourceInput{ExternalSystem: "paperless-ngx", ExternalInstance: "https://docs.example", ExternalDocumentID: "42"}
 
-	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "doc-42", Origin: models.IntakeOriginExternal}, []registry.IntakeSourceInput{doc})
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "doc-42", Origin: models.IntakeOriginExternal}, []registry.IntakeSourceInput{doc}, 0)
 	c.Assert(err, qt.IsNil)
 	c.Assert(session.Origin, qt.Equals, models.IntakeOriginExternal)
 
@@ -118,17 +173,24 @@ func intakeContractExternalIdentity(t *testing.T, env IntakeEnv) {
 	_, err = env.Intake.GetSourceByExternalID(env.Ctx, "paperless-ngx", "https://other.example", "42")
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
-	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "doc-42-again"}, []registry.IntakeSourceInput{doc})
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "doc-42-again"}, []registry.IntakeSourceInput{doc}, 0)
 	c.Assert(err, qt.ErrorIs, registry.ErrAlreadyExists)
 
 	// Two uploads carry no external identity and never collide.
-	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "u1"}, []registry.IntakeSourceInput{{}, {}})
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "u1"}, []registry.IntakeSourceInput{{}, {}}, 0)
 	c.Assert(err, qt.IsNil)
+
+	// A document id names the system it belongs to.
+	_, _, err = env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "doc-no-system"},
+		[]registry.IntakeSourceInput{{ExternalDocumentID: "43"}}, 0)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+	_, err = env.Intake.GetSessionByClientKey(env.Ctx, "doc-no-system")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
-	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}})
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}}, 0)
 	c.Assert(err, qt.IsNil)
 	now := time.Now()
 
@@ -172,13 +234,15 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	second, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
 	c.Assert(err, qt.IsNil)
 	c.Assert(second.SortOrder, qt.Equals, 1)
-	// A rate-limited wait does not count as an attempt.
+	// A rate-limited wait does not count against the limit, and the count
+	// of attempts still grows.
 	err = env.Service.RequeueSource(env.Ctx, second.ID, second.Attempts, now.Add(time.Hour), models.IntakeWaitRateLimited)
 	c.Assert(err, qt.IsNil)
 	waiting, err := env.Intake.GetSource(env.Ctx, second.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(waiting.Status, qt.Equals, models.IntakeSourcePending)
-	c.Assert(waiting.Attempts, qt.Equals, 0)
+	c.Assert(waiting.Attempts, qt.Equals, 1)
+	c.Assert(waiting.CountedAttempts(), qt.Equals, 0)
 	c.Assert(waiting.WaitReason, qt.Equals, models.IntakeWaitRateLimited)
 
 	third, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
@@ -196,12 +260,15 @@ func intakeContractWorkerLifecycle(t *testing.T, env IntakeEnv) {
 	later, err := env.Service.ClaimNextSource(env.Ctx, now.Add(2*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(later.ID, qt.Equals, second.ID)
-	c.Assert(later.Attempts, qt.Equals, 1)
+	c.Assert(later.Attempts, qt.Equals, 2, qt.Commentf("a new claim never reuses the attempt of an earlier one"))
+	c.Assert(later.CountedAttempts(), qt.Equals, 1)
+	err = env.Service.StoreScan(env.Ctx, second.ID, second.Attempts, registry.IntakeScan{}, now)
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceChanged, qt.Commentf("the earlier claim's result is dropped"))
 }
 
 func intakeContractConcurrentClaim(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
-	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}, {}})
+	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}, {}}, 0)
 	c.Assert(err, qt.IsNil)
 	at := time.Now().Add(time.Second)
 
@@ -230,18 +297,22 @@ func intakeContractConcurrentClaim(t *testing.T, env IntakeEnv) {
 
 func intakeContractStuckSweep(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
-	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}})
+	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}}, 0)
 	c.Assert(err, qt.IsNil)
 	now := time.Now()
 	stuck, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
 	c.Assert(err, qt.IsNil)
 
-	swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(-time.Minute), now)
+	swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(-time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
 	c.Assert(swept, qt.Equals, 0, qt.Commentf("a recent claim is not stuck"))
-	swept, err = env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now)
+	swept, err = env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
 	c.Assert(swept, qt.Equals, 1)
+	requeued, err := env.Intake.GetSource(env.Ctx, stuck.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(requeued.Status, qt.Equals, models.IntakeSourcePending)
+	c.Assert(requeued.WaitReason, qt.Equals, models.IntakeWaitRetry)
 
 	again, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
 	c.Assert(err, qt.IsNil)
@@ -257,9 +328,40 @@ func intakeContractStuckSweep(t *testing.T, env IntakeEnv) {
 	c.Assert(env.Service.StoreScan(env.Ctx, again.ID, again.Attempts, registry.IntakeScan{}, now), qt.IsNil)
 }
 
+func intakeContractStuckSweepLimit(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}}, 0)
+	c.Assert(err, qt.IsNil)
+	now := time.Now()
+	for attempt := 1; attempt <= intakeTestMaxAttempts; attempt++ {
+		claimed, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+		c.Assert(err, qt.IsNil, qt.Commentf("attempt %d", attempt))
+		c.Assert(claimed.Attempts, qt.Equals, attempt)
+		swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
+		c.Assert(err, qt.IsNil)
+		c.Assert(swept, qt.Equals, 1)
+	}
+	failed, err := env.Intake.ListSources(env.Ctx, session.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(failed[0].Status, qt.Equals, models.IntakeSourceFailed, qt.Commentf("the third stuck scan is the last"))
+	c.Assert(failed[0].ErrorCode, qt.Equals, intakeTestStuckCode)
+	c.Assert(failed[0].ClaimedAt, qt.IsNil)
+	_, err = env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// A resume gives the source as many attempts again.
+	resumed, err := env.Intake.ResumeSession(env.Ctx, session.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resumed, qt.Equals, 1)
+	again, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(again.Attempts, qt.Equals, intakeTestMaxAttempts+1)
+	c.Assert(again.CountedAttempts(), qt.Equals, 1)
+}
+
 func intakeContractCancelResume(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
-	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}})
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}, {}}, 0)
 	c.Assert(err, qt.IsNil)
 	now := time.Now()
 
@@ -298,6 +400,52 @@ func intakeContractCancelResume(t *testing.T, env IntakeEnv) {
 	candidates, err := env.Intake.ListCandidates(env.Ctx, session.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(candidates, qt.HasLen, 2)
+}
+
+func intakeContractCancelResumeInScan(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{{}, {}}, 0)
+	c.Assert(err, qt.IsNil)
+	now := time.Now()
+	first, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.IsNil)
+
+	// Cancel and resume while the scan runs: the scan stays the only one.
+	_, err = env.Intake.CancelSession(env.Ctx, session.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = env.Intake.RescanSource(env.Ctx, first.ID, now)
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceBusy, qt.Commentf("the canceled scan still runs"))
+	resumed, err := env.Intake.ResumeSession(env.Ctx, session.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resumed, qt.Equals, 2)
+	back, err := env.Intake.GetSource(env.Ctx, first.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(back.Status, qt.Equals, models.IntakeSourceScanning)
+	c.Assert(back.Attempts, qt.Equals, first.Attempts)
+	other, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(other.ID, qt.Not(qt.Equals), first.ID, qt.Commentf("the running scan is not claimed again"))
+	c.Assert(env.Service.StoreScan(env.Ctx, first.ID, first.Attempts, registry.IntakeScan{}, now), qt.IsNil)
+
+	// A canceled scan that fails loses its claim; a resume then queues the
+	// source again under a new attempt, and the old attempt is refused.
+	_, err = env.Intake.CancelSession(env.Ctx, session.ID)
+	c.Assert(err, qt.IsNil)
+	err = env.Service.FailSource(env.Ctx, other.ID, other.Attempts, "timeout")
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceChanged)
+	released, err := env.Intake.GetSource(env.Ctx, other.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(released.Status, qt.Equals, models.IntakeSourceCanceled)
+	c.Assert(released.ClaimedAt, qt.IsNil)
+	resumed, err = env.Intake.ResumeSession(env.Ctx, session.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(resumed, qt.Equals, 1)
+	retried, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(retried.ID, qt.Equals, other.ID)
+	c.Assert(retried.Attempts, qt.Equals, other.Attempts+1)
+	c.Assert(env.Service.StoreScan(env.Ctx, other.ID, other.Attempts, registry.IntakeScan{}, now), qt.ErrorIs, registry.ErrIntakeSourceChanged)
+	c.Assert(env.Service.StoreScan(env.Ctx, retried.ID, retried.Attempts, registry.IntakeScan{}, now), qt.IsNil)
 }
 
 func intakeContractReviewOutcomes(t *testing.T, env IntakeEnv) {
@@ -356,7 +504,8 @@ func intakeContractRescan(t *testing.T, env IntakeEnv) {
 	rescanned, err := env.Intake.RescanSource(env.Ctx, sourceID, time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Assert(rescanned.Status, qt.Equals, models.IntakeSourcePending)
-	c.Assert(rescanned.Attempts, qt.Equals, 0)
+	c.Assert(rescanned.Attempts, qt.Equals, 1, qt.Commentf("the count of attempts never goes down"))
+	c.Assert(rescanned.CountedAttempts(), qt.Equals, 0)
 	left, err := env.Intake.ListCandidates(env.Ctx, session.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(left, qt.HasLen, 0)
@@ -365,12 +514,33 @@ func intakeContractRescan(t *testing.T, env IntakeEnv) {
 	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceBusy)
 }
 
+func intakeContractRescanUnrecordedDraft(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	_, candidates := scannedSession(c, env, "Kettle")
+	sourceID := candidates[0].SourceID
+
+	// A draft made for the candidate whose outcome was never recorded.
+	draft, _, err := env.Drafts.CreateOrGet(env.Ctx, models.CommodityDraft{
+		ClientKey: candidates[0].DraftClientKey(),
+		Values:    models.CommodityDraftValues{"name": "Kettle"},
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = env.Intake.RescanSource(env.Ctx, sourceID, time.Now())
+	c.Assert(err, qt.ErrorIs, registry.ErrIntakeSourceHasDrafts)
+
+	// Once the draft is being discarded, it no longer holds the rescan.
+	_, err = env.Drafts.MarkDiscarding(env.Ctx, draft.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = env.Intake.RescanSource(env.Ctx, sourceID, time.Now())
+	c.Assert(err, qt.IsNil)
+}
+
 func intakeContractDelete(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
 	receipt := intakeFile(c, env, "receipt.pdf", models.FileCategoryDocuments)
 	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "batch"}, []registry.IntakeSourceInput{
 		{FileIDs: []string{receipt.ID}},
-	})
+	}, 0)
 	c.Assert(err, qt.IsNil)
 	sources, err := env.Intake.ListSources(env.Ctx, session.ID)
 	c.Assert(err, qt.IsNil)
@@ -389,7 +559,7 @@ func intakeContractDelete(t *testing.T, env IntakeEnv) {
 func intakeContractListOrder(t *testing.T, env IntakeEnv) {
 	c := qt.New(t)
 	for _, key := range []string{"a", "b", "c"} {
-		_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: key}, nil)
+		_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: key}, nil, 0)
 		c.Assert(err, qt.IsNil)
 		time.Sleep(5 * time.Millisecond)
 	}
@@ -408,7 +578,7 @@ func intakeContractListOrder(t *testing.T, env IntakeEnv) {
 // one candidate per name.
 func scannedSession(c *qt.C, env IntakeEnv, names ...string) (*models.IntakeSession, []*models.IntakeCandidate) {
 	c.Helper()
-	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "scanned"}, []registry.IntakeSourceInput{{}})
+	session, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "scanned"}, []registry.IntakeSourceInput{{}}, 0)
 	c.Assert(err, qt.IsNil)
 	now := time.Now()
 	src, err := env.Service.ClaimNextSource(env.Ctx, now.Add(time.Second))

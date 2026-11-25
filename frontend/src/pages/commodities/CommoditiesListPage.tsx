@@ -52,7 +52,7 @@ import {
   type CommodityCardProps,
 } from "@/components/items/CommodityPhotoCard"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
-import { DraftsCard } from "@/components/items/DraftsCard"
+import { InboxNotice } from "@/components/items/InboxNotice"
 import { IntakeCard } from "@/components/items/IntakeCard"
 import { IntakeUploadDialog } from "@/components/items/IntakeUploadDialog"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
@@ -605,7 +605,7 @@ export function CommoditiesListPage() {
 
         <IntakeCard />
 
-        <DraftsCard />
+        <InboxNotice />
 
         <Toolbar
           searchInput={searchInput}

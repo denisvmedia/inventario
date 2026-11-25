@@ -187,6 +187,9 @@ const WarrantiesListPage = lazy(() =>
 const UpcomingPage = lazy(() =>
   import("@/pages/upcoming/UpcomingPage").then((m) => ({ default: m.UpcomingPage }))
 )
+const InboxPage = lazy(() =>
+  import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))
+)
 const ExportsListPage = lazy(() =>
   import("@/pages/exports/ExportsListPage").then((m) => ({ default: m.ExportsListPage }))
 )
@@ -445,6 +448,9 @@ export function AppRoutes() {
               {/* Upcoming (#2805) — item reminders, warranty expiries, loan
                   and maintenance due dates in one date-ordered list. */}
               <Route path="upcoming" element={<UpcomingPage />} />
+              {/* Inbox (#2794): drafts and items marked as draft, the
+                  group's unfinished work, with the step that clears each. */}
+              <Route path="inbox" element={<InboxPage />} />
               {/* Reports (#1370). Landing + the print-capable insurance
                   report. The report reads its selection (mode / item /
                   location) from the query string. */}

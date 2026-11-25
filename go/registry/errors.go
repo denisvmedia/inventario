@@ -194,7 +194,8 @@ var (
 	ErrIntakeSourceChanged = errx.NewSentinel("the intake source changed while it was scanned")
 
 	// ErrIntakeSourceBusy is returned when a rescan reaches a source that is
-	// still waiting for or in a scan (#2810).
+	// still waiting for or in a scan, also one canceled while its scan runs
+	// (#2810).
 	ErrIntakeSourceBusy = errx.NewSentinel("the intake source is waiting for a scan")
 
 	// ErrIntakeSourceHasDrafts is returned when a rescan reaches a source
@@ -205,4 +206,9 @@ var (
 	// ErrIntakeCandidateFinished is returned when a review change reaches a
 	// detected product that already has its draft (#2810).
 	ErrIntakeCandidateFinished = errx.NewSentinel("the detected product already has its draft")
+
+	// ErrIntakeQueueFull is returned when a new intake session would put
+	// more of the group's sources in the scan queue than the limit allows
+	// (#2810).
+	ErrIntakeQueueFull = errx.NewSentinel("the scan queue of the group is full")
 )

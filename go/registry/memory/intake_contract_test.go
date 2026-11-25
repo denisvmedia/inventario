@@ -45,6 +45,7 @@ func newMemoryIntakeEnv(t *testing.T) registrytest.IntakeEnv {
 		Intake:  set.IntakeRegistry,
 		Service: fs.IntakeRegistryFactory.CreateServiceRegistry(),
 		Files:   set.FileRegistry,
+		Drafts:  set.CommodityDraftRegistry,
 	}
 }
 
@@ -84,7 +85,7 @@ func TestIntakePurges_Memory(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		session, _, err := set.IntakeRegistry.CreateSession(ctx,
 			models.IntakeSession{ClientKey: userID + "-" + groupID, Origin: models.IntakeOriginUpload},
-			[]registry.IntakeSourceInput{{FileIDs: []string{file.ID}}})
+			[]registry.IntakeSourceInput{{FileIDs: []string{file.ID}}}, 0)
 		c.Assert(err, qt.IsNil)
 		return stored{ctx: ctx, session: session.ID, file: file.ID}
 	}

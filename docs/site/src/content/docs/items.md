@@ -275,9 +275,9 @@ appears on every step. It saves the form as it is: nothing is required, not
 even a name, and the files on the **Files** step are uploaded with the draft.
 A draft is saved for the whole group, so everyone in it can see it.
 
-Your drafts are listed in a **Drafts** card at the top of the **Items** page,
-with the time each was saved and how many files it has. The card is hidden
-while there are none.
+Your drafts are listed in the [Inbox](../inbox/), with the time each was
+saved and how many files it has. While there are any, a line at the top of
+the **All Items** page says how many and has an **Open inbox** button.
 
 - **Continue** opens the draft in the **Add item** dialog with its values and
   files. Turn **Save as draft** on and click **Save draft** to save your
@@ -288,8 +288,8 @@ while there are none.
   [Trash](../trash/), where you can restore them as standalone files. Files
   that are also attached to something else stay where they are.
 
-Members with the **Viewer** role see the card but cannot continue or discard a
-draft.
+Members with the **Viewer** role see the drafts but cannot continue or discard
+them.
 
 A draft is not an item. It is not in item lists, counts, search results,
 reports, saved views or reminders, and it never expires. The files saved with
@@ -311,7 +311,7 @@ dialog says so.
 **Save as a new draft** keeps what you entered as a draft of its own. For a
 draft that became an item, **Open item** goes to that item instead and drops
 what you entered in the dialog. A finished draft does not come back in the
-**Drafts** card.
+inbox.
 
 A draft keeps the [seller](../sellers/) you picked. If someone deletes that
 seller before you finish, the **Seller** field says so, and the item is not
@@ -328,6 +328,10 @@ unfinished. Such an item shows a **Draft** badge in lists. It also skips the
 check that a price in another currency has an amount in the group currency.
 An unknown purchase date or price doesn't make an item a draft: you can leave
 those fields blank on a finished item too.
+
+**All Items** hides an item marked as draft until **Show inactive** is on. The
+[Inbox](../inbox/#review-an-item) lists it under **Items to review**, where
+**Mark as reviewed** turns the switch off.
 
 ### Saved on this device
 

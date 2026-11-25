@@ -147,7 +147,7 @@ func (r *IntakeRegistry) Count(ctx context.Context) (int, error) {
 // Create stores a session without sources. CreateSession is the form the
 // service uses; Create exists for the Registry contract.
 func (r *IntakeRegistry) Create(ctx context.Context, session models.IntakeSession) (*models.IntakeSession, error) {
-	stored, _, err := r.CreateSession(ctx, session, nil)
+	stored, _, err := r.CreateSession(ctx, session, nil, 0)
 	return stored, err
 }
 
@@ -192,9 +192,14 @@ func (r *IntakeRegistry) Delete(ctx context.Context, id string) error {
 // CreateSession stores the session, its sources and their file links in one
 // transaction. The session insert uses ON CONFLICT DO NOTHING on the
 // (group_id, client_key) index, so two concurrent creates with one key store
-// one session and both callers get it.
-func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.IntakeSession, sources []registry.IntakeSourceInput) (*models.IntakeSession, bool, error) {
+// one session and both callers get it. The queue limit is checked under a
+// transaction-scoped advisory lock per group, so concurrent sessions of a
+// group count the queue one after the other.
+func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.IntakeSession, sources []registry.IntakeSourceInput, maxQueued int) (*models.IntakeSession, bool, error) {
 	if err := r.requireGroup(); err != nil {
+		return nil, false, err
+	}
+	if err := registry.CheckIntakeSourceInputs(sources); err != nil {
 		return nil, false, err
 	}
 	now := time.Now().UTC()
@@ -235,6 +240,9 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 			return errxtrace.Wrap("failed to insert intake session", err)
 		}
 		created = true
+		if err := r.checkQueueRoom(ctx, tx, len(sources), maxQueued); err != nil {
+			return err
+		}
 
 		for i, input := range sources {
 			if err := r.insertSource(ctx, tx, files, stored.ID, i, input, now); err != nil {
@@ -247,6 +255,27 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 		return nil, false, errxtrace.Wrap("failed to create intake session", err)
 	}
 	return &stored, created, nil
+}
+
+// checkQueueRoom fails with ErrIntakeQueueFull when adding sources to the
+// group's queue would bring it above maxQueued. It takes the group's queue
+// lock first, which the transaction holds until it ends.
+func (r *IntakeRegistry) checkQueueRoom(ctx context.Context, tx *sqlx.Tx, sources, maxQueued int) error {
+	if maxQueued <= 0 {
+		return nil
+	}
+	if _, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext('intake_queue'), hashtext($1))`, r.groupID); err != nil {
+		return errxtrace.Wrap("failed to lock the intake queue", err)
+	}
+	var queued int
+	count := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE group_id = $1 AND status IN ($2, $3)`, r.tableNames.IntakeSources())
+	if err := tx.GetContext(ctx, &queued, count, r.groupID, string(models.IntakeSourcePending), string(models.IntakeSourceScanning)); err != nil {
+		return errxtrace.Wrap("failed to count queued intake sources", err)
+	}
+	if queued+sources > maxQueued {
+		return errxtrace.Classify(registry.ErrIntakeQueueFull, errx.Attrs("queued", queued, "limit", maxQueued))
+	}
+	return nil
 }
 
 func (r *IntakeRegistry) ListSessions(ctx context.Context, offset, limit int) ([]*models.IntakeSession, int, error) {
@@ -472,16 +501,38 @@ func (r *IntakeRegistry) CancelSession(ctx context.Context, sessionID string) (i
 }
 
 func (r *IntakeRegistry) ResumeSession(ctx context.Context, sessionID string, now time.Time) (int, error) {
-	query := fmt.Sprintf(`
-		UPDATE %s SET status = $1, attempts = 0, next_attempt_at = $2, claimed_at = NULL,
-			wait_reason = '', error_code = '', updated_at = $2
-		WHERE session_id = $3 AND status IN ($4, $5)`, r.tableNames.IntakeSources())
-	n, err := r.execCount(ctx, query, string(models.IntakeSourcePending), now.UTC(), sessionID,
-		string(models.IntakeSourceCanceled), string(models.IntakeSourceFailed))
+	now = now.UTC()
+	var n int64
+	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// A scan that runs keeps its claim: the cancel is undone.
+		uncancel := fmt.Sprintf(`
+			UPDATE %s SET status = $1, updated_at = $2
+			WHERE session_id = $3 AND status = $4 AND claimed_at IS NOT NULL`, r.tableNames.IntakeSources())
+		res, err := tx.ExecContext(ctx, uncancel, string(models.IntakeSourceScanning), now, sessionID, string(models.IntakeSourceCanceled))
+		if err != nil {
+			return err
+		}
+		uncanceled, err := res.RowsAffected()
+		if err != nil {
+			return err
+		}
+		requeue := fmt.Sprintf(`
+			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
+				wait_reason = '', error_code = '', updated_at = $2
+			WHERE session_id = $3 AND (status = $4 OR (status = $5 AND claimed_at IS NULL))`, r.tableNames.IntakeSources())
+		res, err = tx.ExecContext(ctx, requeue, string(models.IntakeSourcePending), now, sessionID,
+			string(models.IntakeSourceFailed), string(models.IntakeSourceCanceled))
+		if err != nil {
+			return err
+		}
+		requeued, err := res.RowsAffected()
+		n = uncanceled + requeued
+		return err
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to resume intake session", err)
 	}
-	return n, nil
+	return int(n), nil
 }
 
 // lockSource reads the source and holds its row lock until tx ends.
@@ -504,12 +555,23 @@ func (r *IntakeRegistry) RescanSource(ctx context.Context, id string, now time.T
 		if err != nil {
 			return err
 		}
-		if source.Status.IsQueued() {
+		if source.Status.IsQueued() || source.InScan() {
 			return errxtrace.Classify(registry.ErrIntakeSourceBusy, errx.Attrs("entity_id", id))
 		}
+		// A candidate counts as having its draft when the outcome says so,
+		// and also when a draft with its client key exists although the
+		// outcome was never recorded. A draft being discarded does not count.
 		var hasDrafts bool
-		exists := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE source_id = $1 AND outcome = $2)`, r.tableNames.IntakeCandidates())
-		if err := tx.QueryRowxContext(ctx, exists, id, string(models.IntakeCandidateCreated)).Scan(&hasDrafts); err != nil {
+		exists := fmt.Sprintf(`
+			SELECT EXISTS (
+				SELECT 1 FROM %[1]s c
+				WHERE c.source_id = $1 AND (c.outcome = $2 OR EXISTS (
+					SELECT 1 FROM %[2]s d
+					WHERE d.group_id = c.group_id AND d.client_key = $3 || c.id AND d.status <> $4)))`,
+			r.tableNames.IntakeCandidates(), r.tableNames.CommodityDrafts())
+		err = tx.QueryRowxContext(ctx, exists, id, string(models.IntakeCandidateCreated),
+			models.IntakeDraftClientKey(""), string(models.CommodityDraftDiscarding)).Scan(&hasDrafts)
+		if err != nil {
 			return errxtrace.Wrap("failed to check intake candidates", err)
 		}
 		if hasDrafts {
@@ -520,7 +582,7 @@ func (r *IntakeRegistry) RescanSource(ctx context.Context, id string, now time.T
 			return errxtrace.Wrap("failed to delete intake candidates", err)
 		}
 		update := fmt.Sprintf(`
-			UPDATE %s SET status = $1, attempts = 0, next_attempt_at = $2, claimed_at = NULL,
+			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
 				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, updated_at = $2
 			WHERE id = $3
 			RETURNING *`, r.tableNames.IntakeSources())
@@ -544,16 +606,45 @@ func (r *IntakeRegistry) CountQueued(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time) (int, error) {
-	query := fmt.Sprintf(`
-		UPDATE %s SET status = $1, next_attempt_at = $2, claimed_at = NULL, updated_at = $2
-		WHERE status = $3 AND (claimed_at IS NULL OR claimed_at < $4)`, r.tableNames.IntakeSources())
-	n, err := r.execCount(ctx, query, string(models.IntakeSourcePending), now.UTC(),
-		string(models.IntakeSourceScanning), claimedBefore.UTC())
+func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
+	now, claimedBefore = now.UTC(), claimedBefore.UTC()
+	table := r.tableNames.IntakeSources()
+	var n int64
+	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		exec := func(query string, args ...any) error {
+			res, err := tx.ExecContext(ctx, query, args...)
+			if err != nil {
+				return err
+			}
+			changed, err := res.RowsAffected()
+			n += changed
+			return err
+		}
+		if maxAttempts > 0 {
+			fail := fmt.Sprintf(`
+				UPDATE %s SET status = $1, claimed_at = NULL, wait_reason = '', error_code = $2, updated_at = $3
+				WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5) AND attempts - retry_base >= $6`, table)
+			if err := exec(fail, string(models.IntakeSourceFailed), errorCode, now,
+				string(models.IntakeSourceScanning), claimedBefore, maxAttempts); err != nil {
+				return err
+			}
+		}
+		requeue := fmt.Sprintf(`
+			UPDATE %s SET status = $1, next_attempt_at = $2, claimed_at = NULL, wait_reason = $3, updated_at = $2
+			WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5)`, table)
+		if err := exec(requeue, string(models.IntakeSourcePending), now, models.IntakeWaitRetry,
+			string(models.IntakeSourceScanning), claimedBefore); err != nil {
+			return err
+		}
+		release := fmt.Sprintf(`
+			UPDATE %s SET claimed_at = NULL, updated_at = $1
+			WHERE status = $2 AND claimed_at < $3`, table)
+		return exec(release, now, string(models.IntakeSourceCanceled), claimedBefore)
+	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to sweep stuck intake sources", err)
 	}
-	return n, nil
+	return int(n), nil
 }
 
 // ClaimNextSource takes the due source with SKIP LOCKED, so concurrent
@@ -604,26 +695,36 @@ func (r *IntakeRegistry) lockSourceInScan(ctx context.Context, tx *sqlx.Tx, id s
 	if err != nil {
 		return nil, err
 	}
-	if source.Attempts == attempt {
-		switch {
-		case source.Status == models.IntakeSourceScanning:
-			return source, nil
-		case source.Status == models.IntakeSourceCanceled && source.ClaimedAt != nil:
-			return source, nil
-		}
+	if source.Attempts == attempt && source.InScan() {
+		return source, nil
 	}
 	return nil, errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", id))
 }
 
-// lockScanning is lockSourceInScan for an outcome a canceled scan does not
-// take.
-func (r *IntakeRegistry) lockScanning(ctx context.Context, tx *sqlx.Tx, id string, attempt int) error {
-	source, err := r.lockSourceInScan(ctx, tx, id, attempt)
+// finishScanning runs update on a source that is still the claimed scan and
+// scanning. A source canceled during the scan only loses the claim, so a
+// resume can queue it again, and ErrIntakeSourceChanged is returned, as for
+// a source that moved on.
+func (r *IntakeRegistry) finishScanning(ctx context.Context, sourceID string, attempt int, update func(context.Context, *sqlx.Tx) error) error {
+	canceled := false
+	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		source, err := r.lockSourceInScan(ctx, tx, sourceID, attempt)
+		if err != nil {
+			return err
+		}
+		if source.Status == models.IntakeSourceScanning {
+			return update(ctx, tx)
+		}
+		canceled = true
+		release := fmt.Sprintf(`UPDATE %s SET claimed_at = NULL, updated_at = $1 WHERE id = $2`, r.tableNames.IntakeSources())
+		_, err = tx.ExecContext(ctx, release, time.Now().UTC(), sourceID)
+		return err
+	})
 	if err != nil {
 		return err
 	}
-	if source.Status != models.IntakeSourceScanning {
-		return errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", id))
+	if canceled {
+		return errxtrace.Classify(registry.ErrIntakeSourceChanged, errx.Attrs("entity_id", sourceID))
 	}
 	return nil
 }
@@ -685,17 +786,14 @@ func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt
 }
 
 func (r *IntakeRegistry) RequeueSource(ctx context.Context, sourceID string, attempt int, next time.Time, waitReason string) error {
-	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if err := r.lockScanning(ctx, tx, sourceID, attempt); err != nil {
-			return err
-		}
+	err := r.finishScanning(ctx, sourceID, attempt, func(ctx context.Context, tx *sqlx.Tx) error {
 		refund := 0
 		if waitReason == models.IntakeWaitRateLimited {
 			refund = 1
 		}
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, next_attempt_at = $2, claimed_at = NULL, wait_reason = $3,
-				attempts = GREATEST(attempts - $4, 0), updated_at = $5
+				retry_base = LEAST(retry_base + $4, attempts), updated_at = $5
 			WHERE id = $6`, r.tableNames.IntakeSources())
 		_, err := tx.ExecContext(ctx, update, string(models.IntakeSourcePending), next.UTC(), waitReason, refund, time.Now().UTC(), sourceID)
 		return err
@@ -707,10 +805,7 @@ func (r *IntakeRegistry) RequeueSource(ctx context.Context, sourceID string, att
 }
 
 func (r *IntakeRegistry) FailSource(ctx context.Context, sourceID string, attempt int, errorCode string) error {
-	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		if err := r.lockScanning(ctx, tx, sourceID, attempt); err != nil {
-			return err
-		}
+	err := r.finishScanning(ctx, sourceID, attempt, func(ctx context.Context, tx *sqlx.Tx) error {
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, claimed_at = NULL, wait_reason = '', error_code = $2, updated_at = $3
 			WHERE id = $4`, r.tableNames.IntakeSources())

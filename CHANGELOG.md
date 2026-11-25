@@ -31,11 +31,26 @@ the section matching the tag and publishes it as the GitHub Release body. See
   sessions with a client key, candidate review, drafts, cancel, resume,
   rescan, delete), and the AI scan now reports the quantity of a product line
   ([#2810](https://github.com/denisvmedia/inventario/issues/2810)).
+
+- An Inbox page lists what in the group is still unfinished: the drafts of
+  new items and the items marked as draft. Each row says why it is there and
+  offers the step that clears it: Continue opens a draft in the Add item
+  dialog over the inbox, Discard deletes it, and Mark as reviewed turns an
+  item's draft switch off, with Undo. Tabs filter by reason. The sidebar entry
+  shows the number of records that need attention, counting each record once,
+  and the dashboard shows a "Needs attention" card while there are any. A
+  Missing details section links the No location and untagged item lists,
+  which stay out of the inbox: a missing detail is not unfinished work. The
+  Items page shows a line with an Open inbox button in place of the Drafts
+  card. The new API is `GET /inbox` (paged, filtered by `reason`) and
+  `GET /inbox/count`
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
 - Save as draft in the Add item dialog saves the form and its files on the
   server as a draft of the group, so an item started on one device can be
   finished on another. Nothing is required to save a draft; a **Save draft**
-  button is on every step while the switch is on. The Items page lists the
-  group's drafts in a **Drafts** card with Continue and Discard. Finishing a
+  button is on every step while the switch is on. The Inbox lists the
+  group's drafts with Continue and Discard. Finishing a
   draft creates exactly one item and moves the draft's files to it, and a save
   repeated after a lost response does not make a second draft. Discarding
   sends the files nothing else uses to the Trash. A save made on another
