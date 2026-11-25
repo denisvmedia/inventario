@@ -77,6 +77,12 @@ func (c *Command) run() error {
 	stopFileLinkMove := bootstrap.StartFileLinkMove(ctx, rs, c.cfg)
 	defer stopFileLinkMove()
 
+	// Prices stored before an unknown price existed are rewritten before any
+	// worker or the API reads them, so a "not set" zero never reads as a
+	// known zero.
+	stopLegacyPriceBackfill := bootstrap.StartLegacyPriceBackfill(ctx, rs, c.cfg)
+	defer stopLegacyPriceBackfill()
+
 	stopEmail := bootstrap.StartEmailLifecycle(ctx, rs, c.cfg)
 	defer stopEmail()
 

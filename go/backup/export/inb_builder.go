@@ -836,10 +836,10 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 		Type:                   string(com.Type),
 		AreaID:                 areaUUID,
 		Count:                  com.Count,
-		OriginalPrice:          decimalString(com.OriginalPrice),
+		OriginalPrice:          ptrDecimalString(com.OriginalPrice),
 		OriginalPriceCurrency:  string(com.OriginalPriceCurrency),
-		ConvertedOriginalPrice: decimalString(com.ConvertedOriginalPrice),
-		CurrentPrice:           decimalString(com.CurrentPrice),
+		ConvertedOriginalPrice: ptrDecimalString(com.ConvertedOriginalPrice),
+		CurrentPrice:           ptrDecimalString(com.CurrentPrice),
 		SerialNumber:           com.SerialNumber,
 		ExtraSerialNumbers:     []string(com.ExtraSerialNumbers),
 		PartNumbers:            []string(com.PartNumbers),
@@ -1169,19 +1169,9 @@ func fileSizeHint(file *models.FileEntity) int64 {
 	return 0
 }
 
-// decimalString renders a decimal price, returning "" for the zero value so the
-// omitempty JSON fields stay clean.
-func decimalString(d interface{ String() string }) string {
-	s := d.String()
-	if s == "0" || s == "" {
-		return ""
-	}
-	return s
-}
-
-// ptrDecimalString renders a nullable decimal (SalePrice / AcquisitionPrice).
-// Unlike decimalString it preserves a legitimate zero value: the meaningful
-// distinction for these columns is nil (absent) vs set, so a non-nil pointer
+// ptrDecimalString renders a nullable decimal (the three prices, SalePrice,
+// AcquisitionPrice). It preserves a legitimate zero value: the meaningful
+// distinction for these columns is nil (unknown) vs set, so a non-nil pointer
 // holding 0 is emitted as "0" and only a nil pointer yields "" (the omitempty
 // JSON field then disappears). The restore side mirrors this: empty → nil, any
 // non-empty value → a set pointer.

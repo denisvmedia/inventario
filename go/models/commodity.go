@@ -129,14 +129,22 @@ type Commodity struct {
 	AreaID *string `json:"area_id,omitempty" db:"area_id"`
 	//ptah:schema:field name="count" type="INTEGER" not_null="true" default="1"
 	Count int `json:"count" db:"count"`
+	// The three prices are nil when unknown, which is distinct from a known
+	// zero (a gift, a free item). An item may be reviewed with any of them
+	// unknown; see Value for how they combine into a valuation.
+	//
+	// OriginalPrice is the purchase price in OriginalPriceCurrency.
 	//ptah:schema:field name="original_price" type="DECIMAL(15,2)"
-	OriginalPrice decimal.Decimal `json:"original_price" db:"original_price"`
+	OriginalPrice *decimal.Decimal `json:"original_price" db:"original_price" extensions:"x-nullable=true"`
 	//ptah:schema:field name="original_price_currency" type="TEXT"
 	OriginalPriceCurrency Currency `json:"original_price_currency" db:"original_price_currency"`
+	// ConvertedOriginalPrice is the purchase price in the group currency. It
+	// only applies when OriginalPriceCurrency is a foreign currency.
 	//ptah:schema:field name="converted_original_price" type="DECIMAL(15,2)"
-	ConvertedOriginalPrice decimal.Decimal `json:"converted_original_price" db:"converted_original_price"`
+	ConvertedOriginalPrice *decimal.Decimal `json:"converted_original_price" db:"converted_original_price" extensions:"x-nullable=true"`
+	// CurrentPrice is the current value in the group currency.
 	//ptah:schema:field name="current_price" type="DECIMAL(15,2)"
-	CurrentPrice decimal.Decimal `json:"current_price" db:"current_price"`
+	CurrentPrice *decimal.Decimal `json:"current_price" db:"current_price" extensions:"x-nullable=true"`
 	//ptah:schema:field name="serial_number" type="TEXT"
 	SerialNumber string `json:"serial_number" db:"serial_number"`
 	//ptah:schema:field name="extra_serial_numbers" type="JSONB"
@@ -147,8 +155,9 @@ type Commodity struct {
 	Tags ValuerSlice[string] `json:"tags" db:"tags"`
 	//ptah:schema:field name="status" type="TEXT" not_null="true"
 	Status CommodityStatus `json:"status" db:"status"`
+	// PurchaseDate is nil when the date is unknown.
 	//ptah:schema:field name="purchase_date" type="TEXT"
-	PurchaseDate PDate `json:"purchase_date" db:"purchase_date"`
+	PurchaseDate PDate `json:"purchase_date" db:"purchase_date" extensions:"x-nullable=true"`
 	//ptah:schema:field name="registered_date" type="TEXT"
 	RegisteredDate PDate `json:"registered_date" db:"registered_date"`
 	//ptah:schema:field name="last_modified_date" type="TEXT"
@@ -230,6 +239,51 @@ type Commodity struct {
 	// which `dbwrite:"false"` tells the INSERT/UPDATE builder.
 	//ptah:schema:field name="search_text" type="TEXT" generated="commodity_search_text(name, short_name, serial_number, extra_serial_numbers, part_numbers, tags, comments, warranty_notes, status_note)" stored="true"
 	SearchText string `json:"-" db:"search_text" dbwrite:"false" userinput:"false" readonly:"true"`
+
+	// LegacyZeroPrices marks a row whose prices were stored when a price
+	// could not be unknown: a zero current or converted price in such a row
+	// means "not set". The runtime backfill
+	// (CommodityRegistry.BackfillLegacyPrices) turns those zeros into NULL and
+	// clears the flag. The column defaults to true so that adding it marks
+	// every row that already exists; the registries store false on every
+	// write, and the flag never leaves the server.
+	//ptah:schema:field name="legacy_zero_prices" type="BOOLEAN" not_null="true" default="true"
+	LegacyZeroPrices bool `json:"-" db:"legacy_zero_prices"`
+}
+
+// PurchasePriceInGroupCurrency returns the purchase price in the group
+// currency and whether it is known: the original price when it is in the
+// group currency, otherwise the converted price.
+func (a *Commodity) PurchasePriceInGroupCurrency(groupCurrency Currency) (decimal.Decimal, bool) {
+	if a.OriginalPrice != nil && a.OriginalPriceCurrency == groupCurrency {
+		return *a.OriginalPrice, true
+	}
+	if a.ConvertedOriginalPrice != nil {
+		return *a.ConvertedOriginalPrice, true
+	}
+	return decimal.Zero, false
+}
+
+// Value returns the value of the commodity in the group currency and whether
+// it is known. A known current price wins; otherwise the purchase price in the
+// group currency counts (see PurchasePriceInGroupCurrency). A known zero is a
+// value. A commodity with neither has no usable value, and totals report it
+// separately instead of adding it as zero.
+func (a *Commodity) Value(groupCurrency Currency) (decimal.Decimal, bool) {
+	if a.CurrentPrice != nil {
+		return *a.CurrentPrice, true
+	}
+	return a.PurchasePriceInGroupCurrency(groupCurrency)
+}
+
+// SamePrice reports whether two prices are equal. An unknown (nil) price
+// equals only another unknown price, and the comparison ignores scale, so
+// 17500.00 equals 17500.
+func SamePrice(a, b *decimal.Decimal) bool {
+	if a == nil || b == nil {
+		return a == nil && b == nil
+	}
+	return a.Equal(*b)
 }
 
 // CommoditySearchFunctions declares the function behind the generated
@@ -473,12 +527,25 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 
 	whenNotDraft := rules.WhenTrue(!a.Draft) // Rule to apply rules when not draft
 
+	// A known amount must not be negative. An unknown (nil) amount passes:
+	// a reviewed item may leave its purchase date and every price unknown.
+	nonNegative := func(price *decimal.Decimal) validation.Rule {
+		return validation.By(func(any) error {
+			if price == nil {
+				return nil
+			}
+			v, _ := price.Float64()
+			return validation.Min(0.00).Validate(v)
+		})
+	}
+
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 40)),
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
-		validation.Field(&a.PurchaseDate, whenNotDraft.WithRules(rules.NotEmpty)),
+		// The purchase date is optional on every item, draft or reviewed.
+		validation.Field(&a.PurchaseDate, DateFormat),
 		validation.Field(&a.Count, validation.Required, validation.Min(1)),
 		// #1554: Count > 1 is a "bundle of identical units" semantics, not
 		// a single tracked instance. Warranty fields describe a single
@@ -502,37 +569,15 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 			return nil
 		})),
 		validation.Field(&a.URLs),
-		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(priceRule, validation.By(func(any) error {
-			v, _ := a.OriginalPrice.Float64()
-			return validation.Min(0.00).Validate(v)
-		}))),
-		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(validation.By(func(val any) error {
-			if a.Draft {
-				return nil
-			}
-
-			return validation.Required.Validate(val)
-		}))),
-		// No validation.Required here either, for the reason given on
-		// CurrentPrice below (#1625): the PriceRule on OriginalPrice decides
-		// which prices must be set. Required also cannot tell 0 from a
-		// missing value: since shopspring/decimal 1.5.0, decimal.Zero is the
-		// zero Decimal, so Required rejected the decimal.Zero that restore
-		// and the currency migration set for group-currency items.
-		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(validation.By(func(any) error {
-			v, _ := a.ConvertedOriginalPrice.Float64()
-			return validation.Min(0.00).Validate(v)
-		}))),
-		// #1625: no validation.Required here. The cross-field PriceRule on
-		// OriginalPrice (line above) is the single source of truth for
-		// "at least one price is set" — it already rejects the all-zero
-		// foreign-currency case via ErrNoPriceInGroupCurrency and explicitly
-		// allows current_price = 0 in the same-currency case (the original
-		// price carries the canonical value, no conversion needed).
-		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(validation.By(func(any) error {
-			v, _ := a.CurrentPrice.Float64()
-			return validation.Min(0.00).Validate(v)
-		}))),
+		// The cross-field PriceRule is the single source of truth for which
+		// prices a known amount requires; no price is required on its own.
+		validation.Field(&a.OriginalPrice, whenNotDraft.WithRules(priceRule, nonNegative(a.OriginalPrice))),
+		// The currency is required on a reviewed item even when its
+		// purchase price is unknown: it is the currency the price is
+		// entered in once it becomes known.
+		validation.Field(&a.OriginalPriceCurrency, whenNotDraft.WithRules(validation.Required)),
+		validation.Field(&a.ConvertedOriginalPrice, whenNotDraft.WithRules(nonNegative(a.ConvertedOriginalPrice))),
+		validation.Field(&a.CurrentPrice, whenNotDraft.WithRules(nonNegative(a.CurrentPrice))),
 		// #1611: terminal-status metadata. The cross-field "required
 		// when the transition leaves in_use" check lives in the
 		// updateCommodity handler (it needs the previous status,

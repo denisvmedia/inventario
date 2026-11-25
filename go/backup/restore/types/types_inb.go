@@ -2,6 +2,7 @@ package types
 
 import (
 	"path"
+	"strconv"
 	"strings"
 	"time"
 
@@ -34,6 +35,42 @@ const INBUnassignedMember = "unassigned-commodities.json"
 // It lives under the `files/` prefix on purpose (see backup/export.INBFilesName),
 // so the walker MUST match it before the generic `files/` byte-member case.
 const INBFilesMember = "files/_index.json"
+
+// INBPricesKeepZero is the first format version (MAJOR, MINOR) whose archives
+// write a known zero price as "0" and leave an unknown price out. Kept in sync
+// with backup/export.INBFormatVersion.
+var INBPricesKeepZero = [2]int{3, 1}
+
+// PriceReading says how a restore reads an archive's prices.
+type PriceReading int
+
+const (
+	// PricesKeepZero reads an archive at INBPricesKeepZero or later: an
+	// absent price is unknown and "0" is a known zero.
+	PricesKeepZero PriceReading = iota
+	// PricesOmitZero reads an older archive, which left out every zero
+	// price. See INBCommodity.ConvertToCommodity.
+	PricesOmitZero
+)
+
+// PriceReadingFor returns the reading for an archive with the given manifest
+// format version. An absent or unparseable version counts as older: only
+// archives at INBPricesKeepZero or later declare it.
+func PriceReadingFor(version string) PriceReading {
+	majorPart, minorPart, _ := strings.Cut(version, ".")
+	major, err := strconv.Atoi(majorPart)
+	if err != nil {
+		return PricesOmitZero
+	}
+	minor, err := strconv.Atoi(minorPart)
+	if err != nil {
+		minor = 0
+	}
+	if major > INBPricesKeepZero[0] || (major == INBPricesKeepZero[0] && minor >= INBPricesKeepZero[1]) {
+		return PricesKeepZero
+	}
+	return PricesOmitZero
+}
 
 // INBManifest is the decoded manifest.json. Restore only reads the statistics
 // and the location index; the signature block is informational (verification
@@ -257,42 +294,50 @@ func (a *INBArea) ConvertToArea() *models.Area {
 // the destination DB ID). A malformed numeric field surfaces an error (tagged
 // with the field name and the commodity UUID) rather than being silently coerced
 // to zero, so a corrupt archive fails the restore instead of restoring wrong data.
-func (c *INBCommodity) ConvertToCommodity() (*models.Commodity, error) {
-	originalPrice, err := parseDecimal(c.OriginalPrice)
+//
+// With PricesKeepZero an absent price is unknown and "0" is a known zero.
+// PricesOmitZero reads an archive written before that distinction, which
+// omits every zero price: an absent purchase price restores as the zero it
+// was stored as, while an absent current or converted price, which at the
+// time meant "not set", restores as unknown. That is the same reading the
+// runtime backfill gives rows stored in a database of that age.
+func (c *INBCommodity) ConvertToCommodity(reading PriceReading) (*models.Commodity, error) {
+	originalPrice, err := parseDecimalPtr(c.OriginalPrice)
 	if err != nil {
 		return nil, errxtrace.Wrap("invalid originalPrice", err, errx.Attrs("commodity_id", c.ID))
 	}
-	currentPrice, err := parseDecimal(c.CurrentPrice)
+	if originalPrice == nil && reading == PricesOmitZero {
+		originalPrice = new(decimal.Zero)
+	}
+	currentPrice, err := parseDecimalPtr(c.CurrentPrice)
 	if err != nil {
 		return nil, errxtrace.Wrap("invalid currentPrice", err, errx.Attrs("commodity_id", c.ID))
+	}
+	convertedPrice, err := parseDecimalPtr(c.ConvertedOriginalPrice)
+	if err != nil {
+		return nil, errxtrace.Wrap("invalid convertedOriginalPrice", err, errx.Attrs("commodity_id", c.ID))
 	}
 
 	commodity := &models.Commodity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
 			EntityID: models.EntityID{UUID: c.ID},
 		},
-		Name:                  c.Name,
-		ShortName:             c.ShortName,
-		Type:                  models.CommodityType(c.Type),
-		AreaID:                inbAreaIDPtr(c.AreaID),
-		Count:                 c.Count,
-		OriginalPrice:         originalPrice,
-		OriginalPriceCurrency: models.Currency(c.OriginalPriceCurrency),
-		CurrentPrice:          currentPrice,
-		SerialNumber:          c.SerialNumber,
-		Status:                models.CommodityStatus(c.Status),
-		Comments:              c.Comments,
-		Draft:                 c.Draft,
-		ExtraSerialNumbers:    models.ValuerSlice[string](c.ExtraSerialNumbers),
-		PartNumbers:           models.ValuerSlice[string](c.PartNumbers),
-		Tags:                  models.ValuerSlice[string](c.Tags),
-	}
-	if c.ConvertedOriginalPrice != "" {
-		converted, cErr := parseDecimal(c.ConvertedOriginalPrice)
-		if cErr != nil {
-			return nil, errxtrace.Wrap("invalid convertedOriginalPrice", cErr, errx.Attrs("commodity_id", c.ID))
-		}
-		commodity.ConvertedOriginalPrice = converted
+		Name:                   c.Name,
+		ShortName:              c.ShortName,
+		Type:                   models.CommodityType(c.Type),
+		AreaID:                 inbAreaIDPtr(c.AreaID),
+		Count:                  c.Count,
+		OriginalPrice:          originalPrice,
+		OriginalPriceCurrency:  models.Currency(c.OriginalPriceCurrency),
+		ConvertedOriginalPrice: convertedPrice,
+		CurrentPrice:           currentPrice,
+		SerialNumber:           c.SerialNumber,
+		Status:                 models.CommodityStatus(c.Status),
+		Comments:               c.Comments,
+		Draft:                  c.Draft,
+		ExtraSerialNumbers:     models.ValuerSlice[string](c.ExtraSerialNumbers),
+		PartNumbers:            models.ValuerSlice[string](c.PartNumbers),
+		Tags:                   models.ValuerSlice[string](c.Tags),
 	}
 	if len(c.URLs) > 0 {
 		urls := make([]*models.URL, 0, len(c.URLs))
@@ -447,26 +492,11 @@ func inbAreaIDPtr(areaUUID string) *string {
 	return &areaUUID
 }
 
-// parseDecimal parses a decimal price string. An absent value (empty string) is
-// valid and yields decimal.Zero; a non-empty but unparseable value surfaces an
-// error rather than being silently coerced to zero, which would corrupt the
-// restored price.
-func parseDecimal(s string) (decimal.Decimal, error) {
-	if s == "" {
-		return decimal.Zero, nil
-	}
-	d, err := decimal.NewFromString(s)
-	if err != nil {
-		return decimal.Zero, errxtrace.Wrap("failed to parse decimal", err, errx.Attrs("value", s))
-	}
-	return d, nil
-}
-
-// parseDecimalPtr parses a nullable decimal column (SalePrice / AcquisitionPrice).
-// An absent value (empty string) yields a nil pointer — the column stays NULL —
-// while a non-empty but unparseable value surfaces an error rather than being
-// coerced. A legitimate "0" round-trips as a set pointer holding zero, mirroring
-// the exporter's nil-vs-zero distinction.
+// parseDecimalPtr parses a nullable decimal column (the three prices, SalePrice,
+// AcquisitionPrice). An absent value (empty string) yields a nil pointer — the
+// column stays NULL — while a non-empty but unparseable value surfaces an error
+// rather than being coerced. A legitimate "0" round-trips as a set pointer
+// holding zero, mirroring the exporter's nil-vs-zero distinction.
 func parseDecimalPtr(s string) (*decimal.Decimal, error) {
 	if s == "" {
 		return nil, nil

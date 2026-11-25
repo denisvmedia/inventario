@@ -3548,7 +3548,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/values": {
             "get": {
-                "description": "Get the total value of commodities globally, by location, and by area",
+                "description": "Get the total value of commodities globally, by location, and by area.\nOnly in-use, non-draft items count. An item's value is its current price,\nor its purchase price in the group currency when the current price is\nunknown; a known zero counts. Items with no known value are not added as\nzero: unvalued_count reports how many each total leaves out.",
                 "consumes": [
                     "application/json"
                 ],
@@ -11853,10 +11853,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "current_price_after": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "current_price_before": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_currency_after": {
                     "type": "string"
@@ -11865,10 +11867,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "original_price_after": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_price_before": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 }
             }
         },
@@ -13190,6 +13194,12 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "unvalued_count": {
+                    "description": "UnvaluedCount is the number of in-use items in this location or area\nthat have no known value and are therefore not part of Value.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "value": {
                     "type": "number"
                 }
@@ -13900,6 +13910,18 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/jsonapi.NamedTotal"
                     }
+                },
+                "unvalued_count": {
+                    "description": "UnvaluedCount is the number of in-use items GlobalTotal leaves out\nbecause neither their current value nor their purchase price is known.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                },
+                "valued_count": {
+                    "description": "ValuedCount is the number of in-use items that GlobalTotal includes.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 12
                 }
             }
         },
@@ -13983,7 +14005,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "converted_original_price": {
-                    "type": "number"
+                    "description": "ConvertedOriginalPrice is the purchase price in the group currency. It\nonly applies when OriginalPriceCurrency is a foreign currency.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "count": {
                     "type": "integer"
@@ -13993,7 +14017,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "current_price": {
-                    "type": "number"
+                    "description": "CurrentPrice is the current value in the group currency.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "draft": {
                     "type": "boolean"
@@ -14014,7 +14040,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "original_price": {
-                    "type": "number"
+                    "description": "The three prices are nil when unknown, which is distinct from a known\nzero (a gift, a free item). An item may be reviewed with any of them\nunknown; see Value for how they combine into a valuation.\n\nOriginalPrice is the purchase price in OriginalPriceCurrency.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_price_currency": {
                     "type": "string"
@@ -14026,7 +14054,9 @@ const docTemplate = `{
                     }
                 },
                 "purchase_date": {
-                    "type": "string"
+                    "description": "PurchaseDate is nil when the date is unknown.",
+                    "type": "string",
+                    "x-nullable": "true"
                 },
                 "registered_date": {
                     "type": "string"

@@ -25,7 +25,13 @@ package export
 // the same archive path, whose bytes appear once, after the first document
 // that references them. A 2.x reader would keep only one of the references, or
 // report the later ones as missing members, so the major version changes.
-const INBFormatVersion = "3.0"
+//
+// 3.1 tells an unknown price from a known zero: a price member is absent when
+// the price is unknown and "0" when it is a known zero. 3.0 omitted every zero
+// price instead. A 3.0 reader still restores a 3.1 archive, reading both
+// unknown and zero as zero, which is all it can store; a 3.1 reader reads a
+// 3.0 archive by its old meaning (see the restore side's PriceReadingFor).
+const INBFormatVersion = "3.1"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
