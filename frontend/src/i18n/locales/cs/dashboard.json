@@ -39,6 +39,10 @@
     "totalItems": "Celkem položek",
     "totalItemsSub": "Napříč všemi umístěními",
     "totalValue": "Odhadovaná celková hodnota",
+    "totalValueExcludes_one": "Nezahrnuje {{count}} položku bez hodnoty",
+    "totalValueExcludes_few": "Nezahrnuje {{count}} položky bez hodnoty",
+    "totalValueExcludes_many": "Nezahrnuje {{count}} položky bez hodnoty",
+    "totalValueExcludes_other": "Nezahrnuje {{count}} položek bez hodnoty",
     "totalValueSub": "Součet aktuálních cen"
   },
   "tagline": "Vše, co vlastníte, na jednom místě.",

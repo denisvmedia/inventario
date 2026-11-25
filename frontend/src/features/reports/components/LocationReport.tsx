@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity, CommodityCover } from "@/features/commodities/api"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { formatPrice, purchasePriceInGroupCurrency } from "@/features/commodities/price"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
@@ -34,19 +35,6 @@ interface LocationReportProps {
   generatedDate: string
 }
 
-// The BE marshals non-pointer decimals, so an unpriced item arrives as "0"
-// rather than undefined — the `!== undefined` guard was never false and every
-// such item rendered as a formatted zero (#2132).
-function priceOrNoValue(
-  raw: unknown,
-  currency: string,
-  noValue: string,
-  format: (n: number, c: string) => string
-): string {
-  const n = Number(raw)
-  return Number.isFinite(n) && n !== 0 ? format(n, currency) : noValue
-}
-
 export function LocationReport({
   locationName,
   locationIcon,
@@ -60,7 +48,7 @@ export function LocationReport({
 }: LocationReportProps) {
   const { t } = useTranslation()
   const noValue = t("reports:insurance.noValue")
-  const totals = aggregateLocationTotals(commodities)
+  const totals = aggregateLocationTotals(commodities, groupCurrency)
 
   return (
     <div className="space-y-10" data-testid="report-location">
@@ -102,12 +90,24 @@ export function LocationReport({
         <SummaryCard
           icon={DollarSign}
           label={t("reports:insurance.cards.totalPurchase")}
-          value={formatCurrency(totals.purchase, groupCurrency)}
+          value={formatCurrency(totals.purchase.total, groupCurrency)}
+          note={
+            totals.purchase.excluded > 0
+              ? t("reports:insurance.cards.excludesUnpriced", { count: totals.purchase.excluded })
+              : undefined
+          }
+          testId="report-location-total-purchase"
         />
         <SummaryCard
           icon={DollarSign}
           label={t("reports:insurance.cards.totalValue")}
-          value={formatCurrency(totals.value, groupCurrency)}
+          value={formatCurrency(totals.value.total, groupCurrency)}
+          note={
+            totals.value.excluded > 0
+              ? t("reports:insurance.cards.excludesUnvalued", { count: totals.value.excluded })
+              : undefined
+          }
+          testId="report-location-total-value"
         />
       </div>
 
@@ -122,13 +122,12 @@ export function LocationReport({
           imageSize,
           item.name ?? ""
         )
-        const purchase = priceOrNoValue(
-          item.converted_original_price,
-          groupCurrency,
-          noValue,
-          formatCurrency
-        )
-        const value = priceOrNoValue(item.current_price, groupCurrency, noValue, formatCurrency)
+        // The purchase row is in the group currency like the total above
+        // it: the purchase price itself when paid in the group currency,
+        // otherwise its converted amount.
+        const purchasePrice = purchasePriceInGroupCurrency(item, groupCurrency)
+        const purchase = formatPrice(purchasePrice, groupCurrency, noValue, formatCurrency)
+        const value = formatPrice(item.current_price, groupCurrency, noValue, formatCurrency)
         return (
           <div
             key={item.id}
@@ -244,13 +243,18 @@ function SummaryCard({
   icon: Icon,
   label,
   value,
+  note,
+  testId,
 }: {
   icon: typeof Package
   label: string
   value: string
+  // What the total leaves out, shown under it.
+  note?: string
+  testId?: string
 }) {
   return (
-    <div className="rounded-xl border border-border bg-muted/30 p-5">
+    <div className="rounded-xl border border-border bg-muted/30 p-5" data-testid={testId}>
       <div className="mb-2 flex items-center gap-2">
         <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
         <span className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -258,6 +262,7 @@ function SummaryCard({
         </span>
       </div>
       <p className="text-2xl font-bold tabular-nums">{value}</p>
+      {note ? <p className="mt-1 text-xs text-muted-foreground">{note}</p> : null}
     </div>
   )
 }

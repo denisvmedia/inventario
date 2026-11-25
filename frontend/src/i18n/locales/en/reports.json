@@ -4,6 +4,10 @@
     "cards": {
       "estimatedValue": "Estimated Value",
       "estimatedValueHint": "Current replacement estimate",
+      "excludesUnpriced_one": "Excludes {{count}} item without a purchase price",
+      "excludesUnpriced_other": "Excludes {{count}} items without a purchase price",
+      "excludesUnvalued_one": "Excludes {{count}} item without a current value",
+      "excludesUnvalued_other": "Excludes {{count}} items without a current value",
       "purchasePrice": "Purchase Price",
       "totalItems": "Total Items",
       "totalPurchase": "Total Purchase",

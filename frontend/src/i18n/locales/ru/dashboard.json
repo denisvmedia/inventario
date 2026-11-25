@@ -39,6 +39,10 @@
     "totalItems": "Всего предметов",
     "totalItemsSub": "По всем локациям",
     "totalValue": "Оценочная общая стоимость",
+    "totalValueExcludes_one": "Не учтён {{count}} предмет без стоимости",
+    "totalValueExcludes_few": "Не учтены {{count}} предмета без стоимости",
+    "totalValueExcludes_many": "Не учтено {{count}} предметов без стоимости",
+    "totalValueExcludes_other": "Не учтено {{count}} предмета без стоимости",
     "totalValueSub": "Сумма текущих цен"
   },
   "tagline": "Всё, чем вы владеете, как на ладони.",

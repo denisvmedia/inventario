@@ -5,6 +5,7 @@ import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
 import type { Commodity } from "@/features/commodities/api"
 import { warrantyStatus, type CommodityTypeValue } from "@/features/commodities/constants"
+import { formatPrice } from "@/features/commodities/price"
 import type { ListedFile } from "@/features/files/api"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -32,19 +33,6 @@ interface ItemReportProps {
   generatedDate: string
 }
 
-// The BE marshals non-pointer decimals, so an unpriced item arrives as "0"
-// rather than undefined — the `!== undefined` guard was never false and every
-// such item rendered as a formatted zero (#2132).
-function priceOrNoValue(
-  raw: unknown,
-  currency: string,
-  noValue: string,
-  format: (n: number, c: string) => string
-): string {
-  const n = Number(raw)
-  return Number.isFinite(n) && n !== 0 ? format(n, currency) : noValue
-}
-
 export function ItemReport({
   commodity,
   imageFiles,
@@ -62,13 +50,13 @@ export function ItemReport({
   const WarrantyIcon = wConfig.icon
   const photos = filesToPhotos(imageFiles, imageSize)
 
-  const purchasePrice = priceOrNoValue(
+  const purchasePrice = formatPrice(
     commodity.original_price,
     purchaseCurrency,
     noValue,
     formatCurrency
   )
-  const estimatedValue = priceOrNoValue(
+  const estimatedValue = formatPrice(
     commodity.current_price,
     groupCurrency,
     noValue,

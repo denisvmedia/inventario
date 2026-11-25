@@ -11,7 +11,11 @@
       "errorTitle": "Položky nelze načíst",
       "statsActiveWarranties": "Aktivní záruky",
       "statsItems": "Položky",
-      "statsValue": "Odhad. hodnota"
+      "statsValue": "Odhad. hodnota",
+      "statsValueExcludes_one": "Nezahrnuje {{count}} položku bez hodnoty",
+      "statsValueExcludes_few": "Nezahrnuje {{count}} položky bez hodnoty",
+      "statsValueExcludes_many": "Nezahrnuje {{count}} položky bez hodnoty",
+      "statsValueExcludes_other": "Nezahrnuje {{count}} položek bez hodnoty"
     },
     "printAreaAndItemLabels": "Štítky pro oblast a její položky",
     "printAreaLabel": "Štítek pro tuto oblast",

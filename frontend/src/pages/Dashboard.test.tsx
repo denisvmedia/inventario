@@ -100,6 +100,37 @@ describe("<DashboardPage />", () => {
     expect(rows[2]).toHaveTextContent("Office chair")
   })
 
+  it("says how many items the total value leaves out", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", { name: "Grandfather clock", current_price: null }),
+        commodityResource("c2", { name: "Free chair", current_price: 0 }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0, valuedCount: 1, unvaluedCount: 1 })
+    )
+    renderDashboard()
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("2")
+    )
+    const card = screen.getByTestId("dashboard-total-value")
+    expect(card).toHaveTextContent("$0")
+    expect(card).toHaveTextContent("Excludes 1 item without a value")
+  })
+
+  it("keeps the usual caption when every item has a value", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 10, valuedCount: 1, unvaluedCount: 0 })
+    )
+    renderDashboard()
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-total-value")).toHaveTextContent("Sum of current prices")
+    )
+    expect(screen.getByTestId("dashboard-total-value")).not.toHaveTextContent(/Excludes/)
+  })
+
   // #1581 item 6: a plain click on a Recently-Added row opens the
   // commodity detail in the slide-out sheet overlay — it navigates to the
   // detail route AND stamps the current dashboard URL onto

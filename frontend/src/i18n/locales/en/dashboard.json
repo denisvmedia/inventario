@@ -33,6 +33,8 @@
     "totalItems": "Total items",
     "totalItemsSub": "Across all locations",
     "totalValue": "Estimated total value",
+    "totalValueExcludes_one": "Excludes {{count}} item without a value",
+    "totalValueExcludes_other": "Excludes {{count}} items without a value",
     "totalValueSub": "Sum of current prices"
   },
   "tagline": "Everything you own, at a glance.",

@@ -111,8 +111,28 @@ the section matching the tag and publishes it as the GitHub Release body. See
   as it was left, and "Save and next" on the edit form saves and opens the
   next item's form
   ([#2795](https://github.com/denisvmedia/inventario/issues/2795)).
+- A finished item can keep its purchase date and prices unknown, for a gift
+  or an inherited object. A blank price is unknown and `0` is a known zero;
+  the original price, the converted price and the current value can each be
+  unknown on their own. Unknown shows as "—", lists sorted by purchase date
+  or price put such items last, and the dashboard, area and insurance report
+  totals leave them out and say how many they exclude
+  ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
 
 ### Changed
+
+- Item API: `original_price`, `converted_original_price` and `current_price`
+  are `null` when unknown, and a request that omits one or sends `null`
+  stores it as unknown rather than as zero. `GET /commodities/values` adds
+  `valued_count` and `unvalued_count`, and each location and area total an
+  `unvalued_count`. After the upgrade the server rewrites, in the background,
+  the zero current and converted prices that older versions stored for "not
+  entered" as unknown; a zero original price is kept, since it may be a free
+  item. Backups are written in INB format 3.1, which keeps unknown and zero
+  apart; older backups still restore. Rolling back to v0.2.2 or earlier after
+  an item has an unknown price is not supported, because those versions
+  cannot read it
+  ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
 
 - File API: a file carries a `links` list instead of `linked_entity_type`,
   `linked_entity_id` and `linked_entity_meta`, and `PUT /files/{id}` no

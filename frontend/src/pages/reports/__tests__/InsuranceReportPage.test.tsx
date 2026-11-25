@@ -196,6 +196,36 @@ describe("<InsuranceReportPage /> — location mode", () => {
     expect(within(report).getByText("$690.00")).toBeInTheDocument()
   })
 
+  it("leaves unknown prices out of the totals and says so, but shows a zero", () => {
+    const gift = { id: "c3", name: "Grandfather clock", type: "furniture", area_id: "a1" }
+    const free = {
+      id: "c4",
+      name: "Free chair",
+      type: "furniture",
+      original_price: "0",
+      original_price_currency: "USD",
+      current_price: "0",
+      area_id: "a1",
+    }
+    mockUseAllCommodities.mockReturnValue({
+      data: { commodities: [itemC1, gift, free], total: 3, covers: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useAllCommodities>)
+    renderPage("?mode=location&location=loc1")
+    const report = screen.getByTestId("report-location")
+    const purchase = within(report).getByTestId("report-location-total-purchase")
+    expect(purchase).toHaveTextContent("$700.00")
+    expect(purchase).toHaveTextContent("Excludes 1 item without a purchase price")
+    const value = within(report).getByTestId("report-location-total-value")
+    expect(value).toHaveTextContent("$650.00")
+    expect(value).toHaveTextContent("Excludes 1 item without a current value")
+
+    const [, giftSection, freeSection] = within(report).getAllByTestId("report-location-item")
+    expect(giftSection).not.toHaveTextContent("$0.00")
+    expect(freeSection).toHaveTextContent("$0.00")
+  })
+
   it("shows the empty state when the location has no items", () => {
     mockUseAllCommodities.mockReturnValue({
       data: { commodities: [], total: 0, covers: {} },
