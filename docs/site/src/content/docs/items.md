@@ -238,6 +238,10 @@ A draft keeps the [seller](../sellers/) you picked. If someone deletes that
 seller before you finish, the **Seller** field says so, and the item is not
 added until you pick another seller or clear the field.
 
+The same goes for the [item type](../item-types/). If someone deletes the type
+the draft names, **Save draft** and **Add item** say so on the **Type** field,
+and neither goes through until you pick another type.
+
 ### Drafts of an existing item
 
 When you edit an item, the **Save as draft** switch marks the item itself as

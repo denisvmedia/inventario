@@ -46,7 +46,11 @@ import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
-import { type ClassifiedServerError, classifyServerError } from "@/lib/server-error"
+import {
+  type ClassifiedServerError,
+  classifyServerError,
+  extractFieldErrorCodes,
+} from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
 
@@ -780,6 +784,16 @@ export function CommodityFormDialog({
     }
     if (discardedConflict(err)) {
       setDraftSave({ kind: "discarded" })
+      return
+    }
+    // A type the group no longer has (deleted while the draft was open) is
+    // refused on values.type; it is shown on the type field, as an item
+    // save shows it.
+    if (extractFieldErrorCodes(err)?.["values.type"]) {
+      const message = t("errors:validation.item_type_unknown")
+      setError("type", { type: "server", message })
+      setStep("basics")
+      setDraftSave({ kind: "error", message, failedFiles: [] })
       return
     }
     setDraftSave({

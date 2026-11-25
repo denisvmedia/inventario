@@ -284,6 +284,45 @@ describe("<CommodityFormDialog /> server drafts", () => {
     expect(fake.drafts.map((d) => d.values.name)).toEqual(["Kettle"])
   })
 
+  it("shows a type the group no longer has on the type field", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", revision: 1, values: { name: "Dinghy", short_name: "Dinghy", type: "boat" } },
+    ])
+    server.use(
+      ...groupHandlers.list(groups),
+      http.put(apiUrl(`/g/${SLUG}/drafts/d1`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Unprocessable Entity",
+                error: {
+                  error: { data: { attributes: { values: { type: "no item type" } } } },
+                  errorCodes: {
+                    data: { attributes: { values: { type: { code: "item_type_unknown" } } } },
+                  },
+                },
+              },
+            ],
+          },
+          { status: 422 }
+        )
+      ),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    const { onOpenChange, input } = await openResumed("d1", "Dinghy")
+    await user.type(input, " 2")
+    await user.click(screen.getByLabelText(/Save as draft/i))
+    await user.click(screen.getByTestId("commodity-form-save-draft"))
+    expect(await screen.findByTestId("draft-save-error")).toHaveTextContent(
+      "This type is not in the group."
+    )
+    expect(screen.getAllByText("This type is not in the group.")).toHaveLength(2)
+    expect(onOpenChange).not.toHaveBeenCalled()
+    expect(fake.drafts[0].revision).toBe(1)
+  })
+
   it("finishes a save whose response was lost instead of reporting a conflict", async () => {
     const fake = draftHandlers.backend(SLUG, [
       { id: "d1", revision: 1, values: { name: "Lamp", short_name: "Lamp" } },
