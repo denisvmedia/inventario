@@ -1,8 +1,13 @@
-import { useEffect, useState } from "react"
+import { useMemo, useState } from "react"
+import { defaultFilter } from "cmdk"
 import {
+  ArrowRight,
+  Box,
+  FileText,
   FolderOpen,
   HardDriveDownload,
   LayoutDashboard,
+  ListFilter,
   MapPin,
   Package,
   Search,
@@ -12,6 +17,7 @@ import {
   Tag,
   User,
   Users,
+  type LucideIcon,
 } from "lucide-react"
 import { useNavigate } from "react-router-dom"
 import { useTranslation } from "react-i18next"
@@ -24,8 +30,30 @@ import {
   CommandList,
   CommandSeparator,
 } from "@/components/ui/command"
+import { commodityListHref, primarySearchMatch } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import type { LocationGroup } from "@/features/group/api"
+import type {
+  AreaAttrs,
+  CommodityAttrs,
+  FileAttrs,
+  LocationAttrs,
+  TagAttrs,
+} from "@/features/search/api"
+import { useSearch } from "@/features/search/hooks"
+import { getRecent, pushRecent, type RecentEntry } from "@/features/search/recent"
+import {
+  areaHref,
+  areaItemsHref,
+  commodityHref,
+  commoditySubtitle,
+  fileHref,
+  locationHref,
+  tagHref,
+  tagListHref,
+} from "@/features/search/results"
+import { useTagLabel } from "@/features/tags/hooks"
+import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { withGroupQuery } from "@/lib/group-aware-url"
 import { useNavLabel } from "@/lib/nav-labels"
 
@@ -111,6 +139,35 @@ const NAVIGATION: PaletteEntry[] = [
 // variable and avoid template-literal extraction noise from
 // i18next-cli (see the matching note in AppSidebar.tsx).
 
+// The server search runs from this many characters on, a moment after the
+// typing stops.
+const MIN_SEARCH_CHARS = 2
+const SEARCH_DEBOUNCE_MS = 250
+// Rows per kind. Items get more room: they are what is searched for most.
+const ITEM_LIMIT = 5
+const OTHER_LIMIT = 3
+const RECENT_LIMIT = 5
+
+// Search results and recent entries carry values with this prefix. The
+// server has already matched them, so the palette keeps them as they are;
+// cmdk's own fuzzy match only narrows the navigation entries. Results score
+// as high as an exact navigation match and come first in the list, so they
+// stay above the navigation entries.
+const RESULT_PREFIX = "result:"
+
+function paletteFilter(value: string, search: string, keywords?: string[]): number {
+  if (value.startsWith(RESULT_PREFIX)) return 1
+  return defaultFilter(value, search, keywords)
+}
+
+const RESOURCE_ICON: Record<RecentEntry["type"], LucideIcon> = {
+  commodity: Package,
+  location: MapPin,
+  area: Box,
+  tag: Tag,
+  file: FileText,
+}
+
 interface PaletteRowProps {
   entry: PaletteEntry
   target: string | null
@@ -132,87 +189,216 @@ function PaletteRow({ entry, target, onSelect }: PaletteRowProps) {
   )
 }
 
-// CommandPalette is the Cmd/Ctrl+K quick-nav. It opens whenever the
-// platform-appropriate shortcut is pressed AND the user isn't typing in an
-// input (cmdk handles the focus check via its `onKeyDown` integration; we
-// just bind the global shortcut). Typing a query surfaces a "Search 'X'…"
-// entry that hands the query off to /g/{slug}/search?q=… (the global
-// search page from #1416).
-export function CommandPalette() {
-  const [open, setOpen] = useState(false)
-  const [query, setQuery] = useState("")
+interface RelatedAction {
+  label: string
+  ariaLabel: string
+  onSelect: () => void
+  testId: string
+}
+
+interface ResultRowProps {
+  value: string
+  icon: LucideIcon
+  title: string
+  subtitle?: string
+  onSelect: () => void
+  testId: string
+  // A second action on the row: the items in an area, the items or files
+  // carrying a tag. It is an option of its own, so arrow keys, a click and
+  // a tap reach it like the row.
+  related?: RelatedAction
+}
+
+function ResultRow({
+  value,
+  icon: Icon,
+  title,
+  subtitle,
+  onSelect,
+  testId,
+  related,
+}: ResultRowProps) {
+  const row = (
+    <CommandItem
+      value={value}
+      onSelect={onSelect}
+      className="min-w-0 flex-1 gap-3"
+      data-testid={testId}
+    >
+      <div className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted">
+        <Icon className="size-3.5 text-muted-foreground" />
+      </div>
+      <div className="flex min-w-0 flex-1 items-baseline gap-2">
+        <span className="truncate text-sm font-medium">{title}</span>
+        {subtitle ? (
+          <span className="truncate text-xs text-muted-foreground">{subtitle}</span>
+        ) : null}
+      </div>
+    </CommandItem>
+  )
+  if (!related) return row
+  return (
+    <div className="flex items-center gap-1">
+      {row}
+      <CommandItem
+        value={`${value}:related`}
+        onSelect={related.onSelect}
+        aria-label={related.ariaLabel}
+        className="shrink-0 gap-1.5 text-xs text-muted-foreground"
+        data-testid={related.testId}
+      >
+        <ListFilter className="size-3.5" />
+        <span>{related.label}</span>
+      </CommandItem>
+    </div>
+  )
+}
+
+interface CommandPaletteProps {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  onCloseAutoFocus?: (event: Event) => void
+  onInteractOutside?: (event: Event) => void
+}
+
+// CommandPalette is the global search and quick-nav. CommandPaletteProvider
+// owns its open state: Cmd/Ctrl+K and the search entry in the TopBar open
+// it. Typing searches items, locations, areas, files and tags of the active
+// group through GET /search and lists the matches by kind; a row opens the
+// result, and an area or tag row also offers its items. "Search 'X'…" hands
+// the query to the search page (#1416), and the items group links to the
+// items list with the same query.
+export function CommandPalette({
+  open,
+  onOpenChange,
+  onCloseAutoFocus,
+  onInteractOutside,
+}: CommandPaletteProps) {
+  const { t } = useTranslation()
+  return (
+    <CommandDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      onCloseAutoFocus={onCloseAutoFocus}
+      onInteractOutside={onInteractOutside}
+      contentTestId="command-palette"
+      filter={paletteFilter}
+      title={t("common:shell.commandTitle")}
+      description={t("common:shell.commandDescription")}
+    >
+      {/* The dialog unmounts its content when it closes, so each open
+          starts with an empty query and the hooks below run only while
+          the palette is on screen. */}
+      <PaletteBody onClose={() => onOpenChange(false)} />
+    </CommandDialog>
+  )
+}
+
+function PaletteBody({ onClose }: { onClose: () => void }) {
+  const { t } = useTranslation()
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
-  const { t } = useTranslation()
   const groupSlug = currentGroup?.slug ?? null
+  const [query, setQuery] = useState("")
+  const trimmedQuery = query.trim()
+  const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
+  const searching = groupSlug !== null && trimmedQuery.length >= MIN_SEARCH_CHARS
+  // Results are shown for the query as typed only; while the debounce
+  // trails, the previous query's results would describe something else.
+  const settledQuery = searching && debouncedQuery === trimmedQuery ? debouncedQuery : ""
 
-  // Reset the query when the palette closes so the next open starts
-  // empty — otherwise the user's last keyword sits there with no
-  // visible cursor and the navigation list is filtered against it.
-  useEffect(() => {
-    // Sync from external open prop → local query input.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!open) setQuery("")
-  }, [open])
+  const searchOptions = { groupSlug, minChars: MIN_SEARCH_CHARS }
+  const items = useSearch<CommodityAttrs>(settledQuery, "commodities", {
+    ...searchOptions,
+    limit: ITEM_LIMIT,
+  })
+  const locations = useSearch<LocationAttrs>(settledQuery, "locations", {
+    ...searchOptions,
+    limit: OTHER_LIMIT,
+  })
+  const areas = useSearch<AreaAttrs>(settledQuery, "areas", {
+    ...searchOptions,
+    limit: OTHER_LIMIT,
+  })
+  const files = useSearch<FileAttrs>(settledQuery, "files", {
+    ...searchOptions,
+    limit: OTHER_LIMIT,
+  })
+  const tags = useSearch<TagAttrs>(settledQuery, "tags", { ...searchOptions, limit: OTHER_LIMIT })
+  const tagLabel = useTagLabel("commodity")
 
-  useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      const isShortcut =
-        (event.key === "k" || event.key === "K") && (event.metaKey || event.ctrlKey)
-      if (!isShortcut) return
-      event.preventDefault()
-      setOpen((prev) => !prev)
-    }
-    window.addEventListener("keydown", onKeyDown)
-    return () => window.removeEventListener("keydown", onKeyDown)
-  }, [])
+  // Read once per open; the palette is not on screen while a result is
+  // being visited.
+  const recent = useMemo(
+    () => (groupSlug ? getRecent(groupSlug).slice(0, RECENT_LIMIT) : []),
+    [groupSlug]
+  )
+
+  const sections = [items, locations, areas, files, tags]
+  // isLoading, not isFetching: a background refetch of a cached query keeps
+  // its results on screen.
+  const pending = searching && (settledQuery === "" || sections.some((s) => s.isLoading))
+  const resultCount = sections.reduce((sum, s) => sum + (s.data?.results.length ?? 0), 0)
+  const allFailed = sections.every((s) => s.isError)
 
   function go(path: string | null) {
     if (!path) return
-    setOpen(false)
+    onClose()
     navigate(path)
   }
 
-  function runSearch() {
-    if (!groupSlug) return
-    const trimmed = query.trim()
-    if (!trimmed) return
-    setOpen(false)
-    navigate(`/g/${encodeURIComponent(groupSlug)}/search?q=${encodeURIComponent(trimmed)}`)
+  // Opens a result and remembers it for the empty palette and the empty
+  // search page.
+  function openResult(entry: Omit<RecentEntry, "visitedAt">) {
+    if (groupSlug) pushRecent(groupSlug, entry)
+    go(entry.url)
   }
 
-  const trimmedQuery = query.trim()
+  function runSearch() {
+    if (!groupSlug || !trimmedQuery) return
+    go(`/g/${encodeURIComponent(groupSlug)}/search?q=${encodeURIComponent(trimmedQuery)}`)
+  }
+
+  let status: { text: string; testId: string } | null = null
+  if (trimmedQuery.length < MIN_SEARCH_CHARS) {
+    if (groupSlug) status = { text: t("common:shell.commandHint"), testId: "palette-hint" }
+  } else if (searching && pending) {
+    status = { text: t("search:loading"), testId: "palette-searching" }
+  } else if (searching && resultCount === 0) {
+    status = allFailed
+      ? { text: t("search:errorTitle"), testId: "palette-search-error" }
+      : {
+          text: t("common:shell.commandNoResults", { query: trimmedQuery }),
+          testId: "palette-no-results",
+        }
+  }
+
+  const showResults = searching && !pending && groupSlug !== null
 
   return (
-    <CommandDialog open={open} onOpenChange={setOpen} contentTestId="command-palette">
+    <>
       <CommandInput
         placeholder={t("common:shell.commandPlaceholder")}
         value={query}
         onValueChange={setQuery}
       />
+      {/* Outside the listbox, so it is announced as a status rather than
+          read as an option. */}
+      {status ? (
+        <p
+          role="status"
+          className="px-4 pt-3 pb-1 text-xs text-muted-foreground"
+          data-testid={status.testId}
+        >
+          {status.text}
+        </p>
+      ) : null}
       <CommandList>
-        {/* cmdk only renders <CommandEmpty> when its filtered count is 0, and
-            the search-handoff CommandItem (rendered below) always matches the
-            current query — so CommandEmpty never fires here. We surface the
-            initial-hint and no-results-for-query messages ourselves so both
-            states stay reachable. */}
-        {trimmedQuery.length === 0 ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">
-            {t("common:shell.commandHint")}
-          </p>
-        ) : (
-          <p
-            className="px-2 pt-3 pb-1 text-xs text-muted-foreground"
-            data-testid="palette-no-results"
-          >
-            {t("common:shell.commandNoResults", { query: trimmedQuery })}
-          </p>
-        )}
         {trimmedQuery && groupSlug ? (
           <>
             <CommandGroup heading={t("common:shell.commandGroupSearch")}>
               <CommandItem
-                value={`__search__:${trimmedQuery}`}
+                value={`${RESULT_PREFIX}see-all`}
                 onSelect={runSearch}
                 data-testid="palette-search-handoff"
               >
@@ -223,6 +409,190 @@ export function CommandPalette() {
             <CommandSeparator />
           </>
         ) : null}
+
+        {showResults && items.data && items.data.results.length > 0 ? (
+          <CommandGroup heading={t("search:groups.commodities")} data-testid="palette-group-items">
+            {items.data.results.map((r) => {
+              const title = r.attributes.name ?? r.id
+              return (
+                <ResultRow
+                  key={r.id}
+                  value={`${RESULT_PREFIX}commodity:${r.id}`}
+                  icon={Package}
+                  title={title}
+                  subtitle={commoditySubtitle(
+                    t,
+                    r.attributes,
+                    primarySearchMatch(items.data?.matches[r.id]),
+                    tagLabel
+                  )}
+                  onSelect={() =>
+                    openResult({
+                      type: "commodity",
+                      id: r.id,
+                      title,
+                      url: commodityHref(groupSlug, r.id),
+                    })
+                  }
+                  testId={`palette-result-commodity-${r.id}`}
+                />
+              )
+            })}
+            {/* /search counts drafts and inactive items, so the list shows
+                them too, as the search page's "see all" does. */}
+            <CommandItem
+              value={`${RESULT_PREFIX}all-items`}
+              onSelect={() =>
+                go(commodityListHref(groupSlug, { text: settledQuery, includeInactive: true }))
+              }
+              className="text-muted-foreground"
+              data-testid="palette-all-items"
+            >
+              <ArrowRight className="size-4" />
+              <span>{t("common:shell.commandAllItems", { total: items.data.total })}</span>
+            </CommandItem>
+          </CommandGroup>
+        ) : null}
+
+        {showResults && locations.data && locations.data.results.length > 0 ? (
+          <CommandGroup
+            heading={t("search:groups.locations")}
+            data-testid="palette-group-locations"
+          >
+            {locations.data.results.map((r) => {
+              const title = r.attributes.name ?? r.id
+              return (
+                <ResultRow
+                  key={r.id}
+                  value={`${RESULT_PREFIX}location:${r.id}`}
+                  icon={MapPin}
+                  title={title}
+                  subtitle={r.attributes.address || undefined}
+                  onSelect={() =>
+                    openResult({
+                      type: "location",
+                      id: r.id,
+                      title,
+                      url: locationHref(groupSlug, r.id),
+                    })
+                  }
+                  testId={`palette-result-location-${r.id}`}
+                />
+              )
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {showResults && areas.data && areas.data.results.length > 0 ? (
+          <CommandGroup heading={t("search:groups.areas")} data-testid="palette-group-areas">
+            {areas.data.results.map((r) => {
+              const title = r.attributes.name ?? r.id
+              return (
+                <ResultRow
+                  key={r.id}
+                  value={`${RESULT_PREFIX}area:${r.id}`}
+                  icon={Box}
+                  title={title}
+                  onSelect={() =>
+                    openResult({ type: "area", id: r.id, title, url: areaHref(groupSlug, r.id) })
+                  }
+                  testId={`palette-result-area-${r.id}`}
+                  related={{
+                    label: t("search:resultCard.showItems"),
+                    ariaLabel: t("search:resultCard.showItemsInArea", { name: title }),
+                    onSelect: () => go(areaItemsHref(groupSlug, r.id)),
+                    testId: `palette-area-items-${r.id}`,
+                  }}
+                />
+              )
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {showResults && files.data && files.data.results.length > 0 ? (
+          <CommandGroup heading={t("search:groups.files")} data-testid="palette-group-files">
+            {files.data.results.map((r) => {
+              const title = r.attributes.title || r.attributes.path || r.id
+              return (
+                <ResultRow
+                  key={r.id}
+                  value={`${RESULT_PREFIX}file:${r.id}`}
+                  icon={FileText}
+                  title={title}
+                  subtitle={
+                    r.attributes.path && r.attributes.path !== title ? r.attributes.path : undefined
+                  }
+                  onSelect={() =>
+                    openResult({ type: "file", id: r.id, title, url: fileHref(groupSlug, r.id) })
+                  }
+                  testId={`palette-result-file-${r.id}`}
+                />
+              )
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {showResults && tags.data && tags.data.results.length > 0 ? (
+          <CommandGroup heading={t("search:groups.tags")} data-testid="palette-group-tags">
+            {tags.data.results.map((r) => {
+              const title = r.attributes.label || r.attributes.slug || r.id
+              const isFileTag = r.attributes.kind === "file"
+              return (
+                <ResultRow
+                  key={r.id}
+                  value={`${RESULT_PREFIX}tag:${r.id}`}
+                  icon={Tag}
+                  title={title}
+                  subtitle={
+                    isFileTag ? t("search:resultCard.fileTag") : t("search:resultCard.itemTag")
+                  }
+                  onSelect={() =>
+                    openResult({
+                      type: "tag",
+                      id: r.id,
+                      title,
+                      url: tagHref(groupSlug, r.attributes),
+                    })
+                  }
+                  testId={`palette-result-tag-${r.id}`}
+                  related={{
+                    label: isFileTag
+                      ? t("search:resultCard.showFiles")
+                      : t("search:resultCard.showItems"),
+                    ariaLabel: isFileTag
+                      ? t("search:resultCard.showFilesTagged", { name: title })
+                      : t("search:resultCard.showItemsTagged", { name: title }),
+                    onSelect: () => go(tagListHref(groupSlug, r.attributes)),
+                    testId: `palette-tag-list-${r.id}`,
+                  }}
+                />
+              )
+            })}
+          </CommandGroup>
+        ) : null}
+
+        {!trimmedQuery && recent.length > 0 ? (
+          <>
+            <CommandGroup
+              heading={t("common:shell.commandGroupRecent")}
+              data-testid="palette-group-recent"
+            >
+              {recent.map((entry) => (
+                <ResultRow
+                  key={`${entry.type}:${entry.id}`}
+                  value={`${RESULT_PREFIX}recent:${entry.type}:${entry.id}`}
+                  icon={RESOURCE_ICON[entry.type] ?? FileText}
+                  title={entry.title}
+                  subtitle={t(`search:kinds.${entry.type}`)}
+                  onSelect={() => openResult(entry)}
+                  testId={`palette-recent-${entry.type}-${entry.id}`}
+                />
+              ))}
+            </CommandGroup>
+            <CommandSeparator />
+          </>
+        ) : null}
+
         <CommandGroup heading={t("common:shell.commandGroupNavigation")}>
           {NAVIGATION.map((entry) => (
             <PaletteRow
@@ -234,6 +604,6 @@ export function CommandPalette() {
           ))}
         </CommandGroup>
       </CommandList>
-    </CommandDialog>
+    </>
   )
 }

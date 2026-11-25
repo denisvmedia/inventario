@@ -238,7 +238,8 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 // Search filters by. It is nil when neither a search term nor a concrete kind
 // narrows the list.
 //
-// The search term matches the label or the slug. The kind filter is
+// The search term matches the label or the slug as a literal substring, as
+// in the memory backend: a % or _ in it matches only itself. The kind filter is
 // intrinsic: a tag passes ?kind=commodity when its stored kind is
 // "commodity", and the same for file. The zero kind adds no condition and
 // lists across all kinds, which only internal callers ask for.
@@ -246,7 +247,7 @@ func tagWhere(search string, kind models.TagKind) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	if search != "" {
-		pattern := "%" + search + "%"
+		pattern := containsPattern(search)
 		exprs = append(exprs, cond.Or(cond.ILike("t.label", pattern), cond.ILike("t.slug", pattern)))
 	}
 	if kind == models.TagKindCommodity || kind == models.TagKindFile {

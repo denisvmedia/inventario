@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { Link, useMatch, useNavigate } from "react-router-dom"
+import { Link, useMatch, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
   ChevronRight,
@@ -33,6 +33,7 @@ import { useAreas, useCreateArea } from "@/features/areas/hooks"
 import { useAreaItemCounter, useCommodities } from "@/features/commodities/hooks"
 import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { matchesEveryTerm, splitSearchTerms } from "@/features/search/terms"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
@@ -51,6 +52,10 @@ interface LocationsListPageProps {
 // surfaced as "{N}+" so the chip stays useful instead of silently
 // undercounting.
 const ITEM_COUNT_FETCH_CAP = 100
+
+// How long typing in the search box pauses before the query goes into the
+// URL; the list itself filters on every keystroke.
+const SEARCH_DEBOUNCE_MS = 250
 
 // /locations — list of every location in the active group. Each card is
 // a click-through tile (MapPin avatar + name + address + areas/items
@@ -89,8 +94,44 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   // Search filters locations + their areas client-side. The list is
   // typically small (single-digit) so paging / server-side search
-  // would be over-engineered.
-  const [query, setQuery] = useState("")
+  // would be over-engineered. The query lives in `?q=`, which the search
+  // page's and the palette's links to the list carry.
+  //
+  // The input keeps its own state: the router applies URL changes in a
+  // transition, and a text input controlled by a lagging value loses
+  // keystrokes. A new `q` from a link or from back/forward replaces what
+  // is typed; the URL catching up with the input leaves it alone, so a
+  // trailing space being typed survives.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const urlQuery = searchParams.get("q") ?? ""
+  const [query, setQuery] = useState(urlQuery)
+  const [seenUrlQuery, setSeenUrlQuery] = useState(urlQuery)
+  if (urlQuery !== seenUrlQuery) {
+    setSeenUrlQuery(urlQuery)
+    if (urlQuery !== query.trim()) setQuery(urlQuery)
+  }
+
+  // Write the typed query into the URL once typing pauses, so a reload,
+  // a shared link or back/forward keeps the filter.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed === urlQuery) return
+    const timer = window.setTimeout(() => {
+      setSearchParams(
+        (prev) => {
+          const next = new URLSearchParams(prev)
+          if (trimmed) {
+            next.set("q", trimmed)
+          } else {
+            next.delete("q")
+          }
+          return next
+        },
+        { replace: true }
+      )
+    }, SEARCH_DEBOUNCE_MS)
+    return () => window.clearTimeout(timer)
+  }, [query, urlQuery, setSearchParams])
 
   // Target for the non-empty cascade/unlink delete dialog (#2137); null
   // when closed.
@@ -146,19 +187,20 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
 
   const filteredLocations = useMemo(() => {
     const list = locations.data ?? []
-    if (!query.trim()) return list
-    const q = query.trim().toLowerCase()
+    const terms = splitSearchTerms(query)
+    if (terms.length === 0) return list
     const areaList = areas.data ?? []
-    return list.filter((l) => {
-      if ((l.name ?? "").toLowerCase().includes(q)) return true
-      if ((l.address ?? "").toLowerCase().includes(q)) return true
-      // A location matches if any of its areas match the query — keeps
-      // search useful when the user remembers the room name but not
-      // the building it's in.
-      return areaList.some(
-        (a) => a.location_id === l.id && (a.name ?? "").toLowerCase().includes(q)
-      )
-    })
+    // Every term has to be found in the location's name or address, as
+    // the search page matches locations, or in the name of one of its
+    // areas — which keeps search useful when the user remembers the room
+    // name but not the building it's in.
+    return list.filter((l) =>
+      matchesEveryTerm(terms, [
+        l.name,
+        l.address,
+        ...areaList.filter((a) => a.location_id === l.id).map((a) => a.name),
+      ])
+    )
   }, [locations.data, areas.data, query])
 
   async function handleCreateLocation(values: {

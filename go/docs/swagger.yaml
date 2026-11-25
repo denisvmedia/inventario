@@ -9958,6 +9958,8 @@ paths:
         Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
         Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
         Drafts and inactive items are included unless include_inactive=false.
+        Locations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.
+        Tags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.
       parameters:
       - description: Group slug
         in: path
@@ -9976,6 +9978,7 @@ paths:
         - files
         - areas
         - locations
+        - tags
         in: query
         name: type
         type: string

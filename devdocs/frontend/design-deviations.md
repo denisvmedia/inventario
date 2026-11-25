@@ -724,6 +724,42 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) for skipping steps and for launching once a group is active (#2787 decisions), and for the narrow-screen gate with the user-menu entry left out (2026-11-24, after #2816 merged: a guided tour of a collapsed sidebar on a phone has no good shape).
 - **Reversion plan**: Permanent for the no-group behavior. If the tour gains a mobile variant (for example one that opens the sidebar sheet first), drop the narrow-screen gate.
 
+#### 2026-11-25 — TopBar search entry on narrow screens
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) has a "Search…" button with a `⌘ K` `KbdGroup` and an "Open command palette" tooltip. It is `hidden sm:flex`, so below the `sm` breakpoint the header has no way into the palette.
+- **Reality**: `frontend/src/components/HeaderSearch.tsx` renders the mock's button from `sm` up. Below `sm` it renders an outline icon `Button` (`size="icon"`, `Search` icon, accessible name "Search") in the same place, so phones and touch devices can open the palette.
+- **Why**: The issue asks for a search entry that works by click and touch, on narrow screens too. The mock's button does not fit next to the group switcher and the toggles at phone width.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` gives the header a narrow-screen search entry.
+
+#### 2026-11-25 — TopBar search entry: shortcut label and focus
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The header search button in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) always shows `⌘` and has no focus style.
+- **Reality**: `HeaderSearch` shows `⌘ K` on Apple platforms and `Ctrl K` elsewhere (the same detection the shortcuts dialog uses), sets `aria-keyshortcuts`, and has the `focus-visible` ring of the other outline controls. Closing the palette returns focus to the entry that opened it.
+- **Why**: The shortcut is Ctrl+K on Windows and Linux, so `⌘` there names a key the keyboard does not have. The issue asks for a keyboard-accessible entry, and a control without a focus style is not.
+- **Approved by**: agent-suggested — listed in the PR for confirmation
+- **Reversion plan**: Permanent unless the mock adopts its own platform label and focus style.
+
+#### 2026-11-25 — Command palette lists search results by kind
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) shows fixed groups (Navigate, Recent Items, Recent Files, Locations) filtered on the client by cmdk; item and file rows end in a category `Badge`.
+- **Reality**: `frontend/src/components/CommandPalette.tsx` searches the active group through `GET /search` from two characters on. Under the "Search …" row that opens the search page it lists Items, Locations, Areas, Files and Tags, each only when it has matches, then the Navigation group. Rows keep the mock's anatomy (`size-7` muted icon box, medium title, muted `text-xs` subtitle); the subtitle carries the matched field, the asset ID, the address, the path or the tag kind instead of a category badge. The Items group ends in an "All matching items (N)" row that opens the items list with the same query. Area and tag rows have a second option, "Show items" (or "Show files" for a file tag), next to the row. With an empty query a Recent group lists the results opened from the palette or the search page. A status line under the input says to type more, that the search runs, or that nothing matched.
+- **Why**: The issue asks for results grouped by kind, a "show its items" action for tags and areas, recent results, and a way to all results. Locations get no "show items" action because the item list has no location filter yet.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
+
+#### 2026-11-25 — Search page: tags group, item links and recent results
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The search page is not in the mock. Its result rows follow the [`CommandPalette`](../../design-mocks/src/components/CommandPalette.tsx) title-and-subtitle row.
+- **Reality**: `frontend/src/pages/SearchPage.tsx` lists matching tags (label, and "Item tag" or "File tag") instead of the "not available yet" card. Area and tag cards carry a ghost "Show items" (or "Show files") button at their right edge that opens the item or file list filtered by that area or tag; those cards drop the chevron. Opening a result records it, so the recent list on the empty page fills, and each recent row names its kind (Item, Location, Area, File, Tag).
+- **Why**: not present in mock. The issue asks for the same grouping and "show its items" action as the palette, and the page's recent list stayed empty because nothing recorded a visit.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds a search page.
+
 #### 2026-11-25 — "Upcoming" sidebar entry
 
 - **Issue/PR**: #2805

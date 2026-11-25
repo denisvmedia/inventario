@@ -6973,7 +6973,7 @@
         },
         "/g/{groupSlug}/search": {
             "get": {
-                "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.",
+                "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.\nLocations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.\nTags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7004,7 +7004,8 @@
                             "commodities",
                             "files",
                             "areas",
-                            "locations"
+                            "locations",
+                            "tags"
                         ],
                         "type": "string",
                         "description": "Entity type to search",
