@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import {
@@ -102,6 +102,7 @@ import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
 import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
+import { SavedViewControl } from "@/features/saved-views/SavedViewControl"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -583,6 +584,7 @@ export function CommoditiesListPage() {
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
           onSetViewMode={setViewMode}
+          savedViews={<SavedViewControl query={query} layout={viewMode} />}
         />
 
         {selected.size > 0 ? (
@@ -829,6 +831,8 @@ interface ToolbarProps {
   onToggleInactive: () => void
   onClearFilters: () => void
   onSetViewMode: (v: ViewMode) => void
+  // The saved views control, shown before the layout switch.
+  savedViews?: ReactNode
 }
 
 function Toolbar(props: ToolbarProps) {
@@ -1083,7 +1087,8 @@ function Toolbar(props: ToolbarProps) {
           : t("commodities:filter.inactiveHidden")}
       </Button>
 
-      <div className="ml-auto flex gap-1">
+      <div className="ml-auto flex items-center gap-1">
+        {props.savedViews}
         <Button
           variant={props.viewMode === "grid" ? "secondary" : "ghost"}
           size="icon"

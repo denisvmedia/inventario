@@ -4,12 +4,15 @@ import {
   COMMODITY_QUERY_URL_PARAMS,
   DEFAULT_COMMODITY_QUERY,
   commodityListHref,
+  commodityQueryFromApiQuery,
+  commodityQueryToApiQuery,
   commodityQueryToListOptions,
   commodityTagHref,
   hasCommodityFilters,
   listOptionsToParams,
   parseCommodityQuery,
   primarySearchMatch,
+  sameCommodityQuery,
   unreadableTagParamCount,
   withIncludedTag,
   withTagFilter,
@@ -287,6 +290,53 @@ describe("listOptionsToParams", () => {
 
   it("sends no_tags", () => {
     expect(listOptionsToParams({ noTags: true }).toString()).toBe("no_tags=true")
+  })
+})
+
+describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
+  it("round-trips every condition through the API query string", () => {
+    expect(commodityQueryFromApiQuery(commodityQueryToApiQuery(FULL))).toEqual({
+      ...FULL,
+      types: [...FULL.types].sort(),
+      statuses: [...FULL.statuses].sort(),
+      warrantyStatuses: [...FULL.warrantyStatuses].sort(),
+      tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },
+    })
+  })
+
+  it("writes the sort and the inactive switch even at their defaults", () => {
+    expect(commodityQueryToApiQuery(DEFAULT_COMMODITY_QUERY)).toBe(
+      "include_inactive=false&sort=name"
+    )
+  })
+
+  it("reads an absent include_inactive as the server default", () => {
+    expect(commodityQueryFromApiQuery("lent_out=true").includeInactive).toBe(true)
+    expect(commodityQueryFromApiQuery("include_inactive=false").includeInactive).toBe(false)
+  })
+
+  it("maps the API names onto the query", () => {
+    const q = commodityQueryFromApiQuery(
+      "area_id=a1&warranty_status=expiring&no_tags=true&include_inactive=false&sort=-registered_date"
+    )
+    expect(q.areaId).toBe("a1")
+    expect(q.warrantyStatuses).toEqual(["expiring"])
+    expect(q.tags.untagged).toBe(true)
+    expect(q.sort).toBe("registered_date")
+    expect(q.sortDesc).toBe(true)
+  })
+
+  it("ignores parameters outside the contract", () => {
+    expect(commodityQueryFromApiQuery("page=3&per_page=5&include_inactive=false")).toEqual(
+      DEFAULT_COMMODITY_QUERY
+    )
+  })
+
+  it("compares queries in the stored form", () => {
+    const a = { ...DEFAULT_COMMODITY_QUERY, types: ["other", "equipment"] }
+    const b = { ...DEFAULT_COMMODITY_QUERY, types: ["equipment", "other"] }
+    expect(sameCommodityQuery(a, b)).toBe(true)
+    expect(sameCommodityQuery(a, { ...b, sortDesc: true })).toBe(false)
   })
 })
 

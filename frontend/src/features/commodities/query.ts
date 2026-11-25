@@ -354,6 +354,45 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   return params
 }
 
+// The API query string of query, the form a saved view stores: the list
+// options without paging, in the parameter names of GET /commodities. The
+// sort and include_inactive are always written, so the string says exactly
+// what the list shows. Unreadable values are written as they are, and the
+// server refuses them.
+export function commodityQueryToApiQuery(query: CommodityQuery): string {
+  return listOptionsToParams(commodityQueryToListOptions(query)).toString()
+}
+
+// The page-URL name of each API parameter a saved view can hold, for the
+// parameters whose names differ.
+const API_TO_URL_PARAM: Record<string, string> = {
+  area_id: URL_PARAM.area,
+  warranty_status: URL_PARAM.warranty,
+}
+
+// Reads the API query string of a saved view back into a query. An absent
+// include_inactive is the server default (inactive items included), so it
+// reads as includeInactive; the rest maps name for name. Parameters outside
+// the contract are ignored: the server only stores queries it parsed.
+export function commodityQueryFromApiQuery(raw: string): CommodityQuery {
+  const api = new URLSearchParams(raw)
+  const page = new URLSearchParams()
+  for (const [name, value] of api) {
+    if (name === "include_inactive") continue
+    const urlName = API_TO_URL_PARAM[name] ?? name
+    if (COMMODITY_QUERY_URL_PARAMS.includes(urlName)) page.append(urlName, value)
+  }
+  const inactive = (api.get("include_inactive") ?? "").toLowerCase()
+  if (inactive !== "false" && inactive !== "0") page.set(URL_PARAM.inactive, "1")
+  return parseCommodityQuery(page)
+}
+
+// Whether a and b select the same items in the same order, compared in the
+// form a saved view stores.
+export function sameCommodityQuery(a: CommodityQuery, b: CommodityQuery): boolean {
+  return commodityQueryToApiQuery(a) === commodityQueryToApiQuery(b)
+}
+
 // Why an item matched the search text: the field and the value in it.
 // For a tag the value is its slug; for a long note it is an excerpt.
 export type CommoditySearchMatch = Schema<"registry.CommoditySearchMatch">
