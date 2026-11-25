@@ -53,6 +53,32 @@ If AI vision is enabled on your server, you can let it read a photo or document 
 If AI vision isn't enabled on your server, you'll see a message saying so — just use **Fill manually** to continue. Scanning is also rate-limited to keep usage fair, so you may occasionally be asked to wait a moment before trying again.
 :::
 
+## Find anything
+
+The **Search…** field at the top of every page searches the group you are in.
+On a phone it is a magnifier button. You can also press `Ctrl+K` (`⌘K` on a
+Mac) from anywhere. Both open the same search window; press `Esc` to close it.
+
+Type at least two characters. The results are grouped by kind: **Items**,
+**Locations**, **Areas**, **Files**, and **Tags**, a few of each. Click a
+result, or move to it with the arrow keys and press `Enter`, to open it.
+
+- An area or a tag has a **Show items** button next to it that opens the list
+  of items in that area or with that tag. A file tag offers **Show files**
+  instead.
+- **All matching items** opens **All Items** with the same search, inactive
+  items included.
+- The first row, **Search "…" across items, locations, files…**, opens the
+  search page, which lists more results of each kind, with the same **Show
+  items** buttons.
+
+With nothing typed, the window lists the results you opened recently, from
+there or from the search page, followed by links to the main pages. The recent
+list is kept in your browser, separately for each group.
+
+Items are matched on more than their name: serial and part numbers, tags, and
+notes count too. See [Searching for items](../items/#searching-for-items).
+
 ## Where to go next
 
 Once your first item is in, here's how to make the most of Inventario:

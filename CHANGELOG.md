@@ -12,6 +12,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- A search field in the top bar of every page, an icon button on phones,
+  opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
+  group's matching items, locations, areas, files and tags by kind. An area or
+  a tag offers "Show items" (a file tag "Show files"), the items group links to
+  the items list with the same search, and an empty search lists the results
+  opened recently. The search page lists tags too, has the same "Show items"
+  links, and fills its recent list. `GET /search` now accepts `type=locations`,
+  `type=areas` and `type=tags`
+  ([#2801](https://github.com/denisvmedia/inventario/issues/2801)).
+
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what

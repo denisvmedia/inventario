@@ -388,8 +388,10 @@ and offers **Clear filters** instead of showing a list that ignores it.
 
 ### Searching for items
 
-The search box on **All Items**, the one on an area's page, and the search page
-all search items the same way:
+The search box on **All Items**, the one on an area's page, the search page, and
+the search window at the top of every page (see
+[Find anything](../getting-started/#find-anything)) all search items the same
+way:
 
 - **Every word must match**, each in any field. `drill garage` finds an item
   named "Drill" that has the tag "Garage", but not an item that only has one of
