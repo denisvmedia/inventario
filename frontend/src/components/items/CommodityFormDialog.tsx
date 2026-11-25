@@ -76,8 +76,14 @@ import { buildCommoditySchema, type CommodityFormInput } from "@/features/commod
 import type {
   Commodity,
   CreateCommodityRequest,
+  LinkedItemSummary,
   UpdateCommodityRequest,
 } from "@/features/commodities/api"
+import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
+import { useCustomFieldsBinding } from "@/components/customFields/useCustomFieldsBinding"
+import type { CustomField, CustomFieldValues } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { customFieldsRequest } from "@/features/customFields/values"
 import {
   AiScanStep,
   type ScanAcceptedValues,
@@ -90,6 +96,8 @@ import { useSellers } from "@/features/sellers/hooks"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
 
+const NO_CUSTOM_FIELDS: readonly CustomField[] = []
+
 interface CommodityFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -99,6 +107,8 @@ interface CommodityFormDialogProps {
   // Edit mode prefills from this object — `id` is preserved by the
   // caller, the dialog only consumes the attributes.
   initialValues?: Commodity
+  // Names of the items the item's link fields point at (meta.linked_items).
+  linkedItems?: Record<string, LinkedItemSummary>
   areas: AreaOption[]
   locations: LocationOption[]
   defaultCurrency: string
@@ -207,7 +217,7 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
     "serial_number",
   ],
   warranty: ["warranty_expires_at", "warranty_notes"],
-  extras: ["tags", "comments", "extra_serial_numbers", "part_numbers"],
+  extras: ["tags", "comments", "extra_serial_numbers", "part_numbers", "custom_fields"],
   files: [],
 }
 
@@ -238,6 +248,7 @@ export function CommodityFormDialog({
   enableAiScan = true,
   defaultDraft = false,
   onSaveDraft,
+  linkedItems,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   // Create mode opens on the AI offer surface; edit mode jumps
@@ -331,7 +342,14 @@ export function CommodityFormDialog({
   // matches the group's, `converted_original_price` isn't required
   // (the original price is already in group currency). Re-built when
   // defaultCurrency changes — typically on group switch.
-  const schema = useMemo(() => buildCommoditySchema(defaultCurrency), [defaultCurrency])
+  // The group's custom fields (#2803): their values are checked here and
+  // edited on the Extras step. None outside a group (the landing page).
+  const customFieldsQuery = useCustomFields()
+  const customFields = customFieldsQuery.data ?? NO_CUSTOM_FIELDS
+  const schema = useMemo(
+    () => buildCommoditySchema(defaultCurrency, customFields),
+    [defaultCurrency, customFields]
+  )
   const form = useForm<CommodityFormInput>({
     resolver: zodResolver(schema),
     defaultValues: defaults,
@@ -349,6 +367,7 @@ export function CommodityFormDialog({
     watch,
     getValues,
   } = form
+  const customFieldsBinding = useCustomFieldsBinding(form, customFields)
 
   // Reset to defaults whenever the dialog opens. In create mode we try
   // to rehydrate from the localStorage draft key first (per #1383) — if
@@ -530,7 +549,14 @@ export function CommodityFormDialog({
   const submit = async (values: CommodityFormInput) => {
     setServerError(null)
     try {
-      const created = await onSubmit(toRequest(values, defaultCurrency))
+      const created = await onSubmit({
+        ...toRequest(values, defaultCurrency),
+        custom_fields: customFieldsRequest(
+          customFields,
+          initialValues?.custom_fields as CustomFieldValues | undefined,
+          values.custom_fields
+        ) as Commodity["custom_fields"],
+      })
       // Anonymous flow (#1988): the wrapper's onSubmit has just stashed
       // the draft + the pending-first-item marker and is about to redirect
       // to login. We must NOT clear the draft, NOT upload files (there is
@@ -687,6 +713,9 @@ export function CommodityFormDialog({
     }
     if (values.comments !== undefined) apply("comments", values.comments)
     if (values.tags !== undefined) apply("tags", values.tags)
+    if (values.custom_fields !== undefined) {
+      apply("custom_fields", { ...(getValues("custom_fields") ?? {}), ...values.custom_fields })
+    }
     // #1983 Part A: keep the photos / PDFs the user scanned. They join the
     // Files-step queue (deduped against anything already staged there), so
     // the existing post-create uploadPendingFiles() attaches them with the
@@ -985,7 +1014,33 @@ export function CommodityFormDialog({
               <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
             ) : null}
             {step === "extras" ? (
-              <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
+              <ExtrasStep
+                register={register}
+                errors={errors}
+                watch={watch}
+                setValue={setValue}
+                customFieldsEditor={
+                  customFields.length > 0 ? (
+                    <div
+                      className="flex flex-col gap-3 rounded-xl border border-border p-3"
+                      data-testid="commodity-form-custom-fields"
+                    >
+                      <Label className="text-sm font-medium">
+                        {t("customFields:section.title")}
+                      </Label>
+                      <CustomFieldsEditor
+                        fields={customFields}
+                        values={customFieldsBinding.values}
+                        onChange={customFieldsBinding.onChange}
+                        errors={customFieldsBinding.errors}
+                        linkedItems={linkedItems}
+                        selfId={mode === "edit" ? initialValues?.id : undefined}
+                        groupCurrency={defaultCurrency}
+                      />
+                    </div>
+                  ) : null
+                }
+              />
             ) : null}
             {step === "files" ? (
               <FilesStep pendingFiles={pendingFiles} setPendingFiles={setPendingFiles} />
@@ -1703,6 +1758,7 @@ function warrantyStatusFromDate(d: string | undefined) {
 function ExtrasStep(props: any) {
   const { t } = useTranslation()
   const tagLabel = useTagLabel("commodity")
+  // customFieldsEditor: the custom fields section (#2803), or null.
   const { register, errors, watch, setValue } = props
   const extraSerials: string[] = watch("extra_serial_numbers") ?? []
   const partNumbers: string[] = watch("part_numbers") ?? []
@@ -1806,6 +1862,7 @@ function ExtrasStep(props: any) {
           {t("commodities:fields.revealPartNumbers")}
         </button>
       )}
+      {props.customFieldsEditor}
     </div>
   )
 }

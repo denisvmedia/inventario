@@ -1,6 +1,13 @@
 // Conversions between an item's custom field values as the API sends them
 // (see CustomFieldValues in ./api) and the strings the item form edits.
-import type { CustomField, CustomFieldType, CustomFieldValues } from "./api"
+import {
+  CUSTOM_FIELD_LONG_TEXT_MAX,
+  CUSTOM_FIELD_TEXT_MAX,
+  CUSTOM_FIELD_URL_MAX,
+  type CustomField,
+  type CustomFieldType,
+  type CustomFieldValues,
+} from "./api"
 
 // The form keeps every value as text, like the other item inputs: a
 // number as typed, yes/no as "true"/"false", a select value as the option
@@ -24,28 +31,29 @@ export function hasValue(values: CustomFieldValues | undefined, id: string): boo
   return values !== undefined && id in values && values[id] !== null
 }
 
-// toFormValue reads one stored value into the form's text.
-export function toFormValue(type: CustomFieldType, raw: unknown): CustomFieldFormValue {
+// toFormValue reads one stored value into the form's text. The API form of
+// each type tells the types apart where it matters (money is an object,
+// yes/no a boolean), so the field's definition is not needed.
+export function toFormValue(raw: unknown): CustomFieldFormValue {
   if (raw === null || raw === undefined) return { value: "", currency: "" }
-  if (type === "money" && isRecord(raw)) {
+  if (isRecord(raw)) {
     const amount = raw.amount
     return {
       value: amount === null || amount === undefined ? "" : String(amount),
       currency: typeof raw.currency === "string" ? raw.currency : "",
     }
   }
-  if (type === "boolean") return { value: raw === true ? "true" : "false", currency: "" }
+  if (typeof raw === "boolean") return { value: raw ? "true" : "false", currency: "" }
   return { value: String(raw), currency: "" }
 }
 
-// toFormValues reads the stored values of fields.
-export function toFormValues(
-  fields: readonly CustomField[],
-  values: CustomFieldValues | undefined
-): CustomFieldFormValues {
+// toFormValues reads an item's stored values. A value of a field this
+// client does not know yet is read too; the form shows only the fields it
+// knows, and never sends the others.
+export function toFormValues(values: CustomFieldValues | undefined): CustomFieldFormValues {
   const out: CustomFieldFormValues = {}
-  for (const f of fields) {
-    if (hasValue(values, f.id)) out[f.id] = toFormValue(f.type, values?.[f.id])
+  for (const [id, raw] of Object.entries(values ?? {})) {
+    if (raw !== null && raw !== undefined) out[id] = toFormValue(raw)
   }
   return out
 }
@@ -68,42 +76,43 @@ export function toApiValue(type: CustomFieldType, v: CustomFieldFormValue): unkn
   }
 }
 
-function sameFormValue(a: CustomFieldFormValue | undefined, b: CustomFieldFormValue | undefined) {
-  const av = a?.value.trim() ?? ""
-  const bv = b?.value.trim() ?? ""
-  if (av !== bv) return false
-  return av === "" || (a?.currency ?? "").trim() === (b?.currency ?? "").trim()
-}
-
-// toApiValues returns the values to send: only the fields whose form value
-// differs from what was stored, so a value the form did not touch is left
-// as it is (a link to an item in Trash, a field this client does not know
-// yet). A cleared field is sent as null. Undefined when nothing changed.
-export function toApiValues(
+// customFieldsRequest returns the custom_fields of an item write: the
+// value of every known field the form holds one for, and null for a known
+// field that stored has a key for and the form no longer holds a value
+// for. stored is the item the form started from; a key with null in it (a
+// value cleared before the form opened, see the edit form's "All fields")
+// is cleared again. Fields this client does not know are left out, so the
+// server keeps their values; an unchanged value is not checked again
+// there. Undefined when there is nothing to send.
+export function customFieldsRequest(
   fields: readonly CustomField[],
-  initial: CustomFieldFormValues,
-  current: CustomFieldFormValues
+  stored: CustomFieldValues | undefined,
+  current: CustomFieldFormValues | undefined
 ): CustomFieldValues | undefined {
   const out: CustomFieldValues = {}
   for (const f of fields) {
-    if (sameFormValue(initial[f.id], current[f.id])) continue
-    out[f.id] = toApiValue(f.type, current[f.id] ?? { value: "", currency: "" })
+    const v = current?.[f.id]
+    if (v && v.value.trim() !== "") {
+      out[f.id] = toApiValue(f.type, v)
+    } else if (stored && f.id in stored) {
+      out[f.id] = null
+    }
   }
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-// The fields an item form shows: those the item has a value for, then those
-// the member added in this form, in the group's order (by name).
+// shownFields returns the fields an item form shows: those the form holds
+// an entry for (a stored value, or a field the member added), in the
+// group's order (by name).
 export function shownFields(
   fields: readonly CustomField[],
-  stored: CustomFieldFormValues,
-  added: readonly string[]
+  current: CustomFieldFormValues | undefined
 ): CustomField[] {
-  return fields.filter((f) => f.id in stored || added.includes(f.id))
+  return fields.filter((f) => current !== undefined && f.id in current)
 }
 
-// validateFormValue checks what the server would refuse and returns an
-// i18n key under commodities:customFields.errors, or undefined.
+// validateFormValue checks what the server would refuse and returns the
+// last segment of an i18n key under customFields:errors, or undefined.
 export function validateFormValue(field: CustomField, v: CustomFieldFormValue): string | undefined {
   const text = v.value.trim()
   if (text === "") return undefined
@@ -118,7 +127,12 @@ export function validateFormValue(field: CustomField, v: CustomFieldFormValue): 
       if (field.type === "money" && !/^[A-Za-z]{3}$/.test(v.currency.trim())) return "currency"
       return undefined
     }
+    case "text":
+      return Array.from(text).length > CUSTOM_FIELD_TEXT_MAX ? "tooLong" : undefined
+    case "long_text":
+      return Array.from(text).length > CUSTOM_FIELD_LONG_TEXT_MAX ? "tooLong" : undefined
     case "url":
+      if (Array.from(text).length > CUSTOM_FIELD_URL_MAX) return "tooLong"
       try {
         const u = new URL(text)
         return u.protocol === "http:" || u.protocol === "https:" ? undefined : "url"

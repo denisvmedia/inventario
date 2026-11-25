@@ -101,21 +101,22 @@
     "itemSearch": "Search items…",
     "itemNone": "No items found.",
     "itemTrashed": "{{name}} (in Trash)",
-    "itemUnknown": "An item that no longer exists"
+    "itemUnknown": "Linked item"
   },
   "errors": {
     "number": "Enter a number.",
     "numberTooLong": "The number has too many digits.",
     "currency": "Enter a three-letter currency code.",
     "url": "Enter a web address starting with http:// or https://.",
-    "date": "Enter a date."
+    "date": "Enter a date.",
+    "tooLong": "The value is too long."
   },
   "detail": {
     "title": "Custom fields",
     "yes": "Yes",
     "no": "No",
     "trashed": "in Trash",
-    "unknownItem": "An item that no longer exists",
+    "unknownItem": "Linked item",
     "unknownOption": "A removed option"
   }
 }

@@ -119,21 +119,22 @@
     "itemSearch": "Hledat položky…",
     "itemNone": "Žádné položky nenalezeny.",
     "itemTrashed": "{{name}} (v koši)",
-    "itemUnknown": "Položka, která už neexistuje"
+    "itemUnknown": "Propojená položka"
   },
   "errors": {
     "number": "Zadejte číslo.",
     "numberTooLong": "Číslo má příliš mnoho číslic.",
     "currency": "Zadejte třípísmenný kód měny.",
     "url": "Zadejte webovou adresu začínající http:// nebo https://.",
-    "date": "Zadejte datum."
+    "date": "Zadejte datum.",
+    "tooLong": "Hodnota je příliš dlouhá."
   },
   "detail": {
     "title": "Vlastní pole",
     "yes": "Ano",
     "no": "Ne",
     "trashed": "v koši",
-    "unknownItem": "Položka, která už neexistuje",
+    "unknownItem": "Propojená položka",
     "unknownOption": "Odebraná možnost"
   }
 }

@@ -46,6 +46,7 @@ import { BRAND_MAX_LEN, MODEL_MAX_LEN } from "@/features/commodities/schemas"
 import { SELLER_NAME_MAX } from "@/features/sellers/api"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
+  ScanCustomFieldGuesses,
   ScanFieldGuess,
   ScanFieldName,
   ScanItem,
@@ -53,6 +54,9 @@ import type {
   ScanResultFields,
   ScanWarning,
 } from "@/features/commodities/scanApi"
+import type { CustomField } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { toFormValue, type CustomFieldFormValues } from "@/features/customFields/values"
 
 // Mirrors `services.AllowedMIMETypes` on the BE. The `<input accept>`
 // attribute is a hint the browser may honour loosely (HEIC files on
@@ -127,6 +131,9 @@ export interface ScanAcceptedValues {
   warranty_expires_at?: string
   comments?: string
   tags?: string[]
+  // The accepted custom field values (#2803) by field id, in the form's
+  // shape.
+  custom_fields?: CustomFieldFormValues
 }
 
 interface AiScanStepProps {
@@ -186,6 +193,14 @@ export function AiScanStep({
   // Null = single-item scan (review reads result.fields) or not yet chosen.
   const [selectedItemFields, setSelectedItemFields] = useState<ScanResultFields | null>(null)
   const [acceptedFields, setAcceptedFields] = useState<Set<ScanFieldName>>(new Set())
+  // The same for the custom field values (#2803): the chosen candidate's,
+  // and the ids of the accepted ones.
+  const [selectedItemCustom, setSelectedItemCustom] = useState<ScanCustomFieldGuesses | null>(
+    null
+  )
+  const [acceptedCustom, setAcceptedCustom] = useState<Set<string>>(new Set())
+  // The group's fields, to name the values read; none in the anonymous flow.
+  const customFieldDefs = useCustomFields().data
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)
@@ -316,19 +331,26 @@ export function AiScanStep({
       // Nothing usable came back (an unreadable document, or a model
       // truncation). Don't drop the user into a green-but-empty "review" —
       // keep them on the offer with a retry hint.
-      if (Object.keys(r.fields).length === 0 && r.items.length === 0) {
+      if (
+        Object.keys(r.fields).length === 0 &&
+        Object.keys(r.customFields).length === 0 &&
+        r.items.length === 0
+      ) {
         setStagingError(t("commodities:form.step.ai.errors.noDetails"))
         return
       }
       setResult(r)
       setSelectedItemFields(null)
+      setSelectedItemCustom(null)
       // More than one distinct product → the user chooses which to fill
       // first (no default-accept until they pick). A single product →
       // straight to review with confident fields pre-checked.
       if (r.items.length > 1) {
         setAcceptedFields(new Set())
+        setAcceptedCustom(new Set())
       } else {
         setAcceptedFields(defaultAcceptedFor(r.fields))
+        setAcceptedCustom(defaultAcceptedCustom(r.customFields))
       }
     } catch (err) {
       // AbortError fires when the user clicks Cancel — silently roll
@@ -358,6 +380,8 @@ export function AiScanStep({
     if (!item) return
     setSelectedItemFields(item.fields)
     setAcceptedFields(defaultAcceptedFor(item.fields))
+    setSelectedItemCustom(item.customFields)
+    setAcceptedCustom(defaultAcceptedCustom(item.customFields))
   }
 
   function applyAccepted() {
@@ -460,6 +484,13 @@ export function AiScanStep({
     // clearPhotos() — revoking the object-URLs only invalidates the
     // preview blob: URLs, not the underlying File bytes, so the upload
     // path still reads them fine.
+    const customGuesses = selectedItemCustom ?? result.customFields
+    const custom: CustomFieldFormValues = {}
+    for (const def of customFieldDefs ?? []) {
+      const guess = customGuesses[def.id]
+      if (guess && acceptedCustom.has(def.id)) custom[def.id] = toFormValue(guess.value)
+    }
+    if (Object.keys(custom).length > 0) out.custom_fields = custom
     const sourceFiles = photos.map((p) => p.file)
     // Pass-through if no checked fields produced a value — the
     // wizard still advances to Basics so the user isn't stuck.
@@ -476,6 +507,8 @@ export function AiScanStep({
     setResult(null)
     setSelectedItemFields(null)
     setAcceptedFields(new Set())
+    setSelectedItemCustom(null)
+    setAcceptedCustom(new Set())
   }
 
   function retakePhotos() {
@@ -483,8 +516,19 @@ export function AiScanStep({
     setResult(null)
     setSelectedItemFields(null)
     setAcceptedFields(new Set())
+    setSelectedItemCustom(null)
+    setAcceptedCustom(new Set())
     setServerError(null)
     setErrorCode(null)
+  }
+
+  function toggleCustom(id: string, next: boolean) {
+    setAcceptedCustom((prev) => {
+      const out = new Set(prev)
+      if (next) out.add(id)
+      else out.delete(id)
+      return out
+    })
   }
 
   function toggleField(key: ScanFieldName, next: boolean) {
@@ -529,6 +573,10 @@ export function AiScanStep({
           onSkip={onSkip}
           knownCurrencies={currencySet}
           attachCount={photos.length}
+          customGuesses={selectedItemCustom ?? result.customFields}
+          customFieldDefs={customFieldDefs ?? []}
+          acceptedCustom={acceptedCustom}
+          onToggleCustom={toggleCustom}
         />
       ) : (
         <OfferPanel
@@ -918,6 +966,11 @@ interface ReviewPanelProps {
   // Number of source files the user scanned. Drives the "these files will
   // be attached" reassurance (#1983 Part A); 0 hides it.
   attachCount: number
+  // Custom field values read (#2803), shown for the group's fields only.
+  customGuesses: ScanCustomFieldGuesses
+  customFieldDefs: readonly CustomField[]
+  acceptedCustom: Set<string>
+  onToggleCustom: (id: string, next: boolean) => void
 }
 
 function ReviewPanel({
@@ -930,6 +983,10 @@ function ReviewPanel({
   onSkip,
   knownCurrencies,
   attachCount,
+  customGuesses,
+  customFieldDefs,
+  acceptedCustom,
+  onToggleCustom,
 }: ReviewPanelProps) {
   const { t } = useTranslation()
   // Group warnings by field so each row can render its own inline
@@ -1026,6 +1083,23 @@ function ReviewPanel({
             />
           )
         })}
+        {customFieldDefs.map((def) => {
+          const guess = customGuesses[def.id]
+          if (!guess) return null
+          return (
+            <ReviewRow
+              key={def.id}
+              fieldKey={`custom-${def.id}`}
+              label={def.name}
+              display={customGuessText(def, guess.value, t)}
+              guess={guess as ScanFieldGuess}
+              checked={acceptedCustom.has(def.id)}
+              onToggle={(next) => onToggleCustom(def.id, next)}
+              warnings={[]}
+              currencyUnknown={false}
+            />
+          )
+        })}
       </div>
 
       <div className="flex flex-wrap items-center justify-end gap-2 pt-1">
@@ -1064,7 +1138,11 @@ function ReviewPanel({
 }
 
 interface ReviewRowProps {
-  fieldKey: ScanFieldName
+  // A field of the form, or `custom-<id>` for a custom field, which then
+  // passes its label and display text.
+  fieldKey: ScanFieldName | `custom-${string}`
+  label?: string
+  display?: string
   guess: ScanFieldGuess
   checked: boolean
   onToggle: (next: boolean) => void
@@ -1074,6 +1152,8 @@ interface ReviewRowProps {
 
 function ReviewRow({
   fieldKey,
+  label,
+  display,
   guess,
   checked,
   onToggle,
@@ -1086,6 +1166,8 @@ function ReviewRow({
   const confidenceBand: "high" | "medium" | "low" =
     confidence >= 0.75 ? "high" : confidence >= 0.5 ? "medium" : "low"
   const isLow = confidenceBand === "low"
+  const fieldLabel =
+    label ?? t(`commodities:fields.${fieldLabelKey(fieldKey as ScanFieldName)}`)
   return (
     <div
       className="rounded-lg border border-border bg-muted/20 px-3 py-2.5"
@@ -1098,12 +1180,12 @@ function ReviewRow({
           onCheckedChange={(next) => onToggle(next === true)}
           className="mt-0.5"
           data-testid={`commodity-form-ai-row-${fieldKey}-check`}
-          aria-label={t(`commodities:fields.${fieldLabelKey(fieldKey)}`)}
+          aria-label={fieldLabel}
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-baseline justify-between gap-2">
             <p className="text-[10px] font-medium uppercase tracking-wide text-muted-foreground">
-              {t(`commodities:fields.${fieldLabelKey(fieldKey)}`)}
+              {fieldLabel}
             </p>
             <Badge
               variant="secondary"
@@ -1121,7 +1203,12 @@ function ReviewRow({
             className="mt-1 truncate text-sm font-medium"
             data-testid={`commodity-form-ai-row-${fieldKey}-value`}
           >
-            {formatGuessValue(fieldKey, guess.value, (slug) => itemTypes.get(slug)?.label ?? slug)}
+            {display ??
+              formatGuessValue(
+                fieldKey as ScanFieldName,
+                guess.value,
+                (slug) => itemTypes.get(slug)?.label ?? slug
+              )}
           </p>
           {currencyUnknown ? (
             <p className="mt-1 text-[11px] text-muted-foreground">
@@ -1293,6 +1380,31 @@ function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => st
 // defaultAcceptedFor pre-checks every field the model is reasonably sure
 // about (confidence ≥ 0.3 — below that it's essentially guessing). Used
 // both for a single-item scan and after the user picks a candidate.
+// customGuessText shows a custom field value read by the scan.
+function customGuessText(
+  def: CustomField,
+  value: unknown,
+  t: (key: string) => string
+): string {
+  if (def.type === "select") {
+    return def.options.find((o) => o.id === value)?.label ?? String(value)
+  }
+  if (def.type === "boolean") {
+    return value === true ? t("customFields:detail.yes") : t("customFields:detail.no")
+  }
+  return String(value)
+}
+
+// defaultAcceptedCustom pre-checks the custom field values read with the
+// same confidence floor as the other fields.
+function defaultAcceptedCustom(guesses: ScanCustomFieldGuesses): Set<string> {
+  return new Set(
+    Object.entries(guesses)
+      .filter(([, g]) => g.confidence >= 0.3)
+      .map(([id]) => id)
+  )
+}
+
 function defaultAcceptedFor(fields: ScanResultFields): Set<ScanFieldName> {
   const defaults = new Set<ScanFieldName>()
   for (const key of Object.keys(fields) as ScanFieldName[]) {
