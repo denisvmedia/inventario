@@ -60,13 +60,14 @@ export function toFormValues(values: CustomFieldValues | undefined): CustomField
 
 // toApiValue turns the form's text into the API value, null for no value.
 // Text is trimmed; an empty text clears the value, since the form has no
-// way to tell an empty text from none.
+// way to tell an empty text from none. A number goes as the decimal string
+// typed, as the API returns it, so no digit is lost to a double.
 export function toApiValue(type: CustomFieldType, v: CustomFieldFormValue): unknown {
   const text = v.value.trim()
   if (text === "") return null
   switch (type) {
     case "number":
-      return Number(text)
+      return text
     case "money":
       return { amount: Number(text), currency: v.currency.trim().toUpperCase() }
     case "boolean":
@@ -140,7 +141,8 @@ export function validateFormValue(field: CustomField, v: CustomFieldFormValue): 
         return "url"
       }
     case "date":
-      return /^\d{4}-\d{2}-\d{2}$/.test(text) ? undefined : "date"
+      // The server stores no year 0.
+      return /^\d{4}-\d{2}-\d{2}$/.test(text) && !text.startsWith("0000") ? undefined : "date"
     default:
       return undefined
   }
