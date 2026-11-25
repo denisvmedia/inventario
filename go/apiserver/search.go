@@ -6,6 +6,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"unicode"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -214,15 +215,34 @@ func (*searchAPI) searchTags(w http.ResponseWriter, r *http.Request, registrySet
 // matchesEveryTerm reports whether every term is found, ignoring case, in at
 // least one of the fields. No terms match everything.
 func matchesEveryTerm(terms []string, fields ...string) bool {
+	folded := make([]string, len(fields))
+	for i, field := range fields {
+		folded[i] = foldCase(field)
+	}
 	for _, term := range terms {
-		needle := strings.ToLower(term)
-		if !slices.ContainsFunc(fields, func(field string) bool {
-			return strings.Contains(strings.ToLower(field), needle)
+		needle := foldCase(term)
+		if !slices.ContainsFunc(folded, func(field string) bool {
+			return strings.Contains(field, needle)
 		}) {
 			return false
 		}
 	}
 	return true
+}
+
+// foldCase maps every rune of s to the lowest rune of its Unicode case
+// folding orbit (unicode.SimpleFold), so two strings that strings.EqualFold
+// calls equal fold to the same string, and a substring search on folded
+// strings ignores case. strings.ToLower is not enough: it keeps the final
+// sigma ς apart from σ, the lower case of Σ.
+func foldCase(s string) string {
+	return strings.Map(func(r rune) rune {
+		lowest := r
+		for f := unicode.SimpleFold(r); f != r; f = unicode.SimpleFold(f) {
+			lowest = min(lowest, f)
+		}
+		return lowest
+	}, s)
 }
 
 // renderSearchPage renders one page of rows, with the number of all rows as

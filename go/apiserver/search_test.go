@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -28,6 +29,9 @@ func TestSearch_LocationsAreasAndTags(t *testing.T) {
 	boathouse := must.Must(locationReg.Create(ctx, models.Location{Name: "Boathouse", Address: "Lakeside Road 9"}))
 	loft := must.Must(areaReg.Create(ctx, models.Area{Name: "Cottage Loft", LocationID: cottage.ID}))
 	must.Must(areaReg.Create(ctx, models.Area{Name: "Boat Shed", LocationID: boathouse.ID}))
+	// Ends in the final sigma ς, which strings.ToLower keeps apart from the
+	// σ that Σ lowers to.
+	street := must.Must(areaReg.Create(ctx, models.Area{Name: "Οδός", LocationID: boathouse.ID}))
 	itemTag := must.Must(tagReg.Create(ctx, models.Tag{
 		Kind: models.TagKindCommodity, Slug: "lake-gear", Label: "Lake gear", Color: models.TagColorBlue,
 	}))
@@ -69,6 +73,15 @@ func TestSearch_LocationsAreasAndTags(t *testing.T) {
 		c.Check(body, checkers.JSONPathEquals("$.meta.total"), float64(1))
 		c.Check(body, checkers.JSONPathEquals("$.data[0].id"), loft.ID)
 		c.Check(body, checkers.JSONPathEquals("$.data[0].location_id"), cottage.ID)
+	})
+
+	c.Run("case is folded, final sigma included", func(c *qt.C) {
+		for _, q := range []string{"ΟΔΌΣ", "οδόσ", "ΔΌΣ", "Οδός"} {
+			code, body := get(c, "/search?type=areas&q="+url.QueryEscape(q))
+			c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("q %s, body: %s", q, body))
+			c.Check(body, checkers.JSONPathEquals("$.meta.total"), float64(1), qt.Commentf("q %s", q))
+			c.Check(body, checkers.JSONPathEquals("$.data[0].id"), street.ID, qt.Commentf("q %s", q))
+		}
 	})
 
 	c.Run("an area does not match on its location's address", func(c *qt.C) {
