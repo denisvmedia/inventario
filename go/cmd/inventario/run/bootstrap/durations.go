@@ -26,6 +26,7 @@ type WorkerDurations struct {
 	WeeklyDigestInterval             time.Duration
 	LoanReminderInterval             time.Duration
 	MaintenanceReminderInterval      time.Duration
+	ItemReminderInterval             time.Duration
 	CurrencyMigrationInterval        time.Duration
 	BusinessMetricsInterval          time.Duration
 	WorkerControlRefreshInterval     time.Duration
@@ -75,6 +76,7 @@ func ParseWorkerDurations(cfg *Config) (WorkerDurations, error) {
 		{"weekly-digest-interval", cfg.WeeklyDigestInterval, &out.WeeklyDigestInterval},
 		{"loan-reminder-interval", cfg.LoanReminderInterval, &out.LoanReminderInterval},
 		{"maintenance-reminder-interval", cfg.MaintenanceReminderInterval, &out.MaintenanceReminderInterval},
+		{"item-reminder-interval", cfg.ItemReminderInterval, &out.ItemReminderInterval},
 		{"currency-migration-interval", cfg.CurrencyMigrationInterval, &out.CurrencyMigrationInterval},
 		{"business-metrics-interval", cfg.BusinessMetricsInterval, &out.BusinessMetricsInterval},
 		{"orphan-file-gc-interval", cfg.OrphanFileGCInterval, &out.OrphanFileGCInterval},

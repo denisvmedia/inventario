@@ -829,6 +829,153 @@ table "commodity_loans" {
   }
 }
 
+table "commodity_reminder_sends" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant commodity reminder send isolation"
+  }
+  column "reminder_id" {
+    type = TEXT
+  }
+  column "occurrence_on" {
+    type = TEXT
+  }
+  column "lead_days" {
+    type = INTEGER
+  }
+  column "sent_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_commodity_reminder_send_reminder" {
+    columns = [column.reminder_id]
+    ref_columns = [table.commodity_reminders.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_commodity_reminder_sends_group_id" {
+    columns = [column.group_id]
+  }
+  index "idx_commodity_reminder_sends_key" {
+    unique = true
+    columns = [column.reminder_id, column.occurrence_on, column.lead_days]
+  }
+  index "idx_commodity_reminder_sends_tenant_id" {
+    columns = [column.tenant_id]
+  }
+}
+
+table "commodity_reminders" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant commodity reminder isolation"
+  }
+  column "commodity_id" {
+    type = TEXT
+  }
+  column "title" {
+    type = TEXT
+  }
+  column "due_on" {
+    type = TEXT
+  }
+  column "remind_days_before" {
+    type = JSONB
+  }
+  column "repeat_unit" {
+    type = TEXT
+    default = "none"
+  }
+  column "repeat_interval" {
+    type = INTEGER
+    default = "1"
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_commodity_reminder_commodity" {
+    columns = [column.commodity_id]
+    ref_columns = [table.commodities.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_commodity_reminders_commodity" {
+    columns = [column.commodity_id]
+  }
+  index "idx_commodity_reminders_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_commodity_reminders_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "commodity_scan_audits" {
   row_security {
     enabled = true
@@ -3897,6 +4044,42 @@ policy "commodity_loan_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures commodity loans can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "commodity_reminder_send_background_worker_access" {
+  on = table.commodity_reminder_sends
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to record reminder emails across all groups"
+}
+
+policy "commodity_reminder_send_isolation" {
+  on = table.commodity_reminder_sends
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures commodity reminder sends are accessible only by their tenant and group"
+}
+
+policy "commodity_reminder_background_worker_access" {
+  on = table.commodity_reminders
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to read commodity reminders across all groups"
+}
+
+policy "commodity_reminder_isolation" {
+  on = table.commodity_reminders
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures commodity reminders can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "commodity_scan_audit_background_worker_access" {

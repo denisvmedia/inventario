@@ -68,6 +68,12 @@ type emailJob struct {
 	// maintenance.
 	MaintenanceTitle   string `json:"maintenance_title,omitempty"`
 	MaintenanceDueDate string `json:"maintenance_due_date,omitempty"`
+	// Item-reminder fields (#2805), populated only by
+	// AsyncEmailService.SendItemReminderEmail. CommodityName and
+	// CommodityURL are shared with the warranty fields above.
+	ReminderTitle    string `json:"reminder_title,omitempty"`
+	ReminderDueDate  string `json:"reminder_due_date,omitempty"`
+	ReminderDaysLeft int    `json:"reminder_days_left,omitempty"`
 	// Feedback fields (#1387). Populated only by
 	// AsyncEmailService.SendFeedbackEmail. FeedbackType is the human
 	// label ("Bug", "Feature request", etc.); FromName/FromEmail/FromUserID

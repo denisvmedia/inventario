@@ -12,6 +12,23 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- Item reminders and an Upcoming page. The Reminders card on an item's
+  Details tab takes a title, a date, up to five "remind me N days before"
+  values and an optional repeat (daily, weekly, monthly or yearly, every N
+  units). A monthly reminder on the 31st falls on the last day of shorter
+  months, and a yearly one on 29 February on 28 February in other years. On a
+  repeating reminder each lead time must be shorter than the repeat interval,
+  and the date's year must be between 1900 and 2200. The emails go to whoever
+  created the reminder, at most once per date and lead time, and can be
+  turned off with the new "Item reminders" toggle in Settings →
+  Notifications. Deleting an account deletes the reminders its owner
+  created. The Upcoming page in the sidebar lists item reminders, warranty
+  expiries, loans due back and maintenance due across the group by date, for
+  the next 30 days, 90 days or 12 months. The worker runs every
+  hour (`--item-reminder-interval`) and can be paused as `item-reminder`.
+  Reminders on custom date fields are not part of this
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what
@@ -164,6 +181,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Fixed
 
+- Settings saved on the server show up in the app again. The settings
+  endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
+  app reads camelCase (`notificationsWarrantyExpiry`), so after a reload the
+  notification toggles showed their defaults, and the saved language and
+  default items view were not applied
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 - The search page renders item results. It expected each result wrapped in
   JSON:API `attributes`, which the search endpoint does not send, and failed to
   render as soon as a search matched an item

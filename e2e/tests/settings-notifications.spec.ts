@@ -30,7 +30,7 @@
  *
  * The unique value Playwright adds is the **page-level surface check**:
  * once a real authenticated session lands on `/settings → Notifications`,
- * all six rows render and the prior `ComingSoonBanner` stubs are gone.
+ * every row renders and the prior `ComingSoonBanner` stubs are gone.
  * A live persistence-through-reload probe was attempted and
  * intentionally dropped — the CI cadence races against GroupContext
  * slug propagation (the lib/http rewrite needs a non-empty slug to
@@ -60,6 +60,12 @@ authTest.describe("Settings — notification preferences surface (#1643)", () =>
       ).toBeVisible({ timeout: 30000 });
       await expect(
         page.locator('[data-testid="notification-row-maintenance-reminder"]'),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-testid="notification-row-loan-reminder"]'),
+      ).toBeVisible();
+      await expect(
+        page.locator('[data-testid="notification-row-item-reminder"]'),
       ).toBeVisible();
       await expect(
         page.locator('[data-testid="notification-row-weekly-digest"]'),

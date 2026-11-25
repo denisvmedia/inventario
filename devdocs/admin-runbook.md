@@ -342,7 +342,8 @@ and the `worker_control.worker_type` column):
 `email-verification-cleanup`, `magic-link-token-cleanup`,
 `operation-slot-cleanup`, `login-event-retention`, `group-purge`,
 `orphan-file-gc`, `warranty-reminder`, `storage-quota-reminder`,
-`loan-reminder`, `maintenance-reminder`, `currency-migration`.
+`loan-reminder`, `maintenance-reminder`, `item-reminder`,
+`currency-migration`, `weekly-digest`.
 
 > Email delivery is intentionally **not** in this set — it is a Redis
 > subscriber rather than a polling worker, with a separate pause story.

@@ -89,6 +89,10 @@ func (*recordingEmailService) SendMaintenanceReminderEmail(_ context.Context, _,
 	return nil
 }
 
+func (*recordingEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (*recordingEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }
@@ -140,6 +144,9 @@ func (failingEmailService) SendLoanReminderEmail(_ context.Context, _, _, _, _, 
 	return errors.New("queue down")
 }
 func (failingEmailService) SendMaintenanceReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return errors.New("queue down")
+}
+func (failingEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
 	return errors.New("queue down")
 }
 func (failingEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {

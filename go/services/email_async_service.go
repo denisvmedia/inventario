@@ -294,6 +294,21 @@ func (s *AsyncEmailService) SendMaintenanceReminderEmail(ctx context.Context, to
 	})
 }
 
+// SendItemReminderEmail enqueues a reminder the user set on an item
+// (#2805).
+func (s *AsyncEmailService) SendItemReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType:     emailTemplateItemReminder,
+		To:               to,
+		Name:             name,
+		CommodityName:    commodityName,
+		CommodityURL:     commodityURL,
+		ReminderTitle:    title,
+		ReminderDueDate:  dueDate,
+		ReminderDaysLeft: daysLeft,
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)

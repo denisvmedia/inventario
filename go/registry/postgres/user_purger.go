@@ -30,7 +30,9 @@ var _ registry.UserPurger = (*UserPurger)(nil)
 //     and the group_invites_audit rows that reference the user as the invite
 //     creator (created_by) or accepter (used_by) — both NOT NULL FK -> users(id)
 //     NO ACTION, so they must be cleared here or the final users delete is
-//     rejected (#2147).
+//     rejected (#2147). Also the item reminders the user created and their
+//     send records (#2805): a reminder emails only its author, so it is
+//     personal even in a shared group.
 //   - SET NULL the authorship back-refs that are NULLABLE: login_events.user_id
 //     (already nulled by the DELETE-by-user above — see note), and
 //     system_admin_grants.granted_by (the *operator* who granted someone else's
@@ -180,6 +182,14 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			return err
 		}
 
+		// Item reminders (#2805) email only the person who created them, so
+		// they leave with the account, including in a group the user shares
+		// with others. Their created_by_user_id is a NOT NULL FK -> users(id)
+		// with NO ACTION and would otherwise block the final users delete.
+		if err := r.purgeCommodityReminders(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
+
 		// system_admin_grants is NON-RLS and carries NO tenant_id column, so it
 		// can't ride the tenant_id template. Two FKs point at users(id):
 		//   user_id    -> ON DELETE CASCADE (the granted user) — DELETE the row.
@@ -192,6 +202,27 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 
 		return nil
 	})
+}
+
+// purgeCommodityReminders deletes the item reminders the user created and
+// their send records. Sends go first: each one carries the reminder author as
+// created_by_user_id. Removing the reminders then cascades to any send left
+// behind through the reminder_id foreign key.
+func (r *UserPurger) purgeCommodityReminders(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	for _, table := range []string{
+		string(r.tableNames.CommodityReminderSends()),
+		string(r.tableNames.CommodityReminders()),
+	} {
+		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", table)
+		if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+			return errxtrace.Wrap(
+				"failed to purge the user's item reminders",
+				err,
+				errx.Attrs("table", table, "tenant_id", tenantID, "user_id", userID),
+			)
+		}
+	}
+	return nil
 }
 
 // purgeThumbnailChain removes the thumbnail generation jobs the user created

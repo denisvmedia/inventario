@@ -55,6 +55,7 @@ type Config struct {
 	LoanReminderInterval         string `yaml:"loan_reminder_interval" env:"LOAN_REMINDER_INTERVAL" env-default:""`
 	LoanReminderDueSoonDays      int    `yaml:"loan_reminder_due_soon_days" env:"LOAN_REMINDER_DUE_SOON_DAYS" env-default:"0"`
 	MaintenanceReminderInterval  string `yaml:"maintenance_reminder_interval" env:"MAINTENANCE_REMINDER_INTERVAL" env-default:""`
+	ItemReminderInterval         string `yaml:"item_reminder_interval" env:"ITEM_REMINDER_INTERVAL" env-default:""`
 	CurrencyMigrationInterval    string `yaml:"currency_migration_interval" env:"CURRENCY_MIGRATION_INTERVAL" env-default:""`
 	BusinessMetricsInterval      string `yaml:"business_metrics_interval" env:"BUSINESS_METRICS_INTERVAL" env-default:""`
 	WorkerControlRefreshInterval string `yaml:"worker_control_refresh_interval" env:"WORKER_CONTROL_REFRESH_INTERVAL" env-default:""`
@@ -411,6 +412,30 @@ func (c *Config) setWeeklyDigestDefaults() {
 	}
 }
 
+// setReminderDefaults fills the cadences of the reminder workers.
+func (c *Config) setReminderDefaults() {
+	if c.WarrantyReminderInterval == "" {
+		c.WarrantyReminderInterval = defaults.GetWarrantyReminderInterval()
+	}
+	if c.StorageQuotaReminderInterval == "" {
+		c.StorageQuotaReminderInterval = defaults.GetStorageQuotaReminderInterval()
+	}
+	if c.LoanReminderInterval == "" {
+		c.LoanReminderInterval = defaults.GetLoanReminderInterval()
+	}
+	if c.LoanReminderDueSoonDays <= 0 {
+		// Treat negative values as invalid too — operators that flip a
+		// sign by mistake otherwise silently invert the due-soon window.
+		c.LoanReminderDueSoonDays = defaults.GetLoanReminderDueSoonDays()
+	}
+	if c.MaintenanceReminderInterval == "" {
+		c.MaintenanceReminderInterval = defaults.GetMaintenanceReminderInterval()
+	}
+	if c.ItemReminderInterval == "" {
+		c.ItemReminderInterval = defaults.GetItemReminderInterval()
+	}
+}
+
 func (c *Config) setWorkerDefaults() {
 	if c.MaxConcurrentExports == 0 {
 		c.MaxConcurrentExports = defaults.GetMaxConcurrentExports()
@@ -445,24 +470,8 @@ func (c *Config) setWorkerDefaults() {
 	if c.GroupPurgeInterval == "" {
 		c.GroupPurgeInterval = defaults.GetGroupPurgeInterval()
 	}
-	if c.WarrantyReminderInterval == "" {
-		c.WarrantyReminderInterval = defaults.GetWarrantyReminderInterval()
-	}
-	if c.StorageQuotaReminderInterval == "" {
-		c.StorageQuotaReminderInterval = defaults.GetStorageQuotaReminderInterval()
-	}
+	c.setReminderDefaults()
 	c.setWeeklyDigestDefaults()
-	if c.LoanReminderInterval == "" {
-		c.LoanReminderInterval = defaults.GetLoanReminderInterval()
-	}
-	if c.LoanReminderDueSoonDays <= 0 {
-		// Treat negative values as invalid too — operators that flip a
-		// sign by mistake otherwise silently invert the due-soon window.
-		c.LoanReminderDueSoonDays = defaults.GetLoanReminderDueSoonDays()
-	}
-	if c.MaintenanceReminderInterval == "" {
-		c.MaintenanceReminderInterval = defaults.GetMaintenanceReminderInterval()
-	}
 	if c.CurrencyMigrationInterval == "" {
 		c.CurrencyMigrationInterval = defaults.GetCurrencyMigrationInterval()
 	}

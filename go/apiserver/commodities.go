@@ -813,6 +813,7 @@ func Commodities(params Params) func(r chi.Router) {
 			r.Route("/services", CommodityServices(params))       // /commodities/123/services (#1508)
 			r.Route("/supplies", CommoditySupplyLinks(params))    // /commodities/123/supplies (#1369)
 			r.Route("/maintenance", CommodityMaintenance(params)) // /commodities/123/maintenance (#1368)
+			r.Route("/reminders", CommodityReminders(params))     // /commodities/123/reminders (#2805)
 			// #1450: append-only audit timeline.
 			r.With(paginate).Get("/events", api.listCommodityEvents) // GET /commodities/123/events
 
