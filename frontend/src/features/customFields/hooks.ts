@@ -20,9 +20,12 @@ import { customFieldKeys } from "./keys"
 const CUSTOM_FIELDS_STALE_MS = 60_000
 
 // useCustomFields lists the group's custom fields with their item counts.
-// Without a group (the landing page's first item) the query stays off.
-export function useCustomFields() {
-  const slug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+// Without a group (the landing page's first item) the query stays off. A
+// component that is handed its group's slug instead of reading the group
+// context (the AI scan step) passes it as slug.
+export function useCustomFields({ slug: slugProp }: { slug?: string } = {}) {
+  const contextSlug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+  const slug = slugProp ?? contextSlug
   return useQuery<CustomField[]>({
     queryKey: customFieldKeys.list(slug),
     queryFn: ({ signal }) => listCustomFields(signal),

@@ -200,7 +200,7 @@ export function AiScanStep({
   )
   const [acceptedCustom, setAcceptedCustom] = useState<Set<string>>(new Set())
   // The group's fields, to name the values read; none in the anonymous flow.
-  const customFieldDefs = useCustomFields().data
+  const customFieldDefs = useCustomFields({ slug: anonymous ? "" : slug }).data
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
   const [errorCode, setErrorCode] = useState<string | null>(null)
   const abortRef = useRef<AbortController | null>(null)

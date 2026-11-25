@@ -126,7 +126,7 @@ export function CustomFieldFormDialog({
       if (code === CUSTOM_FIELD_LIMIT) {
         setServerError({
           kind: "conflict",
-          message: t("customFields:dialog.limit", { count: CUSTOM_FIELDS_MAX }),
+          message: t("customFields:dialog.limit", { max: CUSTOM_FIELDS_MAX }),
         })
         return
       }
@@ -228,7 +228,12 @@ export function CustomFieldFormDialog({
                 {t("customFields:dialog.optionsLabel")}
               </legend>
               {options.fields.map((option, index) => {
-                const usage = field?.options.find((o) => o.id && o.id === option.id)?.item_count
+                // option.id is the field array's own key; the option's id
+                // is in the form values.
+                const optionId = currentOptions[index]?.id
+                const usage = optionId
+                  ? field?.options.find((o) => o.id === optionId)?.item_count
+                  : undefined
                 const error = errors.options?.[index]?.label?.message
                 return (
                   <div key={option.id} className="space-y-1">

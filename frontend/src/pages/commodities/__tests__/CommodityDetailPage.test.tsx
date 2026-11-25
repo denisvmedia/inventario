@@ -15,6 +15,7 @@ import {
   apiUrl,
   areaHandlers,
   commodityHandlers,
+  customFieldHandlers,
   fileHandlers,
   groupHandlers,
   locationHandlers,
@@ -1230,5 +1231,69 @@ describe("<CommodityDetailSheet /> (#1546 modal-routes overlay)", () => {
       expect(screen.getByTestId("list-backdrop")).toHaveTextContent(`/g/${SLUG}/commodities`)
     )
     expect(screen.queryByTestId("commodity-detail-sheet")).toBeNull()
+  })
+})
+
+describe("CommodityDetailPage custom fields", () => {
+  beforeEach(() => {
+    clearAuth()
+    __resetGroupContextForTests()
+    __resetHttpForTests()
+  })
+
+  it("shows the values the item has, a link by name and a linked item in Trash", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf-charger", name: "Charger", type: "item_link" }),
+        customFieldHandlers.field({ id: "cf-dock", name: "Dock", type: "item_link" }),
+        customFieldHandlers.field({ id: "cf-keyboard", name: "Keyboard", type: "boolean" }),
+        customFieldHandlers.field({
+          id: "cf-grade",
+          name: "Grade",
+          type: "select",
+          options: [{ id: "opt-a", label: "A" }],
+        }),
+        customFieldHandlers.field({ id: "cf-unused", name: "Unused" }),
+      ]),
+      http.get(apiUrl(`/g/${SLUG}/commodities/${ID}`), () =>
+        HttpResponse.json({
+          data: {
+            ...commodityFixture,
+            attributes: {
+              ...commodityFixture.attributes,
+              custom_fields: {
+                "cf-charger": "c2",
+                "cf-dock": "c3",
+                "cf-keyboard": false,
+                "cf-grade": "opt-a",
+              },
+            },
+          },
+          meta: {
+            linked_items: {
+              c2: { name: "USB-C charger", trashed: false },
+              c3: { name: "Old dock", trashed: true },
+            },
+          },
+        })
+      )
+    )
+    renderDetail()
+    const charger = await screen.findByTestId("commodity-detail-custom-field-cf-charger")
+    expect(within(charger).getByRole("link", { name: "USB-C charger" })).toHaveAttribute(
+      "href",
+      `/g/${SLUG}/commodities/c2`
+    )
+    const dock = screen.getByTestId("commodity-detail-custom-field-cf-dock")
+    expect(dock).toHaveTextContent("Old dock")
+    expect(dock).toHaveTextContent("in Trash")
+    expect(within(dock).queryByRole("link")).not.toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-custom-field-cf-keyboard")).toHaveTextContent(
+      "No"
+    )
+    expect(screen.getByTestId("commodity-detail-custom-field-cf-grade")).toHaveTextContent("A")
+    expect(screen.queryByTestId("commodity-detail-custom-field-cf-unused")).not.toBeInTheDocument()
   })
 })
