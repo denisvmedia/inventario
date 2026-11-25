@@ -13,6 +13,7 @@ import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-co
 import { __resetHttpForTests } from "@/lib/http"
 import { groupHandlers, loanHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
+import { WhenGroupLoaded } from "@/test/group-loaded"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -51,7 +52,9 @@ function renderTab(commodityCount?: number) {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <LendTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                <WhenGroupLoaded>
+                  <LendTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                </WhenGroupLoaded>
               </main>
             </GroupProvider>
           </ConfirmProvider>
