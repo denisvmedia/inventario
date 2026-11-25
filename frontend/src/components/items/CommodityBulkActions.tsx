@@ -72,7 +72,8 @@ interface Target {
 }
 
 // What a request needs to know when it ends, to touch only what is still
-// its own: the selection version it was sent for, the dialog session that
+// its own: the selection version it was sent for (the user's selection;
+// the outcomes of other requests do not change it), the dialog session that
 // sent it (none for a confirm or a retry), and its place among requests.
 interface RequestContext {
   version: SelectionVersion
@@ -81,8 +82,8 @@ interface RequestContext {
 }
 
 // A result with failures, for the result dialog. version is the selection
-// the result left (its failed items), so a retry from the dialog changes
-// the selection only while it is still that one.
+// version its request was sent for, so a retry from the dialog changes the
+// selection only while the user has not changed it since.
 interface Outcome {
   action: BulkAction
   result: CommodityBulkResult
@@ -244,12 +245,10 @@ export function CommodityBulkActions({
     if (action.kind === "delete") reportDelete(result)
     if (result.failed.length > 0) {
       // The failed items stay selected, to retry them or fix them another way.
-      const left = Symbol("bulk result")
-      showOutcome({ action, result, version: left }, req.seq)
+      showOutcome({ action, result, version: req.version }, req.seq)
       selection.settle(
         req.version,
-        result.failed.map((f) => f.id),
-        left
+        result.failed.map((f) => f.id)
       )
       return
     }
@@ -374,7 +373,8 @@ export function CommodityBulkActions({
   }
 
   // retry sends the action again for the failed items. Its outcome changes
-  // the selection only while that is still the one the result left.
+  // the selection only while the user has not changed it since the request
+  // that failed was sent.
   async function retry() {
     if (!outcome) return
     await run(

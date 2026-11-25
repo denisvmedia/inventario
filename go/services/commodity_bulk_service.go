@@ -492,7 +492,8 @@ func (s *CommodityBulkService) Update(ctx context.Context, items registry.Commod
 
 // Move puts every target into the area areaID, which the caller has checked
 // exists, reading each item right before it writes it. An item already
-// there is skipped.
+// there is skipped. Each moved item is validated as a single edit validates
+// it, so the context must carry the group currency.
 func (s *CommodityBulkService) Move(ctx context.Context, items registry.CommodityRegistry, targets []BulkTarget, areaID string) BulkOutcome {
 	var out BulkOutcome
 	for i, t := range targets {
@@ -511,6 +512,10 @@ func (s *CommodityBulkService) Move(ctx context.Context, items registry.Commodit
 		}
 		after := *before
 		after.AreaID = new(areaID)
+		if err := after.ValidateWithContext(ctx); err != nil {
+			out.fail(t.ID, before.Name, err)
+			continue
+		}
 		updated, err := items.Update(ctx, after)
 		if err != nil {
 			out.fail(t.ID, before.Name, err)

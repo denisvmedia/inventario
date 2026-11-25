@@ -107,9 +107,10 @@ could not be changed stay selected, so you can open **Tags…** again to retry
 just those. When no file changed, a message says why: the files already had the
 tags you added, or none of them had the tags you removed.
 
-More than 100 files are sent in batches of 100. If a batch gets no answer, the
-message says how many files may have changed; they stay selected, so check
-them before you send the change again.
+Files are sent in batches of 100. If a batch gets no answer, or fails on the
+server, the message says how many files may have changed; they stay selected,
+so check them before you send the change again. This holds for the first
+batch too, and for 100 files or fewer, which go in one batch.
 
 ## Categories and filters
 

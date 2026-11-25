@@ -480,6 +480,65 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
   })
 
+  it("a delete that ends after a failed move of the same items clears them", async () => {
+    const user = userEvent.setup()
+    let releaseMove = () => {}
+    const moveGate = new Promise<void>((resolve) => (releaseMove = resolve))
+    let releaseDelete = () => {}
+    const deleteGate = new Promise<void>((resolve) => (releaseDelete = resolve))
+    const deleted: Record<string, unknown>[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkMove(SLUG, {
+        respond: async () => {
+          await moveGate
+          return bulkResultResponse({
+            succeeded: ["c1"],
+            failed: [{ id: "c2", name: "Second", code: "failed", error: "boom" }],
+          })
+        },
+      }),
+      ...commodityHandlers.bulkDelete(SLUG, {
+        onRequest: (a) => deleted.push(a),
+        respond: async () => {
+          await deleteGate
+          return bulkResultResponse({ succeeded: ["c1", "c2"] })
+        },
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a1")
+    await user.click(screen.getByTestId("bulk-move-confirm"))
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+
+    // While the move runs, the user deletes the same two items.
+    await user.click(screen.getByTestId("commodities-bulk-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+    await waitFor(() => expect(deleted).toHaveLength(1))
+
+    // The move ends first and keeps the item it could not move selected.
+    releaseMove()
+    await screen.findByTestId("bulk-result-dialog")
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
+
+    // The delete then ends: both items are in the trash, so neither stays
+    // selected.
+    releaseDelete()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        expect.stringContaining("moved to the trash"),
+        expect.anything()
+      )
+    )
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodities-bulk-count")).not.toBeInTheDocument()
+    )
+  })
+
   it("a retry from an earlier result leaves a newer selection alone", async () => {
     const user = userEvent.setup()
     let release = () => {}
@@ -603,6 +662,32 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     act(() => undo!.action.onClick())
     await waitFor(() => expect(restored).toHaveLength(1))
     expect(restored[0]).toEqual({ data: { type: "commodities", attributes: { ids: ["c2"] } } })
+  })
+
+  it("offers Undo when a delete gets no answer at all", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkDelete(SLUG, { respond: () => HttpResponse.error() })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+
+    // The server may have moved both items to the trash before the answer
+    // was lost: they are listed as items that may have changed, with Undo.
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith(
+        "No answer came back for 2 items, so they may be in the trash.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) })
+      )
+    )
+    const result = await screen.findByTestId("bulk-result-dialog")
+    expect(within(result).getAllByText(/May have changed/)).toHaveLength(2)
+    expect(toast.error).not.toHaveBeenCalled()
   })
 
   it("says when an item may have changed, and Undo of a delete tries it too", async () => {

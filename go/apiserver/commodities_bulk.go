@@ -90,6 +90,15 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 		return
 	}
 
+	// Each moved item is validated as a single edit validates it, which
+	// reads the group currency.
+	rWithCurrency, err := requestWithGroupCurrency(r)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	r = rWithCurrency
+
 	// A missing area is one error for the request, not a failure per item.
 	areaID := input.Data.Attributes.AreaID
 	if _, err := regSet.AreaRegistry.Get(r.Context(), areaID); err != nil {
@@ -112,12 +121,15 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 
 // bulkUpdateCommodities changes the tags, type or status of several items.
 // @Summary Bulk-update commodities
-// @Description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).
+// @Description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:
+// @Description a status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,
+// @Description so a type or tag change in the same patch gets no event of its own.
 // @Description
 // @Description The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
 // @Description (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
 // @Description `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
-// @Description `in_use` clears the status date and note. `sold` is refused, since it needs a sale price for each item.
+// @Description `in_use` takes neither: send it without `date` and `note` (a non-empty one is refused with 422), and it clears
+// @Description the status date, note and sale price. `sold` is refused, since it needs a sale price for each item.
 // @Description An item that already has the status keeps its status date and note: the patch does not change them,
 // @Description even when it sends another date or note. The other parts of the patch still apply to that item.
 // @Description A part left out of the patch is left unchanged.

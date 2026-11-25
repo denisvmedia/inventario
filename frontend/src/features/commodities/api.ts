@@ -3,7 +3,7 @@
 // `getCommoditiesValue()`; the items page (#1410) extends with full CRUD
 // + bulk + filter/sort/search query params (BE shipped together with the
 // FE in #1410).
-import { sendInChunks } from "@/lib/bulk-chunks"
+import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -530,9 +530,10 @@ function readBulkResult(body: BulkResultEnvelope | undefined): CommodityBulkResu
 }
 
 // postBulk sends one bulk action. An id list longer than the server takes
-// in one request goes in several, one after the other, and the results are
-// merged. When a later request fails, its items are reported as unknown,
-// since the server may have changed some of them, and the items after it as
+// in one request goes in several, one after the other, all to the group
+// active when the action started, and the results are merged. When a
+// request fails without an answer, its items are reported as unknown, since
+// the server may have changed some of them, and the items after it as
 // not_sent (sendInChunks). A query always goes in one request, since the
 // server resolves it.
 async function postBulk(
@@ -540,11 +541,10 @@ async function postBulk(
   selection: CommoditySelection,
   extra: Record<string, unknown>
 ): Promise<CommodityBulkResult> {
+  const post = pinnedPost<BulkResultEnvelope>(path)
   const send = async (attributes: Record<string, unknown>) =>
     readBulkResult(
-      await http.post<BulkResultEnvelope>(path, {
-        data: { type: "commodities", attributes: { ...attributes, ...extra } },
-      })
+      await post({ data: { type: "commodities", attributes: { ...attributes, ...extra } } })
     )
   if ("query" in selection) {
     return send({

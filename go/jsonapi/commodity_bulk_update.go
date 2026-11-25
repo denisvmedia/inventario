@@ -47,10 +47,11 @@ type BulkTagsPatch struct {
 	Remove []string `json:"remove,omitempty"`
 }
 
-// CommodityBulkStatusPatch sets the status. Value in_use clears the status
-// date and note. Any other status but sold needs Date (YYYY-MM-DD) and takes
-// an optional Note of at most 1024 characters. sold is refused: it needs a
-// sale price of its own for each item.
+// CommodityBulkStatusPatch sets the status. Value in_use takes no Date and
+// no Note (a non-empty one is refused with 422) and clears the status date,
+// note and sale price. Any other status but sold needs Date (YYYY-MM-DD) and
+// takes an optional Note of at most 1024 characters. sold is refused: it
+// needs a sale price of its own for each item.
 type CommodityBulkStatusPatch struct {
 	Value string `json:"value" example:"disposed" enums:"in_use,lost,disposed,written_off"`
 	Date  string `json:"date,omitempty" example:"2026-11-25"`

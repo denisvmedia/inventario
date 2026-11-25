@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { sendInChunks } from "@/lib/bulk-chunks"
+import { HttpError, NetworkError } from "@/lib/http"
 
 const ids = (n: number) => Array.from({ length: n }, (_, i) => `id${i}`)
 
@@ -40,12 +41,33 @@ describe("sendInChunks", () => {
     expect(out).toEqual({ parts: [["id0", "id1"]], unknown: ["id2"], unsent: [] })
   })
 
-  it("throws when the first chunk fails, as a single request would", async () => {
+  it("throws when the server refuses the first chunk, as a single request would", async () => {
+    const refused = new HttpError("refused", 422, "/bulk", undefined)
+    await expect(
+      sendInChunks(ids(3), 2, async () => {
+        throw refused
+      })
+    ).rejects.toBe(refused)
     await expect(
       sendInChunks(ids(3), 2, async () => {
         throw new Error("boom")
       })
     ).rejects.toThrow("boom")
+  })
+
+  it.each([
+    ["gets no answer", new NetworkError("/bulk", new TypeError("offline"))],
+    ["fails on the server", new HttpError("failed", 502, "/bulk", undefined)],
+  ])("reports the first chunk as unknown when it %s", async (_, err) => {
+    let calls = 0
+    const out = await sendInChunks(ids(5), 2, async () => {
+      calls += 1
+      throw err
+    })
+    // The server may have changed some of the first chunk's ids before the
+    // answer was lost; the ids after it were never sent.
+    expect(out).toEqual({ parts: [], unknown: ["id0", "id1"], unsent: ["id2", "id3", "id4"] })
+    expect(calls).toBe(1)
   })
 
   it("sends nothing for no ids", async () => {

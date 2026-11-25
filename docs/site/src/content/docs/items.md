@@ -549,13 +549,18 @@ every item the current search and filters match, on every page. **Clear
 selection** goes back to no selection. **Print labels** is not offered for
 this selection.
 
+The link is offered when up to 500 items match. One action takes up to 500
+items, so when more match, the bar says so instead: narrow the filters first.
+The link is also missing when Inventario could not tell which items match
+right then. In both cases you can still select items one by one or a page at
+a time, on each page, and act on those.
+
 Inventario checks the selection again when you confirm an action. If the
 matching items changed in the meantime, for example because someone added an
 item or edited one so that it no longer matches, nothing is changed: the
 selection is cleared and a message asks you to check the list and select the
 items again. This holds even when as many items match as before, if they are
-not the same ones. One action takes up to 500 items; when more match, narrow
-the filters first.
+not the same ones.
 
 ### When some items fail
 
@@ -565,10 +570,17 @@ deleted in the meantime changes no item and shows an error instead. Click an ite
 and fix it, or click **Retry failed items** to run the same action on those
 items again.
 
-More than 100 picked items are sent in batches of 100. If a batch gets no
-answer, its items are listed as **May have changed**: Inventario cannot tell
-whether the action reached them, so check them in the list before you retry.
-After a delete, **Undo** tries to restore those items too.
+Picked items are sent in batches of 100. If a batch gets no answer, or fails
+on the server, its items are listed as **May have changed**: Inventario cannot
+tell whether the action reached them, so check them in the list before you
+retry. This holds for the first batch too, and for a selection of 100 items
+or fewer, which goes in one batch. After a delete, **Undo** tries to restore
+those items too. The items of later batches are listed as not changed, since
+the action stopped before it reached them.
+
+An action on all matching items goes in one request. If that request gets no
+answer, an error is shown and Inventario cannot list what changed: check the
+list, and the trash after a delete, before you try again.
 
 To clear your selection, untick the items or reload the page. Changing the
 search or a filter also clears it.

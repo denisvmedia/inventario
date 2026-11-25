@@ -12,8 +12,9 @@ import { restoreCommodities } from "./api"
 //
 // maybeDeleted are items whose delete request failed after it may have
 // reached the server (an unknown outcome): they may be in Trash or not, so
-// Undo restores them too, and a restore that fails for one of them is not
-// counted as a failure, since it only means the item never left.
+// Undo restores them too. A restore the server refuses because one of them
+// is not in Trash (not_found) is not counted as a failure, since it means
+// the item never left; any other failure for one of them is.
 export function useUndoItemDelete() {
   const { t } = useTranslation()
   const toast = useAppToast()
@@ -25,12 +26,16 @@ export function useUndoItemDelete() {
       restoreCommodities([...ids, ...maybeDeleted]).then(
         (result) => {
           void qc.invalidateQueries()
-          const failed = result.failed.filter((f) => deleted.has(f.id)).length
+          const failed = result.failed.filter(
+            (f) => deleted.has(f.id) || f.code !== "not_found"
+          ).length
           const options =
             result.unknown.length > 0
               ? { description: t("trash:toast.restoreUnknown", { count: result.unknown.length }) }
               : undefined
-          if (failed > 0) {
+          // As the Trash page does, a restore that got no answer for some
+          // items is a warning: they may still be in Trash.
+          if (failed > 0 || result.unknown.length > 0) {
             toast.warning(
               t("trash:toast.bulkPartial", { succeeded: result.succeeded.length, failed }),
               options

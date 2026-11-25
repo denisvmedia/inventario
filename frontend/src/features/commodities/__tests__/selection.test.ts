@@ -52,6 +52,19 @@ describe("useCommoditySelection", () => {
     expect(result.current.count).toBe(0)
   })
 
+  it("lets every request sent for one selection settle it, in the order they end", () => {
+    const { result } = setup()
+    act(() => result.current.togglePage(["a", "b"]))
+    const version = result.current.version
+
+    // A move and a delete were both sent for a and b. The move ends first
+    // and keeps b, which it failed to move; the delete then removes both.
+    act(() => result.current.settle(version, ["b"]))
+    expect(result.current.version).toBe(version)
+    act(() => result.current.settle(version, []))
+    expect(result.current.count).toBe(0)
+  })
+
   it("leaves a selection made after the request was sent", () => {
     const { result } = setup()
     act(() => result.current.togglePage(["a", "b"]))

@@ -4390,12 +4390,15 @@ export type paths = {
         put?: never;
         /**
          * Bulk-update commodities
-         * @description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).
+         * @description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:
+         *     a status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,
+         *     so a type or tag change in the same patch gets no event of its own.
          *
          *     The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
          *     (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
          *     `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
-         *     `in_use` clears the status date and note. `sold` is refused, since it needs a sale price for each item.
+         *     `in_use` takes neither: send it without `date` and `note` (a non-empty one is refused with 422), and it clears
+         *     the status date, note and sale price. `sold` is refused, since it needs a sale price for each item.
          *     An item that already has the status keeps its status date and note: the patch does not change them,
          *     even when it sends another date or note. The other parts of the patch still apply to that item.
          *     A part left out of the patch is left unchanged.
@@ -9387,7 +9390,9 @@ export type paths = {
          * Restore items from Trash
          * @description Restores every item whose id appears in the body. The response
          *     lists the restored ids, the failures, and the restored items
-         *     that came back without an area.
+         *     that came back without an area. A failure's code is not_found
+         *     when the item is not in Trash (restored already, never deleted,
+         *     or not in the group), and failed for any other error.
          */
         post: {
             parameters: {

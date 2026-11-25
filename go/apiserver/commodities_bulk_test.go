@@ -336,6 +336,33 @@ func TestCommodityBulkMove_RefusesAMissingArea(t *testing.T) {
 	c.Assert(env.getItem(item.ID).AreaID, qt.IsNil)
 }
 
+// A move validates each item as a single edit does: an item that would not
+// pass validation fails, and is not written, while the others move.
+func TestCommodityBulkMove_ValidatesEachItem(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	location := must.Must(regs.LocationRegistry.Create(context.Background(), models.Location{Name: "Bulk Valid Home"}))
+	area := must.Must(regs.AreaRegistry.Create(context.Background(), models.Area{Name: "Bulk Valid Shed", LocationID: location.ID}))
+	good := env.bulkItem("Bulk Valid")
+	item := env.bulkItem("Bulk Unnamed Move")
+	broken := *item
+	broken.ShortName = ""
+	must.Must(regs.CommodityRegistry.Update(context.Background(), broken))
+
+	rr := env.do(http.MethodPost, "/commodities/bulk-move", bulkBody(map[string]any{
+		"ids": []string{good.ID, item.ID}, "area_id": area.ID,
+	}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	body := rr.Body.String()
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{good.ID})
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].id"), item.ID)
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].code"), "invalid")
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.failed[0].field"), "short_name")
+	c.Assert(env.getItem(item.ID).AreaID, qt.IsNil)
+	c.Assert(*env.getItem(good.ID).AreaID, qt.Equals, area.ID)
+}
+
 // A validation failure names the field and the validator's code, so the
 // client can say it in the user's language.
 func TestCommodityBulkUpdate_InvalidItemNamesFieldAndReason(t *testing.T) {

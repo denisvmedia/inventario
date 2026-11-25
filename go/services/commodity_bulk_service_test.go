@@ -271,8 +271,11 @@ func TestCommodityPatch_Apply(t *testing.T) {
 			patch:   services.CommodityPatchInput{Status: &services.CommodityStatusInput{Value: "lost", Date: "2026-11-25"}},
 			changed: true,
 			check: func(c *qt.C, got models.Commodity) {
+				c.Assert(got.Status, qt.Equals, models.CommodityStatusLost)
 				c.Assert(got.SalePrice, qt.IsNil)
 				c.Assert(string(*got.StatusDate), qt.Equals, "2026-11-25")
+				// The patch sends no note, so the old one ("to Bob") goes.
+				c.Assert(got.StatusNote, qt.Equals, "")
 			},
 		},
 		{

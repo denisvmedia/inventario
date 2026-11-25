@@ -165,6 +165,49 @@ describe("bulkUpdateCommodities", () => {
     })
   })
 
+  it("sends every request to the group the action started in", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    const sent: string[][] = []
+    const elsewhere: unknown[] = []
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/commodities/bulk-update`), async ({ request }) => {
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        sent.push(body.data.attributes.ids)
+        // The user switches groups while the first request runs.
+        setCurrentGroupSlug("other")
+        return HttpResponse.json({
+          data: { attributes: { succeeded: body.data.attributes.ids, failed: [] } },
+        })
+      }),
+      http.post(apiUrl("/g/other/commodities/bulk-update"), async ({ request }) => {
+        elsewhere.push(await request.json())
+        return HttpResponse.json({ data: { attributes: { succeeded: [], failed: [] } } })
+      })
+    )
+    const out = await bulkUpdateCommodities({ ids }, { type: "electronics" })
+    expect(sent.map((chunk) => chunk.length)).toEqual([100, 50])
+    expect(elsewhere).toEqual([])
+    expect(out.succeeded).toEqual(ids)
+  })
+
+  it("reports the items of a first request that got no answer as unknown", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/commodities/bulk-update`), () => {
+        calls += 1
+        return HttpResponse.error()
+      })
+    )
+    const out = await bulkUpdateCommodities({ ids }, { type: "electronics" })
+    expect(calls).toBe(1)
+    expect(out.succeeded).toEqual([])
+    expect(out.failed.filter((f) => f.code === "unknown").map((f) => f.id)).toEqual(
+      ids.slice(0, 100)
+    )
+    expect(out.failed.filter((f) => f.code === "not_sent").map((f) => f.id)).toEqual(ids.slice(100))
+  })
+
   it("keeps what the first requests changed when a later one fails", async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `c${i}`)
     let calls = 0

@@ -9,9 +9,11 @@ interface Matching {
   digest: string
 }
 
-// SelectionVersion names one state of the selection: every change makes a
-// new one, so a bulk request can tell whether the selection it was sent for
-// is still the current one (settle).
+// SelectionVersion names one selection the user made: every change the user
+// makes gives a new one, and the outcome of a bulk request (settle) keeps
+// it. A request sent for a selection can so tell whether the user changed
+// the selection since, and every request sent for the same one, even when
+// they overlap, still applies its own outcome.
 export type SelectionVersion = symbol
 
 interface SelectionState {
@@ -38,7 +40,7 @@ export interface CommoditySelectionControls {
   checkedOn: (pageIds: string[]) => ReadonlySet<string>
   /** How many items the selection holds. */
   count: number
-  /** Changes with every change of the selection; see settle. */
+  /** Changes with every change the user makes to the selection; see settle. */
   version: SelectionVersion
   toggle: (id: string, pageIds: string[]) => void
   togglePage: (pageIds: string[]) => void
@@ -47,13 +49,13 @@ export interface CommoditySelectionControls {
   /**
    * Applies the outcome of a bulk request sent for the selection at version:
    * keeps the given ids selected, or clears the selection when there are
-   * none. Does nothing when the selection changed since, so a request that
-   * ends late never replaces or clears one the user made in the meantime.
-   * When it applies, the new selection gets the version `as`, if given, so
-   * the caller can later send a request for exactly that selection (a retry
-   * of the failed items it kept).
+   * none. Does nothing when the user changed the selection since, so a
+   * request that ends late never replaces or clears one the user made in
+   * the meantime. The version stays: another request sent for the same
+   * selection, or a retry of the ids this one kept, still applies its own
+   * outcome after this one.
    */
-  settle: (version: SelectionVersion, keep: string[], as?: SelectionVersion) => void
+  settle: (version: SelectionVersion, keep: string[]) => void
   clear: () => void
   /** The selection as a bulk request names it. */
   toRequest: (query: string) => CommoditySelection
@@ -120,8 +122,8 @@ export function useCommoditySelection(
     []
   )
   const settle = useCallback(
-    (version: SelectionVersion, keep: string[], as?: SelectionVersion) =>
-      setState((s) => (s.version === version ? next(keep, null, as) : s)),
+    (version: SelectionVersion, keep: string[]) =>
+      setState((s) => (s.version === version ? next(keep, null, version) : s)),
     []
   )
   const clear = useCallback(() => setState(next([], null)), [])

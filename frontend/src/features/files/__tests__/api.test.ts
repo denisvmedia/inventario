@@ -209,6 +209,31 @@ describe("features/files/api", () => {
     await expect(uploadFile(f)).rejects.toThrow(/missing id/)
   })
 
+  it("bulkUpdateFileTags sends every request to the group the change started in", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `f${i}`)
+    const sent: string[][] = []
+    const elsewhere: unknown[] = []
+    server.use(
+      http.post(apiUrl("/g/g1/files/bulk-update"), async ({ request }) => {
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        sent.push(body.data.attributes.ids)
+        // The user switches groups while the first request runs.
+        setCurrentGroupSlug("g2")
+        return HttpResponse.json({
+          data: { attributes: { succeeded: body.data.attributes.ids, failed: [] } },
+        })
+      }),
+      http.post(apiUrl("/g/g2/files/bulk-update"), async ({ request }) => {
+        elsewhere.push(await request.json())
+        return HttpResponse.json({ data: { attributes: { succeeded: [], failed: [] } } })
+      })
+    )
+    const out = await bulkUpdateFileTags(ids, { add: ["receipt"], remove: [] })
+    expect(sent.map((chunk) => chunk.length)).toEqual([100, 50])
+    expect(elsewhere).toEqual([])
+    expect(out.succeeded).toEqual(ids)
+  })
+
   it("bulkUpdateFileTags keeps what the first requests changed when a later one fails", async () => {
     const ids = Array.from({ length: 250 }, (_, i) => `f${i}`)
     let calls = 0
