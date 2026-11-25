@@ -42,7 +42,9 @@ const (
 	maxInbMembers         = 1_000_000
 	maxInbTotalUncompress = 8 << 30  // 8 GiB of inflated bytes
 	maxJSONDocBytes       = 32 << 20 // 32 MiB per JSON document member
-	maxInbManifestBytes   = 4 << 20  // 4 MiB for the manifest pre-scan
+	// The manifest carries the group's sellers (format 3.3), so it gets the
+	// same room as any other JSON document.
+	maxInbManifestBytes = maxJSONDocBytes
 )
 
 // maxSupportedInbMajor is the highest `.inb` format MAJOR version this build can
@@ -439,6 +441,12 @@ type inbWalker struct {
 	// reading for archives without a manifest, and the manifest, which the
 	// exporter always writes first, sets it from its format version.
 	priceReading types.PriceReading
+
+	// sellerIDs maps an archived seller's UUID to the destination seller's
+	// DB id, filled from the manifest. An item's seller is set only through
+	// this map, so an archive can never point an item at a seller it did not
+	// carry.
+	sellerIDs map[string]string
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -485,6 +493,47 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 		return errxtrace.Wrap("failed to decode manifest document", err)
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
+	return w.restoreSellers(manifest.Sellers)
+}
+
+// restoreSellers finds or creates the destination seller of each archived
+// seller and records the mapping. A seller is matched by name, the way the
+// group keeps seller names unique, so a restore into a group that already
+// has the seller reuses it and leaves its fields as they are. A dry run
+// writes nothing and maps nothing, and an archived seller that fails
+// validation is counted as an error and its items restore without a seller.
+func (w *inbWalker) restoreSellers(archived []types.INBSeller) error {
+	w.sellerIDs = map[string]string{}
+	if len(archived) == 0 || w.options.DryRun || w.proc.factorySet.SellerRegistryFactory == nil {
+		return nil
+	}
+	reg, err := w.proc.factorySet.SellerRegistryFactory.CreateUserRegistry(w.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create seller registry", err)
+	}
+	for _, a := range archived {
+		if a.ID == "" {
+			continue
+		}
+		if existing, err := reg.GetByName(w.ctx, a.Name); err == nil {
+			w.sellerIDs[a.ID] = existing.ID
+			continue
+		} else if !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to look up seller", err, errx.Attrs("seller_id", a.ID))
+		}
+		seller := models.Seller{Name: a.Name, Website: a.Website, Contact: a.Contact, Note: a.Note}
+		seller.Normalize()
+		if err := seller.ValidateFields(w.ctx); err != nil {
+			w.stats.ErrorCount++
+			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("seller %s: %v", a.ID, err))
+			continue
+		}
+		created, err := reg.Create(w.ctx, seller)
+		if err != nil {
+			return errxtrace.Wrap("failed to create seller", err, errx.Attrs("seller_id", a.ID))
+		}
+		w.sellerIDs[a.ID] = created.ID
+	}
 	return nil
 }
 
@@ -637,6 +686,12 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	// Area is optional (issue #1986): a nil actualAreaID leaves the row
 	// area-less; otherwise pin it to the resolved destination area DB ID.
 	commodity.AreaID = actualAreaID
+	// The seller resolves through the manifest's sellers only; an unknown
+	// one leaves the item without a seller.
+	commodity.SellerID = nil
+	if sellerID, ok := w.sellerIDs[c.SellerID]; ok && c.SellerID != "" {
+		commodity.SellerID = &sellerID
+	}
 
 	// Mirror the XML restore: when the commodity's original currency matches the
 	// group currency, a converted price does not apply (the validator rejects a

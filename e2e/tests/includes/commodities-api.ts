@@ -190,6 +190,8 @@ export interface CreateCommodityParams {
   comments?: string
   brand?: string
   model?: string
+  /** The id of a seller of the group (#2804). */
+  sellerId?: string
 }
 
 /**
@@ -240,6 +242,7 @@ export async function createCommodityViaAPI(
   if (params.comments) attributes.comments = params.comments
   if (params.brand) attributes.brand = params.brand
   if (params.model) attributes.model = params.model
+  if (params.sellerId) attributes.seller_id = params.sellerId
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),
     data: {

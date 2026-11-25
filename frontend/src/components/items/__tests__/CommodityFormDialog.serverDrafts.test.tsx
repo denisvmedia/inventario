@@ -8,8 +8,8 @@ import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
-import { __resetHttpForTests } from "@/lib/http"
-import { apiUrl, draftHandlers, groupHandlers } from "@/test/handlers"
+import { __resetHttpForTests, HttpError } from "@/lib/http"
+import { apiUrl, draftHandlers, groupHandlers, sellerHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
@@ -140,6 +140,57 @@ describe("<CommodityFormDialog /> server drafts", () => {
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Couch", type: "furniture", draft: false })
     expect(draft).toEqual({ id: "d1", revision: 3 })
+  })
+
+  it("shows a seller deleted while the draft was open on the Seller field", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        revision: 2,
+        values: { name: "Drill", short_name: "Drill", type: "equipment", seller_id: "s-gone" },
+      },
+    ])
+    server.use(
+      ...groupHandlers.list(groups),
+      ...sellerHandlers.list(SLUG, [{ id: "s1", name: "Hardware store", item_count: 0 }]),
+      ...fake.handlers
+    )
+    // The promotion's 422 on the field, as the server answers it.
+    const envelope = {
+      errors: [
+        {
+          status: "Unprocessable Entity",
+          error: {
+            type: "validation.Errors",
+            error: {
+              data: { attributes: { seller_id: "no seller with this ID in the group" } },
+            },
+          },
+        },
+      ],
+    }
+    const onSubmit = vi
+      .fn()
+      .mockRejectedValue(new HttpError("boom", 422, `/g/${SLUG}/drafts/d1/promote`, envelope))
+    const user = userEvent.setup()
+    renderForm({ resumeDraftId: "d1", onSubmit })
+    const name = await screen.findByLabelText(/^Name$/i)
+    await waitFor(() => expect(name).toHaveValue("Drill"))
+    await user.click(screen.getByTestId("commodity-form-next"))
+    expect(await screen.findByTestId("commodity-seller-gone")).toBeInTheDocument()
+    for (const step of ["warranty", "tags", "files"]) {
+      await user.click(screen.getByTestId("commodity-form-next"))
+      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
+      if (step === "tags") await screen.findByTestId("commodity-tags-input")
+      if (step === "files") await screen.findByTestId("commodity-form-files-step")
+    }
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
+    expect(values).toMatchObject({ name: "Drill", seller_id: "s-gone" })
+    expect(draft).toEqual({ id: "d1", revision: 2 })
+    // The form goes back to Purchase, where the field still says why.
+    expect(await screen.findByTestId("commodity-seller-gone")).toBeInTheDocument()
   })
 
   it("refuses to overwrite a draft saved elsewhere and loads the newer version", async () => {

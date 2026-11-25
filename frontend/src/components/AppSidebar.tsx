@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
+  Store,
   Tag,
   Trash2,
   User,
@@ -142,6 +143,11 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.tags",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/tags` : null),
     icon: Tag,
+  },
+  {
+    labelKey: "common:nav.sellers",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/sellers` : null),
+    icon: Store,
   },
   {
     labelKey: "common:nav.files",

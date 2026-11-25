@@ -27,6 +27,7 @@ export * as currencyMigrationHandlers from "./currencyMigrations"
 export * as exportHandlers from "./exports"
 export * as memberHandlers from "./members"
 export * as searchHandlers from "./search"
+export * as sellerHandlers from "./sellers"
 
 // Helper used across factories: every backend route lives under /api/v1/.
 // Re-exported so per-test handlers that aren't worth a factory can build

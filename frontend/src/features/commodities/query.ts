@@ -33,6 +33,8 @@ export interface CommodityQuery {
   statuses: string[]
   areaId: string
   unassigned: boolean
+  // Items bought from one of these sellers, by seller id.
+  sellerIds: string[]
   // The list page hides drafts and inactive items unless this is set.
   includeInactive: boolean
   warrantyStatuses: string[]
@@ -67,6 +69,7 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   statuses: [],
   areaId: "",
   unassigned: false,
+  sellerIds: [],
   includeInactive: false,
   warrantyStatuses: [],
   lentOut: false,
@@ -84,6 +87,7 @@ const URL_PARAM = {
   status: "status",
   area: "area",
   unassigned: "unassigned",
+  seller: "seller",
   inactive: "inactive",
   warranty: "warranty",
   lentOut: "lent_out",
@@ -158,6 +162,7 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
     statuses: unique(params.getAll(URL_PARAM.status).filter(Boolean)),
     areaId: params.get(URL_PARAM.area) ?? "",
     unassigned: flag(params, URL_PARAM.unassigned, unreadable),
+    sellerIds: unique(params.getAll(URL_PARAM.seller).filter(Boolean)),
     includeInactive: flag(params, URL_PARAM.inactive, unreadable),
     warrantyStatuses: unique(params.getAll(URL_PARAM.warranty).filter(Boolean)),
     lentOut: flag(params, URL_PARAM.lentOut, unreadable),
@@ -187,6 +192,7 @@ export function writeCommodityQuery(
   for (const v of query.statuses) next.append(URL_PARAM.status, v)
   if (query.areaId) next.set(URL_PARAM.area, query.areaId)
   if (query.unassigned) next.set(URL_PARAM.unassigned, "1")
+  for (const v of query.sellerIds) next.append(URL_PARAM.seller, v)
   if (query.includeInactive) next.set(URL_PARAM.inactive, "1")
   for (const v of query.warrantyStatuses) next.append(URL_PARAM.warranty, v)
   if (query.lentOut) next.set(URL_PARAM.lentOut, "1")
@@ -235,6 +241,12 @@ export function commodityTagHref(slug: string, tagSlug: string): string {
   })
 }
 
+// Link to the items list showing every item bought from one seller,
+// inactive ones included, so the list matches the seller's item count.
+export function commoditySellerHref(slug: string, sellerId: string): string {
+  return commodityListHref(slug, { includeInactive: true, sellerIds: [sellerId] })
+}
+
 // The tag-filter parameters whose value can be unreadable.
 const UNREADABLE_TAG_PARAMS: readonly UnreadableParam[] = ["tag_mode", "no_tags"]
 
@@ -273,6 +285,7 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.statuses.length > 0 ||
     query.areaId !== "" ||
     query.unassigned ||
+    query.sellerIds.length > 0 ||
     query.includeInactive ||
     query.warrantyStatuses.length > 0 ||
     query.lentOut ||
@@ -292,6 +305,7 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     statuses: query.statuses,
     areaId: query.areaId || undefined,
     unassigned: query.unassigned || undefined,
+    sellerIds: query.sellerIds.length > 0 ? query.sellerIds : undefined,
     includeInactive: query.includeInactive,
     warrantyStatuses: query.warrantyStatuses.length > 0 ? query.warrantyStatuses : undefined,
     lentOut: query.lentOut ? true : undefined,
@@ -338,6 +352,7 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   }
   if (opts.lentOut !== undefined) params.set("lent_out", opts.lentOut ? "true" : "false")
   if (opts.unassigned) params.set("unassigned", "true")
+  for (const id of sorted(opts.sellerIds)) params.append("seller_id", id)
   if (opts.tags && opts.tags.length > 0) {
     params.set("tags", sorted(opts.tags).join(","))
     if (opts.tagMode === "any") params.set("tag_mode", "any")

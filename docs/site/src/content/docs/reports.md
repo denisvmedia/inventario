@@ -43,7 +43,7 @@ A single-item report shows:
 - **Two value cards:**
   - **Purchase Price** — what you paid, in the currency you recorded the purchase in. The purchase date appears beneath it if you set one.
   - **Estimated Value** — the item's current value, in your group's currency. When you haven't entered one, the purchase price in your group's currency stands in for it.
-- **Item Details** — **Type**, **Serial Number**, **Purchase Date**, and **Location** (shown as "Location · Area").
+- **Item Details** — **Type**, **Serial Number**, **Purchase Date**, **Seller**, and **Location** (shown as "Location · Area").
 - **Warranty Status** — a coloured badge reading **Active**, **Expiring Soon**, **Expired**, or **No Warranty**, with the expiry date and any warranty notes you've added.
 - **Photographs** — the image files attached to the item (see [Files & photos](../files-and-photos/)).
 - **Notes** — the item's comments, if it has any.
@@ -75,7 +75,7 @@ A location report shows:
   - **Est. Total Value** — the combined estimated value of the items, in your group's currency. An item's estimated value is its current value, or its purchase price when the current value is unknown, the same rule the dashboard uses.
 
   Each total adds up only the items whose amount is known. When it leaves items out, a line under it says how many, for example "Excludes 2 items without a purchase price".
-- **A section per item**, each with its type and area, brand and name, model, warranty badge, purchase price, estimated value, serial number, purchase date, any warranty note, and the item's cover photo.
+- **A section per item**, each with its type and area, brand and name, model, warranty badge, purchase price, estimated value, serial number, purchase date, seller, any warranty note, and the item's cover photo.
 
 Items are grouped by **location**, which is made up of its **areas**. An item only appears in the report if it's been placed in an area belonging to the selected location — see [Locations & areas](../locations-and-areas/). If a location has no items, the report says **No items found for this location.**
 

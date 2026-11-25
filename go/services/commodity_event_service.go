@@ -289,6 +289,7 @@ func genericUpdateChanged(before, after *models.Commodity) bool {
 		before.ShortName != after.ShortName ||
 		before.Brand != after.Brand ||
 		before.Model != after.Model ||
+		!ptrEq(before.SellerID, after.SellerID) ||
 		before.Type != after.Type ||
 		before.Count != after.Count ||
 		before.SerialNumber != after.SerialNumber ||
@@ -335,6 +336,7 @@ func snapshotForUpdate(c *models.Commodity) models.CommodityEventPayload {
 		"short_name":   c.ShortName,
 		"brand":        c.Brand,
 		"model":        c.Model,
+		"seller_id":    ptrString(c.SellerID),
 		"type":         string(c.Type),
 		"count":        c.Count,
 		"comments":     c.Comments,

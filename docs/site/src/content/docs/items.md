@@ -96,6 +96,7 @@ The form is split across the five steps. Only a handful of fields are required
 | Field | Notes |
 | --- | --- |
 | **Purchase date** | When you bought it. Can't be in the future. Leave it blank if you don't know it. |
+| **Seller** | The shop or person you bought it from, picked from your group's [sellers](../sellers/). Choose **New seller** at the end of the list to add one without leaving the form. |
 | **Original price** | What you paid, in the original purchase currency. Leave it blank if you don't know it; enter **0** if it was free. |
 | **Current value** | Current resale / insurance value, in the group currency. Leave it blank if you don't know it. |
 | **Serial number** | Found on the device label or packaging. |
@@ -221,6 +222,10 @@ If someone saves the same draft on another device after you opened it, saving
 yours does not overwrite theirs. The dialog says that the draft changed and
 offers **Load the newer version** or **Save as a new draft**.
 
+A draft keeps the [seller](../sellers/) you picked. If someone deletes that
+seller before you finish, the **Seller** field says so, and the item is not
+added until you pick another seller or clear the field.
+
 ### Drafts of an existing item
 
 When you edit an item, the **Save as draft** switch marks the item itself as
@@ -262,11 +267,11 @@ its type icon instead.
 
 ![An item detail page showing the cover photo, key facts, the row of tabs, and the Reminders card below the details](../../assets/screenshots/item-detail.png)
 
-- **Details** — name, status, type, location/area, prices, serial numbers, part
-  numbers, links, tags, notes, and dates, followed by the item's **Reminders**
-  (see [Item reminders](../warranties-loans-maintenance/#item-reminders)) and its
-  history. Click a tag, the area, or the type (under the name) to open **All
-  Items** filtered by it alone, with **Show inactive** on.
+- **Details** — name, status, type, location/area, prices, seller, serial
+  numbers, part numbers, links, tags, notes, and dates, followed by the item's
+  **Reminders** (see [Item reminders](../warranties-loans-maintenance/#item-reminders))
+  and its history. Click a tag, the seller, the area, or the type (under the
+  name) to open **All Items** filtered by it alone, with **Show inactive** on.
 - **Warranty** — expiry, notes, and a reminder of how long is left. See
   [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 - **Files** — every file attached to this item, filterable by **All**,
@@ -293,7 +298,8 @@ The header also has:
 ![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
 
 A **History** section lists every change — who, when, and what — including
-status changes, price changes, moves, and cover-photo changes.
+status changes, price changes, moves, cover-photo changes, and a change of
+[seller](../sellers/).
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit
@@ -313,9 +319,9 @@ grouped into sections:
   unassigned. If the place is not there yet, owners and administrators choose
   **New location** or **New area** at the end of the list (see
   [Create a place from an item](../locations-and-areas/#create-a-place-from-an-item)).
-- **Purchase** — purchase date, original price and its currency, and current
-  value. For a price in another currency, the converted price in the group
-  currency is asked for too.
+- **Purchase** — purchase date, seller, original price and its currency, and
+  current value. For a price in another currency, the converted price in the
+  group currency is asked for too.
 - **Warranty** — expiry date and notes. A bundle has no warranty, so these stay
   empty for it.
 - **Notes & Tags** — notes, and every tag in your group as a row of buttons.
@@ -462,6 +468,8 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
   **Written Off**.
 - **Area** — narrow to a single area, or **All areas**.
+- **Seller** — show items bought from one or more [sellers](../sellers/). The
+  menu appears once your group has a seller.
 - **Tags** — filter by tag. See [Filtering by tag](#filtering-by-tag).
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.

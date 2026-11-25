@@ -193,3 +193,55 @@ func TestCommodityDraftsAPI_ViewerCanReadOnly(t *testing.T) {
 	rr = env.do(http.MethodDelete, "/drafts/"+draftID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
 }
+
+func TestCommodityDraftsAPI_PromoteChecksTheSeller(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+	shop := must.Must(regs.SellerRegistry.Create(ctx, models.Seller{Name: "Hardware store"}))
+	gone := must.Must(regs.SellerRegistry.Create(ctx, models.Seller{Name: "Closed shop"}))
+
+	promoteBody := func(revision, name, sellerID string) string {
+		return `{"data":{"type":"commodities","attributes":{"name":"` + name + `","short_name":"` + name +
+			`","type":"equipment","status":"in_use","count":1,"original_price_currency":"USD",` +
+			`"brand":"Bosch","model":"GSR 18V","seller_id":"` + sellerID + `"}},"meta":{"revision":` + revision + `}}`
+	}
+	createDraft := func(key, sellerID string) string {
+		rr := env.do(http.MethodPost, "/drafts",
+			`{"data":{"type":"commodity_drafts","attributes":{"client_key":"`+key+`","values":{"name":"Drill","seller_id":"`+sellerID+`"}}}}`)
+		c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+		return decodeDraft(c, rr.Body.Bytes()).Data.ID
+	}
+
+	// The item gets the seller, brand and model the finished form names.
+	kept := createDraft("seller-kept", shop.ID)
+	rr := env.do(http.MethodPost, "/drafts/"+kept+"/promote", promoteBody("1", "Drill", shop.ID))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	var item jsonapi.CommodityResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
+	stored := must.Must(regs.CommodityRegistry.Get(ctx, item.Data.ID))
+	c.Assert(stored.SellerID, qt.IsNotNil)
+	c.Check(*stored.SellerID, qt.Equals, shop.ID)
+	c.Check(stored.Brand, qt.Equals, "Bosch")
+	c.Check(stored.Model, qt.Equals, "GSR 18V")
+
+	// A seller deleted while the draft was open is refused on the field and
+	// promotes nothing; the draft stays open for the user to pick another.
+	stale := createDraft("seller-gone", gone.ID)
+	c.Assert(regs.SellerRegistry.Delete(ctx, gone.ID), qt.IsNil)
+	itemsBefore := must.Must(regs.CommodityRegistry.Count(ctx))
+	rr = env.do(http.MethodPost, "/drafts/"+stale+"/promote", promoteBody("1", "Saw", gone.ID))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "seller_id")
+	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore)
+	c.Assert(must.Must(regs.CommodityDraftRegistry.Get(ctx, stale)).IsOpen(), qt.IsTrue)
+
+	rr = env.do(http.MethodPost, "/drafts/"+stale+"/promote", promoteBody("1", "Saw", ""))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+
+	// The retry of a promotion is not checked: it creates nothing.
+	c.Assert(regs.SellerRegistry.Delete(ctx, shop.ID), qt.IsNil)
+	rr = env.do(http.MethodPost, "/drafts/"+kept+"/promote", promoteBody("1", "Drill", shop.ID))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+}

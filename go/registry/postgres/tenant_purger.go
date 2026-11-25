@@ -165,6 +165,10 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// inventory rows that referenced them are gone.
 	func(t store.TableNames) string { return string(t.Tags()) },
 
+	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
+	// them are gone.
+	func(t store.TableNames) string { return string(t.Sellers()) },
+
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups NO ACTION; cleared before location_groups.
 	func(t store.TableNames) string { return string(t.GroupNotificationPrefs()) },

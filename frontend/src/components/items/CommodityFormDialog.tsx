@@ -109,6 +109,9 @@ import {
   writeBaseRevision,
 } from "@/features/drafts/save"
 import { deleteFile, detachFile, ordinaryLinks, type ListedFile } from "@/features/files/api"
+import { SellerField } from "@/components/sellers/SellerField"
+import { findSellerByName } from "@/features/sellers/api"
+import { useSellers } from "@/features/sellers/hooks"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
 
@@ -231,6 +234,7 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   ],
   purchase: [
     "purchase_date",
+    "seller_id",
     "original_price",
     "original_price_currency",
     "converted_original_price",
@@ -330,6 +334,11 @@ export function CommodityFormDialog({
   // next open, IDB has nothing to restore. Strict Mode's double-
   // mount makes the race deterministic in dev.
   const [pendingFilesLoaded, setPendingFilesLoaded] = useState(false)
+  // A seller name the AI scan read that matches none of the group's sellers
+  // (#2804). The Purchase step offers to create it; nothing is created
+  // before the user agrees.
+  const [scannedSeller, setScannedSeller] = useState("")
+  const sellers = useSellers()
   const toast = useAppToast()
   // Direct queryClient invalidation rather than `useInvalidateFiles`
   // — the files-feature hook reads `useCurrentGroup`, but the
@@ -453,6 +462,7 @@ export function CommodityFormDialog({
     setRestoredUnsaved(serverMode && unsaved)
     setStep(initialStep)
     setServerError(null)
+    setScannedSeller("")
     // Track whether reset() seeded values from a localStorage draft.
     // RHF uses the seeded values as the new "defaults" so isDirty
     // stays false — the Cancel → save-as-draft gate has to read this
@@ -899,6 +909,17 @@ export function CommodityFormDialog({
     if (values.type !== undefined) apply("type", values.type)
     if (values.serial_number !== undefined) apply("serial_number", values.serial_number)
     if (values.purchase_date !== undefined) apply("purchase_date", values.purchase_date)
+    if (values.seller !== undefined) {
+      // A seller the group has is picked; another name waits on the
+      // Purchase step for the user to create it.
+      const known = findSellerByName(sellers.data ?? [], values.seller)
+      if (known) {
+        apply("seller_id", known.id)
+        setScannedSeller("")
+      } else {
+        setScannedSeller(values.seller)
+      }
+    }
     if (values.warranty_expires_at !== undefined) {
       apply("warranty_expires_at", values.warranty_expires_at)
     }
@@ -1241,6 +1262,10 @@ export function CommodityFormDialog({
                 errors={errors}
                 watch={watch}
                 defaultCurrency={defaultCurrency}
+                // Sellers belong to a group; the anonymous flow has none.
+                showSeller={!anonymous && !!activeSlug}
+                scannedSeller={scannedSeller}
+                onScannedSellerDone={() => setScannedSeller("")}
               />
             ) : null}
             {!resumeLoading && step === "warranty" ? (
@@ -1672,7 +1697,16 @@ function BasicsStep(props: any) {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- see BasicsStep
 function PurchaseStep(props: any) {
   const { t } = useTranslation()
-  const { register, control, errors, watch, defaultCurrency } = props
+  const {
+    register,
+    control,
+    errors,
+    watch,
+    defaultCurrency,
+    showSeller,
+    scannedSeller,
+    onScannedSellerDone,
+  } = props
   // No Purchase field is required, on a draft or a reviewed item: a
   // blank date or price is saved as unknown, "0" as a known zero (a
   // gift, a free item). See `features/commodities/schemas.ts`.
@@ -1716,6 +1750,24 @@ function PurchaseStep(props: any) {
           </p>
         )}
       </div>
+
+      {showSeller ? (
+        <Controller
+          control={control}
+          name="seller_id"
+          render={({ field }) => (
+            <SellerField
+              id="commodity-seller"
+              value={field.value ?? ""}
+              onChange={(next) => field.onChange(next)}
+              error={errors.seller_id}
+              suggestion={scannedSeller}
+              onSuggestionDone={onScannedSellerDone}
+              renderLabel={(htmlFor, text) => <FieldLabel htmlFor={htmlFor}>{text}</FieldLabel>}
+            />
+          )}
+        />
+      ) : null}
 
       {/* Mock AddItemDialog L1173-L1196: combined "Purchase Price" row
           — price input with leading currency symbol on the left, the

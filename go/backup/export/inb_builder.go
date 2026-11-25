@@ -65,6 +65,12 @@ type inbBuilder struct {
 	// dropped rather than emitted with a reference restore cannot map.
 	locUUIDByDBID  map[string]string
 	areaUUIDByDBID map[string]string
+	// sellers are the group's sellers in name order; sellerUUIDByDBID
+	// resolves an item's seller_id to the seller's UUID, and usedSellers
+	// collects the DB ids of the sellers the planned items name.
+	sellers          []*models.Seller
+	sellerUUIDByDBID map[string]string
+	usedSellers      map[string]bool
 	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
 	// size-resolved and in list order (orphans already dropped). They are
 	// emitted in the dedicated files member, never nested under a commodity.
@@ -274,10 +280,50 @@ func (b *inbBuilder) preload() error {
 		}
 	}
 
+	if err := b.loadSellers(); err != nil {
+		return err
+	}
+
 	if err := b.indexFiles(); err != nil {
 		return err
 	}
 	return nil
+}
+
+// loadSellers lists the group's sellers once via the RLS-scoped user
+// registry and indexes their UUIDs.
+func (b *inbBuilder) loadSellers() error {
+	b.sellerUUIDByDBID = map[string]string{}
+	b.usedSellers = map[string]bool{}
+	if b.svc.factorySet.SellerRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.SellerRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create seller registry", err)
+	}
+	sellers, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list sellers", err)
+	}
+	b.sellers = sellers
+	for _, s := range sellers {
+		b.sellerUUIDByDBID[s.ID] = s.UUID
+	}
+	return nil
+}
+
+// manifestSellers returns the sellers the manifest carries: all of them in
+// a whole-group export, otherwise the ones the planned items name.
+func (b *inbBuilder) manifestSellers(scope *inbScope) []INBSeller {
+	out := make([]INBSeller, 0, len(b.sellers))
+	for _, s := range b.sellers {
+		if !scope.wholeClass && !b.usedSellers[s.ID] {
+			continue
+		}
+		out = append(out, INBSeller{ID: s.UUID, Name: s.Name, Website: s.Website, Contact: s.Contact, Note: s.Note})
+	}
+	return out
 }
 
 // loadLocations lists every location once via the RLS-scoped user registry.
@@ -894,6 +940,12 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 	if com.AssetNumber != nil {
 		inbCom.AssetNumber = *com.AssetNumber
 	}
+	if com.SellerID != nil {
+		if sellerUUID := b.sellerUUIDByDBID[*com.SellerID]; sellerUUID != "" {
+			inbCom.SellerID = sellerUUID
+			b.usedSellers[*com.SellerID] = true
+		}
+	}
 	// Resolve the cover photo's volatile DB id to its immutable UUID so the
 	// reference round-trips stably. A cover pointing at a file outside the
 	// preloaded commodity-file index (already deleted, or never an attachment)
@@ -995,6 +1047,7 @@ type inbPlan struct {
 	manifestLocs []INBManifestLoc
 	unassigned   plannedUnassigned
 	files        plannedFiles
+	sellers      []INBSeller
 }
 
 // run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
@@ -1028,6 +1081,8 @@ func (b *inbBuilder) run() (inbPlan, error) {
 		manifestLocs: manifestLocs,
 		unassigned:   unassigned,
 		files:        b.planFiles(scope),
+		// After every item is planned, so usedSellers is complete.
+		sellers: b.manifestSellers(scope),
 	}, nil
 }
 
