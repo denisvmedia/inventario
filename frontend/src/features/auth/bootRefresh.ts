@@ -89,7 +89,7 @@ export function __resetBootRefreshForTests(): void {
 
 // Test-only: pre-stamp the one-shot guard as "already attempted" so a test
 // that mounts <AuthProvider> without an access token does not fire the
-// speculative /auth/refresh request and trip MSW's `onUnhandledRequest:
+// speculative /auth/refresh request and trip MSW's `onUnhandledFrame:
 // "error"`. Tests that DO exercise the boot-refresh path call
 // `__resetBootRefreshForTests` to flip this back to "fresh".
 export function markBootRefreshAttemptedForTests(): void {
