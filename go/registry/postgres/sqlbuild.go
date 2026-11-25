@@ -1,6 +1,10 @@
 package postgres
 
-import sqlb "github.com/huandu/go-sqlbuilder"
+import (
+	"strings"
+
+	sqlb "github.com/huandu/go-sqlbuilder"
+)
 
 // Dynamic WHERE and ORDER BY in this package go through go-sqlbuilder: it
 // numbers the placeholders, and one WhereClause can serve both the count and
@@ -50,6 +54,18 @@ func addWhere(sb *sqlb.SelectBuilder, wc *sqlb.WhereClause) *sqlb.SelectBuilder 
 // limit into every row of the table.
 func paginate(sb *sqlb.SelectBuilder, offset, limit int) *sqlb.SelectBuilder {
 	return sb.Limit(max(limit, 0)).Offset(max(offset, 0))
+}
+
+// likeEscaper escapes the LIKE wildcards and the escape character itself.
+// Backslash is PostgreSQL's default LIKE escape, so no ESCAPE clause is
+// needed.
+var likeEscaper = strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`)
+
+// containsPattern turns text into a LIKE/ILIKE pattern that matches it as a
+// literal substring: a % or _ the user typed matches only itself, as it does
+// in the memory backend's strings.Contains.
+func containsPattern(text string) string {
+	return "%" + likeEscaper.Replace(text) + "%"
 }
 
 // anyStrings widens a slice of string-kinded values for a variadic IN.

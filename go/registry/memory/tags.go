@@ -248,6 +248,28 @@ func (r *TagRegistry) Search(ctx context.Context, q string, limit int, kind mode
 	return matched, nil
 }
 
+// SlugsByLabel returns the sorted slugs of the group's tags of the given kind
+// whose label contains text, ignoring case — the same literal substring rule
+// the postgres backend applies with an escaped ILIKE.
+func (r *TagRegistry) SlugsByLabel(ctx context.Context, kind models.TagKind, text string) ([]string, error) {
+	if text == "" {
+		return nil, nil
+	}
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	needle := strings.ToLower(text)
+	var slugs []string
+	for _, t := range filterTagsByKind(all, kind) {
+		if strings.Contains(strings.ToLower(t.Label), needle) {
+			slugs = append(slugs, t.Slug)
+		}
+	}
+	slices.Sort(slugs)
+	return slugs, nil
+}
+
 // scopedUsage returns the part of TagUsage relevant to the given kind.
 // Empty kind sums commodities + files; explicit kinds return just that
 // bucket.

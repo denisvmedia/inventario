@@ -4,6 +4,7 @@ package postgres
 // and the builders are unexported.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +44,45 @@ type listQuery struct {
 	build func(v string) (string, []any)
 }
 
+// listQueryProbes returns, per query name, the reference value v is compared
+// against when it is not "probe". Most queries take any non-blank value the
+// same way. The item search does not: it splits v into terms, one predicate
+// each, and a term that reads as an asset ID adds the asset number to its
+// predicate. Its probe keeps that shape, so the property still holds for the
+// characters.
+var listQueryProbes = map[string]func(v string) string{
+	"commodities": searchProbe,
+}
+
+// searchProbe returns a search with the shape of v: one placeholder term per
+// term of v, a number where the term reads as an asset ID. A v without terms
+// gets "\"\"", which is not blank yet has no terms either.
+func searchProbe(v string) string {
+	terms := registry.SplitSearchTerms(v)
+	if len(terms) == 0 {
+		return `""`
+	}
+	parts := make([]string, len(terms))
+	for i, term := range terms {
+		if _, ok := models.ParseAssetID(term); ok {
+			parts[i] = strconv.Itoa(i + 1)
+		} else {
+			parts[i] = "probe" + strconv.Itoa(i)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+// searchLabels resolves every term of search to the slug v, the way
+// services/commodityquery fills SearchTagLabels.
+func searchLabels(search, v string) map[string][]string {
+	labels := make(map[string][]string)
+	for _, term := range registry.SplitSearchTerms(search) {
+		labels[term] = []string{v}
+	}
+	return labels
+}
+
 func listQueries() []listQuery {
 	tables := store.DefaultTableNames
 	now := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
@@ -54,6 +94,8 @@ func listQueries() []listQuery {
 		{"commodities", func(v string) (string, []any) {
 			return where("commodities", commodityWhere(registry.CommodityListOptions{
 				Search:                v,
+				SearchTagLabels:       searchLabels(v, v),
+				Tags:                  registry.CommodityTagFilter{Include: []string{v}, Exclude: []string{v}},
 				AreaID:                v,
 				Types:                 []models.CommodityType{models.CommodityType(v)},
 				Statuses:              []models.CommodityStatus{models.CommodityStatus(v)},
@@ -121,7 +163,11 @@ func FuzzListQueriesKeepValuesOutOfSQL(f *testing.F) {
 		c := qt.New(t)
 
 		for _, q := range queries {
-			wantSQL, wantArgs := q.build("probe")
+			probe := "probe"
+			if shape, ok := listQueryProbes[q.name]; ok {
+				probe = shape(v)
+			}
+			wantSQL, wantArgs := q.build(probe)
 			gotSQL, gotArgs := q.build(v)
 			c.Check(gotSQL, qt.Equals, wantSQL, qt.Commentf("%s: the value changed the SQL text", q.name))
 			c.Check(gotArgs, qt.HasLen, len(wantArgs), qt.Commentf("%s", q.name))

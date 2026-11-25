@@ -12,51 +12,20 @@ import {
 } from "@/lib/list-context"
 
 import { listCommodities, type ListCommoditiesOptions } from "./api"
-import {
-  COMMODITY_SORT_OPTIONS,
-  type CommoditySortOption,
-  type CommodityStatusValue,
-  type CommodityTypeValue,
-  type CommodityWarrantyStatus,
-} from "./constants"
 import { commodityKeys } from "./keys"
+import { commodityQueryToListOptions, parseCommodityQuery, type CommodityQuery } from "./query"
 
 export const COMMODITIES_PAGE_SIZE = 24
 
+// The filter half of the URL is the item query contract (./query); the page
+// belongs to the list.
 export interface CommoditiesListParams {
   page: number
-  search: string
-  types: CommodityTypeValue[]
-  statuses: CommodityStatusValue[]
-  areaId: string
-  warranty: CommodityWarrantyStatus[]
-  lentOutOnly: boolean
-  unassignedOnly: boolean
-  includeInactive: boolean
-  /** The raw `sort` value, e.g. `-purchase_date`. */
-  sortRaw: string
-  sort: CommoditySortOption
-  sortDesc: boolean
+  query: CommodityQuery
 }
 
 export function parseCommoditiesListParams(params: URLSearchParams): CommoditiesListParams {
-  const sortRaw = params.get("sort") ?? "name"
-  const sortDesc = sortRaw.startsWith("-")
-  const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
-  return {
-    page: parsePageParam(params.get("page")),
-    search: params.get("q") ?? "",
-    types: params.getAll("type") as CommodityTypeValue[],
-    statuses: params.getAll("status") as CommodityStatusValue[],
-    areaId: params.get("area") ?? "",
-    warranty: params.getAll("warranty") as CommodityWarrantyStatus[],
-    lentOutOnly: params.get("lent_out") === "1",
-    unassignedOnly: params.get("unassigned") === "1",
-    includeInactive: params.get("inactive") === "1",
-    sortRaw,
-    sort: COMMODITY_SORT_OPTIONS.includes(sortField) ? sortField : "name",
-    sortDesc,
-  }
+  return { page: parsePageParam(params.get("page")), query: parseCommodityQuery(params) }
 }
 
 /** The list request for a parsed Items list URL. */
@@ -64,21 +33,7 @@ export function commoditiesListOptions(params: CommoditiesListParams): ListCommo
   return {
     page: params.page,
     perPage: COMMODITIES_PAGE_SIZE,
-    search: params.search,
-    types: params.types,
-    statuses: params.statuses,
-    areaId: params.areaId || undefined,
-    // The list always opts in to the active-only view unless the toggle is
-    // on. An explicit boolean (not undefined) makes the server apply the
-    // implicit filter.
-    includeInactive: params.includeInactive,
-    // Single-state chips: only ever send true.
-    lentOut: params.lentOutOnly ? true : undefined,
-    unassigned: params.unassignedOnly ? true : undefined,
-    sort: params.sort,
-    sortDesc: params.sortDesc,
-    // Server-side, so total and page count describe the filtered list (#2128).
-    warrantyStatuses: params.warranty.length > 0 ? params.warranty : undefined,
+    ...commodityQueryToListOptions(params.query),
   }
 }
 

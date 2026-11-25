@@ -182,6 +182,12 @@ export interface CreateCommodityParams {
   warrantyExpiresAt?: string
   /** Free-form warranty notes (#1367). */
   warrantyNotes?: string
+  serialNumber?: string
+  extraSerialNumbers?: string[]
+  partNumbers?: string[]
+  /** Tag texts; the server creates missing tags with the text as label. */
+  tags?: string[]
+  comments?: string
 }
 
 /**
@@ -224,6 +230,11 @@ export async function createCommodityViaAPI(
   if (params.warrantyNotes) {
     attributes.warranty_notes = params.warrantyNotes
   }
+  if (params.serialNumber) attributes.serial_number = params.serialNumber
+  if (params.extraSerialNumbers) attributes.extra_serial_numbers = params.extraSerialNumbers
+  if (params.partNumbers) attributes.part_numbers = params.partNumbers
+  if (params.tags) attributes.tags = params.tags
+  if (params.comments) attributes.comments = params.comments
   const resp = await request.post(`/api/v1/g/${encodeURIComponent(slug)}/commodities`, {
     headers: authHeaders(auth),
     data: {

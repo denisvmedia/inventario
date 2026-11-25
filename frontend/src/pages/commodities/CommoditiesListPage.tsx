@@ -47,6 +47,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
@@ -72,6 +73,15 @@ import {
 } from "@/features/commodities/constants"
 import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
 import {
+  DEFAULT_COMMODITY_QUERY,
+  hasCommodityFilters,
+  parseCommodityQuery,
+  primarySearchMatch,
+  writeCommodityQuery,
+  type CommodityQuery,
+  type CommoditySearchMatch,
+} from "@/features/commodities/query"
+import {
   COMMODITIES_PAGE_SIZE,
   commodityHref,
   commoditiesListOptions,
@@ -88,6 +98,7 @@ import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import { listContextFromLocation, type ListContext } from "@/lib/list-context"
+import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
@@ -125,23 +136,24 @@ export function CommoditiesListPage() {
   const listLocation = useLocation()
 
   // ---- URL → state ------------------------------------------------------
-  // The item page reads the same URL through the same parser when it walks
-  // this list (features/commodities/listContext.ts), so both share the cache.
-  const listParams = parseCommoditiesListParams(searchParams)
-  const {
-    page,
-    search,
-    types,
-    statuses,
-    areaId,
-    warranty: warrantyFilter,
-    lentOutOnly,
-    unassignedOnly,
-    includeInactive,
-    sortRaw,
-    sort: validSort,
-    sortDesc,
-  } = listParams
+  // The filter half of the URL is the item query contract
+  // (features/commodities/query). The item page reads the same URL through
+  // the same parser when it walks this list (features/commodities/listContext),
+  // so both share the cache.
+  const listParams = useMemo(() => parseCommoditiesListParams(searchParams), [searchParams])
+  const { page, query } = listParams
+  const search = query.text
+  const types = query.types as CommodityTypeValue[]
+  const statuses = query.statuses as CommodityStatusValue[]
+  const areaId = query.areaId
+  const warrantyFilter = query.warrantyStatuses as CommodityWarrantyStatus[]
+  const lentOutOnly = query.lentOut
+  const unassignedOnly = query.unassigned
+  const includeInactive = query.includeInactive
+  const validSort = query.sort
+  const sortDesc = query.sortDesc
+  // One string per distinct query, for effects that react to any change.
+  const queryKey = writeCommodityQuery(new URLSearchParams(), query).toString()
   // Items opened from here carry this list in `?from=`, for Back and for
   // Previous / Next on the item page.
   const listContext = listContextFromLocation(listLocation)
@@ -199,19 +211,19 @@ export function CommoditiesListPage() {
     if (trimmed === search) return
     const handle = window.setTimeout(() => {
       const live = new URLSearchParams(window.location.search)
-      if ((live.get("q") ?? "") === trimmed) return
-      if (trimmed) {
-        live.set("q", trimmed)
-      } else {
-        live.delete("q")
-      }
-      live.delete("page")
-      setSearchParamsRef.current(live, { replace: true })
+      const liveQuery = parseCommodityQuery(live)
+      if (liveQuery.text === trimmed) return
+      const next = writeCommodityQuery(live, { ...liveQuery, text: trimmed })
+      next.delete("page")
+      setSearchParamsRef.current(next, { replace: true })
     }, 300)
     return () => window.clearTimeout(handle)
   }, [searchInput, search])
 
   // ---- Data --------------------------------------------------------------
+  // Every filter is applied by the server, so the page, the total and
+  // the pager describe the same set (#2128). includeInactive is always
+  // sent, so the server applies the active-only default.
   const list = useCommodities(commoditiesListOptions(listParams), { enabled })
   const areas = useAreas({ enabled })
   // Locations populate the create-dialog's Location → Area paired
@@ -229,25 +241,11 @@ export function CommoditiesListPage() {
   // Reset selection whenever the visible page changes — the user can't
   // see the rows they had checked, so silently keeping them queued for a
   // bulk action would surprise them.
-  const typesKey = types.join(",")
-  const statusesKey = statuses.join(",")
-  const warrantyKey = warrantyFilter.join(",")
   useEffect(() => {
     // Clear page-local selection on filter/page change.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     setSelected(new Set())
-  }, [
-    page,
-    search,
-    typesKey,
-    statusesKey,
-    areaId,
-    includeInactive,
-    lentOutOnly,
-    unassignedOnly,
-    sortRaw,
-    warrantyKey,
-  ])
+  }, [page, queryKey])
 
   function toggleSelected(id: string) {
     setSelected((prev) => {
@@ -342,80 +340,52 @@ export function CommoditiesListPage() {
     setSearchParams(next, { replace: true })
   }
 
+  // Changes part of the query; any change of filter or sort goes back to
+  // the first page. Parameters the query does not own stay as they are.
+  function updateQuery(patch: Partial<CommodityQuery>) {
+    const next = writeCommodityQuery(searchParams, { ...query, ...patch })
+    next.delete("page")
+    setSearchParams(next, { replace: true })
+  }
+
+  function toggled<T>(values: T[], value: T): T[] {
+    return values.includes(value) ? values.filter((v) => v !== value) : [...values, value]
+  }
+
   function toggleType(type: CommodityTypeValue) {
-    updateParams((p) => {
-      const cur = p.getAll("type")
-      p.delete("type")
-      const next = cur.includes(type) ? cur.filter((t) => t !== type) : [...cur, type]
-      for (const t of next) p.append("type", t)
-    })
+    updateQuery({ types: toggled(query.types, type) })
   }
   function toggleStatus(status: CommodityStatusValue) {
-    updateParams((p) => {
-      const cur = p.getAll("status")
-      p.delete("status")
-      const next = cur.includes(status) ? cur.filter((s) => s !== status) : [...cur, status]
-      for (const s of next) p.append("status", s)
-    })
+    updateQuery({ statuses: toggled(query.statuses, status) })
   }
   function setAreaFilter(id: string) {
-    updateParams((p) => {
-      if (id) p.set("area", id)
-      else p.delete("area")
-    })
+    updateQuery({ areaId: id })
   }
   function toggleWarranty(status: CommodityWarrantyStatus) {
-    updateParams((p) => {
-      const cur = p.getAll("warranty")
-      p.delete("warranty")
-      const next = cur.includes(status) ? cur.filter((s) => s !== status) : [...cur, status]
-      for (const s of next) p.append("warranty", s)
-    })
+    updateQuery({ warrantyStatuses: toggled(query.warrantyStatuses, status) })
   }
   function setSort(field: CommoditySortOption) {
-    updateParams((p) => {
-      // Toggle direction when the same field is selected; otherwise
-      // start the new field in its natural direction (ascending for
-      // name, descending for dates / price — matching what users
-      // typically expect).
-      const isDateOrPrice = field !== "name" && field !== "count"
-      const current = p.get("sort") ?? "name"
-      const currentField = current.startsWith("-") ? current.slice(1) : current
-      const currentDesc = current.startsWith("-")
-      const desc = currentField === field ? !currentDesc : isDateOrPrice
-      p.set("sort", desc ? `-${field}` : field)
-    })
+    // Toggle direction when the same field is selected; otherwise
+    // start the new field in its natural direction (ascending for
+    // name, descending for dates / price — matching what users
+    // typically expect).
+    const isDateOrPrice = field !== "name" && field !== "count"
+    const desc = query.sort === field ? !query.sortDesc : isDateOrPrice
+    updateQuery({ sort: field, sortDesc: desc })
   }
   function clearFilters() {
-    updateParams((p) => {
-      p.delete("type")
-      p.delete("status")
-      p.delete("area")
-      p.delete("warranty")
-      p.delete("lent_out")
-      p.delete("unassigned")
-      p.delete("inactive")
-      p.delete("q")
-    })
+    // The sort is not a filter and survives.
+    updateQuery({ ...DEFAULT_COMMODITY_QUERY, sort: query.sort, sortDesc: query.sortDesc })
     setSearchInput("")
   }
   function toggleInactive() {
-    updateParams((p) => {
-      if (includeInactive) p.delete("inactive")
-      else p.set("inactive", "1")
-    })
+    updateQuery({ includeInactive: !includeInactive })
   }
   function toggleLentOut() {
-    updateParams((p) => {
-      if (lentOutOnly) p.delete("lent_out")
-      else p.set("lent_out", "1")
-    })
+    updateQuery({ lentOut: !lentOutOnly })
   }
   function toggleUnassigned() {
-    updateParams((p) => {
-      if (unassignedOnly) p.delete("unassigned")
-      else p.set("unassigned", "1")
-    })
+    updateQuery({ unassigned: !unassignedOnly })
   }
   function setViewMode(mode: ViewMode) {
     setStoredView(mode)
@@ -452,15 +422,15 @@ export function CommoditiesListPage() {
   const isLoading = list.isLoading
   const isError = list.isError
   const isEmpty = !isLoading && !isError && rows.length === 0
-  const hasFilters =
-    types.length > 0 ||
-    statuses.length > 0 ||
-    areaId !== "" ||
-    warrantyFilter.length > 0 ||
-    lentOutOnly ||
-    unassignedOnly ||
-    search !== "" ||
-    includeInactive
+  const hasFilters = hasCommodityFilters(query)
+  // A link can carry a filter the server refuses (a hand-edited URL, a
+  // value from a newer version). The 400 names the parameter; the page
+  // says so instead of showing a generic load error.
+  const invalidQuery =
+    isError && getServerErrorCode(list.error) === "query.invalid_parameter"
+      ? (getServerErrorMeta(list.error)?.parameter ?? "")
+      : null
+  const matches = list.data?.matches ?? {}
 
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
@@ -659,7 +629,19 @@ export function CommoditiesListPage() {
           </BulkActionBar>
         ) : null}
 
-        {isError ? (
+        {invalidQuery !== null ? (
+          <Alert variant="destructive" data-testid="commodities-invalid-query">
+            <AlertTitle>{t("commodities:list.invalidQueryTitle")}</AlertTitle>
+            <AlertDescription className="flex flex-col items-start gap-2">
+              <span>
+                {t("commodities:list.invalidQueryDescription", { parameter: invalidQuery })}
+              </span>
+              <Button variant="outline" size="sm" onClick={clearFilters}>
+                {t("commodities:filter.clear")}
+              </Button>
+            </AlertDescription>
+          </Alert>
+        ) : isError ? (
           <Alert variant="destructive" data-testid="commodities-error">
             <AlertTitle>{t("commodities:list.errorTitle")}</AlertTitle>
             <AlertDescription>{t("commodities:list.errorDescription")}</AlertDescription>
@@ -685,6 +667,7 @@ export function CommoditiesListPage() {
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
+            matches={matches}
           />
         ) : (
           <CommoditiesTable
@@ -700,6 +683,7 @@ export function CommoditiesListPage() {
             currency={currentGroup?.group_currency ?? "USD"}
             loanCounts={loanCounts}
             serviceCounts={serviceCounts}
+            matches={matches}
           />
         )}
 
@@ -1176,6 +1160,9 @@ interface CommoditiesGridProps {
   // an item can technically only be in one holding kind at a time
   // (cross-kind invariant), but we render whichever the BE reports.
   serviceCounts?: Record<string, number>
+  // Per commodity id, why it matched the search text (meta.matches).
+  // Empty without a search.
+  matches?: Record<string, CommoditySearchMatch[]>
 }
 
 function CommoditiesGrid({
@@ -1190,6 +1177,7 @@ function CommoditiesGrid({
   currency,
   loanCounts,
   serviceCounts,
+  matches,
 }: CommoditiesGridProps) {
   return (
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3" data-testid="commodities-grid">
@@ -1207,6 +1195,7 @@ function CommoditiesGrid({
           currency={currency}
           lent={(loanCounts?.[row.id ?? ""] ?? 0) > 0}
           inService={(serviceCounts?.[row.id ?? ""] ?? 0) > 0}
+          match={primarySearchMatch(matches?.[row.id ?? ""])}
         />
       ))}
     </div>
@@ -1225,6 +1214,7 @@ interface CommodityCardProps {
   currency: string
   lent?: boolean
   inService?: boolean
+  match?: CommoditySearchMatch
 }
 
 function CommodityGridCard({
@@ -1239,6 +1229,7 @@ function CommodityGridCard({
   currency,
   lent,
   inService,
+  match,
 }: CommodityCardProps) {
   const { t } = useTranslation()
   const id = row.id ?? ""
@@ -1353,6 +1344,7 @@ function CommodityGridCard({
         <CardDescription className="pointer-events-none text-xs">
           {areaName(row.area_id)}
         </CardDescription>
+        <SearchMatchHint match={match} tagLabel={tagLabel} className="pointer-events-none" />
       </CardHeader>
       <CardContent className="pointer-events-none">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
@@ -1401,9 +1393,11 @@ function CommoditiesTable({
   onToggleSelectAll,
   onPreview,
   areaName,
+  tagLabel,
   currency,
   loanCounts,
   serviceCounts,
+  matches,
 }: CommoditiesTableProps) {
   const { t } = useTranslation()
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
@@ -1496,6 +1490,7 @@ function CommoditiesTable({
                   {row.short_name ? (
                     <p className="text-xs text-muted-foreground truncate">{row.short_name}</p>
                   ) : null}
+                  <SearchMatchHint match={primarySearchMatch(matches?.[id])} tagLabel={tagLabel} />
                 </div>
                 <span className="pointer-events-none hidden sm:block w-32 truncate text-xs text-muted-foreground">
                   {areaName(row.area_id)}

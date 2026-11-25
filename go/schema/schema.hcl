@@ -526,6 +526,14 @@ table "commodities" {
     type = INTEGER
     null = true
   }
+  column "search_text" {
+    type = TEXT
+    null = true
+    as {
+      expr = "commodity_search_text(name, short_name, serial_number, extra_serial_numbers, part_numbers, tags, comments, warranty_notes, status_note)"
+      type = "STORED"
+    }
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -586,6 +594,11 @@ table "commodities" {
   index "commodities_part_numbers_gin_idx" {
     type = "GIN"
     columns = [column.part_numbers]
+  }
+  index "commodities_search_text_trgm_idx" {
+    type = "GIN"
+    ops = "gin_trgm_ops"
+    columns = [column.search_text]
   }
   index "commodities_short_name_trgm_idx" {
     type = "GIN"
@@ -3820,6 +3833,42 @@ table "worker_control" {
     unique = true
     columns = [column.worker_type]
   }
+}
+
+function "commodity_search_text" {
+  lang = "SQL"
+  return = "text"
+  arg "name" {
+    type = text
+  }
+  arg "short_name" {
+    type = text
+  }
+  arg "serial_number" {
+    type = text
+  }
+  arg "extra_serial_numbers" {
+    type = jsonb
+  }
+  arg "part_numbers" {
+    type = jsonb
+  }
+  arg "tags" {
+    type = jsonb
+  }
+  arg "comments" {
+    type = text
+  }
+  arg "warranty_notes" {
+    type = text
+  }
+  arg "status_note" {
+    type = text
+  }
+  security = "INVOKER"
+  volatility = "IMMUTABLE"
+  as = "SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')"
+  comment = "Builds commodities.search_text, the text the item search matches"
 }
 
 function "get_current_group_id" {

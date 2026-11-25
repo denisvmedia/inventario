@@ -1,28 +1,12 @@
 import type { ListCommoditiesOptions } from "./api"
+import { listOptionsToParams } from "./query"
 
-// Stringify list-query options into a stable key suffix. URLSearchParams
-// preserves multi-value keys; we explicitly sort `types` and `statuses`
-// before serialising so that two options objects with the same filters
-// but different array order produce identical keys (TanStack Query
-// re-uses the cache instead of issuing a duplicate request).
+// Stringify list-query options into a stable key suffix. The suffix is the
+// API query string itself (listOptionsToParams sorts set-like lists), so
+// two option objects that send the same request share one cache entry.
 function listKeySuffix(opts: ListCommoditiesOptions | undefined): string {
   if (!opts) return ""
-  const params = new URLSearchParams()
-  if (opts.page !== undefined) params.set("page", String(opts.page))
-  if (opts.perPage !== undefined) params.set("per_page", String(opts.perPage))
-  for (const t of [...(opts.types ?? [])].sort()) params.append("type", t)
-  for (const s of [...(opts.statuses ?? [])].sort()) params.append("status", s)
-  if (opts.areaId) params.set("area_id", opts.areaId)
-  if (opts.search?.trim()) params.set("q", opts.search.trim())
-  if (opts.includeInactive) params.set("include_inactive", "1")
-  if (opts.sort) params.set("sort", opts.sortDesc ? `-${opts.sort}` : opts.sort)
-  for (const w of [...(opts.warrantyStatuses ?? [])].sort()) params.append("warranty_status", w)
-  if (opts.warrantyExpiresBefore?.trim()) {
-    params.set("warranty_expires_before", opts.warrantyExpiresBefore.trim())
-  }
-  if (opts.lentOut !== undefined) params.set("lent_out", opts.lentOut ? "true" : "false")
-  if (opts.unassigned) params.set("unassigned", "true")
-  return params.toString()
+  return listOptionsToParams(opts).toString()
 }
 
 // TanStack Query keys for the commodities slice. Scoped by group slug

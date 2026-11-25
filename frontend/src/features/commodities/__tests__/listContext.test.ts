@@ -15,33 +15,36 @@ const SLUG = "home"
 const SCOPE = `/g/${SLUG}`
 
 describe("parseCommoditiesListParams", () => {
-  it("reads every filter the Items list writes to its URL", () => {
+  it("reads the page and every filter the Items list writes to its URL", () => {
     const params = parseCommoditiesListParams(
       new URLSearchParams(
-        "page=3&q=lamp&type=electronics&type=furniture&status=sold&area=a1&warranty=expiring&lent_out=1&unassigned=1&inactive=1&sort=-purchase_date"
+        "page=3&q=lamp&type=electronics&type=furniture&status=sold&area=a1&warranty=expiring&lent_out=1&unassigned=1&inactive=1&tags=red,blue&tag_mode=any&sort=-purchase_date"
       )
     )
     expect(params).toEqual({
       page: 3,
-      search: "lamp",
-      types: ["electronics", "furniture"],
-      statuses: ["sold"],
-      areaId: "a1",
-      warranty: ["expiring"],
-      lentOutOnly: true,
-      unassignedOnly: true,
-      includeInactive: true,
-      sortRaw: "-purchase_date",
-      sort: "purchase_date",
-      sortDesc: true,
+      query: {
+        text: "lamp",
+        types: ["electronics", "furniture"],
+        statuses: ["sold"],
+        areaId: "a1",
+        unassigned: true,
+        includeInactive: true,
+        warrantyStatuses: ["expiring"],
+        lentOut: true,
+        tags: { include: ["red", "blue"], mode: "any", exclude: [], untagged: false },
+        sort: "purchase_date",
+        sortDesc: true,
+        unreadable: {},
+      },
     })
   })
 
   it("falls back to page 1 and name order for junk values", () => {
     const params = parseCommoditiesListParams(new URLSearchParams("page=abc&sort=colour"))
     expect(params.page).toBe(1)
-    expect(params.sort).toBe("name")
-    expect(params.sortDesc).toBe(false)
+    expect(params.query.sort).toBe("name")
+    expect(params.query.sortDesc).toBe(false)
   })
 })
 
@@ -57,12 +60,16 @@ describe("commoditiesListOptions", () => {
       types: [],
       statuses: [],
       areaId: undefined,
-      includeInactive: false,
-      lentOut: undefined,
       unassigned: undefined,
+      includeInactive: false,
+      warrantyStatuses: ["active"],
+      lentOut: undefined,
+      tags: undefined,
+      tagMode: undefined,
+      tagsExclude: undefined,
+      noTags: undefined,
       sort: "name",
       sortDesc: false,
-      warrantyStatuses: ["active"],
     })
   })
 })
