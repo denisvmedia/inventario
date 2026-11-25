@@ -430,6 +430,10 @@ func (*bucket) ErrorCode(err error) gcerrors.ErrorCode {
 // path returns the full path for a key.
 func (b *bucket) path(key string) (string, error) {
 	path := filepath.Join(b.dir, escapeKey(key))
+	// Ensure that the key hasn't escaped the bucket root.
+	if b.isEscapingKeyPath(path) {
+		return "", fmt.Errorf("fileblob: key %q escapes bucket root", key)
+	}
 	if strings.HasSuffix(path, attrsExt) {
 		return "", errAttrsExt
 	}
@@ -482,6 +486,11 @@ func (b *bucket) ListPaged(_ctx context.Context, opts *driver.ListOptions) (*dri
 		root = filepath.Join(root, opts.Prefix[:i])
 	}
 
+	// Ensure that the Prefix hasn't escaped the bucket root.
+	if b.isEscapingPath(root) {
+		return nil, fmt.Errorf("fileblob: key %q escapes bucket root", opts.Prefix)
+	}
+
 	// Do a full recursive scan of the root directory.
 	var result driver.ListPage
 	err := filepath.WalkDir(root, func(path string, info fs.DirEntry, err error) error {
@@ -503,6 +512,7 @@ func (b *bucket) ListPaged(_ctx context.Context, opts *driver.ListOptions) (*dri
 		if b.dir != "/" {
 			prefixLen++
 		}
+		absPath := path
 		path = path[prefixLen:]
 		// Unescape the path to get the key.
 		key := unescapeKey(path)
@@ -530,7 +540,7 @@ func (b *bucket) ListPaged(_ctx context.Context, opts *driver.ListOptions) (*dri
 			return nil
 		}
 		var md5hash []byte
-		if xa, err := getAttrs(b.opts.FS, path); err == nil {
+		if xa, err := getAttrs(b.opts.FS, absPath); err == nil {
 			// Note: we only have the MD5 hash for blobs that we wrote.
 			// For other blobs, md5 will remain nil.
 			md5hash = xa.MD5
@@ -582,11 +592,13 @@ func (b *bucket) ListPaged(_ctx context.Context, opts *driver.ListOptions) (*dri
 			return nil
 		}
 		// If we've already got a full page of results, set NextPageToken and stop.
-		// Unless the current object is a directory, in which case there may
-		// still be objects coming that are alphabetically before it (since
-		// we appended the delimiter). In that case, keep going; we'll trim the
-		// extra entries (if any) before returning.
-		if len(result.Objects) == pageSize && !obj.IsDir {
+		// We can only stop if this object is guaranteed to belong after the page,
+		// i.e. it sorts after the last object in it. That isn't always the case:
+		// adding the delimiter can make an object sort before one we've already
+		// added (e.g., the file "a-b" sorts before the "directory" "a/", but is
+		// visited after it), so keep going in that case; we'll trim the extra
+		// entries before returning.
+		if len(result.Objects) == pageSize && !obj.IsDir && obj.Key > result.Objects[pageSize-1].Key {
 			result.NextPageToken = []byte(result.Objects[pageSize-1].Key)
 			return io.EOF
 		}
@@ -688,11 +700,13 @@ func (b *bucket) NewRangeReader(_ctx context.Context, key string, offset, length
 			*p = f
 			return true
 		}); err != nil {
+			_ = f.Close()
 			return nil, err
 		}
 	}
 	if offset > 0 {
 		if _, err := f.Seek(offset, io.SeekStart); err != nil {
+			_ = f.Close()
 			return nil, err
 		}
 	}
@@ -709,6 +723,19 @@ func (b *bucket) NewRangeReader(_ctx context.Context, key string, offset, length
 			Size:        info.Size(),
 		},
 	}, nil
+}
+
+// isEscapingPath reports whether path lies outside the bucket root.
+func (b *bucket) isEscapingPath(path string) bool {
+	cleanedPath := filepath.Clean(path) + string(os.PathSeparator)
+	bucketRootPath := b.dir + string(os.PathSeparator) // b.dir is already Cleaned via Abs in the constructor.
+	return b.dir != string(os.PathSeparator) && !strings.HasPrefix(cleanedPath, bucketRootPath)
+}
+
+// isEscapingKeyPath is isEscapingPath for the path of a key, which also must
+// not point at the bucket itself.
+func (b *bucket) isEscapingKeyPath(path string) bool {
+	return filepath.Clean(path) == b.dir || b.isEscapingPath(path)
 }
 
 type reader struct {
@@ -789,6 +816,9 @@ func (b *bucket) NewTypedWriter(ctx context.Context, key, contentType string, op
 			*p = f
 			return true
 		}); err != nil {
+			name := f.Name()
+			_ = f.Close()
+			_ = b.opts.FS.Remove(name)
 			return nil, err
 		}
 	}
@@ -923,7 +953,7 @@ func (w *writer) Close() error {
 }
 
 // Copy implements driver.Copy.
-func (b *bucket) Copy(ctx context.Context, dstKey, srcKey string, opts *driver.CopyOptions) error {
+func (b *bucket) Copy(ctx context.Context, dstKey, srcKey string, opts *driver.CopyOptions) (err error) {
 	// Note: we could use NewRangeReader here, but since we need to copy all of
 	// the metadata (from xa), it's more efficient to do it directly.
 	srcPath, _, xa, err := b.forKey(srcKey)
@@ -934,7 +964,11 @@ func (b *bucket) Copy(ctx context.Context, dstKey, srcKey string, opts *driver.C
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() {
+		if e := f.Close(); e != nil && err == nil {
+			err = e
+		}
+	}()
 
 	// We'll write the copy using Writer, to avoid re-implementing making of a
 	// temp file, cleaning up after partial failures, etc.
@@ -957,14 +991,21 @@ func (b *bucket) Copy(ctx context.Context, dstKey, srcKey string, opts *driver.C
 	_, err = io.Copy(w, f)
 	if err != nil {
 		cancel() // cancel before Close cancels the write
-		w.Close()
+		_ = w.Close()
 		return err
 	}
 	return w.Close()
 }
 
 // Delete implements driver.Delete.
-func (b *bucket) Delete(_ctx context.Context, key string) error {
+func (b *bucket) Delete(_ context.Context, key string, opts *driver.DeleteOptions) error {
+	if opts.BeforeDelete != nil {
+		// fileblob exposes no driver-specific delete type; the hook is still
+		// invoked exactly once so portable callers behave consistently.
+		if err := opts.BeforeDelete(func(any) bool { return false }); err != nil {
+			return err
+		}
+	}
 	path, err := b.path(key)
 	if err != nil {
 		return err
