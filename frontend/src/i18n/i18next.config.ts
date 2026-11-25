@@ -8,6 +8,7 @@ import enAuth from "./locales/en/auth.json"
 import enBackoffice from "./locales/en/backoffice.json"
 import enCommodities from "./locales/en/commodities.json"
 import enCommon from "./locales/en/common.json"
+import enCustomFields from "./locales/en/customFields.json"
 import enDashboard from "./locales/en/dashboard.json"
 import enErrors from "./locales/en/errors.json"
 import enExports from "./locales/en/exports.json"
@@ -51,6 +52,7 @@ export const I18N_NAMESPACES = [
   "tags",
   "sellers",
   "itemTypes",
+  "customFields",
   "loans",
   "maintenance",
   "reminders",
@@ -87,6 +89,7 @@ const enResources = {
   tags: enTags,
   sellers: enSellers,
   itemTypes: enItemTypes,
+  customFields: enCustomFields,
   loans: enLoans,
   maintenance: enMaintenance,
   reminders: enReminders,

@@ -22,6 +22,7 @@
   "loading": "Загрузка…",
   "nav": {
     "backup": "Резервная копия",
+    "customFields": "Свои поля",
     "dashboard": "Обзор",
     "files": "Файлы",
     "groupInventory": "Инвентарь",

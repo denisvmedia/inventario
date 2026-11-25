@@ -280,6 +280,13 @@ export default defineConfig({
       //   `t(\`itemTypes:icons.${key}\`)` over ITEM_TYPE_ICON_KEYS.
       "itemTypes:validation.*",
       "itemTypes:icons.*",
+      // customFields:validation.* — zod messages in features/customFields/schemas.ts
+      //   and the item form's value checks.
+      // customFields:types.* — a field's type label, `t(\`customFields:types.${type}\`)`.
+      // customFields:errors.* — keys validateFormValue in features/customFields/values.ts returns.
+      "customFields:validation.*",
+      "customFields:types.*",
+      "customFields:errors.*",
       "tags:list.usageItems*",
       "tags:list.usageFiles*",
       "tags:usage.items*",

@@ -1,0 +1,121 @@
+{
+  "title": "Custom fields",
+  "description": "Fields the group adds to its items, such as a license plate or a lens mount. A field's type never changes; its name and options can.",
+  "create": "New field",
+  "types": {
+    "text": "Text",
+    "long_text": "Long text",
+    "number": "Number",
+    "money": "Money",
+    "date": "Date",
+    "boolean": "Yes/no",
+    "select": "Select",
+    "url": "Web address",
+    "item_link": "Link to an item"
+  },
+  "search": {
+    "label": "Search custom fields",
+    "placeholder": "Search fields…",
+    "clear": "Clear search"
+  },
+  "list": {
+    "delete": "Delete {{name}}",
+    "edit": "Edit {{name}}",
+    "empty": "No custom fields yet.",
+    "emptyFiltered": "No fields match “{{query}}”.",
+    "loadError": "Could not load the custom fields.",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "total_one": "{{count}} field",
+    "total_other": "{{count}} fields",
+    "usageItems_one": "{{count}} item",
+    "usageItems_other": "{{count}} items",
+    "usageNone": "No values yet",
+    "usageTrashed_one": "{{count}} in Trash",
+    "usageTrashed_other": "{{count}} in Trash",
+    "options_one": "{{count}} option",
+    "options_other": "{{count}} options"
+  },
+  "dialog": {
+    "createTitle": "New custom field",
+    "editTitle": "Edit custom field",
+    "description": "A name and a type. Each name is used once in the group, and the type cannot change later.",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. License plate",
+    "typeLabel": "Type",
+    "typeLocked": "A field's type cannot change.",
+    "optionsLabel": "Options",
+    "optionPlaceholder": "Option {{index}}",
+    "addOption": "Add option",
+    "removeOption": "Remove option {{index}}",
+    "optionUsage_one": "{{count}} item",
+    "optionUsage_other": "{{count}} items",
+    "removedOptions_one": "Saving clears the removed options on {{count}} item.",
+    "removedOptions_other": "Saving clears the removed options on {{count}} items.",
+    "createSubmit": "Create field",
+    "editSubmit": "Save changes",
+    "submitting": "Saving…",
+    "errorGeneric": "Could not save the field.",
+    "limit": "A group keeps at most {{count}} custom fields. Delete a field before you add another."
+  },
+  "validation": {
+    "nameRequired": "Enter a name.",
+    "nameTooLong": "Use at most {{max}} characters.",
+    "nameTaken": "Another field of the group has this name.",
+    "optionsRequired": "Add at least one option.",
+    "optionRequired": "Enter a label or remove the option.",
+    "optionTooLong": "Use at most {{max}} characters.",
+    "optionDuplicate": "Each option needs its own label.",
+    "optionsTooMany": "A field has at most {{max}} options."
+  },
+  "delete": {
+    "title": "Delete {{name}}?",
+    "description": "No item has a value for this field.",
+    "inUse_one": "{{count}} item has a value for this field. Deleting the field deletes that value.",
+    "inUse_other": "{{count}} items have a value for this field. Deleting the field deletes their values.",
+    "trashed_one": "This includes {{count}} item in Trash.",
+    "trashed_other": "This includes {{count}} items in Trash.",
+    "confirmLabel": "Delete the values too",
+    "confirm": "Delete field",
+    "deleting": "Deleting…",
+    "error": "Could not delete the field.",
+    "changed": "The field's values changed meanwhile. Check the new count and confirm again."
+  },
+  "toast": {
+    "created": "Field created",
+    "updated": "Field saved",
+    "deleted": "Field deleted"
+  },
+  "section": {
+    "title": "Custom fields",
+    "add": "Add field",
+    "addLabel": "Add a custom field",
+    "noneLeft": "Every custom field is already on this item.",
+    "manage": "Manage custom fields",
+    "remove": "Clear {{name}}",
+    "yes": "Yes",
+    "no": "No",
+    "selectPlaceholder": "Pick an option",
+    "currencyLabel": "Currency of {{name}}",
+    "itemPlaceholder": "Pick an item",
+    "itemSearch": "Search items…",
+    "itemNone": "No items found.",
+    "itemTrashed": "{{name}} (in Trash)",
+    "itemUnknown": "An item that no longer exists"
+  },
+  "errors": {
+    "number": "Enter a number.",
+    "numberTooLong": "The number has too many digits.",
+    "currency": "Enter a three-letter currency code.",
+    "url": "Enter a web address starting with http:// or https://.",
+    "date": "Enter a date."
+  },
+  "detail": {
+    "title": "Custom fields",
+    "yes": "Yes",
+    "no": "No",
+    "trashed": "in Trash",
+    "unknownItem": "An item that no longer exists",
+    "unknownOption": "A removed option"
+  }
+}
