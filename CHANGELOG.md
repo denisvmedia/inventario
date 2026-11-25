@@ -75,6 +75,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- In Safari, **Save** in the unsaved-changes prompt saves when the prompt
+  opens again right after **Keep editing**. Before, the click closed the
+  prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
 - Tags written in Cyrillic, Czech, Chinese or any other non-Latin script are
   kept on save. Before, their letters were stripped from the slug, so a tag
   like "кухня" disappeared and "USB кабель" and "USB хаб" became one tag.
