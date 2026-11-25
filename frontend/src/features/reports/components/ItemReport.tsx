@@ -22,6 +22,7 @@ import { formatCurrency, formatDate } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { PhotoSection, type PhotoSize } from "./PhotoSection"
+import { UnavailableNote } from "./UnavailableNote"
 import { filesToPhotos } from "../photos"
 import { reportSubtitle } from "../subtitle"
 
@@ -38,8 +39,9 @@ interface ItemReportProps {
   imageSize: PhotoSize
   // "{Location} · {Area}" breadcrumb for the item's area.
   areaLabel: string
-  // The seller the item was bought from, "" for none.
-  sellerName?: string
+  // The seller the item was bought from, "" for none, null when the sellers
+  // could not be loaded (the cell stays empty with a note).
+  sellerName?: string | null
   // Group currency: the estimated value is in it.
   groupCurrency: string
   // Purchase currency — `original_price` lives here.
@@ -82,7 +84,7 @@ export function ItemReport({
     formatCurrency
   )
 
-  const details: { icon: LucideIcon; label: string; value: string }[] = [
+  const details: { icon: LucideIcon; label: string; value: string; note?: string }[] = [
     {
       icon: Tag,
       label: t("reports:insurance.fields.type"),
@@ -100,11 +102,18 @@ export function ItemReport({
         ? formatDate(commodity.purchase_date, { style: "long" })
         : noValue,
     },
-    {
-      icon: Store,
-      label: t("reports:insurance.fields.seller"),
-      value: sellerName || noValue,
-    },
+    sellerName === null
+      ? {
+          icon: Store,
+          label: t("reports:insurance.fields.seller"),
+          value: "",
+          note: t("reports:insurance.sellerUnavailable"),
+        }
+      : {
+          icon: Store,
+          label: t("reports:insurance.fields.seller"),
+          value: sellerName || noValue,
+        },
     {
       icon: MapPin,
       label: t("reports:insurance.fields.location"),
@@ -174,14 +183,15 @@ export function ItemReport({
           {t("reports:insurance.sections.itemDetails")}
         </h2>
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-          {details.map(({ icon: Icon, label, value }) => (
+          {details.map(({ icon: Icon, label, value, note }) => (
             <div key={label} className="flex items-start gap-3">
               <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
               </div>
               <div>
                 <p className="text-xs text-muted-foreground">{label}</p>
-                <p className="mt-0.5 text-sm font-medium">{value}</p>
+                {value ? <p className="mt-0.5 text-sm font-medium">{value}</p> : null}
+                {note ? <UnavailableNote text={note} /> : null}
               </div>
             </div>
           ))}

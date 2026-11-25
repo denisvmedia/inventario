@@ -57,6 +57,7 @@
     },
     "selectItem": "Vyberte položku…",
     "selectLocation": "Vyberte umístění…",
+    "sellerUnavailable": "Prodejce se nepodařilo načíst.",
     "title": "Pojistná zpráva",
     "warranty": {
       "expires": "platí do {{date}}",

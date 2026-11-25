@@ -61,13 +61,19 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
     return (id?: string) => (id ? (map.get(id) ?? id) : "")
   }, [areas.data])
 
-  // A seller deleted since the event is named as such: the event keeps only
-  // its id.
+  // The event keeps only the seller's id. An id the loaded list lacks is a
+  // seller deleted since; while the list loads, or when it failed, the name
+  // is unknown (null) and the row keeps the generic copy.
+  const sellersLoaded = sellers.isSuccess
   const sellerName = useMemo(() => {
     const map = new Map<string, string>()
     for (const s of sellers.data ?? []) map.set(s.id, s.name ?? "")
-    return (id: string) => map.get(id) ?? t("commodities:detail.historyEvent.sellerDeleted")
-  }, [sellers.data, t])
+    return (id: string): string | null => {
+      const name = map.get(id)
+      if (name !== undefined) return name
+      return sellersLoaded ? t("commodities:detail.historyEvent.sellerDeleted") : null
+    }
+  }, [sellers.data, sellersLoaded, t])
 
   if (events.isLoading) {
     return (
@@ -161,7 +167,7 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
 interface RowProps {
   event: CommodityEvent
   areaName: (id?: string) => string
-  sellerName: (id: string) => string
+  sellerName: (id: string) => string | null
 }
 
 function TimelineRow({ event, areaName, sellerName }: RowProps) {
@@ -246,7 +252,7 @@ function labelFor(
   ev: CommodityEvent,
   t: (key: string, opts?: Record<string, unknown>) => string,
   areaName: (id?: string) => string,
-  sellerName: (id: string) => string
+  sellerName: (id: string) => string | null
 ): string {
   switch (ev.kind) {
     case "created":
@@ -372,42 +378,48 @@ function labelFor(
 }
 
 // sellerOnlyLabel names the sellers of an "updated" event whose only change
-// is the seller (#2804). An edit that changed more keeps the generic copy, so
-// the row never hides the other changes behind the seller.
+// is the seller (#2804), or returns null for the generic copy. The server's
+// snapshot carries every field its change check compares, so an edit that
+// changed anything else besides the seller shows up here and keeps the
+// generic copy. So does a row whose sellers cannot be named yet.
 function sellerOnlyLabel(
   ev: CommodityEvent,
   t: (key: string, opts?: Record<string, unknown>) => string,
-  sellerName: (id: string) => string
+  sellerName: (id: string) => string | null
 ): string | null {
   const changed = changedKeys(ev.before, ev.after)
   if (changed.length !== 1 || changed[0] !== "seller_id") return null
-  const from = stringField(ev.before, "seller_id")
-  const to = stringField(ev.after, "seller_id")
+  const fromId = stringField(ev.before, "seller_id")
+  const toId = stringField(ev.after, "seller_id")
+  const from = fromId ? sellerName(fromId) : ""
+  const to = toId ? sellerName(toId) : ""
+  if (from === null || to === null) return null
   if (from && to) {
-    return t("commodities:detail.historyEvent.sellerChangedLabel", {
-      from: sellerName(from),
-      to: sellerName(to),
-    })
+    return t("commodities:detail.historyEvent.sellerChangedLabel", { from, to })
   }
-  if (to) return t("commodities:detail.historyEvent.sellerChangedLabelSet", { to: sellerName(to) })
-  if (from) {
-    return t("commodities:detail.historyEvent.sellerChangedLabelCleared", {
-      from: sellerName(from),
-    })
-  }
+  if (to) return t("commodities:detail.historyEvent.sellerChangedLabelSet", { to })
+  if (from) return t("commodities:detail.historyEvent.sellerChangedLabelCleared", { from })
   return null
 }
 
 // changedKeys lists the keys whose values differ between two snapshots. The
 // values are strings, numbers, booleans or string lists, so comparing their
-// JSON is exact.
+// JSON is exact once "nothing" has one spelling: a missing key, null, ""
+// and an empty list all compare equal.
 function changedKeys(
   before: Record<string, unknown> | undefined,
   after: Record<string, unknown> | undefined
 ): string[] {
   if (!before || !after) return []
   const keys = new Set([...Object.keys(before), ...Object.keys(after)])
-  return [...keys].filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
+  return [...keys].filter((k) => snapshotValue(before[k]) !== snapshotValue(after[k]))
+}
+
+function snapshotValue(v: unknown): string {
+  if (v === undefined || v === null || v === "" || (Array.isArray(v) && v.length === 0)) {
+    return "null"
+  }
+  return JSON.stringify(v)
 }
 
 // changedLoanFields lists the keys whose values differ between a
