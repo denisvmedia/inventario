@@ -333,3 +333,68 @@ func TestCommodityDraftService_FinishStaleDiscards(t *testing.T) {
 	c.Assert(created, qt.IsTrue)
 	c.Assert(again.ID, qt.Not(qt.Equals), stopped.ID)
 }
+
+// failingDeleteDrafts is a draft registry factory whose registries fail to
+// delete the draft with the id failID.
+type failingDeleteDrafts struct {
+	registry.CommodityDraftRegistryFactory
+	failID string
+}
+
+func (f failingDeleteDrafts) CreateUserRegistry(ctx context.Context) (registry.CommodityDraftRegistry, error) {
+	reg, err := f.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return failingDeleteDraftRegistry{CommodityDraftRegistry: reg, failID: f.failID}, nil
+}
+
+type failingDeleteDraftRegistry struct {
+	registry.CommodityDraftRegistry
+	failID string
+}
+
+var errDraftDeleteFails = errors.New("the draft cannot be deleted")
+
+func (r failingDeleteDraftRegistry) DeleteDiscarding(ctx context.Context, id string) error {
+	if id == r.failID {
+		return errDraftDeleteFails
+	}
+	return r.CommodityDraftRegistry.DeleteDiscarding(ctx, id)
+}
+
+// TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest:
+// a stopped discard that keeps failing is reported, and the stopped discards
+// after it are still finished.
+func TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest(t *testing.T) {
+	c := qt.New(t)
+	f := newDraftFixture(c)
+	var stopped []*models.CommodityDraft
+	for _, key := range []string{"first", "poisoned", "last"} {
+		d := f.draft(c, key, key)
+		_, err := f.regs.CommodityDraftRegistry.MarkDiscarding(f.ctx, d.ID)
+		c.Assert(err, qt.IsNil)
+		stopped = append(stopped, d)
+	}
+	poisoned := stopped[1]
+
+	factorySet := *f.factorySet
+	factorySet.CommodityDraftRegistryFactory = failingDeleteDrafts{
+		CommodityDraftRegistryFactory: f.factorySet.CommodityDraftRegistryFactory,
+		failID:                        poisoned.ID,
+	}
+	later := services.NewCommodityDraftService(&factorySet,
+		services.WithCommodityDraftClock(func() time.Time { return time.Now().Add(11 * time.Minute) }))
+	finished, err := later.FinishStaleDiscards(f.ctx)
+	c.Assert(err, qt.ErrorIs, errDraftDeleteFails)
+	c.Assert(finished, qt.Equals, 2)
+
+	for _, d := range stopped {
+		_, err := f.regs.CommodityDraftRegistry.Get(f.ctx, d.ID)
+		if d.ID == poisoned.ID {
+			c.Check(err, qt.IsNil, qt.Commentf("the failing draft is still there"))
+			continue
+		}
+		c.Check(err, qt.ErrorIs, registry.ErrNotFound, qt.Commentf("draft %s", d.ClientKey))
+	}
+}

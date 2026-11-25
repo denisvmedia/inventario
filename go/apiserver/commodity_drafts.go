@@ -325,7 +325,11 @@ func (api *commodityDraftsAPI) finishStaleDiscards(r *http.Request) {
 		return
 	}
 	canWrite, _, err := api.groupService.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
-	if err != nil || !canWrite {
+	if err != nil {
+		slog.Error("Failed to check the role for finishing stopped draft discards", "group_id", group.ID, "user_id", user.ID, "error", err)
+		return
+	}
+	if !canWrite {
 		return
 	}
 	finished, err := api.service.FinishStaleDiscards(context.WithoutCancel(r.Context()))

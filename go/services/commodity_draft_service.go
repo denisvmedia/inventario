@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -272,7 +273,9 @@ func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 // staleDiscardAfter ago and did not complete, at most staleDiscardBatch of
 // them, and returns how many it finished. Until then such a draft keeps its
 // files and its client key. A draft another discard finishes meanwhile
-// counts as finished.
+// counts as finished. A draft that fails is logged and the others are still
+// finished, so one draft that keeps failing does not hold them up; the first
+// failure is returned.
 func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, error) {
 	reg, err := s.drafts(ctx)
 	if err != nil {
@@ -283,11 +286,17 @@ func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, e
 		return 0, errxtrace.Wrap("failed to list stopped discards", err)
 	}
 	finished := 0
+	var firstErr error
 	for _, draft := range stale {
-		if err := s.Discard(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
-			return finished, errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
+		err := s.Discard(ctx, draft.ID)
+		if err != nil && !errors.Is(err, registry.ErrNotFound) {
+			slog.Error("Failed to finish a stopped draft discard", "draft_id", draft.ID, "error", err)
+			if firstErr == nil {
+				firstErr = errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
+			}
+			continue
 		}
 		finished++
 	}
-	return finished, nil
+	return finished, firstErr
 }
