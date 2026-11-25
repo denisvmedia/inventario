@@ -286,6 +286,9 @@ export interface FileBulkResult {
   succeeded: string[]
   skipped: { id: string; name: string }[]
   failed: { id: string; name: string; error: string }[]
+  // Files of a request that failed after an earlier one went through: the
+  // server may have changed some of them (sendInChunks).
+  unknown: string[]
 }
 
 export interface FileBulkTagsChange {
@@ -296,9 +299,10 @@ export interface FileBulkTagsChange {
 }
 
 // Adds tags to and removes tags from the files; tags the change does not
-// name stay on each file. Sends at most 100 ids per request; when a later
-// request fails, what the earlier ones changed is kept and the rest is
-// reported as failed (sendInChunks).
+// name stay on each file. Sends at most 100 ids per request. When a later
+// request fails, what the earlier ones changed is kept, its ids are reported
+// as unknown, since the server may have changed some of them, and the ids
+// after it as failed (sendInChunks).
 export async function bulkUpdateFileTags(
   ids: string[],
   change: FileBulkTagsChange
@@ -306,12 +310,12 @@ export async function bulkUpdateFileTags(
   const tags: NonNullable<Schema<"jsonapi.FileBulkPatch">["tags"]> = {}
   if (change.add.length > 0) tags.add = change.add
   if (change.remove.length > 0) tags.remove = change.remove
-  const { parts, unsent } = await sendInChunks(ids, MAX_BULK_FILE_IDS, (chunk) =>
+  const { parts, unknown, unsent } = await sendInChunks(ids, MAX_BULK_FILE_IDS, (chunk) =>
     http.post<Schema<"jsonapi.BulkResultResponse">>(`/files/bulk-update`, {
       data: { type: "files", attributes: { ids: chunk, patch: { tags } } },
     })
   )
-  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [] }
+  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [], unknown }
   for (const body of parts) {
     const attrs = body?.data?.attributes
     merged.succeeded.push(...(attrs?.succeeded ?? []))

@@ -329,6 +329,83 @@ describe("<FilesListPage />", () => {
     expect(within(bar).getByText("1 selected")).toBeInTheDocument()
   })
 
+  it("says that no file had the tags a removal names", async () => {
+    const user = userEvent.setup()
+    vi.mocked(toast.info).mockClear()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1")]),
+      ...fileHandlers.counts(SLUG, { all: 1, images: 1 }),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "receipt", label: "Receipt", color: "blue" }]),
+      ...fileHandlers.bulkUpdate(SLUG, {
+        respond: () => ({ skipped: [{ id: "f1", name: "File f1", reason: "unchanged" }] }),
+      })
+    )
+    renderPage()
+    await screen.findByTestId("file-row-f1")
+    await user.click(screen.getAllByLabelText(/select file f1/i)[0])
+    await user.click(await screen.findByTestId("files-bulk-tags"))
+    const dialog = await screen.findByTestId("bulk-tags-dialog")
+    await user.click(await within(dialog).findByTestId("bulk-tags-remove-option-receipt"))
+    await user.click(within(dialog).getByTestId("bulk-tags-confirm"))
+
+    await waitFor(() =>
+      expect(toast.info).toHaveBeenCalledWith(
+        "None of the selected files had these tags.",
+        undefined
+      )
+    )
+  })
+
+  it("keeps a selection made while a tag change was running", async () => {
+    const user = userEvent.setup()
+    vi.mocked(toast.warning).mockClear()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let answered = false
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...fileHandlers.list(SLUG, [fileRow("f1"), fileRow("f2"), fileRow("f3")]),
+      ...fileHandlers.counts(SLUG, { all: 3, images: 3 }),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "receipt", label: "Receipt", color: "blue" }]),
+      http.post(apiUrl(`/g/${SLUG}/files/bulk-update`), async () => {
+        await gate
+        answered = true
+        return HttpResponse.json({
+          data: {
+            type: "files.bulk_result",
+            attributes: {
+              succeeded: ["f1"],
+              skipped: [],
+              failed: [
+                { id: "f2", name: "File f2", code: "failed", error: "could not be changed" },
+              ],
+            },
+          },
+        })
+      })
+    )
+    renderPage()
+    await screen.findByTestId("file-row-f3")
+    await user.click(screen.getAllByLabelText(/select file f1/i)[0])
+    await user.click(screen.getAllByLabelText(/select file f2/i)[0])
+    await user.click(await screen.findByTestId("files-bulk-tags"))
+    const dialog = await screen.findByTestId("bulk-tags-dialog")
+    await user.click(await within(dialog).findByTestId("bulk-tags-add-option-receipt"))
+    await user.click(within(dialog).getByTestId("bulk-tags-confirm"))
+
+    // While the change runs, the user closes the dialog and picks a third file.
+    await user.click(within(dialog).getByRole("button", { name: "Cancel" }))
+    await user.click(screen.getAllByLabelText(/select file f3/i)[0])
+
+    release()
+    await waitFor(() => expect(answered).toBe(true))
+    await waitFor(() => expect(toast.warning).toHaveBeenCalled())
+    // The failed file does not replace the selection the user made since.
+    const bar = await screen.findByTestId("files-bulk-bar")
+    expect(within(bar).getByText("3 selected")).toBeInTheDocument()
+  })
+
   it("reflects the active tag filter from the URL on the matching pill", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

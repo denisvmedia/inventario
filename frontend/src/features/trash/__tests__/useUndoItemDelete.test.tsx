@@ -84,6 +84,63 @@ describe("useUndoItemDelete", () => {
     await waitFor(() => expect(toast.warning).toHaveBeenCalledWith("1 done, 1 failed.", undefined))
   })
 
+  it("also restores items whose delete may have gone through, without counting them as failed", async () => {
+    let body: unknown = null
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/trash/commodities/restore`), async ({ request }) => {
+        body = await request.json()
+        return HttpResponse.json({
+          data: {
+            type: "commodities.bulk_restore_result",
+            id: "bulk-result",
+            // c3 went to Trash before its request failed; c4 never left.
+            attributes: {
+              succeeded: ["c1", "c3"],
+              failed: [{ id: "c4", error: "not found" }],
+              area_removed: [],
+            },
+          },
+        })
+      })
+    )
+    const { result } = renderHook(() => useUndoItemDelete(), { wrapper })
+    result.current(["c1"], ["c3", "c4"]).onClick()
+
+    await waitFor(() => expect(toast.success).toHaveBeenCalledWith("2 items restored.", undefined))
+    expect(body).toEqual({
+      data: { type: "commodities", attributes: { ids: ["c1", "c3", "c4"] } },
+    })
+    expect(toast.warning).not.toHaveBeenCalled()
+  })
+
+  it("says which restores got no answer", async () => {
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/trash/commodities/restore`), async ({ request }) => {
+        calls += 1
+        if (calls > 1) return HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        return HttpResponse.json({
+          data: {
+            type: "commodities.bulk_restore_result",
+            id: "bulk-result",
+            attributes: { succeeded: body.data.attributes.ids, failed: [], area_removed: [] },
+          },
+        })
+      })
+    )
+    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    const { result } = renderHook(() => useUndoItemDelete(), { wrapper })
+    result.current(ids).onClick()
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("100 items restored.", {
+        description:
+          "No answer came back for 50 items, so they may have been restored. Check the list.",
+      })
+    )
+  })
+
   it("restores more items than one request takes in several requests", async () => {
     const sent: string[][] = []
     server.use(

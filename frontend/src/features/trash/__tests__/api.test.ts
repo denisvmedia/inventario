@@ -18,7 +18,7 @@ beforeEach(() => {
 
 describe("restoreCommodities", () => {
   it("keeps what the first requests restored when a later one fails", async () => {
-    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    const ids = Array.from({ length: 250 }, (_, i) => `c${i}`)
     let calls = 0
     server.use(
       http.post(apiUrl("/g/g1/trash/commodities/restore"), async ({ request }) => {
@@ -37,6 +37,7 @@ describe("restoreCommodities", () => {
     expect(calls).toBe(2)
     expect(out.succeeded).toEqual(ids.slice(0, 100))
     expect(out.areaRemoved).toEqual(["c3"])
-    expect(out.failed.map((f) => f.id)).toEqual(ids.slice(100))
+    expect(out.unknown).toEqual(ids.slice(100, 200))
+    expect(out.failed.map((f) => f.id)).toEqual(ids.slice(200))
   })
 })

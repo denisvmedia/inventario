@@ -1,4 +1,4 @@
-import { useState } from "react"
+import { useRef, useState } from "react"
 import { Link } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 import { ChevronDown, QrCode, Trash2 } from "lucide-react"
@@ -63,10 +63,21 @@ type BulkAction =
   | { kind: "delete" }
 
 // The items an action was confirmed for, captured when its dialog opens so
-// a list refresh while the dialog is open does not change them.
+// a list refresh while the dialog is open does not change them. version is
+// the selection's version then (CommoditySelectionControls.settle).
 interface Target {
   selection: CommoditySelection
   count: number
+  version: number
+}
+
+// What a request needs to know when it ends, to touch only what is still
+// its own: the selection version it was sent for, the dialog session that
+// sent it (none for a confirm or a retry), and its place among requests.
+interface RequestContext {
+  version: number
+  session?: number
+  seq: number
 }
 
 type DialogKind = "move" | "tags" | "type" | "status"
@@ -123,6 +134,13 @@ export function CommodityBulkActions({
     action: BulkAction
     result: CommodityBulkResult
   } | null>(null)
+  // Requests can overlap: the user can cancel a dialog while its request
+  // runs, change the filters, select other items and start another action.
+  // dialogSession counts the dialogs opened, requestSeq the requests sent,
+  // and outcomeSeq is the request whose result the result dialog shows.
+  const dialogSession = useRef(0)
+  const requestSeq = useRef(0)
+  const outcomeSeq = useRef(0)
 
   const pageIds = rows.map((r) => r.id ?? "").filter(Boolean)
   const checked = selection.checkedOn(pageIds)
@@ -131,12 +149,41 @@ export function CommodityBulkActions({
   const pending = bulkDelete.isPending || bulkMove.isPending || bulkUpdate.isPending
 
   function currentTarget(): Target {
-    return { selection: selection.toRequest(commodityQueryParam(query)), count }
+    return {
+      selection: selection.toRequest(commodityQueryParam(query)),
+      count,
+      version: selection.version,
+    }
   }
 
   function openDialog(kind: DialogKind) {
+    dialogSession.current += 1
     setTarget(currentTarget())
     setDialog(kind)
+  }
+
+  // closeDialog closes the dialog of session, and leaves one opened since.
+  function closeDialog(session: number | undefined) {
+    if (session === dialogSession.current) setDialog(null)
+  }
+
+  // showOutcome opens the result dialog for a request, unless it already
+  // shows the result of a later one: then the earlier failures get a toast.
+  function showOutcome(action: BulkAction, result: CommodityBulkResult, seq: number) {
+    if (outcomeSeq.current > seq) {
+      toast.warning(t("commodities:bulk.result.failedCount", { count: result.failed.length }))
+      return
+    }
+    outcomeSeq.current = seq
+    setOutcome({ action, result })
+  }
+
+  // closeOutcome closes the result dialog when it shows an earlier request,
+  // as when a retry from it succeeds, and leaves the result of a later one.
+  function closeOutcome(seq: number) {
+    if (outcomeSeq.current >= seq) return
+    outcomeSeq.current = 0
+    setOutcome(null)
   }
 
   function execute(action: BulkAction, sel: CommoditySelection): Promise<CommodityBulkResult> {
@@ -152,20 +199,26 @@ export function CommodityBulkActions({
 
   // run sends the action and reports what it did. It returns false when the
   // request failed as a whole, so the dialog that sent it can stay open.
-  async function run(action: BulkAction, sel: CommoditySelection): Promise<boolean> {
+  async function run(
+    action: BulkAction,
+    sel: CommoditySelection,
+    ctx: Omit<RequestContext, "seq">
+  ): Promise<boolean> {
+    requestSeq.current += 1
+    const req = { ...ctx, seq: requestSeq.current }
     let result: CommodityBulkResult
     try {
       result = await execute(action, sel)
     } catch (err) {
-      reportError(action, err)
+      reportError(action, err, req)
       return false
     }
-    report(action, withRowNames(result))
+    report(action, withRowNames(result), req)
     return true
   }
 
-  // withRowNames names the failed items the server did not name (not_sent:
-  // a later request of the action never ran) from the rows on the page.
+  // withRowNames names the failed items the server did not name (unknown and
+  // not_sent, from an action sent in several requests) from the page's rows.
   function withRowNames(result: CommodityBulkResult): CommodityBulkResult {
     if (result.failed.every((f) => f.name)) return result
     const names = new Map(rows.map((r) => [r.id ?? "", r.name ?? ""]))
@@ -175,26 +228,31 @@ export function CommodityBulkActions({
     }
   }
 
-  function report(action: BulkAction, result: CommodityBulkResult) {
+  function report(action: BulkAction, result: CommodityBulkResult, req: RequestContext) {
     const done = result.succeeded.length
     if (action.kind === "delete" && done > 0) {
+      // An item whose request failed may have gone to Trash: Undo tries it.
+      const maybeDeleted = result.failed.filter((f) => f.code === "unknown").map((f) => f.id)
       toast.success(t("commodities:toast.bulkDeleted", { count: done }), {
-        action: undoDelete(result.succeeded),
+        action: undoDelete(result.succeeded, maybeDeleted),
       })
       const filesKept = result.notes.filter((n) => n.code === "files_kept").length
       if (filesKept > 0) toast.warning(t("commodities:toast.bulkFilesKept", { count: filesKept }))
     }
     if (result.failed.length > 0) {
-      setOutcome({ action, result })
+      showOutcome(action, result, req.seq)
       // The failed items stay selected, to retry them or fix them another way.
-      selection.replace(result.failed.map((f) => f.id))
+      selection.settle(
+        req.version,
+        result.failed.map((f) => f.id)
+      )
       return
     }
-    setOutcome(null)
-    selection.clear()
+    closeOutcome(req.seq)
+    selection.settle(req.version, [])
     if (action.kind === "delete") return
     if (done === 0) {
-      toast.success(t("commodities:toast.bulkUnchanged"))
+      toast.success(unchangedMessage(action))
       return
     }
     const description =
@@ -208,15 +266,27 @@ export function CommodityBulkActions({
     toast.success(message, { description })
   }
 
-  function reportError(action: BulkAction, err: unknown) {
+  // unchangedMessage says why an action changed no item. For tags it names
+  // the part that did nothing: a removal of tags no item has is not a set
+  // of items that "already had" something.
+  function unchangedMessage(action: BulkAction): string {
+    const tags = action.kind === "update" ? action.patch.tags : undefined
+    const adds = (tags?.add?.length ?? 0) > 0
+    const removes = (tags?.remove?.length ?? 0) > 0
+    if (removes && adds) return t("commodities:toast.bulkTagsUnchangedBoth")
+    if (removes) return t("commodities:toast.bulkTagsNotPresent")
+    return t("commodities:toast.bulkUnchanged")
+  }
+
+  function reportError(action: BulkAction, err: unknown, req: RequestContext) {
     const code = getServerErrorCode(err)
     const meta = getServerErrorMeta(err) ?? {}
     if (code === "bulk.selection_changed") {
       // Sending the same request again would fail the same way: close the
       // dialog and drop "all matching", whose items are out of date, so the
       // user looks at the refreshed list and selects again.
-      setDialog(null)
-      selection.clear()
+      closeDialog(req.session)
+      selection.settle(req.version, [])
       const expected = meta.expected ?? ""
       const matched = meta.matched ?? ""
       toast.error(
@@ -235,9 +305,14 @@ export function CommodityBulkActions({
     else toast.error(t("commodities:toast.bulkUpdateError"))
   }
 
-  async function submit(action: BulkAction) {
-    if (!target) return
-    if (await run(action, target.selection)) setDialog(null)
+  // submit sends the action of the open dialog, and closes that dialog when
+  // the request went through. It returns whether it did.
+  async function submit(action: BulkAction): Promise<boolean> {
+    if (!target) return false
+    const session = dialogSession.current
+    if (!(await run(action, target.selection, { version: target.version, session }))) return false
+    closeDialog(session)
+    return true
   }
 
   async function handleDelete() {
@@ -248,7 +323,7 @@ export function CommodityBulkActions({
       confirmLabel: t("common:actions.delete"),
       destructive: true,
     })
-    if (ok) await run({ kind: "delete" }, tgt.selection)
+    if (ok) await run({ kind: "delete" }, tgt.selection, { version: tgt.version })
   }
 
   async function handleInUse() {
@@ -258,7 +333,11 @@ export function CommodityBulkActions({
       description: t("commodities:bulk.inUseDescription"),
       confirmLabel: t("commodities:bulk.inUseConfirm"),
     })
-    if (ok) await run({ kind: "update", patch: { status: { value: "in_use" } } }, tgt.selection)
+    if (ok) {
+      await run({ kind: "update", patch: { status: { value: "in_use" } } }, tgt.selection, {
+        version: tgt.version,
+      })
+    }
   }
 
   function openStatus(status: (typeof BULK_STATUSES)[number]) {
@@ -272,7 +351,11 @@ export function CommodityBulkActions({
 
   async function retry() {
     if (!outcome) return
-    await run(outcome.action, { ids: outcome.result.failed.map((f) => f.id) })
+    await run(
+      outcome.action,
+      { ids: outcome.result.failed.map((f) => f.id) },
+      { version: selection.version }
+    )
   }
 
   // A held write keeps its button focusable, with the reason in the title,
@@ -461,8 +544,7 @@ export function CommodityBulkActions({
             <Button
               onClick={async () => {
                 if (!moveArea) return
-                await submit({ kind: "move", areaId: moveArea })
-                setMoveArea("")
+                if (await submit({ kind: "move", areaId: moveArea })) setMoveArea("")
               }}
               disabled={!moveArea || pending}
               data-testid="bulk-move-confirm"
@@ -481,11 +563,11 @@ export function CommodityBulkActions({
         }}
         count={target?.count ?? 0}
         isPending={pending}
-        onSubmit={(change: BulkTagsChange) => {
+        onSubmit={async (change: BulkTagsChange) => {
           const tags: NonNullable<CommodityBulkPatch["tags"]> = {}
           if (change.add.length > 0) tags.add = change.add
           if (change.remove.length > 0) tags.remove = change.remove
-          return submit({ kind: "update", patch: { tags } })
+          await submit({ kind: "update", patch: { tags } })
         }}
       />
 
@@ -496,7 +578,9 @@ export function CommodityBulkActions({
         }}
         count={target?.count ?? 0}
         isPending={pending}
-        onSubmit={(type) => submit({ kind: "update", patch: { type } })}
+        onSubmit={async (type) => {
+          await submit({ kind: "update", patch: { type } })
+        }}
       />
 
       <StatusTransitionDialog
@@ -533,7 +617,9 @@ export function CommodityBulkActions({
       <BulkResultDialog
         open={outcome !== null}
         onOpenChange={(open) => {
-          if (!open) setOutcome(null)
+          if (open) return
+          outcomeSeq.current = 0
+          setOutcome(null)
         }}
         result={outcome?.result ?? null}
         itemHref={slug ? (id) => commodityHref(slug, id, listContext) : undefined}

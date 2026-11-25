@@ -210,7 +210,7 @@ describe("features/files/api", () => {
   })
 
   it("bulkUpdateFileTags keeps what the first requests changed when a later one fails", async () => {
-    const ids = Array.from({ length: 150 }, (_, i) => `f${i}`)
+    const ids = Array.from({ length: 250 }, (_, i) => `f${i}`)
     let calls = 0
     server.use(
       http.post(apiUrl("/g/g1/files/bulk-update"), async ({ request }) => {
@@ -225,6 +225,7 @@ describe("features/files/api", () => {
     const out = await bulkUpdateFileTags(ids, { add: ["receipt"], remove: [] })
     expect(calls).toBe(2)
     expect(out.succeeded).toEqual(ids.slice(0, 100))
-    expect(out.failed.map((f) => f.id)).toEqual(ids.slice(100))
+    expect(out.unknown).toEqual(ids.slice(100, 200))
+    expect(out.failed.map((f) => f.id)).toEqual(ids.slice(200))
   })
 })

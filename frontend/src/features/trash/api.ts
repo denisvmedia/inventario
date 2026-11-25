@@ -48,6 +48,9 @@ export interface BulkRestoreResult extends BulkTrashResult {
   // Restored items whose area was deleted while they were in Trash; they
   // came back unassigned.
   areaRemoved: string[]
+  // Items of a request that failed after an earlier one went through: the
+  // server may have restored some of them (sendInChunks).
+  unknown: string[]
 }
 
 export interface CommodityRestoreResult {
@@ -141,14 +144,15 @@ export async function restoreCommodity(id: string): Promise<CommodityRestoreResu
 const MAX_RESTORE_IDS = 100
 
 // Restores items from Trash. More ids than one request takes, as Undo after
-// a bulk delete of "all matching" items sends, go in several requests; when
-// a later one fails, what the earlier ones restored is kept and the rest is
-// reported as failed (sendInChunks).
+// a bulk delete of "all matching" items sends, go in several requests. When
+// a later one fails, what the earlier ones restored is kept, its ids are
+// reported as unknown, since the server may have restored some of them, and
+// the ids after it as failed (sendInChunks).
 export async function restoreCommodities(ids: string[]): Promise<BulkRestoreResult> {
-  const { parts, unsent } = await sendInChunks(ids, MAX_RESTORE_IDS, (chunk) =>
+  const { parts, unknown, unsent } = await sendInChunks(ids, MAX_RESTORE_IDS, (chunk) =>
     http.post<BulkRestoreEnvelope>("/trash/commodities/restore", bulkBody("commodities", chunk))
   )
-  const merged: BulkRestoreResult = { succeeded: [], failed: [], areaRemoved: [] }
+  const merged: BulkRestoreResult = { succeeded: [], failed: [], areaRemoved: [], unknown }
   for (const body of parts) {
     const part = bulkResult(body)
     merged.succeeded.push(...part.succeeded)

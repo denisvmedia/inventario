@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { act, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 // test/setup.ts mocks sonner with one spy per variant.
 import { toast } from "sonner"
@@ -187,6 +187,49 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     expect(query.has("page")).toBe(false)
   })
 
+  it("keeps the digest of Select all when the list refetches", async () => {
+    const user = userEvent.setup()
+    const requests: Record<string, unknown>[] = []
+    server.use(
+      listWithTotal(ROWS, 120),
+      ...commodityHandlers.bulkUpdate(SLUG, {
+        onRequest: (a) => requests.push(a),
+        respond: () => bulkResultResponse({ succeeded: ["c1", "c2"] }),
+      })
+    )
+    const { queryClient } = renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    await user.click(screen.getByTestId("commodities-select-all"))
+    await user.click(await screen.findByTestId("commodities-select-all-matching"))
+
+    // A background refetch reports as many items, but another set of them.
+    let refetched = false
+    server.use(
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () => {
+        refetched = true
+        return HttpResponse.json({
+          data: ROWS,
+          meta: { commodities: 120, selection_digest: "digest-after-refetch" },
+        })
+      })
+    )
+    await act(() => queryClient.invalidateQueries())
+    await waitFor(() => expect(refetched).toBe(true))
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent(
+      "All 120 matching items selected"
+    )
+
+    await openEditMenuItem(user, "commodities-bulk-edit-type")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Electronics$/i })
+    await user.click(screen.getByTestId("bulk-type-confirm"))
+    await waitFor(() => expect(requests).toHaveLength(1))
+    // The request names the items the user selected, so the server can
+    // refuse it when the set changed.
+    expect(requests[0].expected_count).toBe(120)
+    expect(requests[0].expected_digest).toBe("digest-120")
+  })
+
   it("unchecking a row of all matching keeps the rest of the page", async () => {
     const user = userEvent.setup()
     server.use(listWithTotal(ROWS, 120))
@@ -364,6 +407,150 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     // The selection named items that are out of date, so it is dropped.
     await waitFor(() =>
       expect(screen.queryByTestId("commodities-bulk-bar")).not.toBeInTheDocument()
+    )
+  })
+
+  it("leaves a newer selection and dialog alone when an earlier request ends", async () => {
+    const user = userEvent.setup()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkMove(SLUG, {
+        respond: async () => {
+          await gate
+          return bulkResultResponse({ succeeded: ["c1", "c2"] })
+        },
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a1")
+    await user.click(screen.getByTestId("bulk-move-confirm"))
+
+    // While the move runs, the user cancels it, changes the selection and
+    // opens another dialog.
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    const cards = screen.getAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    await openEditMenuItem(user, "commodities-bulk-edit-tags")
+    const tags = await screen.findByTestId("bulk-tags-dialog")
+
+    release()
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("2 items moved.", expect.anything())
+    )
+    // The move's success neither clears the newer selection nor closes the
+    // newer dialog.
+    expect(tags).toBeInTheDocument()
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
+  })
+
+  it("keeps a newer selection when an earlier request ends with failures", async () => {
+    const user = userEvent.setup()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkMove(SLUG, {
+        respond: async () => {
+          await gate
+          return bulkResultResponse({
+            failed: [
+              { id: "c1", name: "First", code: "not_found", error: "not found" },
+              { id: "c2", name: "Second", code: "not_found", error: "not found" },
+            ],
+          })
+        },
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a1")
+    await user.click(screen.getByTestId("bulk-move-confirm"))
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    const cards = screen.getAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+
+    release()
+    // The failures are still listed, but the selection stays the user's.
+    await screen.findByTestId("bulk-result-dialog")
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
+  })
+
+  it("says when an item may have changed, and Undo of a delete tries it too", async () => {
+    const user = userEvent.setup()
+    const restored: unknown[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkDelete(SLUG, {
+        respond: () =>
+          bulkResultResponse({ succeeded: ["c1"], failed: [{ id: "c2", code: "unknown" }] }),
+      }),
+      msw.post(apiUrl(`/g/${SLUG}/trash/commodities/restore`), async ({ request }) => {
+        restored.push(await request.json())
+        return HttpResponse.json({
+          data: { attributes: { succeeded: ["c1", "c2"], failed: [], area_removed: [] } },
+        })
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+
+    const result = await screen.findByTestId("bulk-result-dialog")
+    const failed = within(result).getByTestId("bulk-result-failed")
+    // The server did not name the item; the row on the page does.
+    expect(within(failed).getByText("Second")).toBeInTheDocument()
+    expect(
+      within(failed).getByText(
+        "May have changed: no answer came back for this item. Check it in the list before you try again."
+      )
+    ).toBeInTheDocument()
+
+    const undo = vi
+      .mocked(toast.success)
+      .mock.calls.find(([message]) => message === "1 item moved to the trash.")?.[1] as
+      { action: { onClick: () => void } } | undefined
+    expect(undo).toBeDefined()
+    act(() => undo!.action.onClick())
+    await waitFor(() => expect(restored).toHaveLength(1))
+    expect(restored[0]).toEqual({
+      data: { type: "commodities", attributes: { ids: ["c1", "c2"] } },
+    })
+  })
+
+  it("says that no item had the tags a removal names", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkUpdate(SLUG, {
+        respond: () =>
+          bulkResultResponse({
+            skipped: [
+              { id: "c1", name: "First" },
+              { id: "c2", name: "Second" },
+            ],
+          }),
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await openEditMenuItem(user, "commodities-bulk-edit-tags")
+    const dialog = await screen.findByTestId("bulk-tags-dialog")
+    await user.click(await within(dialog).findByTestId("bulk-tags-remove-option-garage"))
+    await user.click(within(dialog).getByTestId("bulk-tags-confirm"))
+
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(
+        "Nothing to change: none of the selected items had these tags.",
+        undefined
+      )
     )
   })
 

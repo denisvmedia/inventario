@@ -519,7 +519,8 @@ On the **All Items** page you can act on several items at once:
      - **Type…** — pick a type and click **Set type**.
      - Under **Set status**, a status. **Lost**, **Disposed**, and
        **Written Off** open the same dialog as a single change, for the
-       **date** and an optional **note**. **In Use** asks for confirmation and
+       **date** and an optional **note**. An item that already has that
+       status keeps its own date and note. **In Use** asks for confirmation and
        clears the status date, note, and sale price. **Sold** is not offered,
        because each item needs its own sale price: mark items sold one at a
        time.
@@ -532,7 +533,9 @@ On the **All Items** page you can act on several items at once:
 
 Each item is changed the way a single change would change it: the same checks
 apply, and the change shows in the item's history. An item that already has
-what you set, such as a tag it already carries, is left as it is.
+what you set, such as a tag it already carries, is left as it is, and so is
+an item that does not have a tag you remove. When no item changed, a message
+says which of the two it was.
 
 ### Select every item that matches
 
@@ -557,6 +560,11 @@ reason. The items that failed stay selected. A move to an area someone
 deleted in the meantime changes no item and shows an error instead. Click an item's name to open it
 and fix it, or click **Retry failed items** to run the same action on those
 items again.
+
+More than 100 picked items are sent in batches of 100. If a batch gets no
+answer, its items are listed as **May have changed**: Inventario cannot tell
+whether the action reached them, so check them in the list before you retry.
+After a delete, **Undo** tries to restore those items too.
 
 To clear your selection, untick the items or reload the page. Changing the
 search or a filter also clears it.

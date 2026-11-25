@@ -470,10 +470,11 @@ export type CommodityBulkPatch = Schema<"jsonapi.CommodityBulkPatch">
 export type CommodityBulkStatusValue = NonNullable<
   Schema<"jsonapi.CommodityBulkStatusPatch">["value"]
 >
-// The server's codes, plus not_sent: the item was in a later request of a
-// chunked action that stopped when a request failed, so it was not changed.
+// The server's codes, plus two for an action sent in several requests that
+// stopped when one failed: unknown, the item was in the request that failed,
+// so it may have changed; not_sent, it was in a later request, so it did not.
 export type CommodityBulkFailureCode =
-  NonNullable<Schema<"jsonapi.BulkResultFail">["code"]> | "not_sent"
+  NonNullable<Schema<"jsonapi.BulkResultFail">["code"]> | "unknown" | "not_sent"
 
 export interface CommodityBulkFailure {
   id: string
@@ -527,9 +528,10 @@ function readBulkResult(body: BulkResultEnvelope | undefined): CommodityBulkResu
 
 // postBulk sends one bulk action. An id list longer than the server takes
 // in one request goes in several, one after the other, and the results are
-// merged; when a later request fails, the items it and the ones after it
-// carried are reported as not_sent (sendInChunks). A query always goes in
-// one request, since the server resolves it.
+// merged. When a later request fails, its items are reported as unknown,
+// since the server may have changed some of them, and the items after it as
+// not_sent (sendInChunks). A query always goes in one request, since the
+// server resolves it.
 async function postBulk(
   path: string,
   selection: CommoditySelection,
@@ -548,7 +550,9 @@ async function postBulk(
       expected_digest: selection.expectedDigest,
     })
   }
-  const { parts, unsent } = await sendInChunks(selection.ids, MAX_BULK_IDS, (ids) => send({ ids }))
+  const { parts, unknown, unsent } = await sendInChunks(selection.ids, MAX_BULK_IDS, (ids) =>
+    send({ ids })
+  )
   const merged = emptyBulkResult()
   for (const part of parts) {
     merged.succeeded.push(...part.succeeded)
@@ -556,6 +560,7 @@ async function postBulk(
     merged.failed.push(...part.failed)
     merged.notes.push(...part.notes)
   }
+  for (const id of unknown) merged.failed.push({ id, name: "", code: "unknown", error: "" })
   for (const id of unsent) merged.failed.push({ id, name: "", code: "not_sent", error: "" })
   return merged
 }

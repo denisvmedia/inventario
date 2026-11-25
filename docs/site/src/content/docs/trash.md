@@ -26,7 +26,9 @@ Backups are not part of this: deleting an export removes it for good (see
 [Backup & restore](../backup-and-restore/#manage-and-delete-exports)).
 
 Right after you delete items, the message at the bottom of the screen has an
-**Undo** button that restores them straight away.
+**Undo** button that restores them straight away. If a restore gets no answer
+for some of them, the message says how many may have been restored; check the
+trash for the rest.
 
 ## While something is in the trash
 

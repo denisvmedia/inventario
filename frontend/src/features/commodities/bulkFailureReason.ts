@@ -11,6 +11,8 @@ export function bulkFailureReason(t: TFunction, f: CommodityBulkFailure): string
   switch (f.code) {
     case "not_found":
       return t("commodities:bulk.result.notFound")
+    case "unknown":
+      return t("commodities:bulk.result.unknown")
     case "not_sent":
       return t("commodities:bulk.result.notSent")
     case "invalid":

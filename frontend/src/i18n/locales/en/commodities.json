@@ -45,6 +45,7 @@
       "succeeded_one": "{{count}} item changed",
       "succeeded_other": "{{count}} items changed",
       "title": "Some items were not changed",
+      "unknown": "May have changed: no answer came back for this item. Check it in the list before you try again.",
       "unnamed": "Unnamed item"
     },
     "selectAllMatching_one": "Select all {{count}} matching item",
@@ -590,6 +591,8 @@
     "bulkSelectionSwapped": "The items the filter matches changed since you selected them. Nothing was changed. Check the list and select them again.",
     "bulkSkipped_one": "{{count}} item already had it.",
     "bulkSkipped_other": "{{count}} items already had it.",
+    "bulkTagsNotPresent": "Nothing to change: none of the selected items had these tags.",
+    "bulkTagsUnchangedBoth": "Nothing to change: the selected items already had the tags to add, and none had the tags to remove.",
     "bulkTooMany": "A bulk action takes up to {{max}} items. Narrow the filter and try again.",
     "bulkUnchanged": "Nothing to change: the selected items already had it.",
     "bulkUpdated_one": "{{count}} item updated.",

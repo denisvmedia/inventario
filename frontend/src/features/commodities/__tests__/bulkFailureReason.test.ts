@@ -63,6 +63,9 @@ describe("bulkFailureReason", () => {
     expect(bulkFailureReason(t, failure({ code: "not_sent" }))).toBe(
       "Not changed: the action stopped before it reached this item. Try again."
     )
+    expect(bulkFailureReason(t, failure({ code: "unknown" }))).toBe(
+      "May have changed: no answer came back for this item. Check it in the list before you try again."
+    )
     expect(bulkFailureReason(t, failure({ code: "failed", error: "pq: deadlock" }))).toBe(
       "Could not be changed. Try again later."
     )

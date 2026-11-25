@@ -257,29 +257,52 @@ export function FilesListPage() {
   }
 
   // Adds and removes tags on the selected files. Files that fail stay
-  // selected, so opening the dialog again retries just those.
+  // selected, so opening the dialog again retries just those. The dialog can
+  // be dismissed while the request runs, and the user can then change the
+  // filters or the selection: the outcome replaces the selection only while
+  // it is still the one the request was sent for (the same Set, since every
+  // change makes a new one).
   async function onBulkTags(change: BulkTagsChange) {
-    const ids = [...selected]
+    const sent = selected
+    const ids = [...sent]
     if (!ids.length) return
     try {
       const result = await bulkTags.mutateAsync({ ids, change })
       setTagsDialogOpen(false)
-      setSelected(new Set(result.failed.map((f) => f.id)))
-      if (result.failed.length > 0) {
+      // Files whose request failed may have changed: they stay selected with
+      // the failed ones, to check them and send the change again.
+      const keep = [...result.failed.map((f) => f.id), ...result.unknown]
+      setSelected((prev) => (prev === sent ? new Set(keep) : prev))
+      const unknown =
+        result.unknown.length > 0
+          ? { description: t("files:bulk.tagsUnknown", { count: result.unknown.length }) }
+          : undefined
+      if (result.failed.length > 0 || result.unknown.length > 0) {
         toast.warning(
           t("files:bulk.tagsPartial", {
             succeeded: result.succeeded.length,
             failed: result.failed.length,
-          })
+          }),
+          unknown
         )
       } else if (result.succeeded.length === 0) {
-        toast.info(t("files:bulk.tagsUnchanged"))
+        toast.info(tagsUnchangedMessage(change))
       } else {
         toast.success(t("files:bulk.tagsUpdated", { count: result.succeeded.length }))
       }
     } catch {
       toast.error(t("files:bulk.tagsError"))
     }
+  }
+
+  // tagsUnchangedMessage says why a tag change changed no file, naming the
+  // part that did nothing: removing a tag no file has is not "already had".
+  function tagsUnchangedMessage(change: BulkTagsChange): string {
+    const adds = change.add.length > 0
+    const removes = change.remove.length > 0
+    if (adds && removes) return t("files:bulk.tagsUnchangedBoth")
+    if (removes) return t("files:bulk.tagsNotPresent")
+    return t("files:bulk.tagsUnchanged")
   }
 
   async function onBulkDelete() {

@@ -166,7 +166,7 @@ describe("bulkUpdateCommodities", () => {
   })
 
   it("keeps what the first requests changed when a later one fails", async () => {
-    const ids = Array.from({ length: 150 }, (_, i) => `c${i}`)
+    const ids = Array.from({ length: 250 }, (_, i) => `c${i}`)
     let calls = 0
     server.use(
       http.post(apiUrl(`/g/${SLUG}/commodities/bulk-update`), async ({ request }) => {
@@ -203,8 +203,11 @@ describe("bulkUpdateCommodities", () => {
       field: "short_name",
       reason: "validation_is_empty",
     })
-    expect(out.failed.slice(1)).toEqual(
-      ids.slice(100).map((id) => ({ id, name: "", code: "not_sent", error: "" }))
-    )
+    // The request that failed may have changed its items before it failed;
+    // the items after it were never sent.
+    expect(out.failed.slice(1)).toEqual([
+      ...ids.slice(100, 200).map((id) => ({ id, name: "", code: "unknown", error: "" })),
+      ...ids.slice(200).map((id) => ({ id, name: "", code: "not_sent", error: "" })),
+    ])
   })
 })

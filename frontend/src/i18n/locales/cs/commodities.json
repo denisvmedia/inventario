@@ -61,6 +61,7 @@
       "succeeded_many": "{{count}} položky změněno",
       "succeeded_other": "{{count}} položek změněno",
       "title": "Některé položky se nezměnily",
+      "unknown": "Možná změněno: pro tuto položku nepřišla odpověď. Než to zkusíte znovu, zkontrolujte ji v seznamu.",
       "unnamed": "Položka bez názvu"
     },
     "selectAllMatching_one": "Vybrat {{count}} odpovídající položku",
@@ -622,6 +623,8 @@
     "bulkSkipped_few": "{{count}} položky to už měly.",
     "bulkSkipped_many": "{{count}} položky to už měly.",
     "bulkSkipped_other": "{{count}} položek to už mělo.",
+    "bulkTagsNotPresent": "Není co měnit: žádná z vybraných položek tyto štítky neměla.",
+    "bulkTagsUnchangedBoth": "Není co měnit: vybrané položky už měly štítky k přidání a žádná neměla štítky k odebrání.",
     "bulkTooMany": "Hromadná akce zvládne nejvýše {{max}} položek. Zužte filtr a zkuste to znovu.",
     "bulkUnchanged": "Není co měnit: vybrané položky to už mají.",
     "bulkUpdated_one": "{{count}} položka upravena.",

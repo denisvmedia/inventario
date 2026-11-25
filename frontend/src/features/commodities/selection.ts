@@ -13,9 +13,14 @@ interface SelectionState {
   ids: ReadonlySet<string>
   // Every item the list query matches, on every page, as it was then.
   matching: Matching | null
+  // Counts the changes of the selection, so a bulk request can tell whether
+  // the selection it was sent for is still the current one (settle).
+  version: number
 }
 
-const EMPTY: SelectionState = { ids: new Set(), matching: null }
+function next(s: SelectionState, ids: Iterable<string>, matching: Matching | null): SelectionState {
+  return { ids: new Set(ids), matching, version: s.version + 1 }
+}
 
 export interface CommoditySelectionControls {
   /** True after "Select all N matching". */
@@ -26,11 +31,19 @@ export interface CommoditySelectionControls {
   checkedOn: (pageIds: string[]) => ReadonlySet<string>
   /** How many items the selection holds. */
   count: number
+  /** Changes with every change of the selection; see settle. */
+  version: number
   toggle: (id: string, pageIds: string[]) => void
   togglePage: (pageIds: string[]) => void
   /** Selects the total items the query matches now, which digest names. */
   selectAllMatching: (total: number, digest: string) => void
-  replace: (ids: string[]) => void
+  /**
+   * Applies the outcome of a bulk request sent for the selection at version:
+   * keeps the given ids selected, or clears the selection when there are
+   * none. Does nothing when the selection changed since, so a request that
+   * ends late never replaces or clears one the user made in the meantime.
+   */
+  settle: (version: number, keep: string[]) => void
   clear: () => void
   /** The selection as a bulk request names it. */
   toRequest: (query: string) => CommoditySelection
@@ -48,19 +61,25 @@ export interface CommoditySelectionControls {
 // the request when it selects other items by then. Keeping them from that
 // moment, rather than from the latest refetch, holds the action to the items
 // the user chose, not ones a background refresh swapped in.
+//
+// Unchecking one row of "all matching" turns the selection into the ids of
+// the page's rows minus that one. Every row of the page shows as checked in
+// "all matching" (checkedOn), so the result is what the user sees checked,
+// whatever a refetch put on the page; the bar's count changes with it, and
+// a request for ids needs no digest, since the user sees each item.
 export function useCommoditySelection(
   queryKey: string,
   pageKey: string
 ): CommoditySelectionControls {
-  const [state, setState] = useState<SelectionState>(EMPTY)
+  const [state, setState] = useState<SelectionState>({ ids: new Set(), matching: null, version: 0 })
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a new query starts a new selection
-    setState(EMPTY)
+    setState((s) => next(s, [], null))
   }, [queryKey])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- ids picked on a page do not outlive it
-    setState((s) => (s.matching ? s : EMPTY))
+    setState((s) => (s.matching ? s : next(s, [], null)))
   }, [pageKey])
 
   const toggle = useCallback((id: string, pageIds: string[]) => {
@@ -69,32 +88,33 @@ export function useCommoditySelection(
       const ids = new Set(s.matching ? pageIds : s.ids)
       if (ids.has(id)) ids.delete(id)
       else ids.add(id)
-      return { ids, matching: null }
+      return next(s, ids, null)
     })
   }, [])
 
   const togglePage = useCallback((pageIds: string[]) => {
     setState((s) => {
-      if (s.matching) return EMPTY
+      if (s.matching) return next(s, [], null)
       const all = pageIds.length > 0 && pageIds.every((id) => s.ids.has(id))
       const ids = new Set(s.ids)
       for (const id of pageIds) {
         if (all) ids.delete(id)
         else ids.add(id)
       }
-      return { ids, matching: null }
+      return next(s, ids, null)
     })
   }, [])
 
   const selectAllMatching = useCallback(
-    (total: number, digest: string) => setState({ ids: new Set(), matching: { total, digest } }),
+    (total: number, digest: string) => setState((s) => next(s, [], { total, digest })),
     []
   )
-  const replace = useCallback(
-    (ids: string[]) => setState({ ids: new Set(ids), matching: null }),
+  const settle = useCallback(
+    (version: number, keep: string[]) =>
+      setState((s) => (s.version === version ? next(s, keep, null) : s)),
     []
   )
-  const clear = useCallback(() => setState(EMPTY), [])
+  const clear = useCallback(() => setState((s) => next(s, [], null)), [])
 
   return useMemo(
     () => ({
@@ -102,16 +122,17 @@ export function useCommoditySelection(
       ids: state.ids,
       checkedOn: (pageIds) => (state.matching ? new Set(pageIds) : state.ids),
       count: state.matching ? state.matching.total : state.ids.size,
+      version: state.version,
       toggle,
       togglePage,
       selectAllMatching,
-      replace,
+      settle,
       clear,
       toRequest: (query) =>
         state.matching
           ? { query, expectedCount: state.matching.total, expectedDigest: state.matching.digest }
           : { ids: [...state.ids] },
     }),
-    [state, toggle, togglePage, selectAllMatching, replace, clear]
+    [state, toggle, togglePage, selectAllMatching, settle, clear]
   )
 }

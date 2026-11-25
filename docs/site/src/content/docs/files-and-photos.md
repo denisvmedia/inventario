@@ -104,7 +104,12 @@ change their **Tags…**, or **Delete selected**.
 to put on every selected file; under **Remove tags**, pick tags to take off.
 Tags you pick in neither list stay on each file as they are. Files whose tags
 could not be changed stay selected, so you can open **Tags…** again to retry
-just those.
+just those. When no file changed, a message says why: the files already had the
+tags you added, or none of them had the tags you removed.
+
+More than 100 files are sent in batches of 100. If a batch gets no answer, the
+message says how many files may have changed; they stay selected, so check
+them before you send the change again.
 
 ## Categories and filters
 
