@@ -4,6 +4,7 @@ import { http, HttpResponse } from "msw"
 import {
   bulkDeleteFiles,
   bulkReclassifyFiles,
+  bulkUpdateFileTags,
   checkUploadCapacity,
   deleteFile,
   getCategoryCounts,
@@ -206,5 +207,50 @@ describe("features/files/api", () => {
     )
     const f = new File(["x"], "x.txt", { type: "text/plain" })
     await expect(uploadFile(f)).rejects.toThrow(/missing id/)
+  })
+
+  it("bulkUpdateFileTags sends every request to the group the change started in", async () => {
+    const ids = Array.from({ length: 150 }, (_, i) => `f${i}`)
+    const sent: string[][] = []
+    const elsewhere: unknown[] = []
+    server.use(
+      http.post(apiUrl("/g/g1/files/bulk-update"), async ({ request }) => {
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        sent.push(body.data.attributes.ids)
+        // The user switches groups while the first request runs.
+        setCurrentGroupSlug("g2")
+        return HttpResponse.json({
+          data: { attributes: { succeeded: body.data.attributes.ids, failed: [] } },
+        })
+      }),
+      http.post(apiUrl("/g/g2/files/bulk-update"), async ({ request }) => {
+        elsewhere.push(await request.json())
+        return HttpResponse.json({ data: { attributes: { succeeded: [], failed: [] } } })
+      })
+    )
+    const out = await bulkUpdateFileTags(ids, { add: ["receipt"], remove: [] })
+    expect(sent.map((chunk) => chunk.length)).toEqual([100, 50])
+    expect(elsewhere).toEqual([])
+    expect(out.succeeded).toEqual(ids)
+  })
+
+  it("bulkUpdateFileTags keeps what the first requests changed when a later one fails", async () => {
+    const ids = Array.from({ length: 250 }, (_, i) => `f${i}`)
+    let calls = 0
+    server.use(
+      http.post(apiUrl("/g/g1/files/bulk-update"), async ({ request }) => {
+        calls += 1
+        if (calls > 1) return HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+        const body = (await request.json()) as { data: { attributes: { ids: string[] } } }
+        return HttpResponse.json({
+          data: { attributes: { succeeded: body.data.attributes.ids, failed: [] } },
+        })
+      })
+    )
+    const out = await bulkUpdateFileTags(ids, { add: ["receipt"], remove: [] })
+    expect(calls).toBe(2)
+    expect(out.succeeded).toEqual(ids.slice(0, 100))
+    expect(out.unknown).toEqual(ids.slice(100, 200))
+    expect(out.failed.map((f) => f.id)).toEqual(ids.slice(200))
   })
 })

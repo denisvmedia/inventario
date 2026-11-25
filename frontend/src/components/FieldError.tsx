@@ -9,6 +9,9 @@ interface FieldErrorProps {
   // nothing when undefined / null / empty, so you can pass
   // `errors.<field>?.message` straight through.
   message?: string | null
+  // Interpolation values for the message, e.g. { max: 60 } for a key whose
+  // text reads "at most {{max}} characters".
+  values?: Record<string, string | number>
   // Element id so the matching input can wire `aria-describedby={id}` and
   // assistive tech announces this message when the field gets focus. RHF's
   // default `shouldFocusError` moves focus to the first invalid field on
@@ -31,7 +34,7 @@ interface FieldErrorProps {
 // field errors by that class, so baking it in gives every adopting form
 // the same selector for free. See `devdocs/frontend/forms.md` for the
 // field shape this slots into.
-export function FieldError({ message, id, testId, className }: FieldErrorProps) {
+export function FieldError({ message, values, id, testId, className }: FieldErrorProps) {
   const { t } = useTranslation()
   if (!message) return null
   return (
@@ -40,7 +43,7 @@ export function FieldError({ message, id, testId, className }: FieldErrorProps) 
       data-testid={testId}
       className={cn("field-error text-xs text-destructive", className)}
     >
-      {t(message)}
+      {t(message, values ?? {})}
     </p>
   )
 }

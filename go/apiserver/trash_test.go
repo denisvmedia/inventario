@@ -106,6 +106,7 @@ func TestTrashAPI_DeleteListRestore(t *testing.T) {
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded[0]"), ids[1])
 	// The first item is already back, so it is not in Trash any more.
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.failed[0].id"), ids[0])
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.failed[0].code"), "not_found")
 
 	rr = env.do(http.MethodGet, "/commodities/"+ids[1], "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK)

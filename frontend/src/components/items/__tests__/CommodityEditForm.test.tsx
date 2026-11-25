@@ -6,7 +6,11 @@ import { axe } from "jest-axe"
 import { http, HttpResponse } from "msw"
 
 import { CommodityEditForm } from "@/components/items/CommodityEditForm"
-import type { Commodity } from "@/features/commodities/api"
+import {
+  updateCommodity,
+  type Commodity,
+  type UpdateCommodityRequest,
+} from "@/features/commodities/api"
 import { GroupProvider } from "@/features/group/GroupContext"
 import type { ListNavigation } from "@/hooks/useListNavigation"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -19,11 +23,21 @@ import {
   authHandlers,
   commodityHandlers,
   groupHandlers,
+  itemTypeHandlers,
   memberHandlers,
   tagHandlers,
 } from "@/test/handlers"
 
 const SLUG = "household"
+const vehicle = {
+  id: "type-vehicle",
+  slug: "vehicle",
+  name: "Vehicle",
+  icon: "car",
+  builtin: false,
+  item_count: 1,
+  trashed_item_count: 0,
+}
 
 const commodity: Commodity = {
   id: "c1",
@@ -184,6 +198,37 @@ describe("<CommodityEditForm />", () => {
     await user.click(screen.getByTestId("unsaved-changes-discard"))
     expect(onExit).toHaveBeenCalledTimes(1)
     expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("says the type was deleted when the server refuses it", async () => {
+    const user = userEvent.setup()
+    const served = { types: [...itemTypeHandlers.builtins(), vehicle] }
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/item-types`), () =>
+        HttpResponse.json({
+          data: served.types.map((t) => ({ id: t.id, type: "item_types", attributes: t })),
+          meta: { item_types: served.types.length },
+        })
+      ),
+      ...itemTypeHandlers.unknownOnUpdate(SLUG, "c1")
+    )
+    renderForm(
+      { type: "vehicle" },
+      { onSubmit: (req) => updateCommodity("c1", req as UpdateCommodityRequest) }
+    )
+    await waitFor(() => expect(screen.getByTestId("edit-category")).toHaveTextContent("Vehicle"))
+
+    // Another member deletes the type before the save.
+    served.types = itemTypeHandlers.builtins()
+    await user.type(screen.getByLabelText(/^name/i), " 2")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+
+    expect(await screen.findByText("This type is not in the group.")).toBeInTheDocument()
+    expect(await screen.findByTestId("edit-category-gone")).toHaveTextContent(
+      "This type was deleted meanwhile. Pick another one."
+    )
+    expect(screen.getByTestId("edit-category")).toHaveAttribute("aria-invalid", "true")
+    expect(screen.queryByTestId("commodity-edit-error")).not.toBeInTheDocument()
   })
 
   it("keeps the fields it does not show when saving", async () => {

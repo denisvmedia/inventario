@@ -49,6 +49,9 @@ type TagRegistryFactory struct {
 	base             *Registry[models.Tag, *models.Tag]
 	commodityFactory *CommodityRegistryFactory
 	fileFactory      *FileRegistryFactory
+	// savedViews is where RenameAtomic rewrites the saved views that name
+	// a renamed item tag; nil leaves them alone.
+	savedViews *SavedViewRegistryFactory
 }
 
 // TagRegistry is a context-aware registry for tags. Cross-entity helpers
@@ -60,6 +63,7 @@ type TagRegistry struct {
 	userID            string
 	commodityRegistry registry.CommodityRegistry
 	fileRegistry      registry.FileRegistry
+	savedViews        *SavedViewRegistryFactory
 }
 
 var (
@@ -73,6 +77,12 @@ func NewTagRegistryFactory(commodityFactory *CommodityRegistryFactory, fileFacto
 		commodityFactory: commodityFactory,
 		fileFactory:      fileFactory,
 	}
+}
+
+// SetSavedViewFactory gives RenameAtomic the saved views to rewrite. It is a
+// setter because the saved view factory is built after this one.
+func (f *TagRegistryFactory) SetSavedViewFactory(savedViews *SavedViewRegistryFactory) {
+	f.savedViews = savedViews
 }
 
 func (f *TagRegistryFactory) MustCreateUserRegistry(ctx context.Context) registry.TagRegistry {
@@ -107,6 +117,7 @@ func (f *TagRegistryFactory) CreateUserRegistry(ctx context.Context) (registry.T
 		userID:            user.ID,
 		commodityRegistry: commodityReg,
 		fileRegistry:      fileReg,
+		savedViews:        f.savedViews,
 	}, nil
 }
 
@@ -122,6 +133,7 @@ func (f *TagRegistryFactory) CreateServiceRegistry() registry.TagRegistry {
 		userID:            "",
 		commodityRegistry: f.commodityFactory.CreateServiceRegistry(),
 		fileRegistry:      f.fileFactory.CreateServiceRegistry(),
+		savedViews:        f.savedViews,
 	}
 }
 
@@ -594,16 +606,21 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 }
 
 // RenameAtomic mirrors the postgres semantics: re-read the tag, run the
-// slug-clash check, rewrite JSONB references, and update the tag row,
-// all under the same mutex. The memory backend doesn't have separate
-// transactions — the mutex is the entire serialization mechanism.
-func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
+// slug-clash check, rewrite JSONB references and saved views, and update
+// the tag row, all under the same mutex. The memory backend doesn't have
+// separate transactions — the mutex is the entire serialization mechanism.
+func (r *TagRegistry) RenameAtomic(
+	ctx context.Context,
+	id, newLabel, newSlug string,
+	newColor models.TagColor,
+	rewriteViews registry.SavedViewTagRewrite,
+) (*models.Tag, string, error) {
 	tagAtomicMu.Lock()
 	defer tagAtomicMu.Unlock()
 
 	current, err := r.Get(ctx, id)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to look up tag", err)
+		return nil, "", errxtrace.Wrap("failed to look up tag", err)
 	}
 
 	updated := *current
@@ -615,29 +632,48 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 		updated.Color = newColor
 	}
 
-	slugChanged := newSlug != "" && newSlug != current.Slug
-	if slugChanged {
+	if newSlug != "" && newSlug != current.Slug {
 		updated.Slug = newSlug
-		// Clash + rewrite are scoped to the tag's own kind: the same slug
-		// may legitimately exist under the other kind.
-		clash, clashErr := r.GetBySlug(ctx, current.Kind, newSlug)
-		if clashErr != nil && !errors.Is(clashErr, registry.ErrNotFound) {
-			return nil, errxtrace.Wrap("failed to check slug availability", clashErr)
-		}
-		if clash != nil && clash.ID != current.ID {
-			return nil, errxtrace.Wrap("target slug is already used by another tag",
-				registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
-		}
-		if _, _, err := r.RewriteSlugReferences(ctx, current.Kind, current.Slug, newSlug); err != nil {
-			return nil, errxtrace.Wrap("failed to rewrite slug references", err)
+		if err := r.renameSlug(ctx, *current, newSlug, rewriteViews); err != nil {
+			return nil, "", err
 		}
 	}
 
 	final, err := r.Update(ctx, updated)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to update tag", err)
+		return nil, "", errxtrace.Wrap("failed to update tag", err)
 	}
-	return final, nil
+	return final, current.Slug, nil
+}
+
+// renameSlug checks that newSlug is free and rewrites the references to
+// current's slug, and for an item tag the saved views; tagAtomicMu must be
+// held. Clash and rewrite are scoped to the tag's own kind: the same slug
+// may legitimately exist under the other kind.
+func (r *TagRegistry) renameSlug(
+	ctx context.Context,
+	current models.Tag,
+	newSlug string,
+	rewriteViews registry.SavedViewTagRewrite,
+) error {
+	clash, err := r.GetBySlug(ctx, current.Kind, newSlug)
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return errxtrace.Wrap("failed to check slug availability", err)
+	}
+	if clash != nil && clash.ID != current.ID {
+		return errxtrace.Wrap("target slug is already used by another tag",
+			registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
+	}
+	if _, _, err := r.RewriteSlugReferences(ctx, current.Kind, current.Slug, newSlug); err != nil {
+		return errxtrace.Wrap("failed to rewrite slug references", err)
+	}
+	if current.Kind != models.TagKindCommodity || rewriteViews == nil || r.savedViews == nil {
+		return nil
+	}
+	if err := r.savedViews.rewriteTag(ctx, current.GroupID, current.Slug, newSlug, rewriteViews); err != nil {
+		return errxtrace.Wrap("failed to rewrite saved views", err)
+	}
+	return nil
 }
 
 // DeleteAtomic mirrors the postgres semantics: usage check + strip (when

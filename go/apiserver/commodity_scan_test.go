@@ -2,6 +2,7 @@ package apiserver_test
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -17,6 +18,7 @@ import (
 	"go.5x5.cz/inventario/internal/aivision"
 	"go.5x5.cz/inventario/internal/aivision/mock"
 	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -368,4 +370,53 @@ func TestCommodityScan_SuccessResponseFields(t *testing.T) {
 
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.type"), "commodity_scan")
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.fields.name.value"), "Sample Wireless Headphones")
+}
+
+// recordingScanProvider keeps the request it was given and returns an
+// empty extraction.
+type recordingScanProvider struct {
+	aivision.Provider
+	req aivision.ScanRequest
+}
+
+func (p *recordingScanProvider) Scan(_ context.Context, req aivision.ScanRequest) (*aivision.ScanResult, error) {
+	p.req = req
+	return &aivision.ScanResult{Fields: map[string]aivision.FieldGuess{}}, nil
+}
+
+func (*recordingScanProvider) Name() string  { return "recording" }
+func (*recordingScanProvider) Model() string { return "recording" }
+
+// The scan offers the model the group's item types, custom ones included,
+// with the name the group sees (#2802).
+func TestCommodityScan_OffersTheGroupsItemTypes(t *testing.T) {
+	c := qt.New(t)
+
+	provider := &recordingScanProvider{}
+	params, userID, slug := newScanParams(provider, services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100})
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	user, err := params.FactorySet.UserRegistry.Get(context.Background(), userID)
+	c.Assert(err, qt.IsNil)
+	regSet := getRegistrySetFromParams(params, user)
+	_, err = regSet.ItemTypeRegistry.Create(context.Background(), models.ItemType{Name: "Vehicle"})
+	c.Assert(err, qt.IsNil)
+
+	body, contentType := buildScanMultipart(c, []struct {
+		name string
+		mime string
+		body []byte
+	}{
+		{name: "front.jpg", mime: "image/jpeg", body: bytes.Repeat([]byte("a"), 128)},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/g/"+slug+"/commodities/scan", body)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, userID)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+
+	c.Assert(provider.req.ItemTypes, qt.HasLen, len(models.BuiltinItemTypes)+1)
+	c.Check(provider.req.ItemTypes[0], qt.Equals, aivision.ItemTypeOption{Slug: "white_goods", Name: "Appliance"})
+	c.Check(provider.req.ItemTypes[len(models.BuiltinItemTypes)], qt.Equals, aivision.ItemTypeOption{Slug: "vehicle", Name: "Vehicle"})
 }

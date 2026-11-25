@@ -241,14 +241,18 @@ func (*sellersAPI) deleteSeller(w http.ResponseWriter, r *http.Request) {
 
 // validateCommoditySeller checks that the seller an item names, when it
 // names one, belongs to the group. An unknown seller is a field error on
-// seller_id rather than a 404, since the item itself was found.
+// seller_id rather than a 404, since the item itself was found. The error
+// sits at data.attributes.seller_id, where the request validation puts its
+// field errors, so a client reads both the same way.
 func validateCommoditySeller(ctx context.Context, sellers registry.SellerRegistry, sellerID *string) error {
 	if sellerID == nil || *sellerID == "" {
 		return nil
 	}
 	if _, err := sellers.Get(ctx, *sellerID); err != nil {
 		if errors.Is(err, registry.ErrNotFound) {
-			return validation.Errors{"seller_id": errors.New("no seller with this ID in the group")}
+			return validation.Errors{"data": validation.Errors{"attributes": validation.Errors{
+				"seller_id": errors.New("no seller with this ID in the group"),
+			}}}
 		}
 		return err
 	}

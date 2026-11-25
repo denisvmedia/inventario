@@ -96,7 +96,25 @@ func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodi
 
 func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodity) (*models.Commodity, error) {
 	// ID, TenantID, and UserID are now set automatically by RLSRepository.Create
+	requestedAssetNumber := prepareNewCommodity(ctx, &commodity)
 
+	reg := r.newSQLRegistry()
+
+	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
+		return prepareNewCommodityInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, row, requestedAssetNumber)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create commodity", err)
+	}
+
+	return &createdCommodity, nil
+}
+
+// prepareNewCommodity applies the rules every new item gets before it is
+// stored, and returns the asset number a backup restore asks for (0 for
+// none). CommodityRegistry.Create and CommodityDraftRegistry.Promote both
+// create items through it.
+func prepareNewCommodity(ctx context.Context, commodity *models.Commodity) int {
 	// Acquisition columns are server-managed (issue #1550 / #202): drop any
 	// value the API caller smuggled in. The only legitimate writers are the
 	// migration worker (via go/registry/internal/migrationops, NULL→value once)
@@ -119,7 +137,7 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	commodity.NormalizeSellerID()
 
 	// Every row written now tells an unknown price from a zero one.
-	registry.NormalizeCommodityPrices(ctx, &commodity)
+	registry.NormalizeCommodityPrices(ctx, commodity)
 	commodity.LegacyZeroPrices = false
 
 	// The trash columns belong to Trash and Restore; a new item is live.
@@ -129,38 +147,41 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// dropped and the number is assigned inside the insert transaction.
 	// Only the backup restore may ask for a specific (archived) number.
 	commodity.AssetNumber = nil
-	requestedAssetNumber, _ := registry.RestoreAssetNumberFromContext(ctx)
+	requested, _ := registry.RestoreAssetNumberFromContext(ctx)
+	return requested
+}
 
-	reg := r.newSQLRegistry()
-
-	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
-		// Taken first: every lock this transaction acquires after it
-		// (tag rows) is one that no holder of a commodity row lock waits
-		// for while holding it, so the order cannot deadlock with Update
-		// or the backfill.
-		if err := assignAssetNumberInTx(ctx, tx, r.tableNames.Commodities(), row, requestedAssetNumber); err != nil {
-			return err
-		}
-		// Area is optional (issue #1986): only verify it exists when set.
-		if commodity.AreaID != nil && *commodity.AreaID != "" {
-			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
-				return err
-			}
-		}
-		if err := r.checkSeller(ctx, tx, commodity.SellerID); err != nil {
-			return err
-		}
-		// Auto-create / row-lock referenced tag rows inside this same tx
-		// so a concurrent DeleteTag(force=true) on one of these slugs
-		// can't leave us with an orphan JSONB reference at commit. See
-		// ensureTagRowsInTx in tags.go for the full lock invariant.
-		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindCommodity, []string(commodity.Tags))
-	})
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to create commodity", err)
+// prepareNewCommodityInTx runs the steps of creating an item that belong in
+// the insert transaction: the asset number, the type, area and seller checks
+// and the tag rows.
+// row already carries its ids, tenant, group and author.
+func prepareNewCommodityInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, tenantID, groupID, userID string, row *models.Commodity, requestedAssetNumber int) error {
+	// Taken first: every lock this transaction acquires after it
+	// (tag rows) is one that no holder of a commodity row lock waits
+	// for while holding it, so the order cannot deadlock with Update
+	// or the backfill.
+	if err := assignAssetNumberInTx(ctx, tx, tableNames.Commodities(), row, requestedAssetNumber); err != nil {
+		return err
 	}
-
-	return &createdCommodity, nil
+	// The type must be one of the group's item types; the check locks it
+	// against a concurrent delete until this insert commits.
+	if err := checkCommodityTypeInTx(ctx, tx, tableNames, tenantID, groupID, row.Type); err != nil {
+		return err
+	}
+	// Area is optional (issue #1986): only verify it exists when set.
+	if row.AreaID != nil && *row.AreaID != "" {
+		if _, err := getAreaInTx(ctx, tx, tableNames, *row.AreaID); err != nil {
+			return err
+		}
+	}
+	if err := checkSellerInTx(ctx, tx, tableNames, row.SellerID); err != nil {
+		return err
+	}
+	// Auto-create / row-lock referenced tag rows inside this same tx
+	// so a concurrent DeleteTag(force=true) on one of these slugs
+	// can't leave us with an orphan JSONB reference at commit. See
+	// ensureTagRowsInTx in tags.go for the full lock invariant.
+	return ensureTagRowsInTx(ctx, tx, tableNames, tenantID, groupID, userID, models.TagKindCommodity, []string(row.Tags))
 }
 
 func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models.Commodity, error) {
@@ -367,6 +388,68 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
+// ListIDs returns the ids of at most limit commodities opts selects. The
+// WHERE clause is the list's, so the ids are those of the rows ListPaginated
+// returns for the same opts.
+func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.CommodityListOptions, limit int) ([]string, error) {
+	if limit <= 0 {
+		return []string{}, nil
+	}
+	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
+	ids := make([]string, 0)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		sb := newSelect().Select("id").From(string(r.tableNames.Commodities()))
+		addWhere(sb, where)
+		sb.Limit(limit)
+		query, args := sb.Build()
+		return tx.SelectContext(ctx, &ids, query, args...)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity ids", err)
+	}
+	return ids, nil
+}
+
+// CountEach runs one COUNT(*) per entry of opts, with the WHERE clause of
+// ListPaginated, in one transaction.
+func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+	counts := make([]int, len(opts))
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	table := string(r.tableNames.Commodities())
+	// One clock for the batch: the same warranty filter counts the same
+	// items whichever side of midnight its query is built.
+	now := time.Now()
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// Under the default READ COMMITTED every COUNT would read its own
+		// snapshot, and an item trashed between two of them would count in
+		// both or in neither. The transaction has run only SET LOCAL so far,
+		// so its isolation level can still change.
+		if _, err := tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+			return errxtrace.Wrap("failed to set the count snapshot", err)
+		}
+		for i, o := range opts {
+			if o.WarrantyNow.IsZero() {
+				o.WarrantyNow = now
+			}
+			where := commodityWhere(o, table, string(r.tableNames.CommodityLoans()))
+			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
+			n, err := countRows(ctx, tx, query, args...)
+			if err != nil {
+				return errxtrace.Wrap("failed to count commodities", err)
+			}
+			counts[i] = n
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count commodities", err)
+	}
+	return counts, nil
+}
+
 // CountTags counts the tags of the commodities opts selects in one query: a
 // LEFT JOIN LATERAL over the tags array yields one row per (commodity, tag),
 // and one row with a NULL slug for a commodity without tags, so grouping by
@@ -488,6 +571,9 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 		if len(opts.Statuses) == 0 {
 			add(cond.Equal("status", string(models.CommodityStatusInUse)))
 		}
+	}
+	if opts.DraftsOnly {
+		add(cond.Equal("draft", true))
 	}
 
 	if len(opts.Types) > 0 {
@@ -755,6 +841,23 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			return err
 		}
 		commodity.AssetNumber = row.AssetNumber
+		// A changed type must be one of the group's item types. "Changed"
+		// compares with the type the row holds under the lock, not with
+		// stored: a type delete may have moved the item to another type
+		// after stored was read, and an update that kept the old type would
+		// then write back a type the group no longer has. The new type's
+		// row is locked after the item's, and a type delete locks the
+		// deleted type before the items it moves; an update never waits for
+		// the type it leaves, so the orders cannot deadlock.
+		current, err := lockedCommodityType(ctx, tx, r.tableNames.Commodities(), stored.ID)
+		if err != nil {
+			return err
+		}
+		if row.Type != current {
+			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
+				return err
+			}
+		}
 		// Area is optional (issue #1986): only verify it exists when set.
 		if commodity.AreaID != nil && *commodity.AreaID != "" {
 			if _, err := r.getArea(ctx, tx, *commodity.AreaID); err != nil {
@@ -775,6 +878,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return &commodity, nil
+}
+
+// lockedCommodityType returns the type of the commodity id, which the
+// caller's transaction has already locked.
+func lockedCommodityType(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (models.CommodityType, error) {
+	var current models.CommodityType
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type FROM %s WHERE id = $1`, table), id); err != nil {
+		return "", errxtrace.Wrap("failed to read commodity type", err, errx.Attrs("commodity_id", id))
+	}
+	return current, nil
 }
 
 // clonePtrDecimal returns a heap-allocated copy of d (or nil). Used to
@@ -848,8 +961,13 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 }
 
 func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID string) (*models.Area, error) {
+	return getAreaInTx(ctx, tx, r.tableNames, areaID)
+}
+
+// getAreaInTx reads an area in tx; ErrNotFound when it is not visible.
+func getAreaInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, areaID string) (*models.Area, error) {
 	var area models.Area
-	areaReg := store.NewTxRegistry[models.Area](tx, r.tableNames.Areas())
+	areaReg := store.NewTxRegistry[models.Area](tx, tableNames.Areas())
 	err := areaReg.ScanOneByField(ctx, store.Pair("id", areaID), &area)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get area", err)
@@ -863,11 +981,17 @@ func (r *CommodityRegistry) getArea(ctx context.Context, tx *sqlx.Tx, areaID str
 // security, so a seller of another group is not found, which the foreign key
 // alone would not catch.
 func (r *CommodityRegistry) checkSeller(ctx context.Context, tx *sqlx.Tx, sellerID *string) error {
+	return checkSellerInTx(ctx, tx, r.tableNames, sellerID)
+}
+
+// checkSellerInTx is checkSeller for code that has no CommodityRegistry,
+// such as promoting a draft.
+func checkSellerInTx(ctx context.Context, tx *sqlx.Tx, tableNames store.TableNames, sellerID *string) error {
 	if sellerID == nil {
 		return nil
 	}
 	var seller models.Seller
-	sellerReg := store.NewTxRegistry[models.Seller](tx, r.tableNames.Sellers())
+	sellerReg := store.NewTxRegistry[models.Seller](tx, tableNames.Sellers())
 	if err := sellerReg.ScanOneByField(ctx, store.Pair("id", *sellerID), &seller); err != nil {
 		return errxtrace.Wrap("failed to get seller", err)
 	}

@@ -154,6 +154,10 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.CommodityReminderRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityReminder])
 		}},
+		{"commodity_drafts", func() error {
+			reg := fs.CommodityDraftRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityDraft])
+		}},
 		// Commodity sub-resources before commodities.
 		{"commodity_supply_links", func() error {
 			reg := fs.SupplyLinkRegistryFactory.CreateServiceRegistry()
@@ -187,10 +191,16 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.TagRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Tag])
 		}},
+		// Saved views; deleting a view deletes its placements.
+		{"saved_views", func() error {
+			reg := fs.SavedViewRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.SavedView])
+		}},
 		{"sellers", func() error {
 			reg := fs.SellerRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Seller])
 		}},
+		{"item_types", func() error { return r.purgeItemTypes(tenantID) }},
 		// Per-user/per-group notification overrides. The only delete handle is
 		// DeleteByGroup(tenant, group), so fan out across the tenant's groups
 		// (mirrors the postgres per-tenant DELETE).
@@ -327,6 +337,15 @@ func purgeByTenant[T any](
 // purgeAPITokens deletes the tenant's personal API tokens. The registry
 // interface has no enumerable List/Delete on purpose (no caller may rewrite a
 // token), so this reaches the memory store's purge method directly.
+// purgeItemTypes drops the tenant's item types (#2802) without the delete
+// rules, which would keep each group's last type.
+func (r *TenantPurger) purgeItemTypes(tenantID string) error {
+	if f, ok := r.fs.ItemTypeRegistryFactory.(*ItemTypeRegistryFactory); ok {
+		f.purgeWhere(func(t *models.ItemType) bool { return t.TenantID == tenantID })
+	}
+	return nil
+}
+
 func (r *TenantPurger) purgeAPITokens(ctx context.Context, tenantID string) error {
 	tokens, ok := r.fs.APITokenRegistry.(*APITokenRegistry)
 	if !ok {

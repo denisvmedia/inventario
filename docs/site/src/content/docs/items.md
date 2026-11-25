@@ -82,11 +82,11 @@ The form is split across the five steps. Only a handful of fields are required
 | Field | Notes |
 | --- | --- |
 | **Name** * | The full name, e.g. "Bosch SMV6ZCX42E dishwasher". |
-| **Short name** * | A 1–40 character label used in compact lists. |
+| **Short name** * | A 1–40 character label used in compact lists. On a new item it follows the name as you type, cut to whole words of up to 20 characters, until you type a short name of your own. |
 | **Brand** | Who made it, e.g. "Bosch". Up to 100 characters. As you type, the brands already used in your group are suggested, most used first; pick one with a click or with the arrow keys and Enter. |
 | **Model** | The model name or number, e.g. "SMV6ZCX42E". Up to 100 characters. Compact cards, list rows, and the item page show "Brand · Model" under the item's name; an item with neither shows its short name there. Photo cards show "Brand · Model" under the name when the item has either. |
 | **Product URLs** | Links to the product page, support, or docs. Add as many as you like. |
-| **Type** * | **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, or **Other**. |
+| **Type** * | One of your group's [item types](../item-types/). A new group starts with **Appliance**, **Electronics**, **Equipment**, **Furniture**, **Clothes**, and **Other**. Choose **New type** at the end of the list to add one without leaving the form. |
 | **Quantity** * | How many you own (see [Quantity and bundles](#quantity-and-bundles)). |
 | **Location** / **Area** | Only when you edit an item; a new item is placed after it is saved. Where the item lives: pick a location first, then an area. Both are optional. Owners and administrators can also add a new location or area from the pickers. See [Locations & areas](../locations-and-areas/). |
 | **Status** * | Starts as **In Use** (see [Status lifecycle](#status-lifecycle)). |
@@ -189,16 +189,89 @@ totals; see [Reports](../reports/).
 
 ## Save as draft
 
-A **Save as draft** toggle sits above the steps on every form step. With it on,
-the item is kept as unfinished work so you can capture a few details now and
-finish later — drafts show a **Draft** badge in lists. A draft also skips the
+### Drafts of a new item
+
+When you add an item, turn on **Save as draft** to keep what you have so far
+and finish it later, on this or any other device. A **Save draft** button then
+appears on every step. It saves the form as it is: nothing is required, not
+even a name, and the files on the **Files** step are uploaded with the draft.
+A draft is saved for the whole group, so everyone in it can see it.
+
+Your drafts are listed in the [Inbox](../inbox/), with the time each was
+saved and how many files it has. While there are any, a line at the top of
+the **All Items** page says how many and has an **Open inbox** button.
+
+- **Continue** opens the draft in the **Add item** dialog with its values and
+  files. Turn **Save as draft** on and click **Save draft** to save your
+  changes, or finish the item and click **Add item** to create it. The draft's
+  files move to the new item, and the draft is gone. Clicking **Add item**
+  again after a lost connection does not create a second item.
+- **Discard** deletes the draft. Its files that nothing else uses go to the
+  [Trash](../trash/), where you can restore them as standalone files. Files
+  that are also attached to something else stay where they are.
+
+Members with the **Viewer** role see the drafts but cannot continue or discard
+them.
+
+A draft is not an item. It is not in item lists, counts, search results,
+reports, saved views or reminders, and it never expires. The files saved with
+a draft are ordinary files: you find them on the
+[Files](../files-and-photos/) page, attached to **Draft:** and the draft's
+name. A [backup](../backup-and-restore/) of the
+whole group includes the drafts and their files, and restoring it brings them
+back. [Deleting your account](../settings-and-account/) deletes the drafts
+you started; their files are kept as standalone files.
+
+If someone saves the same draft on another device after you opened it, saving
+yours does not overwrite theirs. The dialog says that the draft changed and
+offers **Load the newer version** or **Save as a new draft**. A new draft gets
+the files saved with the old one too; the old draft keeps them as well.
+
+If the draft was finished or discarded after you opened it, on another device
+or in another tab, **Save draft** and **Add item** do not save to it, and the
+dialog says so.
+**Save as a new draft** keeps what you entered as a draft of its own. For a
+draft that became an item, **Open item** goes to that item instead and drops
+what you entered in the dialog. A finished draft does not come back in the
+inbox.
+
+A draft keeps the [seller](../sellers/) you picked. If someone deletes that
+seller before you finish, the **Seller** field says so, and the item is not
+added until you pick another seller or clear the field.
+
+The same goes for the [item type](../item-types/). If someone deletes the type
+the draft names, **Save draft** and **Add item** say so on the **Type** field,
+and neither goes through until you pick another type.
+
+### Drafts of an existing item
+
+When you edit an item, the **Save as draft** switch marks the item itself as
+unfinished. Such an item shows a **Draft** badge in lists. It also skips the
 check that a price in another currency has an amount in the group currency.
 An unknown purchase date or price doesn't make an item a draft: you can leave
 those fields blank on a finished item too.
 
+**All Items** hides an item marked as draft until **Show inactive** is on. The
+[Inbox](../inbox/#review-an-item) lists it under **Items to review**, where
+**Mark as reviewed** turns the switch off.
+
+### Saved on this device
+
+While the **Add item** dialog is open, what you type and the files you add are
+also kept in this browser, so a reload or a closed tab does not lose them. That
+copy stays on this device only; to continue on another device, save a draft.
+
+- If a draft cannot be saved, for example while you are offline, the dialog
+  says so and keeps your input on this device. Click **Retry** when you are
+  back online. A file that was already uploaded is not uploaded again.
+- When the dialog opens with input kept on this device that is not saved as a
+  draft yet, a **Restored from this device** note says so.
+
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
-**Save as draft**, **Discard**, or **Keep editing**.
+**Save as draft**, **Discard**, or **Keep editing**. **Save as draft** saves a
+draft as described above. When you continue a draft, **Discard changes**
+drops only what you changed since it was last saved.
 :::
 
 ## The item detail page
@@ -396,7 +469,9 @@ an item as:
 | **Disposed** | Permanently removed from your inventory. |
 | **Written Off** | Written off, usually for insurance or accounting. |
 
-To change status, open the item and use the **Change Status** buttons. Marking
+To change status, open the item and use the **Change Status** buttons, or
+change several items at once from the bulk-action bar (see [Select and change
+items in bulk](#select-and-change-items-in-bulk)). Marking
 an item as anything other than In Use opens a short dialog where you record the
 **date**, an optional **note**, and — for **Sold** — the **sale price**.
 
@@ -412,7 +487,7 @@ The **All Items** page lists every item in your group. Across the top you have:
   model, serial number (including extra serial numbers), part number, tag,
   notes, warranty notes, status note, or asset ID (`A-0042`). See [Searching for
   items](#searching-for-items).
-- **Type** — filter by one or more item types.
+- **Type** — filter by one or more of your group's [item types](../item-types/).
 - **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
   **Written Off**.
 - **Area** — narrow to a single area, or **All areas**.
@@ -443,6 +518,9 @@ the page size on this device. The Default view in [Settings](../settings-and-acc
 picks the layout until you choose one here, and changing it in Settings drops
 that choice on the device you change it on. A page size other than 24 is part of
 the page URL, so a bookmarked or shared page shows the same items on any device.
+
+**Views**, next to the layout buttons, keeps the current filters under a name;
+see [Saved views](#saved-views).
 
 :::tip[Bookmark a filtered view]
 Your filters and sort are kept in the page URL, so you can bookmark or share a
@@ -504,18 +582,168 @@ the first page. A tag on the item page, or a tag's name on the [Tags](../tags/)
 page, opens **All Items** filtered by that tag alone, with **Show inactive**
 on, so it lists every item that has the tag.
 
-## Select, move, and delete in bulk
+### Saved views
+
+A saved view keeps a set of filters, the search, the sort and the layout under
+a name, so a list you open often is one click away.
+
+1. Set up the list the way you want it.
+2. Click **Views** in the toolbar and choose **Save view…**.
+3. Give the view a name (up to 60 characters) and pick an icon.
+4. Choose where it shows: **Sidebar**, **Dashboard**, or both.
+5. Click **Save view**.
+
+A view in the sidebar appears under **Saved views** with the number of items it
+lists. A view on the Dashboard gets a card with that number and its first five
+items. The number is counted the same way as the list, so the sidebar, the
+Dashboard and the opened view agree.
+
+Where a view shows is your own choice. Putting a view in your sidebar or on
+your Dashboard, or taking it off, changes only what you see: every member
+places the views they can see for themselves.
+
+Dates in a view stay relative: a view of **Expiring Soon** warranties shows the
+warranties that expire soon on the day you open it, not the ones that did when
+you saved it.
+
+While a view is open, the **Views** button shows its name. If you change a
+filter, the sort or the layout, a dot on the button says the list no longer
+matches the view, and the **Views** menu offers **Save changes** (to update the
+view) and **Revert to saved** (to go back to it). **Close view** keeps the
+current filters and leaves the view.
+
+If a view refers to an area, a tag, a seller or an [item type](../item-types/)
+that was deleted, it still opens and still applies that condition, so it shows
+what still matches (often nothing, for a deleted area, seller or type). The
+**Views** button shows a warning, and the menu says what no longer exists; on
+the **Saved views** page the condition reads **Deleted area** or **Deleted
+seller**, or a tag or an item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+views that use it.
+
+**Manage views** in the **Views** menu, or the gear next to **Saved views** in
+the sidebar, opens the **Saved views** page with every view you can see: your
+own and the shared ones. Each row shows the view's filters, and the item count
+of a view in your sidebar or on your Dashboard. You can put any of them in
+your sidebar or on your Dashboard. A view you can change also lets you rename
+it or change its icon (**Edit**), move it up or down, and delete it. To change
+a view's filters, open it, adjust the list, and choose **Save changes**.
+
+Until you keep views of your own, the Dashboard offers a few to start with:
+**Expiring warranties**, **Lent out**, **Without a location** and
+**Untagged**. **Add** saves one to the sidebar and the Dashboard; the **×**
+hides the suggestions.
+
+#### Personal and shared views
+
+A view is **personal**: only you see it. Tick **Share with the group** when you
+save or edit it to show it to everyone in the group. Other members find a
+shared view in the **Views** menu and on the **Saved views** page; it shows in
+their sidebar or on their Dashboard only after they put it there. Sharing a
+view shares the filter, not access: each member sees the items they can see.
+Viewers can keep personal views; sharing needs the **User** role or higher.
+
+You can change and delete your personal views. You can change a shared view
+you created while you have the **User** role or higher; with the **Viewer**
+role you can still delete it. Administrators and owners can change or delete
+any shared view. When a view stops being shared, it leaves the sidebar and the
+Dashboard of the other members.
+
+You can keep up to 50 views of your own in a group, and a group can have up to
+50 shared views.
+
+A view uses the filters of the All Items page. A link that filters by a
+warranty end date can't be saved as a view, because that date would never
+change. If a future update stops supporting a filter a view uses, the view shows a
+warning (**Needs an update**) in the **Views** menu and the sidebar, the
+**Saved views** page names the filter, and the view no longer opens: the list
+would leave that filter out and show more than the view. A link or bookmark to such a view shows **This view
+cannot be opened** instead of the list; **Close view** shows the list with the
+filters the link still has. Delete the view and save the filter again. The same
+happens to a view with a filter the page you have open does not know yet
+(reload the page to get the current version), and to a view that required a
+deleted tag when the tag it excludes is renamed to the deleted tag's slug.
+
+If the saved views cannot be loaded, a link or bookmark to a view shows **This
+view could not be loaded** instead of the list, so the list never shows items
+the view leaves out. **Try again** loads the views again; **Close view** shows
+the list with the filters the link has.
+
+## Select and change items in bulk
 
 On the **All Items** page you can act on several items at once:
 
 1. Tick the checkbox on each item you want, or use **Select all visible** to
-   grab everything on the page.
+   select everything on the page.
 2. A bulk-action bar appears showing how many items are selected.
 3. Choose an action:
    - **Move…** — pick a **destination area** and confirm with **Move items**.
+   - **Edit** — opens a menu:
+     - **Tags…** — pick tags under **Add tags** and under **Remove tags**,
+       then click **Apply**. You can also type a new tag to add. Tags you do
+       not pick stay on each item as they are, so this never replaces an
+       item's tags.
+     - **Type…** — pick one of your group's [item types](../item-types/), or add
+       one with **New type**, and click **Set type**.
+     - Under **Set status**, a status. **Lost**, **Disposed**, and
+       **Written Off** open the same dialog as a single change, for the
+       **date** and an optional **note**. An item that already has that
+       status keeps its own date and note. **In Use** asks for confirmation and
+       clears the status date, note, and sale price. **Sold** is not offered,
+       because each item needs its own sale price: mark items sold one at a
+       time.
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
    - **Delete** — moves the selected items to the [Trash](../trash/) after a
-     confirmation. The message that follows has an **Undo** button.
+     confirmation. The message that follows has an **Undo** button. If an
+     item went to the Trash but some of its files could not follow it, a
+     second message says so; those files stay on the Files page.
 
-To clear your selection, untick the items or reload the page.
+Each item is changed the way a single change would change it: the same checks
+apply, and the change shows in the item's history. An item that already has
+what you set, such as a tag it already carries, is left as it is, and so is
+an item that does not have a tag you remove. When no item changed, a message
+says which of the two it was.
+
+### Select every item that matches
+
+When the list has more than one page, select the whole page with **Select all
+visible**. The bar then offers **Select all N matching items**, which selects
+every item the current search and filters match, on every page. **Clear
+selection** goes back to no selection. **Print labels** is not offered for
+this selection.
+
+The link is offered when up to 500 items match. One action takes up to 500
+items, so when more match, the bar says so instead: narrow the filters first.
+The link is also missing when Inventario could not tell which items match
+right then. In both cases you can still select items one by one or a page at
+a time, on each page, and act on those.
+
+Inventario checks the selection again when you confirm an action. If the
+matching items changed in the meantime, for example because someone added an
+item or edited one so that it no longer matches, nothing is changed: the
+selection is cleared and a message asks you to check the list and select the
+items again. This holds even when as many items match as before, if they are
+not the same ones.
+
+### When some items fail
+
+If some items could not be changed, a dialog lists each of them with the
+reason. The items that failed stay selected. A move to an area someone
+deleted in the meantime changes no item and shows an error instead. Click an item's name to open it
+and fix it, or click **Retry failed items** to run the same action on those
+items again.
+
+Picked items are sent in batches of 100. If a batch gets no answer, or fails
+on the server, its items are listed as **May have changed**: Inventario cannot
+tell whether the action reached them, so check them in the list before you
+retry. This holds for the first batch too, and for a selection of 100 items
+or fewer, which goes in one batch. After a delete, **Undo** tries to restore
+those items too. The items of later batches are listed as not changed, since
+the action stopped before it reached them.
+
+An action on all matching items goes in one request. If that request gets no
+answer, an error is shown and Inventario cannot list what changed: check the
+list, and the trash after a delete, before you try again.
+
+To clear your selection, untick the items or reload the page. Changing the
+search or a filter also clears it.

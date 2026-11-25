@@ -28,8 +28,10 @@
     "groupManage": "Группа",
     "groupPersonal": "Личное",
     "groupReports": "Отчёты",
+    "groupSavedViews": "Представления",
     "inService": "В эксплуатации",
     "items": "Все предметы",
+    "itemTypes": "Типы предметов",
     "lent": "Выдано",
     "locations": "Локации",
     "maintenance": "Обслуживание",
@@ -44,7 +46,8 @@
     "upcoming": "Предстоящие",
     "warranties": "Гарантии",
     "help": "Помощь",
-    "sellers": "Продавцы"
+    "sellers": "Продавцы",
+    "inbox": "Входящие"
   },
   "onboarding": {
     "ariaLabel": "Обзор продукта",

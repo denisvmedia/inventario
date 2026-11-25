@@ -125,6 +125,16 @@ func newAPITokenComponents(
 	return svc, NewAPITokenAuthenticator(svc, audit, limiter, params.GlobalRateTrustedProxyNets)
 }
 
+// emailServiceOrStub returns svc, or the stub email service when none is
+// configured.
+func emailServiceOrStub(svc services.EmailService) services.EmailService {
+	if svc != nil {
+		return svc
+	}
+	slog.Warn("EmailService not provided; falling back to stub email service")
+	return services.NewStubEmailService()
+}
+
 // newUsersMeParams wires the /users/me route group: sessions, login history
 // and personal API token management.
 func newUsersMeParams(
@@ -282,6 +292,10 @@ type Params struct {
 	// (legacy behaviour) and APIServer() logs a one-time startup warning so
 	// operators know the installation-wide business gauges are exposed.
 	MetricsToken string
+
+	// CommodityDraftServiceOptions configure the draft service behind the
+	// draft and inbox routes. Tests set the clock with them.
+	CommodityDraftServiceOptions []services.CommodityDraftServiceOption
 
 	// ThumbnailService queues thumbnail jobs when a thumbnail is requested
 	// before it exists, and holds the per-user rate limit for that. The
@@ -606,11 +620,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// Create a shared audit service for use across multiple routes.
 	auditSvc := services.NewAuditService(params.FactorySet.AuditLogRegistry)
 
-	emailSvc := params.EmailService
-	if emailSvc == nil {
-		slog.Warn("EmailService not provided; falling back to stub email service")
-		emailSvc = services.NewStubEmailService()
-	}
+	emailSvc := emailServiceOrStub(params.EmailService)
 
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
@@ -917,8 +927,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 // Per-resource role gates (#1533): reads stay viewer+ (membership is checked
 // by GroupSlugResolverMiddleware). Writes split by resource — structural
 // resources (locations, areas, exports) require admin+; content resources
-// (commodities, files, tags, sellers, loans, services) require user+. Each
-// gate is method-conditional — GET/HEAD/OPTIONS bypass the role check.
+// (commodities, files, tags, sellers, item types, loans, services) require
+// user+. Each gate is method-conditional — GET/HEAD/OPTIONS bypass the role
+// check.
 func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupService *services.GroupService, auditSvc services.AuditLogger) func(r chi.Router) {
 	structuralWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleAdmin)
 	contentWriteGate := requireGroupRoleForWrite(groupService, models.GroupRoleUser)
@@ -933,9 +944,13 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// are viewer+, restores user+, deleting for good admin+.
 		migrationLock := requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration})
 		r.With(migrationLock, contentWriteGate).Route("/commodities", Commodities(params))
+		// Drafts (#2812): promoting one creates an item, so the
+		// currency-migration lock applies as on /commodities.
+		r.With(migrationLock, contentWriteGate).Route("/drafts", Drafts(params, groupService))
 		r.With(contentWriteGate).Route("/files", Files(params))
 		r.With(contentWriteGate).Route("/tags", Tags(params))
 		r.With(contentWriteGate).Route("/sellers", Sellers())
+		r.With(contentWriteGate).Route("/item-types", ItemTypes())
 		r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 		r.With(contentWriteGate).Route("/services", GroupServices(params))
 		r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))
@@ -956,6 +971,12 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.Route("/storage-usage", StorageUsage())
 		r.Route("/plan", GroupPlan())
 		r.Route("/notifications", GroupNotifications(params.FactorySet))
+		// Saved views carry no write gate: viewers keep personal views too;
+		// the service checks who may share and edit.
+		r.Route("/saved-views", SavedViews(params, groupService))
+		// The inbox (#2794) shows records only; its entries are cleared
+		// through /drafts and /commodities, which carry their own gates.
+		r.Route("/inbox", Inbox(params, groupService))
 	}
 }
 

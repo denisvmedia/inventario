@@ -111,7 +111,7 @@ describe("commodity writes refresh the seller counts", () => {
     ["delete", (r: ReturnType<typeof setup>["result"]) => r.current.remove.mutateAsync("c1")],
     [
       "bulk delete",
-      (r: ReturnType<typeof setup>["result"]) => r.current.bulkDelete.mutateAsync(["c1"]),
+      (r: ReturnType<typeof setup>["result"]) => r.current.bulkDelete.mutateAsync({ ids: ["c1"] }),
     ],
   ])("after %s", async (_name, run) => {
     const { result, invalidateSpy } = setup()

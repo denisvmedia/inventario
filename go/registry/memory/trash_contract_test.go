@@ -19,6 +19,10 @@ func TestCoverPhotoContract_Memory(t *testing.T) {
 	registrytest.RunCoverPhotoContract(t, newMemoryTrashEnv)
 }
 
+func TestCountEachContract_Memory(t *testing.T) {
+	registrytest.RunCountEachContract(t, newMemoryTrashEnv)
+}
+
 // newMemoryTrashEnv returns registries scoped to one empty group, with one
 // area to place items in.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
