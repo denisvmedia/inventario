@@ -35,6 +35,7 @@ describe("parseCommoditiesListParams", () => {
         tags: { include: ["red", "blue"], mode: "any", exclude: [], untagged: false },
         sort: "purchase_date",
         sortDesc: true,
+        unreadable: {},
       },
     })
   })

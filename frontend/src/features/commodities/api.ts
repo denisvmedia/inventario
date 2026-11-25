@@ -127,6 +127,10 @@ export interface ListCommoditiesOptions {
   tagMode?: TagMatchMode
   tagsExclude?: string[]
   noTags?: boolean
+  // Values the page URL carried for a boolean filter or tag_mode that could
+  // not be read, by API parameter name. Sent as written so the BE answers
+  // 400 query.invalid_parameter; see CommodityQuery.unreadable.
+  unreadable?: Record<string, string>
   signal?: AbortSignal
 }
 

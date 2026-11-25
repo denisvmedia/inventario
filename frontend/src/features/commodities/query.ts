@@ -40,6 +40,25 @@ export interface CommodityQuery {
   tags: CommodityTagFilter
   sort: CommoditySortOption
   sortDesc: boolean
+  // Values of a flag or of tag_mode that the page URL carries but the parser
+  // cannot read, by page-URL parameter. They stay in the URL and reach the
+  // server as written, so the request fails with query.invalid_parameter and
+  // the page names the parameter, as it does for any other unsupported value.
+  unreadable: UnreadableValues
+}
+
+// The page-URL parameters whose value is parsed into a boolean or a tag mode
+// rather than kept as written.
+export type UnreadableParam = "unassigned" | "inactive" | "lent_out" | "tag_mode" | "no_tags"
+export type UnreadableValues = Partial<Record<UnreadableParam, string>>
+
+// The API name of each of those parameters.
+const UNREADABLE_API_PARAM: Record<UnreadableParam, string> = {
+  unassigned: "unassigned",
+  inactive: "include_inactive",
+  lent_out: "lent_out",
+  tag_mode: "tag_mode",
+  no_tags: "no_tags",
 }
 
 export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
@@ -54,6 +73,7 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   tags: { include: [], mode: "all", exclude: [], untagged: false },
   sort: "name",
   sortDesc: false,
+  unreadable: {},
 }
 
 // Page-URL parameter names. They predate the contract and are kept so saved
@@ -92,9 +112,33 @@ function commaList(params: URLSearchParams, name: string): string[] {
   )
 }
 
-function flag(params: URLSearchParams, name: string): boolean {
-  const v = params.get(name)
-  return v === "1" || v === "true"
+// Reads a boolean the way the server does: 1/true and 0/false in any case,
+// absent or empty as false. Anything else is recorded in unreadable and the
+// flag reads as false.
+function flag(
+  params: URLSearchParams,
+  name: UnreadableParam,
+  unreadable: UnreadableValues
+): boolean {
+  const v = params.get(name) ?? ""
+  switch (v.toLowerCase()) {
+    case "1":
+    case "true":
+      return true
+    case "":
+    case "0":
+    case "false":
+      return false
+  }
+  unreadable[name] = v
+  return false
+}
+
+function tagMode(params: URLSearchParams, unreadable: UnreadableValues): TagMatchMode {
+  const v = params.get(URL_PARAM.tagMode) ?? ""
+  if (v === "any") return "any"
+  if (v !== "" && v !== "all") unreadable.tag_mode = v
+  return "all"
 }
 
 // Reads the query from a page URL. Values are kept as written, so a link
@@ -107,23 +151,25 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
   const sortDesc = sortRaw.startsWith("-")
   const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
   const validSort = COMMODITY_SORT_OPTIONS.includes(sortField)
+  const unreadable: UnreadableValues = {}
   return {
     text: (params.get(URL_PARAM.text) ?? "").trim(),
     types: unique(params.getAll(URL_PARAM.type).filter(Boolean)),
     statuses: unique(params.getAll(URL_PARAM.status).filter(Boolean)),
     areaId: params.get(URL_PARAM.area) ?? "",
-    unassigned: flag(params, URL_PARAM.unassigned),
-    includeInactive: flag(params, URL_PARAM.inactive),
+    unassigned: flag(params, URL_PARAM.unassigned, unreadable),
+    includeInactive: flag(params, URL_PARAM.inactive, unreadable),
     warrantyStatuses: unique(params.getAll(URL_PARAM.warranty).filter(Boolean)),
-    lentOut: flag(params, URL_PARAM.lentOut),
+    lentOut: flag(params, URL_PARAM.lentOut, unreadable),
     tags: {
       include: commaList(params, URL_PARAM.tags),
-      mode: params.get(URL_PARAM.tagMode) === "any" ? "any" : "all",
+      mode: tagMode(params, unreadable),
       exclude: commaList(params, URL_PARAM.tagsExclude),
-      untagged: flag(params, URL_PARAM.noTags),
+      untagged: flag(params, URL_PARAM.noTags, unreadable),
     },
     sort: validSort ? sortField : "name",
     sortDesc: validSort && sortDesc,
+    unreadable,
   }
 }
 
@@ -153,7 +199,17 @@ export function writeCommodityQuery(
   if (query.sort !== "name" || query.sortDesc) {
     next.set(URL_PARAM.sort, query.sortDesc ? `-${query.sort}` : query.sort)
   }
+  // An unreadable value is kept until the parameter is set to a readable one.
+  for (const [name, raw] of unreadableEntries(query.unreadable)) {
+    if (!next.has(name)) next.set(name, raw)
+  }
   return next
+}
+
+function unreadableEntries(values: UnreadableValues | undefined): [UnreadableParam, string][] {
+  return Object.entries(values ?? {}).filter(
+    (entry): entry is [UnreadableParam, string] => entry[1] !== undefined
+  )
 }
 
 // The href of the items list showing query, a partial query filled in with
@@ -163,6 +219,7 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
     ...DEFAULT_COMMODITY_QUERY,
     ...query,
     tags: { ...DEFAULT_COMMODITY_QUERY.tags, ...query.tags },
+    unreadable: { ...query.unreadable },
   })
   const qs = params.toString()
   const base = `/g/${encodeURIComponent(slug)}/commodities`
@@ -182,7 +239,8 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.lentOut ||
     query.tags.include.length > 0 ||
     query.tags.exclude.length > 0 ||
-    query.tags.untagged
+    query.tags.untagged ||
+    unreadableEntries(query.unreadable).length > 0
   )
 }
 
@@ -204,7 +262,16 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     noTags: query.tags.untagged || undefined,
     sort: query.sort,
     sortDesc: query.sortDesc,
+    unreadable: apiUnreadable(query.unreadable),
   }
+}
+
+// The unreadable values under their API names, or undefined when there are
+// none, so a query without them keeps its list-options shape.
+function apiUnreadable(values: UnreadableValues): Record<string, string> | undefined {
+  const entries = unreadableEntries(values)
+  if (entries.length === 0) return undefined
+  return Object.fromEntries(entries.map(([name, raw]) => [UNREADABLE_API_PARAM[name], raw]))
 }
 
 // The API wire format of the list options: the one place that names the
@@ -240,6 +307,11 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
     params.set("tags_exclude", sorted(opts.tagsExclude).join(","))
   }
   if (opts.noTags) params.set("no_tags", "true")
+  // Sent as written, replacing the readable default written above, so the
+  // server refuses the request instead of applying a filter the URL did not
+  // ask for.
+  const unreadable = opts.unreadable ?? {}
+  for (const name of Object.keys(unreadable).sort()) params.set(name, unreadable[name])
   return params
 }
 

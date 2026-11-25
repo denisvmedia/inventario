@@ -97,6 +97,49 @@ func TestParse_Refuses(t *testing.T) {
 	}
 }
 
+func TestParse_TagLimitStopsEarly(t *testing.T) {
+	c := qt.New(t)
+	// Far more distinct tags than allowed: refused, whatever comes after the
+	// limit, including an entry that would be an error of its own.
+	values := url.Values{"tags": {manyTags(commodityquery.MaxTags+1) + ",###"}}
+	_, err := commodityquery.Parse(values)
+	var qErr *commodityquery.Error
+	c.Assert(err, qt.ErrorAs, &qErr)
+	c.Check(qErr.Param, qt.Equals, "tags")
+	c.Check(qErr.Reason, qt.Contains, "at most")
+
+	// Duplicates do not count towards the limit.
+	dup := strings.TrimSuffix(strings.Repeat("a,", commodityquery.MaxTags*3), ",")
+	q, err := commodityquery.Parse(url.Values{"tags": {dup + "," + manyTags(commodityquery.MaxTags-1)}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Tags.Include, qt.HasLen, commodityquery.MaxTags)
+}
+
+func TestDecodeQuery(t *testing.T) {
+	c := qt.New(t)
+
+	values, err := commodityquery.DecodeQuery("q=power+tools&status=sold&status=lost&tags=a%2Cb")
+	c.Assert(err, qt.IsNil)
+	c.Check(values, qt.DeepEquals, url.Values{
+		"q": {"power tools"}, "status": {"sold", "lost"}, "tags": {"a,b"},
+	})
+
+	for _, tc := range []struct {
+		name, raw, param string
+	}{
+		{name: "a malformed escape in a value", raw: "q=drill&status=%ZZ", param: "status"},
+		{name: "a malformed escape in a name", raw: "stat%ZZus=sold", param: "stat%ZZus"},
+		{name: "a semicolon separator", raw: "status=sold;lent_out=true", param: "status"},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			_, err := commodityquery.DecodeQuery(tc.raw)
+			var qErr *commodityquery.Error
+			c.Assert(err, qt.ErrorAs, &qErr)
+			c.Check(qErr.Param, qt.Equals, tc.param)
+		})
+	}
+}
+
 func manyTags(n int) string {
 	tags := make([]string, n)
 	for i := range tags {

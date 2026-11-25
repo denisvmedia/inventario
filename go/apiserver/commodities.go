@@ -64,7 +64,11 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	values := r.URL.Query()
+	values, err := commodityquery.DecodeQuery(r.URL.RawQuery)
+	if err != nil {
+		queryParamError(w, r, err)
+		return
+	}
 	page, perPage := parsePagination(values.Get("page"), values.Get("per_page"))
 	offset := (page - 1) * perPage
 

@@ -103,6 +103,11 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		{"list refuses no_tags with tags", "/commodities?no_tags=true&tags=shed", "no_tags"},
 		{"search refuses the old tag operator", "/search?type=commodities&q=x&operator=AND", "operator"},
 		{"search refuses an unknown warranty status", "/search?type=commodities&q=x&warranty_status=soon", "warranty_status"},
+		{"list refuses a value it cannot decode", "/commodities?status=%ZZ", "status"},
+		{"list refuses a semicolon separator", "/commodities?status=sold;lent_out=true", "status"},
+		{"search refuses a value it cannot decode", "/search?type=commodities&q=x&lent_out=%G1", "lent_out"},
+		{"list refuses an unreadable flag", "/commodities?unassigned=invalid", "unassigned"},
+		{"list refuses an unknown tag mode without tags", "/commodities?tag_mode=some", "tag_mode"},
 	} {
 		c.Run(tc.name, func(c *qt.C) {
 			code, body := get(c, tc.path)

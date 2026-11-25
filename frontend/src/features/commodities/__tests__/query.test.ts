@@ -25,6 +25,7 @@ const FULL: CommodityQuery = {
   tags: { include: ["red", "garage"], mode: "any", exclude: ["broken"], untagged: false },
   sort: "purchase_date",
   sortDesc: true,
+  unreadable: {},
 }
 
 describe("parseCommodityQuery / writeCommodityQuery", () => {
@@ -67,6 +68,46 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
     const q = parseCommodityQuery(new URLSearchParams("status=broken&warranty=soon"))
     expect(q.statuses).toEqual(["broken"])
     expect(q.warrantyStatuses).toEqual(["soon"])
+  })
+
+  it("keeps an unreadable flag or tag mode, so the server can refuse it", () => {
+    const q = parseCommodityQuery(
+      new URLSearchParams(
+        "unassigned=invalid&inactive=maybe&lent_out=yes&no_tags=x&tags=red&tag_mode=some"
+      )
+    )
+    expect(q).toMatchObject({
+      unassigned: false,
+      includeInactive: false,
+      lentOut: false,
+      tags: { include: ["red"], mode: "all", exclude: [], untagged: false },
+      unreadable: {
+        unassigned: "invalid",
+        inactive: "maybe",
+        lent_out: "yes",
+        no_tags: "x",
+        tag_mode: "some",
+      },
+    })
+    // Written back as they were, so the URL keeps them.
+    const written = writeCommodityQuery(new URLSearchParams(), q)
+    expect(parseCommodityQuery(written)).toEqual(q)
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, unreadable: q.unreadable })).toBe(true)
+  })
+
+  it("reads booleans and tag modes the way the server does", () => {
+    const q = parseCommodityQuery(
+      new URLSearchParams("unassigned=TRUE&inactive=0&lent_out=false&no_tags=&tag_mode=all")
+    )
+    expect(q).toMatchObject({ unassigned: true, includeInactive: false, lentOut: false })
+    expect(q.tags.untagged).toBe(false)
+    expect(q.unreadable).toEqual({})
+  })
+
+  it("drops an unreadable value once the parameter gets a readable one", () => {
+    const q = parseCommodityQuery(new URLSearchParams("lent_out=yes"))
+    const next = writeCommodityQuery(new URLSearchParams(), { ...q, lentOut: true })
+    expect(next.toString()).toBe("lent_out=1")
   })
 
   it("falls back to the name sort for an unknown sort field", () => {
@@ -145,6 +186,25 @@ describe("listOptionsToParams", () => {
     const a = listOptionsToParams({ types: ["b", "a"], tags: ["y", "x"] }).toString()
     const b = listOptionsToParams({ types: ["a", "b"], tags: ["x", "y"] }).toString()
     expect(a).toBe(b)
+  })
+
+  it("sends unreadable values as written, under their API names", () => {
+    const q = parseCommodityQuery(
+      new URLSearchParams("unassigned=invalid&inactive=maybe&lent_out=yes&no_tags=x&tag_mode=some")
+    )
+    const params = listOptionsToParams(commodityQueryToListOptions(q))
+    expect(params.get("unassigned")).toBe("invalid")
+    expect(params.getAll("include_inactive")).toEqual(["maybe"])
+    expect(params.get("lent_out")).toBe("yes")
+    expect(params.get("no_tags")).toBe("x")
+    expect(params.get("tag_mode")).toBe("some")
+  })
+
+  it("sends tag_mode=any with tags and nothing for the default mode", () => {
+    const any = parseCommodityQuery(new URLSearchParams("tags=a&tag_mode=any"))
+    expect(listOptionsToParams(commodityQueryToListOptions(any)).get("tag_mode")).toBe("any")
+    const all = parseCommodityQuery(new URLSearchParams("tags=a&tag_mode=all"))
+    expect(listOptionsToParams(commodityQueryToListOptions(all)).has("tag_mode")).toBe(false)
   })
 
   it("sends no_tags", () => {

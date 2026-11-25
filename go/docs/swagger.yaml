@@ -9482,6 +9482,64 @@ paths:
         in: query
         name: tag_mode
         type: string
+      - collectionFormat: multi
+        description: 'Commodities only: only items with none of these tag slugs (comma-separated
+          or repeated)'
+        in: query
+        items:
+          type: string
+        name: tags_exclude
+        type: array
+      - description: 'Commodities only: only items with no tags; cannot be combined
+          with tags or tags_exclude'
+        in: query
+        name: no_tags
+        type: boolean
+      - collectionFormat: multi
+        description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
+          written_off); repeat to OR'
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - description: 'Commodities only: filter by exact area ID'
+        in: query
+        name: area_id
+        type: string
+      - description: 'Commodities only: only items with no area (ignored when area_id
+          is set)'
+        in: query
+        name: unassigned
+        type: boolean
+      - description: 'Commodities only: include drafts and non-in_use items (default
+          true; false hides them)'
+        in: query
+        name: include_inactive
+        type: boolean
+      - collectionFormat: multi
+        description: 'Commodities only: filter by computed warranty status (active,
+          expiring, expired, none); repeat to OR'
+        in: query
+        items:
+          type: string
+        name: warranty_status
+        type: array
+      - description: 'Commodities only: restrict to items whose warranty expires strictly
+          before YYYY-MM-DD'
+        in: query
+        name: warranty_expires_before
+        type: string
+      - description: 'Commodities only: true = only items currently lent, false =
+          only items not lent'
+        in: query
+        name: lent_out
+        type: boolean
+      - description: 'Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count,
+          prefix with ''-'' for descending'
+        in: query
+        name: sort
+        type: string
       produces:
       - application/vnd.api+json
       responses:

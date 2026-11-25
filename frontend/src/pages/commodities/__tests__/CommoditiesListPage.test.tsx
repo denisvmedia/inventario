@@ -995,6 +995,41 @@ describe("<CommoditiesListPage />", () => {
     expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
   })
 
+  it("sends an unreadable flag as written, so the server can refuse it", async () => {
+    const user = userEvent.setup()
+    const sent: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        const lentOut = new URL(request.url).searchParams.get("lent_out")
+        sent.push(lentOut ?? "")
+        if (lentOut === "maybe") {
+          return HttpResponse.json(
+            {
+              errors: [
+                {
+                  status: "Bad Request",
+                  code: "query.invalid_parameter",
+                  meta: { parameter: "lent_out", reason: "must be true or false" },
+                },
+              ],
+            },
+            { status: 400 }
+          )
+        }
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?lent_out=maybe`)
+    const alert = await screen.findByTestId("commodities-invalid-query")
+    expect(alert).toHaveTextContent("(lent_out)")
+    expect(sent).toContain("maybe")
+
+    await user.click(within(alert).getByRole("button", { name: "Clear filters" }))
+    expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+  })
+
   it("has no axe violations on the empty state", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

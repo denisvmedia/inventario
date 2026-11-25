@@ -18,7 +18,7 @@ Features that select items (saved views, header search, bulk "select all N match
 | Backends | `go/registry/postgres/commodities.go` (SQL), `go/registry/memory/commodities.go` (Go) | — |
 | Behavior both backends must share | `go/registry/registrytest/commodity_search.go` (run by the memory and postgres test packages) | `features/commodities/__tests__/query.test.ts` |
 
-Handlers do not read filter parameters themselves. They call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`) and pass the result to `commodityquery.List`.
+Handlers do not read filter parameters themselves. They decode the raw query string with `commodityquery.DecodeQuery`, which refuses a pair that `url.URL.Query` would drop (a malformed `%` escape, a `;` separator), and call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`) and pass the result to `commodityquery.List`.
 
 ## Parameters
 
@@ -85,7 +85,7 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 
 ## Errors
 
-A parameter the endpoint does not know, a value it cannot read, a contradiction or a limit exceeded is answered with 400 and never ignored, because a list that silently drops a condition looks like a list that applied it:
+A parameter the endpoint does not know, a value it cannot read or decode, a contradiction or a limit exceeded is answered with 400 and never ignored, because a list that silently drops a condition looks like a list that applied it:
 
 ```json
 {
@@ -119,6 +119,8 @@ The items list page keeps its query in the page URL under names that predate the
 
 `listOptionsToParams` is the only place that writes API parameters for the list. It sorts set-like lists, so two queries that select the same items produce the same string, which the TanStack Query key relies on. Links to a filtered list are built with `commodityListHref(slug, partialQuery)`.
 
-Filter values are kept as written when the page URL is parsed, so a value the server does not support reaches it and comes back as a 400 the page can explain. The sort is the exception, as on the server.
+Filter values are kept as written when the page URL is parsed, so a value the server does not support reaches it and comes back as a 400 the page can explain. The page-URL booleans (`unassigned`, `inactive`, `lent_out`, `no_tags`) and `tag_mode` are read into a boolean or a mode, but a value that is not one the server reads (`1`/`true`, `0`/`false` in any case, absent; `all`/`any`) is kept in `CommodityQuery.unreadable`, written back to the URL and sent to the server as written. The sort is the exception, as on the server.
+
+The item page walks the list it was opened from (`?from=`) through `features/commodities/listContext.ts`, which parses that list URL with `parseCommodityQuery` too, so the page and the walk ask the same question under the same query key.
 
 The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items.
