@@ -5,9 +5,10 @@ One representation of an item filter is shared by every surface that lists, sear
 - the items list, `GET /g/{slug}/commodities`, and its `meta.commodities` total;
 - the item search, `GET /g/{slug}/search?type=commodities`, and its `meta.total`;
 - the tag counts, `GET /g/{slug}/commodities/tag-counts`, behind the items list's Tags menu;
+- saved views, `GET /g/{slug}/saved-views` and their counts, `GET /g/{slug}/saved-views/counts`;
 - every frontend link that opens a filtered items list.
 
-Features that select items (saved views, header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
+Features that select items (header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
 
 ## Where it lives
 
@@ -28,7 +29,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | Parameter | Value | Meaning |
 | --------- | ----- | ------- |
 | `q` | text, at most 200 characters and 10 terms | Free-text search, see below. |
-| `type` | repeatable | Item type is one of the values. Any value is accepted: types become per group (#2802), and an unused value matches nothing. Not available on `/search`, where `type` names the entity type. |
+| `type` | repeatable | Item type slug is one of the values. Types are per group and a slug never changes when its type is renamed, so a saved view keeps working. Any value is accepted; an unknown slug matches nothing. Not available on `/search`, where `type` names the entity type. |
 | `status` | repeatable, a known status | Item status is one of the values. |
 | `area_id` | area id | Item is in that area. |
 | `unassigned` | `true`/`false` | Item has no area. Ignored when `area_id` is set. |
@@ -114,6 +115,18 @@ A parameter the endpoint does not know, a value it cannot read or decode, a cont
 
 Next to these members, `error` carries the message as for any API error. The items list page shows this as an alert that names the parameter, with a Clear filters button.
 
+## Saved views
+
+A saved view stores a query string of this contract, in the API names, without paging. `commodityquery.ParseSaved` reads it: `Parse` limited to `SavedParams`, the filters and the sort the items list shows and edits. It refuses `warranty_expires_before`, an absolute date that a view meant to stay current must not keep (`warranty_status` is computed on every run instead), and `lent_out=false`, which the list has no control for. A view opens as the items list, so a condition the list cannot show would either be dropped on the way, which broadens the view, or stay invisible to the person looking at it.
+
+The service validates the query on every write and stores `Query.Encode()`, the canonical form (sorted keys, and sorted values in the set-like lists: types, statuses, warranty statuses, included and excluded tags), with a query version (`models.SavedViewQueryVersion`). A stored query that no longer parses, or carries another version, is reported per view as `query_error` with the parameter and the reason; such a view has no count and is never run, so a contract change cannot silently broaden or change a view. The counts endpoint counts the views the requesting member placed in their sidebar or on their dashboard with `commodityquery.CountEach`: each query goes through `Resolve` and the WHERE clause of the items list (`CommodityRegistry.CountEach`), in one transaction and without reading rows, so the sidebar badge, the dashboard card and the opened list agree.
+
+Placement is per member: `saved_view_placements` holds, per view and member, `show_in_sidebar` and `show_on_dashboard`. Any member who sees a view may place it; sharing a view places it for nobody else, and unsharing drops the placements of everyone but the creator.
+
+Renaming an item tag's slug rewrites every view of the group that names it (`Query.RenameTag`). A deleted tag, area or location stays in the query: the view still applies the condition and shows what still matches, and the frontend names what no longer exists.
+
+On the frontend, `commodityQueryToApiQuery` writes the stored form (sort and `include_inactive` always written) and `commodityQueryFromApiQuery` reads it back, an absent `include_inactive` being the server default. `sameCommodityQuery` compares two queries in that form, which is how the items list tells that an open view was changed.
+
 ## Frontend: page URL and API
 
 The items list page keeps its query in the page URL under names that predate the contract, so saved links keep working. `writeCommodityQuery` replaces only these names and leaves the parameters the list owns (`page`, `per_page`, `view`) as they are; `parseCommodityQuery` reads them back. Defaults are left out of the URL. A page number counts pages of `per_page` items, 24 when it is absent (see `frontend/src/features/commodities/listContext.ts`).
@@ -142,3 +155,13 @@ Filter values are kept as written when the page URL is parsed, so a value the se
 The item page walks the list it was opened from (`?from=`) through `features/commodities/listContext.ts`, which parses that list URL with `parseCommodityQuery` too, so the page and the walk ask the same question under the same query key.
 
 The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items. For the same reason the links that open the list for one tag (`commodityTagHref`, used on the item page and the Tags page) or one seller (`commoditySellerHref`, used on the item page and the Sellers page) and the item page's area and type links carry `inactive=1`: the usage count of a tag or a seller includes inactive items, and the item the link sits on may be inactive itself. A tag pill on an item card in the list is different: it adds the tag to the list's current query with `withIncludedTag`, keeping every other condition.
+
+## Bulk actions on a query
+
+The bulk endpoints (`POST /commodities/bulk-update`, `bulk-move`, `bulk-delete`) take the items as `ids` or as `query` with `expected_count` and `expected_digest`. `query` is the API query string of the contract without `page` and `per_page`; the frontend builds it with `commodityQueryParam(query)`, which is `listOptionsToParams` of the list options, so the request names exactly what the list shows. The server decodes it with `commodityquery.DecodeQuery` and `Parse`, so an unknown parameter or an unreadable value fails with the 400 described under Errors, and `trashed=true` is refused the same way: bulk actions apply to live items only.
+
+`expected_digest` names the items the user saw. `GET /commodities` returns it as `meta.selection_digest` for every query a bulk action can take: one that matches at least one and at most `MaxBulkQueryItems` items, without `trashed=true`. It is `commodityquery.Digest` of the ids of every matching item, on every page: the hex SHA-256 of the ids sorted and joined with commas, so it depends on neither `sort` nor `page`. The list computes it from the page it already read when that page holds every match, and otherwise reads the ids alone (`CommodityRegistry.ListIDs`, with the same options as the list). When that read returns another number of ids than the total the list counted (an item changed between the two reads), or fails, the list omits the digest and still returns the page: the digest is optional, and a missing one only means the frontend offers no bulk action on the query. The frontend keeps the total and the digest from the moment the user chooses "Select all N matching" and sends both, not the values of a later refetch.
+
+`services.ResolveBulkSelection` runs the query when the request arrives, in the list's order. When it matches more than `MaxBulkQueryItems` (500) items the request fails with 422 `bulk.too_many` (`meta.matched`, `meta.max`). This check comes first, so a confirmed set that grew past 500 gives 422, not 409. When it matches a different number than `expected_count`, or as many items whose digest is not `expected_digest` (one left the query and another joined it), it fails with 409 `bulk.selection_changed` (`meta.expected`, `meta.matched`; equal values mean a swapped item). None of these changes anything, so a filter edited in another tab or an item someone else added or changed cannot widen or shift an action the user confirmed for a given set of items.
+
+Bulk update and move read each item again right before they write it, so an edit someone saves while the action runs is kept rather than overwritten by the row the query read. Each item is written in its own transaction with the checks of a single change.

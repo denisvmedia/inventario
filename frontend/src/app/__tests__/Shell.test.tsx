@@ -7,7 +7,7 @@ import { Shell } from "@/app/Shell"
 import { AuthProvider, useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { TOUR_BLOCKER_GRACE_MS, useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
-import { authHandlers, groupHandlers } from "@/test/handlers"
+import { authHandlers, groupHandlers, savedViewHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -102,6 +102,8 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+  // The sidebar lists the group's saved views.
+  server.use(...savedViewHandlers.none("household"), ...savedViewHandlers.none("office"))
 })
 
 afterEach(() => {

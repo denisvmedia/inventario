@@ -6,7 +6,9 @@ import (
 	"archive/tar"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -71,6 +73,14 @@ type inbBuilder struct {
 	sellers          []*models.Seller
 	sellerUUIDByDBID map[string]string
 	usedSellers      map[string]bool
+	// drafts are the group's open drafts in a whole-group export, oldest
+	// first, and draftUUIDByDBID resolves a file link to one of them.
+	drafts          []*models.CommodityDraft
+	draftUUIDByDBID map[string]string
+	// itemTypes are the group's item types in list order; usedItemTypes
+	// collects the slugs the planned items have.
+	itemTypes     []*models.ItemType
+	usedItemTypes map[models.CommodityType]bool
 	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
 	// size-resolved and in list order (orphans already dropped). They are
 	// emitted in the dedicated files member, never nested under a commodity.
@@ -102,8 +112,9 @@ type candidateFile struct {
 }
 
 // entityCandidateFile is one size-resolved NON-commodity reference (issue
-// #2235): a file's link to a location or an area, or a standalone (unlinked)
-// file. linkedType is "location", "area", or "" for standalone; entityUUID is
+// #2235): a file's link to a location, an area or a draft, or a standalone
+// (unlinked) file. linkedType is "location", "area", "draft", or "" for
+// standalone; entityUUID is
 // the linked entity's IMMUTABLE UUID (empty for standalone), already resolved
 // from the link's volatile entity id, which entityDBID keeps for scoping.
 type entityCandidateFile struct {
@@ -148,6 +159,14 @@ type plannedUnassigned struct {
 	present bool
 	doc     INBUnassignedDoc
 	pending []pendingFile
+}
+
+// plannedDrafts is the plan for the drafts member: the document encoded as it
+// is written. present is false when no draft is in scope, so the member is
+// omitted.
+type plannedDrafts struct {
+	present bool
+	data    []byte
 }
 
 // plannedFiles is the in-memory plan for the non-commodity files member (issue
@@ -240,7 +259,7 @@ func (b *inbBuilder) resolveSelectedScope() (*inbScope, error) {
 // parent-keyed indexes the plan/write passes read from. Each candidate file's
 // size is resolved here (recorded SizeBytes else a single bucket probe); orphans
 // are dropped so they never reach the doc or the statistics.
-func (b *inbBuilder) preload() error {
+func (b *inbBuilder) preload(scope *inbScope) error {
 	locations, err := b.loadLocations()
 	if err != nil {
 		return err
@@ -265,6 +284,16 @@ func (b *inbBuilder) preload() error {
 		b.areaUUIDByDBID[area.ID] = area.UUID
 	}
 
+	// The drafts are read before the items, in a transaction of their own.
+	// A promotion that commits between the two reads then leaves the archive
+	// with both the draft and the item it became, which restores as a
+	// duplicate the user can discard. Read the other way round, the item
+	// would be missing from the items read and the draft from the drafts
+	// read, and the archive would lose it.
+	if err := b.loadDrafts(scope); err != nil {
+		return err
+	}
+
 	commodities, err := b.loadCommodities()
 	if err != nil {
 		return err
@@ -284,6 +313,11 @@ func (b *inbBuilder) preload() error {
 		return err
 	}
 
+	if err := b.loadItemTypes(); err != nil {
+		return err
+	}
+
+	// After the drafts, which the files link to.
 	if err := b.indexFiles(); err != nil {
 		return err
 	}
@@ -313,6 +347,94 @@ func (b *inbBuilder) loadSellers() error {
 	return nil
 }
 
+// loadDrafts lists the group's open drafts once via the RLS-scoped user
+// registry. Only a whole-group export carries drafts: a selection names
+// locations, areas and items, and a draft is none of them. A promoted draft
+// is an item already, and one being discarded is on its way out, so neither
+// is exported.
+func (b *inbBuilder) loadDrafts(scope *inbScope) error {
+	b.draftUUIDByDBID = map[string]string{}
+	if !scope.wholeClass || b.svc.factorySet.CommodityDraftRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create draft registry", err)
+	}
+	drafts, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list drafts", err)
+	}
+	for _, d := range drafts {
+		if d == nil || !d.IsOpen() {
+			continue
+		}
+		b.drafts = append(b.drafts, d)
+		b.draftUUIDByDBID[d.ID] = d.UUID
+	}
+	slices.SortFunc(b.drafts, func(x, y *models.CommodityDraft) int {
+		if c := x.CreatedAt.Compare(y.CreatedAt); c != 0 {
+			return c
+		}
+		return strings.Compare(x.UUID, y.UUID)
+	})
+	return nil
+}
+
+// planDrafts builds the drafts member. The area and the seller a draft names
+// are written as their UUIDs, which the restore maps to the restored area
+// and seller; one the export cannot resolve is left out, so the archive never
+// carries a DB id. The document is encoded here, in the planning pass, so a
+// document larger than a restore accepts fails the export with
+// ErrDraftsTooLarge before anything is written.
+func (b *inbBuilder) planDrafts() (plannedDrafts, error) {
+	if len(b.drafts) == 0 {
+		return plannedDrafts{}, nil
+	}
+	doc := INBDraftsDoc{Drafts: make([]INBDraft, 0, len(b.drafts))}
+	for _, d := range b.drafts {
+		values := make(map[string]any, len(d.Values))
+		maps.Copy(values, d.Values)
+		b.exportDraftReference(values, "area_id", b.areaUUIDByDBID)
+		b.exportDraftReference(values, "seller_id", b.sellerUUIDByDBID)
+		doc.Drafts = append(doc.Drafts, INBDraft{
+			ID:        d.UUID,
+			ClientKey: d.ClientKey,
+			Values:    values,
+			Revision:  d.Revision,
+			CreatedAt: d.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt: d.UpdatedAt.UTC().Format(time.RFC3339),
+		})
+	}
+	data, err := encodeJSONMember(INBDraftsName, doc)
+	if err != nil {
+		return plannedDrafts{}, err
+	}
+	if limit := jsonDocLimit(); int64(len(data)) > limit {
+		return plannedDrafts{}, errx.Classify(ErrDraftsTooLarge,
+			errx.Attrs("member", INBDraftsName, "size", len(data), "max", limit, "drafts", len(doc.Drafts)))
+	}
+	return plannedDrafts{present: true, data: data}, nil
+}
+
+// exportDraftReference replaces the DB id in values[key] with the UUID
+// uuidByDBID gives for it. An empty value stays, meaning nothing chosen; a
+// value that is not text or names nothing in the group is removed.
+func (*inbBuilder) exportDraftReference(values map[string]any, key string, uuidByDBID map[string]string) {
+	raw, ok := values[key]
+	if !ok {
+		return
+	}
+	id, isText := raw.(string)
+	switch {
+	case isText && id == "":
+	case isText && uuidByDBID[id] != "":
+		values[key] = uuidByDBID[id]
+	default:
+		delete(values, key)
+	}
+}
+
 // manifestSellers returns the sellers the manifest carries: all of them in
 // a whole-group export, otherwise the ones the planned items name.
 func (b *inbBuilder) manifestSellers(scope *inbScope) []INBSeller {
@@ -322,6 +444,38 @@ func (b *inbBuilder) manifestSellers(scope *inbScope) []INBSeller {
 			continue
 		}
 		out = append(out, INBSeller{ID: s.UUID, Name: s.Name, Website: s.Website, Contact: s.Contact, Note: s.Note})
+	}
+	return out
+}
+
+// loadItemTypes lists the group's item types once via the RLS-scoped user
+// registry.
+func (b *inbBuilder) loadItemTypes() error {
+	b.usedItemTypes = map[models.CommodityType]bool{}
+	if b.svc.factorySet.ItemTypeRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.ItemTypeRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create item type registry", err)
+	}
+	list, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list item types", err)
+	}
+	b.itemTypes = list
+	return nil
+}
+
+// manifestItemTypes returns the item types the manifest carries: all of them
+// in a whole-group export, otherwise the ones the planned items have.
+func (b *inbBuilder) manifestItemTypes(scope *inbScope) []INBItemType {
+	out := make([]INBItemType, 0, len(b.itemTypes))
+	for _, t := range b.itemTypes {
+		if !scope.wholeClass && !b.usedItemTypes[t.Slug] {
+			continue
+		}
+		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon})
 	}
 	return out
 }
@@ -367,10 +521,13 @@ func (b *inbBuilder) loadCommodities() ([]*models.Commodity, error) {
 
 // indexFiles lists the group's files ONCE and routes every link to its home:
 // commodity attachments are grouped by commodity DB ID and bucket, while
-// location-/area-linked and standalone files are collected for the dedicated
-// files member (issue #2235). A file with several links is routed once per
-// link. Export artifacts (files with an export link) are skipped — a backup
-// must never embed previous backups.
+// location-, area- and draft-linked and standalone files are collected for the
+// dedicated files member (issue #2235). A file with several links is routed
+// once per link. Export artifacts (files with an export link) are skipped — a
+// backup must never embed previous backups. A link to a draft the export does
+// not carry (any draft in a selection, a draft being discarded) is left out,
+// and a file with no other link is exported as a standalone file, so its bytes
+// survive a restore.
 //
 // Orphan rows (missing/unsized blob) are dropped in EVERY branch, so they never
 // reach a document or the statistics. That drop is mandatory: the restore side
@@ -396,18 +553,19 @@ func (b *inbBuilder) indexFiles() error {
 		}
 		// A blob probe that cannot determine a file's state aborts the export:
 		// an incomplete-but-successful backup is worse than a failed one.
-		if len(file.Links) == 0 {
+		links := b.exportedFileLinks(file.Links)
+		if len(links) == 0 {
 			if err := b.indexStandaloneFile(file); err != nil {
 				return err
 			}
 			continue
 		}
-		for _, link := range file.Links {
+		for _, link := range links {
 			var indexErr error
 			switch link.EntityType {
 			case models.FileLinkCommodity:
 				indexErr = b.indexCommodityFile(file, link)
-			case models.FileLinkLocation, models.FileLinkArea:
+			case models.FileLinkLocation, models.FileLinkArea, models.FileLinkDraft:
 				indexErr = b.indexEntityFile(file, link)
 			default:
 				// A link type this build does not know is not exported.
@@ -419,6 +577,18 @@ func (b *inbBuilder) indexFiles() error {
 		}
 	}
 	return nil
+}
+
+// exportedFileLinks returns the links a backup carries: every link except
+// the links to drafts the backup does not contain.
+func (b *inbBuilder) exportedFileLinks(links []models.FileLink) []models.FileLink {
+	out := make([]models.FileLink, 0, len(links))
+	for _, link := range links {
+		if link.EntityType != models.FileLinkDraft || b.draftUUIDByDBID[link.EntityID] != "" {
+			out = append(out, link)
+		}
+	}
+	return out
 }
 
 // cachedFileSize resolves a file's size once per export.
@@ -469,13 +639,13 @@ func (b *inbBuilder) indexCommodityFile(file *models.FileEntity, link models.Fil
 	return nil
 }
 
-// indexEntityFile collects one location-/area link of a file (issue #2235),
-// resolving the link's volatile entity id to the linked entity's immutable
-// UUID. A link whose entity does not resolve (dangling link, out of RLS scope)
-// or whose bucket is outside images/files is skipped rather than emitted with a
-// reference the restore side could not map.
+// indexEntityFile collects one location, area or draft link of a file (issue
+// #2235), resolving the link's volatile entity id to the linked entity's
+// immutable UUID. A link whose entity does not resolve (dangling link, out of
+// RLS scope) or whose bucket is not one of the entity type's is skipped rather
+// than emitted with a reference the restore side could not map.
 func (b *inbBuilder) indexEntityFile(file *models.FileEntity, link models.FileLink) error {
-	if !isEntityFileBucket(link.Meta) {
+	if !slices.Contains(models.FileLinkMetaValues(link.EntityType), link.Meta) {
 		return nil
 	}
 
@@ -485,6 +655,8 @@ func (b *inbBuilder) indexEntityFile(file *models.FileEntity, link models.FileLi
 		entityUUID = b.locUUIDByDBID[link.EntityID]
 	case models.FileLinkArea:
 		entityUUID = b.areaUUIDByDBID[link.EntityID]
+	case models.FileLinkDraft:
+		entityUUID = b.draftUUIDByDBID[link.EntityID]
 	}
 	if entityUUID == "" {
 		return nil
@@ -875,6 +1047,7 @@ func (b *inbBuilder) planLocation(loc *models.Location, scope *inbScope) planned
 // commodities). areaUUID is the parent area's immutable UUID, or "" for an
 // area-less commodity (issue #1986).
 func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodity) (INBCommodity, []pendingFile) {
+	b.usedItemTypes[com.Type] = true
 	inbCom := INBCommodity{
 		ID:                     com.UUID,
 		Name:                   com.Name,
@@ -1030,8 +1203,10 @@ type inbPlan struct {
 	locations    []plannedLocation
 	manifestLocs []INBManifestLoc
 	unassigned   plannedUnassigned
+	drafts       plannedDrafts
 	files        plannedFiles
 	sellers      []INBSeller
+	itemTypes    []INBItemType
 }
 
 // run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
@@ -1041,7 +1216,7 @@ func (b *inbBuilder) run() (inbPlan, error) {
 	if err != nil {
 		return inbPlan{}, err
 	}
-	if err := b.preload(); err != nil {
+	if err := b.preload(scope); err != nil {
 		return inbPlan{}, err
 	}
 
@@ -1060,13 +1235,21 @@ func (b *inbBuilder) run() (inbPlan, error) {
 
 	unassigned := b.planUnassigned(scope)
 
+	drafts, err := b.planDrafts()
+	if err != nil {
+		return inbPlan{}, err
+	}
+
 	return inbPlan{
 		locations:    planned,
 		manifestLocs: manifestLocs,
 		unassigned:   unassigned,
+		drafts:       drafts,
 		files:        b.planFiles(scope),
 		// After every item is planned, so usedSellers is complete.
 		sellers: b.manifestSellers(scope),
+		// After every item is planned, so usedItemTypes is complete.
+		itemTypes: b.manifestItemTypes(scope),
 	}, nil
 }
 
@@ -1108,6 +1291,14 @@ func (b *inbBuilder) writeUnassigned(pu plannedUnassigned) error {
 		}
 	}
 	return nil
+}
+
+// writeDrafts writes the drafts member; a no-op when no draft is in scope.
+func (b *inbBuilder) writeDrafts(pd plannedDrafts) error {
+	if !pd.present {
+		return nil
+	}
+	return b.writeMember(INBDraftsName, pd.data)
 }
 
 // writeFiles writes the non-commodity files member (issue #2235): its JSON
@@ -1156,19 +1347,6 @@ var commodityFileBuckets = []string{"images", "documents"}
 func isCommodityFileBucket(meta string) bool {
 	switch meta {
 	case "images", "documents":
-		return true
-	default:
-		return false
-	}
-}
-
-// isEntityFileBucket reports whether a linked_entity_meta value is one of the two
-// location/area attachment buckets (issue #2235). Anything else cannot pass model
-// validation for a location/area file, so such a row is dropped rather than
-// exported into an archive that would fail on restore.
-func isEntityFileBucket(meta string) bool {
-	switch meta {
-	case "images", "files":
 		return true
 	default:
 		return false

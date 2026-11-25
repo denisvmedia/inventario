@@ -35,6 +35,52 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has the **Save as draft** `Switch` row on the form steps (L554–L569); with it on, the last step's primary button reads "Save Draft" (L702–L711) and the earlier steps keep Continue. The mock has no notice about where a draft is saved, no conflict handling, and no list of files already saved with a draft.
+- **Reality**: In create mode for a signed-in user (`serverDrafts`), turning the switch on adds a primary **Save draft** button on every form step and turns Continue into an outline button; it saves the form and the staged files as a server draft without checking the form, then closes. A draft opened with **Continue** skips the Fill with AI step, opens on Basics with the switch off, and hides the fields behind "Opening the draft…" until the draft has loaded. Below the steps, a destructive `Alert` "Draft not saved to the server" names the files that did not upload and has a **Retry** button; a destructive `Alert` "This draft changed elsewhere" has two outline buttons, **Load the newer version** and **Save as a new draft**. When the draft was finished elsewhere, **Save draft** or **Add item** shows a destructive `Alert` "This draft is already an item" with **Open item** and **Save as a new draft**; when it was discarded elsewhere, "This draft was discarded" with **Save as a new draft**. Under the switch, default `Alert`s say "Restored from this device" (input kept locally that the server lacks), "Draft not found" or "This draft is already an item". The Files step lists "Saved with this draft" rows with the pending-file row's anatomy, without the tags input. The close confirm says the draft is saved for any device, reads **Discard changes** when a draft is being continued, and for the anonymous landing-page form reads **Keep on this device** with copy about signing in.
+- **Why**: The issue asks for quick capture without the full validation, explicit handling of a stale save from another tab or device, and copy that tells local recovery from a server save. The notices compose existing `Alert` and `Button` primitives from [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). Save draft on every step (rather than on the last step only) and opening a continued draft on Basics with the switch off go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; Save draft on every step and the continued-draft opening agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws server drafts; otherwise permanent.
+
+#### 2026-11-25 — Drafts card on the Items page
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no list of drafts.
+- **Reality**: `frontend/src/components/items/DraftsCard.tsx` renders a `Card` between the page header and the toolbar, only while the group has drafts. The title "Drafts" carries a secondary `Badge` with the count, and a `CardDescription` says drafts can be continued on any device. Each row shows the draft's name (an italic muted "Untitled draft" when it has none), "Saved {relative time}" and a paperclip with the file count, then an outline small **Continue** button and a ghost icon button (`Trash2`) that discards after the confirm dialog. The card lists five drafts; a ghost small "Show all N" in `CardAction` lists up to 100. Viewers see the rows without the buttons.
+- **Why**: not present in mock. The issue asks that drafts can be found and resumed on another device, with the inbox of #2794 as the later home; the card follows the `Card` anatomy in [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). The placement above the toolbar and the five-row cap are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; placement and the row cap agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Move the list into the inbox when #2794 lands.
+- **Resolved**: 2026-11-25, #2794 — the list moved to the inbox; the Items page keeps the notice described in "Inbox notice on the Items page instead of a Drafts filter".
+
+#### 2026-11-25 — Short name follows the name in the Add item dialog
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has an independent Short name input with a 20-character limit (L215–L216).
+- **Reality**: In create mode the short name is filled from the name as the user types it, cut to whole words of up to 20 characters (counted as code points, so an emoji counts once), until the user types in the short name field or the AI scan supplies one. Edit mode leaves the short name alone. The field keeps its 40-character limit, the server's.
+- **Why**: The issue asks for a short name derived from the title that keeps a manual choice. The 20-character cut follows the mock's limit and is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the 20-character cut agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent.
+
+#### 2026-11-25 — Views control on the items list toolbar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no saved views: its toolbar ends with the grid/list toggle.
+- **Reality**: `frontend/src/features/saved-views/SavedViewControl.tsx` sits in the toolbar before the grid/list buttons, an outline `Button size="sm"` with a `Bookmark` icon and **Views**, opening a `DropdownMenu` like the toolbar's filter menus and the menus catalogued in `UIShowcaseView`. It saves the current filter, sort and layout through `SaveViewDialog` (name, a 16-icon picker built on the Radix radio group, so it takes one tab stop and the arrow keys choose, Sidebar / Dashboard / Share checkboxes), lists the member's views and links to the manage page. While a view is open (`saved_view=<id>` in the page URL) the button turns `secondary` and shows the view's icon and name, a `bg-primary` dot when the list no longer matches the view, and a `text-status-expiring` warning icon when the view names a deleted area, tag or seller (sellers are checked only once the group's sellers have loaded); the menu then offers **Save changes**, **Revert to saved** and **Close view**, and a notice lists what no longer exists. A view whose stored query cannot run, or holds a parameter this client cannot read, is a disabled menu entry with a warning icon and is never opened, by the menu or by Revert; while the page URL names one, the menu explains it and offers only **Close view**, and the page shows a destructive `Alert` (title, the parameter, **Close view**) in place of the items, as it does for an invalid query. While the saved views fail to load and none are cached, a page URL that names a view shows a destructive `Alert` with **Try again** and **Close view** in place of the items. The page passes the control through one `savedViews` slot of its toolbar.
+- **Why**: not present in mock. #2793 asks for a Save view control on the items list; the changed marker, revert and the deleted-reference notice follow from the issue's "opening, editing and returning preserves context" and "show what no longer matches" requirements.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views.
+
+#### 2026-11-25 — Saved views page (`/g/:slug/views`)
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: none; the mock has no saved views.
+- **Reality**: `frontend/src/pages/saved-views/SavedViewsPage.tsx` is a `Page width="narrow"` with one `Card` of rows (the row pattern of the dashboard lists): icon tile, the view name as a link, a **Personal** / **Shared** badge, the item count, the conditions as outline badges (`features/saved-views/QueryConditions.tsx`, a condition naming something deleted in the `status-expiring` tone and saying so in its text: "Deleted area", "Deleted seller", or "(deleted)" after a tag or an item type the group no longer has; a seller reads "Seller <name>", an item type by the group's name for it), ghost icon toggles for Sidebar (`PanelLeft`) and Dashboard (`LayoutDashboard`) that set the member's own placement on every row, shared views of others included, and a `MoreHorizontal` menu with Edit, Move up, Move down and Delete for the views the member may change. Reached from the Views menu and the gear on the sidebar section; it is not in the sidebar's nav lists.
+- **Why**: not present in mock. A member needs one place to rename, reorder, unpin and delete views, including views that are on neither the sidebar nor the dashboard; the issue does not name the surface, so the page is agent-suggested.
+- **Approved by**: agent-suggested; listed in the PR for the owner (the feature itself is pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements).
+- **Reversion plan**: Follow the mock once `inventario-design` draws view management, or fold the page into Settings if the owner prefers.
+
 #### 2026-11-25 — Brand and model on the item: inputs, suggestions, cards, item page, search
 
 - **Issue/PR**: #2804 / PR #2840
@@ -44,6 +90,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; substring matching, edit-form suggestions, keyboard selection and the short-name fallback agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Add model suggestions if the mock's `ModelInput` is wanted with real data; otherwise permanent. The short-name fallback stays while brand and model are optional.
 
+#### 2026-11-25 — Items bulk bar: Edit menu, select all matching, result dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no bulk selection at all; the shared `BulkActionBar` is itself a recorded deviation (the 2026-06-05 entry below), and this extends it. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (DropdownMenu with a label and separator, Dialog, Select, link Button) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: The Items bar moved out of the list page into `frontend/src/components/items/CommodityBulkActions.tsx` (Print labels with it) and is wider (`max-w-3xl` instead of the shared `max-w-xl`) to fit one more control; the shared bar's action row now wraps, so the four buttons fit a phone. Between Move and Print labels an outline **Edit** `DropdownMenu` trigger (chevron) offers **Tags…**, **Type…**, a separator, a **Set status** label and the statuses In Use, Lost, Disposed and Written Off. **Tags…** opens `BulkTagsDialog` (`frontend/src/components/tags/`, shared with the Files bar): two `TagPalette`s, **Add tags** (with the new-tag input) and **Remove tags** (existing tags only, through a new `allowCreate={false}` prop); picking a tag on one side takes it off the other. **Type…** opens `BulkTypeDialog` with the edit form's `ItemTypeField` (the group's item types and **New type**, #2802); a type the server refuses because another member deleted it is named on the field. Lost, Disposed and Written Off reuse `StatusTransitionDialog` with a new optional `title` / `description` pair that speaks of N items; In Use is a confirm dialog. Once the whole page is selected, a link button next to the count offers **Select all N matching items**; then the count reads "All N matching items selected", a **Clear selection** link button follows it, and Print labels is hidden. Above 500 matching items a muted line says to narrow the filters instead. When some items fail, `BulkResultDialog` shows the counts in its description, a bordered scrolling list of the failed items (the name links to the item) with the reason, and **Close** / **Retry failed items**.
+- **Why**: not present in mock. The issue asks for bulk tags, type and status (with the date and note dialog of a single change), for "Select all N matching" as an action separate from "Select this page", and for a report of completed, skipped and failed items with a retry of the failed subset. The grouping under one Edit menu, the wider bar, the link to each failed item, keeping the failed items selected, and leaving Sold out of the bulk statuses go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the Edit menu grouping, wider bar, failed-item links, kept selection and the Sold omission agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the items list; reconcile with the Files bar through the shared component.
+
 #### 2026-11-25 — Seller on the item: picker with New seller, AI suggestion, items-list filter, Details row
 
 - **Issue/PR**: #2804 / PR #2844
@@ -52,6 +107,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. #2804 asks for a seller per item, created on the fly from the form, a filter on the items list, and the AI scan filling the seller. The suggestion box instead of creating the scanned seller, the "Deleted seller" entry and the Details link are agent-suggested. The **Use {name}** offer and the deleted-seller line come from the #2844 review.
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner; the taken-name offer and the deleted-seller line asked for in the PR review.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller field.
+
+#### 2026-11-25 — Item type picker with New type, the group's types in the Type filter
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) Basics step has a **Category** `Select` over the fixed `CATEGORIES` list (L1051–L1057), and `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) the same `Select` (L475–L481). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar filter lists `CATEGORIES` as `DropdownMenuCheckboxItem`s with an icon each (L250–L262). There is no way to add a category.
+- **Reality**: `frontend/src/components/itemTypes/ItemTypeField.tsx` keeps the mock's `Select`, filled from the group's item types (`GET /item-types`): each option shows the type's icon and its name, the built-in types by their translated default name until someone renames them. The list ends with a `SelectSeparator` and **New type** (a `Plus` icon), which opens `ItemTypeFormDialog` over the form and selects the type it created, the pattern of the Location and Seller pickers. When the name is taken, the dialog offers **Use {name}** to pick the existing type. A picked type that is missing from the cached list makes the field fetch the list once more, and a destructive line under the picker asks to pick another one only when a list fetched after that still lacks it (deleted by another member); a save the server refuses with 422 `item_type.unknown` shows "This type is not in the group." on the field and runs the same check. Without a group (the item form on the public landing page) the picker offers the six built-in types and no **New type**. The items toolbar's Type filter and the area page's filter list the group's types with their icons; a slug from the URL that the group does not have stays in the menu, by its slug, so it can be cleared. The AI scan review shows the type's name.
+- **Why**: #2802 makes item types a per-group list with a name and an icon, created on the fly from the item form. The deleted-type line, the field error for an unknown type, the built-in types on the landing page and the unknown slug in the filter are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; deleted-type line, unknown-type field error, landing-page fallback and unknown filter slug agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers and a managed category list.
 
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
 
@@ -328,7 +392,43 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds a reminders surface to the item page.
 
+#### 2026-11-25 — Inbox page
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: none. `design-mocks/src/views/` has no inbox, review queue or list of drafts.
+- **Reality**: `frontend/src/pages/inbox/InboxPage.tsx` at `/g/:slug/inbox`: a `PageHeader` ("Inbox", one line on what it holds), line `Tabs` **All (N)**, **Drafts (N)**, **Items to review (N)** whose counts come from the server and whose filter is the `reason` query parameter, and one `Card` list in the Upcoming page's row anatomy. A row has an icon (`FilePen` for a draft, `Package` for an item), the title, a secondary `Badge` per reason ("Draft", "Marked as draft"), muted meta text, and its action at the end. A draft row shows "Saved {relative time}" and the file count, with an outline small **Continue** that opens the Add item dialog over the inbox and a ghost `Trash2` icon button that discards after the confirm dialog. An item row's title opens the item sheet over the inbox; its outline small **Mark as reviewed** turns the item's draft switch off and shows a success toast with **Undo**; a refusal shows an error toast with **Open item**. Viewers see the rows without buttons. More than 50 rows page with the shared `Pagination`. The empty state is a muted `CircleCheck` with "Nothing needs attention". Under the list, a **Missing details** `Card` links **Items without a location** and **Items without tags** to the items list with those filters.
+- **Why**: not present in mock. #2794 asks for one place for unfinished work where each row states its reason and offers the action that clears it, and for missing data to stay a separate, optional view. The tabs, list and card follow [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) and the Upcoming and Trash pages. The Missing details section, Undo on Mark as reviewed and the 50-row page are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the Missing details section, Undo and the page size agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
+#### 2026-11-25 — Inbox notice on the Items page instead of a Drafts filter
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no draft filter and no notice above the toolbar. The issue text asks for a "Drafts" filter next to No location.
+- **Reality**: `frontend/src/components/items/InboxNotice.tsx` renders a bordered row between the page header and the toolbar, only while the inbox holds drafts or items marked as draft: an `Inbox` icon, the summary ("2 drafts to finish · 1 item to review") and an outline small **Open inbox** button. The button opens the inbox on the Drafts or Items to review tab when only one kind is waiting, otherwise on All. The toolbar has no Drafts filter.
+- **Why**: Since #2812 a draft of a new item is a server draft, not an item, so an item filter cannot list it, and a filter that showed only items marked as draft would disagree with the inbox's draft count. The inbox lists both kinds; the notice is the Items page's way there and replaces the Drafts card of #2812. Opening on the matching tab is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the tab choice agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Add a Drafts filter if the item query gains one that covers server drafts; otherwise permanent.
+
 ### Dashboard / Overview
+
+#### 2026-11-25 — Needs attention card on the dashboard
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) goes from the stat cards to Expiring Warranties and Recently Added; it has no inbox card.
+- **Reality**: `frontend/src/components/dashboard/NeedsAttentionCard.tsx` renders between the stat cards and the saved views, only while the inbox is not empty: a full-width bordered link row with an `Inbox` icon tile, "Needs attention: N" from the server's inbox count, the summary ("2 drafts to finish · 1 item to review") and "Open inbox" with a chevron. The four stat cards stay as the mock draws them.
+- **Why**: not present in mock. #2794 asks for a "Needs attention: N" card. It is a row rather than a fifth stat card so the mock's four-card grid stays intact. Hiding it while the inbox is empty and the summary line are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the placement, hiding at zero and the summary agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card.
+
+#### 2026-11-25 — Saved view cards and suggested views on the dashboard
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) goes from the stat cards straight to Expiring Warranties and Recently Added; it has no user-defined cards.
+- **Reality**: `frontend/src/components/dashboard/SavedViewsSection.tsx` renders between the stat cards and the two-up grid. Each view the member put on their own dashboard gets a `Card` in a `lg:grid-cols-2` grid, built like Recently Added: icon and name as the title, the item count as the description (the rows' own total once they load, the counts endpoint's until then), an **Open** ghost button as `CardAction`, and the first five items as rows that open the item sheet. While the member keeps no view of their own other than these, a **Start with a saved view** card lists ready-made views (Expiring warranties, Lent out, Without a location, Untagged), each with an **Add** button that saves it to the sidebar and the dashboard, and an `X` that dismisses the card for the group (localStorage).
+- **Why**: not present in mock. #2793 asks for a dashboard widget whose count matches the sidebar and the opened list, and for a small useful initial set without dashboard building.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws dashboard widgets.
 
 #### 2026-05-10 — Stat-card grid: 6 inventory metrics in a single `lg:grid-cols-3` block
 
@@ -416,6 +516,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Files & Attachments
 
+#### 2026-11-25 — Files bulk bar: Tags… button and dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no bulk selection; the bar itself is the recorded deviation of 2026-05-16 below. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (outline Button with an icon, Dialog) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: `frontend/src/pages/files/FilesListPage.tsx` adds an outline **Tags…** button (`Tag` icon, `data-testid="files-bulk-tags"`) between **Move to…** and **Delete selected**. It opens the items' bulk tag dialog, now `frontend/src/components/tags/BulkTagsDialog.tsx` with `kind="file"`: **Add tags** (with the new-tag input) and **Remove tags** (existing file tags only). The outcome is a toast; files that failed stay selected instead of opening a result dialog, so **Tags…** retries them. The shared `BulkActionBar` lets its action row wrap, which this third control needs on a phone.
+- **Why**: not present in mock. The issue asks for bulk add and remove of file tags. Reusing the items dialog keeps the two surfaces alike; keeping failed files selected with a toast rather than the items' result dialog is agent-suggested, since a file failure carries no reason the user can act on beyond retrying.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the toast-and-keep-selected outcome agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the file browser.
+
 #### 2026-11-25 — Files page: "More tags" picker for any file tag
 
 - **Issue/PR**: #2792 / PR (pending)
@@ -433,6 +542,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: The issue asks for "Linked to" with several entries in the file panel and for "remove attachment" and "delete file" as separate actions, with the delete action explaining the affected associations.
 - **Approved by**: user (explicit) — pre-approved for #2806 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` models a file with several attachments.
+
+#### 2026-11-25 — Files name the draft they are saved with
+
+- **Issue/PR**: #2812 / #2861
+- **Mock**: [`design-mocks/src/components/FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) "Attached to" names an item, a location or an area; the mock has no drafts.
+- **Reality**: A link to an open draft reads "Draft: {name}" ("Draft" when the draft has no name) everywhere a file's attachments are named: the "Linked to" list of `FileLinksList.tsx`, where it has the `FilePen` icon and links to `/commodities/new?draft={id}`, the summary on file cards, list rows and the Attach existing file dialog, the Files tab of the Trash, and the Delete confirmation. The label comes from `useLinkName` in `frontend/src/features/files/labels.ts`. The server leaves out a link to a draft being discarded, so such a file reads "Not attached to anything" until the discard finishes.
+- **Why**: not present in mock. A file saved with a draft is in the Files list; naming the draft lets the user find and continue it, and tells them that deleting the file takes it off the draft. The "Draft:" prefix keeps a draft from being taken for an item of the same name. Showing the draft rather than "Not attached to anything" is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the label agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws draft attachments.
 
 #### 2026-11-25 — "Attach an existing file" on the item Files tab and the location/area files panel
 
@@ -545,6 +663,17 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. #2804 asks for a page listing the sellers with their item counts, and for a confirmation naming the count before a seller is deleted.
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` adds a sellers view.
+
+### Item types
+
+#### 2026-11-25 — Item types page
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
+- **Reality**: `frontend/src/pages/itemTypes/ItemTypesListPage.tsx` at `/g/:slug/item-types` follows the Sellers page (#2804), which follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New type**, a search box that filters by the shown name on the client (`?q=`), and a card of `ItemTypeRow`s with the type's icon, its name (a link to the items list filtered by the type, inactive items shown), a secondary **Built-in** badge on the six built-in types, "N items · N in Trash", and edit / delete buttons on hover; the delete button is disabled on the group's last type. `ItemTypeFormDialog` takes a name and an icon from `ItemTypeIconPicker`, a grid of 38 Lucide icons as a radio group (`grid-cols-6 sm:grid-cols-8`, each a bordered icon tile, the selected one with a primary border and a `bg-primary/10` fill). A built-in type's name field starts empty with its translated name as the placeholder and a hint that an empty name keeps it. `ItemTypeDeleteDialog` replaces the confirm dialog: for a type no item has it confirms the delete; for a type items have, Trash included, it names the counts and asks, with a `Select` of the other types, where the items move, and its button reads **Move items and delete**. That is also how two types are merged.
+- **Why**: not present in mock. #2802 asks for types managed like tags (rename, merge, delete with an in-use check), each with a name and an icon. The icon set and its picker, the Built-in badge, the separate Trash count and the empty-name rule for built-in types are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; icon picker, Built-in badge, Trash count and empty-name rule agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 ### Forms & Validation
 
@@ -762,6 +891,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
 ### Navigation & App shell
+
+#### 2026-11-25 — Inbox entry with a count in the sidebar
+
+- **Issue/PR**: #2794 / PR #2867
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Dashboard then Locations in the Inventory group, with no per-row counts.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Inbox** (`Inbox` icon) after Dashboard, linking to `/g/:slug/inbox`, with a `SidebarMenuBadge` holding the server's count of records that need attention (`GET /inbox/count`). The badge is hidden while the count is zero or loading, and in the collapsed icon rail, as the primitive does. The label resolves through `lib/nav-labels.ts` (`common:nav.inbox`).
+- **Why**: not present in mock. #2794 asks for an Inbox entry in the sidebar with a counter.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the position after Dashboard agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Move the row if `inventario-design` places the inbox elsewhere.
+
+#### 2026-11-25 — Saved views section in the sidebar
+
+- **Issue/PR**: #2793 / #2839
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has fixed groups (Inventory, Group, Reports, Personal) and no per-row counts.
+- **Reality**: `frontend/src/features/saved-views/SidebarSavedViews.tsx` adds a **Saved views** `SidebarGroup` between Inventory and Group, listing the views the member pinned to their own sidebar (placement is per member; sharing pins a view for nobody else) in the group's order, each with its icon and a `SidebarMenuBadge` count (the shadcn primitive the mock vendors in [`design-mocks/src/components/ui/sidebar.tsx`](../../design-mocks/src/components/ui/sidebar.tsx) but does not use). A `SidebarGroupAction` gear opens the saved views page. The row is active while the items list shows that view. A view whose stored query cannot run is an `aria-disabled` row with a warning icon instead of a link. The group is left out while no view is pinned.
+- **Why**: not present in mock. #2793 asks for views in the sidebar with a count that matches the opened list.
+- **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws saved views in its sidebar.
+
+#### 2026-11-25 — Item types entry in the sidebar and the command palette
+
+- **Issue/PR**: #2802 / PR #2863
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Item types entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Item types** (`Shapes` icon) after Sellers in the Group section, linking to `/g/:slug/item-types`. `CommandPalette.tsx` lists the same entry after Sellers. Both resolve the label through `lib/nav-labels.ts` (`common:nav.itemTypes`).
+- **Why**: not present in mock. #2802 asks for a page that manages the group's item types.
+- **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
 #### 2026-11-25 — Sellers entry in the sidebar and the command palette
 
@@ -1164,9 +1320,9 @@ _None yet._
 
 - **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
-- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
-- **Why**: not present in mock. #2804 asks for the seller in the insurance report.
-- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements
+- **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values. When the sellers cannot be loaded, the seller of an item that has one stays empty with a small muted "Could not load the seller." line (`UnavailableNote`, hidden in print), and the rest of the report renders.
+- **Why**: not present in mock. #2804 asks for the seller in the insurance report. A failed sellers request should not take the whole report down (review of #2844).
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; the empty cell with a note asked for in the #2844 review
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller to the report.
 
 #### 2026-11-25 — Location report totals leave unknown prices out and say so

@@ -64,15 +64,17 @@ jobs:
         working-directory: go
 
       # The integration suite starts its own PostgreSQL when POSTGRES_TEST_DSN
-      # is unset (internal/pgtest, #1953). The server binary is downloaded on
-      # first use and cached here, so only a version bump pays for it.
+      # is unset (internal/pgtest, #1953). The server binaries and the
+      # embedded-postgres supervisor are downloaded on first use and cached
+      # here (v2 keeps them in the user cache directory), so only a version
+      # bump pays for them.
       - name: Cache the embedded PostgreSQL binaries
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6
         with:
-          path: ~/.embedded-postgres-go
-          key: embedded-postgres-${{ runner.os }}-${{ hashFiles('go/go.sum') }}
+          path: ~/.cache/embedded-postgres/v2
+          key: embedded-postgres-v2-${{ runner.os }}-${{ hashFiles('go/go.sum') }}
           restore-keys: |
-            embedded-postgres-${{ runner.os }}-
+            embedded-postgres-v2-${{ runner.os }}-
 
       - name: Run tests
         # tee keeps the per-package "coverage: N%" lines for the summary step;

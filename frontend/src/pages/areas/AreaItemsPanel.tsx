@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import {
   Link,
   useLocation as useRouterLocation,
@@ -45,16 +45,14 @@ import {
   COMMODITY_SORT_OPTIONS,
   COMMODITY_STATUSES,
   COMMODITY_STATUS_TONES,
-  COMMODITY_TYPES,
-  COMMODITY_TYPE_FALLBACK_ICON,
-  COMMODITY_TYPE_ICONS,
   COMMODITY_WARRANTY_STATUSES,
   warrantyStatus,
   type CommoditySortOption,
   type CommodityStatusValue,
-  type CommodityTypeValue,
   type CommodityWarrantyStatus,
 } from "@/features/commodities/constants"
+import { itemTypeIconFor } from "@/features/itemTypes/display"
+import { useItemTypeFilterOptions, useItemTypeLookup } from "@/features/itemTypes/hooks"
 import type { Commodity } from "@/features/commodities/api"
 import { primarySearchMatch, type CommoditySearchMatch } from "@/features/commodities/query"
 import { useTagLabel } from "@/features/tags/hooks"
@@ -100,7 +98,7 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
   const pageRaw = Number(searchParams.get("page") ?? "1")
   const page = Number.isFinite(pageRaw) && pageRaw >= 1 ? Math.floor(pageRaw) : 1
   const search = searchParams.get("q") ?? ""
-  const types = searchParams.getAll("type") as CommodityTypeValue[]
+  const types = useMemo(() => searchParams.getAll("type"), [searchParams])
   const statuses = searchParams.getAll("status") as CommodityStatusValue[]
   const warrantyFilter = searchParams.getAll("warranty") as CommodityWarrantyStatus[]
   const includeInactive = searchParams.get("inactive") === "1"
@@ -231,7 +229,7 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
     if (!opts?.keepPage) next.delete("page")
     setSearchParams(next, { replace: true })
   }
-  function toggleType(type: CommodityTypeValue) {
+  function toggleType(type: string) {
     updateParams((p) => {
       const cur = p.getAll("type")
       p.delete("type")
@@ -439,10 +437,17 @@ function StatCell({
   )
 }
 
+// The icon of an item's type, by slug: the group's type's icon, or the
+// generic one when the type is not known.
+function useItemTypeIcon() {
+  const lookup = useItemTypeLookup()
+  return (slug: string | undefined) => itemTypeIconFor(lookup.get(slug)?.type, slug)
+}
+
 interface ToolbarProps {
   searchInput: string
   onSearchInput: (v: string) => void
-  types: CommodityTypeValue[]
+  types: string[]
   statuses: CommodityStatusValue[]
   warrantyFilter: CommodityWarrantyStatus[]
   includeInactive: boolean
@@ -450,7 +455,7 @@ interface ToolbarProps {
   sortDesc: boolean
   viewMode: ViewMode
   hasFilters: boolean
-  onToggleType: (t: CommodityTypeValue) => void
+  onToggleType: (t: string) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onSetSort: (f: CommoditySortOption) => void
@@ -460,6 +465,7 @@ interface ToolbarProps {
 }
 
 function Toolbar(props: ToolbarProps) {
+  const typeOptions = useItemTypeFilterOptions(props.types)
   const { t } = useTranslation()
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="area-detail-items-toolbar">
@@ -499,19 +505,16 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuContent align="start" className="w-44">
           <DropdownMenuLabel>{t("commodities:filter.type")}</DropdownMenuLabel>
           <DropdownMenuSeparator />
-          {COMMODITY_TYPES.map((tp) => {
-            const Icon = COMMODITY_TYPE_ICONS[tp]
-            return (
-              <DropdownMenuCheckboxItem
-                key={tp}
-                checked={props.types.includes(tp)}
-                onCheckedChange={() => props.onToggleType(tp)}
-              >
-                <Icon aria-hidden="true" />
-                {t(`commodities:type.${tp}`)}
-              </DropdownMenuCheckboxItem>
-            )
-          })}
+          {typeOptions.map(({ slug, label, Icon }) => (
+            <DropdownMenuCheckboxItem
+              key={slug}
+              checked={props.types.includes(slug)}
+              onCheckedChange={() => props.onToggleType(slug)}
+            >
+              <Icon aria-hidden="true" />
+              {label}
+            </DropdownMenuCheckboxItem>
+          ))}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -682,6 +685,7 @@ interface RowListProps {
 }
 
 function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
+  const itemTypeIcon = useItemTypeIcon()
   const { t } = useTranslation()
   const tagLabel = useTagLabel("commodity")
   if (!slug) return null
@@ -694,9 +698,8 @@ function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
             const detailHref = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(row.id)}`
             const status = row.status as CommodityStatusValue | undefined
             const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-            const typeKey = row.type as CommodityTypeValue | undefined
-            const TypeIcon =
-              (typeKey && COMMODITY_TYPE_ICONS[typeKey]) || COMMODITY_TYPE_FALLBACK_ICON
+            const typeKey = row.type
+            const TypeIcon = itemTypeIcon(typeKey)
             const showStatusPill = status !== undefined && status !== "in_use"
             const wStatus = warrantyStatus({ warranty_expires_at: row.warranty_expires_at })
             return (
@@ -776,6 +779,7 @@ function List_({ rows, onPreview, currency, slug, matches }: RowListProps) {
 }
 
 function Grid({ rows, onPreview, currency, slug, matches }: RowListProps) {
+  const itemTypeIcon = useItemTypeIcon()
   const { t } = useTranslation()
   const tagLabel = useTagLabel("commodity")
   if (!slug) return null
@@ -787,9 +791,8 @@ function Grid({ rows, onPreview, currency, slug, matches }: RowListProps) {
           const detailHref = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(row.id)}`
           const status = row.status as CommodityStatusValue | undefined
           const tone = status ? COMMODITY_STATUS_TONES[status] : ""
-          const typeKey = row.type as CommodityTypeValue | undefined
-          const TypeIcon =
-            (typeKey && COMMODITY_TYPE_ICONS[typeKey]) || COMMODITY_TYPE_FALLBACK_ICON
+          const typeKey = row.type
+          const TypeIcon = itemTypeIcon(typeKey)
           const showStatusPill = status !== undefined && status !== "in_use"
           const wStatus = warrantyStatus({ warranty_expires_at: row.warranty_expires_at })
           return (

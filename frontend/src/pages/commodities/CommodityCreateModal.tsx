@@ -1,11 +1,11 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useNavigate } from "react-router-dom"
+import { useNavigate, useSearchParams } from "react-router-dom"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { useAreas } from "@/features/areas/hooks"
-import { useCreateCommodity } from "@/features/commodities/hooks"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
+import { useSubmitNewItem, type DraftRef } from "@/features/drafts/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -42,8 +42,11 @@ export function CommodityCreateModalRoute() {
   const slug = currentGroup?.slug
   const areas = useAreas()
   const locationsQuery = useLocations()
-  const create = useCreateCommodity()
+  const create = useSubmitNewItem()
   const toast = useAppToast()
+  // ?draft=<id> opens a server draft to finish it (#2812).
+  const [searchParams] = useSearchParams()
+  const resumeDraftId = searchParams.get("draft")
   // Local `open` drives the Radix close animation: flipping to false
   // starts the `data-state=closed` transition, then the setTimeout
   // pops the route once the transition has played. Initial value is
@@ -81,8 +84,8 @@ export function CommodityCreateModalRoute() {
     scheduleNavigate(() => navigate(-1))
   }
 
-  async function handleSubmit(values: CreateCommodityRequest) {
-    const created = await create.mutateAsync(values)
+  async function handleSubmit(values: CreateCommodityRequest, draft?: DraftRef) {
+    const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
     // Return the created commodity to the dialog so it can run
     // post-create work (uploading + linking pending files from
@@ -112,6 +115,7 @@ export function CommodityCreateModalRoute() {
 
   return (
     <CommodityFormDialog
+      key={resumeDraftId ?? "new"}
       open={open}
       onOpenChange={(o) => {
         if (!o) close()
@@ -123,6 +127,8 @@ export function CommodityCreateModalRoute() {
       onSubmit={handleSubmit}
       isPending={create.isPending}
       draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+      serverDrafts
+      resumeDraftId={resumeDraftId}
     />
   )
 }

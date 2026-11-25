@@ -224,6 +224,11 @@ type CommodityListOptions struct {
 	// are hidden, so a caller does not combine it with LentOut
 	// (services/commodityquery refuses the pair).
 	Trashed bool
+	// DraftsOnly keeps only the items marked as draft (Commodity.Draft),
+	// whatever their status. The default view hides drafts, so a caller
+	// sets IncludeInactive with it; without it nothing matches. It is not
+	// part of the item query contract: the inbox reads it (#2794).
+	DraftsOnly bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -308,6 +313,46 @@ func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
 	return n, true
 }
 
+// restoredDraftCtxKey keys the archived state of a draft that a backup
+// restore recreates (see WithRestoredDraft).
+type restoredDraftCtxKey struct{}
+
+// RestoredDraft is the archived revision and timestamps of a draft.
+type RestoredDraft struct {
+	Revision  int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// WithRestoredDraft marks ctx so a CommodityDraftRegistry.Create or
+// CreateOrGet that creates a draft keeps the archived revision and timestamps
+// instead of starting at revision 1 now, so a restored draft keeps its place
+// in the drafts list. It is the backup restore's seam, a context signal for
+// the same reason as WithRestoreAssetNumber: the API path never sets it.
+func WithRestoredDraft(ctx context.Context, d RestoredDraft) context.Context {
+	return context.WithValue(ctx, restoredDraftCtxKey{}, d)
+}
+
+// RestoredDraftFromContext returns the state set by WithRestoredDraft. A
+// revision below 1 or a zero timestamp is replaced by what a new draft gets:
+// revision 1 and now.
+func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft, bool) {
+	d, ok := ctx.Value(restoredDraftCtxKey{}).(RestoredDraft)
+	if !ok {
+		return RestoredDraft{}, false
+	}
+	if d.Revision < 1 {
+		d.Revision = 1
+	}
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = now
+	}
+	if d.UpdatedAt.IsZero() {
+		d.UpdatedAt = d.CreatedAt
+	}
+	return d, true
+}
+
 // CommodityRegistry stores items.
 //
 // Trash: an item moved to Trash keeps its row with deleted_at set
@@ -381,6 +426,11 @@ type CommodityRegistry interface {
 	// not apply.
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
+	// CountEach counts, for each entry of opts, the commodities it selects,
+	// as ListPaginated would report in its total, without reading the rows.
+	// The counts are read from one snapshot, so they describe one moment.
+	CountEach(ctx context.Context, opts []CommodityListOptions) ([]int, error)
+
 	// ListBrands returns the brands the commodities of the group carry, with
 	// how many carry each, for the brand input's suggestions. Every live
 	// commodity counts, drafts and inactive items included; items in Trash
@@ -389,6 +439,11 @@ type CommodityRegistry interface {
 	// empty query matches every brand. CountCommodityBrands states the rules
 	// and the order; at most limit brands are returned.
 	ListBrands(ctx context.Context, query string, limit int) ([]CommodityBrandCount, error)
+
+	// ListIDs returns the ids of at most limit commodities opts selects, in
+	// no particular order. It reads ids only, so a caller can tell which
+	// items a query selects without loading them. Sorting does not apply.
+	ListIDs(ctx context.Context, opts CommodityListOptions, limit int) ([]string, error)
 
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status, trashed items included. Used by the
@@ -531,6 +586,16 @@ type FileRegistry interface {
 	// own. ErrNotFound when the file does not exist or is already in Trash.
 	Trash(ctx context.Context, id, deletedBy, withCommodityID string, at time.Time) error
 
+	// TrashUnlessHeld moves a live file to Trash unless a link other than
+	// the one to the entity named by entityType and entityID holds it live,
+	// and reports whether it did. Every link holds a file live except one to
+	// an item in Trash; when such links are all that is left, the file goes
+	// to Trash with the item linked first, so restoring that item brings the
+	// file back. The check and the update are one statement, so a link added
+	// concurrently keeps the file. Discarding a draft calls it for each of
+	// the draft's files.
+	TrashUnlessHeld(ctx context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error)
+
 	// Restore makes a trashed file live again. ErrNotFound when the file does
 	// not exist or is live.
 	Restore(ctx context.Context, id string) error
@@ -551,6 +616,10 @@ type FileRegistry interface {
 	// ListByLinkedEntity returns the files linked to an entity through
 	// file_links, newest first.
 	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// CountLinkedTo returns, for each of the entities of entityType, how many
+	// live files are linked to it. Entities without files are absent.
+	CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error)
 
 	// ListByLinkedEntityAndMeta returns the files whose link to the entity
 	// carries the given meta (bucket), newest first.
@@ -944,7 +1013,24 @@ type TagRegistry interface {
 	//
 	// Pass newSlug == "" to keep the existing slug. Empty newLabel /
 	// newColor leave the corresponding fields untouched.
-	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error)
+	//
+	// Saved views name item tags by slug. When the slug of an item tag
+	// changes and rewriteViews is not nil, rewriteViews is called for every
+	// saved view of the tag's group, the personal views of every member
+	// included, and the views it changes are stored in the same transaction
+	// under the group's saved view lock. The rename holds the locks of its
+	// old and new slug until it commits, so another tag cannot take the
+	// freed slug while the views still name it: a view keeps following the
+	// tag it was saved with.
+	//
+	// It returns the tag as written and the slug it held when the lock was
+	// taken, which is the slug the references were rewritten from.
+	RenameAtomic(
+		ctx context.Context,
+		id, newLabel, newSlug string,
+		newColor models.TagColor,
+		rewriteViews SavedViewTagRewrite,
+	) (renamed *models.Tag, previousSlug string, err error)
 
 	// DeleteAtomic re-checks usage, strips JSONB references (when
 	// force=true), and deletes the tags row — all under a single
@@ -1186,6 +1272,85 @@ type SupplyLinkRegistry interface {
 	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
+// SavedViewTally counts the views of one group. CreateChecked and UpdateFunc
+// take it under the group's write lock, so a limit checked against it holds
+// when the write lands.
+type SavedViewTally struct {
+	// Own counts the views the registry's user created in the group.
+	Own int
+	// Shared counts the views shared with the group.
+	Shared int
+}
+
+// SavedViewPlacementPatch changes where a member shows a view. A nil field
+// keeps the stored value, or false when the member has no placement yet.
+type SavedViewPlacementPatch struct {
+	ShowInSidebar   *bool
+	ShowOnDashboard *bool
+}
+
+// SavedViewRegistry stores the saved views of one group and where each
+// member shows them. A user registry sees the views its user created and
+// every view shared with the group; Get, Update and Delete answer
+// ErrNotFound for another member's personal view, so a view a member cannot
+// see is indistinguishable from one that does not exist. Who may change a
+// view they can see is decided by the service. A service registry sees every
+// row of every group.
+type SavedViewRegistry interface {
+	// Create stores a view after every view of the group: its SortOrder is
+	// one past the highest in the group, whatever the caller set. Update
+	// keeps the stored SortOrder; Reorder is the only way to change it.
+	// Get, List, Update, Delete and Count follow the visibility rule above.
+	// Deleting a view deletes its placements.
+	Registry[models.SavedView]
+
+	// CreateChecked is Create under the group's write lock, for a user
+	// registry. check gets the tally taken under that lock; an error from
+	// it is returned and nothing is stored. When placement is not nil it is
+	// stored as the user's placement of the new view in the same
+	// transaction.
+	CreateChecked(ctx context.Context, view models.SavedView, placement *SavedViewPlacementPatch, check func(SavedViewTally) error) (*models.SavedView, error)
+
+	// UpdateFunc reads the visible view id under the group's write lock and
+	// writes back what mutate leaves of it. mutate also gets the tally taken
+	// under the lock; an error from it is returned and nothing is written.
+	// The id, tenant, group, creator, SortOrder and CreatedAt are kept
+	// whatever mutate does. When the view stops being shared, the
+	// placements other members had for it are deleted. When placement is
+	// not nil and the user still sees the view as written, it is stored as
+	// the user's placement in the same transaction, so the view and the
+	// placement are written together or not at all.
+	UpdateFunc(
+		ctx context.Context,
+		id string,
+		placement *SavedViewPlacementPatch,
+		mutate func(view *models.SavedView, tally SavedViewTally) error,
+	) (*models.SavedView, error)
+
+	// Placements returns the placements of the user registry's user for the
+	// views they see, keyed by view ID. A view without an entry is shown
+	// nowhere.
+	Placements(ctx context.Context) (map[string]models.SavedViewPlacement, error)
+
+	// SetPlacement changes where the user registry's user shows a view they
+	// see and returns the stored placement. An unknown or invisible view
+	// fails with ErrNotFound.
+	SetPlacement(ctx context.Context, viewID string, patch SavedViewPlacementPatch) (*models.SavedViewPlacement, error)
+
+	// Reorder gives the views named in ids, which must be visible and
+	// distinct, the positions they hold now, sorted and handed out in the
+	// order of ids. Views not named keep their positions, so a member can
+	// reorder the views they may edit without moving the others. An id that
+	// is unknown, invisible or repeated fails with ErrNotFound and nothing
+	// is changed.
+	Reorder(ctx context.Context, ids []string) error
+}
+
+// SavedViewTagRewrite returns the query a saved view gets when the item tag
+// slug from is renamed to to, and whether the view changed. See
+// TagRegistry.RenameAtomic.
+type SavedViewTagRewrite func(view models.SavedView, from, to string) (query string, changed bool)
+
 // MaintenanceListOptions narrows the result of
 // MaintenanceScheduleRegistry.ListPaginated.
 type MaintenanceListOptions struct {
@@ -1277,6 +1442,92 @@ type CommodityReminderRegistry interface {
 	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityReminder, error)
 }
 
+// CommodityDraftRegistry is the group-scoped registry of commodity_drafts,
+// the unfinished items saved on the server (#2812). A draft is not an item:
+// no CommodityRegistry read returns it.
+//
+// List and Count see open and promoted drafts; ListOpen sees open drafts
+// only. A promoted draft keeps its row with the values cleared, so a
+// repeated create with its client key or a repeated promotion finds it.
+type CommodityDraftRegistry interface {
+	Registry[models.CommodityDraft]
+
+	// CreateOrGet stores a new open draft unless the group already has a
+	// draft with the same ClientKey, which is returned unchanged with
+	// created=false. The registry sets the ids, tenant, group, author,
+	// status, revision and timestamps; a backup restore passes the archived
+	// revision and timestamps through WithRestoredDraft.
+	CreateOrGet(ctx context.Context, draft models.CommodityDraft) (stored *models.CommodityDraft, created bool, err error)
+
+	// GetByClientKey returns the group's draft with the key; ErrNotFound
+	// when there is none.
+	GetByClientKey(ctx context.Context, clientKey string) (*models.CommodityDraft, error)
+
+	// ListOpen returns a page of the group's open drafts, most recently
+	// saved first, with the total.
+	ListOpen(ctx context.Context, offset, limit int) ([]*models.CommodityDraft, int, error)
+
+	// OpenIDs returns the ids of every open draft of the group, in the order
+	// of ListOpen. It reads ids only, for a caller that counts the drafts
+	// or merges them with other records without loading their values.
+	OpenIDs(ctx context.Context) ([]string, error)
+
+	// SaveValues replaces the values of an open draft and increments its
+	// revision. revision is the revision the values were based on:
+	// ErrDraftRevisionConflict when it is not the current one,
+	// ErrDraftPromoted when the draft is promoted, ErrDraftDiscarded when
+	// its discard has begun, ErrNotFound when it does not exist.
+	SaveValues(ctx context.Context, id string, revision int, values models.CommodityDraftValues) (*models.CommodityDraft, error)
+
+	// Promote turns an open draft into an item in one step: it creates the
+	// item from commodity the way CommodityRegistry.Create does, moves the
+	// draft's file links to the item, and marks the draft promoted with its
+	// values cleared and promotionKey stored. Either all of it happens or
+	// none of it.
+	//
+	// A repeat with the same promotionKey changes nothing and returns the
+	// promoted draft with a nil Commodity, whatever revision says; the
+	// caller reads the item through PromotedCommodityID. Another key on a
+	// promoted draft gets ErrDraftPromoted. On an open draft revision must
+	// be the current one (ErrDraftRevisionConflict); a draft whose discard
+	// has begun gets ErrDraftDiscarded. The caller validates the item and
+	// normalizes its tags beforehand.
+	Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (DraftPromotion, error)
+
+	// AttachFile links a file to an open draft, holding the draft row so a
+	// promotion or a discard cannot happen between the check and the
+	// insert. It returns the existing link with created=false when the file
+	// is already attached; ErrDraftPromoted or ErrDraftDiscarded when the
+	// draft is not open, ErrNotFound when the draft or the file is not in
+	// the group.
+	AttachFile(ctx context.Context, draftID string, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// MarkDiscarding begins the discard of an open draft: from then on it
+	// cannot be saved, promoted or given files, and no list shows it. On a
+	// draft already being discarded it returns the draft unchanged, so a
+	// discard that stopped half way can be finished. ErrDraftPromoted when
+	// the draft is an item, ErrNotFound when it does not exist.
+	MarkDiscarding(ctx context.Context, id string) (*models.CommodityDraft, error)
+
+	// DeleteDiscarding deletes a draft whose discard has begun; ErrNotFound
+	// when there is no such draft.
+	DeleteDiscarding(ctx context.Context, id string) error
+
+	// ListDiscarding returns, oldest first, at most limit of the group's
+	// drafts whose discard began before the given time and did not finish.
+	// MarkDiscarding sets UpdatedAt, so it is the time the discard began.
+	ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error)
+}
+
+// DraftPromotion is the result of CommodityDraftRegistry.Promote.
+type DraftPromotion struct {
+	// Draft is the draft after the call, in the promoted state.
+	Draft *models.CommodityDraft
+	// Commodity is the item this call created. It is nil when the draft
+	// was promoted before the call.
+	Commodity *models.Commodity
+}
+
 // SellerRegistry is the group-scoped registry of sellers (#2804). Create and
 // Update normalize the seller (models.Seller.Normalize) and fail with
 // ErrAlreadyExists when another seller of the group has the same name key.
@@ -1292,6 +1543,68 @@ type SellerRegistry interface {
 	// at that seller, drafts and inactive items included and items in Trash
 	// left out. A seller without items is absent from the map.
 	ItemCounts(ctx context.Context) (map[string]int, error)
+}
+
+// ItemTypeUsage counts the items of a group that have one item type.
+type ItemTypeUsage struct {
+	// Live counts the items outside Trash, drafts and inactive items
+	// included.
+	Live int
+	// Trashed counts the items in Trash.
+	Trashed int
+}
+
+// Total is the number of items, in Trash or not, that have the type.
+func (u ItemTypeUsage) Total() int {
+	return u.Live + u.Trashed
+}
+
+// ItemTypeRegistry is the group-scoped registry of item types (#2802).
+//
+// Create and Update normalize the type (models.ItemType.Normalize) and fail
+// with ErrAlreadyExists when another type of the group has the same name
+// key. Create gives the type a slug made from its name, unique in the
+// group and never one of a built-in type, unless the caller sets one (the
+// backup restore keeps the archived slug when it is free). Update keeps the
+// stored slug. Create fails with ErrItemTypeLimit when the group already has
+// models.MaxItemTypesPerGroup types.
+//
+// A group with no item types has never been seeded: the user registry's
+// List, Create and the commodity registries' writes of a built-in slug seed
+// the built-in types into it first. Delete is DeleteReassigning without a
+// target.
+type ItemTypeRegistry interface {
+	Registry[models.ItemType]
+
+	// GetBySlug returns the type with the given slug, or ErrNotFound.
+	GetBySlug(ctx context.Context, slug models.CommodityType) (*models.ItemType, error)
+
+	// GetByName returns the type whose name key equals the key of name, or
+	// ErrNotFound. A built-in type with no name of its own is found by its
+	// English default name.
+	GetByName(ctx context.Context, name string) (*models.ItemType, error)
+
+	// ItemCounts returns, per type slug, how many items of the group have
+	// that type. A slug without items is absent from the map.
+	ItemCounts(ctx context.Context) (map[models.CommodityType]ItemTypeUsage, error)
+
+	// DeleteReassigning deletes the type with id. When items of the group,
+	// those in Trash included, have it, they are first given the type
+	// reassignTo, in the same transaction, and the count of moved items is
+	// returned; with an empty reassignTo the delete fails with
+	// ErrItemTypeInUse instead. A reassignTo that is not another type of
+	// the group fails with ErrInvalidInput. The last type of a group cannot
+	// be deleted (ErrLastItemType).
+	DeleteReassigning(ctx context.Context, id, reassignTo string) (int, error)
+
+	// EnsureBuiltins seeds the built-in types into the registry's group when
+	// the group has no item types, and returns how many it created.
+	EnsureBuiltins(ctx context.Context) (int, error)
+
+	// BackfillBuiltins seeds the built-in types into every group that has
+	// no item types, one group per transaction, and returns how many types
+	// it created. Service registry only.
+	BackfillBuiltins(ctx context.Context) (int, error)
 }
 
 // CommodityReminderSendRegistry records which reminder emails the worker
@@ -2801,7 +3114,9 @@ type Set struct {
 	SupplyLinkRegistry             SupplyLinkRegistry
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
+	CommodityDraftRegistry         CommodityDraftRegistry
 	SellerRegistry                 SellerRegistry
+	ItemTypeRegistry               ItemTypeRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -2896,7 +3211,9 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
+		validation.Field(&s.CommodityDraftRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
+		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

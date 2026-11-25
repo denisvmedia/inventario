@@ -193,6 +193,41 @@ export function bulkDelete(
   ]
 }
 
+// bulkUpdate backs POST /files/bulk-update. onRequest receives the request
+// attributes; respond answers for them, by default every id succeeded.
+export function bulkUpdate(
+  slug: string,
+  opts: {
+    onRequest?: (attributes: { ids: string[]; patch: unknown }) => void
+    respond?: (attributes: { ids: string[]; patch: unknown }) => {
+      succeeded?: string[]
+      skipped?: { id: string; name: string; reason: string }[]
+      failed?: { id: string; name: string; code: string; error: string }[]
+    }
+  } = {}
+) {
+  return [
+    http.post(apiUrl(`/g/${encodeURIComponent(slug)}/files/bulk-update`), async ({ request }) => {
+      const body = (await request.json()) as {
+        data: { attributes: { ids: string[]; patch: unknown } }
+      }
+      const attributes = body.data.attributes
+      opts.onRequest?.(attributes)
+      const result = opts.respond?.(attributes) ?? { succeeded: attributes.ids }
+      return HttpResponse.json({
+        data: {
+          type: "files.bulk_result",
+          attributes: {
+            succeeded: result.succeeded ?? [],
+            skipped: result.skipped ?? [],
+            failed: result.failed ?? [],
+          },
+        },
+      })
+    }),
+  ]
+}
+
 export function uploadCapacity(
   slug: string,
   opts: { canStart?: boolean; retryAfter?: number } = {}

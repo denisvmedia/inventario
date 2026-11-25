@@ -194,6 +194,13 @@ export interface TagIndex {
   // the muted color.
   resolve: (slug: string) => ResolvedTag
   isLoading: boolean
+  // The catalogue failed to load: tags is empty, but that says nothing
+  // about which tags exist.
+  isError: boolean
+  // tags is the previous group's catalogue, kept while the current group's
+  // loads after a group switch: it resolves labels, but says nothing about
+  // which tags exist in the current group.
+  isPlaceholderData: boolean
 }
 
 // useTagIndex resolves slugs against the group's tags of one kind. It falls
@@ -203,7 +210,7 @@ export interface TagIndex {
 export function useTagIndex(kind: TagKind): TagIndex {
   const ctx = useOptionalCurrentGroup()
   const groupSlug = ctx?.currentGroup?.slug ?? ""
-  const { data, isLoading } = useTagCatalog(kind)
+  const { data, isLoading, isError, isPlaceholderData } = useTagCatalog(kind)
   // A Map, not an object literal: a slug such as "constructor" must not
   // resolve to an Object.prototype member.
   const { tags, bySlug } = useMemo(() => {
@@ -225,7 +232,13 @@ export function useTagIndex(kind: TagKind): TagIndex {
     (slug: string): ResolvedTag => bySlug.get(slug) ?? { slug, label: slug, color: "muted" },
     [bySlug]
   )
-  return { tags, resolve, isLoading: isLoading && groupSlug.length > 0 }
+  return {
+    tags,
+    resolve,
+    isLoading: isLoading && groupSlug.length > 0,
+    isError,
+    isPlaceholderData,
+  }
 }
 
 // useTagLabel is useTagIndex for callers that only show the label.

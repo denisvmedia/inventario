@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
 import { useNavigate, useParams, useSearchParams } from "react-router-dom"
-import { ChevronLeft, ChevronRight, Search, Trash2, Upload, X } from "lucide-react"
+import { ChevronLeft, ChevronRight, Search, Tag, Trash2, Upload, X } from "lucide-react"
 
 import { CategoryTiles } from "@/components/files/CategoryTiles"
 import { FileCollection } from "@/components/files/FileCollection"
@@ -32,10 +32,12 @@ import {
 } from "@/features/files/listContext"
 import type { FileCategory, FileCategoryCounts } from "@/features/files/api"
 import { useTagIndex } from "@/features/tags/hooks"
+import { BulkTagsDialog, type BulkTagsChange } from "@/components/tags/BulkTagsDialog"
 import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
 import {
   useBulkDeleteFiles,
   useBulkReclassifyFiles,
+  useBulkUpdateFileTags,
   useFileCategoryCounts,
   useFiles,
 } from "@/features/files/hooks"
@@ -101,6 +103,8 @@ export function FilesListPage() {
   )
   const bulkDelete = useBulkDeleteFiles()
   const bulkReclassify = useBulkReclassifyFiles()
+  const bulkTags = useBulkUpdateFileTags()
+  const [tagsDialogOpen, setTagsDialogOpen] = useState(false)
 
   // useMemo with a stable reference: a `?? []` fallback would mint a
   // fresh array each render and bust the downstream tag/sibling memos.
@@ -250,6 +254,55 @@ export function FilesListPage() {
     } catch (err) {
       toast.error(err instanceof Error ? err.message : String(err))
     }
+  }
+
+  // Adds and removes tags on the selected files. Files that fail stay
+  // selected, so opening the dialog again retries just those. The dialog can
+  // be dismissed while the request runs, and the user can then change the
+  // filters or the selection: the outcome replaces the selection only while
+  // it is still the one the request was sent for (the same Set, since every
+  // change makes a new one).
+  async function onBulkTags(change: BulkTagsChange) {
+    const sent = selected
+    const ids = [...sent]
+    if (!ids.length) return
+    try {
+      const result = await bulkTags.mutateAsync({ ids, change })
+      setTagsDialogOpen(false)
+      // Files whose request failed may have changed: they stay selected with
+      // the failed ones, to check them and send the change again.
+      const keep = [...result.failed.map((f) => f.id), ...result.unknown]
+      setSelected((prev) => (prev === sent ? new Set(keep) : prev))
+      const unknown =
+        result.unknown.length > 0
+          ? { description: t("files:bulk.tagsUnknown", { count: result.unknown.length }) }
+          : undefined
+      if (result.failed.length > 0 || result.unknown.length > 0) {
+        toast.warning(
+          t("files:bulk.tagsPartial", {
+            succeeded: result.succeeded.length,
+            failed: result.failed.length,
+          }),
+          unknown
+        )
+      } else if (result.succeeded.length === 0) {
+        toast.info(tagsUnchangedMessage(change))
+      } else {
+        toast.success(t("files:bulk.tagsUpdated", { count: result.succeeded.length }))
+      }
+    } catch {
+      toast.error(t("files:bulk.tagsError"))
+    }
+  }
+
+  // tagsUnchangedMessage says why a tag change changed no file, naming the
+  // part that did nothing: removing a tag no file has is not "already had".
+  function tagsUnchangedMessage(change: BulkTagsChange): string {
+    const adds = change.add.length > 0
+    const removes = change.remove.length > 0
+    if (adds && removes) return t("files:bulk.tagsUnchangedBoth")
+    if (removes) return t("files:bulk.tagsNotPresent")
+    return t("files:bulk.tagsUnchanged")
   }
 
   async function onBulkDelete() {
@@ -463,6 +516,16 @@ export function FilesListPage() {
             <option value="other">{t("files:categoryOther")}</option>
           </select>
           <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setTagsDialogOpen(true)}
+            disabled={bulkTags.isPending}
+            data-testid="files-bulk-tags"
+          >
+            <Tag className="mr-2 size-4" aria-hidden="true" />
+            {t("files:bulk.tagsButton")}
+          </Button>
+          <Button
             variant="destructive"
             size="sm"
             onClick={onBulkDelete}
@@ -474,6 +537,14 @@ export function FilesListPage() {
           </Button>
         </BulkActionBar>
       ) : null}
+      <BulkTagsDialog
+        kind="file"
+        open={tagsDialogOpen}
+        onOpenChange={setTagsDialogOpen}
+        count={selected.size}
+        isPending={bulkTags.isPending}
+        onSubmit={onBulkTags}
+      />
 
       {filesQuery.error ? (
         <Alert variant="destructive">

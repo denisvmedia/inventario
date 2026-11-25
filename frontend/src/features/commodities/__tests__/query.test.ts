@@ -4,6 +4,8 @@ import {
   COMMODITY_QUERY_URL_PARAMS,
   DEFAULT_COMMODITY_QUERY,
   commodityListHref,
+  commodityQueryFromApiQuery,
+  commodityQueryToApiQuery,
   commodityQueryToListOptions,
   commoditySellerHref,
   commodityTagHref,
@@ -11,6 +13,8 @@ import {
   listOptionsToParams,
   parseCommodityQuery,
   primarySearchMatch,
+  sameCommodityQuery,
+  unreadApiQueryParam,
   unreadableTagParamCount,
   withIncludedTag,
   withTagFilter,
@@ -311,6 +315,98 @@ describe("listOptionsToParams", () => {
       "q=drill&trashed=true"
     )
     expect(listOptionsToParams({ trashed: false }).has("trashed")).toBe(false)
+  })
+})
+
+describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
+  it("round-trips every condition through the API query string", () => {
+    expect(commodityQueryFromApiQuery(commodityQueryToApiQuery(FULL))).toEqual({
+      ...FULL,
+      types: [...FULL.types].sort(),
+      sellerIds: [...FULL.sellerIds].sort(),
+      statuses: [...FULL.statuses].sort(),
+      warrantyStatuses: [...FULL.warrantyStatuses].sort(),
+      tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },
+    })
+  })
+
+  it("writes the sort and the inactive switch even at their defaults", () => {
+    expect(commodityQueryToApiQuery(DEFAULT_COMMODITY_QUERY)).toBe(
+      "include_inactive=false&sort=name"
+    )
+  })
+
+  it("reads an absent include_inactive as the server default", () => {
+    expect(commodityQueryFromApiQuery("lent_out=true").includeInactive).toBe(true)
+    expect(commodityQueryFromApiQuery("include_inactive=false").includeInactive).toBe(false)
+  })
+
+  it("maps the API names onto the query", () => {
+    const q = commodityQueryFromApiQuery(
+      "area_id=a1&warranty_status=expiring&no_tags=true&include_inactive=false&sort=-registered_date"
+    )
+    expect(q.areaId).toBe("a1")
+    expect(q.warrantyStatuses).toEqual(["expiring"])
+    expect(q.tags.untagged).toBe(true)
+    expect(q.sort).toBe("registered_date")
+    expect(q.sortDesc).toBe(true)
+  })
+
+  describe("unreadApiQueryParam", () => {
+    // The server stores Go's url.Values encoding: keys sorted, and the
+    // include_inactive default left out.
+    const serverForm = (raw: string) => {
+      const entries = [...new URLSearchParams(raw)]
+        .filter(([name, value]) => !(name === "include_inactive" && value === "true"))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      return new URLSearchParams(entries).toString()
+    }
+
+    it("reads every condition the list writes, in the server's form", () => {
+      expect(unreadApiQueryParam(serverForm(commodityQueryToApiQuery(FULL)))).toBeUndefined()
+      expect(
+        unreadApiQueryParam(serverForm(commodityQueryToApiQuery(DEFAULT_COMMODITY_QUERY)))
+      ).toBeUndefined()
+      expect(unreadApiQueryParam("")).toBeUndefined()
+      expect(unreadApiQueryParam("lent_out=true")).toBeUndefined()
+      expect(unreadApiQueryParam("q=+drill+&sort=name")).toBeUndefined()
+      expect(unreadApiQueryParam("sort=name&tags=red%2Cblue")).toBeUndefined()
+    })
+
+    it("names a parameter the list would drop", () => {
+      expect(unreadApiQueryParam("item_type=abc&sort=name")).toBe("item_type")
+    })
+
+    it("names a value the list would read as something else", () => {
+      expect(unreadApiQueryParam("sort=-unknown")).toBe("sort")
+      expect(unreadApiQueryParam("sort=unknown")).toBe("sort")
+    })
+  })
+
+  it("ignores parameters outside the contract", () => {
+    expect(commodityQueryFromApiQuery("page=3&per_page=5&include_inactive=false")).toEqual(
+      DEFAULT_COMMODITY_QUERY
+    )
+  })
+
+  it("compares queries in the stored form", () => {
+    const a = { ...DEFAULT_COMMODITY_QUERY, types: ["other", "equipment"] }
+    const b = { ...DEFAULT_COMMODITY_QUERY, types: ["equipment", "other"] }
+    expect(sameCommodityQuery(a, b)).toBe(true)
+    expect(sameCommodityQuery(a, { ...b, sortDesc: true })).toBe(false)
+  })
+
+  // The server normalizes tag slugs and drops repeats before it stores them.
+  it("compares tag slugs as the server stores them", () => {
+    const tags = (include: string[], exclude: string[] = []) => ({
+      ...DEFAULT_COMMODITY_QUERY,
+      tags: { ...DEFAULT_COMMODITY_QUERY.tags, include, exclude },
+    })
+    expect(sameCommodityQuery(tags(["Fragile"]), tags(["fragile"]))).toBe(true)
+    expect(sameCommodityQuery(tags(["fragile", "FRAGILE"]), tags(["fragile"]))).toBe(true)
+    expect(sameCommodityQuery(tags([], ["Power Tools"]), tags([], ["power-tools"]))).toBe(true)
+    expect(sameCommodityQuery(tags(["fragile"]), tags(["fragile-2"]))).toBe(false)
+    expect(sameCommodityQuery(tags(["fragile"]), tags([], ["fragile"]))).toBe(false)
   })
 })
 

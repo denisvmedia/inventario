@@ -158,6 +158,9 @@ const TagsListPage = lazy(() =>
 const SellersListPage = lazy(() =>
   import("@/pages/sellers/SellersListPage").then((m) => ({ default: m.SellersListPage }))
 )
+const ItemTypesListPage = lazy(() =>
+  import("@/pages/itemTypes/ItemTypesListPage").then((m) => ({ default: m.ItemTypesListPage }))
+)
 const TrashPage = lazy(() =>
   import("@/pages/trash/TrashPage").then((m) => ({ default: m.TrashPage }))
 )
@@ -172,11 +175,17 @@ const MaintenanceListPage = lazy(() =>
     default: m.MaintenanceListPage,
   }))
 )
+const SavedViewsPage = lazy(() =>
+  import("@/pages/saved-views/SavedViewsPage").then((m) => ({ default: m.SavedViewsPage }))
+)
 const WarrantiesListPage = lazy(() =>
   import("@/pages/warranties/WarrantiesListPage").then((m) => ({ default: m.WarrantiesListPage }))
 )
 const UpcomingPage = lazy(() =>
   import("@/pages/upcoming/UpcomingPage").then((m) => ({ default: m.UpcomingPage }))
+)
+const InboxPage = lazy(() =>
+  import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))
 )
 const ExportsListPage = lazy(() =>
   import("@/pages/exports/ExportsListPage").then((m) => ({ default: m.ExportsListPage }))
@@ -410,7 +419,9 @@ export function AppRoutes() {
               <Route path="files/:id" element={<FilesListPage />} />
               <Route path="files/:id/edit" element={<FileEditPage />} />
               <Route path="tags" element={<TagsListPage />} />
+              <Route path="views" element={<SavedViewsPage />} />
               <Route path="sellers" element={<SellersListPage />} />
+              <Route path="item-types" element={<ItemTypesListPage />} />
               <Route path="lent" element={<LoansListPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="in-service" element={<ServicesListPage />} />
@@ -432,6 +443,9 @@ export function AppRoutes() {
               {/* Upcoming (#2805) — item reminders, warranty expiries, loan
                   and maintenance due dates in one date-ordered list. */}
               <Route path="upcoming" element={<UpcomingPage />} />
+              {/* Inbox (#2794): drafts and items marked as draft, the
+                  group's unfinished work, with the step that clears each. */}
+              <Route path="inbox" element={<InboxPage />} />
               {/* Reports (#1370). Landing + the print-capable insurance
                   report. The report reads its selection (mode / item /
                   location) from the query string. */}

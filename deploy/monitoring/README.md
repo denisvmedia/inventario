@@ -86,7 +86,13 @@ renamed in `go/internal/metrics`, update the matching panel/rule here.
 | `inventario_emails_processed_total`               | counter         | emails processed by status        |
 | `inventario_tenants/users/…/commodities/files`    | gauge           | business entity counts            |
 | `inventario_file_storage_bytes`                   | gauge           | file storage by category          |
-| `up{job="inventario"}`                            | synthetic       | scrape target up                  |
+| `up{job=~"$job"}`                                 | synthetic       | scrape target up                  |
+
+The hidden `job` variable holds the scrape jobs that report
+`inventario_http_requests_in_flight`. In this compose stack that is `inventario`.
+Under the Prometheus Operator the job is named after the Service or the PodMonitor
+(for example `inventario-inventario`), so a fixed `job="inventario"` would find
+nothing there.
 
 ## Split deployments (`run apiserver` + `run workers`)
 

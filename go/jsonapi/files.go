@@ -376,7 +376,7 @@ func (fd *FileLinkRequestData) ValidateWithContext(ctx context.Context) error {
 // an image and the entity's document bucket for anything else. The first
 // attachment into a bucket given here sets the file's category from it.
 type FileLinkRequestAttributes struct {
-	EntityType string `json:"entity_type" example:"commodity" enums:"commodity,location,area"`
+	EntityType string `json:"entity_type" example:"commodity" enums:"commodity,location,area,draft"`
 	EntityID   string `json:"entity_id"`
 	Meta       string `json:"meta,omitempty" example:"documents" enums:"images,documents,files"`
 }
@@ -394,7 +394,7 @@ func (fa FileLinkRequestAttributes) ValidateWithContext(ctx context.Context) err
 	}
 	return validation.ValidateStructWithContext(ctx, &fa,
 		validation.Field(&fa.EntityType, validation.Required, validation.In(
-			models.FileLinkCommodity, models.FileLinkLocation, models.FileLinkArea,
+			models.FileLinkCommodity, models.FileLinkLocation, models.FileLinkArea, models.FileLinkDraft,
 		)),
 		validation.Field(&fa.EntityID, validation.Required, validation.Length(1, 255)),
 		validation.Field(&fa.Meta, validation.In(metas...)),

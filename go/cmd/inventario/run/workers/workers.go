@@ -177,6 +177,7 @@ func (c *Command) run() error {
 			bootstrap.StartWeeklyDigestWorker,
 			bootstrap.StartBusinessMetricsWorker,
 			bootstrap.StartAssetNumberBackfill,
+			bootstrap.StartItemTypeBackfill,
 			bootstrap.StartFileChecksumBackfill,
 		}},
 	}

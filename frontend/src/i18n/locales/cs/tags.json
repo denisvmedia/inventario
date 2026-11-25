@@ -1,4 +1,9 @@
 {
+  "bulkEdit": {
+    "add": "Přidat štítky",
+    "confirm": "Použít",
+    "remove": "Odebrat štítky"
+  },
   "color": {
     "amber": "Jantarová",
     "blue": "Modrá",

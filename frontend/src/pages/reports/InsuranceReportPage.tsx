@@ -141,12 +141,20 @@ export function InsuranceReportPage() {
     }
   }, [areas.data, locations.data])
 
-  // The name of the seller an item was bought from, "" for none.
+  // The name of the seller an item was bought from, "" for none, and null
+  // when the sellers could not be loaded: the report then leaves the seller
+  // empty with a note instead of claiming the item has none.
+  const sellersFailed = sellers.isError
   const sellerNameFor = useMemo(() => {
     const nameById = new Map<string, string>()
     for (const s of sellers.data ?? []) nameById.set(s.id, s.name ?? "")
-    return (sellerId?: string) => (sellerId ? (nameById.get(sellerId) ?? "") : "")
-  }, [sellers.data])
+    return (sellerId?: string): string | null => {
+      if (!sellerId) return ""
+      const name = nameById.get(sellerId)
+      if (name !== undefined) return name
+      return sellersFailed ? null : ""
+    }
+  }, [sellers.data, sellersFailed])
 
   // Location mode: filter commodities to those whose area belongs to the
   // selected location.
@@ -201,18 +209,21 @@ export function InsuranceReportPage() {
   // + header). Gate on these so the report doesn't flash an empty state /
   // zero totals while `areas` is still resolving after commodities settle
   // (#1370 review). Photos (`useFiles`) stay ungated — see the query above.
-  // Both modes print each item's seller by name, so they wait for the
-  // sellers too; without them a seller would print as "—" (#2804).
+  // The report prints each item's seller by name, so it waits for the
+  // sellers when an item in it has one; otherwise that seller would print as
+  // "—" (#2804). A failed sellers request does not fail the report: the
+  // seller cells stay empty with a note (see sellerNameFor).
+  const reportItems = mode === "item" ? (commodity ? [commodity] : []) : locationCommodities
+  const needsSellers = reportItems.some((c) => !!c.seller_id)
   const isLoading =
-    sellers.isLoading ||
+    (needsSellers && sellers.isLoading) ||
     (mode === "item"
       ? detail.isLoading || commoditiesQuery.isLoading || areas.isLoading
       : commoditiesQuery.isLoading || locations.isLoading || areas.isLoading)
   const isError =
-    sellers.isError ||
-    (mode === "item"
+    mode === "item"
       ? detail.isError || commoditiesQuery.isError || areas.isError
-      : commoditiesQuery.isError || locations.isError || areas.isError)
+      : commoditiesQuery.isError || locations.isError || areas.isError
 
   return (
     <>

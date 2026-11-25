@@ -226,7 +226,7 @@ table "audit_logs" {
     columns = [column.tenant_id]
   }
   index "audit_logs_timestamp_idx" {
-    columns = [column["\"timestamp\""]]
+    columns = [column.timestamp]
   }
   index "audit_logs_user_id_idx" {
     columns = [column.user_id]
@@ -544,7 +544,7 @@ table "commodities" {
     as {
       expr = "commodity_search_text(name, short_name, serial_number, extra_serial_numbers, part_numbers, tags, comments, warranty_notes, status_note)"
       type = "STORED"
-    }
+  }
   }
   column "legacy_zero_prices" {
     type = BOOLEAN
@@ -668,6 +668,9 @@ table "commodities" {
     unique = true
     columns = [column.group_id, column.asset_number]
   }
+  index "idx_commodities_group_type" {
+    columns = [column.group_id, column.type]
+  }
   index "idx_commodities_seller" {
     columns = [column.seller_id]
   }
@@ -684,6 +687,92 @@ table "commodities" {
     columns = [column.tenant_id, column.status]
   }
   index "idx_commodities_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "commodity_drafts" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant commodity draft isolation"
+  }
+  column "client_key" {
+    type = TEXT
+  }
+  column "form_values" {
+    type = JSONB
+  }
+  column "revision" {
+    type = INTEGER
+    default = "1"
+  }
+  column "status" {
+    type = TEXT
+    default = "open"
+  }
+  column "promoted_commodity_id" {
+    type = TEXT
+    null = true
+  }
+  column "promoted_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "promotion_key" {
+    type = TEXT
+    null = true
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_commodity_drafts_group_client_key" {
+    unique = true
+    columns = [column.group_id, column.client_key]
+  }
+  index "idx_commodity_drafts_group_status_updated" {
+    columns = [column.group_id, column.status, column.updated_at]
+  }
+  index "idx_commodity_drafts_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_commodity_drafts_uuid" {
     unique = true
     columns = [column.uuid]
   }
@@ -2258,6 +2347,81 @@ table "group_notification_prefs" {
   }
 }
 
+table "item_types" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant item type isolation"
+  }
+  column "slug" {
+    type = TEXT
+  }
+  column "name" {
+    type = TEXT
+    default = ""
+  }
+  column "name_key" {
+    type = TEXT
+  }
+  column "icon" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_item_types_group_name_key" {
+    unique = true
+    columns = [column.group_id, column.name_key]
+  }
+  index "idx_item_types_group_slug" {
+    unique = true
+    columns = [column.group_id, column.slug]
+  }
+  index "idx_item_types_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_item_types_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "location_groups" {
   row_security {
     enabled = true
@@ -3090,6 +3254,172 @@ table "restore_steps" {
     columns = [column.tenant_id, column.result]
   }
   index "idx_restore_steps_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "saved_view_placements" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant saved view placement isolation"
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "saved_view_id" {
+    type = TEXT
+  }
+  column "user_id" {
+    type = TEXT
+  }
+  column "show_in_sidebar" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "show_on_dashboard" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_saved_view_placement_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_saved_view_placement_view" {
+    columns = [column.saved_view_id]
+    ref_columns = [table.saved_views.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_saved_view_placement_user" {
+    columns = [column.user_id]
+    ref_columns = [table.users.column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  index "idx_saved_view_placements_group_user" {
+    columns = [column.tenant_id, column.group_id, column.user_id]
+  }
+  index "idx_saved_view_placements_user" {
+    columns = [column.user_id]
+  }
+  index "idx_saved_view_placements_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+  index "idx_saved_view_placements_view_user" {
+    unique = true
+    columns = [column.saved_view_id, column.user_id]
+  }
+}
+
+table "saved_views" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant saved view isolation"
+  }
+  column "name" {
+    type = TEXT
+  }
+  column "icon" {
+    type = TEXT
+    default = "bookmark"
+  }
+  column "entity" {
+    type = TEXT
+    default = "commodities"
+  }
+  column "query" {
+    type = TEXT
+    default = ""
+  }
+  column "query_version" {
+    type = INTEGER
+    default = "1"
+  }
+  column "layout" {
+    type = TEXT
+    default = ""
+  }
+  column "shared" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "sort_order" {
+    type = INTEGER
+    default = "0"
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_saved_views_created_by" {
+    columns = [column.created_by_user_id]
+  }
+  index "idx_saved_views_tenant_group_order" {
+    columns = [column.tenant_id, column.group_id, column.sort_order]
+  }
+  index "idx_saved_views_tenant_id" {
+    columns = [column.tenant_id]
+  }
+  index "idx_saved_views_uuid" {
     unique = true
     columns = [column.uuid]
   }
@@ -4018,7 +4348,6 @@ function "commodity_search_text" {
   arg "status_note" {
     type = text
   }
-  security = "INVOKER"
   volatility = "IMMUTABLE"
   as = "SELECT COALESCE(name, '') || pg_catalog.chr(31) || COALESCE(short_name, '') || pg_catalog.chr(31) || COALESCE(serial_number, '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(extra_serial_numbers) = 'array' THEN extra_serial_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(part_numbers) = 'array' THEN part_numbers END) AS e), '') || pg_catalog.chr(31) || COALESCE((SELECT pg_catalog.string_agg(e, pg_catalog.chr(31)) FROM pg_catalog.jsonb_array_elements_text(CASE WHEN pg_catalog.jsonb_typeof(tags) = 'array' THEN tags END) AS e), '') || pg_catalog.chr(31) || COALESCE(comments, '') || pg_catalog.chr(31) || COALESCE(warranty_notes, '') || pg_catalog.chr(31) || COALESCE(status_note, '')"
   comment = "Builds commodities.search_text, the text the item search matches"
@@ -4027,7 +4356,6 @@ function "commodity_search_text" {
 function "get_current_group_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_group_id', true); END;"
   comment = "Gets the current group ID from session for RLS policies"
@@ -4036,7 +4364,6 @@ function "get_current_group_id" {
 function "get_current_tenant_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_tenant_id', true); END;"
   comment = "Gets the current tenant ID from session for RLS policies"
@@ -4045,7 +4372,6 @@ function "get_current_tenant_id" {
 function "get_current_user_id" {
   lang = "PLpgSQL"
   return = "text"
-  security = "INVOKER"
   volatility = "STABLE"
   as = "BEGIN RETURN current_setting('app.current_user_id', true); END;"
   comment = "Gets the current user ID from session for RLS policies"
@@ -4057,7 +4383,6 @@ function "set_group_context" {
   arg "group_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_group_id', group_id_param, true); END;"
   comment = "Sets the current group context for RLS policies (transaction-local)"
@@ -4069,7 +4394,6 @@ function "set_tenant_context" {
   arg "tenant_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_tenant_id', tenant_id_param, true); END;"
   comment = "Sets the current tenant context for RLS policies (transaction-local)"
@@ -4081,7 +4405,6 @@ function "set_user_context" {
   arg "user_id_param" {
     type = text
   }
-  security = "INVOKER"
   volatility = "VOLATILE"
   as = "BEGIN PERFORM set_config('app.current_user_id', user_id_param, true); END;"
   comment = "Sets the current user context for RLS policies (transaction-local)"
@@ -4157,6 +4480,24 @@ policy "commodity_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "commodity_draft_background_worker_access" {
+  on = table.commodity_drafts
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to read and purge commodity drafts across all groups"
+}
+
+policy "commodity_draft_isolation" {
+  on = table.commodity_drafts
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures commodity drafts can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "commodity_event_background_worker_access" {
@@ -4447,6 +4788,24 @@ policy "group_notification_prefs_tenant_isolation" {
   comment = "Ensures per-group notification prefs are isolated by tenant; user-level filtering happens in application logic"
 }
 
+policy "item_type_background_worker_access" {
+  on = table.item_types
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all item types for processing"
+}
+
+policy "item_type_isolation" {
+  on = table.item_types
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures item types can only be accessed and modified by their tenant and group with required contexts"
+}
+
 policy "location_group_background_worker_access" {
   on = table.location_groups
   for = "ALL"
@@ -4607,6 +4966,42 @@ policy "restore_step_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures restore steps can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "saved_view_placement_background_worker_access" {
+  on = table.saved_view_placements
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all saved view placements for purges"
+}
+
+policy "saved_view_placement_isolation" {
+  on = table.saved_view_placements
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures saved view placements can only be accessed and modified by their tenant and group with required contexts; the member filter is applied in application logic"
+}
+
+policy "saved_view_background_worker_access" {
+  on = table.saved_views
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all saved views for purges"
+}
+
+policy "saved_view_isolation" {
+  on = table.saved_views
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures saved views can only be accessed and modified by their tenant and group with required contexts; per-user visibility is applied in application logic"
 }
 
 policy "seller_background_worker_access" {

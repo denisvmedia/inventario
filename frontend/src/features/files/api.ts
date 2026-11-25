@@ -3,6 +3,7 @@
 // #1398 (category enum) + #1399 (legacy backfill); the FE consumes a
 // single endpoint regardless of whether a row originated as an image,
 // invoice, or manual on the legacy split-table side.
+import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -157,8 +158,9 @@ export interface UpdateFileRequest {
 }
 
 // The entity kinds a user can attach a file to. Backup export bundles carry
-// an "export" link too, but that one is never created or removed here.
-export type FileLinkEntityType = "commodity" | "location" | "area"
+// an "export" link too, but that one is never created or removed here. A
+// "draft" link holds a file for an unfinished item (#2812).
+export type FileLinkEntityType = "commodity" | "location" | "area" | "draft"
 
 export interface AttachFileRequest {
   entityType: FileLinkEntityType
@@ -274,6 +276,63 @@ export async function bulkReclassifyFiles(
     }
   }
   return { succeeded, failed }
+}
+
+// The server takes at most this many ids per bulk request.
+const MAX_BULK_FILE_IDS = 100
+
+// What a bulk tag change did to each file: changed its tags, left it as it
+// was because it already had them, or could not change it.
+export interface FileBulkResult {
+  succeeded: string[]
+  skipped: { id: string; name: string }[]
+  failed: { id: string; name: string; error: string }[]
+  // Files of a request that failed without an answer: the server may have
+  // changed some of them (sendInChunks).
+  unknown: string[]
+}
+
+export interface FileBulkTagsChange {
+  /** Tag slugs, or the text of a tag the group does not have yet. */
+  add: string[]
+  /** Tag slugs. */
+  remove: string[]
+}
+
+// Adds tags to and removes tags from the files; tags the change does not
+// name stay on each file. Sends at most 100 ids per request, all to the
+// group active when the change started. When a request fails without an
+// answer, what the earlier ones changed is kept, its ids are reported as
+// unknown, since the server may have changed some of them, and the ids after
+// it as failed (sendInChunks).
+export async function bulkUpdateFileTags(
+  ids: string[],
+  change: FileBulkTagsChange
+): Promise<FileBulkResult> {
+  const tags: NonNullable<Schema<"jsonapi.FileBulkPatch">["tags"]> = {}
+  if (change.add.length > 0) tags.add = change.add
+  if (change.remove.length > 0) tags.remove = change.remove
+  const post = pinnedPost<Schema<"jsonapi.BulkResultResponse">>("/files/bulk-update")
+  const { parts, unknown, unsent } = await sendInChunks(ids, MAX_BULK_FILE_IDS, (chunk) =>
+    post({ data: { type: "files", attributes: { ids: chunk, patch: { tags } } } })
+  )
+  const merged: FileBulkResult = { succeeded: [], skipped: [], failed: [], unknown }
+  for (const body of parts) {
+    const attrs = body?.data?.attributes
+    merged.succeeded.push(...(attrs?.succeeded ?? []))
+    merged.skipped.push(
+      ...(attrs?.skipped ?? []).map((sk) => ({ id: sk.id ?? "", name: sk.name ?? "" }))
+    )
+    merged.failed.push(
+      ...(attrs?.failed ?? []).map((f) => ({
+        id: f.id ?? "",
+        name: f.name ?? "",
+        error: f.error ?? "",
+      }))
+    )
+  }
+  for (const id of unsent) merged.failed.push({ id, name: "", error: "" })
+  return merged
 }
 
 interface BulkDeleteEnvelope {

@@ -59,7 +59,7 @@ export function LeadTimeField({
     }
     const result = validateLeadTimes(draft, { multiple, max })
     if (!result.ok) {
-      setError(t(result.errorKey, result.params))
+      setError(t(result.errorKey, result.params ?? {}))
       return
     }
     setError(null)

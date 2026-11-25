@@ -452,6 +452,14 @@ func (l *RestoreOperationProcessor) createOrUpdateCommodity(
 	// commodities), so take the address of the resolved value.
 	commodity.AreaID = &actualAreaID
 
+	resolver, err := l.itemTypeResolver(ctx, options)
+	if err != nil {
+		return err
+	}
+	if commodity.Type, err = resolver.resolve(ctx, commodity.Type, stats); err != nil {
+		return errxtrace.Wrap("failed to resolve item type", err, errx.Attrs("original_commodity_id", xmlCommodity.ID))
+	}
+
 	if groupCurrency, gcErr := validationctx.GroupCurrencyFromContext(ctx); gcErr == nil && string(commodity.OriginalPriceCurrency) == groupCurrency {
 		commodity.ConvertedOriginalPrice = nil
 	}

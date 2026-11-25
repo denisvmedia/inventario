@@ -229,6 +229,34 @@ func (r *FileRegistry) RemoveLinksToEntity(_ context.Context, entityType, entity
 	return fileIDs, nil
 }
 
+// moveLinks points every link to (fromType, fromID) at (toType, toID)
+// instead, for the files this registry can see. It mirrors the UPDATE of
+// file_links the postgres draft promotion runs.
+func (r *FileRegistry) moveLinks(fromType, fromID, toType, toID string) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	for fileID, current := range r.links.byFile {
+		file, ok := r.items.Get(fileID)
+		if ok && !r.isItemVisible(file) {
+			continue
+		}
+		var next []models.FileLink
+		for i, l := range current {
+			if l.EntityType != fromType || l.EntityID != fromID {
+				continue
+			}
+			if next == nil {
+				next = slices.Clone(current)
+			}
+			next[i].EntityType = toType
+			next[i].EntityID = toID
+		}
+		if next != nil {
+			r.links.byFile[fileID] = next
+		}
+	}
+}
+
 // DeleteIfUnlinked mirrors the postgres method.
 func (r *FileRegistry) DeleteIfUnlinked(_ context.Context, id, ignoreEntityType, ignoreEntityID string) (bool, error) {
 	r.lock.Lock()

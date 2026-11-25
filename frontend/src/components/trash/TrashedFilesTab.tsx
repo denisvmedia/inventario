@@ -16,7 +16,7 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { ordinaryLinks } from "@/features/files/api"
-import { useLinkTypeLabel } from "@/features/files/labels"
+import { useLinkName } from "@/features/files/labels"
 import type { TrashedFile } from "@/features/trash/api"
 import {
   usePurgeFile,
@@ -52,7 +52,7 @@ export function TrashedFilesTab({ permissions }: { permissions: TrashPermissions
   const { t } = useTranslation()
   const toast = useAppToast()
   const confirm = useConfirm()
-  const typeLabel = useLinkTypeLabel()
+  const linkName = useLinkName()
 
   const [requestedPage, setRequestedPage] = useState(1)
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -95,7 +95,7 @@ export function TrashedFilesTab({ permissions }: { permissions: TrashPermissions
   function attachedTo(entry: TrashedFile): string {
     const links = ordinaryLinks(entry.file)
     if (links.length === 0) return t("trash:table.notAttached")
-    return links.map((l) => l.entity_name || typeLabel(l.entity_type)).join(", ")
+    return links.map(linkName).join(", ")
   }
 
   async function onRestore(entry: TrashedFile) {

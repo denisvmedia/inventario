@@ -7,12 +7,14 @@ import {
   FolderOpen,
   HandCoins,
   HardDriveDownload,
+  Inbox,
   LayoutDashboard,
   LogOut,
   MapPin,
   Package,
   Plus,
   Settings,
+  Shapes,
   ShieldCheck,
   SlidersHorizontal,
   Sparkles,
@@ -36,6 +38,7 @@ import {
   SidebarGroupLabel,
   SidebarHeader,
   SidebarMenu,
+  SidebarMenuBadge,
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarRail,
@@ -60,6 +63,8 @@ import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { useInboxCount } from "@/features/inbox/hooks"
+import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
 
 interface NavEntry {
@@ -79,6 +84,9 @@ interface NavEntry {
   // (#1543) can target it. Only the rows the tour walks through need
   // one.
   tourKey?: string
+  // A count shown at the end of the row. The inbox shows the server's
+  // count of what it holds.
+  badge?: "inbox"
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
@@ -97,6 +105,12 @@ const INVENTORY: NavEntry[] = [
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}` : null),
     icon: LayoutDashboard,
     tourKey: "nav-dashboard",
+  },
+  {
+    labelKey: "common:nav.inbox",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/inbox` : null),
+    icon: Inbox,
+    badge: "inbox",
   },
   {
     labelKey: "common:nav.locations",
@@ -148,6 +162,11 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.sellers",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/sellers` : null),
     icon: Store,
+  },
+  {
+    labelKey: "common:nav.itemTypes",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/item-types` : null),
+    icon: Shapes,
   },
   {
     labelKey: "common:nav.files",
@@ -262,10 +281,35 @@ function NavRow({ entry, group, onNavigate }: NavRowProps) {
         <NavLink to={target} end={navLinkEnd} onClick={onNavigate} data-tour={entry.tourKey}>
           <Icon className="size-4" />
           <span>{label}</span>
+          {entry.badge === "inbox" ? <InboxCountName /> : null}
         </NavLink>
       </SidebarMenuButton>
+      {entry.badge === "inbox" ? <InboxBadge /> : null}
     </SidebarMenuItem>
   )
+}
+
+// The inbox row's count (#2794), from the server's count of the group's
+// inbox. Hidden while the inbox is empty or the count is loading. The badge
+// sits outside the link, so screen readers hear the count through
+// InboxCountName, inside the link's name, and the badge is hidden from them.
+function InboxBadge() {
+  const count = useInboxCount()
+  const total = count.data?.total ?? 0
+  if (total === 0) return null
+  return (
+    <SidebarMenuBadge aria-hidden="true" data-testid="sidebar-inbox-count">
+      {total}
+    </SidebarMenuBadge>
+  )
+}
+
+function InboxCountName() {
+  const { t } = useTranslation("inbox")
+  const count = useInboxCount()
+  const total = count.data?.total ?? 0
+  if (total === 0) return null
+  return <span className="sr-only">{`, ${t("inbox:sidebarCount", { count: total })}`}</span>
 }
 
 interface AppSidebarProps {
@@ -394,6 +438,8 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             </SidebarGroupContent>
           </SidebarGroup>
         ) : null}
+
+        {showGroupSections ? <SidebarSavedViews onNavigate={closeMobileSidebar} /> : null}
 
         {showGroupSections ? (
           <SidebarGroup data-testid="sidebar-manage-group">

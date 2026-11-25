@@ -10,6 +10,7 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 )
@@ -160,7 +161,7 @@ func TestCommodities_SellerFilterAndCheck(t *testing.T) {
 	}}))
 	rr = doJSON(c, handler, testUser.ID, http.MethodPut, base+"/commodities/"+item.ID, string(payload))
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
-	c.Check(rr.Body.String(), qt.Contains, "seller_id")
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].error.error.data.attributes.seller_id"), "no seller with this ID in the group")
 	kept := must.Must(regSet.CommodityRegistry.Get(ctx, item.ID))
 	c.Check(kept.SellerID, qt.DeepEquals, &shop.ID)
 }

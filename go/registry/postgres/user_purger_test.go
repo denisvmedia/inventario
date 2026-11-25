@@ -109,6 +109,29 @@ func TestUserPurger_Postgres_PurgesAuthRowsKeepsContent(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 }
 
+// TestUserPurger_Postgres_PurgesTheUsersDrafts covers #2812: the drafts a
+// user created go with the account, together with every file link to them,
+// so the files stay as standalone files. created_by_user_id is a NOT NULL FK
+// with NO ACTION, so a draft left behind would block the final users delete.
+func TestUserPurger_Postgres_PurgesTheUsersDrafts(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+
+	drafts, err := fx.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	draft, _, err := drafts.CreateOrGet(fx.ctx, models.CommodityDraft{ClientKey: "leaving", Values: models.CommodityDraftValues{"name": "Half done"}})
+	c.Assert(err, qt.IsNil)
+	photo := fx.file(c, "photo.pdf", 10, models.FileLink{EntityType: models.FileLinkDraft, EntityID: draft.ID, Meta: models.FileLinkMetaDocuments})
+
+	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(context.Background(), fx.user.TenantID, fx.user.ID), qt.IsNil)
+
+	_, err = fx.factorySet.CommodityDraftRegistryFactory.CreateServiceRegistry().Get(context.Background(), draft.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	kept, err := fx.set.FileRegistry.Get(fx.ctx, photo.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(kept.Links, qt.HasLen, 0)
+}
+
 // TestUserPurger_Postgres_ClearsGroupInvitesAuditReferences is the #2147
 // regression: group_invites_audit.created_by and .used_by are NOT NULL FK ->
 // users(id) with NO ACTION, so a user whose group ever had a USED invite would

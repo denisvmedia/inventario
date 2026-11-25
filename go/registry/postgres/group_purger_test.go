@@ -304,6 +304,16 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// Draft (#2812) with a file attached. Its group_id FK is NO ACTION, so
+	// the purge must clear it before location_groups.
+	drafts, err := fs.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	c.Assert(err, qt.IsNil)
+	draft, _, err := drafts.CreateOrGet(ctx, models.CommodityDraft{ClientKey: "purge-draft", Values: models.CommodityDraftValues{"name": "Half done"}})
+	c.Assert(err, qt.IsNil)
+	draftFileID := seedTagFile(c, set, ctx, "draft-photo")
+	_, _, err = set.FileRegistry.AddLink(ctx, models.FileLink{FileID: draftFileID, EntityType: models.FileLinkDraft, EntityID: draft.ID, Meta: models.FileLinkMetaImages})
+	c.Assert(err, qt.IsNil)
+
 	// Currency migration + audit row (#2095). The audit row's group_id FK is
 	// NO ACTION, so it must be cleared explicitly before currency_migrations.
 	migration, err := set.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{
@@ -371,6 +381,18 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
+	// A shared saved view placed in its creator's sidebar: group_id and the
+	// user columns of both rows are NO ACTION.
+	_, err = fs.SavedViewRegistryFactory.MustCreateUserRegistry(ctx).CreateChecked(ctx, models.SavedView{
+		Name:         "Purged view",
+		Icon:         models.SavedViewIconBookmark,
+		Entity:       models.SavedViewEntityCommodities,
+		Query:        "status=in_use",
+		QueryVersion: models.SavedViewQueryVersion,
+		Shared:       true,
+	}, &registry.SavedViewPlacementPatch{ShowInSidebar: new(true)}, nil)
+	c.Assert(err, qt.IsNil)
+
 	// -- purge, then prove the group row can finally be removed -------------
 
 	err = fs.GroupPurger.PurgeGroupDependents(context.Background(), tenantID, groupID)
@@ -381,6 +403,10 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	_, err = set.FileRegistry.Get(ctx, areaLinkedFile.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = set.FileRegistry.Get(ctx, locationLinkedFile.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = set.FileRegistry.Get(ctx, draftFileID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.CommodityDraftRegistryFactory.CreateServiceRegistry().Get(context.Background(), draft.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 
 	// The final location_groups DELETE is what was blocked before the fix:

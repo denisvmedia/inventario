@@ -1,4 +1,9 @@
 {
+  "bulkEdit": {
+    "add": "Add tags",
+    "confirm": "Apply",
+    "remove": "Remove tags"
+  },
   "color": {
     "amber": "Amber",
     "blue": "Blue",
