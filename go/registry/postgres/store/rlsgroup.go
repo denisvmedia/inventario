@@ -176,6 +176,16 @@ func (r *RLSGroupRepository[T, P]) Create(ctx context.Context, entity T, checker
 // and receives a pointer to the row about to be written. Use it for a column
 // whose value has to be computed under the same transaction as the insert.
 func (r *RLSGroupRepository[T, P]) CreateWithPrepare(ctx context.Context, entity T, prepareFn func(context.Context, *sqlx.Tx, P) error) (T, error) {
+	return r.CreateWithHooks(ctx, entity, prepareFn, nil)
+}
+
+// CreateWithHooks is CreateWithPrepare with a second hook, afterFn, that runs
+// in the same transaction after the INSERT and receives the inserted row.
+// Use it for rows that reference the new one, which the database refuses
+// before the row exists.
+func (r *RLSGroupRepository[T, P]) CreateWithHooks(
+	ctx context.Context, entity T, prepareFn, afterFn func(context.Context, *sqlx.Tx, P) error,
+) (T, error) {
 	var zero T
 
 	// Fail fast on a misconstructed user-scoped registry: tenant / group /
@@ -227,6 +237,13 @@ func (r *RLSGroupRepository[T, P]) CreateWithPrepare(ctx context.Context, entity
 		return zero, errxtrace.Wrap("failed to insert entity", err)
 	}
 
+	if afterFn != nil {
+		err = afterFn(ctx, tx, P(&entity))
+		if err != nil {
+			return zero, errxtrace.Wrap("failed to call after-insert function", err, errx.Attrs("entity_type", r.table))
+		}
+	}
+
 	return entity, nil
 }
 
@@ -243,6 +260,15 @@ func (r *RLSGroupRepository[T, P]) Update(ctx context.Context, entity T, checker
 // a pointer to the row about to be written, and can carry a server-managed
 // column over from the database.
 func (r *RLSGroupRepository[T, P]) UpdateWithPrepare(ctx context.Context, entity T, prepareFn func(context.Context, *sqlx.Tx, T, P) error) error {
+	return r.UpdateWithHooks(ctx, entity, prepareFn, nil)
+}
+
+// UpdateWithHooks is UpdateWithPrepare with a second hook, afterFn, that runs
+// in the same transaction after the UPDATE and receives the stored row as it
+// was before and the row written.
+func (r *RLSGroupRepository[T, P]) UpdateWithHooks(
+	ctx context.Context, entity T, prepareFn, afterFn func(context.Context, *sqlx.Tx, T, P) error,
+) error {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -287,6 +313,13 @@ func (r *RLSGroupRepository[T, P]) UpdateWithPrepare(ctx context.Context, entity
 	err = txreg.UpdateByField(ctx, field, entity)
 	if err != nil {
 		return errxtrace.Wrap("failed to update entity", err)
+	}
+
+	if afterFn != nil {
+		err = afterFn(ctx, tx, dbEntity, P(&entity))
+		if err != nil {
+			return errxtrace.Wrap("failed to call after-update function", err, errx.Attrs("entity_type", r.table))
+		}
 	}
 
 	return nil

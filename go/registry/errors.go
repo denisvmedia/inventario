@@ -1,6 +1,9 @@
 package registry
 
 import (
+	"slices"
+	"strings"
+
 	"github.com/go-extras/errx"
 )
 
@@ -43,6 +46,16 @@ var (
 	// ErrUnknownItemType signals an item write whose type is not a slug of
 	// one of the group's item types.
 	ErrUnknownItemType = errx.NewSentinel("unknown item type")
+
+	// ErrCustomFieldInUse signals a delete of a custom field that items, in
+	// Trash or not, have a value for, without consent to delete the values
+	// (#2803).
+	ErrCustomFieldInUse = errx.NewSentinel("custom field is in use")
+
+	// ErrInvalidCustomFieldValue classifies a CustomFieldValueError: an
+	// item write with a custom field value its field refuses, or one for a
+	// field the group does not have.
+	ErrInvalidCustomFieldValue = errx.NewSentinel("invalid custom field value")
 
 	// ErrLoanAlreadyOpen signals that a commodity already has an open
 	// (returned_at IS NULL) loan and the service refused to create a
@@ -166,3 +179,28 @@ var (
 	// a MFA challenge (MFAEnforced=true, secret present).
 	ErrBackofficeMFASecretNotFound = errx.NewSentinel("backoffice MFA secret not found", ErrNotFound)
 )
+
+// CustomFieldValueError lists the custom field values of an item write that
+// the registries refuse, keyed by field ID: a value its field does not
+// accept, a field the group does not have, or a link to an item that is not
+// another live item of the group. It matches ErrInvalidCustomFieldValue.
+type CustomFieldValueError struct {
+	Fields map[string]error
+}
+
+func (e *CustomFieldValueError) Error() string {
+	ids := make([]string, 0, len(e.Fields))
+	for id := range e.Fields {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	parts := make([]string, 0, len(ids))
+	for _, id := range ids {
+		parts = append(parts, id+": "+e.Fields[id].Error())
+	}
+	return "invalid custom field values: " + strings.Join(parts, "; ")
+}
+
+func (*CustomFieldValueError) Is(target error) bool {
+	return target == ErrInvalidCustomFieldValue
+}

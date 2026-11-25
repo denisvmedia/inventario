@@ -83,6 +83,20 @@ func searchLabels(search, v string) map[string][]string {
 	return labels
 }
 
+// searchCustomFields matches every term of search against the custom field
+// v and its option v, the way services/commodityquery fills
+// SearchCustomFields.
+func searchCustomFields(search, v string) registry.CustomFieldSearch {
+	s := registry.CustomFieldSearch{
+		TextFields: map[string]bool{v: true},
+		Options:    map[string][]registry.CustomFieldOptionRef{},
+	}
+	for _, term := range registry.SplitSearchTerms(search) {
+		s.Options[term] = []registry.CustomFieldOptionRef{{FieldID: v, OptionID: v, Label: v}}
+	}
+	return s
+}
+
 func listQueries() []listQuery {
 	tables := store.DefaultTableNames
 	now := time.Date(2026, 5, 10, 0, 0, 0, 0, time.UTC)
@@ -100,7 +114,16 @@ func listQueries() []listQuery {
 				Types:                 []models.CommodityType{models.CommodityType(v)},
 				Statuses:              []models.CommodityStatus{models.CommodityStatus(v)},
 				WarrantyExpiresBefore: v,
-			}, "commodities", "commodity_loans"))
+				SearchCustomFields:    searchCustomFields(v, v),
+				CustomFields: []registry.CustomFieldFilter{
+					{FieldID: v, Type: models.CustomFieldTypeText, Op: registry.CustomFieldOpContains, Text: v},
+					{FieldID: v, Type: models.CustomFieldTypeText, Op: registry.CustomFieldOpEq, Text: v},
+					{FieldID: v, Type: models.CustomFieldTypeSelect, Op: registry.CustomFieldOpIn, OptionIDs: []string{v}},
+					{FieldID: v, Type: models.CustomFieldTypeDate, Op: registry.CustomFieldOpGte, Text: v},
+					{FieldID: v, Type: models.CustomFieldTypeItemLink, Op: registry.CustomFieldOpEq, Text: v},
+					{FieldID: v, Type: models.CustomFieldTypeNumber, Op: registry.CustomFieldOpUnset},
+				},
+			}, commodityListTables{commodities: "commodities", loans: "commodity_loans", customFieldValues: "commodity_custom_field_values"}))
 		}},
 		{"files", func(v string) (string, []any) {
 			fileType := models.FileType(v)

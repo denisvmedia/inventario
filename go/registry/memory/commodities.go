@@ -3,6 +3,7 @@ package memory
 import (
 	"context"
 	"errors"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -30,6 +31,10 @@ type CommodityRegistryFactory struct {
 	// fails unless its type is one of the group's item types, as the
 	// postgres registry checks inside the write's transaction.
 	itemTypes *ItemTypeRegistryFactory
+	// customFields is set by NewCustomFieldRegistryFactory. A write's
+	// custom field values are checked against its fields; without it the
+	// group has no fields, so any value is refused.
+	customFields *CustomFieldRegistryFactory
 }
 
 // CommodityRegistry is a context-aware registry that can only be created through the factory
@@ -40,6 +45,7 @@ type CommodityRegistry struct {
 	areaRegistry *AreaRegistry // required dependency for relationship tracking
 	sellers      *SellerRegistryFactory
 	itemTypes    *ItemTypeRegistryFactory
+	customFields *CustomFieldRegistryFactory
 	// assetNumbers serializes every write of AssetNumber, standing in for
 	// the per-group advisory lock of the postgres registry: Create holds it
 	// from computing the next number until the row is stored.
@@ -96,6 +102,7 @@ func (f *CommodityRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 		areaRegistry: areaRegistry,
 		sellers:      f.sellers,
 		itemTypes:    f.itemTypes,
+		customFields: f.customFields,
 		assetNumbers: f.assetNumbers,
 	}, nil
 }
@@ -123,6 +130,7 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 		areaRegistry: areaRegistry,
 		sellers:      f.sellers,
 		itemTypes:    f.itemTypes,
+		customFields: f.customFields,
 		assetNumbers: f.assetNumbers,
 	}
 }
@@ -187,6 +195,12 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	}
 	defer unlockType()
 
+	unlockFields := r.lockCustomFields()
+	defer unlockFields()
+	if commodity.CustomFields, err = r.planCustomFields(groupID, "", nil, commodity.CustomFields); err != nil {
+		return nil, errxtrace.Wrap("failed to create commodity", err)
+	}
+
 	// Use CreateWithUser to ensure user context is applied
 	newCommodity, err := r.Registry.CreateWithUser(ctx, commodity)
 	if err != nil {
@@ -199,7 +213,9 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 		_ = r.areaRegistry.AddCommodity(ctx, *newCommodity.AreaID, newCommodity.GetID())
 	}
 
-	return newCommodity, nil
+	// The base registry returns the stored pointer; hand out a copy so a
+	// caller's change does not reach the store without Update.
+	return new(*newCommodity), nil
 }
 
 // lockItemType checks that slug names an item type of groupID and holds the
@@ -340,6 +356,9 @@ func (r *CommodityRegistry) Delete(ctx context.Context, id string) error {
 	if err := r.Registry.Delete(ctx, id); err != nil {
 		return errxtrace.Wrap("failed to delete commodity", err)
 	}
+	if r.customFields != nil {
+		r.customFields.dropLinksTo(id)
+	}
 
 	// Untrack from the parent area's commodity list — only after the row
 	// delete succeeds (so a failed delete can't desync the area index) and
@@ -371,21 +390,11 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		if existingCommodity.AreaID != nil {
 			oldAreaID = *existingCommodity.AreaID
 		}
-		// A changed type must be one of the group's item types.
-		if existingCommodity.Type != commodity.Type {
-			unlockType, err := r.lockItemType(ctx, existingCommodity.GroupID, existingCommodity.TenantID, commodity.Type)
-			if err != nil {
-				return nil, err
-			}
-			defer unlockType()
+		unlock, err := r.carryOverStoredFields(ctx, &commodity, existingCommodity)
+		defer unlock()
+		if err != nil {
+			return nil, err
 		}
-		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
-		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)
-		commodity.AssetNumber = nil
-		if existingCommodity.AssetNumber != nil {
-			commodity.AssetNumber = new(*existingCommodity.AssetNumber)
-		}
-		commodity.UnsetEchoedLegacyZeros(existingCommodity)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) so un-assigning via "" is
@@ -428,7 +437,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		}
 	}
 
-	return updatedCommodity, nil
+	return new(*updatedCommodity), nil
 }
 
 // ListPaginated returns a paginated list of commodities along with the total count.
@@ -576,7 +585,7 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 	if !commodityMatchesSeller(c, opts.SellerIDs) {
 		return false
 	}
-	if _, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels); !ok {
+	if _, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels, opts.SearchCustomFields); !ok {
 		return false
 	}
 	if !opts.Tags.Matches(c.Tags) {
@@ -596,6 +605,11 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 	}
 	if !matchesLentOut(c, opts.LentOut, openSet) {
 		return false
+	}
+	for _, f := range opts.CustomFields {
+		if !f.Matches(c.CustomFields) {
+			return false
+		}
 	}
 	return true
 }
@@ -631,7 +645,26 @@ func pdateString(d models.PDate) string {
 //
 // An unknown date or price sorts after every known one in both directions,
 // matching the NULLS LAST ordering of the postgres backend.
+//
+// A CustomFieldSort orders by the item's value for the field instead, items
+// without one last in both directions.
 func sortCommodities(items []*models.Commodity, opts registry.CommodityListOptions) {
+	if s := opts.CustomFieldSort; s != nil && registry.CustomFieldSortable(s.Type) {
+		slices.SortStableFunc(items, func(a, b *models.Commodity) int {
+			c, aUnset, bUnset := s.Compare(a.CustomFields, b.CustomFields)
+			if u := unknownLast(aUnset, bUnset); u != 0 {
+				return u
+			}
+			if c == 0 {
+				c = strings.Compare(a.GetID(), b.GetID())
+			}
+			if opts.SortDesc {
+				return -c
+			}
+			return c
+		})
+		return
+	}
 	field := opts.SortField
 	if !field.IsValid() {
 		field = registry.CommoditySortName
@@ -1039,4 +1072,78 @@ func clonePtrCurrency(c *models.Currency) *models.Currency {
 	}
 	cp := *c
 	return &cp
+}
+
+// carryOverStoredFields prepares an update of existing: it checks a changed
+// type against the group's item types, keeps the server-managed acquisition
+// columns and asset number, and plans the custom field values against the
+// stored ones. The returned function releases the locks it took, in reverse
+// order; the caller defers it whether or not an error is returned.
+func (r *CommodityRegistry) carryOverStoredFields(ctx context.Context, commodity, existing *models.Commodity) (func(), error) {
+	var unlocks []func()
+	unlock := func() {
+		for _, u := range slices.Backward(unlocks) {
+			u()
+		}
+	}
+	// A changed type must be one of the group's item types.
+	if existing.Type != commodity.Type {
+		unlockType, err := r.lockItemType(ctx, existing.GroupID, existing.TenantID, commodity.Type)
+		if err != nil {
+			return unlock, err
+		}
+		unlocks = append(unlocks, unlockType)
+	}
+	commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
+	commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
+	commodity.AssetNumber = nil
+	if existing.AssetNumber != nil {
+		commodity.AssetNumber = new(*existing.AssetNumber)
+	}
+	commodity.UnsetEchoedLegacyZeros(existing)
+
+	unlocks = append(unlocks, r.lockCustomFields())
+	values, err := r.planCustomFields(existing.GroupID, existing.ID, existing.CustomFields, commodity.CustomFields)
+	if err != nil {
+		return unlock, errxtrace.Wrap("failed to update commodity", err)
+	}
+	commodity.CustomFields = values
+	return unlock, nil
+}
+
+// lockCustomFields holds the custom field lock for reading until the
+// returned function is called, see CustomFieldRegistryFactory.
+func (r *CommodityRegistry) lockCustomFields() func() {
+	if r.customFields == nil {
+		return func() {}
+	}
+	return r.customFields.lockForItemWrite()
+}
+
+// planCustomFields checks the custom field values input of a write to the
+// item selfID of groupID, which has the values stored, and returns the
+// values the item has after the write, by the rules of
+// registry.PlanCustomFieldWrite. A nil input keeps stored. The caller holds
+// the custom field lock.
+func (r *CommodityRegistry) planCustomFields(groupID, selfID string, stored, input models.CustomFieldValues) (models.CustomFieldValues, error) {
+	if input == nil {
+		return stored, nil
+	}
+	defs := map[string]*models.CustomFieldDefinition{}
+	if r.customFields != nil {
+		defs = r.customFields.fieldsByID(groupID, slices.Collect(maps.Keys(input)))
+	}
+	plan, err := registry.PlanCustomFieldWrite(selfID, defs, stored, input, func(id string) (registry.LinkedItemState, error) {
+		r.lock.RLock()
+		defer r.lock.RUnlock()
+		c, ok := r.items.Get(id)
+		if !ok || c.GroupID != groupID {
+			return registry.LinkedItemState{}, nil
+		}
+		return registry.LinkedItemState{Exists: true, Trashed: c.IsTrashed()}, nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return registry.ApplyCustomFieldWritePlan(stored, plan, defs), nil
 }

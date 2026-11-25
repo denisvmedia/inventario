@@ -5,12 +5,14 @@ package export
 import (
 	"archive/tar"
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
@@ -75,6 +77,13 @@ type inbBuilder struct {
 	// collects the slugs the planned items have.
 	itemTypes     []*models.ItemType
 	usedItemTypes map[models.CommodityType]bool
+	// customFields are the group's custom fields by name; usedCustomFields
+	// collects the IDs of the fields the planned items have a value of, and
+	// commodityUUIDByDBID resolves the item an item link value names.
+	customFields        []*models.CustomFieldDefinition
+	customFieldByID     map[string]*models.CustomFieldDefinition
+	usedCustomFields    map[string]bool
+	commodityUUIDByDBID map[string]string
 	// entityFiles / standaloneFiles are the NON-commodity files (issue #2235),
 	// size-resolved and in list order (orphans already dropped). They are
 	// emitted in the dedicated files member, never nested under a commodity.
@@ -274,7 +283,9 @@ func (b *inbBuilder) preload() error {
 		return err
 	}
 	b.commoditiesByAreaID = make(map[string][]*models.Commodity, len(commodities))
+	b.commodityUUIDByDBID = make(map[string]string, len(commodities))
 	for _, com := range commodities {
+		b.commodityUUIDByDBID[com.ID] = com.UUID
 		// Area is optional (issue #1986): only index commodities that have an
 		// area under it; collect the area-less ones for the unassigned member.
 		if com.AreaID != nil && *com.AreaID != "" {
@@ -289,6 +300,10 @@ func (b *inbBuilder) preload() error {
 	}
 
 	if err := b.loadItemTypes(); err != nil {
+		return err
+	}
+
+	if err := b.loadCustomFields(); err != nil {
 		return err
 	}
 
@@ -362,6 +377,92 @@ func (b *inbBuilder) manifestItemTypes(scope *inbScope) []INBItemType {
 			continue
 		}
 		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon})
+	}
+	return out
+}
+
+// loadCustomFields lists the group's custom fields once via the RLS-scoped
+// user registry.
+func (b *inbBuilder) loadCustomFields() error {
+	b.customFieldByID = map[string]*models.CustomFieldDefinition{}
+	b.usedCustomFields = map[string]bool{}
+	if b.svc.factorySet.CustomFieldRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create custom field registry", err)
+	}
+	list, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list custom fields", err)
+	}
+	b.customFields = list
+	for _, d := range list {
+		b.customFieldByID[d.ID] = d
+	}
+	return nil
+}
+
+// archiveCustomFields returns com's custom field values keyed by the field's
+// UUID. An item link value names the linked item's UUID instead of its DB
+// id; a link to an item outside the export's reach (in Trash) is left out,
+// since a restore could not link to it.
+func (b *inbBuilder) archiveCustomFields(com *models.Commodity) map[string]json.RawMessage {
+	if len(com.CustomFields) == 0 {
+		return nil
+	}
+	out := make(map[string]json.RawMessage, len(com.CustomFields))
+	for id, raw := range com.CustomFields {
+		d := b.customFieldByID[id]
+		if d == nil || models.IsNullJSON(raw) {
+			continue
+		}
+		if d.Type == models.CustomFieldTypeItemLink {
+			var target string
+			if json.Unmarshal(raw, &target) != nil || b.commodityUUIDByDBID[target] == "" {
+				continue
+			}
+			raw = must.Must(json.Marshal(b.commodityUUIDByDBID[target]))
+		}
+		out[d.UUID] = raw
+		b.usedCustomFields[d.ID] = true
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// manifestCustomFields returns the custom fields the manifest carries: all of
+// them in a whole-group export, otherwise the ones the planned items have a
+// value of. A template names its item type by slug.
+func (b *inbBuilder) manifestCustomFields(scope *inbScope) []INBCustomField {
+	typeSlugByID := make(map[string]string, len(b.itemTypes))
+	for _, t := range b.itemTypes {
+		typeSlugByID[t.ID] = string(t.Slug)
+	}
+	out := make([]INBCustomField, 0, len(b.customFields))
+	for _, d := range b.customFields {
+		if !scope.wholeClass && !b.usedCustomFields[d.ID] {
+			continue
+		}
+		f := INBCustomField{ID: d.UUID, Name: d.Name, Type: string(d.Type)}
+		for _, o := range d.Options {
+			f.Options = append(f.Options, INBCustomFieldOption{ID: o.ID, Label: o.Label})
+		}
+		for _, t := range d.Templates {
+			slug := typeSlugByID[t.ItemTypeID]
+			if slug == "" {
+				continue
+			}
+			entry := INBCustomFieldTemplate{ItemType: slug}
+			if !t.DefaultValue.IsNull() {
+				entry.DefaultValue = json.RawMessage(t.DefaultValue)
+			}
+			f.Templates = append(f.Templates, entry)
+		}
+		out = append(out, f)
 	}
 	return out
 }
@@ -965,6 +1066,7 @@ func (b *inbBuilder) planCommodity(locSlug, areaUUID string, com *models.Commodi
 	if com.AssetNumber != nil {
 		inbCom.AssetNumber = *com.AssetNumber
 	}
+	inbCom.CustomFields = b.archiveCustomFields(com)
 	if com.SellerID != nil {
 		if sellerUUID := b.sellerUUIDByDBID[*com.SellerID]; sellerUUID != "" {
 			inbCom.SellerID = sellerUUID
@@ -1074,6 +1176,7 @@ type inbPlan struct {
 	files        plannedFiles
 	sellers      []INBSeller
 	itemTypes    []INBItemType
+	customFields []INBCustomField
 }
 
 // run returns the Pass-1 plan; it does NOT write anything itself, so writePayload
@@ -1111,6 +1214,8 @@ func (b *inbBuilder) run() (inbPlan, error) {
 		sellers: b.manifestSellers(scope),
 		// After every item is planned, so usedItemTypes is complete.
 		itemTypes: b.manifestItemTypes(scope),
+		// After every item is planned, so usedCustomFields is complete.
+		customFields: b.manifestCustomFields(scope),
 	}, nil
 }
 

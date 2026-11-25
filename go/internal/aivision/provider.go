@@ -104,6 +104,44 @@ type ScanRequest struct {
 	// lists each slug with its name so the model can match a custom type
 	// by meaning. Empty means the built-in types (BuiltinItemTypes).
 	ItemTypes []ItemTypeOption
+	// CustomFields are the group's custom fields the model may fill
+	// (#2803). The prompt lists each and the schema allows a value per
+	// field under "custom_fields". Fields of a type the model cannot fill
+	// (money, item links) and those past MaxScanCustomFields are left out.
+	CustomFields []CustomFieldOption
+}
+
+// CustomFieldOption is one custom field the model may fill.
+type CustomFieldOption struct {
+	// Key names the field in the response's custom_fields object.
+	Key string
+	// Name is the field's name as the group knows it, in any language.
+	Name string
+	// Type is the field's type: text, long_text, number, date, boolean,
+	// select or url.
+	Type string
+	// Options are the labels a select field's value is one of.
+	Options []string
+}
+
+// MaxScanCustomFields bounds the custom fields one scan offers the model,
+// which keeps the prompt and the schema small.
+const MaxScanCustomFields = 25
+
+// scanCustomFields returns the request's custom fields the model can fill:
+// those of a type it can read from a photo, at most MaxScanCustomFields.
+func (r ScanRequest) scanCustomFields() []CustomFieldOption {
+	out := make([]CustomFieldOption, 0, len(r.CustomFields))
+	for _, f := range r.CustomFields {
+		if f.Key == "" || customFieldValueSchema(f) == nil {
+			continue
+		}
+		out = append(out, f)
+		if len(out) == MaxScanCustomFields {
+			break
+		}
+	}
+	return out
 }
 
 // ItemTypeOption is one item type the model may classify a product as.
@@ -182,6 +220,13 @@ type ScanResult struct {
 	// one candidate, Fields mirrors the most prominent one (Items[0]) so
 	// single-item consumers keep working unchanged.
 	Fields map[string]FieldGuess `json:"fields"`
+	// CustomFields holds the values the model read for the request's
+	// custom fields, keyed by CustomFieldOption.Key: a string for text,
+	// long text, URL and date (YYYY-MM-DD) fields and the option label of
+	// a select field, a float64 for a number, a bool for yes/no. The
+	// service turns a select label into its option ID. Absent keys mean no
+	// signal.
+	CustomFields map[string]FieldGuess `json:"custom_fields,omitempty"`
 	// Items is populated ONLY when the source describes more than one
 	// distinct product (a multi-line receipt, a photo of several items):
 	// one entry per product, most prominent first. The FE renders a
@@ -208,6 +253,9 @@ type ScanItem struct {
 	// Fields is keyed by canonical field name; same shape and semantics
 	// as ScanResult.Fields.
 	Fields map[string]FieldGuess `json:"fields"`
+	// CustomFields is keyed by custom field key; same semantics as
+	// ScanResult.CustomFields.
+	CustomFields map[string]FieldGuess `json:"custom_fields,omitempty"`
 }
 
 // Sentinel errors returned by Provider implementations and the registry

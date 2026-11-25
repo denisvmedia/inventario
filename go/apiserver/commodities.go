@@ -53,8 +53,9 @@ type commoditiesAPI struct {
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
 // @Param tags_exclude query []string false "Only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
 // @Param no_tags query bool false "Only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param cf query []string false "Custom field condition as <field id>:<op>[:<value>], op one of set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field the group does not have matches no item" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true; false hides them)"
-// @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
+// @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.<field id> for a custom field (items without a value last); prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
@@ -85,7 +86,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	result, err := commodityquery.List(r.Context(), regSet, query, offset, perPage)
 	if err != nil {
-		internalServerError(w, r, err)
+		queryRunError(w, r, err)
 		return
 	}
 
@@ -126,6 +127,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 // @Param tag_mode query string false "Validated as for GET /commodities, then set aside for the counts" Enums(all,any)
 // @Param tags_exclude query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
 // @Param no_tags query bool false "Validated as for GET /commodities, then set aside for the counts"
+// @Param cf query []string false "Custom field condition, as for GET /commodities" collectionFormat(multi)
 // @Param sort query string false "Accepted and ignored"
 // @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
@@ -149,7 +151,7 @@ func (*commoditiesAPI) countCommodityTags(w http.ResponseWriter, r *http.Request
 	}
 	counts, err := commodityquery.TagCounts(r.Context(), regSet, query)
 	if err != nil {
-		internalServerError(w, r, err)
+		queryRunError(w, r, err)
 		return
 	}
 	if err := render.Render(w, r, jsonapi.NewCommodityTagCountsResponse(counts)); err != nil {
@@ -252,6 +254,12 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	if cover := api.resolveCoverForOne(r, commodity); cover != nil {
 		resp = resp.WithCover(cover)
 	}
+	linked, err := linkedItemSummaries(r.Context(), RegistrySetFromContext(r.Context()), commodity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	resp = resp.WithLinkedItems(linked)
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)

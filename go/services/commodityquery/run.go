@@ -11,10 +11,16 @@ import (
 
 // Resolve turns q into the registry options for the group of set: it adds,
 // for every search term, the slugs of the item tags whose label contains the
-// term, and, for a backend that does not join loans itself
-// (registry.NativeLentOutFilterer), the IDs of the items on an open loan.
+// term, the custom field filters, sort and search (see resolveCustomFields),
+// and, for a backend that does not join loans itself
+// (registry.NativeLentOutFilterer), the IDs of the items on an open loan. A
+// custom field condition the group's field refuses is an *Error.
 func Resolve(ctx context.Context, set *registry.Set, q Query) (registry.CommodityListOptions, error) {
 	opts := q.ListOptions()
+
+	if err := resolveCustomFields(ctx, set, q, &opts); err != nil {
+		return registry.CommodityListOptions{}, err
+	}
 
 	if set.TagRegistry != nil {
 		for _, term := range registry.SplitSearchTerms(q.Text) {
@@ -102,7 +108,7 @@ func Explain(commodities []*models.Commodity, opts registry.CommodityListOptions
 		if c == nil {
 			continue
 		}
-		if matches, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels); ok {
+		if matches, ok := registry.MatchCommoditySearch(c, terms, opts.SearchTagLabels, opts.SearchCustomFields); ok {
 			out[c.ID] = matches
 		}
 	}

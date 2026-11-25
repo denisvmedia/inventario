@@ -248,6 +248,7 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 
 	in.PreferredCurrencyCode = preferredCurrencyFromContext(r.Context())
 	in.ItemTypes = scanItemTypesFromContext(r.Context())
+	in.CustomFields = scanCustomFieldsFromContext(r.Context())
 
 	// The constructor permits a nil service so the route can stay
 	// mounted in a "feature gated off" deployment; calling Scan on it
@@ -402,6 +403,30 @@ func scanItemTypesFromContext(ctx context.Context) []services.ScanItemType {
 	out := make([]services.ScanItemType, 0, len(types))
 	for _, t := range types {
 		out = append(out, services.ScanItemType{Slug: string(t.Slug), Name: t.DisplayName()})
+	}
+	return out
+}
+
+// scanCustomFieldsFromContext lists the group's custom fields for the scan
+// prompt (#2803). When the list cannot be read the scan goes on without
+// them rather than failing.
+func scanCustomFieldsFromContext(ctx context.Context) []services.ScanCustomField {
+	regSet := RegistrySetFromContext(ctx)
+	if regSet == nil || regSet.CustomFieldRegistry == nil {
+		return nil
+	}
+	defs, err := regSet.CustomFieldRegistry.List(ctx)
+	if err != nil {
+		slog.Warn("commodity scan: custom fields unavailable, scanning without them", "error", err.Error())
+		return nil
+	}
+	out := make([]services.ScanCustomField, 0, len(defs))
+	for _, d := range defs {
+		f := services.ScanCustomField{ID: d.ID, Name: d.Name, Type: string(d.Type)}
+		for _, o := range d.Options {
+			f.Options = append(f.Options, services.ScanCustomFieldOption{ID: o.ID, Label: o.Label})
+		}
+		out = append(out, f)
 	}
 	return out
 }

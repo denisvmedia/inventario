@@ -324,7 +324,9 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		return err
 	}
 
-	return nil
+	// Item links last for the same reason: only now is every item the
+	// archive carries restored, so a link can name one that came after it.
+	return walker.applyPendingLinks()
 }
 
 // applyPendingCovers resolves each queued commodity → cover-photo reference and
@@ -447,6 +449,12 @@ type inbWalker struct {
 	// this map, so an archive can never point an item at a seller it did not
 	// carry.
 	sellerIDs map[string]string
+
+	// customFields maps an archived custom field's UUID to its destination
+	// field, filled from the manifest; pendingLinks are the item link values
+	// set after the walk, once every item they may name is restored.
+	customFields map[string]*restoredCustomField
+	pendingLinks []inbPendingLink
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -494,6 +502,9 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
 	if err := w.restoreItemTypes(manifest.ItemTypes); err != nil {
+		return err
+	}
+	if err := w.restoreCustomFields(manifest.CustomFields); err != nil {
 		return err
 	}
 	return w.restoreSellers(manifest.Sellers)
@@ -705,6 +716,9 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if sellerID, ok := w.sellerIDs[c.SellerID]; ok && c.SellerID != "" {
 		commodity.SellerID = &sellerID
 	}
+	// Custom field values resolve through the manifest's custom fields only.
+	var links []inbPendingLink
+	commodity.CustomFields, links = w.restoredCustomFieldValues(c)
 
 	resolver, err := l.itemTypeResolver(w.ctx, w.options)
 	if err != nil {
@@ -769,6 +783,10 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if w.commodityWasCreated(existingCommodity) {
 		w.queueCoverPatch(c)
 	}
+	// Item links go with the values: onto a created row, or an updated one.
+	if w.commodityWasCreated(existingCommodity) || w.commodityWasUpdated(existingCommodity) {
+		w.pendingLinks = append(w.pendingLinks, links...)
+	}
 
 	// Register file refs so the later file members know which commodity (and
 	// bucket) they belong to.
@@ -790,6 +808,12 @@ func (w *inbWalker) commodityWasCreated(existingCommodity *models.Commodity) boo
 		return true
 	}
 	return existingCommodity == nil
+}
+
+// commodityWasUpdated reports whether applyStrategyForCommodityModel just
+// wrote the archived fields onto an existing row (merge_update).
+func (w *inbWalker) commodityWasUpdated(existingCommodity *models.Commodity) bool {
+	return !w.options.DryRun && w.options.Strategy == types.RestoreStrategyMergeUpdate && existingCommodity != nil
 }
 
 // queueCoverPatch records the commodity's cover-photo cross-reference (#1451)

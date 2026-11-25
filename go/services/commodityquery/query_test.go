@@ -36,6 +36,7 @@ func TestParse_EveryParameter(t *testing.T) {
 		"tags=Fragile,power+tools", "tags=red",
 		"tag_mode=any",
 		"tags_exclude=garage",
+		"cf=f-1:set", "cf=f-2:contains:+a:b+", "cf=f-1:set",
 		"sort=-purchase_date",
 	}, "&"))
 	c.Assert(err, qt.IsNil)
@@ -57,6 +58,10 @@ func TestParse_EveryParameter(t *testing.T) {
 			Include: []string{"fragile", "power-tools", "red"},
 			Mode:    registry.TagMatchAny,
 			Exclude: []string{"garage"},
+		},
+		CustomFields: []commodityquery.CustomFieldCondition{
+			{FieldID: "f-1", Op: registry.CustomFieldOpSet},
+			{FieldID: "f-2", Op: registry.CustomFieldOpContains, Operand: "a:b"},
 		},
 		SortField: registry.CommoditySortPurchaseDate,
 		SortDesc:  true,
@@ -88,6 +93,14 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "too many sellers", query: manySellers(commodityquery.MaxSellers + 1), param: "seller_id"},
 		{name: "trashed that is neither", query: "trashed=deleted", param: "trashed"},
 		{name: "lent_out in the trash", query: "trashed=true&lent_out=false", param: "lent_out"},
+		{name: "a custom field condition without a comparison", query: "cf=f-1", param: "cf"},
+		{name: "a custom field condition without a field", query: "cf=:set", param: "cf"},
+		{name: "an unknown custom field comparison", query: "cf=f-1:like:x", param: "cf"},
+		{name: "set with a value", query: "cf=f-1:set:x", param: "cf"},
+		{name: "eq without a value", query: "cf=f-1:eq", param: "cf"},
+		{name: "a range over a word", query: "cf=f-1:gte:ten", param: "cf"},
+		{name: "a custom field value over the length limit", query: "cf=f-1:eq:" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "cf"},
+		{name: "too many custom field conditions", query: manyConditions(commodityquery.MaxCustomFieldFilters + 1), param: "cf"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -219,8 +232,13 @@ func TestQuery_ValuesRoundTrip(t *testing.T) {
 			Tags: registry.CommodityTagFilter{
 				Include: []string{"b", "a"}, Mode: registry.TagMatchAny, Exclude: []string{"c"},
 			},
+			CustomFields: []commodityquery.CustomFieldCondition{
+				{FieldID: "f-2", Op: registry.CustomFieldOpIn, Operand: "a,b"},
+				{FieldID: "f-1", Op: registry.CustomFieldOpUnset},
+			},
 			SortField: registry.CommoditySortCurrentPrice,
 		}},
+		{name: "custom field sort", q: commodityquery.Query{IncludeInactive: true, SortField: "cf.f-1", SortDesc: true}},
 		{name: "untagged", q: commodityquery.Query{IncludeInactive: true, Tags: registry.CommodityTagFilter{Untagged: true}}},
 		{name: "trashed", q: commodityquery.Query{Text: "drill", IncludeInactive: true, Trashed: true}},
 		{name: "all is the default mode", q: commodityquery.Query{
@@ -273,4 +291,12 @@ func TestParse_Trashed(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(q.Trashed, qt.IsFalse)
 	c.Check(q.LentOut, qt.DeepEquals, new(true))
+}
+
+func manyConditions(n int) string {
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = fmt.Sprintf("cf=f-%d:set", i)
+	}
+	return strings.Join(parts, "&")
 }

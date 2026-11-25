@@ -14,6 +14,12 @@ import (
 	"go.5x5.cz/inventario/registry"
 )
 
+var testListTables = commodityListTables{
+	commodities:       "commodities",
+	loans:             "commodity_loans",
+	customFieldValues: "commodity_custom_field_values",
+}
+
 // The list query is assembled from a dozen optional filters, and a wrong
 // placeholder or a dropped predicate reads as "no results" rather than as an
 // error. These pin the text so a change to the builder has to be deliberate.
@@ -222,7 +228,7 @@ func TestCommodityListSQL(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			where := commodityWhere(tc.opts, "commodities", "commodity_loans")
+			where := commodityWhere(tc.opts, testListTables)
 			sb := newSelect().
 				Select("*", totalCountColumn).
 				From("commodities").
@@ -231,7 +237,7 @@ func TestCommodityListSQL(t *testing.T) {
 			if where != nil {
 				sb.AddWhereClause(where)
 			}
-			applyCommodityOrder(sb, tc.opts)
+			applyCommodityOrder(sb, tc.opts, testListTables)
 
 			got, args := sb.Build()
 			c.Check(got, qt.Equals, tc.want)
@@ -250,7 +256,7 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 		Search:   "drill",
 		Statuses: []models.CommodityStatus{"in_use"},
 	}
-	where := commodityWhere(opts, "commodities", "commodity_loans")
+	where := commodityWhere(opts, testListTables)
 
 	countSB := newSelect().Select("COUNT(*)").From("commodities")
 	countSB.AddWhereClause(where)
@@ -267,7 +273,7 @@ func TestCommodityTagCountsSQL(t *testing.T) {
 
 	opts := registry.CommodityListOptions{Search: "drill"}
 	sb := commodityTagCountsSelect("commodities")
-	query, args := addWhere(sb, commodityWhere(opts, "commodities", "commodity_loans")).Build()
+	query, args := addWhere(sb, commodityWhere(opts, testListTables)).Build()
 
 	c.Check(query, qt.Equals,
 		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+

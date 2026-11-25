@@ -16,8 +16,9 @@ Features that select items (saved views, header search, bulk "select all N match
 | Parameters, parsing, validation, encoding | `go/services/commodityquery/query.go` (`Query`, `Parse`, `Query.Values`) | `frontend/src/features/commodities/query.ts` (`CommodityQuery`, `parseCommodityQuery`, `writeCommodityQuery`, `listOptionsToParams`) |
 | Running a query, totals, match reasons, tag counts | `go/services/commodityquery/run.go` (`Resolve`, `List`, `Explain`, `TagCounts`) | `useCommodities`, `useCommodityTagCounts` in `features/commodities/hooks.ts` |
 | What a search term and a tag filter match, how tags are counted | `go/registry/commodity_search.go` (`SplitSearchTerms`, `MatchCommoditySearch`, `CommodityTagFilter`, `CountCommodityTags`) | — |
-| Backends | `go/registry/postgres/commodities.go` (SQL), `go/registry/memory/commodities.go` (Go) | — |
-| Behavior both backends must share | `go/registry/registrytest/commodity_search.go` (run by the memory and postgres test packages) | `features/commodities/__tests__/query.test.ts` |
+| Custom field filters, sort and search | `go/services/commodityquery/custom_fields.go` (`cf`, resolving against the group's fields), `go/registry/custom_field_query.go` (`CustomFieldFilter`, `CustomFieldSort`, `CustomFieldSearch`) | — |
+| Backends | `go/registry/postgres/commodities.go` and `commodity_custom_fields.go` (SQL), `go/registry/memory/commodities.go` (Go) | — |
+| Behavior both backends must share | `go/registry/registrytest/commodity_search.go` and `custom_fields.go` (run by the memory and postgres test packages) | `features/commodities/__tests__/query.test.ts` |
 
 Handlers do not read filter parameters themselves. They decode the raw query string with `commodityquery.DecodeQuery`, which refuses a pair that `url.URL.Query` would drop (a malformed `%` escape, a `;` separator), and call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`; none on `/commodities/tag-counts`, which refuses `page`) and pass the result to `commodityquery.List` or `commodityquery.TagCounts`.
 
@@ -41,10 +42,11 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `tag_mode` | `all` (default) or `any` | `all`: every tag in `tags`; `any`: at least one. |
 | `tags_exclude` | slugs, comma-separated or repeated, at most 50 | Item carries none of these tags. |
 | `no_tags` | `true`/`false` | Item has no tags. |
+| `cf` | `<field id>:<op>[:<value>]`, repeatable, at most 20 | Custom field condition, see below. |
 | `trashed` | `true`/`false`, default `false` | `true` selects the items in Trash instead of the live ones; every other filter applies to them the same way. Cannot be combined with `lent_out`, because the loans of an item in Trash are hidden. |
-| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. An unknown date or price (NULL) comes after every known one in both directions, and a known zero sorts as a value; `registrytest.RunCommoditySearchContract` holds both backends to it. |
+| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. An unknown date or price (NULL) comes after every known one in both directions, and a known zero sorts as a value; `registrytest.RunCommoditySearchContract` holds both backends to it. `cf.<field id>` sorts by a custom field, see below. |
 
-All conditions are combined with AND. Within a repeatable parameter the values are combined with OR, except `tags` with `tag_mode=all`.
+All conditions are combined with AND. Within a repeatable parameter the values are combined with OR, except `tags` with `tag_mode=all` and `cf`, whose conditions are each a condition of their own.
 
 Boolean values are `true`/`false` or `1`/`0`, in any case. Tag values are normalized like a tag slug on write, so `tags=Fragile` finds the tag `fragile`.
 
@@ -58,7 +60,8 @@ Every term must match. A term matches an item when one of these holds:
 
 - it is a substring of one of the searched fields: name, short name, brand, model, serial number, extra serial numbers, part numbers, tag slugs, notes (`comments`), warranty notes, status note;
 - it is a substring of the label of an item tag the item carries (the labels are looked up per term in the item tag namespace before the query runs; file tags are never consulted);
-- it is the item's asset ID (`A-0042`, `a-42`, `A42`, `#42` and `42` all name asset number 42, see `models.ParseAssetID`).
+- it is the item's asset ID (`A-0042`, `a-42`, `A42`, `#42` and `42` all name asset number 42, see `models.ParseAssetID`);
+- it is a substring of the item's value of a text, long text or URL custom field, or of the label of the option an item's select field holds (the labels are looked up per term before the query runs, like tag labels). Numbers, dates, money, yes/no and item links are not searched.
 
 `%` and `_` are ordinary characters, as in a plain substring search.
 
@@ -79,7 +82,7 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 }
 ```
 
-`field` is one of `asset_id`, `name`, `short_name`, `brand`, `model`, `serial_number`, `extra_serial_numbers`, `part_numbers`, `tags`, `comments`, `warranty_notes`, `status_note`, in that order. A list field reports the matching element; a tag reports its slug; a note reports an excerpt of up to 40 characters on each side of the first matching term, with an ellipsis where text was cut. The frontend shows the first match unless the name matched (`primarySearchMatch`), since the name is already the result's title.
+`field` is one of `asset_id`, `name`, `short_name`, `brand`, `model`, `serial_number`, `extra_serial_numbers`, `part_numbers`, `tags`, `comments`, `warranty_notes`, `status_note`, `custom_fields`, in that order. A `custom_fields` match also carries `custom_field_id`; its value is the field's value, or the option label of a select field. A list field reports the matching element; a tag reports its slug; a note reports an excerpt of up to 40 characters on each side of the first matching term, with an ellipsis where text was cut. The frontend shows the first match unless the name matched (`primarySearchMatch`), since the name is already the result's title.
 
 ## Tag filter
 
@@ -97,6 +100,29 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 ```
 
 The counts are for the query with its tag filter set aside: `tags[slug]` is the number of items the rest of the query selects that carry the tag, and `untagged` the number with no tags. So the counts do not change while the user picks tags, and a tag's count is the total the list shows when that tag alone is selected. A tag no selected item carries is absent from `tags`. The search, the other filters (`include_inactive` among them) and the group scope apply as on the list. `CountCommodityTags` is the reference: the memory registry calls it, and the shared registry tests check both backends against it applied to the listed items.
+
+## Custom fields
+
+The custom fields of a group (#2803) are named by their definition's ID, which a rename does not change, so a saved query keeps working after a field is renamed.
+
+A `cf` condition is `<field id>:<op>` for `set` and `unset`, and `<field id>:<op>:<value>` for the others. Everything after the second colon is the value, so a text value may contain colons. The comparisons a field type takes:
+
+| Type | Comparisons | Value |
+| ---- | ----------- | ----- |
+| text, long text, URL | `set`, `unset`, `eq`, `contains` | text; `eq` ignores case, `contains` is a substring test without regard to case |
+| number, money | `set`, `unset`, `eq`, `gte`, `lte` | a decimal number; money compares the amount whatever its currency |
+| date | `set`, `unset`, `eq`, `gte`, `lte` | `YYYY-MM-DD` |
+| yes/no | `set`, `unset`, `eq` | `true`/`false` or `1`/`0` |
+| select | `set`, `unset`, `eq`, `in` | option ids; `eq` takes one, `in` a comma-separated list |
+| link to another item | `set`, `unset`, `eq` | an item id |
+
+`set` keeps items with a value and `unset` items without one. A value of zero, `false` or empty text is a value: `set` keeps it, and `eq:0` or `eq:false` finds it.
+
+`commodityquery.Parse` checks the shape of a condition, the comparison name, and that a range value is a number or a date. `commodityquery.Resolve` reads the group's fields and checks the rest; a comparison the field's type does not take, or a value it cannot read, is a 400 like any other parameter error. A condition on a field the group does not have, or an option the field no longer has, matches nothing, the way a deleted tag or seller does: a saved view that names a deleted field lists no items instead of failing.
+
+`sort=cf.<field id>` orders by the field's value: text without regard to case, numbers and money by amount, dates by day, `false` before `true`, select options in the order the field lists them. Items without a value come last in both directions. Long text and item links do not sort, and a sort by them, or by a field the group does not have, falls back to `name`.
+
+In PostgreSQL each condition is an `EXISTS` on `commodity_custom_field_values`, which has one typed column per type and an index on `(field_id, value_x)` for each; the sort is a correlated subquery on the same table. The memory registry evaluates `registry.CustomFieldFilter.Matches` and `registry.CustomFieldSort.Compare`. `registrytest.RunCustomFieldContract` holds both backends to the same results.
 
 ## Errors
 

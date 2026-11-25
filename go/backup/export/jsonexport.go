@@ -166,7 +166,7 @@ func (s *ExportService) writePayload(
 	if plan.files.present {
 		filesMember = INBFilesName
 	}
-	if err := builder.writeManifest(plan.manifestLocs, plan.sellers, plan.itemTypes, unassignedMember, filesMember); err != nil {
+	if err := builder.writeManifest(plan, unassignedMember, filesMember); err != nil {
 		return nil, nil, err
 	}
 
@@ -279,15 +279,11 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 }
 
 // writeManifest emits the manifest.json member from the accumulated stats and
-// the per-location index. unassignedMember names the area-less commodities member
-// (issue #1986) and filesMember the non-commodity files member (issue #2235);
-// either is "" when that member is not written (then the field is omitted).
-func (b *inbBuilder) writeManifest(
-	locs []INBManifestLoc,
-	sellers []INBSeller,
-	itemTypes []INBItemType,
-	unassignedMember, filesMember string,
-) error {
+// the plan's per-location index, sellers, item types and custom fields.
+// unassignedMember names the area-less commodities member (issue #1986) and
+// filesMember the non-commodity files member (issue #2235); either is "" when
+// that member is not written (then the field is omitted).
+func (b *inbBuilder) writeManifest(plan inbPlan, unassignedMember, filesMember string) error {
 	manifest := INBManifest{
 		ExportDate:  time.Now().UTC().Format(time.RFC3339),
 		ExportType:  string(b.export.Type),
@@ -299,11 +295,12 @@ func (b *inbBuilder) writeManifest(
 			PublicKey:   b.svc.signer.PublicKeyBase64(),
 			Fingerprint: b.svc.signer.Fingerprint(),
 		},
-		Locations:      locs,
+		Locations:      plan.manifestLocs,
 		UnassignedFile: unassignedMember,
 		FilesFile:      filesMember,
-		Sellers:        sellers,
-		ItemTypes:      itemTypes,
+		Sellers:        plan.sellers,
+		ItemTypes:      plan.itemTypes,
+		CustomFields:   plan.customFields,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

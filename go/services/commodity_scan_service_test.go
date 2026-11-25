@@ -330,3 +330,33 @@ func TestCommodityScanService_ScanAnonymous_ProviderTimeout(t *testing.T) {
 	_, err := svc.ScanAnonymous(context.Background(), newScanInput(jpegPhoto("a.jpg", 64)))
 	c.Assert(err, qt.ErrorIs, services.ErrScanProviderTimeout)
 }
+
+func TestCommodityScanService_CustomFieldGuessesNameTheFields(t *testing.T) {
+	c := qt.New(t)
+	provider := mock.New(mock.WithDefaultResult(aivision.ScanResult{
+		Fields: map[string]aivision.FieldGuess{aivision.FieldNameName: {Value: "Car", Confidence: 0.9}},
+		CustomFields: map[string]aivision.FieldGuess{
+			"f-vin":     {Value: "WVW123", Confidence: 0.8},
+			"f-fuel":    {Value: "diesel", Confidence: 0.6},
+			"f-km":      {Value: "lots", Confidence: 0.4},
+			"f-unknown": {Value: "x", Confidence: 0.4},
+		},
+	}))
+	svc := services.NewCommodityScanService(provider, memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos:     5,
+		MaxPhotoBytes: 1024,
+	})
+	in := newScanInput(jpegPhoto("a.jpg", 64))
+	in.CustomFields = []services.ScanCustomField{
+		{ID: "f-vin", Name: "VIN", Type: "text"},
+		{ID: "f-fuel", Name: "Fuel", Type: "select", Options: []services.ScanCustomFieldOption{{ID: "o1", Label: "Petrol"}, {ID: "o2", Label: "Diesel"}}},
+		{ID: "f-km", Name: "Km", Type: "number"},
+	}
+
+	result, err := svc.Scan(context.Background(), "tenant-1", "user-1", in)
+	c.Assert(err, qt.IsNil)
+	c.Check(result.CustomFields, qt.DeepEquals, map[string]aivision.FieldGuess{
+		"f-vin":  {Value: "WVW123", Confidence: 0.8},
+		"f-fuel": {Value: "o2", Confidence: 0.6},
+	}, qt.Commentf("a select label becomes its option; a guess of the wrong kind or for no field is dropped"))
+}

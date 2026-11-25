@@ -204,16 +204,27 @@ func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Com
 	return &out, nil
 }
 
-// PurgeTrashed deletes a trashed item's row.
+// PurgeTrashed deletes a trashed item's row, and the links other items have
+// to it.
 func (r *CommodityRegistry) PurgeTrashed(_ context.Context, id string) (bool, error) {
+	if !r.purgeTrashedRow(id) {
+		return false, nil
+	}
+	if r.customFields != nil {
+		r.customFields.dropLinksTo(id)
+	}
+	return true, nil
+}
+
+func (r *CommodityRegistry) purgeTrashedRow(id string) bool {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	c, ok := r.items.Get(id)
 	if !ok || !r.isItemVisible(c) || !c.IsTrashed() {
-		return false, nil
+		return false
 	}
 	r.items.Delete(id)
-	return true, nil
+	return true
 }
 
 // rewriteTrashedTags applies fn to the tags of every visible trashed item. Tag

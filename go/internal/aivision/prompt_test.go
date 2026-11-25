@@ -149,3 +149,53 @@ func TestResponseSchemaAndPrompt_UseTheGroupsItemTypes(t *testing.T) {
 	builtin := aivision.UserPromptHeader(aivision.ScanRequest{})
 	c.Check(builtin, qt.Contains, "- white_goods (Appliance)\n")
 }
+
+func TestResponseSchemaAndPrompt_OfferTheGroupsCustomFields(t *testing.T) {
+	c := qt.New(t)
+	req := aivision.ScanRequest{CustomFields: []aivision.CustomFieldOption{
+		{Key: "f-vin", Name: "VIN", Type: "text"},
+		{Key: "f-fuel", Name: "Fuel", Type: "select", Options: []string{"Petrol", "Diesel"}},
+		{Key: "f-paid", Name: "Paid", Type: "money"},
+		{Key: "f-charger", Name: "Charger", Type: "item_link"},
+		{Key: "f-electric", Name: "Electric", Type: "boolean"},
+	}}
+
+	schema := aivision.ResponseSchema(req)
+	fields := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	custom := fields[aivision.FieldNameCustomFields].(map[string]any)["properties"].(map[string]any)
+	c.Check(custom, qt.HasLen, 3, qt.Commentf("money and item links are left out"))
+	fuelEnum := custom["f-fuel"].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)["enum"].([]string)
+	c.Check(fuelEnum, qt.DeepEquals, []string{"Petrol", "Diesel"})
+
+	header := aivision.UserPromptHeader(req)
+	c.Check(header, qt.Contains, `- f-vin: "VIN" (text)`)
+	c.Check(header, qt.Contains, `- f-fuel: "Fuel" (select; options: "Petrol", "Diesel")`)
+	c.Check(header, qt.Not(qt.Contains), "f-paid")
+
+	// Without custom fields the schema has no custom_fields member.
+	plain := aivision.ResponseSchema(aivision.ScanRequest{})
+	plainFields := plain["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	_, has := plainFields[aivision.FieldNameCustomFields]
+	c.Check(has, qt.IsFalse)
+}
+
+func TestToScanResult_CustomFields(t *testing.T) {
+	c := qt.New(t)
+	res, err := aivision.ToScanResult([]byte(`{"items":[{
+		"name":{"value":"Car","confidence":0.9},
+		"custom_fields":{
+			"f-vin":{"value":"WVW123","confidence":0.8},
+			"f-km":{"value":120000,"confidence":0.5},
+			"f-electric":{"value":false,"confidence":0.7},
+			"f-none":{"value":null,"confidence":0.1},
+			"f-list":{"value":["a"],"confidence":0.1}
+		}
+	}]}`))
+	c.Assert(err, qt.IsNil)
+	c.Check(res.Fields[aivision.FieldNameName].Value, qt.Equals, "Car")
+	c.Check(res.CustomFields, qt.DeepEquals, map[string]aivision.FieldGuess{
+		"f-vin":      {Value: "WVW123", Confidence: 0.8},
+		"f-km":       {Value: float64(120000), Confidence: 0.5},
+		"f-electric": {Value: false, Confidence: 0.7},
+	})
+}

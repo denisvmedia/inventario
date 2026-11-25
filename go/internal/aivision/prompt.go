@@ -52,6 +52,17 @@ func UserPromptHeader(req ScanRequest) string {
 		}
 		fmt.Fprintf(&b, "- %s (%s)\n", t.Slug, t.Name)
 	}
+	if fields := req.scanCustomFields(); len(fields) > 0 {
+		b.WriteString("The user also records these custom fields. Put a value into \"custom_fields\" under the field's key " +
+			"only when the product or document shows it; dates as YYYY-MM-DD, a select value as one of its options:\n")
+		for _, f := range fields {
+			fmt.Fprintf(&b, "- %s: %q (%s", f.Key, f.Name, f.Type)
+			if len(f.Options) > 0 {
+				fmt.Fprintf(&b, "; options: %s", strings.Join(quoteAll(f.Options), ", "))
+			}
+			b.WriteString(")\n")
+		}
+	}
 	b.WriteString("\nReturn the JSON object now.")
 	return b.String()
 }
@@ -178,6 +189,18 @@ func ResponseSchema(req ScanRequest) map[string]any {
 		"additionalProperties": false,
 	}
 
+	if custom := req.scanCustomFields(); len(custom) > 0 {
+		properties := make(map[string]any, len(custom))
+		for _, f := range custom {
+			properties[f.Key] = customFieldValueSchema(f)
+		}
+		fields[FieldNameCustomFields] = map[string]any{
+			"type":                 "object",
+			"properties":           properties,
+			"additionalProperties": false,
+		}
+	}
+
 	fieldsObject := map[string]any{
 		"type":                 "object",
 		"properties":           fields,
@@ -215,6 +238,51 @@ func ResponseSchema(req ScanRequest) map[string]any {
 	}
 }
 
+// FieldNameCustomFields is the key of the custom field values in a response
+// item. It is not a FieldName: its value is an object of guesses keyed by
+// custom field key, see ScanResult.CustomFields.
+const FieldNameCustomFields = "custom_fields"
+
+// customFieldValueSchema returns the guess schema of one custom field, or nil
+// for a type the model cannot fill.
+func customFieldValueSchema(f CustomFieldOption) map[string]any {
+	var value map[string]any
+	switch f.Type {
+	case "text", "long_text", "url":
+		value = map[string]any{"type": "string"}
+	case "date":
+		value = map[string]any{"type": "string", "description": "YYYY-MM-DD"}
+	case "number":
+		value = map[string]any{"type": "number"}
+	case "boolean":
+		value = map[string]any{"type": "boolean"}
+	case "select":
+		if len(f.Options) == 0 {
+			return nil
+		}
+		value = map[string]any{"type": "string", "enum": f.Options}
+	default:
+		return nil
+	}
+	return map[string]any{
+		"type": "object",
+		"properties": map[string]any{
+			"value":      value,
+			"confidence": map[string]any{"type": "number", "minimum": 0, "maximum": 1},
+		},
+		"required":             []string{"value", "confidence"},
+		"additionalProperties": false,
+	}
+}
+
+func quoteAll(in []string) []string {
+	out := make([]string, len(in))
+	for i, s := range in {
+		out[i] = fmt.Sprintf("%q", s)
+	}
+	return out
+}
+
 // ResponseSchemaJSON returns the schema serialised as JSON bytes, which
 // is the form OpenAI's response_format and Anthropic's tool input_schema
 // expect.
@@ -237,23 +305,76 @@ type rawScanResponse struct {
 //     e.g. {"name": {...}, "type": {...}}
 //   - nested: a {"fields": {...}} wrapper (legacy / some responses)
 //
-// Whichever yields a non-empty field map wins (flat is tried first).
-func decodeRawItem(raw json.RawMessage) map[string]FieldGuess {
-	var flat map[string]rawFieldGuess
+// Whichever yields a non-empty field map wins (flat is tried first). The
+// custom field values sit under FieldNameCustomFields in either shape.
+func decodeRawItem(raw json.RawMessage) ScanItem {
+	var flat map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &flat); err == nil {
-		if f, _ := decodeFieldMap(flat); len(f) > 0 {
-			return f
+		item := ScanItem{Fields: decodeFlatFields(flat), CustomFields: decodeCustomFields(flat[FieldNameCustomFields])}
+		if len(item.Fields) > 0 || len(item.CustomFields) > 0 {
+			return item
+		}
+		if nested, ok := flat["fields"]; ok {
+			var fields map[string]json.RawMessage
+			if json.Unmarshal(nested, &fields) == nil {
+				return ScanItem{Fields: decodeFlatFields(fields), CustomFields: decodeCustomFields(fields[FieldNameCustomFields])}
+			}
 		}
 	}
-	var nested struct {
-		Fields map[string]rawFieldGuess `json:"fields"`
-	}
-	if err := json.Unmarshal(raw, &nested); err == nil && len(nested.Fields) > 0 {
-		if f, _ := decodeFieldMap(nested.Fields); len(f) > 0 {
-			return f
+	return ScanItem{}
+}
+
+// decodeFlatFields decodes the canonical fields of one item, skipping a key
+// whose value is not a guess object.
+func decodeFlatFields(raw map[string]json.RawMessage) map[string]FieldGuess {
+	guesses := make(map[string]rawFieldGuess, len(raw))
+	for name, v := range raw {
+		var g rawFieldGuess
+		if json.Unmarshal(v, &g) == nil {
+			guesses[name] = g
 		}
 	}
-	return nil
+	f, _ := decodeFieldMap(guesses)
+	if len(f) == 0 {
+		return nil
+	}
+	return f
+}
+
+// decodeCustomFields decodes the custom field guesses of one item. A value
+// that is not a string, a number or a boolean is dropped; the service checks
+// the rest against the fields.
+func decodeCustomFields(raw json.RawMessage) map[string]FieldGuess {
+	if len(raw) == 0 {
+		return nil
+	}
+	var guesses map[string]rawFieldGuess
+	if json.Unmarshal(raw, &guesses) != nil {
+		return nil
+	}
+	out := make(map[string]FieldGuess, len(guesses))
+	for key, g := range guesses {
+		if len(g.Value) == 0 || string(g.Value) == "null" {
+			continue
+		}
+		var (
+			s string
+			n float64
+			b bool
+		)
+		switch {
+		case json.Unmarshal(g.Value, &s) == nil:
+			out[key] = FieldGuess{Value: s, Confidence: g.Confidence}
+		case json.Unmarshal(g.Value, &n) == nil:
+			out[key] = FieldGuess{Value: n, Confidence: g.Confidence}
+		case json.Unmarshal(g.Value, &b) == nil:
+			out[key] = FieldGuess{Value: b, Confidence: g.Confidence}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // rawFieldGuess uses json.RawMessage on Value so the same schema can
@@ -284,11 +405,11 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 	// each, dropping empties so a stray {} never renders a blank choice.
 	var products []ScanItem
 	for _, it := range raw.Items {
-		itemFields := decodeRawItem(it)
-		if len(itemFields) == 0 {
+		item := decodeRawItem(it)
+		if len(item.Fields) == 0 && len(item.CustomFields) == 0 {
 			continue
 		}
-		products = append(products, ScanItem{Fields: itemFields})
+		products = append(products, item)
 	}
 
 	// Primary single-item view: prefer an explicit top-level `fields`
@@ -302,6 +423,7 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 		out.Warnings = append(out.Warnings, primaryWarnings...)
 	case len(products) > 0:
 		out.Fields = products[0].Fields
+		out.CustomFields = products[0].CustomFields
 	}
 
 	// Expose Items to the FE only when there's an actual choice to make.
