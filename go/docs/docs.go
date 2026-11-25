@@ -3400,9 +3400,155 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/commodities/tag-counts": {
+            "get": {
+                "description": "Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.\nTakes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Count commodity tags",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Search text, as for GET /commodities",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by commodity type, as for GET /commodities",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by status, as for GET /commodities",
+                        "name": "status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Filter by exact area ID",
+                        "name": "area_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only commodities with no area",
+                        "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Include drafts and non-in_use commodities (default true)",
+                        "name": "include_inactive",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Filter by computed warranty status",
+                        "name": "warranty_status",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Warranty expires strictly before YYYY-MM-DD",
+                        "name": "warranty_expires_before",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Filter by current loan state",
+                        "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags",
+                        "in": "query"
+                    },
+                    {
+                        "enum": [
+                            "all",
+                            "any"
+                        ],
+                        "type": "string",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tag_mode",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "tags_exclude",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Validated as for GET /commodities, then set aside for the counts",
+                        "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Accepted and ignored",
+                        "name": "sort",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityTagCountsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Unsupported parameter or invalid value",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/values": {
             "get": {
-                "description": "Get the total value of commodities globally, by location, and by area",
+                "description": "Get the total value of commodities globally, by location, and by area.\nOnly in-use, non-draft items count. An item's value is its current price,\nor its purchase price in the group currency when the current price is\nunknown; a known zero counts. Items with no known value are not added as\nzero: unvalued_count reports how many each total leaves out.",
                 "consumes": [
                     "application/json"
                 ],
@@ -12089,6 +12235,14 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityTagCountsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/registry.CommodityTagCounts"
+                }
+            }
+        },
         "jsonapi.CurrencyMigrationPreviewAttributes": {
             "type": "object",
             "properties": {
@@ -12157,10 +12311,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "current_price_after": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "current_price_before": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_currency_after": {
                     "type": "string"
@@ -12169,10 +12325,12 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "original_price_after": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_price_before": {
-                    "type": "number"
+                    "type": "number",
+                    "x-nullable": "true"
                 }
             }
         },
@@ -13494,6 +13652,12 @@ const docTemplate = `{
                 "name": {
                     "type": "string"
                 },
+                "unvalued_count": {
+                    "description": "UnvaluedCount is the number of in-use items in this location or area\nthat have no known value and are therefore not part of Value.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "value": {
                     "type": "number"
                 }
@@ -14269,6 +14433,18 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/jsonapi.NamedTotal"
                     }
+                },
+                "unvalued_count": {
+                    "description": "UnvaluedCount is the number of in-use items GlobalTotal leaves out\nbecause neither their current value nor their purchase price is known.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                },
+                "valued_count": {
+                    "description": "ValuedCount is the number of in-use items that GlobalTotal includes.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 12
                 }
             }
         },
@@ -14352,7 +14528,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "converted_original_price": {
-                    "type": "number"
+                    "description": "ConvertedOriginalPrice is the purchase price in the group currency, null\nwhen unknown. It applies only when OriginalPriceCurrency is a foreign\ncurrency; for an item bought in the group currency it is always null.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "count": {
                     "type": "integer"
@@ -14362,7 +14540,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "current_price": {
-                    "type": "number"
+                    "description": "CurrentPrice is the current value in the group currency, null when\nunknown. When known, 0 included, it is the item's value in every total;\notherwise the purchase price in the group currency stands in.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "draft": {
                     "type": "boolean"
@@ -14383,7 +14563,9 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "original_price": {
-                    "type": "number"
+                    "description": "OriginalPrice is the purchase price in OriginalPriceCurrency, null when\nunknown. Each of the three prices can be unknown on its own, and\nunknown is not zero: a gift's price is unknown, a free item's is 0. A\nreviewed item may leave any of them unknown.",
+                    "type": "number",
+                    "x-nullable": "true"
                 },
                 "original_price_currency": {
                     "type": "string"
@@ -14395,7 +14577,9 @@ const docTemplate = `{
                     }
                 },
                 "purchase_date": {
-                    "type": "string"
+                    "description": "PurchaseDate is nil when the date is unknown.",
+                    "type": "string",
+                    "x-nullable": "true"
                 },
                 "registered_date": {
                     "type": "string"
@@ -15805,6 +15989,22 @@ const docTemplate = `{
                 },
                 "value": {
                     "type": "string"
+                }
+            }
+        },
+        "registry.CommodityTagCounts": {
+            "type": "object",
+            "properties": {
+                "tags": {
+                    "description": "Tags maps a tag slug to the number of commodities carrying it. A slug\nno commodity in the set carries is absent.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "untagged": {
+                    "description": "Untagged counts the commodities without tags (a NULL tags column\nincluded).",
+                    "type": "integer"
                 }
             }
         },

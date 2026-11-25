@@ -258,3 +258,19 @@ func (ccr *CommodityCoverRequest) Validate() error {
 		validation.Field(&ccr.Data.Type, validation.Required, validation.In("commodity_cover")),
 	)
 }
+
+// CommodityTagCountsResponse is the payload of GET /commodities/tag-counts:
+// a flat envelope, like GET /tags/stats, holding per tag slug the number of
+// items the query selects.
+type CommodityTagCountsResponse struct {
+	Data registry.CommodityTagCounts `json:"data"`
+}
+
+func NewCommodityTagCountsResponse(counts registry.CommodityTagCounts) *CommodityTagCountsResponse {
+	return &CommodityTagCountsResponse{Data: counts}
+}
+
+func (*CommodityTagCountsResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}

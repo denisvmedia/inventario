@@ -341,10 +341,10 @@ func mustCreateLiveCommodity(c *qt.C, ctx context.Context, fs *registry.FactoryS
 		Type:                   models.CommodityTypeElectronics,
 		AreaID:                 new(area.ID),
 		Count:                  1,
-		OriginalPrice:          decimal.NewFromInt(10),
+		OriginalPrice:          new(decimal.NewFromInt(10)),
 		OriginalPriceCurrency:  "USD",
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.Zero,
+		ConvertedOriginalPrice: nil,
+		CurrentPrice:           nil,
 		Status:                 models.CommodityStatusInUse,
 		PurchaseDate:           models.ToPDate("2023-01-01"),
 	})

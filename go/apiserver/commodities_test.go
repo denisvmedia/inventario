@@ -19,6 +19,15 @@ import (
 	"go.5x5.cz/inventario/models"
 )
 
+// priceJSON is how a price reads in a JSON:API response: null when it is
+// unknown, its decimal string otherwise.
+func priceJSON(price *decimal.Decimal) any {
+	if price == nil {
+		return nil
+	}
+	return price.String()
+}
+
 func TestCommoditiesList(t *testing.T) {
 	c := qt.New(t)
 
@@ -46,10 +55,10 @@ func TestCommoditiesList(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.type"), string(expectedCommodities[0].Type))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.area_id"), ptr.From(expectedCommodities[0].AreaID))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.count"), float64(expectedCommodities[0].Count))
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.original_price"), expectedCommodities[0].OriginalPrice.String())
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.original_price"), priceJSON(expectedCommodities[0].OriginalPrice))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.original_price_currency"), string(expectedCommodities[0].OriginalPriceCurrency))
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.converted_original_price"), expectedCommodities[0].ConvertedOriginalPrice.String())
-	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.current_price"), expectedCommodities[0].CurrentPrice.String())
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.converted_original_price"), priceJSON(expectedCommodities[0].ConvertedOriginalPrice))
+	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.current_price"), priceJSON(expectedCommodities[0].CurrentPrice))
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.serial_number"), expectedCommodities[0].SerialNumber)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.extra_serial_numbers"), expectedCommodities[0].ExtraSerialNumbers)
 	c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.part_numbers"), expectedCommodities[0].PartNumbers)
@@ -91,10 +100,10 @@ func TestCommodityGet(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.type"), string(commodity.Type))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.area_id"), ptr.From(commodity.AreaID))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), commodity.OriginalPrice.String())
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), priceJSON(commodity.OriginalPrice))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), string(commodity.OriginalPriceCurrency))
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), commodity.ConvertedOriginalPrice.String())
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), commodity.CurrentPrice.String())
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), priceJSON(commodity.ConvertedOriginalPrice))
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), priceJSON(commodity.CurrentPrice))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), commodity.SerialNumber)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), commodity.ExtraSerialNumbers)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.part_numbers"), commodity.PartNumbers)
@@ -115,16 +124,15 @@ func TestCommoditiesList_UnassignedFilter(t *testing.T) {
 	registrySet := getRegistrySetFromParams(params, testUser)
 
 	loose := must.Must(registrySet.CommodityRegistry.Create(context.Background(), models.Commodity{
-		Name:                   "Loose Item",
-		ShortName:              "LI",
-		Type:                   models.CommodityTypeElectronics,
-		Count:                  1,
-		OriginalPrice:          must.Must(decimal.NewFromString("10.00")),
-		OriginalPriceCurrency:  models.Currency("USD"),
-		ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")),
-		CurrentPrice:           must.Must(decimal.NewFromString("8.00")),
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           models.ToPDate("2023-01-01"),
+		Name:                  "Loose Item",
+		ShortName:             "LI",
+		Type:                  models.CommodityTypeElectronics,
+		Count:                 1,
+		OriginalPrice:         new(must.Must(decimal.NewFromString("10.00"))),
+		OriginalPriceCurrency: models.Currency("USD"),
+		CurrentPrice:          new(must.Must(decimal.NewFromString("8.00"))),
+		Status:                models.CommodityStatusInUse,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
 	}))
 
 	req, err := http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+"/commodities?unassigned=true", nil)
@@ -158,26 +166,25 @@ func TestCommodityCreate(t *testing.T) {
 		Data: &jsonapi.CommodityData{
 			Type: "commodities",
 			Attributes: &models.Commodity{
-				Name:                   "New Commodity in Area 2",
-				ShortName:              "NewCom2",
-				AreaID:                 new(area.ID),
-				Type:                   models.CommodityTypeElectronics,
-				OriginalPrice:          must.Must(decimal.NewFromString("1000.00")),
-				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")), // to pass the validation
-				CurrentPrice:           must.Must(decimal.NewFromString("800.00")),
-				SerialNumber:           "SN123456",
-				ExtraSerialNumbers:     []string{"SN654321"},
-				PartNumbers:            []string{"P123", "P456"},
-				Tags:                   []string{"tag1", "tag2"},
-				URLs:                   urls,
-				Count:                  1,
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2023-01-01"),
-				RegisteredDate:         models.ToPDate("2023-01-02"),
-				LastModifiedDate:       models.ToPDate("2023-01-03"),
-				Comments:               "New commodity comments",
-				Draft:                  false,
+				Name:                  "New Commodity in Area 2",
+				ShortName:             "NewCom2",
+				AreaID:                new(area.ID),
+				Type:                  models.CommodityTypeElectronics,
+				OriginalPrice:         new(must.Must(decimal.NewFromString("1000.00"))),
+				OriginalPriceCurrency: models.Currency("USD"),
+				CurrentPrice:          new(must.Must(decimal.NewFromString("800.00"))),
+				SerialNumber:          "SN123456",
+				ExtraSerialNumbers:    []string{"SN654321"},
+				PartNumbers:           []string{"P123", "P456"},
+				Tags:                  []string{"tag1", "tag2"},
+				URLs:                  urls,
+				Count:                 1,
+				Status:                models.CommodityStatusInUse,
+				PurchaseDate:          models.ToPDate("2023-01-01"),
+				RegisteredDate:        models.ToPDate("2023-01-02"),
+				LastModifiedDate:      models.ToPDate("2023-01-03"),
+				Comments:              "New commodity comments",
+				Draft:                 false,
 			},
 		},
 	}
@@ -206,7 +213,8 @@ func TestCommodityCreate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(1))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "1000")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "0")
+	// A converted price does not apply to an item bought in the group currency.
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), nil)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "800")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN123456")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN654321"})
@@ -233,25 +241,24 @@ func TestCommodityUpdate(t *testing.T) {
 			ID:   commodity.ID,
 			Type: "commodities",
 			Attributes: models.WithID(commodity.ID, &models.Commodity{
-				Name:                   "Updated Commodity",
-				ShortName:              "UC",
-				AreaID:                 commodity.AreaID,
-				Type:                   models.CommodityTypeFurniture,
-				Count:                  10,
-				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
-				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("0")), // to pass the validation
-				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
-				SerialNumber:           "SN654321",
-				ExtraSerialNumbers:     []string{"SN123456"},
-				PartNumbers:            []string{"P789"},
-				Tags:                   []string{"tag1", "tag3"},
-				Status:                 models.CommodityStatusInUse,
-				PurchaseDate:           models.ToPDate("2022-01-01"),
-				RegisteredDate:         models.ToPDate("2022-01-02"),
-				LastModifiedDate:       models.ToPDate("2022-01-03"),
-				Comments:               "Updated commodity comments",
-				Draft:                  false,
+				Name:                  "Updated Commodity",
+				ShortName:             "UC",
+				AreaID:                commodity.AreaID,
+				Type:                  models.CommodityTypeFurniture,
+				Count:                 10,
+				OriginalPrice:         new(must.Must(decimal.NewFromString("2000.00"))),
+				OriginalPriceCurrency: models.Currency("USD"),
+				CurrentPrice:          new(must.Must(decimal.NewFromString("1800.00"))),
+				SerialNumber:          "SN654321",
+				ExtraSerialNumbers:    []string{"SN123456"},
+				PartNumbers:           []string{"P789"},
+				Tags:                  []string{"tag1", "tag3"},
+				Status:                models.CommodityStatusInUse,
+				PurchaseDate:          models.ToPDate("2022-01-01"),
+				RegisteredDate:        models.ToPDate("2022-01-02"),
+				LastModifiedDate:      models.ToPDate("2022-01-03"),
+				Comments:              "Updated commodity comments",
+				Draft:                 false,
 			}),
 		},
 	}
@@ -281,7 +288,8 @@ func TestCommodityUpdate(t *testing.T) {
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.count"), float64(commodity.Count))
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price"), "2000")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.original_price_currency"), "USD")
-	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), "0")
+	// A converted price does not apply to an item bought in the group currency.
+	c.Check(body, checkers.JSONPathEquals("$.data.attributes.converted_original_price"), nil)
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.current_price"), "1800")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.serial_number"), "SN654321")
 	c.Check(body, checkers.JSONPathEquals("$.data.attributes.extra_serial_numbers"), []any{"SN123456"})
@@ -412,10 +420,10 @@ func TestCommodityUpdate_WrongIDInRequestBody(t *testing.T) {
 				ShortName:              "UC",
 				AreaID:                 new(wrongAreaID),
 				Type:                   models.CommodityTypeFurniture,
-				OriginalPrice:          must.Must(decimal.NewFromString("2000.00")),
+				OriginalPrice:          new(must.Must(decimal.NewFromString("2000.00"))),
 				OriginalPriceCurrency:  models.Currency("USD"),
-				ConvertedOriginalPrice: must.Must(decimal.NewFromString("2400.00")),
-				CurrentPrice:           must.Must(decimal.NewFromString("1800.00")),
+				ConvertedOriginalPrice: new(must.Must(decimal.NewFromString("2400.00"))),
+				CurrentPrice:           new(must.Must(decimal.NewFromString("1800.00"))),
 				SerialNumber:           "SN654321",
 				ExtraSerialNumbers:     []string{"SN123456"},
 				PartNumbers:            []string{"P789"},

@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { formatPrice, parsePrice } from "@/features/commodities/price"
 import { usePreviewMigration, useStartMigration } from "@/features/currency-migration/hooks"
 import type { MigrationPreview } from "@/features/currency-migration/api"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -113,15 +114,16 @@ function useCountdown(expiresAt: string | undefined): number {
 
 // Picks the top-N commodities by absolute current-price delta. The BE
 // already returns the diffs sorted; we slice client-side and let
-// `sliceLimit` flow from the spec (top-5).
+// `sliceLimit` flow from the spec (top-5). An item with an unknown
+// current value has no delta and sorts last.
 function topDeltas(diffs: MigrationPreview["diffs"], limit = 5) {
   if (!diffs) return []
   // Defensive sort — the BE may already do this, but the contract isn't
   // guaranteed and the slice is cheap.
   const withDelta = diffs.map((d) => {
-    const before = d.current_price_before ?? 0
-    const after = d.current_price_after ?? 0
-    return { ...d, delta: after - before }
+    const before = parsePrice(d.current_price_before)
+    const after = parsePrice(d.current_price_after)
+    return { ...d, delta: before === null || after === null ? 0 : after - before }
   })
   withDelta.sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
   return withDelta.slice(0, limit)
@@ -673,9 +675,9 @@ function StepPreview({
               >
                 <span className="truncate">{d.commodity_name ?? "—"}</span>
                 <span className="font-mono text-xs text-muted-foreground">
-                  {formatCurrency(d.current_price_before ?? 0, from)}
+                  {formatPrice(d.current_price_before, from, "—", formatCurrency)}
                   {" → "}
-                  {formatCurrency(d.current_price_after ?? 0, to)}
+                  {formatPrice(d.current_price_after, to, "—", formatCurrency)}
                 </span>
               </li>
             ))}

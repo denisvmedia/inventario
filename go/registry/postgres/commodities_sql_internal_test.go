@@ -62,7 +62,15 @@ func TestCommodityListSQL(t *testing.T) {
 			// LOWER(name) alone.
 			name: "non-name sorts are not case-folded",
 			opts: registry.CommodityListOptions{SortField: registry.CommoditySortCurrentPrice},
-			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY current_price ASC, id ASC LIMIT $3 OFFSET $4",
+			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY current_price ASC NULLS LAST, id ASC LIMIT $3 OFFSET $4",
+			args: []any{false, "in_use", 24, 0},
+		},
+		{
+			// An unknown date or price sorts after every known one in both
+			// directions; PostgreSQL alone would put NULL first on DESC.
+			name: "descending sort on a nullable column keeps unknowns last",
+			opts: registry.CommodityListOptions{SortField: registry.CommoditySortPurchaseDate, SortDesc: true},
+			want: selectPrefix + "draft = $1 AND status = $2 ORDER BY purchase_date DESC NULLS LAST, id DESC LIMIT $3 OFFSET $4",
 			args: []any{false, "in_use", 24, 0},
 		},
 		{
@@ -236,4 +244,18 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 	c.Check(countSQL, qt.Equals,
 		"SELECT COUNT(*) FROM commodities WHERE draft = $1 AND status IN ($2) AND (search_text ILIKE $3)")
 	c.Check(countArgs, qt.DeepEquals, []any{false, "in_use", "%drill%"})
+}
+
+func TestCommodityTagCountsSQL(t *testing.T) {
+	c := qt.New(t)
+
+	opts := registry.CommodityListOptions{Search: "drill"}
+	sb := commodityTagCountsSelect("commodities")
+	query, args := addWhere(sb, commodityWhere(opts, "commodities", "commodity_loans")).Build()
+
+	c.Check(query, qt.Equals,
+		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+
+			"LEFT JOIN LATERAL jsonb_array_elements_text(COALESCE(commodities.tags, '[]'::jsonb)) AS t(slug) ON true "+
+			"WHERE draft = $1 AND status = $2 AND (search_text ILIKE $3) GROUP BY t.slug")
+	c.Check(args, qt.DeepEquals, []any{false, "in_use", "%drill%"})
 }

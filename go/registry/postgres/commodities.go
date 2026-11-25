@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"fmt"
 	"log/slog"
 	"time"
@@ -113,6 +114,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// "unassigned" (#1986): a stored "" would miss the `area_id IS NULL`
 	// filter and match no real area.
 	commodity.NormalizeAreaID()
+
+	// Every row written now tells an unknown price from a zero one.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
 
 	// The asset number is server-managed: whatever the caller sent is
 	// dropped and the number is assigned inside the insert transaction.
@@ -345,6 +350,58 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
+// CountTags counts the tags of the commodities opts selects in one query: a
+// LEFT JOIN LATERAL over the tags array yields one row per (commodity, tag),
+// and one row with a NULL slug for a commodity without tags, so grouping by
+// the slug gives every tag count plus, under NULL, the untagged count. The
+// WHERE clause is the list's, so the counts describe the same commodities.
+func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
+	commodities := string(r.tableNames.Commodities())
+	where := commodityWhere(opts, commodities, string(r.tableNames.CommodityLoans()))
+	sb := commodityTagCountsSelect(commodities)
+	query, args := addWhere(sb, where).Build()
+
+	counts := registry.CommodityTagCounts{Tags: map[string]int{}}
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		rows, err := tx.QueryContext(ctx, query, args...)
+		if err != nil {
+			return errxtrace.Wrap("failed to count commodity tags", err)
+		}
+		defer rows.Close()
+		for rows.Next() {
+			var slug sql.NullString
+			var n int
+			if err := rows.Scan(&slug, &n); err != nil {
+				return errxtrace.Wrap("failed to scan commodity tag count", err)
+			}
+			if slug.Valid {
+				counts.Tags[slug.String] = n
+			} else {
+				counts.Untagged = n
+			}
+		}
+		return rows.Err()
+	})
+	if err != nil {
+		return registry.CommodityTagCounts{}, errxtrace.Wrap("failed to count commodity tags", err)
+	}
+	return counts, nil
+}
+
+// commodityTagCountsSelect is the SELECT of CountTags without its WHERE.
+// COUNT(DISTINCT id) keeps a slug stored twice on one row from counting
+// twice.
+func commodityTagCountsSelect(commodities string) *sqlb.SelectBuilder {
+	sb := newSelect().
+		Select("t.slug", "COUNT(DISTINCT "+commodities+".id)").
+		From(commodities)
+	sb.JoinWithOption(sqlb.LeftJoin,
+		"LATERAL jsonb_array_elements_text(COALESCE("+commodities+".tags, '[]'::jsonb)) AS t(slug)",
+		"true")
+	sb.GroupBy("t.slug")
+	return sb
+}
+
 // commodityWhere assembles the WHERE clause for the filtered list queries.
 // Both table names are passed in so a TableNames override flows through to the
 // correlated subquery's outer reference too — hard-coding "commodities.id"
@@ -539,15 +596,23 @@ func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOpti
 	}
 	column := "name"
 	caseInsensitive := false
+	// Dates and prices are NULL when unknown. NULLS LAST keeps them after
+	// every known value in both directions (PostgreSQL's default puts them
+	// first on DESC); the memory backend orders them the same way.
+	nullable := false
 	switch field {
 	case registry.CommoditySortRegisteredDate:
 		column = "registered_date"
+		nullable = true
 	case registry.CommoditySortPurchaseDate:
 		column = "purchase_date"
+		nullable = true
 	case registry.CommoditySortCurrentPrice:
 		column = "current_price"
+		nullable = true
 	case registry.CommoditySortOriginalPrice:
 		column = "original_price"
+		nullable = true
 	case registry.CommoditySortCount:
 		column = "count"
 	case registry.CommoditySortName:
@@ -564,12 +629,16 @@ func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOpti
 	if caseInsensitive {
 		expr = "LOWER(" + column + ")"
 	}
+	nulls := ""
+	if nullable {
+		nulls = " NULLS LAST"
+	}
 	// Per-column direction, not sb.Desc(): that appends one keyword after the
 	// whole list, which would leave the leading column ascending.
 	if opts.SortDesc {
-		sb.OrderByDesc(expr).OrderByDesc("id")
+		sb.OrderBy(expr + " DESC" + nulls).OrderByDesc("id")
 	} else {
-		sb.OrderByAsc(expr).OrderByAsc("id")
+		sb.OrderBy(expr + " ASC" + nulls).OrderByAsc("id")
 	}
 }
 
@@ -584,11 +653,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	if existing, err := r.get(ctx, commodity.GetID()); err == nil && existing != nil {
 		commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
+		commodity.UnsetEchoedLegacyZeros(existing)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
 	// empty string persists as NULL, consistent with the IS NULL filter.
 	commodity.NormalizeAreaID()
+
+	// The caller's prices tell unknown from zero, whatever the row held.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
 
 	reg := r.newSQLRegistry()
 

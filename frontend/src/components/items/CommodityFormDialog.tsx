@@ -831,12 +831,11 @@ export function CommodityFormDialog({
                   checked={!!field.value}
                   onCheckedChange={(v) => {
                     field.onChange(!!v)
-                    // Required-ness for purchase_date / original_price /
-                    // converted_original_price / current_price flips with
-                    // `draft`. Re-trigger validation on the affected paths
-                    // so leftover "required" errors clear immediately when
-                    // the user opts into a draft (and re-surface if they
-                    // un-toggle back to a non-draft with empty fields).
+                    // The foreign-currency rule (a known foreign price
+                    // needs a group-currency amount) applies only to a
+                    // non-draft item. Re-trigger validation on the price
+                    // paths so its error clears as soon as the user opts
+                    // into a draft, and comes back if they opt out.
                     void trigger([
                       "purchase_date",
                       "original_price",
@@ -1323,12 +1322,9 @@ function BasicsStep(props: any) {
 function PurchaseStep(props: any) {
   const { t } = useTranslation()
   const { register, control, errors, watch, defaultCurrency } = props
-  // Required-ness on Purchase fields is dynamic. Drafts relax all
-  // four (purchase_date / original_price / converted / current);
-  // commodity submits require them. Schema is in
-  // `features/commodities/schemas.ts` superRefine `whenNotDraft`.
-  const isDraft = !!watch("draft")
-  const requireWhenNotDraft = !isDraft
+  // No Purchase field is required, on a draft or a reviewed item: a
+  // blank date or price is saved as unknown, "0" as a known zero (a
+  // gift, a free item). See `features/commodities/schemas.ts`.
   // Foreign-currency check mirrors the mock's `isForeignCurrency`
   // (AddItemDialog L1154). When the purchase currency matches the
   // group's currency the converted-price field is moot — the original
@@ -1351,17 +1347,23 @@ function PurchaseStep(props: any) {
   return (
     <div className="space-y-4 py-2" data-testid="commodity-form-purchase-step">
       <div className="flex flex-col gap-1.5">
-        <FieldLabel htmlFor="commodity-purchase-date" required={requireWhenNotDraft}>
+        <FieldLabel htmlFor="commodity-purchase-date">
           {t("commodities:fields.purchaseDate")}
         </FieldLabel>
         <Input
           id="commodity-purchase-date"
           type="date"
-          aria-required={requireWhenNotDraft || undefined}
+          aria-describedby="commodity-purchase-date-help"
           {...register("purchase_date")}
           aria-invalid={!!errors.purchase_date}
         />
-        <FieldError error={errors.purchase_date} />
+        {errors.purchase_date ? (
+          <FieldError error={errors.purchase_date} />
+        ) : (
+          <p id="commodity-purchase-date-help" className="text-xs text-muted-foreground">
+            {t("commodities:fields.purchaseDateHelp")}
+          </p>
+        )}
       </div>
 
       {/* Mock AddItemDialog L1173-L1196: combined "Purchase Price" row
@@ -1370,7 +1372,7 @@ function PurchaseStep(props: any) {
           (flex-1) and the combobox holds a fixed code-width so the
           two never wrestle for space. */}
       <div className="flex flex-col gap-1.5">
-        <FieldLabel htmlFor="commodity-original-price" required={requireWhenNotDraft}>
+        <FieldLabel htmlFor="commodity-original-price">
           {t("commodities:fields.originalPrice")}
         </FieldLabel>
         <div className="flex gap-2">
@@ -1388,7 +1390,7 @@ function PurchaseStep(props: any) {
               min={0}
               placeholder="0"
               className={purchasePadClass}
-              aria-required={requireWhenNotDraft || undefined}
+              aria-describedby="commodity-original-price-help"
               {...register("original_price")}
               aria-invalid={!!errors.original_price}
             />
@@ -1412,7 +1414,7 @@ function PurchaseStep(props: any) {
         ) : errors.original_price_currency ? (
           <FieldError error={errors.original_price_currency} />
         ) : (
-          <p className="text-xs text-muted-foreground">
+          <p id="commodity-original-price-help" className="text-xs text-muted-foreground">
             {t("commodities:fields.originalPriceHelp")}
           </p>
         )}
@@ -1431,14 +1433,12 @@ function PurchaseStep(props: any) {
             <span className="font-semibold">{t("commodities:fields.foreignCurrencyDetected")}</span>{" "}
             {t("commodities:fields.foreignCurrencyBanner", { groupCurrency })}
           </p>
-          {/* Foreign-currency mode: the cross-field rule is
-              "at-least-one-of (converted, current) > 0" — neither
-              field is individually required. Drop the required
-              asterisk and aria-required on both so the markup
-              matches the actual rule. The "or" divider below makes
-              the OR relationship visible; schema-level
-              NO_PRICE_IN_GROUP_CURRENCY catches the
-              both-empty case. */}
+          {/* Foreign-currency mode: a known purchase price needs one
+              of (converted, current) to be known, a zero included;
+              neither field is individually required, so neither
+              carries the asterisk. The "or" divider makes the OR
+              relationship visible; schema-level
+              NO_PRICE_IN_GROUP_CURRENCY catches the both-blank case. */}
           <div className="flex flex-col gap-1.5">
             <FieldLabel htmlFor="commodity-converted-price">
               {t("commodities:fields.convertedOriginalPrice", { groupCurrency })}

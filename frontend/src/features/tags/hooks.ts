@@ -1,6 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCallback, useMemo } from "react"
 
+import { commodityKeys } from "@/features/commodities/keys"
+import { fileKeys } from "@/features/files/keys"
 import { useCurrentGroup, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 
 import {
@@ -16,6 +18,7 @@ import {
   type ListTagsOptions,
   type ListedTag,
   type TagAutocompleteEntry,
+  type TagColor,
   type TagEntity,
   type TagKind,
   type TagStats,
@@ -64,17 +67,27 @@ export function useTag(id: string | undefined, { enabled = true }: QueryOptions 
   })
 }
 
-// invalidateAll wipes the entire tags namespace for the active group.
-// Used after every mutation because list queries are keyed by sort +
-// order + search + include flags, and a focused invalidation would miss
-// cached permutations the user can switch back to.
+// all wipes the entire tags namespace for the active group. Used after
+// every mutation because list queries are keyed by sort + order + search +
+// include flags, and a focused invalidation would miss cached permutations
+// the user can switch back to.
+//
+// tagged also wipes the item and file namespaces (lists, details, tag
+// counts): renaming a tag's slug or deleting it changes the tags those
+// records carry.
 function useInvalidate() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
+  const all = () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) })
   return {
-    all: () => qc.invalidateQueries({ queryKey: tagKeys.group(slug) }),
-    detail: (id: string) => qc.invalidateQueries({ queryKey: tagKeys.detail(slug, id) }),
+    all,
+    tagged: () =>
+      Promise.all([
+        all(),
+        qc.invalidateQueries({ queryKey: commodityKeys.group(slug) }),
+        qc.invalidateQueries({ queryKey: fileKeys.group(slug) }),
+      ]),
   }
 }
 
@@ -95,7 +108,7 @@ export function useUpdateTag() {
   const invalidate = useInvalidate()
   return useMutation<TagEntity & { id: string }, Error, UpdateTagVars>({
     mutationFn: ({ id, req }) => updateTag(id, req),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => invalidate.tagged(),
   })
 }
 
@@ -108,7 +121,7 @@ export function useDeleteTag() {
   const invalidate = useInvalidate()
   return useMutation<void, Error, DeleteTagVars>({
     mutationFn: ({ id, force }) => deleteTag(id, force),
-    onSuccess: () => invalidate.all(),
+    onSuccess: () => invalidate.tagged(),
   })
 }
 
@@ -149,8 +162,12 @@ export function useTagAutocomplete(q: string, limit = 10, opts: AutocompleteOpti
 }
 
 // useTagCatalog lists every tag of a kind in the active group: the tag
-// palette offers them, useTagLabel reads their labels. Both share one cached
-// query. Outside a group the query stays off and `data` is undefined.
+// palette offers them, useTagIndex and useTagLabel resolve slugs against
+// them. All share one cached query. Outside a group the query stays off and
+// `data` is undefined.
+//
+// The key sits under the group's tag namespace, so tag mutations and the
+// commodity / file writes that auto-create tags refresh it.
 export function useTagCatalog(kind: TagKind) {
   const ctx = useOptionalCurrentGroup()
   const groupSlug = ctx?.currentGroup?.slug ?? ""
@@ -162,24 +179,57 @@ export function useTagCatalog(kind: TagKind) {
   })
 }
 
-// useTagLabel resolves the slugs stored on items and files to the labels
-// the user typed or gave the tag on the Tags page. It falls back to the
-// slug while the catalogue loads, outside a group, and for a slug with no
-// tag row. Uses the optional group hook so a component rendered outside
-// <GroupProvider> (a dialog test harness) just gets the slug back.
-//
-// The key sits under the group's tag namespace, so tag mutations and the
-// commodity / file writes that auto-create tags refresh it.
-export function useTagLabel(kind: TagKind): (slug: string) => string {
-  const { data } = useTagCatalog(kind)
+// A tag as a slug stored on an item or file resolves to: the label the user
+// typed or gave it on the Tags page, and its color.
+export interface ResolvedTag {
+  slug: string
+  label: string
+  color: TagColor
+}
+
+export interface TagIndex {
+  // Every tag of the kind in the current group, as listed by the API.
+  tags: ResolvedTag[]
+  // Resolves a slug; a slug without a tag row comes back as itself in
+  // the muted color.
+  resolve: (slug: string) => ResolvedTag
+  isLoading: boolean
+}
+
+// useTagIndex resolves slugs against the group's tags of one kind. It falls
+// back to the slug while the catalogue loads, outside a group, and for a slug
+// with no tag row. Uses the optional group hook so a component rendered
+// outside <GroupProvider> (a dialog test harness) just gets the slug back.
+export function useTagIndex(kind: TagKind): TagIndex {
+  const ctx = useOptionalCurrentGroup()
+  const groupSlug = ctx?.currentGroup?.slug ?? ""
+  const { data, isLoading } = useTagCatalog(kind)
   // A Map, not an object literal: a slug such as "constructor" must not
   // resolve to an Object.prototype member.
-  const labels = useMemo(() => {
-    const map = new Map<string, string>()
+  const { tags, bySlug } = useMemo(() => {
+    const list: ResolvedTag[] = []
+    const map = new Map<string, ResolvedTag>()
     for (const tag of data ?? []) {
-      if (tag.slug && tag.label) map.set(tag.slug, tag.label)
+      if (!tag.slug) continue
+      const resolved: ResolvedTag = {
+        slug: tag.slug,
+        label: tag.label || tag.slug,
+        color: (tag.color ?? "muted") as TagColor,
+      }
+      list.push(resolved)
+      map.set(tag.slug, resolved)
     }
-    return map
+    return { tags: list, bySlug: map }
   }, [data])
-  return useCallback((slug: string) => labels.get(slug) ?? slug, [labels])
+  const resolve = useCallback(
+    (slug: string): ResolvedTag => bySlug.get(slug) ?? { slug, label: slug, color: "muted" },
+    [bySlug]
+  )
+  return { tags, resolve, isLoading: isLoading && groupSlug.length > 0 }
+}
+
+// useTagLabel is useTagIndex for callers that only show the label.
+export function useTagLabel(kind: TagKind): (slug: string) => string {
+  const { resolve } = useTagIndex(kind)
+  return useCallback((slug: string) => resolve(slug).label, [resolve])
 }

@@ -14,6 +14,7 @@ import { attachFile, uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import type { CommodityStatusValue, CommodityTypeValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
+import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
 import type {
   Commodity,
   CreateCommodityRequest,
@@ -112,6 +113,8 @@ export function clearDraft(key: string): void {
 // mode it carries the existing record; for create mode the only
 // pre-populated bits are the count (1), status (in_use), draft, and the
 // group currency. Everything else stays empty so the user fills it in.
+// An unknown price or purchase date stays an empty field, so saving the
+// form unchanged keeps it unknown.
 //
 // `defaultDraft` seeds the `draft` toggle for a brand-new item (it has
 // no effect in edit mode, where the record's own `draft` wins). The
@@ -131,7 +134,6 @@ export function buildDefaults(
   // form) so the schema's input type stays string — see schemas.ts
   // for the rationale. They convert to JS numbers at submit time
   // inside toRequest.
-  const numStr = (n: number | undefined): string => (n === undefined ? "" : String(n))
   return {
     name: initial?.name ?? "",
     short_name: initial?.short_name ?? "",
@@ -139,15 +141,15 @@ export function buildDefaults(
     area_id: initial?.area_id ?? "",
     status: (initial?.status as string) ?? "in_use",
     count: initial?.count !== undefined ? String(initial.count) : "1",
-    original_price: numStr(initial?.original_price),
-    original_price_currency: (initial?.original_price_currency as string) ?? currency,
-    converted_original_price: numStr(initial?.converted_original_price),
-    current_price: numStr(initial?.current_price),
+    original_price: priceToFormValue(initial?.original_price),
+    original_price_currency: (initial?.original_price_currency as string) || currency,
+    converted_original_price: priceToFormValue(initial?.converted_original_price),
+    current_price: priceToFormValue(initial?.current_price),
     serial_number: initial?.serial_number ?? "",
     extra_serial_numbers: initial?.extra_serial_numbers ?? [],
     part_numbers: initial?.part_numbers ?? [],
     tags: initial?.tags ?? [],
-    purchase_date: (initial?.purchase_date as string) ?? "",
+    purchase_date: initial?.purchase_date ?? "",
     urls,
     comments: initial?.comments ?? "",
     draft: initial?.draft ?? defaultDraft,
@@ -158,13 +160,13 @@ export function buildDefaults(
 
 // toRequest maps the validated form input into the BE-shaped envelope's
 // attributes. Numbers come out of the form as strings (see schemas.ts);
-// we convert here. `urls` flows through as string[] even though
-// openapi-typescript types it as a single string (see buildDefaults).
+// we convert here. A blank price is sent as null, which the BE stores as
+// unknown; "0" is a known zero. `urls` flows through as string[] even
+// though openapi-typescript types it as a single string (see buildDefaults).
 export function toRequest(
   values: CommodityFormInput,
   groupCurrency: string
 ): CreateCommodityRequest & UpdateCommodityRequest {
-  const num = (v: string): number | undefined => (v === "" ? undefined : Number(v))
   // Date fields are PDate (pointer-to-Date) on the BE — `Date.UnmarshalJSON`
   // rejects empty strings as "cannot parse \"\" as \"2006\"". Omit the
   // field entirely when the input is blank so the BE sees a missing
@@ -173,39 +175,17 @@ export function toRequest(
     const trimmed = v.trim()
     return trimmed === "" ? undefined : trimmed
   }
-  // BE rule (PriceRule.ErrConvertedPriceNotZero in
-  // go/models/rules/price.go): when the purchase currency matches the
-  // group's currency, `converted_original_price` MUST be 0 — the
-  // original price is already expressed in group currency, so a
-  // non-zero converted amount would conflict. The mock hides the
-  // converted-price field entirely in this case (AddItemDialog L1198
-  // isForeignCurrency = false branch); we mirror that visually, and
-  // force the value to 0 here so the BE's same-currency invariant is
-  // satisfied.
-  const original = num(values.original_price)
-  const convertedFromForm = num(values.converted_original_price)
-  const currentFromForm = num(values.current_price)
+  // When the purchase currency is the group's, the purchase price already
+  // is the group-currency amount: the mock hides the converted-price field
+  // (AddItemDialog L1198 isForeignCurrency = false branch) and the BE
+  // rejects a nonzero converted price (PriceRule.ErrConvertedPriceNotZero
+  // in go/models/rules/price.go), so it is sent as unknown. In a foreign
+  // currency the converted price is whatever the user typed, unknown when
+  // blank; nothing is copied into it from the current value.
   const sameCurrency =
     !!groupCurrency &&
     values.original_price_currency.trim().toUpperCase() === groupCurrency.trim().toUpperCase()
-  // Foreign-currency: ConvertedOriginalPrice still carries
-  // `validation.Required` at the BE for non-draft commodities, so an
-  // omitted value JSON-decodes to the zero struct and is rejected.
-  // The schema's cross-field rule lets the user satisfy "at-least-one"
-  // by filling only the current-value field; mirror that into
-  // converted so the BE invariant survives. Explicit 0s are preserved
-  // (`?? `, not `||`) so an edit-mode row that genuinely has
-  // converted=0 / current>0 round-trips unchanged.
-  // CurrentPrice carries no field-level Required anymore (#1625), so
-  // we never need to mirror in the other direction — passing through
-  // whatever the user typed is enough.
-  let converted: number | undefined
-  if (sameCurrency) {
-    converted = 0
-  } else {
-    converted = convertedFromForm ?? currentFromForm
-  }
-  const current = currentFromForm
+  const converted = sameCurrency ? null : formValueToPrice(values.converted_original_price)
   return {
     name: values.name.trim(),
     short_name: values.short_name.trim(),
@@ -216,10 +196,10 @@ export function toRequest(
     area_id: values.area_id || undefined,
     status: values.status as CommodityStatusValue,
     count: Number(values.count),
-    original_price: original,
+    original_price: formValueToPrice(values.original_price),
     original_price_currency: values.original_price_currency,
     converted_original_price: converted,
-    current_price: current,
+    current_price: formValueToPrice(values.current_price),
     serial_number: values.serial_number.trim(),
     extra_serial_numbers: values.extra_serial_numbers,
     part_numbers: values.part_numbers,

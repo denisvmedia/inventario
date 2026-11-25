@@ -4,7 +4,9 @@ import { type ReactNode } from "react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it } from "vitest"
 
-import { GroupProvider } from "@/features/group/GroupContext"
+import { commodityKeys } from "@/features/commodities/keys"
+import { fileKeys } from "@/features/files/keys"
+import { GroupProvider, useCurrentGroup } from "@/features/group/GroupContext"
 import {
   useCreateTag,
   useDeleteTag,
@@ -179,6 +181,51 @@ describe("features/tags/hooks", () => {
     await expect(result.current.mutateAsync({ id: "t1" })).rejects.toThrow()
     // With force, it returns 204.
     await expect(result.current.mutateAsync({ id: "t1", force: true })).resolves.toBeUndefined()
+  })
+
+  it("useUpdateTag and useDeleteTag mark cached items, files and tag counts stale", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...tagHandlers.update(SLUG, "t1", {
+        id: "t1",
+        slug: "kitchen-2",
+        label: "Kitchen",
+        color: "amber",
+      }),
+      ...tagHandlers.remove(SLUG, "t1")
+    )
+    const client = newClient()
+    const keys = [
+      commodityKeys.list(SLUG, { tags: ["kitchen"] }),
+      commodityKeys.detail(SLUG, "c1"),
+      commodityKeys.tagCounts(SLUG, {}),
+      fileKeys.list(SLUG, {}),
+      fileKeys.detail(SLUG, "f1"),
+    ]
+    const otherGroup = commodityKeys.list("office", {})
+    const seed = () => {
+      for (const key of [...keys, otherGroup]) client.setQueryData(key, { seeded: true })
+    }
+    const stale = () => keys.map((key) => client.getQueryState(key)?.isInvalidated)
+    const { result } = renderHook(
+      () => ({
+        group: useCurrentGroup().currentGroup,
+        update: useUpdateTag(),
+        remove: useDeleteTag(),
+      }),
+      { wrapper: makeWrapper(client) }
+    )
+    await waitFor(() => expect(result.current.group?.slug).toBe(SLUG))
+
+    seed()
+    await result.current.update.mutateAsync({ id: "t1", req: { slug: "kitchen-2" } })
+    expect(stale()).toEqual(keys.map(() => true))
+    expect(client.getQueryState(otherGroup)?.isInvalidated).toBe(false)
+
+    seed()
+    expect(stale()).toEqual(keys.map(() => false))
+    await result.current.remove.mutateAsync({ id: "t1" })
+    expect(stale()).toEqual(keys.map(() => true))
   })
 
   it("useTagAutocomplete returns the flat data envelope", async () => {

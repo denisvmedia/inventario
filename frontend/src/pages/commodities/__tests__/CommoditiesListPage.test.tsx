@@ -963,6 +963,154 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("links each tag on a card to the list filtered by that tag", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "garage", label: "Garage", color: "blue" }]),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Drill", tags: ["garage"] })])
+    )
+    renderList()
+    const card = await screen.findByTestId("commodity-card")
+    const pill = await within(card).findByRole("link", { name: "Garage" })
+    expect(pill).toHaveAttribute("href", `/g/${SLUG}/commodities?tags=garage`)
+    expect(pill.className).toContain("text-tag-blue")
+  })
+
+  it("adds a card's tag to the current filters and goes back to the first page", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "garage", label: "Garage", color: "blue" }]),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "Drill", tags: ["red", "garage"] }),
+      ])
+    )
+    renderList(
+      `/g/${SLUG}/commodities?q=drill&status=in_use&tags=red&tags_exclude=garage&page=2&view=grid`
+    )
+    const card = await screen.findByTestId("commodity-card")
+    const pill = await within(card).findByRole("link", { name: "Garage" })
+    const href = new URL(pill.getAttribute("href") ?? "", window.location.origin)
+    expect(href.pathname).toBe(`/g/${SLUG}/commodities`)
+    expect(Object.fromEntries(href.searchParams)).toEqual({
+      q: "drill",
+      status: "in_use",
+      tags: "red,garage",
+      view: "grid",
+    })
+  })
+
+  it("filters by tags from the Tags menu, with counts for the rest of the query", async () => {
+    const user = userEvent.setup()
+    const listQueries: URLSearchParams[] = []
+    const countQueries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [
+        { id: "t1", slug: "garage", label: "Garage", color: "blue" },
+        { id: "t2", slug: "fragile", label: "Fragile", color: "red" },
+      ]),
+      ...commodityHandlers.tagCounts(SLUG, { tags: { garage: 3, fragile: 1 }, untagged: 5 }, (p) =>
+        countQueries.push(p)
+      ),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        listQueries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?q=drill&tags=fragile`)
+    await screen.findByTestId("commodity-card")
+    // Counts load only once the menu opens.
+    expect(countQueries).toHaveLength(0)
+
+    await user.click(screen.getByTestId("commodities-filter-tags"))
+    expect(await screen.findByTestId("tag-filter-count-garage")).toHaveTextContent("3")
+    expect(screen.getByTestId("commodities-filter-tags-untagged")).toHaveTextContent("5")
+    // The counts keep the search and set the tag filter aside.
+    expect(countQueries[0].get("q")).toBe("drill")
+    expect(countQueries[0].has("tags")).toBe(false)
+    expect(countQueries[0].has("page")).toBe(false)
+
+    await user.click(screen.getByTestId("commodities-filter-tags-option-garage"))
+    await waitFor(() => {
+      const last = listQueries[listQueries.length - 1]
+      expect(last.get("tags")).toBe("fragile,garage")
+      expect(last.get("q")).toBe("drill")
+    })
+    // A second click excludes the tag.
+    await user.click(screen.getByTestId("commodities-filter-tags-option-garage"))
+    await waitFor(() => {
+      const last = listQueries[listQueries.length - 1]
+      expect(last.get("tags")).toBe("fragile")
+      expect(last.get("tags_exclude")).toBe("garage")
+    })
+    await user.click(screen.getByTestId("commodities-filter-tags-mode-any"))
+    await waitFor(() => expect(listQueries[listQueries.length - 1].get("tag_mode")).toBe("any"))
+    // Changing the tag filter does not refetch the counts.
+    expect(countQueries).toHaveLength(1)
+  })
+
+  it("keeps Any tag picked before the first tag", async () => {
+    const user = userEvent.setup()
+    const listQueries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "garage", label: "Garage", color: "blue" }]),
+      ...commodityHandlers.tagCounts(SLUG, { tags: { garage: 3 }, untagged: 0 }),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        listQueries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    await user.click(screen.getByTestId("commodities-filter-tags"))
+    await user.click(await screen.findByTestId("commodities-filter-tags-mode-any"))
+    expect(screen.getByTestId("commodities-filter-tags-mode-any")).toHaveAttribute(
+      "aria-pressed",
+      "true"
+    )
+    await user.click(screen.getByTestId("commodities-filter-tags-option-garage"))
+    await waitFor(() => {
+      const last = listQueries[listQueries.length - 1]
+      expect(last.get("tags")).toBe("garage")
+      expect(last.get("tag_mode")).toBe("any")
+    })
+  })
+
+  it("drops an unreadable tag_mode or no_tags on the first edit in the Tags menu", async () => {
+    const user = userEvent.setup()
+    const listQueries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, [{ id: "t1", slug: "garage", label: "Garage", color: "blue" }]),
+      ...commodityHandlers.tagCounts(SLUG, { tags: { garage: 3 }, untagged: 0 }),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        listQueries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?tag_mode=some&no_tags=x&lent_out=maybe`)
+    await screen.findByTestId("commodity-card")
+    await waitFor(() => expect(listQueries[0]?.get("tag_mode")).toBe("some"))
+    // Both unreadable values count as active, so the menu offers Clear.
+    const trigger = screen.getByTestId("commodities-filter-tags")
+    expect(within(trigger).getByText("2")).toBeInTheDocument()
+    await user.click(trigger)
+    await user.click(await screen.findByTestId("commodities-filter-tags-clear"))
+    await waitFor(() => {
+      const last = listQueries[listQueries.length - 1]
+      expect(last.has("tag_mode")).toBe(false)
+      expect(last.has("no_tags")).toBe(false)
+      // An unreadable value outside the tag filter stays.
+      expect(last.get("lent_out")).toBe("maybe")
+    })
+  })
+
   it("explains a filter the server refuses instead of a generic error", async () => {
     const user = userEvent.setup()
     server.use(

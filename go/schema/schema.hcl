@@ -534,6 +534,10 @@ table "commodities" {
       type = "STORED"
     }
   }
+  column "legacy_zero_prices" {
+    type = BOOLEAN
+    default = "true"
+  }
   column "tenant_id" {
     type = TEXT
   }

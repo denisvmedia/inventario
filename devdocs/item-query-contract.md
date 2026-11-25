@@ -4,6 +4,7 @@ One representation of an item filter is shared by every surface that lists, sear
 
 - the items list, `GET /g/{slug}/commodities`, and its `meta.commodities` total;
 - the item search, `GET /g/{slug}/search?type=commodities`, and its `meta.total`;
+- the tag counts, `GET /g/{slug}/commodities/tag-counts`, behind the items list's Tags menu;
 - every frontend link that opens a filtered items list.
 
 Features that select items (saved views, header search, bulk "select all N matching", the inbox) build on this contract rather than adding parameters of their own. A new filter is added here first, on both sides, and then used.
@@ -13,12 +14,12 @@ Features that select items (saved views, header search, bulk "select all N match
 | Part | Go | TypeScript |
 | ---- | -- | ---------- |
 | Parameters, parsing, validation, encoding | `go/services/commodityquery/query.go` (`Query`, `Parse`, `Query.Values`) | `frontend/src/features/commodities/query.ts` (`CommodityQuery`, `parseCommodityQuery`, `writeCommodityQuery`, `listOptionsToParams`) |
-| Running a query, totals, match reasons | `go/services/commodityquery/run.go` (`Resolve`, `List`, `Explain`) | `useCommodities` in `features/commodities/hooks.ts` |
-| What a search term and a tag filter match | `go/registry/commodity_search.go` (`SplitSearchTerms`, `MatchCommoditySearch`, `CommodityTagFilter`) | — |
+| Running a query, totals, match reasons, tag counts | `go/services/commodityquery/run.go` (`Resolve`, `List`, `Explain`, `TagCounts`) | `useCommodities`, `useCommodityTagCounts` in `features/commodities/hooks.ts` |
+| What a search term and a tag filter match, how tags are counted | `go/registry/commodity_search.go` (`SplitSearchTerms`, `MatchCommoditySearch`, `CommodityTagFilter`, `CountCommodityTags`) | — |
 | Backends | `go/registry/postgres/commodities.go` (SQL), `go/registry/memory/commodities.go` (Go) | — |
 | Behavior both backends must share | `go/registry/registrytest/commodity_search.go` (run by the memory and postgres test packages) | `features/commodities/__tests__/query.test.ts` |
 
-Handlers do not read filter parameters themselves. They decode the raw query string with `commodityquery.DecodeQuery`, which refuses a pair that `url.URL.Query` would drop (a malformed `%` escape, a `;` separator), and call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`) and pass the result to `commodityquery.List`.
+Handlers do not read filter parameters themselves. They decode the raw query string with `commodityquery.DecodeQuery`, which refuses a pair that `url.URL.Query` would drop (a malformed `%` escape, a `;` separator), and call `commodityquery.Parse` with the names they handle on their own (pagination on the list; `type`, `limit`, `offset` on `/search`; none on `/commodities/tag-counts`, which refuses `page`) and pass the result to `commodityquery.List` or `commodityquery.TagCounts`.
 
 ## Parameters
 
@@ -39,7 +40,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `tag_mode` | `all` (default) or `any` | `all`: every tag in `tags`; `any`: at least one. |
 | `tags_exclude` | slugs, comma-separated or repeated, at most 50 | Item carries none of these tags. |
 | `no_tags` | `true`/`false` | Item has no tags. |
-| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. |
+| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. An unknown date or price (NULL) comes after every known one in both directions, and a known zero sorts as a value; `registrytest.RunCommoditySearchContract` holds both backends to it. |
 
 All conditions are combined with AND. Within a repeatable parameter the values are combined with OR, except `tags` with `tag_mode=all`.
 
@@ -83,6 +84,16 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 - `no_tags=true` together with `tags` or `tags_exclude`;
 - one tag both in `tags` and in `tags_exclude`.
 
+### Tag counts
+
+`GET /commodities/tag-counts` takes the same parameters as the list, without pagination, and answers:
+
+```json
+{ "data": { "tags": { "garage": 12, "fragile": 3 }, "untagged": 40 } }
+```
+
+The counts are for the query with its tag filter set aside: `tags[slug]` is the number of items the rest of the query selects that carry the tag, and `untagged` the number with no tags. So the counts do not change while the user picks tags, and a tag's count is the total the list shows when that tag alone is selected. A tag no selected item carries is absent from `tags`. The search, the other filters (`include_inactive` among them) and the group scope apply as on the list. `CountCommodityTags` is the reference: the memory registry calls it, and the shared registry tests check both backends against it applied to the listed items.
+
 ## Errors
 
 A parameter the endpoint does not know, a value it cannot read or decode, a contradiction or a limit exceeded is answered with 400 and never ignored, because a list that silently drops a condition looks like a list that applied it:
@@ -113,14 +124,14 @@ The items list page keeps its query in the page URL under names that predate the
 | `warranty` (repeated) | `warranty_status` |
 | `lent_out=1` | `lent_out=true` |
 | `tags`, `tags_exclude` (comma-separated) | same |
-| `tag_mode=any` | same |
+| `tag_mode=any` | same, sent only with `tags`; the page URL keeps it without tags so the mode picked before the first tag survives |
 | `no_tags=1` | `no_tags=true` |
 | `sort` | `sort` |
 
 `listOptionsToParams` is the only place that writes API parameters for the list. It sorts set-like lists, so two queries that select the same items produce the same string, which the TanStack Query key relies on. Links to a filtered list are built with `commodityListHref(slug, partialQuery)`.
 
-Filter values are kept as written when the page URL is parsed, so a value the server does not support reaches it and comes back as a 400 the page can explain. The page-URL booleans (`unassigned`, `inactive`, `lent_out`, `no_tags`) and `tag_mode` are read into a boolean or a mode, but a value that is not one the server reads (`1`/`true`, `0`/`false` in any case, absent; `all`/`any`) is kept in `CommodityQuery.unreadable`, written back to the URL and sent to the server as written. The sort is the exception, as on the server.
+Filter values are kept as written when the page URL is parsed, so a value the server does not support reaches it and comes back as a 400 the page can explain. The page-URL booleans (`unassigned`, `inactive`, `lent_out`, `no_tags`) and `tag_mode` are read into a boolean or a mode, but a value that is not one the server reads (`1`/`true`, `0`/`false` in any case, absent; `all`/`any`) is kept in `CommodityQuery.unreadable`, written back to the URL and sent to the server as written. The sort is the exception, as on the server. An edit in the Tags menu goes through `withTagFilter`, which drops an unreadable `tag_mode` or `no_tags`; the menu counts them as active conditions so its Clear button is offered for them.
 
 The item page walks the list it was opened from (`?from=`) through `features/commodities/listContext.ts`, which parses that list URL with `parseCommodityQuery` too, so the page and the walk ask the same question under the same query key.
 
-The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items.
+The search page links "see all" to the list with `inactive=1`, because `/search` includes drafts and inactive items and the list it opens has to show the same items. For the same reason the links that open the list for one tag (`commodityTagHref`, used on the item page and the Tags page) and the item page's area and type links carry `inactive=1`: the tag's usage count includes inactive items, and the item the link sits on may be inactive itself. A tag pill on an item card in the list is different: it adds the tag to the list's current query with `withIncludedTag`, keeping every other condition.

@@ -2028,6 +2028,11 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.CommodityServicesMeta'
     type: object
+  jsonapi.CommodityTagCountsResponse:
+    properties:
+      data:
+        $ref: '#/definitions/registry.CommodityTagCounts'
+    type: object
   jsonapi.CurrencyMigrationPreviewAttributes:
     properties:
       exchange_rate:
@@ -2074,16 +2079,20 @@ definitions:
         type: string
       current_price_after:
         type: number
+        x-nullable: "true"
       current_price_before:
         type: number
+        x-nullable: "true"
       original_currency_after:
         type: string
       original_currency_before:
         type: string
       original_price_after:
         type: number
+        x-nullable: "true"
       original_price_before:
         type: number
+        x-nullable: "true"
     type: object
   jsonapi.CurrencyMigrationPreviewRequest:
     properties:
@@ -3040,6 +3049,13 @@ definitions:
         type: string
       name:
         type: string
+      unvalued_count:
+        description: |-
+          UnvaluedCount is the number of in-use items in this location or area
+          that have no known value and are therefore not part of Value.
+        example: 0
+        format: int64
+        type: integer
       value:
         type: number
     type: object
@@ -3586,6 +3602,18 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.NamedTotal'
         type: array
+      unvalued_count:
+        description: |-
+          UnvaluedCount is the number of in-use items GlobalTotal leaves out
+          because neither their current value nor their purchase price is known.
+        example: 2
+        format: int64
+        type: integer
+      valued_count:
+        description: ValuedCount is the number of in-use items that GlobalTotal includes.
+        example: 12
+        format: int64
+        type: integer
     type: object
   jsonapi.ValueData:
     properties:
@@ -3670,7 +3698,12 @@ definitions:
       comments:
         type: string
       converted_original_price:
+        description: |-
+          ConvertedOriginalPrice is the purchase price in the group currency, null
+          when unknown. It applies only when OriginalPriceCurrency is a foreign
+          currency; for an item bought in the group currency it is always null.
         type: number
+        x-nullable: "true"
       count:
         type: integer
       cover_file_id:
@@ -3682,7 +3715,12 @@ definitions:
           override; the resolver's first-photo path takes over.
         type: string
       current_price:
+        description: |-
+          CurrentPrice is the current value in the group currency, null when
+          unknown. When known, 0 included, it is the item's value in every total;
+          otherwise the purchase price in the group currency stands in.
         type: number
+        x-nullable: "true"
       draft:
         type: boolean
       extra_serial_numbers:
@@ -3696,7 +3734,13 @@ definitions:
       name:
         type: string
       original_price:
+        description: |-
+          OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+          unknown. Each of the three prices can be unknown on its own, and
+          unknown is not zero: a gift's price is unknown, a free item's is 0. A
+          reviewed item may leave any of them unknown.
         type: number
+        x-nullable: "true"
       original_price_currency:
         type: string
       part_numbers:
@@ -3704,7 +3748,9 @@ definitions:
           type: string
         type: array
       purchase_date:
+        description: PurchaseDate is nil when the date is unknown.
         type: string
+        x-nullable: "true"
       registered_date:
         type: string
       sale_price:
@@ -5013,6 +5059,21 @@ definitions:
         $ref: '#/definitions/registry.CommoditySearchField'
       value:
         type: string
+    type: object
+  registry.CommodityTagCounts:
+    properties:
+      tags:
+        additionalProperties:
+          type: integer
+        description: |-
+          Tags maps a tag slug to the number of commodities carrying it. A slug
+          no commodity in the set carries is absent.
+        type: object
+      untagged:
+        description: |-
+          Untagged counts the commodities without tags (a NULL tags column
+          included).
+        type: integer
     type: object
   registry.StorageBreakdown:
     properties:
@@ -8323,12 +8384,117 @@ paths:
       summary: Run an AI vision scan on uploaded photos or documents
       tags:
       - commodities
+  /g/{groupSlug}/commodities/tag-counts:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.
+        Takes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Search text, as for GET /commodities
+        in: query
+        name: q
+        type: string
+      - collectionFormat: multi
+        description: Filter by commodity type, as for GET /commodities
+        in: query
+        items:
+          type: string
+        name: type
+        type: array
+      - collectionFormat: multi
+        description: Filter by status, as for GET /commodities
+        in: query
+        items:
+          type: string
+        name: status
+        type: array
+      - description: Filter by exact area ID
+        in: query
+        name: area_id
+        type: string
+      - description: Only commodities with no area
+        in: query
+        name: unassigned
+        type: boolean
+      - description: Include drafts and non-in_use commodities (default true)
+        in: query
+        name: include_inactive
+        type: boolean
+      - collectionFormat: multi
+        description: Filter by computed warranty status
+        in: query
+        items:
+          type: string
+        name: warranty_status
+        type: array
+      - description: Warranty expires strictly before YYYY-MM-DD
+        in: query
+        name: warranty_expires_before
+        type: string
+      - description: Filter by current loan state
+        in: query
+        name: lent_out
+        type: boolean
+      - collectionFormat: multi
+        description: Validated as for GET /commodities, then set aside for the counts
+        in: query
+        items:
+          type: string
+        name: tags
+        type: array
+      - description: Validated as for GET /commodities, then set aside for the counts
+        enum:
+        - all
+        - any
+        in: query
+        name: tag_mode
+        type: string
+      - collectionFormat: multi
+        description: Validated as for GET /commodities, then set aside for the counts
+        in: query
+        items:
+          type: string
+        name: tags_exclude
+        type: array
+      - description: Validated as for GET /commodities, then set aside for the counts
+        in: query
+        name: no_tags
+        type: boolean
+      - description: Accepted and ignored
+        in: query
+        name: sort
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityTagCountsResponse'
+        "400":
+          description: Unsupported parameter or invalid value
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Count commodity tags
+      tags:
+      - commodities
   /g/{groupSlug}/commodities/values:
     get:
       consumes:
       - application/json
-      description: Get the total value of commodities globally, by location, and by
-        area
+      description: |-
+        Get the total value of commodities globally, by location, and by area.
+        Only in-use, non-draft items count. An item's value is its current price,
+        or its purchase price in the group currency when the current price is
+        unknown; a known zero counts. Items with no known value are not added as
+        zero: unvalued_count reports how many each total leaves out.
       parameters:
       - description: Group slug
         in: path

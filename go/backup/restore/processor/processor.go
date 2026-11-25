@@ -22,7 +22,6 @@ import (
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
-	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -253,6 +252,8 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		options:   options,
 		fileRefs:  map[string]*inbPendingFile{},
 		delivered: map[string]string{},
+
+		priceReading: types.PricesOmitZero,
 	}
 
 	// Open the destination bucket once for the whole walk rather than per file
@@ -427,6 +428,11 @@ type inbWalker struct {
 	// file member has been processed (so idMapping.Files is fully populated).
 	// Only created commodities (write strategies, non-dry-run) register one.
 	pendingCovers []inbPendingCover
+
+	// priceReading says how the archive's prices are read. It starts as the
+	// reading for archives without a manifest, and the manifest, which the
+	// exporter always writes first, sets it from its format version.
+	priceReading types.PriceReading
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing
@@ -435,11 +441,9 @@ type inbWalker struct {
 func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 	switch {
 	case hdr.Name == types.INBManifestMember:
-		// Manifest is informational here — its format version was already gated
-		// in checkInbFormatVersion, before any data was touched. Drain it so the
-		// tar advances.
-		_, err := io.Copy(io.Discard, r)
-		return err
+		// The format version was already gated in checkInbFormatVersion,
+		// before any data was touched. Here it only selects how prices read.
+		return w.handleManifestMember(hdr, r)
 	case hdr.Name == types.INBFilesMember:
 		// Non-commodity files document (issue #2235). It lives UNDER the `files/`
 		// prefix, so it must be matched before the file-bytes case below.
@@ -457,6 +461,25 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		_, err := io.Copy(io.Discard, r)
 		return err
 	}
+}
+
+// handleManifestMember reads the manifest's format version, which decides how
+// an absent price in the commodity documents that follow is read.
+func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
+	if hdr.Size < 0 || hdr.Size > maxInbManifestBytes {
+		return errx.Classify(ErrJSONDocTooLarge,
+			errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxInbManifestBytes))
+	}
+	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
+	if err != nil {
+		return errxtrace.Wrap("failed to read manifest member", err)
+	}
+	var manifest types.INBManifest
+	if err := json.Unmarshal(data, &manifest); err != nil {
+		return errxtrace.Wrap("failed to decode manifest document", err)
+	}
+	w.priceReading = types.PriceReadingFor(manifest.Version)
+	return nil
 }
 
 // handleLocationMember decodes a per-location JSON document, recreates the
@@ -595,7 +618,7 @@ func (w *inbWalker) applyUnassignedCommodity(c *types.INBCommodity) error {
 // queues the cover-photo patch, and registers the commodity's file references.
 func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *string) error {
 	l := w.proc
-	commodity, err := c.ConvertToCommodity()
+	commodity, err := c.ConvertToCommodity(w.priceReading)
 	if err != nil {
 		// A malformed numeric field corrupts the restored value — abort the
 		// restore (ErrMalformedEntity is propagated hard by applyLocationDoc)
@@ -610,10 +633,10 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	commodity.AreaID = actualAreaID
 
 	// Mirror the XML restore: when the commodity's original currency matches the
-	// group currency, the converted original price must be zero (the validator
-	// rejects a non-zero converted price in that case).
+	// group currency, a converted price does not apply (the validator rejects a
+	// non-zero one in that case), so it restores as unknown.
 	if groupCurrency, gcErr := validationctx.GroupCurrencyFromContext(w.ctx); gcErr == nil && string(commodity.OriginalPriceCurrency) == groupCurrency {
-		commodity.ConvertedOriginalPrice = decimal.Zero
+		commodity.ConvertedOriginalPrice = nil
 	}
 
 	if err := commodity.ValidateWithContext(w.ctx); err != nil {

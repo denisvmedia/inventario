@@ -9,91 +9,80 @@ import (
 	"go.5x5.cz/inventario/models/rules"
 )
 
-func TestPriceRule_Validate(t *testing.T) {
-	// Happy path tests
-	t.Run("valid when original price is in group currency and converted price is zero", func(t *testing.T) {
-		c := qt.New(t)
-		rule := rules.NewPriceRule("USD", "USD", decimal.NewFromInt(100), decimal.Zero, decimal.Zero)
-		err := rule.Validate(nil)
-		c.Assert(err, qt.IsNil)
-	})
+func price(v int64) *decimal.Decimal {
+	return new(decimal.NewFromInt(v))
+}
 
-	t.Run("valid when original price is not in group currency and converted price is set", func(t *testing.T) {
-		c := qt.New(t)
-		rule := rules.NewPriceRule("USD", "EUR", decimal.NewFromInt(100), decimal.NewFromInt(110), decimal.Zero)
-		err := rule.Validate(nil)
-		c.Assert(err, qt.IsNil)
-	})
+func TestPriceRule_Validate_Valid(t *testing.T) {
+	testCases := []struct {
+		name          string
+		origCurrency  string
+		origPrice     *decimal.Decimal
+		convertedPrc  *decimal.Decimal
+		currentPrice  *decimal.Decimal
+		groupCurrency string
+	}{
+		{name: "original price in group currency, converted unknown", origCurrency: "USD", origPrice: price(100)},
+		{name: "original price in group currency, converted known zero", origCurrency: "USD", origPrice: price(100), convertedPrc: price(0)},
+		{name: "foreign original price with converted price", origCurrency: "EUR", origPrice: price(100), convertedPrc: price(110)},
+		{name: "foreign original price with current price only", origCurrency: "EUR", origPrice: price(100), currentPrice: price(110)},
+		{name: "only current price known", origCurrency: "USD", currentPrice: price(110)},
+		{name: "every price unknown", origCurrency: "USD"},
+		{name: "every price unknown in a foreign currency", origCurrency: "EUR"},
+		{name: "free acquisition in group currency", origCurrency: "USD", origPrice: price(0)},
+		{name: "free acquisition in a foreign currency, converted known zero", origCurrency: "EUR", origPrice: price(0), convertedPrc: price(0)},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rule := rules.NewPriceRule("USD", tc.origCurrency, tc.origPrice, tc.convertedPrc, tc.currentPrice)
+			c.Assert(rule.Validate(nil), qt.IsNil)
+		})
+	}
+}
 
-	t.Run("valid when original price is not in group currency and current price is set", func(t *testing.T) {
-		c := qt.New(t)
-		rule := rules.NewPriceRule("USD", "EUR", decimal.NewFromInt(100), decimal.Zero, decimal.NewFromInt(110))
-		err := rule.Validate(nil)
-		c.Assert(err, qt.IsNil)
-	})
-
-	t.Run("valid when only current price is set", func(t *testing.T) {
-		c := qt.New(t)
-		rule := rules.NewPriceRule("USD", "USD", decimal.Zero, decimal.Zero, decimal.NewFromInt(110))
-		err := rule.Validate(nil)
-		c.Assert(err, qt.IsNil)
-	})
-
-	t.Run("all prices are zero", func(t *testing.T) {
-		c := qt.New(t)
-		rule := rules.NewPriceRule("USD", "USD", decimal.Zero, decimal.Zero, decimal.Zero)
-		err := rule.Validate(nil)
-		c.Assert(err, qt.IsNil)
-	})
-
-	// Unhappy path tests
-	t.Run("invalid cases", func(t *testing.T) {
-		testCases := []struct {
-			name           string
-			groupCurrency  string
-			origCurrency   string
-			origPrice      decimal.Decimal
-			convertedPrice decimal.Decimal
-			currentPrice   decimal.Decimal
-			expectedErr    error
-		}{
-			{
-				name:           "original price in group currency but converted price is not zero",
-				groupCurrency:  "USD",
-				origCurrency:   "USD",
-				origPrice:      decimal.NewFromInt(100),
-				convertedPrice: decimal.NewFromInt(110),
-				currentPrice:   decimal.Zero,
-				expectedErr:    rules.ErrConvertedPriceNotZero,
-			},
-			// {
-			//	name:           "all prices are zero",
-			//	groupCurrency:   "USD",
-			//	origCurrency:   "USD",
-			//	origPrice:      decimal.Zero,
-			//	convertedPrice: decimal.Zero,
-			//	currentPrice:   decimal.Zero,
-			//	expectedErr:    rules.ErrAllPricesZero,
-			// },
-			{
-				name:           "original price not in group currency and neither converted nor current price is set",
-				groupCurrency:  "USD",
-				origCurrency:   "EUR",
-				origPrice:      decimal.NewFromInt(100),
-				convertedPrice: decimal.Zero,
-				currentPrice:   decimal.Zero,
-				expectedErr:    rules.ErrNoPriceInGroupCurrency,
-			},
-		}
-
-		for _, tc := range testCases {
-			t.Run(tc.name, func(t *testing.T) {
-				c := qt.New(t)
-				rule := rules.NewPriceRule(tc.groupCurrency, tc.origCurrency, tc.origPrice, tc.convertedPrice, tc.currentPrice)
-				err := rule.Validate(nil)
-				c.Assert(err, qt.IsNotNil)
-				c.Assert(err.Error(), qt.Equals, tc.expectedErr.Error())
-			})
-		}
-	})
+func TestPriceRule_Validate_Invalid(t *testing.T) {
+	testCases := []struct {
+		name         string
+		origCurrency string
+		origPrice    *decimal.Decimal
+		convertedPrc *decimal.Decimal
+		currentPrice *decimal.Decimal
+		expectedErr  error
+	}{
+		{
+			name:         "original price in group currency but converted price is not zero",
+			origCurrency: "USD",
+			origPrice:    price(100),
+			convertedPrc: price(110),
+			expectedErr:  rules.ErrConvertedPriceNotZero,
+		},
+		{
+			name:         "unknown original price in group currency with a nonzero converted price",
+			origCurrency: "USD",
+			convertedPrc: price(110),
+			expectedErr:  rules.ErrConvertedPriceNotZero,
+		},
+		{
+			name:         "foreign original price with neither converted nor current price",
+			origCurrency: "EUR",
+			origPrice:    price(100),
+			expectedErr:  rules.ErrNoPriceInGroupCurrency,
+		},
+		{
+			name:         "foreign free acquisition still needs a group-currency amount",
+			origCurrency: "EUR",
+			origPrice:    price(0),
+			expectedErr:  rules.ErrNoPriceInGroupCurrency,
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			rule := rules.NewPriceRule("USD", tc.origCurrency, tc.origPrice, tc.convertedPrc, tc.currentPrice)
+			err := rule.Validate(nil)
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Equals, tc.expectedErr.Error())
+		})
+	}
 }

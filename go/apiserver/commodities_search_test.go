@@ -30,18 +30,17 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		Kind: models.TagKindCommodity, Slug: "shed", Label: "Garden shed", Color: models.TagColorGreen,
 	}))
 	target := must.Must(commodityReg.Create(ctx, models.Commodity{
-		Name:                   "Hedge Trimmer",
-		ShortName:              "Trimmer",
-		Type:                   models.CommodityTypeOther,
-		OriginalPrice:          decimal.RequireFromString("10.00"),
-		OriginalPriceCurrency:  models.Currency("USD"),
-		ConvertedOriginalPrice: decimal.Zero,
-		CurrentPrice:           decimal.RequireFromString("10.00"),
-		Count:                  1,
-		Status:                 models.CommodityStatusInUse,
-		PurchaseDate:           models.ToPDate("2023-01-01"),
-		SerialNumber:           "HT-778899",
-		Tags:                   models.ValuerSlice[string]{"shed"},
+		Name:                  "Hedge Trimmer",
+		ShortName:             "Trimmer",
+		Type:                  models.CommodityTypeOther,
+		OriginalPrice:         new(decimal.RequireFromString("10.00")),
+		OriginalPriceCurrency: models.Currency("USD"),
+		CurrentPrice:          new(decimal.RequireFromString("10.00")),
+		Count:                 1,
+		Status:                models.CommodityStatusInUse,
+		PurchaseDate:          models.ToPDate("2023-01-01"),
+		SerialNumber:          "HT-778899",
+		Tags:                  models.ValuerSlice[string]{"shed"},
 	}))
 
 	handler := apiserver.APIServer(params, &mockRestoreWorker{})
@@ -90,6 +89,17 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		c.Check(body, checkers.JSONPathMatches("$.data[*].id", qt.Not(qt.Contains)), target.ID)
 	})
 
+	c.Run("tag counts follow the query and set its tag filter aside", func(c *qt.C) {
+		code, body := get(c, "/commodities/tag-counts?q=ht-7788&tags_exclude=shed")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathEquals("$.data.tags.shed"), float64(1))
+		c.Check(body, checkers.JSONPathEquals("$.data.untagged"), float64(0))
+
+		code, body = get(c, "/commodities/tag-counts?q=nothing-matches-this")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data.tags", qt.HasLen), 0)
+	})
+
 	c.Run("a list without q carries no matches", func(c *qt.C) {
 		code, body := get(c, "/commodities")
 		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
@@ -101,6 +111,8 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 	}{
 		{"list refuses an unknown parameter", "/commodities?colour=red", "colour"},
 		{"list refuses no_tags with tags", "/commodities?no_tags=true&tags=shed", "no_tags"},
+		{"tag counts refuse pagination", "/commodities/tag-counts?page=2", "page"},
+		{"tag counts refuse a value they cannot decode", "/commodities/tag-counts?status=%ZZ", "status"},
 		{"search refuses the old tag operator", "/search?type=commodities&q=x&operator=AND", "operator"},
 		{"search refuses an unknown warranty status", "/search?type=commodities&q=x&warranty_status=soon", "warranty_status"},
 		{"list refuses a value it cannot decode", "/commodities?status=%ZZ", "status"},

@@ -73,8 +73,9 @@ var searchSeeds = []searchSeed{
 // RunCommoditySearchContract checks that a backend's CommodityRegistry
 // applies the item search and the tag filter exactly as
 // registry.MatchCommoditySearch and registry.CommodityTagFilter describe,
-// and that its TagRegistry.SlugsByLabel keeps to its own tag kind. newEnv is
-// called once per subtest and must return an empty group.
+// that it sorts unknown dates and prices last, and that its
+// TagRegistry.SlugsByLabel keeps to its own tag kind. newEnv is called once
+// per subtest and must return an empty group.
 func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) CommoditySearchEnv) {
 	t.Run("search and tag filter", func(t *testing.T) {
 		c := qt.New(t)
@@ -102,6 +103,100 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 						c.Check(matches, qt.Contains, *tc.match, qt.Commentf("matches of %s", cm.Name))
 					}
 				}
+			})
+		}
+	})
+
+	t.Run("tag counts", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seedSearchGroup(c, env)
+
+		for _, tc := range []struct {
+			name string
+			opts registry.CommodityListOptions
+			want registry.CommodityTagCounts
+		}{
+			{
+				name: "every item",
+				opts: registry.CommodityListOptions{IncludeInactive: true},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 2, "kitchen": 1},
+					Untagged: 2,
+				},
+			},
+			{
+				// The sold phone drops out of "red".
+				name: "default view",
+				opts: registry.CommodityListOptions{},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 1, "kitchen": 1},
+					Untagged: 2,
+				},
+			},
+			{
+				name: "with a search",
+				opts: registry.CommodityListOptions{IncludeInactive: true, Search: "red"},
+				want: registry.CommodityTagCounts{
+					Tags:     map[string]int{"power-tools": 1, "red": 2},
+					Untagged: 1,
+				},
+			},
+			{
+				name: "with a tag filter",
+				opts: registry.CommodityListOptions{
+					IncludeInactive: true,
+					Tags:            registry.CommodityTagFilter{Exclude: []string{"red"}},
+				},
+				want: registry.CommodityTagCounts{Tags: map[string]int{"kitchen": 1}, Untagged: 2},
+			},
+			{
+				name: "nothing selected",
+				opts: registry.CommodityListOptions{Search: "nonexistent"},
+				want: registry.CommodityTagCounts{Tags: map[string]int{}},
+			},
+		} {
+			c.Run(tc.name, func(c *qt.C) {
+				got, err := env.Commodities.CountTags(env.Ctx, tc.opts)
+				c.Assert(err, qt.IsNil)
+				c.Check(got, qt.DeepEquals, tc.want)
+
+				// The counts describe the items the list returns.
+				items, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, tc.opts)
+				c.Assert(err, qt.IsNil)
+				c.Check(registry.CountCommodityTags(items), qt.DeepEquals, got)
+			})
+		}
+	})
+
+	t.Run("unknown dates and prices sort last", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		seedSortGroup(c, env)
+
+		for _, tc := range []struct {
+			field registry.CommoditySortField
+			desc  bool
+			want  []string
+		}{
+			// Bravo's current value is a known zero: it sorts as a value.
+			{field: registry.CommoditySortCurrentPrice, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortCurrentPrice, desc: true, want: []string{"Alpha", "Bravo", "Charlie"}},
+			{field: registry.CommoditySortOriginalPrice, want: []string{"Alpha", "Bravo", "Charlie"}},
+			{field: registry.CommoditySortOriginalPrice, desc: true, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortPurchaseDate, want: []string{"Bravo", "Alpha", "Charlie"}},
+			{field: registry.CommoditySortPurchaseDate, desc: true, want: []string{"Alpha", "Bravo", "Charlie"}},
+		} {
+			name := string(tc.field)
+			if tc.desc {
+				name = "-" + name
+			}
+			c.Run(name, func(c *qt.C) {
+				got, _, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, registry.CommodityListOptions{
+					SortField: tc.field, SortDesc: tc.desc,
+				})
+				c.Assert(err, qt.IsNil)
+				c.Check(names(got), qt.DeepEquals, tc.want)
 			})
 		}
 	})
@@ -234,26 +329,25 @@ func seedSearchGroup(c *qt.C, env CommoditySearchEnv) *models.Commodity {
 			tags = models.ValuerSlice[string](s.tags)
 		}
 		created, err := env.Commodities.Create(env.Ctx, models.Commodity{
-			Name:                   s.name,
-			ShortName:              s.shortName,
-			Type:                   models.CommodityTypeOther,
-			AreaID:                 new(env.AreaID),
-			Count:                  1,
-			OriginalPrice:          decimal.NewFromInt(10),
-			OriginalPriceCurrency:  "USD",
-			ConvertedOriginalPrice: decimal.Zero,
-			CurrentPrice:           decimal.NewFromInt(10),
-			Status:                 status,
-			StatusNote:             s.statusNote,
-			SerialNumber:           s.serial,
-			ExtraSerialNumbers:     models.ValuerSlice[string](s.extraSerials),
-			PartNumbers:            models.ValuerSlice[string](s.parts),
-			Tags:                   tags,
-			Comments:               s.comments,
-			WarrantyNotes:          s.warrantyNotes,
-			PurchaseDate:           models.ToPDate("2024-01-01"),
-			RegisteredDate:         models.ToPDate("2024-01-02"),
-			LastModifiedDate:       models.ToPDate("2024-01-03"),
+			Name:                  s.name,
+			ShortName:             s.shortName,
+			Type:                  models.CommodityTypeOther,
+			AreaID:                new(env.AreaID),
+			Count:                 1,
+			OriginalPrice:         new(decimal.NewFromInt(10)),
+			OriginalPriceCurrency: "USD",
+			CurrentPrice:          new(decimal.NewFromInt(10)),
+			Status:                status,
+			StatusNote:            s.statusNote,
+			SerialNumber:          s.serial,
+			ExtraSerialNumbers:    models.ValuerSlice[string](s.extraSerials),
+			PartNumbers:           models.ValuerSlice[string](s.parts),
+			Tags:                  tags,
+			Comments:              s.comments,
+			WarrantyNotes:         s.warrantyNotes,
+			PurchaseDate:          models.ToPDate("2024-01-01"),
+			RegisteredDate:        models.ToPDate("2024-01-02"),
+			LastModifiedDate:      models.ToPDate("2024-01-03"),
 		})
 		c.Assert(err, qt.IsNil, qt.Commentf("seeding %s", s.name))
 		if s.name == "Garden Hose" {
@@ -262,6 +356,36 @@ func seedSearchGroup(c *qt.C, env CommoditySearchEnv) *models.Commodity {
 	}
 	c.Assert(hose.AssetNumber, qt.IsNotNil)
 	return hose
+}
+
+// seedSortGroup creates three items: Alpha and Bravo with known prices and
+// purchase dates (Bravo's current value a known zero), and Charlie with
+// neither.
+func seedSortGroup(c *qt.C, env CommoditySearchEnv) {
+	c.Helper()
+	for _, seed := range []struct {
+		name              string
+		original, current *decimal.Decimal
+		purchased         models.PDate
+	}{
+		{name: "Alpha", original: new(decimal.NewFromInt(5)), current: new(decimal.NewFromInt(5)), purchased: models.ToPDate("2024-01-01")},
+		{name: "Bravo", original: new(decimal.NewFromInt(20)), current: new(decimal.Zero), purchased: models.ToPDate("2023-01-01")},
+		{name: "Charlie"},
+	} {
+		_, err := env.Commodities.Create(env.Ctx, models.Commodity{
+			Name:                  seed.name,
+			ShortName:             seed.name,
+			Type:                  models.CommodityTypeOther,
+			AreaID:                new(env.AreaID),
+			Count:                 1,
+			OriginalPrice:         seed.original,
+			OriginalPriceCurrency: "USD",
+			CurrentPrice:          seed.current,
+			Status:                models.CommodityStatusInUse,
+			PurchaseDate:          seed.purchased,
+		})
+		c.Assert(err, qt.IsNil, qt.Commentf("seeding %s", seed.name))
+	}
 }
 
 // resolveLabels does what services/commodityquery.Resolve does for the

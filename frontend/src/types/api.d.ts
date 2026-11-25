@@ -4386,6 +4386,87 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/tag-counts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count commodity tags
+         * @description Per item tag slug, the number of items the query selects when its own tag filter (tags, tag_mode, tags_exclude, no_tags) is set aside, plus the number without tags.
+         *     Takes the filter parameters of GET /commodities (item query contract); sort is accepted and ignored. An unknown parameter or an unreadable value is a 400.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Search text, as for GET /commodities */
+                    q?: string;
+                    /** @description Filter by commodity type, as for GET /commodities */
+                    type?: string[];
+                    /** @description Filter by status, as for GET /commodities */
+                    status?: string[];
+                    /** @description Filter by exact area ID */
+                    area_id?: string;
+                    /** @description Only commodities with no area */
+                    unassigned?: boolean;
+                    /** @description Include drafts and non-in_use commodities (default true) */
+                    include_inactive?: boolean;
+                    /** @description Filter by computed warranty status */
+                    warranty_status?: string[];
+                    /** @description Warranty expires strictly before YYYY-MM-DD */
+                    warranty_expires_before?: string;
+                    /** @description Filter by current loan state */
+                    lent_out?: boolean;
+                    /** @description Validated as for GET /commodities, then set aside for the counts */
+                    tags?: string[];
+                    /** @description Validated as for GET /commodities, then set aside for the counts */
+                    tag_mode?: "all" | "any";
+                    /** @description Validated as for GET /commodities, then set aside for the counts */
+                    tags_exclude?: string[];
+                    /** @description Validated as for GET /commodities, then set aside for the counts */
+                    no_tags?: boolean;
+                    /** @description Accepted and ignored */
+                    sort?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityTagCountsResponse"];
+                    };
+                };
+                /** @description Unsupported parameter or invalid value */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/values": {
         parameters: {
             query?: never;
@@ -4395,7 +4476,11 @@ export type paths = {
         };
         /**
          * Get total value of commodities
-         * @description Get the total value of commodities globally, by location, and by area
+         * @description Get the total value of commodities globally, by location, and by area.
+         *     Only in-use, non-draft items count. An item's value is its current price,
+         *     or its purchase price in the group currency when the current price is
+         *     unknown; a known zero counts. Items with no known value are not added as
+         *     zero: unvalued_count reports how many each total leaves out.
          */
         get: {
             parameters: {
@@ -12058,6 +12143,9 @@ export type components = {
             data?: components["schemas"]["models.CommodityService"][];
             meta?: components["schemas"]["jsonapi.CommodityServicesMeta"];
         };
+        "jsonapi.CommodityTagCountsResponse": {
+            data?: components["schemas"]["registry.CommodityTagCounts"];
+        };
         "jsonapi.CurrencyMigrationPreviewAttributes": {
             exchange_rate?: number;
             from_currency?: string;
@@ -12080,12 +12168,12 @@ export type components = {
         "jsonapi.CurrencyMigrationPreviewDiff": {
             commodity_id?: string;
             commodity_name?: string;
-            current_price_after?: number;
-            current_price_before?: number;
+            current_price_after?: number | null;
+            current_price_before?: number | null;
             original_currency_after?: string;
             original_currency_before?: string;
-            original_price_after?: number;
-            original_price_before?: number;
+            original_price_after?: number | null;
+            original_price_before?: number | null;
         };
         "jsonapi.CurrencyMigrationPreviewRequest": {
             data?: components["schemas"]["jsonapi.CurrencyMigrationPreviewRequestData"];
@@ -12786,6 +12874,13 @@ export type components = {
         "jsonapi.NamedTotal": {
             id?: string;
             name?: string;
+            /**
+             * Format: int64
+             * @description UnvaluedCount is the number of in-use items in this location or area
+             *     that have no known value and are therefore not part of Value.
+             * @example 0
+             */
+            unvalued_count?: number;
             value?: number;
         };
         "jsonapi.RestoreOperationCreateRequest": {
@@ -13154,6 +13249,19 @@ export type components = {
             area_totals?: components["schemas"]["jsonapi.NamedTotal"][];
             global_total?: number;
             location_totals?: components["schemas"]["jsonapi.NamedTotal"][];
+            /**
+             * Format: int64
+             * @description UnvaluedCount is the number of in-use items GlobalTotal leaves out
+             *     because neither their current value nor their purchase price is known.
+             * @example 2
+             */
+            unvalued_count?: number;
+            /**
+             * Format: int64
+             * @description ValuedCount is the number of in-use items that GlobalTotal includes.
+             * @example 12
+             */
+            valued_count?: number;
         };
         "jsonapi.ValueData": {
             attributes?: components["schemas"]["jsonapi.ValueAttrs"];
@@ -13215,7 +13323,12 @@ export type components = {
              */
             readonly asset_number?: number;
             comments?: string;
-            converted_original_price?: number;
+            /**
+             * @description ConvertedOriginalPrice is the purchase price in the group currency, null
+             *     when unknown. It applies only when OriginalPriceCurrency is a foreign
+             *     currency; for an item bought in the group currency it is always null.
+             */
+            converted_original_price?: number | null;
             count?: number;
             /**
              * @description CoverFileID is the user-picked cover photo for the commodity (issue
@@ -13225,16 +13338,28 @@ export type components = {
              *     override; the resolver's first-photo path takes over.
              */
             cover_file_id?: string;
-            current_price?: number;
+            /**
+             * @description CurrentPrice is the current value in the group currency, null when
+             *     unknown. When known, 0 included, it is the item's value in every total;
+             *     otherwise the purchase price in the group currency stands in.
+             */
+            current_price?: number | null;
             draft?: boolean;
             extra_serial_numbers?: string[];
             id?: string;
             last_modified_date?: string;
             name?: string;
-            original_price?: number;
+            /**
+             * @description OriginalPrice is the purchase price in OriginalPriceCurrency, null when
+             *     unknown. Each of the three prices can be unknown on its own, and
+             *     unknown is not zero: a gift's price is unknown, a free item's is 0. A
+             *     reviewed item may leave any of them unknown.
+             */
+            original_price?: number | null;
             original_price_currency?: string;
             part_numbers?: string[];
-            purchase_date?: string;
+            /** @description PurchaseDate is nil when the date is unknown. */
+            purchase_date?: string | null;
             registered_date?: string;
             /**
              * @description SalePrice is the realised proceeds for a `sold` transition. NULL
@@ -14053,6 +14178,20 @@ export type components = {
         "registry.CommoditySearchMatch": {
             field?: components["schemas"]["registry.CommoditySearchField"];
             value?: string;
+        };
+        "registry.CommodityTagCounts": {
+            /**
+             * @description Tags maps a tag slug to the number of commodities carrying it. A slug
+             *     no commodity in the set carries is absent.
+             */
+            tags?: {
+                [key: string]: number;
+            };
+            /**
+             * @description Untagged counts the commodities without tags (a NULL tags column
+             *     included).
+             */
+            untagged?: number;
         };
         "registry.StorageBreakdown": {
             documents?: number;

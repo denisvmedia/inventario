@@ -73,6 +73,13 @@ export interface CommodityMeta {
   invoices_error?: string
 }
 
+interface ValueResponseTotal {
+  id?: string
+  name?: string
+  value?: number
+  unvalued_count?: number
+}
+
 interface ValueResponse {
   data?: {
     // Mirrors jsonapi.NamedTotal in src/types/api.d.ts. The BE emits
@@ -80,9 +87,11 @@ interface ValueResponse {
     // consumers can match without relying on names — area names are
     // not unique on the BE (`uuid` is the only unique column).
     attributes?: {
-      area_totals?: { id?: string; name?: string; value?: number }[]
+      area_totals?: ValueResponseTotal[]
       global_total?: number
-      location_totals?: { id?: string; name?: string; value?: number }[]
+      location_totals?: ValueResponseTotal[]
+      unvalued_count?: number
+      valued_count?: number
     }
   }
 }
@@ -174,6 +183,43 @@ export async function listCommodities(options: ListCommoditiesOptions = {}): Pro
     covers,
     matches: body.meta?.matches ?? {},
   }
+}
+
+// Per tag slug, how many items a query selects once its tag filter is set
+// aside, plus how many have no tags (GET /commodities/tag-counts).
+export type CommodityTagCounts = Schema<"registry.CommodityTagCounts">
+
+// The options that reach the tag counts: the query without paging, sort
+// or tag filter, which the endpoint would ignore or set aside. An unreadable
+// tag_mode or no_tags is part of the tag filter and goes with it.
+export function tagCountsOptions(options: ListCommoditiesOptions): ListCommoditiesOptions {
+  const unreadable = Object.fromEntries(
+    Object.entries(options.unreadable ?? {}).filter(
+      ([name]) => name !== "tag_mode" && name !== "no_tags"
+    )
+  )
+  return {
+    ...options,
+    page: undefined,
+    perPage: undefined,
+    sort: undefined,
+    sortDesc: undefined,
+    tags: undefined,
+    tagMode: undefined,
+    tagsExclude: undefined,
+    noTags: undefined,
+    unreadable: Object.keys(unreadable).length > 0 ? unreadable : undefined,
+    signal: undefined,
+  }
+}
+
+export async function getCommodityTagCounts(
+  options: ListCommoditiesOptions = {}
+): Promise<{ tags: Record<string, number>; untagged: number }> {
+  const qs = listOptionsToParams(tagCountsOptions(options)).toString()
+  const path = qs ? `/commodities/tag-counts?${qs}` : "/commodities/tag-counts"
+  const body = await http.get<{ data?: CommodityTagCounts }>(path, { signal: options.signal })
+  return { tags: body.data?.tags ?? {}, untagged: body.data?.untagged ?? 0 }
 }
 
 // normalizeCover folds a BE `meta.covers[id]` payload into the FE's
@@ -399,14 +445,21 @@ export async function bulkMoveCommodities(ids: string[], areaId: string): Promis
 // Each named total carries the area/location `id` alongside its name
 // + value, mirroring `jsonapi.NamedTotal` on the BE. Consumers should
 // match by `id` — area names are not unique (only `uuid` is).
+//
+// A total sums the items whose value is known (the current value, else
+// the purchase price in the group currency). Items with neither are left
+// out rather than counted as zero; `unvaluedCount` says how many.
 export interface NamedTotal {
   id: string
   name: string
   value: number
+  unvaluedCount: number
 }
 
 export interface CommoditiesValue {
   globalValue: number
+  valuedCount: number
+  unvaluedCount: number
   locationTotals: NamedTotal[]
   areaTotals: NamedTotal[]
 }
@@ -414,13 +467,16 @@ export interface CommoditiesValue {
 export async function getCommoditiesValue(signal?: AbortSignal): Promise<CommoditiesValue> {
   const body = await http.get<ValueResponse>("/commodities/values", { signal })
   const attrs = body.data?.attributes ?? {}
-  const mapEntry = (t: { id?: string; name?: string; value?: number }): NamedTotal => ({
+  const mapEntry = (t: ValueResponseTotal): NamedTotal => ({
     id: t.id ?? "",
     name: t.name ?? "",
     value: t.value ?? 0,
+    unvaluedCount: t.unvalued_count ?? 0,
   })
   return {
     globalValue: attrs.global_total ?? 0,
+    valuedCount: attrs.valued_count ?? 0,
+    unvaluedCount: attrs.unvalued_count ?? 0,
     locationTotals: (attrs.location_totals ?? []).map(mapEntry),
     areaTotals: (attrs.area_totals ?? []).map(mapEntry),
   }

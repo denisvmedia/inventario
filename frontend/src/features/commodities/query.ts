@@ -190,10 +190,10 @@ export function writeCommodityQuery(
   if (query.includeInactive) next.set(URL_PARAM.inactive, "1")
   for (const v of query.warrantyStatuses) next.append(URL_PARAM.warranty, v)
   if (query.lentOut) next.set(URL_PARAM.lentOut, "1")
-  if (query.tags.include.length > 0) {
-    next.set(URL_PARAM.tags, query.tags.include.join(","))
-    if (query.tags.mode === "any") next.set(URL_PARAM.tagMode, "any")
-  }
+  if (query.tags.include.length > 0) next.set(URL_PARAM.tags, query.tags.include.join(","))
+  // Written without tags too, so the mode picked before the first tag is
+  // kept; the server ignores it until a tag is included.
+  if (query.tags.mode === "any") next.set(URL_PARAM.tagMode, "any")
   if (query.tags.exclude.length > 0) next.set(URL_PARAM.tagsExclude, query.tags.exclude.join(","))
   if (query.tags.untagged) next.set(URL_PARAM.noTags, "1")
   if (query.sort !== "name" || query.sortDesc) {
@@ -224,6 +224,45 @@ export function commodityListHref(slug: string, query: Partial<CommodityQuery>):
   const qs = params.toString()
   const base = `/g/${encodeURIComponent(slug)}/commodities`
   return qs ? `${base}?${qs}` : base
+}
+
+// Link to the items list showing every item that carries one tag, inactive
+// ones included, so the list matches the tag's item count.
+export function commodityTagHref(slug: string, tagSlug: string): string {
+  return commodityListHref(slug, {
+    includeInactive: true,
+    tags: { ...DEFAULT_COMMODITY_QUERY.tags, include: [tagSlug] },
+  })
+}
+
+// The tag-filter parameters whose value can be unreadable.
+const UNREADABLE_TAG_PARAMS: readonly UnreadableParam[] = ["tag_mode", "no_tags"]
+
+// query with its tag filter replaced by tags. An unreadable tag_mode or
+// no_tags is dropped, because tags now says what those parameters hold.
+export function withTagFilter(query: CommodityQuery, tags: CommodityTagFilter): CommodityQuery {
+  const unreadable = { ...query.unreadable }
+  for (const name of UNREADABLE_TAG_PARAMS) delete unreadable[name]
+  return { ...query, tags, unreadable }
+}
+
+// query narrowed to items that also carry tagSlug. The tag leaves the
+// excluded tags and "No tags" is turned off, since a required tag combines
+// with neither.
+export function withIncludedTag(query: CommodityQuery, tagSlug: string): CommodityQuery {
+  const { include, exclude } = query.tags
+  return withTagFilter(query, {
+    ...query.tags,
+    include: include.includes(tagSlug) ? include : [...include, tagSlug],
+    exclude: exclude.filter((s) => s !== tagSlug),
+    untagged: false,
+  })
+}
+
+// How many tag-filter parameters in the page URL hold a value the parser
+// cannot read.
+export function unreadableTagParamCount(query: CommodityQuery): number {
+  return UNREADABLE_TAG_PARAMS.filter((name) => query.unreadable[name] !== undefined).length
 }
 
 // Whether query narrows the list at all; the sort does not count.

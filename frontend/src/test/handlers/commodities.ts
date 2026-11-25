@@ -27,6 +27,21 @@ export function list(slug: string, items: unknown[] = [], covers?: Record<string
   ]
 }
 
+// tagCounts backs GET /commodities/tag-counts. onRequest sees the query
+// string, for tests that check which filters reach the counts.
+export function tagCounts(
+  slug: string,
+  data: { tags: Record<string, number>; untagged: number },
+  onRequest?: (params: URLSearchParams) => void
+) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/tag-counts`), ({ request }) => {
+      onRequest?.(new URL(request.url).searchParams)
+      return HttpResponse.json({ data })
+    }),
+  ]
+}
+
 export function detail(slug: string, id: string, item: unknown, cover?: CoverFixture) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`), () => {
@@ -59,6 +74,7 @@ export interface NamedTotalFixture {
   id?: string
   name: string
   value?: number
+  unvaluedCount?: number
   /** @deprecated alias for `value` — kept for back-compat with pre-#1632 tests. */
   total?: number
 }
@@ -67,6 +83,8 @@ export function values(
   slug: string,
   attrs: {
     globalTotal?: number
+    valuedCount?: number
+    unvaluedCount?: number
     locationTotals?: NamedTotalFixture[]
     areaTotals?: NamedTotalFixture[]
   } = {}
@@ -75,6 +93,7 @@ export function values(
     id: t.id ?? "",
     name: t.name,
     value: t.value ?? t.total ?? 0,
+    unvalued_count: t.unvaluedCount ?? 0,
   })
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/commodities/values`), () =>
@@ -84,6 +103,8 @@ export function values(
           type: "values",
           attributes: {
             global_total: attrs.globalTotal ?? 0,
+            valued_count: attrs.valuedCount ?? 0,
+            unvalued_count: attrs.unvaluedCount ?? 0,
             location_totals: (attrs.locationTotals ?? []).map(toEntry),
             area_totals: (attrs.areaTotals ?? []).map(toEntry),
           },

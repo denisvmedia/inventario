@@ -9,6 +9,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAreas } from "@/features/areas/hooks"
 import { useCommodity } from "@/features/commodities/hooks"
+import { formatPrice } from "@/features/commodities/price"
 import {
   COMMODITY_TYPE_FALLBACK_ICON,
   COMMODITY_TYPE_ICONS,
@@ -162,27 +163,25 @@ export function CommodityPrintPage() {
               />
               <PrintRow
                 label={t("commodities:detail.fields.originalPrice")}
-                value={
-                  commodity.original_price !== undefined
-                    ? formatCurrency(commodity.original_price, purchaseCurrency)
-                    : noValue
-                }
+                value={formatPrice(
+                  commodity.original_price,
+                  purchaseCurrency,
+                  noValue,
+                  formatCurrency
+                )}
               />
               <PrintRow
                 label={t("commodities:detail.fields.convertedOriginalPrice")}
-                value={
-                  commodity.converted_original_price !== undefined
-                    ? formatCurrency(commodity.converted_original_price, groupCurrency)
-                    : noValue
-                }
+                value={formatPrice(
+                  commodity.converted_original_price,
+                  groupCurrency,
+                  noValue,
+                  formatCurrency
+                )}
               />
               <PrintRow
                 label={t("commodities:detail.fields.currentPrice")}
-                value={
-                  commodity.current_price !== undefined
-                    ? formatCurrency(commodity.current_price, groupCurrency)
-                    : noValue
-                }
+                value={formatPrice(commodity.current_price, groupCurrency, noValue, formatCurrency)}
               />
             </section>
 

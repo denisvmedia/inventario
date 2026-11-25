@@ -10,7 +10,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { apiUrl, fileHandlers, groupHandlers } from "@/test/handlers"
+import { apiUrl, fileHandlers, groupHandlers, tagHandlers } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -284,6 +284,34 @@ describe("<FilesListPage />", () => {
       expect(screen.getByTestId("files-tag-pill-warranty")).toHaveAttribute("aria-pressed", "true")
     )
     expect(screen.getByTestId("files-tag-clear")).toBeInTheDocument()
+  })
+
+  it("filters by any file tag from the tag picker and shows it as a pill", async () => {
+    const user = userEvent.setup()
+    const queries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...tagHandlers.list(SLUG, [
+        { id: "t1", slug: "receipt-2024", label: "Receipt 2024", color: "amber" },
+      ]),
+      http.get(apiUrl(`/g/${SLUG}/files`), ({ request }) => {
+        queries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({ data: [], meta: { total: 0 } })
+      }),
+      ...fileHandlers.counts(SLUG, { all: 0 })
+    )
+    renderPage()
+    await user.click(await screen.findByTestId("files-tag-picker"))
+    await user.click(await screen.findByTestId("files-tag-picker-option-receipt-2024"))
+    await waitFor(() => expect(queries[queries.length - 1].get("tags")).toBe("receipt-2024"))
+    await user.keyboard("{Escape}")
+
+    const pill = screen.getByTestId("files-tag-pill-receipt-2024")
+    expect(pill).toHaveTextContent("Receipt 2024")
+    expect(pill).toHaveAttribute("aria-pressed", "true")
+    await user.click(pill)
+    await waitFor(() => expect(queries[queries.length - 1].has("tags")).toBe(false))
+    expect(screen.queryByTestId("files-tag-pill-receipt-2024")).toBeNull()
   })
 
   it("toggles between list and grid views via the toolbar buttons", async () => {

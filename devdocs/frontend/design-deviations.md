@@ -246,6 +246,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2800 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent until the mock defines list error states.
 
+#### 2026-11-25 — Items list: Tags filter menu with counts
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar has search, type and status filters and the view toggle; there is no tag filter.
+- **Reality**: `frontend/src/components/tags/TagFilterMenu.tsx` adds a **Tags** toolbar button (same `Button size="sm"` outline/default shape and count `Badge` as the other filter dropdowns, with a `Tag` icon) that opens a `Popover` holding a `Command` list: a search box, an **All tags** / **Any tag** switch, a **No tags** row, then one row per item tag with a check/exclude mark, the tag's color dot, its label and its item count. A click requires a tag, a second click excludes it (crossed out, `Ban` mark), a third removes it; a footer says so and carries **Clear**. Counts load from `GET /commodities/tag-counts` when the menu opens. Fallback pattern: the `Popover` + `Command` combobox in [`design-mocks/src/components/CurrencyCombobox.tsx`](../../design-mocks/src/components/CurrencyCombobox.tsx).
+- **Why**: not present in mock. #2792 asks for a Tags dropdown with a search box, color and count per tag, all/any, "No tags" and click-again-to-exclude, and says the dropdown needs a mock or a recorded deviation.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws a tag filter.
+
+#### 2026-11-25 — Tags, area and type link to the filtered items list
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) grid cards and [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) draw item tags with `TagPill size="xs"` as plain spans; the area and the type on the item page are plain text.
+- **Reality**: `frontend/src/components/tags/TagPill.tsx` follows the mock's pill (sizes, `#` glyph, `bg-*/15` and `border-*/30` tones, using the `tag-*` color tokens that `TagBadge` already uses for real tag colors) and renders a `Link` when given an `href`, with `hover:opacity-80` and a focus outline. A tag on an item card adds itself to the list's current query (other filters kept, back to page 1); the pill sits above the card-wide link (`relative z-10 pointer-events-auto`), like the selection checkbox. The item page's Details tab links each tag to `?inactive=1&tags=<slug>`, the area value to `?area=<id>&inactive=1` and the type under the item name to `?type=<type>&inactive=1`, the last two with `hover:underline`.
+- **Why**: not present in mock. #2792 asks that a tag anywhere, and the type and area values on the item page, link to the items list filtered by them.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows interactive tags.
+
 #### 2026-11-25 — Item page: Reminders card on the Details tab
 
 - **Issue/PR**: #2805
@@ -265,6 +283,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Dual constraint. (1) The warranty status counts the mock's "Active Warranties" / "Expired Warranties" cards depend on require warranty rollups gated on #1367 / #1529 — neither has landed yet, so the cards literally have no data to show. (2) We already had the six Inventory metrics surfacing live data; the prior shipped layout was two grids of three (`lg:grid-cols-3`) which produced two awkward half-empty rows on mobile. Merging into a single 6-card grid is the smallest move that improves mobile without reaching for unimplemented BE rollups.
 - **Approved by**: user (explicit) — "Доделай ещё свою главную задачу - дашборд."
 - **Reversion plan**: When #1367 / #1529 land the warranty rollups, swap to the mock's 4-card layout (Active / Expiring / Expired / Total Value) by replacing the six `<StatCard>` calls with the four warranty-rooted ones and switching `lg:grid-cols-3` → `lg:grid-cols-4`. The Locations / Areas / Files counts then either move to a secondary surface (sidebar metric strip, or a "More stats" expander) or get folded into the relevant feature pages.
+
+#### 2026-11-25 — Est. Total Value card says how many items it leaves out
+
+- **Issue/PR**: #2813 / #2836
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) shows the Est. Total Value card with the fixed caption "current resale value"; every mock item has a value.
+- **Reality**: `frontend/src/pages/Dashboard.tsx` keeps the card. While every in-use item has a value, the caption reads "Sum of current values or purchase prices" (`dashboard:stats.totalValueSub`), because an item without a current value counts at its purchase price. When some have neither, the caption reads "Excludes N items without a value" (`dashboard:stats.totalValueExcludes`), from the `unvalued_count` the values endpoint returns.
+- **Why**: A purchase price or value can be unknown, and the total leaves such items out rather than counting them as zero. The issue asks every total to disclose how many items it excludes.
+- **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage on the card.
 
 ### Locations & Areas
 
@@ -323,7 +350,25 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested (per the issue's explicit instruction to "build a NEW dialog component … and log any design deviation").
 - **Reversion plan**: Permanent unless `inventario-design` adds a canonical pattern for choice-based destructive deletes, at which point reconcile `DeleteWithItemsDialog` to match.
 
+#### 2026-11-25 — Area items panel: Est. value says how many items it leaves out
+
+- **Issue/PR**: #2813 / #2836
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) shows the Est. value stat as a value and a label only.
+- **Reality**: `frontend/src/pages/areas/AreaItemsPanel.tsx` adds a second muted line under the label, "Excludes N items without a value", when the area total leaves items out (`locations:areaDetail.items.statsValueExcludes`). Item rows show "—" for an unknown current value and a formatted zero for a known zero, as the mock does for a missing value.
+- **Why**: Same reason as the dashboard card: an unknown value is left out of the total, and the total says so.
+- **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage in the stats strip.
+
 ### Files & Attachments
+
+#### 2026-11-25 — Files page: "More tags" picker for any file tag
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) offers only the six curated `FILE_TAGS` pills in the toolbar.
+- **Reality**: `FilesListPage` keeps the curated pills and adds, after them, one pressed pill (with an `X`) per selected tag that has no curated pill, and a **More tags** button that opens `TagFilterMenu` over the group's file tags (search box, color dot, label; no counts, exclusion, all/any or "No tags", since the files endpoint has none of them). Only file tags are listed; item tags stay in their own namespace (#1928).
+- **Why**: not present in mock. #2792 asks that file browsing keep the curated tag shortcuts and also offer a searchable picker for any file tag, and that every condition in the URL stay visible.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` draws arbitrary file tag selection.
 
 #### 2026-11-25 — File detail sheet: "Linked to" lists every attachment, each with Remove attachment
 
@@ -399,6 +444,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Tags
 
+#### 2026-11-25 — Tags page: tag names link to the filtered list
+
+- **Issue/PR**: #2792 / PR (pending)
+- **Mock**: [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) row label is plain text.
+- **Reality**: `TagRow` renders the `# label` as a `Link` with `hover:underline`: an item tag opens the items list with `?inactive=1&tags=<slug>`, so the list matches the row's item count, and a file tag opens the Files page with `?tags=<slug>`.
+- **Why**: not present in mock. #2792 asks that a tag in a row of the Tags page link to the list filtered by it.
+- **Approved by**: user (explicit) — pre-approved for #2792 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows interactive tag rows.
+
 #### 2026-05-15 — Tags page: full-shape TagFormDialog preserved alongside inline create
 
 - **Issue/PR**: #1539 / PR _pending_
@@ -445,6 +499,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Merging would either bloat one component with a popover/inline `mode` switch (poor cohesion) or break mock fidelity (the dialogs want the inline grid; the group form wants the space-saving popover). The folder paths already disambiguate the imports.
 - **Approved by**: agent-suggested — judgment call within the #1264 "dedup IconPicker" scope item; surfaced to the user as "not duplicates → document, don't merge".
 - **Reversion plan**: Permanent unless the upstream mock unifies the two surfaces.
+
+#### 2026-11-25 — Item purchase step: purchase date and prices are never required
+
+- **Issue/PR**: #2813 / #2836
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) L1158-L1161 marks Purchase Date required for a non-draft item, with the hint "Required for non-draft items"; the Purchase Price hint reads "Original purchase currency".
+- **Reality**: `frontend/src/components/items/CommodityFormDialog.tsx` drops the asterisk and `aria-required` from Purchase date and Original price on every item. Purchase date carries the hint "Leave blank if you don't know it." and Original price "Leave blank if you don't know it; enter 0 if it was free." The in-place edit form (`CommodityEditForm.tsx`) shows the same two hints. A blank field is saved as unknown and "0" as a known zero. The foreign-currency banner and its "converted price or current value" rule apply only when the purchase price is known.
+- **Why**: A reviewed item may have an unknown purchase date or price (a gift, an inherited object), and unknown is distinct from zero. The hints tell the user how to record each case.
+- **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
 
 ### Auth & Profile
 
@@ -957,6 +1020,15 @@ _None yet._
 - **Why**: Backend data-model constraints (no brand/model columns, `type` not `category`, per-group immutable currency from #202/#1550, covers-not-galleries on the list endpoint), missing shadcn primitives (`ToggleGroup`), and the established `CommodityPrintPage` precedent (Shell-mounted print route, chrome hidden via `@media print`). The issue's broader full-inventory / filtered scope was deliberately deferred to match the design mock's two-mode shape.
 - **Approved by**: agent-suggested-then-user-confirmed.
 - **Reversion plan**: Permanent for the data-model-bound divergences (brand/model, category→type, currency, covers). The `ToggleGroup` segmented-button substitution resolves to 1:1 if/when a `toggle-group.tsx` primitive is vendored. The issue's full-inventory / filtered report scope is a future follow-up if requested.
+
+#### 2026-11-25 — Location report totals leave unknown prices out and say so
+
+- **Issue/PR**: #2813 / #2836
+- **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) L224-L277 sums `purchasePrice ?? 0` and `currentValue ?? 0` into the Total Purchase and Est. Total Value cards, so a missing price counts as zero.
+- **Reality**: `frontend/src/features/reports/components/LocationReport.tsx` sums only the known amounts (`features/reports/aggregate.ts`). Under each total card a muted line reads "Excludes N items without a purchase price" or "… without a value" when items are left out. The purchase total and each item's purchase row use the purchase price in the group currency: the price itself when it was paid in the group currency, otherwise its converted amount. The Est. Total Value card, each item's value row and the item report's Estimated Value use the dashboard's rule (the current value, else that purchase price), so one item has one estimated value everywhere. Item rows and the item report show "—" for an unknown price and a formatted zero for a known zero.
+- **Why**: An unknown price is not a zero, and the issue asks report totals to disclose what they exclude. A price paid in the group currency has no converted amount, so summing the converted column alone dropped it.
+- **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` shows coverage on the report cards.
 
 ---
 
