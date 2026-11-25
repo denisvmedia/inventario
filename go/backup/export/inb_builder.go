@@ -6,6 +6,7 @@ import (
 	"archive/tar"
 	"context"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -376,9 +377,7 @@ func (b *inbBuilder) planDrafts() plannedDrafts {
 	doc := INBDraftsDoc{Drafts: make([]INBDraft, 0, len(b.drafts))}
 	for _, d := range b.drafts {
 		values := make(map[string]any, len(d.Values))
-		for key, value := range d.Values {
-			values[key] = value
-		}
+		maps.Copy(values, d.Values)
 		b.exportDraftReference(values, "area_id", b.areaUUIDByDBID)
 		b.exportDraftReference(values, "seller_id", b.sellerUUIDByDBID)
 		doc.Drafts = append(doc.Drafts, INBDraft{

@@ -154,7 +154,7 @@ func TestINBExport_Drafts(t *testing.T) {
 	c.Check(strings.HasPrefix(refs[f.photo].Path, "files/_entity/draft/"+f.draft.UUID+"/images/"), qt.IsTrue, qt.Commentf("path %s", refs[f.photo].Path))
 	c.Check(refs[f.receipt].LinkedEntityMeta, qt.Equals, models.FileLinkMetaDocuments)
 	// The receipt's bytes are stored once, under the TV.
-	c.Check(strings.Contains(refs[f.receipt].Path, "/"+f.tvUUID+"/documents/"), qt.IsTrue, qt.Commentf("path %s", refs[f.receipt].Path))
+	c.Check(refs[f.receipt].Path, qt.Contains, "/"+f.tvUUID+"/documents/")
 
 	for name, data := range jsons {
 		for _, d := range []*models.CommodityDraft{f.promoted, f.discarding} {

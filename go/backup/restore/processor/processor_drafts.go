@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"maps"
 
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
@@ -149,9 +150,7 @@ func (w *inbWalker) isKeptDraft(link inbFileLink) bool {
 // the group. An empty reference stays, meaning nothing chosen.
 func (w *inbWalker) restoreDraftValues(archived models.CommodityDraftValues) models.CommodityDraftValues {
 	values := make(models.CommodityDraftValues, len(archived))
-	for key, value := range archived {
-		values[key] = value
-	}
+	maps.Copy(values, archived)
 	restoreDraftReference(values, "area_id", w.idMapping.Areas)
 	restoreDraftReference(values, "seller_id", w.sellerIDs)
 	if raw, ok := values["type"]; ok {
