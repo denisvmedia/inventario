@@ -111,6 +111,11 @@ export function useOnboardingTour(
   // including Playwright) and skip the auto-launch in that environment.
   // The user can still call `restart()` imperatively — the test would
   // just have to do that explicitly if it wants to exercise the tour.
+  //
+  // The launch only sets isOpen. A closed tour is always on step 0 (every
+  // close resets it), and an open one must keep its step: Shell turns
+  // autoLaunch off and on again when the window crosses the mobile
+  // breakpoint for a moment, which re-runs this effect mid-tour.
   useEffect(() => {
     if (!autoLaunch) return
     if (!userId) return
@@ -119,7 +124,6 @@ export function useOnboardingTour(
     const seen = readSeen(userId)
     if (!seen) {
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setStep(0)
       setIsOpen(true)
     }
   }, [autoLaunch, userId, hasGroup])

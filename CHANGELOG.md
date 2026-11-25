@@ -92,6 +92,13 @@ the section matching the tag and publishes it as the GitHub Release body. See
   hid the tour for good. The tour now starts the first time a group is active,
   and it skips a step whose element is not on the page
   ([#2816](https://github.com/denisvmedia/inventario/pull/2816)).
+- The onboarding tour started over from its welcome card, or closed under
+  browser automation, when the window was narrower than the mobile breakpoint
+  for a moment only: while Chromium takes a full-page screenshot, or when a
+  window is dragged across that width and back. The tour now hides while the
+  window is narrow and comes back on the step it was on. It closes only when
+  the window stays narrow for a second
+  ([#PRNUM](https://github.com/denisvmedia/inventario/pull/PRNUM)).
 
 ### Security
 
