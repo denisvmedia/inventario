@@ -182,6 +182,27 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 	return &out, nil
 }
 
+// SetDraft sets or clears the draft mark of a live item. It holds the lock
+// Update takes for its read and write, so the two run one after the other.
+func (r *CommodityRegistry) SetDraft(_ context.Context, id string, draft bool, check func(models.Commodity) error) (*models.Commodity, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	c, ok := r.items.Get(id)
+	if !ok || !r.isItemVisible(c) || c.IsTrashed() {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
+	}
+	next := *c
+	next.Draft = draft
+	if check != nil {
+		if err := check(next); err != nil {
+			return nil, err
+		}
+	}
+	r.items.Set(id, &next)
+	out := next
+	return &out, nil
+}
+
 // Restore makes a trashed item live again. An item whose area was deleted
 // while it was in Trash comes back unassigned, as in the postgres registry,
 // where deleting the area clears area_id of its trashed items.

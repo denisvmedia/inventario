@@ -407,6 +407,15 @@ type CommodityRegistry interface {
 	// the item does not exist or is live.
 	Restore(ctx context.Context, id string) (*models.Commodity, error)
 
+	// SetDraft sets or clears the draft mark of a live item and writes no
+	// other column. It reads and writes the item under the item's row lock,
+	// so it and an Update of the same item run one after the other and
+	// neither undoes the other's change. check, when not nil, receives the
+	// item as it will be stored, under that lock; an error from it is
+	// returned as is and nothing is written. ErrNotFound when the item does
+	// not exist or is in Trash.
+	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (*models.Commodity, error)
+
 	// PurgeTrashed deletes the row of a trashed item; its loans, service
 	// records, maintenance schedules, supply links and events go with it
 	// through ON DELETE CASCADE. It never deletes a live item, so a purge

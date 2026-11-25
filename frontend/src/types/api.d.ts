@@ -4921,6 +4921,75 @@ export type paths = {
         };
         trace?: never;
     };
+    "/g/{groupSlug}/commodities/{commodityID}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark an item as draft or as reviewed
+         * @description Sets (`true`) or clears (`false`) the draft mark of an item
+         *     and changes no other field. The item with the new mark must
+         *     pass the validation a full update runs.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description The draft mark */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftMarkRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Commodity not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
     "/g/{groupSlug}/commodities/{commodityID}/events": {
         parameters: {
             query?: never;
@@ -14716,6 +14785,20 @@ export type components = {
              * @enum {string}
              */
             type: "commodity_drafts";
+        };
+        "jsonapi.CommodityDraftMarkRequest": {
+            data?: components["schemas"]["jsonapi.CommodityDraftMarkRequestData"];
+        };
+        "jsonapi.CommodityDraftMarkRequestAttributes": {
+            draft?: boolean;
+        };
+        "jsonapi.CommodityDraftMarkRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftMarkRequestAttributes"];
+            /**
+             * @example commodity_draft_mark
+             * @enum {string}
+             */
+            type?: "commodity_draft_mark";
         };
         "jsonapi.CommodityDraftPromoteMeta": {
             /** @example 6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10 */

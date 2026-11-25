@@ -1145,6 +1145,34 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 	return &commodity, nil
 }
 
+// SetDraft sets or clears the draft mark of a live item, under the row lock
+// that Update takes too.
+func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (*models.Commodity, error) {
+	var commodity models.Commodity
+	table := r.tableNames.Commodities()
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := lockLiveRow(ctx, tx, table, "commodity", id); err != nil {
+			return err
+		}
+		if err := scanOne(ctx, tx, &commodity, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, table), id); err != nil {
+			return err
+		}
+		commodity.Draft = draft
+		if check != nil {
+			if err := check(commodity); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2 WHERE id = $1`, table), id, draft)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to set the draft mark", err, errx.Attrs("commodity_id", id))
+	}
+	return &commodity, nil
+}
+
 // Restore makes a trashed item live again.
 func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Commodity, error) {
 	var commodity models.Commodity

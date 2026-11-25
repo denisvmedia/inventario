@@ -1529,6 +1529,26 @@ definitions:
     - attributes
     - type
     type: object
+  jsonapi.CommodityDraftMarkRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityDraftMarkRequestData'
+    type: object
+  jsonapi.CommodityDraftMarkRequestAttributes:
+    properties:
+      draft:
+        type: boolean
+    type: object
+  jsonapi.CommodityDraftMarkRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityDraftMarkRequestAttributes'
+      type:
+        enum:
+        - commodity_draft_mark
+        example: commodity_draft_mark
+        type: string
+    type: object
   jsonapi.CommodityDraftPromoteMeta:
     properties:
       promotion_key:
@@ -9221,6 +9241,49 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Set or clear the commodity cover photo
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/{commodityID}/draft:
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Sets (`true`) or clears (`false`) the draft mark of an item
+        and changes no other field. The item with the new mark must
+        pass the validation a full update runs.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: The draft mark
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityDraftMarkRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Mark an item as draft or as reviewed
       tags:
       - commodities
   /g/{groupSlug}/commodities/{commodityID}/events:

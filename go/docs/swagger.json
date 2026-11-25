@@ -3971,6 +3971,66 @@
                 }
             }
         },
+        "/g/{groupSlug}/commodities/{commodityID}/draft": {
+            "patch": {
+                "description": "Sets (`true`) or clears (`false`) the draft mark of an item\nand changes no other field. The item with the new mark must\npass the validation a full update runs.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Mark an item as draft or as reviewed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The draft mark",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/commodities/{commodityID}/events": {
             "get": {
                 "description": "Returns the append-only audit timeline for a commodity, newest first.",
@@ -14043,6 +14103,37 @@
                         "commodity_drafts"
                     ],
                     "example": "commodity_drafts"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftMarkRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftMarkRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "draft": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftMarkRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequestAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_draft_mark"
+                    ],
+                    "example": "commodity_draft_mark"
                 }
             }
         },

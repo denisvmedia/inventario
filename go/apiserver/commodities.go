@@ -583,8 +583,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Summary Set or clear the commodity cover photo
 // @Description Sets the explicit cover-photo override (issue #1451 option B)
 // @Description or clears it when `attributes.file_id` is null/empty. The
-// @Description file must already be attached to this commodity and be an
-// @Description image.
+// @Description file must already be attached to this commodity among its
+// @Description photos and be an image.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -679,6 +679,90 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// setCommodityDraftMark sets or clears the draft mark of an item and leaves
+// the rest of it as it is. A full PUT built from an earlier read would write
+// back every other field as that read had it, undoing an edit that landed in
+// between; this write changes the mark alone, under the item's row lock. The
+// item as it will be stored must pass the checks a full save runs, so an
+// item that is not complete enough to be reviewed keeps its mark.
+//
+// @Summary Mark an item as draft or as reviewed
+// @Description Sets (`true`) or clears (`false`) the draft mark of an item
+// @Description and changes no other field. The item with the new mark must
+// @Description pass the validation a full update runs.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
+// @Param body body jsonapi.CommodityDraftMarkRequest true "The draft mark"
+// @Success 200 {object} jsonapi.CommodityResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity not found"
+// @Failure 422 {object} jsonapi.Errors "User-side request problem"
+// @Router /g/{groupSlug}/commodities/{commodityID}/draft [patch].
+func (api *commoditiesAPI) setCommodityDraftMark(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	rWithCurrency, err := requestWithGroupCurrency(r)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	r = rWithCurrency
+
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
+		return
+	}
+
+	var input jsonapi.CommodityDraftMarkRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+	check := func(next models.Commodity) error {
+		// Checked as a full save would see it: a legacy zero price that
+		// save echoes back is stored as unknown.
+		stored := next
+		next.UnsetEchoedLegacyZeros(&stored)
+		err := next.ValidateWithContext(ctx)
+		if verrs, ok := errors.AsType[validation.Errors](err); ok {
+			// Nested as the body of a full update nests them, so a client
+			// reads the refused fields the same way from either write.
+			return validation.Errors{"data": validation.Errors{"attributes": verrs}}
+		}
+		return err
+	}
+	updated, err := registrySet.CommodityRegistry.SetDraft(ctx, commodity.ID, *input.Data.Attributes.Draft, check)
+	if err != nil {
+		if _, ok := errors.AsType[validation.Errors](err); ok {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		if _, ok := errors.AsType[validation.Error](err); ok {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		renderEntityError(w, r, err)
+		return
+	}
+
+	api.eventService.EmitUpdated(ctx, commodity, updated)
+
+	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 // validateCoverFile rejects file ids that don't satisfy the cover
 // invariants: must exist, must already belong to this commodity, must
 // be an image. Mirrors the same checks the resolver applies on read so
@@ -763,6 +847,7 @@ func Commodities(params Params) func(r chi.Router) {
 			r.Put("/", api.updateCommodity)                       // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity)                    // DELETE /commodities/123
 			r.Patch("/cover", api.setCommodityCover)              // PATCH /commodities/123/cover
+			r.Patch("/draft", api.setCommodityDraftMark)          // PATCH /commodities/123/draft
 			r.Route("/loans", CommodityLoans(params))             // /commodities/123/loans (#1452)
 			r.Route("/services", CommodityServices(params))       // /commodities/123/services (#1508)
 			r.Route("/supplies", CommoditySupplyLinks(params))    // /commodities/123/supplies (#1369)

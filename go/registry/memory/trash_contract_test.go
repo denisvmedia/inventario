@@ -27,6 +27,10 @@ func TestMissingDataContract_Memory(t *testing.T) {
 	registrytest.RunMissingDataContract(t, newMemoryTrashEnv)
 }
 
+func TestDraftMarkContract_Memory(t *testing.T) {
+	registrytest.RunDraftMarkContract(t, newMemoryTrashEnv)
+}
+
 // newMemoryTrashEnv returns registries scoped to one empty group, with one
 // area to place items in.
 func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
