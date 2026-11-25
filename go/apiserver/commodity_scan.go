@@ -565,9 +565,9 @@ type commodityScanResultDT struct {
 	// form an item write takes (#2803).
 	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
 	Items        []commodityScanItemDT           `json:"items,omitempty"`
-	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
-	UsedTokens int                             `json:"used_tokens,omitempty"`
-	LatencyMS  int64                           `json:"latency_ms,omitempty"`
+	Warnings     []aivision.Warning              `json:"warnings,omitempty"`
+	UsedTokens   int                             `json:"used_tokens,omitempty"`
+	LatencyMS    int64                           `json:"latency_ms,omitempty"`
 }
 
 // commodityScanItemDT is one candidate product in a multi-product scan.
