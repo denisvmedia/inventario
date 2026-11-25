@@ -138,11 +138,16 @@ option is matched the same way as a field, first to the option it was backed
 up from and then by label, so an option renamed since the backup still holds
 its values. When the group has a field of that name with a different
 type, the backup's values of that field are left out and the restore reports
-an error for it.
+an error for it. The same happens when the field of that name is another field
+of the backup, renamed since: for example, after you delete "Model code" and
+rename "Serial" to "Model code", the backup's "Serial" values go to the renamed
+field and its "Model code" values are left out.
 
 A link to another item is restored when the linked item is in the backup or in
 the group, outside the Trash. A backup keeps a link to an item in the Trash,
-and a restore that cannot set a link reports an error for it. **Full replace**
+and a restore that cannot set a link reports an error for it. An item that
+already holds the link keeps it, without an error, while the linked item is
+still in the group's Trash. **Full replace**
 does not remove custom fields. A dry run creates no custom fields, but reports
 an error for each field the restore would refuse.
 
