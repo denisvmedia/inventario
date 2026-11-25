@@ -79,7 +79,7 @@
     "i18next-cli": "1.94.1",
     "jest-axe": "11.0.0",
     "jsdom": "29.1.1",
-    "msw": "2.15.0",
+    "msw": "3.0.7",
     "openapi-typescript": "7.13.0",
     "prettier": "3.10.1",
     "size-limit": "14.3.0",
