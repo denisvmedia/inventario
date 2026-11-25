@@ -99,6 +99,8 @@ const baseHandlers = [
   // section stays compact unless a test explicitly overrides.
   msw.get(api("/auth/oauth/providers"), () => HttpResponse.json({ providers: [] })),
   msw.get(api("/auth/oauth/identities"), () => HttpResponse.json({ identities: [] })),
+  // The notifications section reads the server's loan lead-time default.
+  msw.get(api("/system"), () => HttpResponse.json({ loan_reminder_due_soon_days: 5 })),
 ]
 
 // withGroupHandlers extends baseHandlers with a current group + a GET
@@ -131,6 +133,7 @@ function withGroupHandlers(settingsBody: Record<string, unknown> = {}) {
       })
     ),
     msw.get(api(`/g/${slug}/settings`), () => HttpResponse.json(settingsBody)),
+    msw.get(api("/system"), () => HttpResponse.json({ loan_reminder_due_soon_days: 5 })),
   ]
 }
 
@@ -574,6 +577,95 @@ describe("<SettingsPage />", () => {
     await waitFor(() => {
       expect(lastPatch?.field).toBe("notifications.item_reminder")
       expect(lastPatch?.body).toBe(true)
+    })
+  })
+
+  describe("reminder lead times", () => {
+    async function openNotifications() {
+      const user = userEvent.setup()
+      renderSettings("/settings?g=household")
+      await screen.findByTestId("settings-page")
+      await user.click(await screen.findByTestId("settings-nav-notifications"))
+      return user
+    }
+
+    function recordPatches(respond: (field: string, body: unknown) => Record<string, unknown>) {
+      const patches: Array<{ field: string; body: unknown }> = []
+      server.use(
+        msw.patch(api("/g/household/settings/:field"), async ({ params, request }) => {
+          const body = (await request.json()) as unknown
+          patches.push({ field: String(params.field), body })
+          return HttpResponse.json(respond(String(params.field), body))
+        })
+      )
+      return patches
+    }
+
+    it("shows the defaults, the loan one from the server", async () => {
+      server.use(...withGroupHandlers({}))
+      await openNotifications()
+      expect(await screen.findByTestId("lead-times-warranty-input")).toHaveValue("60, 30, 7")
+      expect(screen.getByTestId("lead-times-maintenance-input")).toHaveValue("14, 7, 1")
+      await waitFor(() => expect(screen.getByTestId("lead-times-loan-input")).toHaveValue("5"))
+      expect(screen.queryByTestId("lead-times-warranty-reset")).not.toBeInTheDocument()
+    })
+
+    it("saves a list on blur and resets it to the default", async () => {
+      server.use(...withGroupHandlers({}))
+      const patches = recordPatches((_field, body) =>
+        body === null ? {} : { notificationsWarrantyLeadTimes: body }
+      )
+      const user = await openNotifications()
+      const input = await screen.findByTestId("lead-times-warranty-input")
+      await user.clear(input)
+      await user.type(input, "7, 90")
+      await user.tab()
+      await waitFor(() =>
+        expect(patches).toEqual([{ field: "notifications.warranty_lead_times", body: [90, 7] }])
+      )
+      expect(await screen.findByTestId("lead-times-warranty-input")).toHaveValue("90, 7")
+
+      await user.click(await screen.findByTestId("lead-times-warranty-reset"))
+      await waitFor(() => expect(patches).toHaveLength(2))
+      expect(patches[1]).toEqual({ field: "notifications.warranty_lead_times", body: null })
+      await waitFor(() =>
+        expect(screen.getByTestId("lead-times-warranty-input")).toHaveValue("60, 30, 7")
+      )
+    })
+
+    it("sends the loan lead time as a number", async () => {
+      server.use(...withGroupHandlers({ notificationsLoanLeadTime: 10 }))
+      const patches = recordPatches((_field, body) => ({ notificationsLoanLeadTime: body }))
+      const user = await openNotifications()
+      const input = await screen.findByTestId("lead-times-loan-input")
+      expect(input).toHaveValue("10")
+      expect(screen.getByTestId("lead-times-loan-reset")).toHaveTextContent("5")
+      await user.clear(input)
+      await user.type(input, "21{Enter}")
+      await waitFor(() =>
+        expect(patches).toEqual([{ field: "notifications.loan_lead_time", body: 21 }])
+      )
+    })
+
+    it("explains a value it cannot save and sends nothing", async () => {
+      server.use(...withGroupHandlers({}))
+      const patches = recordPatches(() => ({}))
+      const user = await openNotifications()
+      const input = await screen.findByTestId("lead-times-maintenance-input")
+      await user.clear(input)
+      await user.type(input, "7, 7")
+      await user.tab()
+      const field = screen.getByTestId("lead-times-maintenance")
+      expect(within(field).getByRole("alert")).toHaveTextContent("only once")
+      expect(input).toHaveAttribute("aria-invalid", "true")
+      expect(patches).toHaveLength(0)
+    })
+
+    it("disables the field while the reminder is turned off", async () => {
+      server.use(...withGroupHandlers({ notificationsWarrantyExpiry: false }))
+      await openNotifications()
+      expect(await screen.findByTestId("lead-times-warranty-input")).toBeDisabled()
+      expect(screen.getByTestId("lead-times-maintenance-input")).toBeEnabled()
     })
   })
 

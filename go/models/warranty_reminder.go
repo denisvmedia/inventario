@@ -28,25 +28,31 @@ const (
 	WarrantyReminder7Days WarrantyReminderThreshold = 7
 )
 
-// WarrantyReminderThresholds is the canonical, ordered (largest →
-// smallest) list of thresholds the worker scans for. Order is preserved
-// so the backfill query can OR the windows in a deterministic shape.
+// WarrantyReminderThresholds is the default lead-time list, largest
+// first. A user's notifications.warranty_lead_times setting replaces it
+// for that user (#2805).
 var WarrantyReminderThresholds = []WarrantyReminderThreshold{
 	WarrantyReminder60Days,
 	WarrantyReminder30Days,
 	WarrantyReminder7Days,
 }
 
-// IsValid reports whether t is one of the canonical thresholds. Used as
-// a guard before persisting a reminder row and when decoding the
-// threshold value back from the database — anything else is a bug
-// upstream.
+// IsValid reports whether t is a lead time the worker can send at: from 1
+// to ReminderMaxLeadDays days. Used as a guard before persisting a
+// reminder row and when decoding the threshold value back from the
+// database.
 func (t WarrantyReminderThreshold) IsValid() bool {
-	switch t {
-	case WarrantyReminder60Days, WarrantyReminder30Days, WarrantyReminder7Days:
-		return true
+	return t >= 1 && int(t) <= ReminderMaxLeadDays
+}
+
+// DefaultWarrantyLeadTimes returns the default warranty lead times as
+// plain ints, largest first.
+func DefaultWarrantyLeadTimes() []int {
+	out := make([]int, len(WarrantyReminderThresholds))
+	for i, t := range WarrantyReminderThresholds {
+		out[i] = int(t)
 	}
-	return false
+	return out
 }
 
 var (

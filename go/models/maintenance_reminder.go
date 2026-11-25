@@ -2,6 +2,7 @@ package models
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -35,9 +36,10 @@ const (
 	MaintenanceReminderOverdue MaintenanceReminderThreshold = 0
 )
 
-// MaintenanceReminderThresholds is the canonical, ordered (largest →
-// overdue) list of thresholds the worker scans for. Order is preserved
-// so the backfill query can OR the windows in a deterministic shape.
+// MaintenanceReminderThresholds is the default list, largest first, ending
+// with the overdue sentinel. A user's notifications.maintenance_lead_times
+// setting replaces the positive values for that user (#2805); the overdue
+// reminder always applies.
 var MaintenanceReminderThresholds = []MaintenanceReminderThreshold{
 	MaintenanceReminder14Days,
 	MaintenanceReminder7Days,
@@ -45,31 +47,35 @@ var MaintenanceReminderThresholds = []MaintenanceReminderThreshold{
 	MaintenanceReminderOverdue,
 }
 
-// IsValid reports whether t is one of the canonical thresholds. Used
-// as a guard before persisting a reminder row and when decoding the
-// threshold value back from the database.
+// IsValid reports whether t is the overdue sentinel or a lead time from 1
+// to ReminderMaxLeadDays days. Used as a guard before persisting a
+// reminder row and when decoding the threshold value back from the
+// database.
 func (t MaintenanceReminderThreshold) IsValid() bool {
-	switch t {
-	case MaintenanceReminder14Days, MaintenanceReminder7Days,
-		MaintenanceReminder1Day, MaintenanceReminderOverdue:
-		return true
-	}
-	return false
+	return t == MaintenanceReminderOverdue || (t >= 1 && int(t) <= ReminderMaxLeadDays)
 }
 
 // Label returns a short human-readable label for logs and email copy.
 func (t MaintenanceReminderThreshold) Label() string {
-	switch t {
-	case MaintenanceReminder14Days:
-		return "14-day"
-	case MaintenanceReminder7Days:
-		return "7-day"
-	case MaintenanceReminder1Day:
-		return "1-day"
-	case MaintenanceReminderOverdue:
+	if t == MaintenanceReminderOverdue {
 		return "overdue"
 	}
-	return ""
+	if !t.IsValid() {
+		return ""
+	}
+	return strconv.Itoa(int(t)) + "-day"
+}
+
+// DefaultMaintenanceLeadTimes returns the default maintenance lead times
+// as plain ints, largest first, without the overdue sentinel.
+func DefaultMaintenanceLeadTimes() []int {
+	out := make([]int, 0, len(MaintenanceReminderThresholds))
+	for _, t := range MaintenanceReminderThresholds {
+		if t != MaintenanceReminderOverdue {
+			out = append(out, int(t))
+		}
+	}
+	return out
 }
 
 var (

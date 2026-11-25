@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -124,6 +125,10 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	// when this RemindOnce returns so the next sweep sees the user's
 	// freshest toggle flips.
 	prefsCache := s.prefsForSweep()
+	// Admin recipients depend only on the group, so they are resolved once
+	// per group per sweep. Every commodity within a year of expiry needs
+	// them now that each recipient picks their own lead times.
+	recipientsByGroup := map[string][]warrantyRecipient{}
 
 	for _, c := range commodities {
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
@@ -142,8 +147,17 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 			)
 			continue
 		}
-		for _, threshold := range matchedThresholds(c.WarrantyExpiresAt, now) {
-			ok, processErr := s.processOne(ctx, c, threshold, now, prefsCache)
+		thresholds, recipients, planErr := s.planCommodity(ctx, c, now, prefsCache, recipientsByGroup)
+		if planErr != nil {
+			stats.Failed++
+			slog.Error("warranty reminder failed",
+				"commodity_id", c.ID,
+				"error", planErr,
+			)
+			continue
+		}
+		for _, threshold := range thresholds {
+			ok, processErr := s.processOne(ctx, c, threshold, recipients, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
 				slog.Error("warranty reminder failed",
@@ -161,47 +175,108 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	return stats, nil
 }
 
-// matchedThresholds returns every WarrantyReminderThreshold whose
-// "days remaining" window contains the commodity at the given clock.
-// Concretely: a commodity expiring in N days matches every threshold
-// T where N <= T — so a row 30 days from expiry returns [60, 30],
-// and the worker emits one email per matched threshold. The
-// `WarrantyReminderRegistry.CreateOnce` idempotency row keeps each
-// (commodity, threshold) tuple emitting at most once across all
-// future ticks; that is what prevents duplicates, NOT this function.
+// planCommodity returns the lead times at which c is due a reminder now,
+// largest first, and the recipients to consider for them.
 //
-// Returning every matched threshold (rather than only the tightest
-// one) is deliberate: after a worker outage we still want to send the
-// 60-day reminder for an item that is now 30 days out, because the
-// 60-day row was never inserted and the user has missed that signal.
-//
-// `now` is normalised to UTC before deriving today's date — same
-// rationale as ComputeWarrantyStatus. Two callers with the same
-// (expires, now) pair always get the same threshold list, in
-// canonical largest → smallest order.
-func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyReminderThreshold {
+// Each recipient has their own lead times (#2805), so the commodity is
+// checked at the union of them and processOne sends each lead time only to
+// the recipients who chose it. Without recipients, or without an email
+// service, the defaults apply so the idempotency rows are still written.
+// A commodity 30 days from expiry with [60, 30, 7] returns [60, 30]; see
+// matchedThresholds.
+func (s *WarrantyReminderService) planCommodity(
+	ctx context.Context,
+	c *models.Commodity,
+	now time.Time,
+	prefsCache *notifications.Cache,
+	recipientsByGroup map[string][]warrantyRecipient,
+) ([]models.WarrantyReminderThreshold, []warrantyRecipient, error) {
+	daysLeft, ok := warrantyDaysLeft(c.WarrantyExpiresAt, now)
+	if !ok || daysLeft > models.ReminderMaxLeadDays {
+		return nil, nil, nil
+	}
+	if s.emailSvc == nil {
+		return matchedThresholds(daysLeft, models.DefaultWarrantyLeadTimes()), nil, nil
+	}
+	recipients, err := s.cachedRecipients(ctx, c, recipientsByGroup)
+	if err != nil {
+		return nil, nil, errxtrace.Wrap("warranty reminder: resolve recipients", err)
+	}
+	if len(recipients) == 0 {
+		return matchedThresholds(daysLeft, models.DefaultWarrantyLeadTimes()), nil, nil
+	}
+	withLeads := make([]warrantyRecipient, len(recipients))
+	var union []int
+	for i, r := range recipients {
+		r.leadTimes = prefsCache.WarrantyLeadTimes(ctx, r.user)
+		withLeads[i] = r
+		union = append(union, r.leadTimes...)
+	}
+	return matchedThresholds(daysLeft, union), withLeads, nil
+}
+
+// warrantyDaysLeft returns the whole days from today (UTC) to the expiry
+// date, and false when there is no date or it has passed. Expired
+// warranties are surfaced in the FE; the email cadence does not message
+// after the deadline. `now` is normalised to UTC before deriving today's
+// date, the same rationale as ComputeWarrantyStatus.
+func warrantyDaysLeft(expires models.PDate, now time.Time) (int, bool) {
 	if expires == nil || string(*expires) == "" {
-		return nil
+		return 0, false
 	}
 	exp := expires.ToTime()
 	if exp.IsZero() {
-		return nil
+		return 0, false
 	}
 	n := now.UTC()
 	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
 	if exp.Before(today) {
-		// Expired warranties are surfaced in the FE; the email cadence
-		// does not double-message after the deadline.
-		return nil
+		return 0, false
 	}
-	daysLeft := int(exp.Sub(today).Hours() / 24)
+	return int(exp.Sub(today).Hours() / 24), true
+}
+
+// matchedThresholds returns the distinct lead times T with daysLeft <= T,
+// largest first. The worker emits one email per matched threshold, and the
+// (commodity, threshold) idempotency row keeps each one to a single send.
+//
+// Returning every matched threshold rather than only the tightest one is
+// deliberate: after a worker outage, or after a recipient adds a longer
+// lead time, the reminder for a threshold that has already passed is still
+// sent once, because the recipient has not had that signal yet.
+func matchedThresholds(daysLeft int, leadTimes []int) []models.WarrantyReminderThreshold {
 	var out []models.WarrantyReminderThreshold
-	for _, t := range models.WarrantyReminderThresholds {
-		if daysLeft <= int(t) {
+	for _, d := range leadTimes {
+		t := models.WarrantyReminderThreshold(d)
+		if daysLeft <= d && t.IsValid() && !slices.Contains(out, t) {
 			out = append(out, t)
 		}
 	}
+	slices.Sort(out)
+	slices.Reverse(out)
 	return out
+}
+
+// cachedRecipients returns recipientsForCommodity, reusing the admin list
+// already resolved for the commodity's group in this sweep. The creator
+// fallback depends on the commodity, so an empty admin list is not cached.
+func (s *WarrantyReminderService) cachedRecipients(ctx context.Context, c *models.Commodity, byGroup map[string][]warrantyRecipient) ([]warrantyRecipient, error) {
+	if cached, ok := byGroup[c.GroupID]; ok {
+		return cached, nil
+	}
+	recipients, err := s.recipientsForCommodity(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if len(recipients) > 0 && recipients[0].fromMembership {
+		byGroup[c.GroupID] = recipients
+	}
+	return recipients, nil
+}
+
+// wants reports whether the recipient chose lead time t.
+func (r warrantyRecipient) wants(t models.WarrantyReminderThreshold) bool {
+	return slices.Contains(r.leadTimes, int(t))
 }
 
 // processOne handles one (commodity, threshold) pair across the
@@ -239,7 +314,7 @@ func matchedThresholds(expires models.PDate, now time.Time) []models.WarrantyRem
 // SentAt timestamp matches the sweep clock — important for tests that
 // pin time and for audit consistency across rows produced in the same
 // tick.
-func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, now time.Time, prefsCache *notifications.Cache) (bool, error) {
+func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, recipients []warrantyRecipient, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	already, err := s.factorySet.WarrantyReminderRegistry.HasSent(ctx, c.ID, int(threshold))
 	if err != nil {
 		return false, errxtrace.Wrap("warranty reminder: check existing row", err)
@@ -266,10 +341,6 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		return ok, nil
 	}
 
-	recipients, err := s.recipientsForCommodity(ctx, c)
-	if err != nil {
-		return false, errxtrace.Wrap("warranty reminder: resolve recipients", err)
-	}
 	if len(recipients) == 0 {
 		// No one to email — write the row anyway so the worker stops
 		// re-considering this (commodity, threshold) on every tick.
@@ -292,6 +363,11 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 	attempted := 0
 	var firstEnqueueErr error
 	for _, r := range recipients {
+		if !r.wants(threshold) {
+			// This recipient chose other lead times. They are not
+			// counted as attempted; another recipient chose this one.
+			continue
+		}
 		// Per-recipient opt-out gate. Skipped recipients still count
 		// toward "this commodity/threshold was processed" — the
 		// idempotency row gets written below so we don't sweep them
@@ -382,6 +458,12 @@ type warrantyRecipient struct {
 	// tenant_id to materialise a user-scoped SettingsRegistry. Always
 	// non-nil for recipients that came out of recipientsForCommodity.
 	user *models.User
+	// leadTimes are the recipient's warranty lead times, set by
+	// planCommodity from their notification settings.
+	leadTimes []int
+	// fromMembership is true for group admins and false for the
+	// commodity-creator fallback.
+	fromMembership bool
 }
 
 // recipientsForCommodity returns every group admin/owner that should
@@ -449,7 +531,7 @@ func (s *WarrantyReminderService) collectAdminRecipients(
 			continue
 		}
 		seen[user.Email] = struct{}{}
-		out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user})
+		out = append(out, warrantyRecipient{email: user.Email, name: user.Name, user: user, fromMembership: true})
 	}
 	return out
 }

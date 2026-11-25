@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"log/slog"
+	"slices"
 	"strings"
 	"time"
 
@@ -94,13 +95,24 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 	}
 
 	prefsCache := s.prefsForSweep()
+	// Admin recipients depend only on the group; see the warranty service.
+	recipientsByGroup := map[string][]maintenanceRecipient{}
 
 	for _, m := range schedules {
 		if m == nil || !m.Enabled {
 			continue
 		}
-		for _, threshold := range matchedMaintenanceThresholds(m, now) {
-			ok, processErr := s.processOne(ctx, m, threshold, now, prefsCache)
+		target, planErr := s.planSchedule(ctx, m, now, prefsCache, recipientsByGroup)
+		if planErr != nil {
+			stats.Failed++
+			slog.Error("maintenance reminder failed",
+				"schedule_id", m.ID,
+				"error", planErr,
+			)
+			continue
+		}
+		for _, threshold := range target.thresholds {
+			ok, processErr := s.processOne(ctx, m, threshold, target, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
 				slog.Error("maintenance reminder failed",
@@ -118,40 +130,122 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 	return stats, nil
 }
 
-// matchedMaintenanceThresholds returns every threshold whose
-// "days remaining" window contains the schedule at the given clock,
-// plus MaintenanceReminderOverdue when the schedule is past due. A
-// schedule N days from due matches every threshold T where N <= T
-// (largest → smallest order), so a row 7 days out returns [14, 7].
-// The overdue sentinel returns alone — once we're past due the
-// 14/7/1 thresholds no longer apply, only the one-shot overdue
-// reminder. The idempotency row guarantees each (schedule, threshold)
-// fires at most once until the next MarkDone clears them.
-func matchedMaintenanceThresholds(m *models.MaintenanceSchedule, now time.Time) []models.MaintenanceReminderThreshold {
-	if m == nil || string(m.NextDueAt) == "" {
-		return nil
+// maintenanceTarget is what one schedule needs for this sweep: the lead
+// times it is due at, its commodity and the recipients to consider.
+type maintenanceTarget struct {
+	thresholds []models.MaintenanceReminderThreshold
+	// commodity is nil when the schedule's commodity is gone or when no
+	// email service is configured; processOne then only writes rows.
+	commodity  *models.Commodity
+	recipients []maintenanceRecipient
+}
+
+// planSchedule works out maintenanceTarget for m. A past-due schedule gets
+// the overdue reminder alone, for every recipient: once the date has passed
+// the lead times no longer apply. Otherwise each recipient has their own
+// lead times (#2805), the schedule is checked at the union of them, and
+// processOne sends a lead time only to the recipients who chose it. A
+// schedule N days from due matches every lead time T where N <= T, so with
+// [14, 7, 1] a row 7 days out returns [14, 7]. The idempotency row keeps
+// each (schedule, threshold) to one send until the next MarkDone clears
+// them.
+func (s *MaintenanceReminderService) planSchedule(
+	ctx context.Context,
+	m *models.MaintenanceSchedule,
+	now time.Time,
+	prefsCache *notifications.Cache,
+	recipientsByGroup map[string][]maintenanceRecipient,
+) (maintenanceTarget, error) {
+	var target maintenanceTarget
+	if string(m.NextDueAt) == "" {
+		return target, nil
 	}
-	if m.IsOverdue(now) {
-		return []models.MaintenanceReminderThreshold{models.MaintenanceReminderOverdue}
-	}
-	due := m.NextDueAt.ToTime()
-	if due.IsZero() {
-		return nil
-	}
-	n := now.UTC()
-	today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
-	daysLeft := int(due.Sub(today).Hours() / 24)
-	var out []models.MaintenanceReminderThreshold
-	for _, t := range []models.MaintenanceReminderThreshold{
-		models.MaintenanceReminder14Days,
-		models.MaintenanceReminder7Days,
-		models.MaintenanceReminder1Day,
-	} {
-		if daysLeft <= int(t) {
-			out = append(out, t)
+	overdue := m.IsOverdue(now)
+	daysLeft := 0
+	if !overdue {
+		due := m.NextDueAt.ToTime()
+		if due.IsZero() {
+			return target, nil
+		}
+		n := now.UTC()
+		today := time.Date(n.Year(), n.Month(), n.Day(), 0, 0, 0, 0, time.UTC)
+		daysLeft = int(due.Sub(today).Hours() / 24)
+		if daysLeft > models.ReminderMaxLeadDays {
+			return target, nil
 		}
 	}
-	return out
+	leadTimes := models.DefaultMaintenanceLeadTimes()
+	if s.emailSvc != nil {
+		if err := s.resolveTarget(ctx, m, prefsCache, recipientsByGroup, &target); err != nil {
+			return target, err
+		}
+		var union []int
+		for _, r := range target.recipients {
+			union = append(union, r.leadTimes...)
+		}
+		if len(union) > 0 {
+			leadTimes = union
+		}
+	}
+	if overdue {
+		target.thresholds = []models.MaintenanceReminderThreshold{models.MaintenanceReminderOverdue}
+		return target, nil
+	}
+	for _, d := range leadTimes {
+		t := models.MaintenanceReminderThreshold(d)
+		if daysLeft <= d && t != models.MaintenanceReminderOverdue && t.IsValid() && !slices.Contains(target.thresholds, t) {
+			target.thresholds = append(target.thresholds, t)
+		}
+	}
+	slices.Sort(target.thresholds)
+	slices.Reverse(target.thresholds)
+	return target, nil
+}
+
+// resolveTarget fills target's commodity and recipients, each recipient
+// with their maintenance lead times. A missing commodity leaves both empty.
+func (s *MaintenanceReminderService) resolveTarget(
+	ctx context.Context,
+	m *models.MaintenanceSchedule,
+	prefsCache *notifications.Cache,
+	recipientsByGroup map[string][]maintenanceRecipient,
+	target *maintenanceTarget,
+) error {
+	commodity, err := s.lookupCommodity(ctx, m.CommodityID)
+	if err != nil {
+		return errxtrace.Wrap("maintenance reminder: lookup commodity", err)
+	}
+	target.commodity = commodity
+	if commodity == nil {
+		return nil
+	}
+	recipients, err := s.cachedRecipients(ctx, commodity, recipientsByGroup)
+	if err != nil {
+		return errxtrace.Wrap("maintenance reminder: resolve recipients", err)
+	}
+	target.recipients = make([]maintenanceRecipient, len(recipients))
+	for i, r := range recipients {
+		r.leadTimes = prefsCache.MaintenanceLeadTimes(ctx, r.user)
+		target.recipients[i] = r
+	}
+	return nil
+}
+
+// cachedRecipients returns recipientsForCommodity, reusing the admin list
+// already resolved for the commodity's group in this sweep. The creator
+// fallback depends on the commodity, so it is not cached.
+func (s *MaintenanceReminderService) cachedRecipients(ctx context.Context, c *models.Commodity, byGroup map[string][]maintenanceRecipient) ([]maintenanceRecipient, error) {
+	if cached, ok := byGroup[c.GroupID]; ok {
+		return cached, nil
+	}
+	recipients, err := s.recipientsForCommodity(ctx, c)
+	if err != nil {
+		return nil, err
+	}
+	if len(recipients) > 0 && recipients[0].fromMembership {
+		byGroup[c.GroupID] = recipients
+	}
+	return recipients, nil
 }
 
 // processOne handles one (schedule, threshold) pair across the
@@ -166,7 +260,7 @@ func matchedMaintenanceThresholds(m *models.MaintenanceSchedule, now time.Time) 
 // email" early returns. Mirrors WarrantyReminderService.processOne;
 // see the comments there for the idempotency / retry / opt-out
 // reasoning.
-func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, now time.Time, prefsCache *notifications.Cache) (bool, error) {
+func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, target maintenanceTarget, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	already, err := s.factorySet.MaintenanceReminderRegistry.HasSent(ctx, m.ID, int(threshold))
 	if err != nil {
 		return false, errxtrace.Wrap("maintenance reminder: check existing row", err)
@@ -182,10 +276,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		return s.commitWithoutSend(ctx, m, threshold, now, "no email service configured", nil)
 	}
 
-	commodity, err := s.lookupCommodity(ctx, m.CommodityID)
-	if err != nil {
-		return false, errxtrace.Wrap("maintenance reminder: lookup commodity", err)
-	}
+	commodity := target.commodity
 	if commodity == nil {
 		// Schedule references a commodity that's gone (cross-tenant
 		// drift / mid-purge). Write the row so we stop revisiting,
@@ -193,10 +284,7 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		return s.commitWithoutSend(ctx, m, threshold, now, "commodity missing", nil)
 	}
 
-	recipients, err := s.recipientsForCommodity(ctx, commodity)
-	if err != nil {
-		return false, errxtrace.Wrap("maintenance reminder: resolve recipients", err)
-	}
+	recipients := target.recipients
 	if len(recipients) == 0 {
 		// No one to email. Persist the row to stop re-evaluating but
 		// don't inflate SentByThreshold — see #1368 / CR feedback.
@@ -269,6 +357,11 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 	dueDate := string(m.NextDueAt)
 	url := s.buildCommodityURL(ctx, commodity)
 	for _, r := range recipients {
+		if threshold != models.MaintenanceReminderOverdue && !slices.Contains(r.leadTimes, int(threshold)) {
+			// This recipient chose other lead times; another one chose
+			// this. The overdue reminder goes to everyone.
+			continue
+		}
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, commodity.TenantID, commodity.GroupID, notifications.CategoryMaintenanceReminder, notifications.ChannelEmail) {
 			slog.Debug("maintenance reminder: recipient opted out",
 				"schedule_id", m.ID,
@@ -312,6 +405,12 @@ type maintenanceRecipient struct {
 	email string
 	name  string
 	user  *models.User
+	// leadTimes are the recipient's maintenance lead times, set by
+	// planSchedule from their notification settings.
+	leadTimes []int
+	// fromMembership is true for group admins and false for the
+	// commodity-creator fallback.
+	fromMembership bool
 }
 
 // lookupCommodity resolves a commodity by ID via the service-mode
@@ -383,7 +482,7 @@ func (s *MaintenanceReminderService) collectAdminRecipients(
 			continue
 		}
 		seen[user.Email] = struct{}{}
-		out = append(out, maintenanceRecipient{email: user.Email, name: user.Name, user: user})
+		out = append(out, maintenanceRecipient{email: user.Email, name: user.Name, user: user, fromMembership: true})
 	}
 	return out
 }

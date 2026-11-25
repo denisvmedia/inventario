@@ -165,12 +165,24 @@ Use the tabs (**All**, **Reminders**, **Warranties**, **Loans**, **Maintenance**
 
 Inventario sends reminder emails so you don't have to keep checking these pages:
 
-- **Warranties** — 60, 30, and 7 days before the expiry date.
-- **Loans** — when an item you've lent out is due back or overdue.
-- **Maintenance** — 14, 7, and 1 day before each due date.
+- **Warranties** — 60, 30, and 7 days before the expiry date, unless you choose other days.
+- **Loans** — a number of days before an item you've lent out is due back (7 unless you or your administrator chose another number), and once more when it is overdue.
+- **Maintenance** — 14, 7, and 1 day before each due date, unless you choose other days, and once more when a task is overdue.
 - **Item reminders** — on the days before the date that you chose for that reminder. They go to the person who created the reminder, as long as they are still a member of the group.
 
-Each email for a date is sent once. If Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day.
+Each email for a date is sent once.
+
+- For an item reminder, if Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day.
+- For a warranty or a maintenance task, a lead time that passed while Inventario was not running, or that you add after it has passed, is still sent once, late. Each of those emails names the lead time it stands for and the date itself.
+
+### Choose your lead times
+
+Under **Settings → Notifications**, the **Warranty expiry**, **Maintenance reminders**, and **Loan reminders** rows each have a **Days before** field. These choices are yours alone: other members of the group keep their own.
+
+- For warranties and maintenance, enter up to five whole numbers from 1 to 365, separated by commas, for example `90, 30, 7`.
+- For loans, enter one whole number from 1 to 60. It applies to the items you lend out.
+
+The field saves when you leave it or press Enter. Leave it empty, or select **Use default**, to go back to the default days. The field is unavailable while that reminder is turned off.
 
 You control which of these you receive under **Settings → Notifications**, where **Warranty expiry**, **Maintenance reminders**, **Loan reminders**, and **Item reminders** each have their own toggle, alongside the email and push channel settings. See [Settings & account](../settings-and-account/) for the full list.
 

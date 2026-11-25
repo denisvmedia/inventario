@@ -1,6 +1,7 @@
 package typekit
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"reflect"
@@ -46,7 +47,8 @@ func ZeroOfType[T any](t T) (zero T) {
 }
 
 // SetFieldByConfigfieldTag sets the struct field denoted by the "configfield" tag to the provided value if it matches.
-// ptr must be a non-nil pointer to a struct, and the function returns an error if the field is not settable or not found.
+// ptr must be a non-nil pointer to a struct, and the function returns an error if the field is not settable or not found,
+// or when the value does not fit the field type (see assignValue).
 func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 	v := reflect.ValueOf(ptr)
 	if v.Kind() != reflect.Pointer || v.IsNil() {
@@ -65,21 +67,69 @@ func SetFieldByConfigfieldTag(ptr any, tag string, value any) error {
 			if !fieldValue.CanSet() {
 				return fmt.Errorf("cannot set field %q: %w", field.Name, ErrUnsettableField)
 			}
-			val := reflect.ValueOf(value)
-			switch {
-			case field.Type.Kind() == reflect.Pointer && val.Kind() != reflect.Pointer:
-				valPtr := reflect.New(field.Type.Elem())
-				valPtr.Elem().Set(val.Convert(field.Type.Elem()))
-				fieldValue.Set(valPtr)
-			case field.Type.Kind() != reflect.Pointer && val.Kind() == reflect.Pointer:
-				fieldValue.Set(val.Elem().Convert(field.Type))
-			default:
-				fieldValue.Set(val.Convert(field.Type))
+			if err := assignValue(fieldValue, value); err != nil {
+				return fmt.Errorf("cannot set field %q: %w", field.Name, err)
 			}
 			return nil
 		}
 	}
 	return fmt.Errorf("cannot set field %q: %w", tag, ErrNoFieldWithTag)
+}
+
+// assignValue stores value in dst. A nil value clears dst. A value of the
+// same kind is assigned or converted (a string into a named string type), a
+// pointer field takes a fresh pointer to the value, and a pointer value
+// fills a plain field. Anything else goes through a JSON round trip into
+// dst's type: a float64 decoded from JSON fills an int field when it is a
+// whole number, and the []any that encoding/json produces for a list fills
+// a []int field. A value that does not fit returns ErrIncompatibleValue
+// instead of panicking in reflect.Value.Convert.
+func assignValue(dst reflect.Value, value any) error {
+	target := dst.Type()
+	if IsNil(value) {
+		dst.Set(reflect.Zero(target))
+		return nil
+	}
+	val := reflect.ValueOf(value)
+	switch {
+	case val.Type().AssignableTo(target):
+		dst.Set(val)
+		return nil
+	case target.Kind() == reflect.Pointer && val.Kind() != reflect.Pointer:
+		elem := reflect.New(target.Elem())
+		if err := assignValue(elem.Elem(), value); err != nil {
+			return err
+		}
+		dst.Set(elem)
+		return nil
+	case target.Kind() != reflect.Pointer && val.Kind() == reflect.Pointer:
+		return assignValue(dst, val.Elem().Interface())
+	case val.Kind() == target.Kind() && isScalarKind(target.Kind()) && val.Type().ConvertibleTo(target):
+		dst.Set(val.Convert(target))
+		return nil
+	}
+
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return fmt.Errorf("%T into %s: %w", value, target, ErrIncompatibleValue)
+	}
+	out := reflect.New(target)
+	if err := json.Unmarshal(raw, out.Interface()); err != nil {
+		return fmt.Errorf("%T into %s: %w", value, target, ErrIncompatibleValue)
+	}
+	dst.Set(out.Elem())
+	return nil
+}
+
+func isScalarKind(k reflect.Kind) bool {
+	switch k {
+	case reflect.Bool, reflect.String,
+		reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64,
+		reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64,
+		reflect.Float32, reflect.Float64:
+		return true
+	}
+	return false
 }
 
 func GetFieldByConfigfieldTag[T any](ptr T, tag string) (any, error) {

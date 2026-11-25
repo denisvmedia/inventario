@@ -25,6 +25,9 @@ type systemAPI struct {
 	// deploys (preview / demo / dev); leave it unset in production so a
 	// render crash never leaks a stack trace to real users (#1965).
 	debugUI bool
+	// loanReminderDueSoonDays is the server-wide loan lead time, shown
+	// in Settings as the value a user gets until they pick their own.
+	loanReminderDueSoonDays int
 }
 
 // SystemInfo contains comprehensive system information
@@ -51,6 +54,12 @@ type SystemInfo struct {
 	// crash details (error message + stack) on its error screen. Off by
 	// default so production never exposes a stack trace to end users.
 	Debug bool `json:"debug"`
+
+	// LoanReminderDueSoonDays is the server-wide default for how many days
+	// before the due date the loan reminder goes out
+	// (--loan-reminder-due-soon-days). A user's
+	// notifications.loan_lead_time setting replaces it for them.
+	LoanReminderDueSoonDays int `json:"loan_reminder_due_soon_days"`
 
 	// Settings information
 	Settings models.SettingsObject `json:"settings"`
@@ -115,6 +124,8 @@ func (api *systemAPI) getSystemInfo(w http.ResponseWriter, r *http.Request) { //
 		// Debug UI toggle (INVENTARIO_DEBUG_UI), resolved once at startup.
 		Debug: api.debugUI,
 
+		LoanReminderDueSoonDays: api.loanReminderDueSoonDays,
+
 		// Settings
 		Settings: settings,
 	}
@@ -157,11 +168,12 @@ func pluralize(value int) string {
 }
 
 // System returns a handler for system information.
-func System(debugInfo *debug.Info, startTime time.Time) func(r chi.Router) {
+func System(debugInfo *debug.Info, startTime time.Time, loanReminderDueSoonDays int) func(r chi.Router) {
 	api := &systemAPI{
-		debugInfo: debugInfo,
-		startTime: startTime,
-		debugUI:   debugUIEnabled(),
+		debugInfo:               debugInfo,
+		startTime:               startTime,
+		debugUI:                 debugUIEnabled(),
+		loanReminderDueSoonDays: loanReminderDueSoonDays,
 	}
 
 	return func(r chi.Router) {

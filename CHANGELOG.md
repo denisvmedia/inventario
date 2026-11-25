@@ -26,6 +26,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 
+- Your own lead times for warranty, maintenance and loan reminders. Under
+  Settings → Notifications, the Warranty expiry and Maintenance reminders rows
+  take up to five "days before" values from 1 to 365, and the Loan reminders
+  row takes one value from 1 to 60 for the items you lend. Each member of a
+  group keeps their own choice. Unset, the defaults stay as they were: 60, 30
+  and 7 days for warranties, 14, 7 and 1 for maintenance, and
+  `--loan-reminder-due-soon-days` for loans, which `/system` now reports as
+  `loan_reminder_due_soon_days`
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;

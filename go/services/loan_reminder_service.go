@@ -138,7 +138,10 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		return 0, 0, errxtrace.Wrap("loan reminder: missing CommodityLoanRegistryFactory", registry.ErrFieldRequired)
 	}
 	loanReg := s.factorySet.CommodityLoanRegistryFactory.CreateServiceRegistry()
-	loans, err := loanReg.ListPendingReminders(ctx, kind, now, s.dueSoonDays)
+	// A lender may pick a lead time up to models.LoanReminderMaxLeadDays
+	// (#2805), so the due-soon query looks that far ahead and processOne
+	// drops the loans that are not yet inside their lender's lead time.
+	loans, err := loanReg.ListPendingReminders(ctx, kind, now, max(s.dueSoonDays, models.LoanReminderMaxLeadDays))
 	if err != nil {
 		return 0, 0, errxtrace.Wrap("loan reminder: list pending", err)
 	}
@@ -163,6 +166,8 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 
 // processOne handles one (loan, kind) pair. Order is fixed:
 //
+//  0. A due-soon loan that is not yet inside the lender's lead time
+//     (leadTimeFor) is left alone, flag unset, for a later sweep.
 //  1. Resolve the lender + recipient email. If the lender has no email
 //     on file or no user record at all, treat the loan as "no recipient"
 //     and flip the flag anyway (no point re-evaluating it every tick).
@@ -179,11 +184,18 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 //
 // Returns:
 //   - (true,  nil) — email enqueued AND flag flipped by us.
-//   - (false, nil) — no recipient (flag still flipped) OR opted out
-//     (flag NOT flipped) OR concurrent worker won the flip.
+//   - (false, nil) — not inside the lead time yet (flag NOT flipped) OR
+//     no recipient (flag still flipped) OR opted out (flag NOT flipped)
+//     OR concurrent worker won the flip.
 //   - (false, err) — enqueue or flip-side failure that should retry.
 func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.CommodityLoanRegistry, l *models.CommodityLoan, kind registry.LoanReminderKind, now time.Time, prefsCache *notifications.Cache) (bool, error) {
 	lender, recipientEmail, recipientName := s.lookupLender(ctx, l)
+	if kind == registry.LoanReminderKindDueSoon && computeDaysDelta(l.DueBackAt, now) > s.leadTimeFor(ctx, lender, prefsCache) {
+		// Not inside the lender's lead time yet. The flag stays false,
+		// so a later sweep sends the reminder once the date is close
+		// enough.
+		return false, nil
+	}
 	if recipientEmail == "" {
 		// No lender / no email on file. Flip the flag anyway so this row
 		// stops matching on every tick — there's no one to email, and a
@@ -388,6 +400,16 @@ func (s *LoanReminderService) prefsForSweep() *notifications.Cache {
 		return nil
 	}
 	return s.prefs.NewCache()
+}
+
+// leadTimeFor returns how many days before the due date the lender wants
+// the due-soon reminder: their notifications.loan_lead_time setting, or the
+// server-wide --loan-reminder-due-soon-days when it is unset.
+func (s *LoanReminderService) leadTimeFor(ctx context.Context, lender *models.User, prefsCache *notifications.Cache) int {
+	if days, ok := prefsCache.LoanLeadTime(ctx, lender); ok {
+		return days
+	}
+	return s.dueSoonDays
 }
 
 // computeDaysDelta returns the days-until-due (positive) or days-overdue

@@ -24,6 +24,7 @@ import {
 import { UserAvatar } from "@/components/UserAvatar"
 import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
+import { LeadTimeField } from "@/components/settings/LeadTimeField"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
 import { useAPITokensList } from "@/features/api-tokens/hooks"
 import { useSessionsList } from "@/features/sessions/hooks"
@@ -62,6 +63,11 @@ import { makeDeleteAccountSchema, type DeleteAccountInput } from "@/features/aut
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
+  BUILTIN_LEAD_TIME_MAX_DAYS,
+  DEFAULT_LOAN_LEAD_TIME,
+  DEFAULT_MAINTENANCE_LEAD_TIMES,
+  DEFAULT_WARRANTY_LEAD_TIMES,
+  LOAN_LEAD_TIME_MAX_DAYS,
   SETTING_APPEARANCE_DEFAULT_ITEMS_VIEW,
   SETTING_APPEARANCE_LANGUAGE,
   SETTING_APPEARANCE_NUMBER_FORMAT_LOCALE,
@@ -69,14 +75,18 @@ import {
   SETTING_NOTIFICATIONS_CHANNEL_EMAIL,
   SETTING_NOTIFICATIONS_CHANNEL_PUSH,
   SETTING_NOTIFICATIONS_ITEM_REMINDER,
+  SETTING_NOTIFICATIONS_LOAN_LEAD_TIME,
   SETTING_NOTIFICATIONS_LOAN_REMINDER,
+  SETTING_NOTIFICATIONS_MAINTENANCE_LEAD_TIMES,
   SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER,
   SETTING_NOTIFICATIONS_PRICE_DROP,
   SETTING_NOTIFICATIONS_WARRANTY_EXPIRY,
+  SETTING_NOTIFICATIONS_WARRANTY_LEAD_TIMES,
   SETTING_NOTIFICATIONS_WEEKLY_DIGEST,
   type SettingsObject,
 } from "@/features/settings/api"
 import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
+import { useSystemInfo } from "@/features/system/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
@@ -909,6 +919,17 @@ const NOTIFICATION_FIELD_DEFAULTS: Record<string, boolean> = {
   [SETTING_NOTIFICATIONS_CHANNEL_PUSH]: false,
 }
 
+// LeadTimeConfig adds a "days before" field under a reminder row (#2805).
+// A list setting holds up to five values; the loan setting holds one,
+// sent as a plain number. Unset means the defaults.
+interface LeadTimeConfig {
+  field: string
+  multiple: boolean
+  max: number
+  read: (s: SettingsObject) => number[] | undefined
+  testId: string
+}
+
 interface NotificationRow {
   field: string
   // Settings model key — used to read the current value from the
@@ -917,6 +938,7 @@ interface NotificationRow {
   labelKey: string
   descriptionKey: string
   testId: string
+  leadTime?: LeadTimeConfig
 }
 
 const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> = [
@@ -929,6 +951,13 @@ const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> 
         labelKey: "settings:notifications.rows.warrantyExpiry",
         descriptionKey: "settings:notifications.rows.warrantyExpiryDescription",
         testId: "notification-row-warranty-expiry",
+        leadTime: {
+          field: SETTING_NOTIFICATIONS_WARRANTY_LEAD_TIMES,
+          multiple: true,
+          max: BUILTIN_LEAD_TIME_MAX_DAYS,
+          read: (s) => s.notificationsWarrantyLeadTimes,
+          testId: "lead-times-warranty",
+        },
       },
       {
         field: SETTING_NOTIFICATIONS_MAINTENANCE_REMINDER,
@@ -936,6 +965,13 @@ const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> 
         labelKey: "settings:notifications.rows.maintenanceReminder",
         descriptionKey: "settings:notifications.rows.maintenanceReminderDescription",
         testId: "notification-row-maintenance-reminder",
+        leadTime: {
+          field: SETTING_NOTIFICATIONS_MAINTENANCE_LEAD_TIMES,
+          multiple: true,
+          max: BUILTIN_LEAD_TIME_MAX_DAYS,
+          read: (s) => s.notificationsMaintenanceLeadTimes,
+          testId: "lead-times-maintenance",
+        },
       },
       {
         field: SETTING_NOTIFICATIONS_LOAN_REMINDER,
@@ -943,6 +979,14 @@ const NOTIFICATION_GROUPS: Array<{ titleKey: string; rows: NotificationRow[] }> 
         labelKey: "settings:notifications.rows.loanReminder",
         descriptionKey: "settings:notifications.rows.loanReminderDescription",
         testId: "notification-row-loan-reminder",
+        leadTime: {
+          field: SETTING_NOTIFICATIONS_LOAN_LEAD_TIME,
+          multiple: false,
+          max: LOAN_LEAD_TIME_MAX_DAYS,
+          read: (s) =>
+            s.notificationsLoanLeadTime === undefined ? undefined : [s.notificationsLoanLeadTime],
+          testId: "lead-times-loan",
+        },
       },
       {
         field: SETTING_NOTIFICATIONS_ITEM_REMINDER,
@@ -998,12 +1042,36 @@ function NotificationsSection() {
   const toast = useAppToast()
   const settingsQuery = useUserSettings()
   const patchMutation = usePatchSetting()
+  // The loan default is the server's --loan-reminder-due-soon-days.
+  const systemQuery = useSystemInfo()
+  const loanDefault = systemQuery.data?.loan_reminder_due_soon_days || DEFAULT_LOAN_LEAD_TIME
 
   const settings = settingsQuery.data
 
   function onToggle(field: string, next: boolean) {
     patchMutation.mutate(
       { field, value: next },
+      {
+        onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
+      }
+    )
+  }
+
+  function leadTimeDefaults(cfg: LeadTimeConfig): number[] {
+    switch (cfg.field) {
+      case SETTING_NOTIFICATIONS_WARRANTY_LEAD_TIMES:
+        return DEFAULT_WARRANTY_LEAD_TIMES
+      case SETTING_NOTIFICATIONS_MAINTENANCE_LEAD_TIMES:
+        return DEFAULT_MAINTENANCE_LEAD_TIMES
+      default:
+        return [loanDefault]
+    }
+  }
+
+  function onSaveLeadTimes(cfg: LeadTimeConfig, value: number[] | null) {
+    const payload = value === null ? null : cfg.multiple ? value : value[0]
+    patchMutation.mutate(
+      { field: cfg.field, value: payload },
       {
         onError: () => toast.error(t("settings:notifications.errors.saveFailed")),
       }
@@ -1049,6 +1117,15 @@ function NotificationsSection() {
                     <p className="mt-0.5 text-xs text-muted-foreground leading-relaxed">
                       {t(row.descriptionKey)}
                     </p>
+                    {row.leadTime && settings && (
+                      <LeadTimeRow
+                        cfg={row.leadTime}
+                        stored={row.leadTime.read(settings)}
+                        defaults={leadTimeDefaults(row.leadTime)}
+                        disabled={!checked}
+                        onSave={(value) => row.leadTime && onSaveLeadTimes(row.leadTime, value)}
+                      />
+                    )}
                   </div>
                   <Switch
                     checked={checked}
@@ -1063,6 +1140,38 @@ function NotificationsSection() {
         </div>
       ))}
     </div>
+  )
+}
+
+function LeadTimeRow({
+  cfg,
+  stored,
+  defaults,
+  disabled,
+  onSave,
+}: {
+  cfg: LeadTimeConfig
+  stored: number[] | undefined
+  defaults: number[]
+  disabled: boolean
+  onSave: (value: number[] | null) => void
+}) {
+  const value = stored && stored.length > 0 ? stored : defaults
+  return (
+    <LeadTimeField
+      // Re-keyed by the value in effect so a save, a rollback or the
+      // server default arriving resets the draft.
+      key={value.join(",")}
+      id={`${cfg.testId}-field`}
+      value={value}
+      defaults={defaults}
+      isCustom={stored !== undefined}
+      multiple={cfg.multiple}
+      max={cfg.max}
+      disabled={disabled}
+      onSave={onSave}
+      testId={cfg.testId}
+    />
   )
 }
 

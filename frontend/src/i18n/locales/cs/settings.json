@@ -232,6 +232,20 @@
       "reminders": "Připomínky",
       "updates": "Aktualizace"
     },
+    "leadTimes": {
+      "errors": {
+        "duplicate": "Každá hodnota může být uvedena jen jednou.",
+        "notNumber": "Zadejte celé číslo.",
+        "notNumbers": "Zadejte celá čísla oddělená čárkami.",
+        "range": "Každá hodnota musí být od 1 do {{max}}.",
+        "single": "Zadejte jedno číslo.",
+        "tooMany": "Zadejte nejvýše {{max}} hodnot."
+      },
+      "hintList": "Až 5 celých čísel od 1 do {{max}}, oddělených čárkami. Prázdné pole znamená výchozí hodnotu.",
+      "hintSingle": "Jedno celé číslo od 1 do {{max}}. Prázdné pole znamená výchozí hodnotu.",
+      "label": "Dní předem",
+      "reset": "Použít výchozí ({{value}})"
+    },
     "rows": {
       "channelEmail": "E-mailová oznámení",
       "channelEmailDescription": "Dostávejte oznámení na e-mailovou adresu uvedenou u vašeho účtu.",
@@ -242,11 +256,11 @@
       "loanReminder": "Připomínky zápůjček",
       "loanReminderDescription": "Upozornit, když má být zapůjčená položka vrácena nebo je vrácení po termínu.",
       "maintenanceReminder": "Připomínky údržby",
-      "maintenanceReminderDescription": "Naplánovaná upozornění na péči o položky, které jste nastavili.",
+      "maintenanceReminderDescription": "Naplánovaná upozornění na péči o položky, které jste nastavili, a jedno navíc, když je úkol po termínu.",
       "priceDrop": "Upozornění na pokles ceny",
       "priceDropDescription": "Upozornit, když u sledovaných odkazů na zboží klesne cena.",
       "warrantyExpiry": "Konec záruky",
-      "warrantyExpiryDescription": "Dostanete upozornění 60, 30 a 7 dní před koncem záruky.",
+      "warrantyExpiryDescription": "Dostanete upozornění před koncem záruky.",
       "weeklyDigest": "Týdenní souhrn",
       "weeklyDigestDescription": "Souhrn změn v inventáři a blížících se konců platnosti."
     },
