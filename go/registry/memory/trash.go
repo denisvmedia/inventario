@@ -338,18 +338,8 @@ func (r *FileRegistry) ListStrandedTrashed(_ context.Context, limit int) ([]*mod
 	if limit <= 0 {
 		return nil, nil
 	}
-	itemInTrash := func(id string) bool {
-		if r.commodityFactory == nil {
-			return false
-		}
-		base := r.commodityFactory.baseCommodityRegistry
-		base.lock.RLock()
-		defer base.lock.RUnlock()
-		c, ok := base.items.Get(id)
-		return ok && c != nil && c.IsTrashed()
-	}
 	candidates := r.trashedFiles(func(f *models.FileEntity, _ []models.FileLink) bool {
-		return f.DeletedWithCommodityID != nil && !itemInTrash(*f.DeletedWithCommodityID)
+		return f.DeletedWithCommodityID != nil && !r.itemInTrash(*f.DeletedWithCommodityID)
 	})
 	sortFilesOldestDeletedFirst(candidates)
 	return page(candidates, 0, limit), nil

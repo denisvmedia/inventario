@@ -60,3 +60,19 @@ func TestAPIServer_Run(t *testing.T) {
 
 	<-apiServer.Done()
 }
+
+// Resources the handler holds are released once the server has stopped.
+func TestAPIServer_OnShutdownRunsAfterShutdown(t *testing.T) {
+	c := qt.New(t)
+	apiServer := &httpserver.APIServer{}
+	var calls []string
+	apiServer.OnShutdown(func() { calls = append(calls, "first") })
+	apiServer.OnShutdown(func() { calls = append(calls, "second") })
+
+	errCh := apiServer.Run("localhost:0", http.NotFoundHandler())
+	c.Assert(calls, qt.HasLen, 0)
+
+	c.Assert(apiServer.Shutdown(), qt.IsNil)
+	c.Assert(calls, qt.DeepEquals, []string{"first", "second"})
+	c.Assert(<-errCh, qt.IsNil)
+}

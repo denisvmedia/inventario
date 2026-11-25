@@ -65,14 +65,18 @@ func TestServePlaceholderThumbnail_NoJobEnqueuesAndServesPlaceholder(t *testing.
 	})
 	c.Assert(err, qt.IsNil)
 
+	config := services.ThumbnailGenerationConfig{
+		MaxConcurrentPerUser: 10,
+		RateLimitPerMinute:   60,
+		SlotDuration:         time.Minute,
+	}
+	thumbnailService := services.NewThumbnailGenerationService(fs, "", config)
+	c.Cleanup(thumbnailService.Stop)
 	api := &filesAPI{
-		factorySet:     fs,
-		uploadLocation: "", // no bucket needed: we exercise the placeholder + enqueue path only
-		thumbnailConfig: services.ThumbnailGenerationConfig{
-			MaxConcurrentPerUser: 10,
-			RateLimitPerMinute:   60,
-			SlotDuration:         time.Minute,
-		},
+		factorySet:       fs,
+		uploadLocation:   "", // no bucket needed: we exercise the placeholder + enqueue path only
+		thumbnailConfig:  config,
+		thumbnailService: thumbnailService,
 	}
 
 	req := httptest.NewRequest(http.MethodGet, "/files/download/thumbnails/"+created.ID+"/small", nil).WithContext(ctx)

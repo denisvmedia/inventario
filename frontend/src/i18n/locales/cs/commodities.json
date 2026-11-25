@@ -43,6 +43,10 @@
     "backToList": "Zpět na položky",
     "cover": {
       "open": "Zobrazit fotografie položky {{name}}",
+      "openWithCount_one": "Zobrazit {{count}} fotografii položky {{name}}",
+      "openWithCount_few": "Zobrazit {{count}} fotografie položky {{name}}",
+      "openWithCount_many": "Zobrazit {{count}} fotografie položky {{name}}",
+      "openWithCount_other": "Zobrazit {{count}} fotografií položky {{name}}",
       "photoCount_one": "{{count}} fotografie",
       "photoCount_few": "{{count}} fotografie",
       "photoCount_many": "{{count}} fotografie",
@@ -485,6 +489,7 @@
     "pageSize": "Položek na stránku",
     "searchPlaceholder": "Hledat podle názvu, značky, modelu, sériového čísla, čísla dílu, štítku, poznámek nebo inventárního čísla…",
     "selectAll": "Vybrat vše viditelné",
+    "selectItem": "Vybrat {{name}}",
     "subtitle_one": "{{count}} položka v této skupině",
     "subtitle_few": "{{count}} položky v této skupině",
     "subtitle_many": "{{count}} položky v této skupině",

@@ -55,6 +55,12 @@ func (s *stubFileRegistry) ListByLinkedEntity(context.Context, string, string) (
 func (s *stubFileRegistry) ListByLinkedEntityAndMeta(context.Context, string, string, string) ([]*models.FileEntity, error) {
 	panic("not implemented")
 }
+func (s *stubFileRegistry) GetMany(context.Context, []string) ([]*models.FileEntity, error) {
+	panic("not implemented")
+}
+func (s *stubFileRegistry) FirstPhotos(context.Context, []string) (map[string]*models.FileEntity, error) {
+	panic("not implemented")
+}
 func (s *stubFileRegistry) ListByGroup(context.Context, string, string) ([]*models.FileEntity, error) {
 	panic("not implemented")
 }

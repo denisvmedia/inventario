@@ -645,6 +645,74 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	return filtered, nil
 }
 
+// GetMany returns the live files among ids, with their links.
+func (r *FileRegistry) GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	seen := make(map[string]bool, len(ids))
+	var files []*models.FileEntity
+	for _, id := range ids {
+		if seen[id] {
+			continue
+		}
+		seen[id] = true
+		file, err := r.Get(ctx, id)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, file)
+	}
+	return files, nil
+}
+
+// FirstPhotos returns the oldest photo of each item among commodityIDs that
+// is not in Trash.
+func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error) {
+	out := make(map[string]*models.FileEntity, len(commodityIDs))
+	if len(commodityIDs) == 0 {
+		return out, nil
+	}
+	wanted := make(map[string]bool, len(commodityIDs))
+	for _, id := range commodityIDs {
+		wanted[id] = !r.itemInTrash(id)
+	}
+	files, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for _, f := range files {
+		if f.Type != models.FileTypeImage || f.Category != models.FileCategoryImages {
+			continue
+		}
+		for _, l := range f.Links {
+			if l.EntityType != models.FileLinkCommodity || l.Meta != models.FileLinkMetaImages || !wanted[l.EntityID] {
+				continue
+			}
+			cur := out[l.EntityID]
+			if cur == nil || f.CreatedAt.Before(cur.CreatedAt) || (f.CreatedAt.Equal(cur.CreatedAt) && f.ID < cur.ID) {
+				out[l.EntityID] = f
+			}
+		}
+	}
+	return out, nil
+}
+
+// itemInTrash reports whether the item with this id is in Trash.
+func (r *FileRegistry) itemInTrash(id string) bool {
+	if r.commodityFactory == nil {
+		return false
+	}
+	base := r.commodityFactory.baseCommodityRegistry
+	base.lock.RLock()
+	defer base.lock.RUnlock()
+	c, ok := base.items.Get(id)
+	return ok && c != nil && c.IsTrashed()
+}
+
 // Enhanced methods with simplified in-memory implementations
 
 // FullTextSearch performs simple text search on files (simplified)

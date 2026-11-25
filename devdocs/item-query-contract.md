@@ -116,7 +116,7 @@ Next to these members, `error` carries the message as for any API error. The ite
 
 ## Frontend: page URL and API
 
-The items list page keeps its query in the page URL under names that predate the contract, so saved links keep working. `writeCommodityQuery` replaces only these names and leaves every other parameter (page, view) as it is; `parseCommodityQuery` reads them back. Defaults are left out of the URL.
+The items list page keeps its query in the page URL under names that predate the contract, so saved links keep working. `writeCommodityQuery` replaces only these names and leaves the parameters the list owns (`page`, `per_page`, `view`) as they are; `parseCommodityQuery` reads them back. Defaults are left out of the URL. A page number counts pages of `per_page` items, 24 when it is absent (see `frontend/src/features/commodities/listContext.ts`).
 
 | Page URL | API |
 | -------- | --- |
