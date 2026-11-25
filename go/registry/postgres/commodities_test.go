@@ -491,6 +491,41 @@ func TestCommodityRegistry_ListPaginated_Unassigned(t *testing.T) {
 	c.Assert(got[0].ID, qt.Equals, filed.ID)
 }
 
+// TestCommodityRegistry_ListIDs verifies that ListIDs selects the rows the
+// same options select in ListPaginated, and stops at limit.
+func TestCommodityRegistry_ListIDs(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := appctx.WithUser(c.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "test-user-id"},
+			TenantID: "test-tenant-id",
+		},
+	})
+
+	location := createTestLocation(c, registrySet)
+	area := createTestArea(c, registrySet, location.GetID())
+	first := createTestCommodity(c, registrySet, area.GetID())
+	second := createTestCommodity(c, registrySet, area.GetID())
+	otherArea := createTestArea(c, registrySet, location.GetID())
+	createTestCommodity(c, registrySet, otherArea.GetID())
+
+	opts := registry.CommodityListOptions{AreaID: area.GetID()}
+	ids, err := registrySet.CommodityRegistry.ListIDs(ctx, opts, 10)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ids, qt.ContentEquals, []string{first.ID, second.ID})
+
+	ids, err = registrySet.CommodityRegistry.ListIDs(ctx, opts, 1)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ids, qt.HasLen, 1)
+
+	ids, err = registrySet.CommodityRegistry.ListIDs(ctx, opts, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(ids, qt.HasLen, 0)
+}
+
 func TestCommodityRegistry_Update_UnhappyPath(t *testing.T) {
 	registrySet, cleanup := setupTestRegistrySet(t)
 	defer cleanup()

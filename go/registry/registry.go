@@ -395,6 +395,11 @@ type CommodityRegistry interface {
 	// and the order; at most limit brands are returned.
 	ListBrands(ctx context.Context, query string, limit int) ([]CommodityBrandCount, error)
 
+	// ListIDs returns the ids of at most limit commodities opts selects, in
+	// no particular order. It reads ids only, so a caller can tell which
+	// items a query selects without loading them. Sorting does not apply.
+	ListIDs(ctx context.Context, opts CommodityListOptions, limit int) ([]string, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status, trashed items included. Used by the
 	// currency-migration service (issue #202): the conversion needs to see all

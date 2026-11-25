@@ -100,6 +100,16 @@ type CommoditiesMeta struct {
 	// found in, so the list can say why an item matched. Omitted when the
 	// request has no `q`.
 	Matches map[string][]registry.CommoditySearchMatch `json:"matches,omitempty"`
+
+	// SelectionDigest names the set of items the query selects, on every
+	// page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
+	// bulk action on the query sends it back unchanged as expected_digest,
+	// and is refused when the query no longer selects exactly these items.
+	// Omitted when the query selects no items, more than a bulk action takes
+	// (500), or items in Trash, and when the items changed while the list was
+	// read or the lookup failed; a client then offers no bulk action on the
+	// query.
+	SelectionDigest string `json:"selection_digest,omitempty" example:"1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"`
 }
 
 // CommoditiesResponse is an object that holds a list of commodities information.
@@ -149,6 +159,12 @@ func (cr *CommoditiesResponse) WithMatches(matches map[string][]registry.Commodi
 	if len(matches) > 0 {
 		cr.Meta.Matches = matches
 	}
+	return cr
+}
+
+// WithSelectionDigest sets meta.selection_digest.
+func (cr *CommoditiesResponse) WithSelectionDigest(digest string) *CommoditiesResponse {
+	cr.Meta.SelectionDigest = digest
 	return cr
 }
 

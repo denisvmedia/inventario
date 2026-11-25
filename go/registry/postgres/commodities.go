@@ -367,6 +367,29 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 	return commodities, total, nil
 }
 
+// ListIDs returns the ids of at most limit commodities opts selects. The
+// WHERE clause is the list's, so the ids are those of the rows ListPaginated
+// returns for the same opts.
+func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.CommodityListOptions, limit int) ([]string, error) {
+	if limit <= 0 {
+		return []string{}, nil
+	}
+	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
+	ids := make([]string, 0)
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		sb := newSelect().Select("id").From(string(r.tableNames.Commodities()))
+		addWhere(sb, where)
+		sb.Limit(limit)
+		query, args := sb.Build()
+		return tx.SelectContext(ctx, &ids, query, args...)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list commodity ids", err)
+	}
+	return ids, nil
+}
+
 // CountEach runs one COUNT(*) per entry of opts, with the WHERE clause of
 // ListPaginated, in one transaction.
 func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {

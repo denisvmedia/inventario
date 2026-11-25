@@ -37,6 +37,33 @@ the section matching the tag and publishes it as the GitHub Release body. See
   sellers by name, creating the missing ones
   ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
 
+- Bulk edits on the items list. The bulk-action bar has an Edit menu that adds
+  and removes tags (an item keeps the tags the change does not name), sets the
+  type, and changes the status with the same date and note dialog as a single
+  change; sold is left out, since each item needs its own sale price. After the
+  whole page is selected, "Select all N matching items" selects every item the
+  search and filters match, on every page, for every bulk action but label
+  printing. It is offered when 1 to 500 items match and the list could tell
+  which items those are; otherwise a bulk action works on the items selected
+  one by one or a page at a time. Each item goes through the checks of a
+  single change and gets its own history event. When some items fail, a dialog
+  lists them with the reason, keeps them selected and offers a retry of those
+  items alone. The new
+  `POST /commodities/bulk-update` takes ids or a query of the item query
+  contract with the number and the digest of the items it was seen to match
+  (`meta.selection_digest` of `GET /commodities`), and refuses with 409 when
+  the query selects other items by then, even as many; `bulk-move` and
+  `bulk-delete` take the same selection, and all three answer with the items
+  that changed, were skipped as unchanged, or failed with a reason (a
+  validation failure names the field and the rule, so the app can say it in
+  the user's language). A query may select up to 500 items. `bulk-move` to an
+  area that does not exist is refused with 422 before any item changes.
+  `POST /trash/commodities/restore` gives each failure a code as well:
+  `not_found` for an item that is not in the trash, `failed` otherwise. The
+  Files page's bulk bar gains **Tags…**, which adds and removes tags on the
+  selected files the same way, through the new `POST /files/bulk-update`
+  ([#2798](https://github.com/denisvmedia/inventario/issues/2798)).
+
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,
   from two cards a row on a phone to six on a wide screen. The previous cards
