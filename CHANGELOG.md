@@ -29,6 +29,14 @@ the section matching the tag and publishes it as the GitHub Release body. See
   Reminders on custom date fields are not part of this
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 
+- "New location" and "New area" at the end of the Location and Area pickers
+  on the item's edit form, its All fields dialog and the location quick edit.
+  They open the Locations page's create dialog over the item and select what
+  it created, so a place that does not exist yet no longer means leaving the
+  item. Only owners and administrators see them, as only they can create
+  locations and areas
+  ([#2796](https://github.com/denisvmedia/inventario/issues/2796)).
+
 - Item search covers serial numbers, extra serial numbers, part numbers, tags
   (by slug and by name), notes, warranty notes and the status note, besides the
   name, short name and asset ID. Every word of a search must match, in any

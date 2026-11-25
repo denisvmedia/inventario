@@ -35,6 +35,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-25 — New location / New area entries in the item's Location and Area pickers
+
+- **Issue/PR**: #2796 / PR #2833
+- **Mock**: The Location and Area `Select`s of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1074–L1091) and of `ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) list only existing locations and areas; nothing in the mock creates one from an item. The create dialogs are the mock's [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx).
+- **Reality**: `frontend/src/components/locations/LocationAreaFields.tsx` is the one picker behind the item edit form, the Basics step of the edit-mode step dialog and the location quick edit on the Details tab. For admins and owners it ends the Location list with a `SelectSeparator` and a **New location** item, and the Area list with **New area**, each with a `Plus` icon muted like the icons of the Type select. Picking one opens the existing `LocationFormDialog` / `AreaFormDialog` over the form (stacked over the step dialog when that is open), selects what was created, and shows the Locations page's "Location created." / "Area created." toast. Users and viewers get the lists as before.
+- **Why**: not present in mock. The issue asks for the entries in the pickers, for the existing create dialogs, and for the role gate. The toast and returning the focus to the select the dialog was opened from (a new optional `onCloseAutoFocus` prop on both dialogs) go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2796 by the 2026-11-24 goal to implement the open enhancements; toast and focus return agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers. Item types (#2802) and sellers (#2804) take the same pattern when their pickers land.
+
 #### 2026-11-24 — Label print page for items and areas (`/g/:slug/labels`)
 
 - **Issue/PR**: #2807 / PR (pending)

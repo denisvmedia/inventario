@@ -234,6 +234,8 @@
     "locationPlaceholder": "Pick a location",
     "name": "Name",
     "namePlaceholder": "e.g. Bosch SMV6ZCX42E dishwasher",
+    "newArea": "New area",
+    "newLocation": "New location",
     "originalPrice": "Original price",
     "originalPriceHelp": "Original purchase currency",
     "partNumbers": "Part numbers",
