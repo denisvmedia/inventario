@@ -390,6 +390,21 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
 }
 
+func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+	counts := make([]int, len(opts))
+	if len(opts) == 0 {
+		return counts, nil
+	}
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	for i, o := range opts {
+		counts[i] = len(filterCommodities(all, o))
+	}
+	return counts, nil
+}
+
 // filterCommodities applies the predicate fields of opts in-memory. Empty
 // slice/string fields are no-ops, matching the documented "zero-value =
 // no filter" contract.

@@ -44,11 +44,19 @@ func ParseSaved(rawQuery string) (Query, error) {
 	return q, nil
 }
 
-// Encode returns the canonical query string of q: Values encoded with sorted
-// keys. Two queries that select the same items with the same sort encode the
-// same, whatever order their parameters came in.
+// Encode returns the canonical query string of q: Values with every list
+// sorted, encoded with sorted keys. The lists are sets (an item matches any
+// of the types, carries all or any of the tags), so two queries that select
+// the same items with the same sort encode the same, whatever order their
+// parameters and list entries came in.
 func (q Query) Encode() string {
-	return q.Values().Encode()
+	canonical := q
+	canonical.Types = slices.Sorted(slices.Values(q.Types))
+	canonical.Statuses = slices.Sorted(slices.Values(q.Statuses))
+	canonical.WarrantyStatuses = slices.Sorted(slices.Values(q.WarrantyStatuses))
+	canonical.Tags.Include = slices.Sorted(slices.Values(q.Tags.Include))
+	canonical.Tags.Exclude = slices.Sorted(slices.Values(q.Tags.Exclude))
+	return canonical.Values().Encode()
 }
 
 // RenameTag replaces the tag slug from with to wherever q names it and

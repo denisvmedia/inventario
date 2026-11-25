@@ -525,7 +525,7 @@
       "placement": "Show in",
       "save": "Save",
       "shared": "Share with the group",
-      "sharedHint": "Everyone in the group sees the view. Each member still sees only the items they can see.",
+      "sharedHint": "Everyone in the group finds the view in the Views menu and on the Saved views page. It shows in their sidebar or on their dashboard only after they put it there. Each member still sees only the items they can see.",
       "sharedNeedsRole": "Only members with the user role or higher can share views.",
       "showInSidebar": "Sidebar",
       "showOnDashboard": "Dashboard"

@@ -185,26 +185,31 @@ func (s *TagService) normalizeAndEnsureSlugs(ctx context.Context, kind models.Ta
 // lock and renames from whatever slug the first one settled on.
 //
 // Saved views name item tags by slug, so after an item tag's slug changes
-// the views of the group that name it are rewritten to the new slug. That
-// rewrite runs after the rename commits; when it fails the rename stands and
-// the views show the old slug as a tag that no longer exists.
+// the views of the group that name it are rewritten from the slug the rename
+// started from (read under the rename's lock) to the slug the tag has when
+// the views are rewritten. That rewrite runs after the rename commits; when
+// it fails the rename stands and the views show the old slug as a tag that
+// no longer exists.
 func (s *TagService) RenameTag(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
 	tagReg, err := s.factorySet.TagRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create tag registry", err)
 	}
-	before, err := tagReg.Get(ctx, id)
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to get tag", err)
-	}
-	renamed, err := tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor)
+	renamed, from, err := tagReg.RenameAtomic(ctx, id, newLabel, newSlug, newColor)
 	if err != nil {
 		return nil, err
 	}
-	if renamed.Kind == models.TagKindCommodity && renamed.Slug != before.Slug && s.factorySet.SavedViewRegistryFactory != nil {
-		if _, err := NewSavedViewService(s.factorySet).RenameTag(ctx, before.Slug, renamed.Slug); err != nil {
+	if renamed.Kind == models.TagKindCommodity && renamed.Slug != from && s.factorySet.SavedViewRegistryFactory != nil {
+		current := func(ctx context.Context) (string, error) {
+			tag, err := tagReg.Get(ctx, id)
+			if err != nil {
+				return "", err
+			}
+			return tag.Slug, nil
+		}
+		if _, err := NewSavedViewService(s.factorySet).RenameTag(ctx, from, current); err != nil {
 			slog.WarnContext(ctx, "Saved views kept the old tag slug after a rename",
-				"tag_id", id, "from", before.Slug, "to", renamed.Slug, "error", err)
+				"tag_id", id, "from", from, "to", renamed.Slug, "error", err)
 		}
 	}
 	return renamed, nil

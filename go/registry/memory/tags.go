@@ -577,13 +577,13 @@ func (r *TagRegistry) StripSlugReferences(ctx context.Context, kind models.TagKi
 // slug-clash check, rewrite JSONB references, and update the tag row,
 // all under the same mutex. The memory backend doesn't have separate
 // transactions — the mutex is the entire serialization mechanism.
-func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
+func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, string, error) {
 	tagAtomicMu.Lock()
 	defer tagAtomicMu.Unlock()
 
 	current, err := r.Get(ctx, id)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to look up tag", err)
+		return nil, "", errxtrace.Wrap("failed to look up tag", err)
 	}
 
 	updated := *current
@@ -602,22 +602,22 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 		// may legitimately exist under the other kind.
 		clash, clashErr := r.GetBySlug(ctx, current.Kind, newSlug)
 		if clashErr != nil && !errors.Is(clashErr, registry.ErrNotFound) {
-			return nil, errxtrace.Wrap("failed to check slug availability", clashErr)
+			return nil, "", errxtrace.Wrap("failed to check slug availability", clashErr)
 		}
 		if clash != nil && clash.ID != current.ID {
-			return nil, errxtrace.Wrap("target slug is already used by another tag",
+			return nil, "", errxtrace.Wrap("target slug is already used by another tag",
 				registry.ErrAlreadyExists, errx.Attrs("slug", newSlug))
 		}
 		if _, _, err := r.RewriteSlugReferences(ctx, current.Kind, current.Slug, newSlug); err != nil {
-			return nil, errxtrace.Wrap("failed to rewrite slug references", err)
+			return nil, "", errxtrace.Wrap("failed to rewrite slug references", err)
 		}
 	}
 
 	final, err := r.Update(ctx, updated)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to update tag", err)
+		return nil, "", errxtrace.Wrap("failed to update tag", err)
 	}
-	return final, nil
+	return final, current.Slug, nil
 }
 
 // DeleteAtomic mirrors the postgres semantics: usage check + strip (when

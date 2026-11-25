@@ -327,6 +327,11 @@ type CommodityRegistry interface {
 	// not apply.
 	CountTags(ctx context.Context, opts CommodityListOptions) (CommodityTagCounts, error)
 
+	// CountEach counts, for each entry of opts, the commodities it selects,
+	// as ListPaginated would report in its total, without reading the rows.
+	// The counts are taken in one transaction, so they describe one moment.
+	CountEach(ctx context.Context, opts []CommodityListOptions) ([]int, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status. Used by the currency-migration
 	// service (issue #202): the conversion needs to see all rows in the
@@ -786,7 +791,10 @@ type TagRegistry interface {
 	//
 	// Pass newSlug == "" to keep the existing slug. Empty newLabel /
 	// newColor leave the corresponding fields untouched.
-	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error)
+	//
+	// It returns the tag as written and the slug it held when the lock was
+	// taken, which is the slug the references were rewritten from.
+	RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (renamed *models.Tag, previousSlug string, err error)
 
 	// DeleteAtomic re-checks usage, strips JSONB references (when
 	// force=true), and deletes the tags row — all under a single
@@ -1020,17 +1028,62 @@ type SupplyLinkRegistry interface {
 	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
-// SavedViewRegistry stores the saved views of one group. A user registry
-// sees the views its user created and every view shared with the group; Get,
-// Update and Delete answer ErrNotFound for another member's personal view, so
-// a view a member cannot see is indistinguishable from one that does not
-// exist. Who may change a view they can see is decided by the service. A
-// service registry sees every row of every group.
+// SavedViewTally counts the views of one group. CreateChecked and UpdateFunc
+// take it under the group's write lock, so a limit checked against it holds
+// when the write lands.
+type SavedViewTally struct {
+	// Own counts the views the registry's user created in the group.
+	Own int
+	// Shared counts the views shared with the group.
+	Shared int
+}
+
+// SavedViewPlacementPatch changes where a member shows a view. A nil field
+// keeps the stored value, or false when the member has no placement yet.
+type SavedViewPlacementPatch struct {
+	ShowInSidebar   *bool
+	ShowOnDashboard *bool
+}
+
+// SavedViewRegistry stores the saved views of one group and where each
+// member shows them. A user registry sees the views its user created and
+// every view shared with the group; Get, Update and Delete answer
+// ErrNotFound for another member's personal view, so a view a member cannot
+// see is indistinguishable from one that does not exist. Who may change a
+// view they can see is decided by the service. A service registry sees every
+// row of every group.
 type SavedViewRegistry interface {
-	// Create stores a view after every view of the group: its Position is
-	// one past the highest position in the group, whatever the caller set.
+	// Create stores a view after every view of the group: its SortOrder is
+	// one past the highest in the group, whatever the caller set. Update
+	// keeps the stored SortOrder; Reorder is the only way to change it.
 	// Get, List, Update, Delete and Count follow the visibility rule above.
+	// Deleting a view deletes its placements.
 	Registry[models.SavedView]
+
+	// CreateChecked is Create under the group's write lock, for a user
+	// registry. check gets the tally taken under that lock; an error from
+	// it is returned and nothing is stored. When placement is not nil it is
+	// stored as the user's placement of the new view in the same
+	// transaction.
+	CreateChecked(ctx context.Context, view models.SavedView, placement *SavedViewPlacementPatch, check func(SavedViewTally) error) (*models.SavedView, error)
+
+	// UpdateFunc reads the visible view id under the group's write lock and
+	// writes back what mutate leaves of it. mutate also gets the tally taken
+	// under the lock; an error from it is returned and nothing is written.
+	// The id, tenant, group, creator, SortOrder and CreatedAt are kept
+	// whatever mutate does. When the view stops being shared, the
+	// placements other members had for it are deleted.
+	UpdateFunc(ctx context.Context, id string, mutate func(view *models.SavedView, tally SavedViewTally) error) (*models.SavedView, error)
+
+	// Placements returns the placements of the user registry's user for the
+	// views they see, keyed by view ID. A view without an entry is shown
+	// nowhere.
+	Placements(ctx context.Context) (map[string]models.SavedViewPlacement, error)
+
+	// SetPlacement changes where the user registry's user shows a view they
+	// see and returns the stored placement. An unknown or invisible view
+	// fails with ErrNotFound.
+	SetPlacement(ctx context.Context, viewID string, patch SavedViewPlacementPatch) (*models.SavedViewPlacement, error)
 
 	// Reorder gives the views named in ids, which must be visible and
 	// distinct, the positions they hold now, sorted and handed out in the
@@ -1044,7 +1097,7 @@ type SavedViewRegistry interface {
 	// the personal views of other members, and stores the query it returns
 	// when changed is true. It returns how many views changed. It is meant
 	// for changes that every reference has to follow, such as a tag slug
-	// rename, and runs in one transaction.
+	// rename, and runs in one transaction under the group's write lock.
 	RewriteQueries(ctx context.Context, rewrite func(view models.SavedView) (query string, changed bool)) (int, error)
 }
 

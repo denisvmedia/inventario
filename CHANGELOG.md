@@ -35,7 +35,9 @@ the section matching the tag and publishes it as the GitHub Release body. See
   view tells when the list no longer matches it and offers **Save changes**
   and **Revert to saved**; a view naming a deleted area or tag still opens and
   says what no longer exists. Views are personal unless shared with the group
-  (User role or higher), and sharing a view grants no access to items. Warranty
+  (User role or higher), and sharing a view grants no access to items. Each
+  member chooses which views, their own or shared, show in their sidebar and on
+  their Dashboard. Warranty
   filters stay relative to the day the view is opened. The Dashboard suggests a
   few views to start with, and **Saved views** (`/g/:slug/views`) lists, edits,
   reorders and deletes them. New endpoints: `/g/{slug}/saved-views` and

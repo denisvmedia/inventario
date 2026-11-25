@@ -122,8 +122,11 @@ var purgeOrder = []func(t store.TableNames) string{
 	// by now; the tags table itself is plain (tenant_id + group_id).
 	func(t store.TableNames) string { return string(t.Tags()) },
 
-	// Saved views. group_id -> location_groups and created_by_user_id ->
-	// users are NO ACTION; no incoming FK.
+	// Saved view placements, then the views. group_id -> location_groups
+	// and the user columns -> users are NO ACTION; placements also go with
+	// their view (ON DELETE CASCADE), but are cleared first so the order
+	// does not rest on the cascade.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
 	func(t store.TableNames) string { return string(t.SavedViews()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->

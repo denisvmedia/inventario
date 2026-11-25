@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
+	"sync/atomic"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -195,8 +197,8 @@ func TestSavedViewService_Update_ReplacesTheQuery(t *testing.T) {
 	c.Assert(updated.View.Query, qt.Equals, "lent_out=true&sort=-registered_date")
 	c.Assert(updated.View.Layout, qt.Equals, models.SavedViewLayoutGrid)
 	c.Assert(updated.View.Icon, qt.Equals, models.SavedViewIconStar)
-	c.Assert(updated.View.ShowOnDashboard, qt.IsTrue)
-	c.Assert(updated.View.ShowInSidebar, qt.IsFalse)
+	c.Assert(updated.ShowOnDashboard, qt.IsTrue)
+	c.Assert(updated.ShowInSidebar, qt.IsFalse)
 	c.Assert(updated.View.Name, qt.Equals, "View")
 
 	_, err = f.svc.Update(ctx, alice, created.View.ID, services.SavedViewPatch{Query: new("lent_out=false")})
@@ -212,15 +214,16 @@ func TestSavedViewService_StoredQueryThatNoLongerParses(t *testing.T) {
 	f := newSavedViewFixture()
 	ctx := savedViewCtx("alice")
 	reg := f.factory.SavedViewRegistryFactory.MustCreateUserRegistry(ctx)
-	broken, err := reg.Create(ctx, models.SavedView{
+	pinned := registry.SavedViewPlacementPatch{ShowInSidebar: new(true)}
+	broken, err := reg.CreateChecked(ctx, models.SavedView{
 		Name: "Broken", Icon: models.SavedViewIconBookmark, Entity: models.SavedViewEntityCommodities,
-		Query: "warranty_expires_before=2026-01-01", QueryVersion: models.SavedViewQueryVersion, ShowInSidebar: true,
-	})
+		Query: "warranty_expires_before=2026-01-01", QueryVersion: models.SavedViewQueryVersion,
+	}, &pinned, nil)
 	c.Assert(err, qt.IsNil)
-	future, err := reg.Create(ctx, models.SavedView{
+	future, err := reg.CreateChecked(ctx, models.SavedView{
 		Name: "Future", Icon: models.SavedViewIconBookmark, Entity: models.SavedViewEntityCommodities,
-		Query: "status=in_use", QueryVersion: models.SavedViewQueryVersion + 1, ShowInSidebar: true,
-	})
+		Query: "status=in_use", QueryVersion: models.SavedViewQueryVersion + 1,
+	}, &pinned, nil)
 	c.Assert(err, qt.IsNil)
 
 	entries, err := f.svc.List(ctx, actor("alice", models.GroupRoleUser))
@@ -260,8 +263,9 @@ func seedSavedViewCommodity(c *qt.C, f *savedViewFixture, ctx context.Context, n
 	c.Assert(err, qt.IsNil)
 }
 
-// The sidebar count runs the stored query through the list path, so it is the
-// total the items list reports for the same query string.
+// The counts use the filter of the list path, so each is the total the items
+// list reports for the same query string. They cover the views the member
+// shows in the sidebar or on the dashboard, and only those.
 func TestSavedViewService_CountsMatchTheList(t *testing.T) {
 	c := qt.New(t)
 	f := newSavedViewFixture()
@@ -275,15 +279,22 @@ func TestSavedViewService_CountsMatchTheList(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	activeFragile, err := f.svc.Create(ctx, alice, viewInput("Active fragile", "tags=fragile&include_inactive=false", false))
 	c.Assert(err, qt.IsNil)
-	hidden, err := f.svc.Create(ctx, alice, services.SavedViewInput{Name: "Not in sidebar", Query: ""})
+	dashboard, err := f.svc.Create(ctx, alice, services.SavedViewInput{Name: "On the dashboard", Query: "", ShowOnDashboard: true})
+	c.Assert(err, qt.IsNil)
+	hidden, err := f.svc.Create(ctx, alice, services.SavedViewInput{Name: "Shown nowhere", Query: ""})
+	c.Assert(err, qt.IsNil)
+	// Bob shares a view and shows it in his sidebar; Alice has not placed it.
+	bobShared, err := f.svc.Create(savedViewCtx("bob"), actor("bob", models.GroupRoleUser), viewInput("Bob shared", "tags=fragile", true))
 	c.Assert(err, qt.IsNil)
 
 	set, err := f.factory.CreateUserRegistrySet(ctx)
 	c.Assert(err, qt.IsNil)
 	counts, err := f.svc.Counts(ctx, set)
 	c.Assert(err, qt.IsNil)
-	c.Assert(counts, qt.DeepEquals, map[string]int{fragile.View.ID: 2, activeFragile.View.ID: 1})
+	c.Assert(counts, qt.DeepEquals, map[string]int{fragile.View.ID: 2, activeFragile.View.ID: 1, dashboard.View.ID: 3})
 	_, counted := counts[hidden.View.ID]
+	c.Assert(counted, qt.IsFalse)
+	_, counted = counts[bobShared.View.ID]
 	c.Assert(counted, qt.IsFalse)
 
 	for id, want := range counts {
@@ -348,4 +359,146 @@ func TestSavedViewService_Reorder(t *testing.T) {
 	c.Assert(entries, qt.HasLen, 2)
 	c.Assert(entries[0].View.Name, qt.Equals, "Second")
 	c.Assert(entries[1].View.Name, qt.Equals, "First")
+}
+
+// Two renames of one tag, a to b then b to c, whose view rewrites run in the
+// other order: each rewrite renames to the slug the tag has when it runs, so
+// the views end on c.
+func TestSavedViewService_RenameTag_FollowsTheTagsCurrentSlug(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	ctx := savedViewCtx("alice")
+	view, err := f.svc.Create(ctx, actor("alice", models.GroupRoleUser), viewInput("A", "tags=a", false))
+	c.Assert(err, qt.IsNil)
+	tagIsNow := func(slug string) func(context.Context) (string, error) {
+		return func(context.Context) (string, error) { return slug, nil }
+	}
+
+	// The second rename (b to c) rewrites first; no view names b yet.
+	n, err := f.svc.RenameTag(ctx, "b", tagIsNow("c"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 0)
+	// The first rename (a to b) rewrites last, when the tag is already c.
+	n, err = f.svc.RenameTag(ctx, "a", tagIsNow("c"))
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+
+	got, err := f.svc.Get(ctx, actor("alice", models.GroupRoleUser), view.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.View.Query, qt.Equals, "tags=c")
+}
+
+// Concurrent renames of one tag from the same starting slug: the second
+// renames from the slug the first left, read under the rename's lock, so the
+// views follow the tag to its final slug.
+func TestTagService_RenameTag_ConcurrentRenamesKeepViewsOnTheTag(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	ctx := savedViewCtx("alice")
+	tags := services.NewTagService(f.factory)
+	created, err := tags.EnsureTagsExist(ctx, models.TagKindCommodity, []string{"red"})
+	c.Assert(err, qt.IsNil)
+	tag := created["red"]
+	view, err := f.svc.Create(ctx, actor("alice", models.GroupRoleUser), viewInput("Red", "tags=red", false))
+	c.Assert(err, qt.IsNil)
+
+	var wg sync.WaitGroup
+	for _, slug := range []string{"crimson", "scarlet"} {
+		wg.Go(func() {
+			_, err := tags.RenameTag(ctx, tag.ID, slug, slug, tag.Color)
+			c.Check(err, qt.IsNil)
+		})
+	}
+	wg.Wait()
+
+	final, err := f.factory.TagRegistryFactory.MustCreateUserRegistry(ctx).Get(ctx, tag.ID)
+	c.Assert(err, qt.IsNil)
+	got, err := f.svc.Get(ctx, actor("alice", models.GroupRoleUser), view.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.View.Query, qt.Equals, "tags="+final.Slug)
+}
+
+// Where a view shows is each member's own: sharing a view places it for
+// nobody else, any member who sees a shared view may pin and unpin it, and an
+// admin unpinning it changes only the admin's sidebar.
+func TestSavedViewService_PlacementIsPerMember(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	aliceCtx, bobCtx, carolCtx := savedViewCtx("alice"), savedViewCtx("bob"), savedViewCtx("carol")
+	alice := actor("alice", models.GroupRoleUser)
+	bob := actor("bob", models.GroupRoleViewer)
+	carol := actor("carol", models.GroupRoleAdmin)
+
+	shared, err := f.svc.Create(aliceCtx, alice, services.SavedViewInput{Name: "Team", Shared: true, ShowInSidebar: true, ShowOnDashboard: true})
+	c.Assert(err, qt.IsNil)
+	c.Assert(shared.ShowInSidebar, qt.IsTrue)
+	c.Assert(shared.ShowOnDashboard, qt.IsTrue)
+
+	seen, err := f.svc.Get(bobCtx, bob, shared.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(seen.ShowInSidebar, qt.IsFalse)
+	c.Assert(seen.ShowOnDashboard, qt.IsFalse)
+
+	// A viewer who may not edit the view still places it for themselves.
+	pinned, err := f.svc.Update(bobCtx, bob, shared.View.ID, services.SavedViewPatch{ShowInSidebar: new(true)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(pinned.ShowInSidebar, qt.IsTrue)
+	c.Assert(pinned.CanEdit, qt.IsFalse)
+	// A change to the view itself in the same request is still refused, and
+	// the placement in it is not applied.
+	_, err = f.svc.Update(bobCtx, bob, shared.View.ID, services.SavedViewPatch{Name: new("Mine"), ShowOnDashboard: new(true)})
+	c.Assert(err, qt.ErrorIs, services.ErrSavedViewForbidden)
+	seen, err = f.svc.Get(bobCtx, bob, shared.View.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(seen.ShowOnDashboard, qt.IsFalse)
+
+	// The admin pins and unpins it for the admin alone.
+	_, err = f.svc.Update(carolCtx, carol, shared.View.ID, services.SavedViewPatch{ShowInSidebar: new(true)})
+	c.Assert(err, qt.IsNil)
+	_, err = f.svc.Update(carolCtx, carol, shared.View.ID, services.SavedViewPatch{ShowInSidebar: new(false)})
+	c.Assert(err, qt.IsNil)
+	for _, member := range []struct {
+		ctx   context.Context
+		actor services.SavedViewActor
+		want  bool
+	}{{aliceCtx, alice, true}, {bobCtx, bob, true}, {carolCtx, carol, false}} {
+		got, err := f.svc.Get(member.ctx, member.actor, shared.View.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.ShowInSidebar, qt.Equals, member.want, qt.Commentf("member %s", member.actor.UserID))
+	}
+
+	// Another member's personal view cannot be placed: it does not exist for
+	// them.
+	personal, err := f.svc.Create(aliceCtx, alice, viewInput("Mine", "", false))
+	c.Assert(err, qt.IsNil)
+	_, err = f.svc.Update(bobCtx, bob, personal.View.ID, services.SavedViewPatch{ShowInSidebar: new(true)})
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// Five members race for the last shared slot: the limit is checked under the
+// registry's write lock, so exactly one of them shares a view.
+func TestSavedViewService_SharedLimitHoldsUnderConcurrency(t *testing.T) {
+	c := qt.New(t)
+	f := newSavedViewFixture()
+	aliceCtx := savedViewCtx("alice")
+	alice := actor("alice", models.GroupRoleUser)
+	for i := range models.MaxSharedSavedViews - 1 {
+		_, err := f.svc.Create(aliceCtx, alice, viewInput(fmt.Sprintf("View %d", i), "", true))
+		c.Assert(err, qt.IsNil)
+	}
+	var shared atomic.Int32
+	var wg sync.WaitGroup
+	for i := range 5 {
+		wg.Go(func() {
+			userID := fmt.Sprintf("member-%d", i)
+			_, err := f.svc.Create(savedViewCtx(userID), actor(userID, models.GroupRoleUser), viewInput("Last slot", "", true))
+			if err == nil {
+				shared.Add(1)
+				return
+			}
+			c.Check(err, qt.ErrorIs, services.ErrSavedViewLimitReached)
+		})
+	}
+	wg.Wait()
+	c.Assert(shared.Load(), qt.Equals, int32(1))
 }

@@ -234,7 +234,8 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Saved views: group_id -> location_groups is NO ACTION, like the
-		// postgres purger's explicit DELETE.
+		// postgres purger's explicit DELETE. Deleting a view deletes the
+		// placements every member had for it.
 		{"saved_views", func() error {
 			reg := r.savedViews.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)

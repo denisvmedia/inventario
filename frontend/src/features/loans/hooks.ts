@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { commodityKeys } from "@/features/commodities/keys"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { savedViewKeys } from "@/features/saved-views/keys"
 
 import {
   deleteLoan,
@@ -71,7 +72,13 @@ function useInvalidate() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   return {
-    all: () => qc.invalidateQueries({ queryKey: loanKeys.group(slug) }),
+    // A loan that starts, ends or is deleted moves the item counts of the
+    // saved views that filter on lent_out, so those refetch with the loans.
+    all: () =>
+      Promise.all([
+        qc.invalidateQueries({ queryKey: loanKeys.group(slug) }),
+        qc.invalidateQueries({ queryKey: savedViewKeys.counts(slug) }),
+      ]),
     forCommodity: (commodityID: string) =>
       qc.invalidateQueries({ queryKey: loanKeys.byCommodity(slug, commodityID) }),
     // Loan mutations emit `lent_out` / `returned` / `loan_updated`

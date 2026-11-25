@@ -187,6 +187,11 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.TagRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Tag])
 		}},
+		// Saved views; deleting a view deletes its placements.
+		{"saved_views", func() error {
+			reg := fs.SavedViewRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.SavedView])
+		}},
 		// Per-user/per-group notification overrides. The only delete handle is
 		// DeleteByGroup(tenant, group), so fan out across the tenant's groups
 		// (mirrors the postgres per-tenant DELETE).

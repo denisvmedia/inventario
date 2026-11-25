@@ -732,8 +732,9 @@ func (r *TagRegistry) acquireSlugLocks(ctx context.Context, tx *sqlx.Tx, kind mo
 // (old + new, sorted) → tag-row FOR UPDATE → rewrite + update. The
 // peek-then-slug-lock split is what avoids deadlocking against
 // concurrent ensureTagRowsInTx (which takes slug-lock then row-lock).
-func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, error) {
+func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug string, newColor models.TagColor) (*models.Tag, string, error) {
 	var final *models.Tag
+	var previousSlug string
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		if err := acquireTagAdvisoryLock(ctx, tx, r.groupID, "id:"+id); err != nil {
@@ -763,6 +764,7 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 			return errxtrace.Wrap("failed to look up tag", err)
 		}
 
+		previousSlug = current.Slug
 		updated := current
 		updated.UpdatedAt = time.Now()
 		if strings.TrimSpace(newLabel) != "" {
@@ -791,9 +793,9 @@ func (r *TagRegistry) RenameAtomic(ctx context.Context, id, newLabel, newSlug st
 		return nil
 	})
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to rename tag atomically", err)
+		return nil, "", errxtrace.Wrap("failed to rename tag atomically", err)
 	}
-	return final, nil
+	return final, previousSlug, nil
 }
 
 // DeleteAtomic checks usage, strips JSONB references (when force=true),

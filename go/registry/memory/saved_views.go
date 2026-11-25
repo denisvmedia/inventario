@@ -8,8 +8,10 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	"github.com/google/uuid"
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
@@ -20,20 +22,25 @@ import (
 // context.
 type SavedViewRegistryFactory struct {
 	base *Registry[models.SavedView, *models.SavedView]
-	// writeLock serializes the read-modify-write sequences (position on
-	// create, reorder, rewrite) that the base registry's lock does not cover
-	// as one step.
+	// writeLock serializes the read-modify-write sequences (position and
+	// limits on create, update, reorder, rewrite) that the base registry's
+	// lock does not cover as one step. It also guards placements.
 	writeLock *sync.Mutex
+	// placements holds, per view ID and then per user ID, where that member
+	// shows the view.
+	placements map[string]map[string]models.SavedViewPlacement
 }
 
 // SavedViewRegistry is the in-memory registry of saved views. A user
 // registry applies the visibility rule of registry.SavedViewRegistry; a
 // service registry (userID empty) sees every row.
 type SavedViewRegistry struct {
-	base      *Registry[models.SavedView, *models.SavedView]
-	writeLock *sync.Mutex
-	userID    string
-	groupID   string
+	base       *Registry[models.SavedView, *models.SavedView]
+	writeLock  *sync.Mutex
+	placements map[string]map[string]models.SavedViewPlacement
+	userID     string
+	tenantID   string
+	groupID    string
 }
 
 var (
@@ -43,8 +50,9 @@ var (
 
 func NewSavedViewRegistryFactory() *SavedViewRegistryFactory {
 	return &SavedViewRegistryFactory{
-		base:      NewRegistry[models.SavedView, *models.SavedView](),
-		writeLock: &sync.Mutex{},
+		base:       NewRegistry[models.SavedView, *models.SavedView](),
+		writeLock:  &sync.Mutex{},
+		placements: make(map[string]map[string]models.SavedViewPlacement),
 	}
 }
 
@@ -65,9 +73,11 @@ func (f *SavedViewRegistryFactory) CreateUserRegistry(ctx context.Context) (regi
 			userID:  user.ID,
 			groupID: groupID,
 		},
-		writeLock: f.writeLock,
-		userID:    user.ID,
-		groupID:   groupID,
+		writeLock:  f.writeLock,
+		placements: f.placements,
+		userID:     user.ID,
+		tenantID:   user.TenantID,
+		groupID:    groupID,
 	}, nil
 }
 
@@ -77,8 +87,28 @@ func (f *SavedViewRegistryFactory) CreateServiceRegistry() registry.SavedViewReg
 			items: f.base.items,
 			lock:  f.base.lock,
 		},
-		writeLock: f.writeLock,
+		writeLock:  f.writeLock,
+		placements: f.placements,
 	}
+}
+
+// purgeUserPlacements deletes every placement userID has in tenantID, for
+// the user purger.
+func (f *SavedViewRegistryFactory) purgeUserPlacements(tenantID, userID string) {
+	f.writeLock.Lock()
+	defer f.writeLock.Unlock()
+	for viewID, byUser := range f.placements {
+		if p, ok := byUser[userID]; ok && p.TenantID == tenantID {
+			delete(byUser, userID)
+		}
+		if len(byUser) == 0 {
+			delete(f.placements, viewID)
+		}
+	}
+}
+
+func errNeedsUser() error {
+	return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "user"))
 }
 
 func (r *SavedViewRegistry) visible(v *models.SavedView) bool {
@@ -93,7 +123,10 @@ func (r *SavedViewRegistry) groupViews(ctx context.Context) ([]*models.SavedView
 func (r *SavedViewRegistry) Create(ctx context.Context, view models.SavedView) (*models.SavedView, error) {
 	r.writeLock.Lock()
 	defer r.writeLock.Unlock()
+	return r.create(ctx, view)
+}
 
+func (r *SavedViewRegistry) create(ctx context.Context, view models.SavedView) (*models.SavedView, error) {
 	all, err := r.groupViews(ctx)
 	if err != nil {
 		return nil, err
@@ -111,6 +144,55 @@ func (r *SavedViewRegistry) Create(ctx context.Context, view models.SavedView) (
 	created, err := r.base.Create(ctx, view)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create saved view", err)
+	}
+	return created, nil
+}
+
+// tally counts the views of the registry's group; writeLock must be held.
+func (r *SavedViewRegistry) tally(ctx context.Context) (registry.SavedViewTally, error) {
+	all, err := r.groupViews(ctx)
+	if err != nil {
+		return registry.SavedViewTally{}, err
+	}
+	var t registry.SavedViewTally
+	for _, v := range all {
+		if v.CreatedByUserID == r.userID {
+			t.Own++
+		}
+		if v.Shared {
+			t.Shared++
+		}
+	}
+	return t, nil
+}
+
+func (r *SavedViewRegistry) CreateChecked(
+	ctx context.Context,
+	view models.SavedView,
+	placement *registry.SavedViewPlacementPatch,
+	check func(registry.SavedViewTally) error,
+) (*models.SavedView, error) {
+	if r.userID == "" {
+		return nil, errNeedsUser()
+	}
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+
+	tally, err := r.tally(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if check != nil {
+		if err := check(tally); err != nil {
+			return nil, err
+		}
+	}
+	created, err := r.create(ctx, view)
+	if err != nil {
+		return nil, err
+	}
+	if placement != nil {
+		r.storePlacement(created.ID, *placement)
 	}
 	return created, nil
 }
@@ -168,12 +250,15 @@ func (r *SavedViewRegistry) Update(ctx context.Context, view models.SavedView) (
 	return r.update(ctx, view)
 }
 
+// update writes view over the stored one, keeping the fields the registry
+// manages; writeLock must be held.
 func (r *SavedViewRegistry) update(ctx context.Context, view models.SavedView) (*models.SavedView, error) {
 	existing, err := r.Get(ctx, view.ID)
 	if err != nil {
 		return nil, err
 	}
 	view.TenantID = existing.TenantID
+	view.SortOrder = existing.SortOrder
 	view.CreatedAt = existing.CreatedAt
 	view.UpdatedAt = time.Now()
 	updated, err := r.base.Update(ctx, view)
@@ -183,11 +268,126 @@ func (r *SavedViewRegistry) update(ctx context.Context, view models.SavedView) (
 	return updated, nil
 }
 
+func (r *SavedViewRegistry) UpdateFunc(
+	ctx context.Context,
+	id string,
+	mutate func(view *models.SavedView, tally registry.SavedViewTally) error,
+) (*models.SavedView, error) {
+	if r.userID == "" {
+		return nil, errNeedsUser()
+	}
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+
+	existing, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	tally, err := r.tally(ctx)
+	if err != nil {
+		return nil, err
+	}
+	next := *existing
+	if err := mutate(&next, tally); err != nil {
+		return nil, err
+	}
+	next.EntityID = existing.EntityID
+	next.GroupID = existing.GroupID
+	next.CreatedByUserID = existing.CreatedByUserID
+	updated, err := r.update(ctx, next)
+	if err != nil {
+		return nil, err
+	}
+	if existing.Shared && !updated.Shared {
+		for userID := range r.placements[id] {
+			if userID != updated.CreatedByUserID {
+				delete(r.placements[id], userID)
+			}
+		}
+	}
+	return updated, nil
+}
+
+// storePlacement writes the registry user's placement of viewID; writeLock
+// must be held.
+func (r *SavedViewRegistry) storePlacement(viewID string, patch registry.SavedViewPlacementPatch) models.SavedViewPlacement {
+	now := time.Now()
+	byUser := r.placements[viewID]
+	if byUser == nil {
+		byUser = make(map[string]models.SavedViewPlacement)
+		r.placements[viewID] = byUser
+	}
+	p, ok := byUser[r.userID]
+	if !ok {
+		p = models.SavedViewPlacement{
+			TenantAwareEntityID: models.TenantAwareEntityID{
+				EntityID: models.EntityID{ID: uuid.New().String(), UUID: uuid.New().String()},
+				TenantID: r.tenantID,
+			},
+			GroupID:     r.groupID,
+			SavedViewID: viewID,
+			UserID:      r.userID,
+			CreatedAt:   now,
+		}
+	}
+	if patch.ShowInSidebar != nil {
+		p.ShowInSidebar = *patch.ShowInSidebar
+	}
+	if patch.ShowOnDashboard != nil {
+		p.ShowOnDashboard = *patch.ShowOnDashboard
+	}
+	p.UpdatedAt = now
+	byUser[r.userID] = p
+	return p
+}
+
+func (r *SavedViewRegistry) Placements(ctx context.Context) (map[string]models.SavedViewPlacement, error) {
+	if r.userID == "" {
+		return nil, errNeedsUser()
+	}
+	views, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+	out := make(map[string]models.SavedViewPlacement)
+	for _, v := range views {
+		if p, ok := r.placements[v.ID][r.userID]; ok {
+			out[v.ID] = p
+		}
+	}
+	return out, nil
+}
+
+func (r *SavedViewRegistry) SetPlacement(
+	ctx context.Context,
+	viewID string,
+	patch registry.SavedViewPlacementPatch,
+) (*models.SavedViewPlacement, error) {
+	if r.userID == "" {
+		return nil, errNeedsUser()
+	}
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
+	if _, err := r.Get(ctx, viewID); err != nil {
+		return nil, err
+	}
+	return new(r.storePlacement(viewID, patch)), nil
+}
+
+// Delete removes a visible view and every placement of it.
 func (r *SavedViewRegistry) Delete(ctx context.Context, id string) error {
+	r.writeLock.Lock()
+	defer r.writeLock.Unlock()
 	if _, err := r.Get(ctx, id); err != nil {
 		return err
 	}
-	return r.base.Delete(ctx, id)
+	if err := r.base.Delete(ctx, id); err != nil {
+		return err
+	}
+	delete(r.placements, id)
+	return nil
 }
 
 func (r *SavedViewRegistry) Reorder(ctx context.Context, ids []string) error {
@@ -210,13 +410,17 @@ func (r *SavedViewRegistry) Reorder(ctx context.Context, ids []string) error {
 		positions = append(positions, v.SortOrder)
 	}
 	slices.Sort(positions)
+	now := time.Now()
 	for i, v := range views {
 		if v.SortOrder == positions[i] {
 			continue
 		}
+		// The base registry writes the new position as given; update would
+		// keep the stored one.
 		v.SortOrder = positions[i]
-		if _, err := r.update(ctx, *v); err != nil {
-			return err
+		v.UpdatedAt = now
+		if _, err := r.base.Update(ctx, *v); err != nil {
+			return errxtrace.Wrap("failed to update saved view position", err)
 		}
 	}
 	return nil

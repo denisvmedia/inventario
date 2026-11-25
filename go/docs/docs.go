@@ -7010,7 +7010,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.",
+                "description": "Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.\nshow_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7063,7 +7063,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/saved-views/counts": {
             "get": {
-                "description": "Per saved view ID, the number of items its query selects, for the views the member sees with show_in_sidebar set. Each count runs the query as GET /commodities does. A view whose query cannot run (query_error) has no entry.",
+                "description": "Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.\nEach count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7240,7 +7240,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.\nThe member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.",
+                "description": "Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.\nThe member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.\nshow_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -14108,6 +14108,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "show_in_sidebar": {
+                    "description": "ShowInSidebar and ShowOnDashboard are where the requesting member\nshows the view. Each member places the views they see on their own.",
                     "type": "boolean"
                 },
                 "show_on_dashboard": {

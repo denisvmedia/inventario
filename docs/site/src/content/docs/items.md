@@ -483,6 +483,10 @@ lists. A view on the Dashboard gets a card with that number and its first five
 items. The number is counted the same way as the list, so the sidebar, the
 Dashboard and the opened view agree.
 
+Where a view shows is your own choice. Putting a view in your sidebar or on
+your Dashboard, or taking it off, changes only what you see: every member
+places the views they can see for themselves.
+
 Dates in a view stay relative: a view of **Expiring Soon** warranties shows the
 warranties that expire soon on the day you open it, not the ones that did when
 you saved it.
@@ -500,10 +504,12 @@ longer exists. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in
-the sidebar, opens the list of your views. There you can see each view's
-filters and item count, pin it to the sidebar or the Dashboard, rename it or
-change its icon (**Edit**), move it up or down, and delete it. To change a
-view's filters, open it, adjust the list, and choose **Save changes**.
+the sidebar, opens the **Saved views** page with every view you can see: your
+own and the shared ones. Each row shows the view's filters, and the item count
+of a view in your sidebar or on your Dashboard. You can put any of them in
+your sidebar or on your Dashboard. A view you can change also lets you rename
+it or change its icon (**Edit**), move it up or down, and delete it. To change
+a view's filters, open it, adjust the list, and choose **Save changes**.
 
 Until you keep views of your own, the Dashboard offers a few to start with:
 **Expiring warranties**, **Lent out**, **Without a location** and
@@ -513,11 +519,17 @@ hides the suggestions.
 #### Personal and shared views
 
 A view is **personal**: only you see it. Tick **Share with the group** when you
-save or edit it to show it to everyone in the group. Sharing a view shares the
-filter, not access: each member sees the items they can see. Viewers can keep
-personal views; sharing needs the **User** role or higher. You can change the
-views you created, and administrators and owners can change or delete any
-shared view.
+save or edit it to show it to everyone in the group. Other members find a
+shared view in the **Views** menu and on the **Saved views** page; it shows in
+their sidebar or on their Dashboard only after they put it there. Sharing a
+view shares the filter, not access: each member sees the items they can see.
+Viewers can keep personal views; sharing needs the **User** role or higher.
+
+You can change and delete your personal views. You can change a shared view
+you created while you have the **User** role or higher; with the **Viewer**
+role you can still delete it. Administrators and owners can change or delete
+any shared view. When a view stops being shared, it leaves the sidebar and the
+Dashboard of the other members.
 
 You can keep up to 50 views of your own in a group, and a group can have up to
 50 shared views.

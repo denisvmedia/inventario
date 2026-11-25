@@ -7997,6 +7997,7 @@ export type paths = {
         /**
          * Create a saved view
          * @description Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.
+         *     show_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.
          */
         post: {
             parameters: {
@@ -8059,7 +8060,8 @@ export type paths = {
         };
         /**
          * Count the items of saved views
-         * @description Per saved view ID, the number of items its query selects, for the views the member sees with show_in_sidebar set. Each count runs the query as GET /commodities does. A view whose query cannot run (query_error) has no entry.
+         * @description Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.
+         *     Each count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.
          */
         get: {
             parameters: {
@@ -8262,6 +8264,7 @@ export type paths = {
          * Update a saved view
          * @description Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.
          *     The member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.
+         *     show_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.
          */
         patch: {
             parameters: {
@@ -13301,6 +13304,10 @@ export type components = {
             /** @example 1 */
             query_version?: number;
             shared?: boolean;
+            /**
+             * @description ShowInSidebar and ShowOnDashboard are where the requesting member
+             *     shows the view. Each member places the views they see on their own.
+             */
             show_in_sidebar?: boolean;
             show_on_dashboard?: boolean;
             /** @example 0 */

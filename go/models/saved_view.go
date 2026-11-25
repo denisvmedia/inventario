@@ -185,20 +185,15 @@ type SavedView struct {
 	//ptah:schema:field name="layout" type="TEXT" not_null="true" default=""
 	Layout SavedViewLayout `json:"layout" db:"layout"`
 
-	// Shared makes the view visible to every member of the group.
+	// Shared makes the view visible to every member of the group. Where a
+	// member shows a view (sidebar, dashboard) is their own choice, kept in
+	// SavedViewPlacement, so sharing puts the view in nobody else's sidebar.
 	//ptah:schema:field name="shared" type="BOOLEAN" not_null="true" default="false"
 	Shared bool `json:"shared" db:"shared"`
 
-	// ShowInSidebar lists the view in the sidebar with its item count.
-	//ptah:schema:field name="show_in_sidebar" type="BOOLEAN" not_null="true" default="true"
-	ShowInSidebar bool `json:"show_in_sidebar" db:"show_in_sidebar"`
-
-	// ShowOnDashboard shows the view on the dashboard with its first items.
-	//ptah:schema:field name="show_on_dashboard" type="BOOLEAN" not_null="true" default="false"
-	ShowOnDashboard bool `json:"show_on_dashboard" db:"show_on_dashboard"`
-
 	// SortOrder orders the views: ascending, then by name. A new view goes
-	// after every view of the group.
+	// after every view of the group. Only the registry changes it (on create
+	// and on reorder); an update keeps the stored value.
 	//ptah:schema:field name="sort_order" type="INTEGER" not_null="true" default="0"
 	SortOrder int `json:"sort_order" db:"sort_order"`
 
@@ -225,6 +220,81 @@ type SavedViewIndexes struct {
 	// Account deletion removes the views a user created.
 	//ptah:schema:index name="idx_saved_views_created_by" fields="created_by_user_id" table="saved_views"
 	_ int
+}
+
+var (
+	_ validation.Validatable            = (*SavedViewPlacement)(nil)
+	_ validation.ValidatableWithContext = (*SavedViewPlacement)(nil)
+)
+
+// SavedViewPlacement is where one member shows one saved view: in their
+// sidebar with its item count, on their dashboard with its first items, both
+// or neither. A view without a placement row for a member is shown nowhere
+// for them. Each member places the views they see, their own and shared
+// ones, so sharing or unpinning a view changes nothing for anyone else.
+//
+//ptah:schema:rls:enable table="saved_view_placements" comment="Enable RLS for multi-tenant saved view placement isolation"
+//ptah:schema:rls:policy name="saved_view_placement_isolation" table="saved_view_placements" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures saved view placements can only be accessed and modified by their tenant and group with required contexts; the member filter is applied in application logic"
+//ptah:schema:rls:policy name="saved_view_placement_background_worker_access" table="saved_view_placements" for="ALL" to="inventario_background_worker" using="true" with_check="true" comment="Allows background workers to access all saved view placements for purges"
+//ptah:schema:table name="saved_view_placements"
+type SavedViewPlacement struct {
+	//ptah:embedded mode="inline"
+	TenantAwareEntityID
+
+	//ptah:schema:field name="group_id" type="TEXT" not_null="true" foreign="location_groups(id)" foreign_key_name="fk_saved_view_placement_group"
+	GroupID string `json:"-" db:"group_id" userinput:"false"`
+
+	// SavedViewID is the view placed. Deleting the view deletes its
+	// placements.
+	//ptah:schema:field name="saved_view_id" type="TEXT" not_null="true" foreign="saved_views(id)" foreign_key_name="fk_saved_view_placement_view" on_delete="CASCADE"
+	SavedViewID string `json:"saved_view_id" db:"saved_view_id"`
+
+	// UserID is the member the placement belongs to.
+	//ptah:schema:field name="user_id" type="TEXT" not_null="true" foreign="users(id)" foreign_key_name="fk_saved_view_placement_user"
+	UserID string `json:"-" db:"user_id" userinput:"false"`
+
+	// ShowInSidebar lists the view in the member's sidebar with its count.
+	//ptah:schema:field name="show_in_sidebar" type="BOOLEAN" not_null="true" default="false"
+	ShowInSidebar bool `json:"show_in_sidebar" db:"show_in_sidebar"`
+
+	// ShowOnDashboard shows the view on the member's dashboard.
+	//ptah:schema:field name="show_on_dashboard" type="BOOLEAN" not_null="true" default="false"
+	ShowOnDashboard bool `json:"show_on_dashboard" db:"show_on_dashboard"`
+
+	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
+
+	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
+	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
+}
+
+// SavedViewPlacementIndexes defines the postgres indexes for
+// saved_view_placements.
+type SavedViewPlacementIndexes struct {
+	//ptah:schema:index name="idx_saved_view_placements_uuid" fields="uuid" unique="true" table="saved_view_placements"
+	_ int
+
+	// One placement per member and view; the upsert conflicts on it.
+	//ptah:schema:index name="idx_saved_view_placements_view_user" fields="saved_view_id,user_id" unique="true" table="saved_view_placements"
+	_ int
+
+	// Every read is "this member's placements in this group".
+	//ptah:schema:index name="idx_saved_view_placements_group_user" fields="tenant_id,group_id,user_id" table="saved_view_placements"
+	_ int
+
+	// Account deletion removes the placements of a user.
+	//ptah:schema:index name="idx_saved_view_placements_user" fields="user_id" table="saved_view_placements"
+	_ int
+}
+
+func (*SavedViewPlacement) Validate() error {
+	return ErrMustUseValidateWithContext
+}
+
+func (p *SavedViewPlacement) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, p,
+		validation.Field(&p.SavedViewID, validation.Required),
+	)
 }
 
 // VisibleTo reports whether the member userID sees the view: their own views

@@ -11,6 +11,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
+	"github.com/google/uuid"
 	"github.com/jmoiron/sqlx"
 
 	"go.5x5.cz/inventario/appctx"
@@ -98,14 +99,43 @@ func (r *SavedViewRegistry) visible(v *models.SavedView) bool {
 	return r.service || v.VisibleTo(r.createdByUserID)
 }
 
-// lockGroup serializes the writes that read positions of a group before
-// changing them. The lock is released at the end of the transaction.
+// lockSavedViewGroup serializes the writes of a group that read its views
+// before changing them: positions, the limits, the rewrite of queries. The
+// lock is released at the end of the transaction.
 func lockSavedViewGroup(ctx context.Context, tx *sqlx.Tx, groupID string) error {
 	_, err := tx.ExecContext(ctx, `SELECT pg_advisory_xact_lock(hashtext('saved_views'), hashtext($1))`, groupID)
 	if err != nil {
 		return errxtrace.Wrap("failed to acquire saved view advisory lock", err, errx.Attrs("group_id", groupID))
 	}
 	return nil
+}
+
+// nextSortOrder returns one past the highest position of the group.
+func (r *SavedViewRegistry) nextSortOrder(ctx context.Context, tx *sqlx.Tx, tenantID, groupID string) (int, error) {
+	var next int
+	query := fmt.Sprintf(
+		`SELECT COALESCE(MAX(sort_order) + 1, 0) FROM %s WHERE tenant_id = $1 AND group_id = $2`,
+		r.tableNames.SavedViews())
+	if err := tx.GetContext(ctx, &next, query, tenantID, groupID); err != nil {
+		return 0, errxtrace.Wrap("failed to read the next saved view position", err)
+	}
+	return next, nil
+}
+
+// tally counts the views of the registry's group for the limits.
+func (r *SavedViewRegistry) tally(ctx context.Context, tx *sqlx.Tx) (registry.SavedViewTally, error) {
+	var row struct {
+		Own    int `db:"own"`
+		Shared int `db:"shared"`
+	}
+	query := fmt.Sprintf(
+		`SELECT COUNT(*) FILTER (WHERE created_by_user_id = $3) AS own, COUNT(*) FILTER (WHERE shared) AS shared
+		 FROM %s WHERE tenant_id = $1 AND group_id = $2`,
+		r.tableNames.SavedViews())
+	if err := tx.GetContext(ctx, &row, query, r.tenantID, r.groupID, r.createdByUserID); err != nil {
+		return registry.SavedViewTally{}, errxtrace.Wrap("failed to count saved views", err)
+	}
+	return registry.SavedViewTally{Own: row.Own, Shared: row.Shared}, nil
 }
 
 func (r *SavedViewRegistry) Create(ctx context.Context, view models.SavedView) (*models.SavedView, error) {
@@ -116,18 +146,66 @@ func (r *SavedViewRegistry) Create(ctx context.Context, view models.SavedView) (
 		if err := lockSavedViewGroup(ctx, tx, v.GroupID); err != nil {
 			return err
 		}
-		query := fmt.Sprintf(
-			`SELECT COALESCE(MAX(sort_order) + 1, 0) FROM %s WHERE tenant_id = $1 AND group_id = $2`,
-			r.tableNames.SavedViews())
-		if err := tx.GetContext(ctx, &v.SortOrder, query, v.TenantID, v.GroupID); err != nil {
-			return errxtrace.Wrap("failed to read the next saved view position", err)
+		next, err := r.nextSortOrder(ctx, tx, v.TenantID, v.GroupID)
+		if err != nil {
+			return err
 		}
+		v.SortOrder = next
 		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create saved view", err)
 	}
 	return &created, nil
+}
+
+func (r *SavedViewRegistry) CreateChecked(
+	ctx context.Context,
+	view models.SavedView,
+	placement *registry.SavedViewPlacementPatch,
+	check func(registry.SavedViewTally) error,
+) (*models.SavedView, error) {
+	if r.service {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "user"))
+	}
+	now := time.Now()
+	view.ID = uuid.New().String()
+	view.UUID = uuid.New().String()
+	view.TenantID = r.tenantID
+	view.GroupID = r.groupID
+	view.CreatedByUserID = r.createdByUserID
+	view.CreatedAt = now
+	view.UpdatedAt = now
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := lockSavedViewGroup(ctx, tx, r.groupID); err != nil {
+			return err
+		}
+		tally, err := r.tally(ctx, tx)
+		if err != nil {
+			return err
+		}
+		if check != nil {
+			if err := check(tally); err != nil {
+				return err
+			}
+		}
+		if view.SortOrder, err = r.nextSortOrder(ctx, tx, r.tenantID, r.groupID); err != nil {
+			return err
+		}
+		if err := store.NewTxRegistry[models.SavedView](tx, r.tableNames.SavedViews()).Insert(ctx, view); err != nil {
+			return errxtrace.Wrap("failed to insert saved view", err)
+		}
+		if placement != nil {
+			if _, err := r.upsertPlacement(ctx, tx, view.ID, *placement); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create saved view", err)
+	}
+	return &view, nil
 }
 
 func (r *SavedViewRegistry) Get(ctx context.Context, id string) (*models.SavedView, error) {
@@ -178,6 +256,7 @@ func (r *SavedViewRegistry) Update(ctx context.Context, view models.SavedView) (
 			return registry.ErrNotFound
 		}
 		next.CreatedAt = existing.CreatedAt
+		next.SortOrder = existing.SortOrder
 		view = *next
 		return nil
 	})
@@ -185,6 +264,144 @@ func (r *SavedViewRegistry) Update(ctx context.Context, view models.SavedView) (
 		return nil, errxtrace.Wrap("failed to update saved view", err)
 	}
 	return &view, nil
+}
+
+func (r *SavedViewRegistry) UpdateFunc(
+	ctx context.Context,
+	id string,
+	mutate func(view *models.SavedView, tally registry.SavedViewTally) error,
+) (*models.SavedView, error) {
+	if r.service {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "user"))
+	}
+	var updated models.SavedView
+	cond, args := r.visibility(2)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := lockSavedViewGroup(ctx, tx, r.groupID); err != nil {
+			return err
+		}
+		var existing models.SavedView
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND %s FOR UPDATE`, r.tableNames.SavedViews(), cond)
+		if err := tx.GetContext(ctx, &existing, query, append([]any{id}, args...)...); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return registry.ErrNotFound
+			}
+			return errxtrace.Wrap("failed to read saved view", err)
+		}
+		tally, err := r.tally(ctx, tx)
+		if err != nil {
+			return err
+		}
+		next := existing
+		if err := mutate(&next, tally); err != nil {
+			return err
+		}
+		next.EntityID = existing.EntityID
+		next.TenantID = existing.TenantID
+		next.GroupID = existing.GroupID
+		next.CreatedByUserID = existing.CreatedByUserID
+		next.SortOrder = existing.SortOrder
+		next.CreatedAt = existing.CreatedAt
+		next.UpdatedAt = time.Now()
+		if err := store.NewTxRegistry[models.SavedView](tx, r.tableNames.SavedViews()).UpdateByField(ctx, store.Pair("id", id), next); err != nil {
+			return errxtrace.Wrap("failed to update saved view", err)
+		}
+		if existing.Shared && !next.Shared {
+			// A personal view is the creator's alone again: nobody else
+			// keeps it in their sidebar or on their dashboard.
+			unpin := fmt.Sprintf(`DELETE FROM %s WHERE saved_view_id = $1 AND user_id <> $2`, r.tableNames.SavedViewPlacements())
+			if _, err := tx.ExecContext(ctx, unpin, id, next.CreatedByUserID); err != nil {
+				return errxtrace.Wrap("failed to remove saved view placements", err)
+			}
+		}
+		updated = next
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to update saved view", err)
+	}
+	return &updated, nil
+}
+
+// upsertPlacement writes the registry user's placement of viewID. A nil
+// field of patch keeps the stored value, or false on insert.
+func (r *SavedViewRegistry) upsertPlacement(
+	ctx context.Context,
+	tx *sqlx.Tx,
+	viewID string,
+	patch registry.SavedViewPlacementPatch,
+) (*models.SavedViewPlacement, error) {
+	now := time.Now()
+	var placement models.SavedViewPlacement
+	// uuid is left to the column default, as in the other upserts.
+	query := fmt.Sprintf(
+		`INSERT INTO %[1]s (id, tenant_id, group_id, saved_view_id, user_id, show_in_sidebar, show_on_dashboard, created_at, updated_at)
+		 VALUES ($1, $2, $3, $4, $5, COALESCE($6, FALSE), COALESCE($7, FALSE), $8, $8)
+		 ON CONFLICT (saved_view_id, user_id) DO UPDATE SET
+		   show_in_sidebar = COALESCE($6, %[1]s.show_in_sidebar),
+		   show_on_dashboard = COALESCE($7, %[1]s.show_on_dashboard),
+		   updated_at = $8
+		 RETURNING *`,
+		r.tableNames.SavedViewPlacements())
+	err := tx.QueryRowxContext(ctx, query,
+		uuid.New().String(), r.tenantID, r.groupID, viewID, r.createdByUserID,
+		patch.ShowInSidebar, patch.ShowOnDashboard, now,
+	).StructScan(&placement)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to store saved view placement", err)
+	}
+	return &placement, nil
+}
+
+func (r *SavedViewRegistry) Placements(ctx context.Context) (map[string]models.SavedViewPlacement, error) {
+	if r.service {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "user"))
+	}
+	var rows []models.SavedViewPlacement
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT p.* FROM %s p JOIN %s v ON v.id = p.saved_view_id
+			 WHERE p.user_id = $1 AND (v.shared OR v.created_by_user_id = $1)`,
+			r.tableNames.SavedViewPlacements(), r.tableNames.SavedViews())
+		return tx.SelectContext(ctx, &rows, query, r.createdByUserID)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list saved view placements", err)
+	}
+	out := make(map[string]models.SavedViewPlacement, len(rows))
+	for _, p := range rows {
+		out[p.SavedViewID] = p
+	}
+	return out, nil
+}
+
+func (r *SavedViewRegistry) SetPlacement(
+	ctx context.Context,
+	viewID string,
+	patch registry.SavedViewPlacementPatch,
+) (*models.SavedViewPlacement, error) {
+	if r.service {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "user"))
+	}
+	var placement *models.SavedViewPlacement
+	cond, args := r.visibility(2)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var seen bool
+		query := fmt.Sprintf(`SELECT EXISTS (SELECT 1 FROM %s WHERE id = $1 AND %s)`, r.tableNames.SavedViews(), cond)
+		if err := tx.GetContext(ctx, &seen, query, append([]any{viewID}, args...)...); err != nil {
+			return errxtrace.Wrap("failed to read saved view", err)
+		}
+		if !seen {
+			return registry.ErrNotFound
+		}
+		var err error
+		placement, err = r.upsertPlacement(ctx, tx, viewID, patch)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to store saved view placement", err)
+	}
+	return placement, nil
 }
 
 func (r *SavedViewRegistry) Delete(ctx context.Context, id string) error {

@@ -3025,6 +3025,82 @@ table "restore_steps" {
   }
 }
 
+table "saved_view_placements" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant saved view placement isolation"
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "saved_view_id" {
+    type = TEXT
+  }
+  column "user_id" {
+    type = TEXT
+  }
+  column "show_in_sidebar" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "show_on_dashboard" {
+    type = BOOLEAN
+    default = "false"
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_saved_view_placement_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_saved_view_placement_view" {
+    columns = [column.saved_view_id]
+    ref_columns = [table.saved_views.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_saved_view_placement_user" {
+    columns = [column.user_id]
+    ref_columns = [table.users.column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  index "idx_saved_view_placements_group_user" {
+    columns = [column.tenant_id, column.group_id, column.user_id]
+  }
+  index "idx_saved_view_placements_user" {
+    columns = [column.user_id]
+  }
+  index "idx_saved_view_placements_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+  index "idx_saved_view_placements_view_user" {
+    unique = true
+    columns = [column.saved_view_id, column.user_id]
+  }
+}
+
 table "saved_views" {
   row_security {
     enabled = true
@@ -3054,14 +3130,6 @@ table "saved_views" {
     default = ""
   }
   column "shared" {
-    type = BOOLEAN
-    default = "false"
-  }
-  column "show_in_sidebar" {
-    type = BOOLEAN
-    default = "true"
-  }
-  column "show_on_dashboard" {
     type = BOOLEAN
     default = "false"
   }
@@ -4556,6 +4624,24 @@ policy "restore_step_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures restore steps can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "saved_view_placement_background_worker_access" {
+  on = table.saved_view_placements
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all saved view placements for purges"
+}
+
+policy "saved_view_placement_isolation" {
+  on = table.saved_view_placements
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures saved view placements can only be accessed and modified by their tenant and group with required contexts; the member filter is applied in application logic"
 }
 
 policy "saved_view_background_worker_access" {

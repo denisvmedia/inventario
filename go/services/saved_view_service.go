@@ -31,7 +31,8 @@ type SavedViewActor struct {
 	Role   models.GroupRole
 }
 
-// SavedViewInput is what a member sets when creating a view.
+// SavedViewInput is what a member sets when creating a view. ShowInSidebar
+// and ShowOnDashboard are the creator's own placement of it.
 type SavedViewInput struct {
 	Name            string
 	Icon            models.SavedViewIcon
@@ -43,7 +44,9 @@ type SavedViewInput struct {
 }
 
 // SavedViewPatch carries the fields a PATCH may change. A nil field is left
-// as it is.
+// as it is. ShowInSidebar and ShowOnDashboard change where the requesting
+// member shows the view; any member who sees the view may set them. The
+// other fields change the view itself and take CanEdit.
 type SavedViewPatch struct {
 	Name            *string
 	Icon            *models.SavedViewIcon
@@ -54,9 +57,21 @@ type SavedViewPatch struct {
 	ShowOnDashboard *bool
 }
 
+func (p SavedViewPatch) changesView() bool {
+	return p.Name != nil || p.Icon != nil || p.Query != nil || p.Layout != nil || p.Shared != nil
+}
+
+func (p SavedViewPatch) changesPlacement() bool {
+	return p.ShowInSidebar != nil || p.ShowOnDashboard != nil
+}
+
 // SavedViewEntry is a view as one member sees it.
 type SavedViewEntry struct {
 	View *models.SavedView
+	// ShowInSidebar and ShowOnDashboard are where this member shows the
+	// view; every member places the views they see on their own.
+	ShowInSidebar   bool
+	ShowOnDashboard bool
 	// Owned is true for the views the member created.
 	Owned bool
 	// CanEdit and CanDelete say what the member may do with the view.
@@ -79,7 +94,9 @@ type SavedViewEntry struct {
 // access to data. Sharing a view with the group takes the user role; the
 // member who shared a view keeps editing it while they hold that role, and
 // admins and owners may edit or delete any shared view. A member may always
-// delete a view they created.
+// delete a view they created. Where a view shows (sidebar, dashboard) is
+// each member's own choice for every view they see, so sharing a view puts
+// it in nobody else's sidebar.
 type SavedViewService struct {
 	factorySet *registry.FactorySet
 }
@@ -133,13 +150,15 @@ func storedQueryError(view *models.SavedView) *commodityquery.Error {
 	return nil
 }
 
-func entryFor(view *models.SavedView, actor SavedViewActor) SavedViewEntry {
+func entryFor(view *models.SavedView, placement models.SavedViewPlacement, actor SavedViewActor) SavedViewEntry {
 	return SavedViewEntry{
-		View:       view,
-		Owned:      view.CreatedByUserID == actor.UserID,
-		CanEdit:    canEdit(view, actor),
-		CanDelete:  canDelete(view, actor),
-		QueryError: storedQueryError(view),
+		View:            view,
+		ShowInSidebar:   placement.ShowInSidebar,
+		ShowOnDashboard: placement.ShowOnDashboard,
+		Owned:           view.CreatedByUserID == actor.UserID,
+		CanEdit:         canEdit(view, actor),
+		CanDelete:       canDelete(view, actor),
+		QueryError:      storedQueryError(view),
 	}
 }
 
@@ -163,9 +182,13 @@ func (s *SavedViewService) List(ctx context.Context, actor SavedViewActor) ([]Sa
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list saved views", err)
 	}
+	placements, err := reg.Placements(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list saved view placements", err)
+	}
 	out := make([]SavedViewEntry, 0, len(views))
 	for _, v := range views {
-		out = append(out, entryFor(v, actor))
+		out = append(out, entryFor(v, placements[v.ID], actor))
 	}
 	return out, nil
 }
@@ -176,48 +199,42 @@ func (s *SavedViewService) Get(ctx context.Context, actor SavedViewActor, id str
 	if err != nil {
 		return SavedViewEntry{}, err
 	}
+	return s.entry(ctx, reg, actor, id)
+}
+
+// entry reads one visible view with the member's placement of it.
+func (s *SavedViewService) entry(ctx context.Context, reg registry.SavedViewRegistry, actor SavedViewActor, id string) (SavedViewEntry, error) {
 	view, err := reg.Get(ctx, id)
 	if err != nil {
 		return SavedViewEntry{}, errxtrace.Wrap("failed to get saved view", err)
 	}
-	return entryFor(view, actor), nil
-}
-
-// savedViewTally counts, over the views a member sees (all of their own
-// and every shared one), the views they created and the shared ones.
-type savedViewTally struct {
-	own, shared int
-}
-
-func tallySavedViews(views []*models.SavedView, actor SavedViewActor) savedViewTally {
-	var t savedViewTally
-	for _, v := range views {
-		if v.CreatedByUserID == actor.UserID {
-			t.own++
-		}
-		if v.Shared {
-			t.shared++
-		}
+	placements, err := reg.Placements(ctx)
+	if err != nil {
+		return SavedViewEntry{}, errxtrace.Wrap("failed to list saved view placements", err)
 	}
-	return t
+	return entryFor(view, placements[view.ID], actor), nil
 }
 
-func (t savedViewTally) checkCreate() error {
-	if t.own >= models.MaxSavedViewsPerUser {
+// checkCreateLimit refuses a view past MaxSavedViewsPerUser.
+func checkCreateLimit(t registry.SavedViewTally) error {
+	if t.Own >= models.MaxSavedViewsPerUser {
 		return errxtrace.Classify(ErrSavedViewLimitReached, errx.Attrs("limit", models.MaxSavedViewsPerUser, "kind", "per_user"))
 	}
 	return nil
 }
 
-func (t savedViewTally) checkShare() error {
-	if t.shared >= models.MaxSharedSavedViews {
+// checkShareLimit refuses sharing a view past MaxSharedSavedViews.
+func checkShareLimit(t registry.SavedViewTally) error {
+	if t.Shared >= models.MaxSharedSavedViews {
 		return errxtrace.Classify(ErrSavedViewLimitReached, errx.Attrs("limit", models.MaxSharedSavedViews, "kind", "shared"))
 	}
 	return nil
 }
 
-// Create stores a new view after every view of the group. The query is
-// validated with commodityquery.ParseSaved and stored in canonical form.
+// Create stores a new view after every view of the group, with the creator's
+// placement of it. The query is validated with commodityquery.ParseSaved and
+// stored in canonical form. The limits are checked under the registry's write
+// lock, so two creates cannot both pass the last free slot.
 func (s *SavedViewService) Create(ctx context.Context, actor SavedViewActor, in SavedViewInput) (SavedViewEntry, error) {
 	query, err := canonicalQuery(in.Query)
 	if err != nil {
@@ -230,15 +247,13 @@ func (s *SavedViewService) Create(ctx context.Context, actor SavedViewActor, in 
 		in.Icon = models.SavedViewIconBookmark
 	}
 	view := models.SavedView{
-		Name:            strings.TrimSpace(in.Name),
-		Icon:            in.Icon,
-		Entity:          models.SavedViewEntityCommodities,
-		Query:           query,
-		QueryVersion:    models.SavedViewQueryVersion,
-		Layout:          in.Layout,
-		Shared:          in.Shared,
-		ShowInSidebar:   in.ShowInSidebar,
-		ShowOnDashboard: in.ShowOnDashboard,
+		Name:         strings.TrimSpace(in.Name),
+		Icon:         in.Icon,
+		Entity:       models.SavedViewEntityCommodities,
+		Query:        query,
+		QueryVersion: models.SavedViewQueryVersion,
+		Layout:       in.Layout,
+		Shared:       in.Shared,
 	}
 	if err := view.ValidateWithContext(ctx); err != nil {
 		return SavedViewEntry{}, errxtrace.Wrap("invalid saved view", err)
@@ -248,73 +263,93 @@ func (s *SavedViewService) Create(ctx context.Context, actor SavedViewActor, in 
 	if err != nil {
 		return SavedViewEntry{}, err
 	}
-	views, err := reg.List(ctx)
-	if err != nil {
-		return SavedViewEntry{}, errxtrace.Wrap("failed to list saved views", err)
+	placement := registry.SavedViewPlacementPatch{
+		ShowInSidebar:   new(in.ShowInSidebar),
+		ShowOnDashboard: new(in.ShowOnDashboard),
 	}
-	tally := tallySavedViews(views, actor)
-	if err := tally.checkCreate(); err != nil {
-		return SavedViewEntry{}, err
-	}
-	if in.Shared {
-		if err := tally.checkShare(); err != nil {
-			return SavedViewEntry{}, err
+	created, err := reg.CreateChecked(ctx, view, &placement, func(t registry.SavedViewTally) error {
+		if err := checkCreateLimit(t); err != nil {
+			return err
 		}
-	}
-	created, err := reg.Create(ctx, view)
+		if in.Shared {
+			return checkShareLimit(t)
+		}
+		return nil
+	})
 	if err != nil {
 		return SavedViewEntry{}, errxtrace.Wrap("failed to create saved view", err)
 	}
-	return entryFor(created, actor), nil
+	return entryFor(created, models.SavedViewPlacement{
+		ShowInSidebar:   in.ShowInSidebar,
+		ShowOnDashboard: in.ShowOnDashboard,
+	}, actor), nil
 }
 
-// Update applies a patch to a view the member may edit. A new query is
-// validated and stored in canonical form under the current query version, so
-// saving a view that needed an update brings it up to date.
+// Update applies a patch to a view the member sees. The fields of the view
+// take CanEdit, checked on the row read under the registry's write lock
+// together with the shared limit; the stored query and position are those of
+// that row, so a concurrent tag rename or reorder is not written back over.
+// A new query is validated and stored in canonical form under the current
+// query version, so saving a view that needed an update brings it up to
+// date. The placement fields change only the requesting member's placement.
 func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id string, patch SavedViewPatch) (SavedViewEntry, error) {
 	reg, err := s.registry(ctx)
 	if err != nil {
 		return SavedViewEntry{}, err
 	}
-	view, err := reg.Get(ctx, id)
-	if err != nil {
-		return SavedViewEntry{}, errxtrace.Wrap("failed to get saved view", err)
+	if patch.changesView() {
+		if err := updateSavedView(ctx, reg, actor, id, patch); err != nil {
+			return SavedViewEntry{}, err
+		}
 	}
-	if !canEdit(view, actor) {
-		return SavedViewEntry{}, errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "not_editable"))
+	if patch.changesPlacement() {
+		_, err := reg.SetPlacement(ctx, id, registry.SavedViewPlacementPatch{
+			ShowInSidebar:   patch.ShowInSidebar,
+			ShowOnDashboard: patch.ShowOnDashboard,
+		})
+		if err != nil {
+			return SavedViewEntry{}, errxtrace.Wrap("failed to place saved view", err)
+		}
 	}
+	return s.entry(ctx, reg, actor, id)
+}
 
+// updateSavedView applies the view fields of patch under the registry's
+// write lock.
+func updateSavedView(ctx context.Context, reg registry.SavedViewRegistry, actor SavedViewActor, id string, patch SavedViewPatch) error {
+	var query string
 	if patch.Query != nil {
-		query, err := canonicalQuery(*patch.Query)
-		if err != nil {
-			return SavedViewEntry{}, err
-		}
-		view.Query = query
-		view.QueryVersion = models.SavedViewQueryVersion
-	}
-	sharing := patch.Shared != nil && *patch.Shared && !view.Shared
-	if sharing {
-		if !canShare(actor) {
-			return SavedViewEntry{}, errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "share_requires_user_role"))
-		}
-		views, err := reg.List(ctx)
-		if err != nil {
-			return SavedViewEntry{}, errxtrace.Wrap("failed to list saved views", err)
-		}
-		if err := tallySavedViews(views, actor).checkShare(); err != nil {
-			return SavedViewEntry{}, err
+		var err error
+		if query, err = canonicalQuery(*patch.Query); err != nil {
+			return err
 		}
 	}
-	applySavedViewPatch(view, patch)
-	if err := view.ValidateWithContext(ctx); err != nil {
-		return SavedViewEntry{}, errxtrace.Wrap("invalid saved view", err)
-	}
-
-	updated, err := reg.Update(ctx, *view)
+	_, err := reg.UpdateFunc(ctx, id, func(view *models.SavedView, tally registry.SavedViewTally) error {
+		if !canEdit(view, actor) {
+			return errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "not_editable"))
+		}
+		if patch.Shared != nil && *patch.Shared && !view.Shared {
+			if !canShare(actor) {
+				return errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "share_requires_user_role"))
+			}
+			if err := checkShareLimit(tally); err != nil {
+				return err
+			}
+		}
+		if patch.Query != nil {
+			view.Query = query
+			view.QueryVersion = models.SavedViewQueryVersion
+		}
+		applySavedViewPatch(view, patch)
+		if err := view.ValidateWithContext(ctx); err != nil {
+			return errxtrace.Wrap("invalid saved view", err)
+		}
+		return nil
+	})
 	if err != nil {
-		return SavedViewEntry{}, errxtrace.Wrap("failed to update saved view", err)
+		return errxtrace.Wrap("failed to update saved view", err)
 	}
-	return entryFor(updated, actor), nil
+	return nil
 }
 
 func applySavedViewPatch(view *models.SavedView, patch SavedViewPatch) {
@@ -329,12 +364,6 @@ func applySavedViewPatch(view *models.SavedView, patch SavedViewPatch) {
 	}
 	if patch.Shared != nil {
 		view.Shared = *patch.Shared
-	}
-	if patch.ShowInSidebar != nil {
-		view.ShowInSidebar = *patch.ShowInSidebar
-	}
-	if patch.ShowOnDashboard != nil {
-		view.ShowOnDashboard = *patch.ShowOnDashboard
 	}
 }
 
@@ -380,10 +409,12 @@ func (s *SavedViewService) Reorder(ctx context.Context, actor SavedViewActor, id
 	return nil
 }
 
-// Counts returns, per view the member sees with ShowInSidebar set, how many
-// items its query selects. Each count runs the query the way the items list
-// does (commodityquery.List over the request's registry set), so the badge
-// and the opened list agree. A view whose query cannot run has no count.
+// Counts returns, per view the member sees and shows in their sidebar or on
+// their dashboard, how many items its query selects. The counts use the
+// filter of the items list (commodityquery.CountEach over the request's
+// registry set), so the badge, the dashboard card and the opened list agree;
+// they are taken in one transaction without reading rows. A view whose query
+// cannot run has no count.
 func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[string]int, error) {
 	reg, err := s.registry(ctx)
 	if err != nil {
@@ -393,39 +424,68 @@ func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[s
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list saved views", err)
 	}
-	counts := make(map[string]int, len(views))
+	placements, err := reg.Placements(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list saved view placements", err)
+	}
+	ids := make([]string, 0, len(placements))
+	queries := make([]commodityquery.Query, 0, len(placements))
 	for _, v := range views {
-		if !v.ShowInSidebar || v.QueryVersion != models.SavedViewQueryVersion {
+		p := placements[v.ID]
+		if !p.ShowInSidebar && !p.ShowOnDashboard {
+			continue
+		}
+		if v.QueryVersion != models.SavedViewQueryVersion {
 			continue
 		}
 		q, err := commodityquery.ParseSaved(v.Query)
 		if err != nil {
 			continue
 		}
-		page, err := commodityquery.List(ctx, set, q, 0, 1)
-		if err != nil {
-			return nil, errxtrace.Wrap("failed to count saved view items", err, errx.Attrs("saved_view_id", v.ID))
-		}
-		counts[v.ID] = page.Total
+		ids = append(ids, v.ID)
+		queries = append(queries, q)
+	}
+	totals, err := commodityquery.CountEach(ctx, set, queries)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to count saved view items", err)
+	}
+	counts := make(map[string]int, len(ids))
+	for i, id := range ids {
+		counts[id] = totals[i]
 	}
 	return counts, nil
 }
 
 // RenameTag makes every view of the group that names the item tag slug from
-// name to instead. It is called after a tag slug rename, so the views keep
-// selecting the tag they were saved with. A view whose query cannot run is
-// left alone.
-func (s *SavedViewService) RenameTag(ctx context.Context, from, to string) (int, error) {
+// name the tag's current slug instead, which current reads. It is called
+// after a tag slug rename, so the views keep selecting the tag they were
+// saved with. current runs once, inside the rewrite and so under the
+// registry's write lock: when two renames of one tag rewrite the views in the
+// other order than they renamed the tag, the views still end on the slug the
+// tag has. A view whose query cannot run is left alone.
+func (s *SavedViewService) RenameTag(ctx context.Context, from string, current func(context.Context) (string, error)) (int, error) {
 	reg, err := s.registry(ctx)
 	if err != nil {
 		return 0, err
 	}
+	var (
+		to       string
+		resolved bool
+		toErr    error
+	)
 	n, err := reg.RewriteQueries(ctx, func(view models.SavedView) (string, bool) {
 		if view.QueryVersion != models.SavedViewQueryVersion {
 			return "", false
 		}
 		q, err := commodityquery.ParseSaved(view.Query)
 		if err != nil {
+			return "", false
+		}
+		if !resolved {
+			resolved = true
+			to, toErr = current(ctx)
+		}
+		if toErr != nil {
 			return "", false
 		}
 		renamed, changed := q.RenameTag(from, to)
@@ -436,6 +496,9 @@ func (s *SavedViewService) RenameTag(ctx context.Context, from, to string) (int,
 	})
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to rewrite saved view queries", err)
+	}
+	if toErr != nil {
+		return 0, errxtrace.Wrap("failed to read the renamed tag", toErr)
 	}
 	if n > 0 {
 		slog.DebugContext(ctx, "Saved views follow a tag rename", "from", from, "to", to, "views", n)

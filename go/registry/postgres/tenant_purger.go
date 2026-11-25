@@ -161,8 +161,9 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// inventory rows that referenced them are gone.
 	func(t store.TableNames) string { return string(t.Tags()) },
 
-	// Saved views. group_id -> location_groups and created_by_user_id ->
-	// users NO ACTION; cleared before both.
+	// Saved view placements, then the views. group_id -> location_groups
+	// and the user columns -> users NO ACTION; cleared before both.
+	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
 	func(t store.TableNames) string { return string(t.SavedViews()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->

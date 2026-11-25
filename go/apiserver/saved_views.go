@@ -70,9 +70,11 @@ func (api *savedViewsAPI) actor(w http.ResponseWriter, r *http.Request) (service
 
 func savedViewData(entry services.SavedViewEntry) jsonapi.SavedViewData {
 	access := jsonapi.SavedViewAccess{
-		Owned:     entry.Owned,
-		CanEdit:   entry.CanEdit,
-		CanDelete: entry.CanDelete,
+		ShowInSidebar:   entry.ShowInSidebar,
+		ShowOnDashboard: entry.ShowOnDashboard,
+		Owned:           entry.Owned,
+		CanEdit:         entry.CanEdit,
+		CanDelete:       entry.CanDelete,
 	}
 	if entry.QueryError != nil {
 		access.QueryError = &jsonapi.SavedViewQueryError{
@@ -145,10 +147,11 @@ func (api *savedViewsAPI) listSavedViews(w http.ResponseWriter, r *http.Request)
 	}
 }
 
-// countSavedViews counts the items of every saved view shown in the sidebar.
+// countSavedViews counts the items of every saved view the member shows.
 //
 // @Summary Count the items of saved views
-// @Description Per saved view ID, the number of items its query selects, for the views the member sees with show_in_sidebar set. Each count runs the query as GET /commodities does. A view whose query cannot run (query_error) has no entry.
+// @Description Per saved view ID, the number of items its query selects, for the views the member shows in their sidebar or on their dashboard.
+// @Description Each count uses the filter of GET /commodities. A view whose query cannot run (query_error) has no entry.
 // @Tags saved_views
 // @Accept json-api
 // @Produce json-api
@@ -202,6 +205,7 @@ func (api *savedViewsAPI) getSavedView(w http.ResponseWriter, r *http.Request) {
 //
 // @Summary Create a saved view
 // @Description Store an item query (the query string of GET /commodities, limited to the parameters the items list edits) under a name. The query is validated and stored in canonical form. Sharing with the group takes the user role.
+// @Description show_in_sidebar and show_on_dashboard place the view for the creator only; sharing places it for nobody else.
 // @Tags saved_views
 // @Accept json-api
 // @Produce json-api
@@ -240,11 +244,12 @@ func (api *savedViewsAPI) createSavedView(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// updateSavedView changes a saved view the member may edit.
+// updateSavedView changes a saved view, or where the member shows it.
 //
 // @Summary Update a saved view
 // @Description Change the fields given; the others stay. A new query is validated and stored in canonical form under the current query version.
 // @Description The member who created a view edits it; a shared view also takes the user role, and admins may edit any shared view.
+// @Description show_in_sidebar and show_on_dashboard change where the requesting member shows the view; any member who sees it may set them.
 // @Tags saved_views
 // @Accept json-api
 // @Produce json-api

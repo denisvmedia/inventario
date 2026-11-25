@@ -54,10 +54,11 @@ import { useConfirm } from "@/hooks/useConfirm"
 import { parseServerError } from "@/lib/server-error"
 
 // /g/:slug/views lists the saved views a member sees: their own and the
-// shared ones. Each row says what the view filters, where it shows and how
-// many items it selects; the member edits, reorders and deletes the views
-// they may change. Views are created from the items list, which holds the
-// filter.
+// shared ones. Each row says what the view filters, where the member shows
+// it and how many items it selects. Every member puts any view they see in
+// their own sidebar or on their own dashboard; they edit, reorder and delete
+// the views they may change. Views are created from the items list, which
+// holds the filter.
 export function SavedViewsPage() {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
@@ -261,7 +262,7 @@ export function SavedViewsPage() {
                           variant={view.showInSidebar ? "secondary" : "ghost"}
                           size="icon"
                           className="size-8"
-                          disabled={!view.canEdit || update.isPending}
+                          disabled={update.isPending}
                           onClick={() => void toggle(view, "showInSidebar")}
                           aria-pressed={view.showInSidebar}
                           aria-label={t("commodities:savedViews.dialog.showInSidebar")}
@@ -274,7 +275,7 @@ export function SavedViewsPage() {
                           variant={view.showOnDashboard ? "secondary" : "ghost"}
                           size="icon"
                           className="size-8"
-                          disabled={!view.canEdit || update.isPending}
+                          disabled={update.isPending}
                           onClick={() => void toggle(view, "showOnDashboard")}
                           aria-pressed={view.showOnDashboard}
                           aria-label={t("commodities:savedViews.dialog.showOnDashboard")}

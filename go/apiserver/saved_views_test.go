@@ -239,3 +239,54 @@ func TestSavedViews_CountsAndReorder(t *testing.T) {
 	})
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
+
+// Where a view shows is the requesting member's own: a shared view is in
+// nobody else's sidebar or counts until they put it there, and a member who
+// may not edit the view may still place it.
+func TestSavedViews_PlacementIsPerMember(t *testing.T) {
+	c := qt.New(t)
+	env := newSavedViewsEnv(c)
+	id := env.create(c, env.otherUser, map[string]any{
+		"name": "For everyone", "shared": true, "show_in_sidebar": true, "show_on_dashboard": true,
+	})
+
+	counts := func(userID string) map[string]int {
+		rr := env.do(c, http.MethodGet, "/counts", userID, nil)
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", rr.Body.String()))
+		var resp struct {
+			Data struct {
+				Counts map[string]int `json:"counts"`
+			} `json:"data"`
+		}
+		c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+		return resp.Data.Counts
+	}
+
+	rr := env.do(c, http.MethodGet, "/"+id, env.viewerID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), false)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_on_dashboard"), false)
+	_, counted := counts(env.viewerID)[id]
+	c.Assert(counted, qt.IsFalse)
+	_, counted = counts(env.otherUser)[id]
+	c.Assert(counted, qt.IsTrue)
+
+	rr = env.do(c, http.MethodPatch, "/"+id, env.viewerID, savedViewBody(map[string]any{"show_in_sidebar": true}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", rr.Body.String()))
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), true)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.can_edit"), false)
+	_, counted = counts(env.viewerID)[id]
+	c.Assert(counted, qt.IsTrue)
+
+	// The admin unpins it from the admin's own sidebar only.
+	rr = env.do(c, http.MethodPatch, "/"+id, env.adminID, savedViewBody(map[string]any{"show_in_sidebar": false}))
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", rr.Body.String()))
+	rr = env.do(c, http.MethodGet, "/"+id, env.otherUser, nil)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), true)
+	rr = env.do(c, http.MethodGet, "/"+id, env.viewerID, nil)
+	c.Check(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.show_in_sidebar"), true)
+
+	// Changing the view itself still takes the right to edit it.
+	rr = env.do(c, http.MethodPatch, "/"+id, env.viewerID, savedViewBody(map[string]any{"name": "Taken", "show_on_dashboard": true}))
+	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+}

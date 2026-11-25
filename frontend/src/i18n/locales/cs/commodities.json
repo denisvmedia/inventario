@@ -529,7 +529,7 @@
       "placement": "Zobrazit v",
       "save": "Uložit",
       "shared": "Sdílet se skupinou",
-      "sharedHint": "Pohled uvidí všichni ve skupině. Každý člen stále vidí jen položky, které vidět smí.",
+      "sharedHint": "Všichni ve skupině najdou pohled v nabídce Pohledy a na stránce Uložené pohledy. V postranním panelu nebo na přehledu se jim zobrazí, až když si ho tam přidají. Každý člen stále vidí jen položky, které vidět smí.",
       "sharedNeedsRole": "Pohledy mohou sdílet jen členové s rolí uživatel a vyšší.",
       "showInSidebar": "Postranní panel",
       "showOnDashboard": "Přehled"

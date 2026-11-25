@@ -35,8 +35,10 @@ type SavedViewAttributes struct {
 	Query        string `json:"query" example:"warranty_status=expiring&sort=name"`
 	QueryVersion int    `json:"query_version" example:"1"`
 	// Layout is grid, list, or empty for the viewer's default.
-	Layout          string    `json:"layout" example:"list" enums:",grid,list"`
-	Shared          bool      `json:"shared"`
+	Layout string `json:"layout" example:"list" enums:",grid,list"`
+	Shared bool   `json:"shared"`
+	// ShowInSidebar and ShowOnDashboard are where the requesting member
+	// shows the view. Each member places the views they see on their own.
 	ShowInSidebar   bool      `json:"show_in_sidebar"`
 	ShowOnDashboard bool      `json:"show_on_dashboard"`
 	SortOrder       int       `json:"sort_order" example:"0"`
@@ -51,13 +53,15 @@ type SavedViewAttributes struct {
 	QueryError *SavedViewQueryError `json:"query_error,omitempty"`
 }
 
-// SavedViewAccess is what the requesting member may do with one view; the
-// service decides it.
+// SavedViewAccess is how the requesting member stands to one view: where
+// they show it and what they may do with it. The service decides it.
 type SavedViewAccess struct {
-	Owned      bool
-	CanEdit    bool
-	CanDelete  bool
-	QueryError *SavedViewQueryError
+	ShowInSidebar   bool
+	ShowOnDashboard bool
+	Owned           bool
+	CanEdit         bool
+	CanDelete       bool
+	QueryError      *SavedViewQueryError
 }
 
 // SavedViewData is one saved view resource object.
@@ -80,8 +84,8 @@ func NewSavedViewData(view *models.SavedView, access SavedViewAccess) SavedViewD
 			QueryVersion:    view.QueryVersion,
 			Layout:          string(view.Layout),
 			Shared:          view.Shared,
-			ShowInSidebar:   view.ShowInSidebar,
-			ShowOnDashboard: view.ShowOnDashboard,
+			ShowInSidebar:   access.ShowInSidebar,
+			ShowOnDashboard: access.ShowOnDashboard,
 			SortOrder:       view.SortOrder,
 			CreatedAt:       view.CreatedAt,
 			UpdatedAt:       view.UpdatedAt,
@@ -200,6 +204,7 @@ type SavedViewRequestDataWrapper struct {
 
 // SavedViewRequestData carries the fields a member sets on create. The query
 // is validated against the item query contract by the service.
+// ShowInSidebar and ShowOnDashboard are the creator's own placement.
 type SavedViewRequestData struct {
 	Name            string `json:"name" example:"Expiring warranties"`
 	Icon            string `json:"icon,omitempty" example:"shield"`
@@ -255,6 +260,10 @@ type SavedViewUpdateRequestDataWrapper struct {
 	Attributes SavedViewUpdateRequestData `json:"attributes"`
 }
 
+// SavedViewUpdateRequestData carries the fields a PATCH changes.
+// ShowInSidebar and ShowOnDashboard change where the requesting member shows
+// the view, which any member who sees it may do; the other fields change the
+// view and need the right to edit it.
 type SavedViewUpdateRequestData struct {
 	Name            *string `json:"name,omitempty"`
 	Icon            *string `json:"icon,omitempty"`

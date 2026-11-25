@@ -119,6 +119,39 @@ func TestList_PagesKeepTheTotal(t *testing.T) {
 	c.Check(page.Matches, qt.HasLen, 1)
 }
 
+// CountEach gives, per query, the total List reports for it, with no query
+// and with the lent-out filter the memory backend resolves to item IDs.
+func TestCountEach_MatchesTheListTotals(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	drill := seedItem(c, ctx, set, "Red drill", "red", "tools")
+	seedItem(c, ctx, set, "Red lamp", "red")
+	seedItem(c, ctx, set, "Saw", "tools")
+	_, err := set.CommodityLoanRegistry.Create(ctx, models.CommodityLoan{
+		CommodityID: drill.ID, BorrowerName: "Neighbor", LentAt: models.Date("2026-01-01"),
+	})
+	c.Assert(err, qt.IsNil)
+
+	qs := []commodityquery.Query{
+		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"red"}}},
+		{IncludeInactive: true, Text: "saw"},
+		{IncludeInactive: true, LentOut: new(true)},
+		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"none"}}},
+	}
+	counts, err := commodityquery.CountEach(ctx, set, qs)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 0})
+	for i, q := range qs {
+		page, err := commodityquery.List(ctx, set, q, 0, 1)
+		c.Assert(err, qt.IsNil)
+		c.Check(counts[i], qt.Equals, page.Total, qt.Commentf("query %d", i))
+	}
+
+	none, err := commodityquery.CountEach(ctx, set, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(none, qt.HasLen, 0)
+}
+
 func TestTagCounts_SetsTheTagFilterAside(t *testing.T) {
 	c := qt.New(t)
 	ctx, set := newMemorySet(c)

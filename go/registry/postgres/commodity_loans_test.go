@@ -241,3 +241,40 @@ func TestCommodityLoanRegistry_Postgres_FKCascade(t *testing.T) {
 	_, err = fx.groupASet.CommodityLoanRegistry.Get(fx.ctxA, loan.ID)
 	c.Assert(err, qt.IsNotNil, qt.Commentf("loan should be cascade-deleted with the parent commodity"))
 }
+
+// CountEach counts each set of options with the WHERE clause of the list, so
+// every count is the total ListPaginated reports for the same options,
+// including the loans join, and only the group of the context is counted.
+func TestCommodityRegistry_Postgres_CountEachMatchesTheListTotals(t *testing.T) {
+	c := qt.New(t)
+	fx := newLoanPGFixture(t)
+	reg := fx.groupASet.CommodityRegistry
+	area := seedTagArea(c, fx.groupASet, fx.ctxA)
+	seedTagCommodity(c, fx.groupASet, fx.ctxA, area, "Saw A", "tools")
+	_, err := fx.groupASet.CommodityLoanRegistry.Create(fx.ctxA, models.CommodityLoan{
+		CommodityID:  fx.commAID,
+		BorrowerName: "Neighbor",
+		LentAt:       models.Date("2026-05-01"),
+	})
+	c.Assert(err, qt.IsNil)
+
+	opts := []registry.CommodityListOptions{
+		{IncludeInactive: true},
+		{IncludeInactive: true, LentOut: new(true)},
+		{IncludeInactive: true, LentOut: new(false)},
+		{IncludeInactive: true, Search: "saw"},
+		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"tools"}}},
+	}
+	counts, err := reg.CountEach(fx.ctxA, opts)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 1, 1})
+	for i, o := range opts {
+		_, total, err := reg.ListPaginated(fx.ctxA, 0, 1, o)
+		c.Assert(err, qt.IsNil)
+		c.Check(counts[i], qt.Equals, total, qt.Commentf("options %d", i))
+	}
+
+	none, err := reg.CountEach(fx.ctxA, nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(none, qt.HasLen, 0)
+}

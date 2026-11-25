@@ -93,10 +93,11 @@ describe("<SavedViewsPage />", () => {
       "saved_view=sv1"
     )
 
-    // A shared view of someone else: visible, not changeable.
+    // A shared view of someone else: visible and placeable, not changeable.
     expect(within(rows[1]).getByText("Shared")).toBeInTheDocument()
     expect(within(rows[1]).queryByTestId("saved-view-actions")).not.toBeInTheDocument()
-    expect(within(rows[1]).getByTestId("saved-view-toggle-sidebar")).toBeDisabled()
+    expect(within(rows[1]).getByTestId("saved-view-toggle-sidebar")).toBeEnabled()
+    expect(within(rows[1]).getByTestId("saved-view-toggle-dashboard")).toBeEnabled()
 
     expect(await axe(container)).toHaveNoViolations()
   })
@@ -147,6 +148,22 @@ describe("<SavedViewsPage />", () => {
 
     await user.click(await screen.findByTestId("saved-view-toggle-sidebar"))
     await waitFor(() => expect(sent).toEqual({ show_in_sidebar: true }))
+  })
+
+  it("puts a shared view of someone else on the member's own dashboard", async () => {
+    const user = userEvent.setup()
+    let sent: Record<string, unknown> | undefined
+    server.use(
+      ...savedViewHandlers.list(SLUG, [{ ...SHARED, show_on_dashboard: false }]),
+      ...savedViewHandlers.counts(SLUG),
+      ...savedViewHandlers.update(SLUG, SHARED, (attrs) => {
+        sent = attrs
+      })
+    )
+    renderPage()
+
+    await user.click(await screen.findByTestId("saved-view-toggle-dashboard"))
+    await waitFor(() => expect(sent).toEqual({ show_on_dashboard: true }))
   })
 
   it("moves a view below the next one it may change", async () => {

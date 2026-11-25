@@ -29,6 +29,23 @@ func TestParseSaved_AcceptsTheListFilters(t *testing.T) {
 	c.Assert(again, qt.DeepEquals, q)
 }
 
+// Two queries that select the same items encode to the same string, however
+// their list values were ordered.
+func TestQuery_EncodeSortsListValues(t *testing.T) {
+	c := qt.New(t)
+	a, err := commodityquery.ParseSaved("type=tools&type=other&status=sold&status=in_use" +
+		"&warranty_status=expiring&warranty_status=active&tags=red,fragile&tags_exclude=shed,garage")
+	c.Assert(err, qt.IsNil)
+	b, err := commodityquery.ParseSaved("type=other&type=tools&status=in_use&status=sold" +
+		"&warranty_status=active&warranty_status=expiring&tags=fragile,red&tags_exclude=garage,shed")
+	c.Assert(err, qt.IsNil)
+	c.Assert(a.Encode(), qt.Equals, b.Encode())
+	c.Assert(a.Encode(), qt.Equals, "status=in_use&status=sold&tags=fragile%2Cred&tags_exclude=garage%2Cshed"+
+		"&type=other&type=tools&warranty_status=active&warranty_status=expiring")
+	// Encoding leaves the query as it was.
+	c.Assert(a.Tags.Include, qt.DeepEquals, []string{"red", "fragile"})
+}
+
 func TestParseSaved_EmptyIsTheDefaultQuery(t *testing.T) {
 	c := qt.New(t)
 	q, err := commodityquery.ParseSaved("")
