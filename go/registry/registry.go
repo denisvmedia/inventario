@@ -4,6 +4,8 @@ import (
 	"context"
 	"time"
 
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 	"github.com/shopspring/decimal"
 
@@ -1540,6 +1542,180 @@ type CommodityDraftRegistry interface {
 	// drafts whose discard began before the given time and did not finish.
 	// MarkDiscarding sets UpdatedAt, so it is the time the discard began.
 	ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error)
+}
+
+// IntakeSourceInput is one source of a new intake session: the files the AI
+// scan reads together.
+type IntakeSourceInput struct {
+	// FileIDs are files of the group, uploaded beforehand. Each is linked
+	// to the source with entity type "intake"; images go to the "images"
+	// bucket and everything else to "documents".
+	FileIDs []string
+	// OneItem says the files show one item.
+	OneItem bool
+	// ExternalSystem, ExternalInstance and ExternalDocumentID identify a
+	// document another system delivered (#2809); empty for an upload. A
+	// document id needs the system it belongs to.
+	ExternalSystem     string
+	ExternalInstance   string
+	ExternalDocumentID string
+}
+
+// CheckIntakeSourceInputs checks what both backends require of the sources
+// of a new session before anything is written: a document id comes with the
+// system it belongs to.
+func CheckIntakeSourceInputs(sources []IntakeSourceInput) error {
+	for _, src := range sources {
+		if src.ExternalDocumentID != "" && src.ExternalSystem == "" {
+			return errxtrace.Classify(ErrFieldRequired, errx.Attrs("field_name", "ExternalSystem"))
+		}
+	}
+	return nil
+}
+
+// IntakeScan is what the scan of one source produced.
+type IntakeScan struct {
+	// Candidates are the detected products in order. The registry sets
+	// their ids, scope, session, source, position and outcome; Fields,
+	// Selected, AcceptedFields and Quantity are stored as given.
+	Candidates []models.IntakeCandidate
+	Warnings   []models.IntakeWarning
+}
+
+// IntakeCandidateReview is a member's review of a detected product. A nil
+// field is left unchanged.
+type IntakeCandidateReview struct {
+	Selected       *bool
+	AcceptedFields *[]string
+	Quantity       *int
+}
+
+// IntakeRegistry is the group-scoped registry of intake sessions with their
+// sources and detected products (#2810). The embedded Registry works on the
+// sessions; deleting a session deletes its sources, its candidates and the
+// "intake" file links of its sources, and leaves the files and every draft
+// made from it alone.
+//
+// A user registry acts in the group of its context. The service registry
+// serves the background worker: the queue methods (SweepStuckSources,
+// ClaimNextSource, StoreScan, RequeueSource, FailSource) work across groups
+// and address sources by id.
+type IntakeRegistry interface {
+	Registry[models.IntakeSession]
+
+	// CreateSession stores a session, its sources in the given order and
+	// the links of their files, all or nothing. When the group already has a
+	// session with the same ClientKey, that session is returned unchanged
+	// with created=false, whatever the sources given. Every file must be a
+	// live file of the group (ErrNotFound otherwise). A source whose
+	// external identity the group already has fails with ErrAlreadyExists,
+	// one with a document id but no system with ErrFieldRequired.
+	//
+	// With maxQueued above zero, a new session whose sources would bring the
+	// group's queued sources (see CountQueued) above maxQueued fails with
+	// ErrIntakeQueueFull. The count and the insert are atomic: two sessions
+	// created at once cannot both pass on the same free room.
+	CreateSession(ctx context.Context, session models.IntakeSession, sources []IntakeSourceInput, maxQueued int) (stored *models.IntakeSession, created bool, err error)
+
+	// GetSessionByClientKey returns the group's session with the key;
+	// ErrNotFound when there is none.
+	GetSessionByClientKey(ctx context.Context, clientKey string) (*models.IntakeSession, error)
+
+	// ListSessions returns a page of the group's sessions, newest first,
+	// with the total.
+	ListSessions(ctx context.Context, offset, limit int) ([]*models.IntakeSession, int, error)
+
+	// ListSources returns the sources of the given sessions, ordered by
+	// session and position.
+	ListSources(ctx context.Context, sessionIDs ...string) ([]*models.IntakeSource, error)
+
+	// GetSource returns one source; ErrNotFound when it is not in the
+	// group.
+	GetSource(ctx context.Context, id string) (*models.IntakeSource, error)
+
+	// GetSourceByExternalID returns the group's source with the external
+	// identity; ErrNotFound when there is none.
+	GetSourceByExternalID(ctx context.Context, system, instance, documentID string) (*models.IntakeSource, error)
+
+	// ListCandidates returns the candidates of the given sessions, ordered
+	// by source position and candidate position.
+	ListCandidates(ctx context.Context, sessionIDs ...string) ([]*models.IntakeCandidate, error)
+
+	// GetCandidate returns one candidate; ErrNotFound when it is not in
+	// the group.
+	GetCandidate(ctx context.Context, id string) (*models.IntakeCandidate, error)
+
+	// ReviewCandidate applies a member's review. A skipped candidate that
+	// is selected again goes back to pending. ErrIntakeCandidateFinished
+	// when the candidate has its draft.
+	ReviewCandidate(ctx context.Context, id string, review IntakeCandidateReview) (*models.IntakeCandidate, error)
+
+	// SetCandidateOutcome records what became of a candidate. draftID is
+	// stored with the created outcome and errorCode with the failed one.
+	SetCandidateOutcome(ctx context.Context, id string, outcome models.IntakeCandidateOutcome, draftID *string, errorCode string) (*models.IntakeCandidate, error)
+
+	// CancelSession stops the session's queued sources: a pending source
+	// is canceled at once; a source in a scan is canceled too, and the
+	// result of that scan is still stored when it arrives, so a paid scan
+	// is not lost. It returns how many sources it canceled.
+	CancelSession(ctx context.Context, sessionID string) (int, error)
+
+	// ResumeSession undoes a cancel and retries failures. A source canceled
+	// while its scan runs goes back to scanning under the same claim, so the
+	// running scan stays the only one. Other canceled sources and failed
+	// sources go back in the queue, due at now, with a fresh allowance of
+	// attempts (RetryBase set to Attempts). Scanned sources are left alone,
+	// so a resume never scans a file twice. It returns how many sources it
+	// changed.
+	ResumeSession(ctx context.Context, sessionID string, now time.Time) (int, error)
+
+	// RescanSource puts a scanned, failed or canceled source back in the
+	// queue with a fresh allowance of attempts and deletes its candidates,
+	// so the next scan replaces them. ErrIntakeSourceBusy when the source is
+	// queued or a canceled scan of it still runs; ErrIntakeSourceHasDrafts
+	// when one of its candidates has its draft, or a draft with a
+	// candidate's client key exists in the group and is not being discarded
+	// (a draft made by a call that stopped before it recorded the outcome).
+	RescanSource(ctx context.Context, id string, now time.Time) (*models.IntakeSource, error)
+
+	// CountQueued counts the group's sources that wait for or are in a
+	// scan.
+	CountQueued(ctx context.Context) (int, error)
+
+	// SweepStuckSources handles the claims taken before claimedBefore that
+	// no worker finished. A scanning source goes back in the queue, due at
+	// now, to wait for a retry, unless it used maxAttempts counted attempts
+	// (models.IntakeSource.CountedAttempts): then it fails with errorCode, so
+	// a file that kills its worker is not scanned forever. A source canceled
+	// during such a scan loses the claim, so a resume can queue it. It
+	// returns how many sources it changed.
+	SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error)
+
+	// ClaimNextSource takes the pending source that has been due the
+	// longest, marks it scanning and counts an attempt. Two workers never
+	// get the same source. ErrNotFound when nothing is due.
+	ClaimNextSource(ctx context.Context, now time.Time) (*models.IntakeSource, error)
+
+	// StoreScan stores the outcome of a scan and marks the source scanned.
+	// attempt is the source's Attempts as ClaimNextSource returned it; when
+	// the source is no longer that scan (neither scanning nor canceled with
+	// that attempt), nothing is stored and ErrIntakeSourceChanged is
+	// returned.
+	StoreScan(ctx context.Context, sourceID string, attempt int, scan IntakeScan, now time.Time) error
+
+	// RequeueSource puts a scanning source back in the queue, due at next,
+	// with the reason it waits (models.IntakeWait*). A wait for the rate
+	// limit does not count the attempt against the limit (RetryBase goes up
+	// by one), as it is not the source's fault. A source that has moved on
+	// (see StoreScan) is left alone and ErrIntakeSourceChanged returned; so
+	// is one canceled during the scan, which only loses the claim.
+	RequeueSource(ctx context.Context, sourceID string, attempt int, next time.Time, waitReason string) error
+
+	// FailSource marks a scanning source failed with the error code. A
+	// source that has moved on is left alone and ErrIntakeSourceChanged
+	// returned; so is one canceled during the scan, which only loses the
+	// claim.
+	FailSource(ctx context.Context, sourceID string, attempt int, errorCode string) error
 }
 
 // DraftPromotion is the result of CommodityDraftRegistry.Promote.
@@ -3196,6 +3372,7 @@ type Set struct {
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
 	CommodityDraftRegistry         CommodityDraftRegistry
+	IntakeRegistry                 IntakeRegistry
 	SellerRegistry                 SellerRegistry
 	ItemTypeRegistry               ItemTypeRegistry
 	CustomFieldRegistry            CustomFieldRegistry
@@ -3294,6 +3471,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
 		validation.Field(&s.CommodityDraftRegistry, validation.Required),
+		validation.Field(&s.IntakeRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
 		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.CustomFieldRegistry, validation.Required),

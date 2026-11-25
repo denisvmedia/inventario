@@ -436,7 +436,10 @@ func (l *RestoreOperationProcessor) unparkFile(ctx context.Context, fileDBID str
 //  3. The group's drafts (#2812), in every state, with their file links. The
 //     archive's open drafts take their place: the drafts member recreates
 //     them, and the files member links their files to them again.
-//  4. A type-agnostic sweep of the remaining files (rows + blobs), which catches
+//  4. The group's intake sessions (#2810). Backups do not carry them, so a
+//     replace leaves none; their files fall to the sweep unless the archive
+//     brings them back.
+//  5. A type-agnostic sweep of the remaining files (rows + blobs), which catches
 //     standalone files and any orphan. linked_entity_type='export' is skipped:
 //     that is the archive being restored plus the backup history, not inventory.
 //
@@ -476,6 +479,9 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 		return errxtrace.Wrap("failed to create user file registry for clear", err)
 	}
 	if err := l.clearDrafts(ctx, fileReg); err != nil {
+		return err
+	}
+	if err := l.clearIntake(ctx); err != nil {
 		return err
 	}
 
@@ -521,6 +527,26 @@ func (l *RestoreOperationProcessor) clearDrafts(ctx context.Context, fileReg reg
 		}
 		if err := draftReg.Delete(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errxtrace.Wrap("failed to delete draft", err, errx.Attrs("draft_id", draft.ID))
+		}
+	}
+	return nil
+}
+
+// clearIntake deletes every intake session of the group with its sources,
+// detected products and file links. Drafts made from them are drafts like
+// any other. RLS-scoped registry, as for the drafts.
+func (l *RestoreOperationProcessor) clearIntake(ctx context.Context) error {
+	intakeReg, err := l.factorySet.IntakeRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user intake registry for clear", err)
+	}
+	sessions, err := intakeReg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list intake sessions for deletion", err)
+	}
+	for _, session := range sessions {
+		if err := intakeReg.Delete(ctx, session.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete intake session", err, errx.Attrs("session_id", session.ID))
 		}
 	}
 	return nil
