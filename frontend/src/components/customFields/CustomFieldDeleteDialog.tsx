@@ -112,8 +112,12 @@ export function CustomFieldDeleteDialog({ field, onClose }: CustomFieldDeleteDia
         <DialogHeader>
           <DialogTitle>{t("customFields:delete.title", { name })}</DialogTitle>
           <DialogDescription data-testid="custom-field-delete-description">
-            {inUse ? t("customFields:delete.inUse", { count }) : t("customFields:delete.description")}
-            {usage.trashed > 0 ? ` ${t("customFields:delete.trashed", { count: usage.trashed })}` : ""}
+            {inUse
+              ? t("customFields:delete.inUse", { count })
+              : t("customFields:delete.description")}
+            {usage.trashed > 0
+              ? ` ${t("customFields:delete.trashed", { count: usage.trashed })}`
+              : ""}
           </DialogDescription>
         </DialogHeader>
 

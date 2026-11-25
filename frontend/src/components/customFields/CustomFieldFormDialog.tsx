@@ -269,10 +269,7 @@ export function CustomFieldFormDialog({
                         <X aria-hidden="true" className="size-4" />
                       </Button>
                     </div>
-                    <FieldError
-                      message={error}
-                      values={{ max: CUSTOM_FIELD_OPTION_LABEL_MAX }}
-                    />
+                    <FieldError message={error} values={{ max: CUSTOM_FIELD_OPTION_LABEL_MAX }} />
                   </div>
                 )
               })}

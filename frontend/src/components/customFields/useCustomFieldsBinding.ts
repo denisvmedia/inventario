@@ -15,9 +15,7 @@ export function useCustomFieldsBinding(
   fields: readonly CustomField[]
 ) {
   const values = form.watch("custom_fields")
-  const entries = form.formState.errors.custom_fields as
-    | Record<string, EntryError>
-    | undefined
+  const entries = form.formState.errors.custom_fields as Record<string, EntryError> | undefined
   const errors: Record<string, string | undefined> = {}
   for (const f of fields) {
     const e = entries?.[f.id]

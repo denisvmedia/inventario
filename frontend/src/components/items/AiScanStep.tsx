@@ -195,9 +195,7 @@ export function AiScanStep({
   const [acceptedFields, setAcceptedFields] = useState<Set<ScanFieldName>>(new Set())
   // The same for the custom field values (#2803): the chosen candidate's,
   // and the ids of the accepted ones.
-  const [selectedItemCustom, setSelectedItemCustom] = useState<ScanCustomFieldGuesses | null>(
-    null
-  )
+  const [selectedItemCustom, setSelectedItemCustom] = useState<ScanCustomFieldGuesses | null>(null)
   const [acceptedCustom, setAcceptedCustom] = useState<Set<string>>(new Set())
   // The group's fields, to name the values read; none in the anonymous flow.
   const customFieldDefs = useCustomFields({ slug: anonymous ? "" : slug }).data
@@ -1166,8 +1164,7 @@ function ReviewRow({
   const confidenceBand: "high" | "medium" | "low" =
     confidence >= 0.75 ? "high" : confidence >= 0.5 ? "medium" : "low"
   const isLow = confidenceBand === "low"
-  const fieldLabel =
-    label ?? t(`commodities:fields.${fieldLabelKey(fieldKey as ScanFieldName)}`)
+  const fieldLabel = label ?? t(`commodities:fields.${fieldLabelKey(fieldKey as ScanFieldName)}`)
   return (
     <div
       className="rounded-lg border border-border bg-muted/20 px-3 py-2.5"
@@ -1381,11 +1378,7 @@ function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => st
 // about (confidence ≥ 0.3 — below that it's essentially guessing). Used
 // both for a single-item scan and after the user picks a candidate.
 // customGuessText shows a custom field value read by the scan.
-function customGuessText(
-  def: CustomField,
-  value: unknown,
-  t: (key: string) => string
-): string {
+function customGuessText(def: CustomField, value: unknown, t: (key: string) => string): string {
   if (def.type === "select") {
     return def.options.find((o) => o.id === value)?.label ?? String(value)
   }

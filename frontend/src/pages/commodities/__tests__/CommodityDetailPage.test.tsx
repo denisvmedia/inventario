@@ -1290,9 +1290,7 @@ describe("CommodityDetailPage custom fields", () => {
     expect(dock).toHaveTextContent("Old dock")
     expect(dock).toHaveTextContent("in Trash")
     expect(within(dock).queryByRole("link")).not.toBeInTheDocument()
-    expect(screen.getByTestId("commodity-detail-custom-field-cf-keyboard")).toHaveTextContent(
-      "No"
-    )
+    expect(screen.getByTestId("commodity-detail-custom-field-cf-keyboard")).toHaveTextContent("No")
     expect(screen.getByTestId("commodity-detail-custom-field-cf-grade")).toHaveTextContent("A")
     expect(screen.queryByTestId("commodity-detail-custom-field-cf-unused")).not.toBeInTheDocument()
   })

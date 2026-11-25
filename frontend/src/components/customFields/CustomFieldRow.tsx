@@ -22,7 +22,9 @@ export function CustomFieldRow({ field, onEdit, onDelete, className }: CustomFie
   const trashed = field.trashed_item_count ?? 0
   const usage = [
     field.type === "select" ? t("customFields:list.options", { count: field.options.length }) : "",
-    items > 0 ? t("customFields:list.usageItems", { count: items }) : t("customFields:list.usageNone"),
+    items > 0
+      ? t("customFields:list.usageItems", { count: items })
+      : t("customFields:list.usageNone"),
     trashed > 0 ? t("customFields:list.usageTrashed", { count: trashed }) : "",
   ].filter(Boolean)
 

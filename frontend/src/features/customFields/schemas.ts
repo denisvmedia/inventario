@@ -24,10 +24,7 @@ export const customFieldFormSchema = z
       .string()
       .trim()
       .min(1, "customFields:validation.nameRequired")
-      .refine(
-        (v) => codePoints(v) <= CUSTOM_FIELD_NAME_MAX,
-        "customFields:validation.nameTooLong"
-      ),
+      .refine((v) => codePoints(v) <= CUSTOM_FIELD_NAME_MAX, "customFields:validation.nameTooLong"),
     type: z.enum(CUSTOM_FIELD_TYPES),
     options: z.array(
       z.object({
