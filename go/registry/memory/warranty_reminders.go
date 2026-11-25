@@ -41,6 +41,20 @@ func (r *WarrantyReminderRegistry) HasSent(_ context.Context, commodityID string
 	return false, nil
 }
 
+// HasSentInRange checks whether a row exists for the commodity with
+// fromDays <= threshold < belowDays.
+func (r *WarrantyReminderRegistry) HasSentInRange(_ context.Context, commodityID string, fromDays, belowDays int) (bool, error) {
+	r.lock.RLock()
+	defer r.lock.RUnlock()
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		v := pair.Value
+		if v.CommodityID == commodityID && v.ThresholdDays >= fromDays && v.ThresholdDays < belowDays {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
 // CreateOnce inserts the reminder row iff no row exists for the same
 // (commodity, threshold) tuple. Returns (false, nil) for the loser of
 // a race so the caller can treat happy-path and race-loser identically.

@@ -53,6 +53,26 @@ func (r *WarrantyReminderRegistry) HasSent(ctx context.Context, commodityID stri
 	return count > 0, nil
 }
 
+// HasSentInRange reports whether a row exists for the commodity with
+// fromDays <= threshold_days < belowDays.
+func (r *WarrantyReminderRegistry) HasSentInRange(ctx context.Context, commodityID string, fromDays, belowDays int) (bool, error) {
+	if commodityID == "" {
+		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "CommodityID"))
+	}
+	var exists bool
+	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT EXISTS (SELECT 1 FROM %s WHERE commodity_id = $1 AND threshold_days >= $2 AND threshold_days < $3)`,
+			r.tableNames.WarrantyReminders(),
+		)
+		return tx.QueryRowxContext(ctx, query, commodityID, fromDays, belowDays).Scan(&exists)
+	})
+	if err != nil {
+		return false, errxtrace.Wrap("failed to check warranty reminders in range", err)
+	}
+	return exists, nil
+}
+
 // CreateOnce inserts the row iff no row exists for the same
 // (commodity_id, threshold_days). Returns (false, nil) if the unique
 // index already has the tuple — duplicate-key is a normal happy-path

@@ -123,6 +123,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
   are written in INB format 3.0, which stores a shared file once; 2.x backups
   still restore
   ([#2806](https://github.com/denisvmedia/inventario/issues/2806)).
+- Warranty and maintenance reminders send one email for the closest lead time
+  reached, the way item reminders do. A lead time that passed while the
+  server was down, or that someone added after it had passed, no longer goes
+  out late, and a longer lead time is not sent after a shorter one. Raising a
+  lead time therefore does not email every item that is already closer than
+  it. The `threshold` label of `inventario_warranty_reminders_sent_total` and
+  `inventario_maintenance_reminders_sent_total` is `custom` for a lead time
+  other than the defaults
+  ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
 
 ### Fixed
 

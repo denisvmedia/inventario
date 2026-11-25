@@ -143,16 +143,17 @@ func TestMaintenanceReminderService_RemindOnce_TickClock(t *testing.T) {
 
 	stats, err := svc.RemindOnce(ctx, now)
 	c.Assert(err, qt.IsNil)
-	// 14-day + 7-day thresholds both match a 7-days-out schedule.
-	c.Assert(stats.Sent(), qt.Equals, 2)
-	c.Assert(stats.SentByThreshold[models.MaintenanceReminder14Days], qt.Equals, 1)
+	// 14-day + 7-day thresholds both match a 7-days-out schedule. Only
+	// the closest, 7, is emailed; the 14-day row is written silently.
+	c.Assert(stats.Sent(), qt.Equals, 1)
+	c.Assert(stats.SentByThreshold[models.MaintenanceReminder14Days], qt.Equals, 0)
 	c.Assert(stats.SentByThreshold[models.MaintenanceReminder7Days], qt.Equals, 1)
 	c.Assert(stats.SentByThreshold[models.MaintenanceReminder1Day], qt.Equals, 0)
 	c.Assert(stats.Failed, qt.Equals, 0)
 
 	// Recipient resolution falls back to the commodity's creator when
 	// no admin memberships exist (single-user install).
-	c.Assert(email.snapshot(), qt.HasLen, 2)
+	c.Assert(email.snapshot(), qt.HasLen, 1)
 
 	// Second tick at the same clock — every reminder row already
 	// exists, so nothing new is sent. The Failed counter must stay
@@ -161,7 +162,7 @@ func TestMaintenanceReminderService_RemindOnce_TickClock(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(stats2.Sent(), qt.Equals, 0)
 	c.Assert(stats2.Failed, qt.Equals, 0)
-	c.Assert(email.snapshot(), qt.HasLen, 2)
+	c.Assert(email.snapshot(), qt.HasLen, 1)
 }
 
 // TestMaintenanceReminderService_OverdueOnce verifies that a schedule

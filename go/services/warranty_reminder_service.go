@@ -179,11 +179,14 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 // largest first, and the recipients to consider for them.
 //
 // Each recipient has their own lead times (#2805), so the commodity is
-// checked at the union of them and processOne sends each lead time only to
-// the recipients who chose it. Without recipients, or without an email
-// service, the defaults apply so the idempotency rows are still written.
-// A commodity 30 days from expiry with [60, 30, 7] returns [60, 30]; see
-// matchedThresholds.
+// checked at the union of them. Each recipient is due only the closest
+// lead time they have reached (DueLeadTime), and processOne emails a
+// threshold only to the recipients it is due for. The larger thresholds
+// still get their idempotency row, without an email. Without recipients,
+// or without an email service, the defaults apply so the rows are still
+// written. A commodity 30 days from expiry with [60, 30, 7] returns
+// [60, 30]: the 60-day row is written silently and the recipient gets the
+// 30-day email.
 func (s *WarrantyReminderService) planCommodity(
 	ctx context.Context,
 	c *models.Commodity,
@@ -209,6 +212,7 @@ func (s *WarrantyReminderService) planCommodity(
 	var union []int
 	for i, r := range recipients {
 		r.leadTimes = prefsCache.WarrantyLeadTimes(ctx, r.user)
+		r.due, r.hasDue = DueLeadTime(r.leadTimes, daysLeft)
 		withLeads[i] = r
 		union = append(union, r.leadTimes...)
 	}
@@ -237,13 +241,12 @@ func warrantyDaysLeft(expires models.PDate, now time.Time) (int, bool) {
 }
 
 // matchedThresholds returns the distinct lead times T with daysLeft <= T,
-// largest first. The worker emits one email per matched threshold, and the
-// (commodity, threshold) idempotency row keeps each one to a single send.
-//
-// Returning every matched threshold rather than only the tightest one is
-// deliberate: after a worker outage, or after a recipient adds a longer
-// lead time, the reminder for a threshold that has already passed is still
-// sent once, because the recipient has not had that signal yet.
+// largest first. Every one of them gets its (commodity, threshold)
+// idempotency row in this sweep, but a recipient is emailed only for the
+// closest one they have reached. Sending every matched threshold would
+// burst after a worker outage, or when a recipient adds a longer lead
+// time: adding 90 would send a "90 days left" email for every item that
+// expires within 90 days, tomorrow's included.
 func matchedThresholds(daysLeft int, leadTimes []int) []models.WarrantyReminderThreshold {
 	var out []models.WarrantyReminderThreshold
 	for _, d := range leadTimes {
@@ -274,9 +277,10 @@ func (s *WarrantyReminderService) cachedRecipients(ctx context.Context, c *model
 	return recipients, nil
 }
 
-// wants reports whether the recipient chose lead time t.
-func (r warrantyRecipient) wants(t models.WarrantyReminderThreshold) bool {
-	return slices.Contains(r.leadTimes, int(t))
+// dueFor reports whether t is the lead time the recipient is due now: the
+// closest one they have reached.
+func (r warrantyRecipient) dueFor(t models.WarrantyReminderThreshold) bool {
+	return r.hasDue && r.due == int(t)
 }
 
 // processOne handles one (commodity, threshold) pair across the
@@ -303,7 +307,8 @@ func (r warrantyRecipient) wants(t models.WarrantyReminderThreshold) bool {
 //   - (true, nil)  — this call won the row insert AND at least one
 //     enqueue succeeded.
 //   - (false, nil) — already-sent (HasSent hit) OR another worker won
-//     the CreateOnce race OR no recipients matched
+//     the CreateOnce race OR no recipients matched OR no recipient is
+//     due this threshold OR a closer one was already sent
 //     (row still committed so the worker stops
 //     re-evaluating).
 //   - (false, err) — recipient lookup failed OR every enqueue failed;
@@ -357,15 +362,66 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 		return ok, nil
 	}
 
+	superseded, err := s.supersededByCloserSend(ctx, c, threshold, recipients, now)
+	if err != nil {
+		return false, err
+	}
+	if superseded {
+		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (superseded)", err)
+		}
+		return false, nil
+	}
+
+	attempted, enqueueErrs, firstEnqueueErr := s.fanOutToRecipients(ctx, c, threshold, recipients, prefsCache)
+	if attempted > 0 && enqueueErrs == attempted {
+		// Every recipient enqueue failed. Don't commit the idempotency
+		// row — let the next sweep retry. Once any enqueue succeeds the
+		// async email service handles its own per-job retry inside the
+		// queue worker pool.
+		return false, errxtrace.Wrap("warranty reminder: all enqueues failed", firstEnqueueErr)
+	}
+	if attempted == 0 {
+		// Every recipient opted out of warranty notifications, or none
+		// is due this threshold because each has reached a closer one.
+		// Persist the idempotency row so the worker doesn't sweep them
+		// again next tick, but DON'T flag this row as "sent" — the
+		// SentByThreshold counter (Prometheus
+		// `inventario_warranty_reminders_sent_total`) is for actually-
+		// emitted reminders and would otherwise drift upwards every
+		// time a fully-opted-out cohort matched a threshold.
+		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
+			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (all opted out)", err)
+		}
+		return false, nil
+	}
+	ok, err := s.commitReminderRow(ctx, c, threshold, now)
+	if err != nil {
+		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
+	}
+	return ok, nil
+}
+
+// fanOutToRecipients enqueues the warranty email for every recipient the
+// threshold is due for who has not opted out. It returns how many enqueues
+// were attempted, how many failed and the first error, for processOne to
+// pick between its terminal states. Split out of processOne to keep it
+// under the gocognit ceiling.
+func (s *WarrantyReminderService) fanOutToRecipients(
+	ctx context.Context,
+	c *models.Commodity,
+	threshold models.WarrantyReminderThreshold,
+	recipients []warrantyRecipient,
+	prefsCache *notifications.Cache,
+) (attempted, enqueueErrs int, firstEnqueueErr error) {
 	expiry := string(*c.WarrantyExpiresAt)
 	url := s.buildCommodityURL(ctx, c)
-	enqueueErrs := 0
-	attempted := 0
-	var firstEnqueueErr error
 	for _, r := range recipients {
-		if !r.wants(threshold) {
-			// This recipient chose other lead times. They are not
-			// counted as attempted; another recipient chose this one.
+		if !r.dueFor(threshold) {
+			// This recipient did not choose this lead time, or has
+			// already reached a closer one and gets only that. They are
+			// not counted as attempted; when nobody is, the row is
+			// written without an email below.
 			continue
 		}
 		// Per-recipient opt-out gate. Skipped recipients still count
@@ -404,31 +460,29 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 			)
 		}
 	}
-	if attempted > 0 && enqueueErrs == attempted {
-		// Every recipient enqueue failed. Don't commit the idempotency
-		// row — let the next sweep retry. Once any enqueue succeeds the
-		// async email service handles its own per-job retry inside the
-		// queue worker pool.
-		return false, errxtrace.Wrap("warranty reminder: all enqueues failed", firstEnqueueErr)
-	}
-	if attempted == 0 {
-		// Every recipient opted out of warranty notifications. Persist
-		// the idempotency row so the worker doesn't sweep them again
-		// next tick, but DON'T flag this row as "sent" — the
-		// SentByThreshold counter (Prometheus
-		// `inventario_warranty_reminders_sent_total`) is for actually-
-		// emitted reminders and would otherwise drift upwards every
-		// time a fully-opted-out cohort matched a threshold.
-		if _, err := s.commitReminderRow(ctx, c, threshold, now); err != nil {
-			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (all opted out)", err)
-		}
+	return attempted, enqueueErrs, firstEnqueueErr
+}
+
+// supersededByCloserSend reports whether a reminder at a closer lead time
+// than threshold has already gone out for c, while threshold is due for
+// some recipient. That happens when a recipient raises a lead time: with
+// 60 sent and the lead times changed to [90, 30, 7], an item 45 days out
+// is due the 90-day reminder, but its owner already had the 60-day one.
+// A larger lead time is never sent after a smaller one, the same rule as
+// item reminders.
+func (s *WarrantyReminderService) supersededByCloserSend(ctx context.Context, c *models.Commodity, threshold models.WarrantyReminderThreshold, recipients []warrantyRecipient, now time.Time) (bool, error) {
+	if !slices.ContainsFunc(recipients, func(r warrantyRecipient) bool { return r.dueFor(threshold) }) {
 		return false, nil
 	}
-	ok, err := s.commitReminderRow(ctx, c, threshold, now)
-	if err != nil {
-		return false, errxtrace.Wrap("warranty reminder: insert idempotency row", err)
+	daysLeft, ok := warrantyDaysLeft(c.WarrantyExpiresAt, now)
+	if !ok {
+		return false, nil
 	}
-	return ok, nil
+	closer, err := s.factorySet.WarrantyReminderRegistry.HasSentInRange(ctx, c.ID, daysLeft, int(threshold))
+	if err != nil {
+		return false, errxtrace.Wrap("warranty reminder: check closer reminders", err)
+	}
+	return closer, nil
 }
 
 // commitReminderRow writes the (commodity, threshold) idempotency row
@@ -461,6 +515,10 @@ type warrantyRecipient struct {
 	// leadTimes are the recipient's warranty lead times, set by
 	// planCommodity from their notification settings.
 	leadTimes []int
+	// due is the closest lead time the recipient has reached, the only
+	// one they are emailed for; hasDue is false when none is reached.
+	due    int
+	hasDue bool
 	// fromMembership is true for group admins and false for the
 	// commodity-creator fallback.
 	fromMembership bool

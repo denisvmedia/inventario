@@ -170,10 +170,7 @@ Inventario sends reminder emails so you don't have to keep checking these pages:
 - **Maintenance** — 14, 7, and 1 day before each due date, unless you choose other days, and once more when a task is overdue.
 - **Item reminders** — on the days before the date that you chose for that reminder. They go to the person who created the reminder, as long as they are still a member of the group.
 
-Each email for a date is sent once.
-
-- For an item reminder, if Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day.
-- For a warranty or a maintenance task, a lead time that passed while Inventario was not running, or that you add after it has passed, is still sent once, late. Each of those emails names the lead time it stands for and the date itself.
+Each email for a date is sent once. If Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day. A longer lead time is not sent after a shorter one, so if you add 90 to your warranty lead times, an item that expires next week, or one that already had its 60-day email, gets no new email; an item 75 days away gets its 90-day email straight away.
 
 ### Choose your lead times
 

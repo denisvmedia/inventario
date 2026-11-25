@@ -95,14 +95,13 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 	}
 
 	prefsCache := s.prefsForSweep()
-	// Admin recipients depend only on the group; see the warranty service.
-	recipientsByGroup := map[string][]maintenanceRecipient{}
+	sweep := newMaintenanceSweep()
 
 	for _, m := range schedules {
 		if m == nil || !m.Enabled {
 			continue
 		}
-		target, planErr := s.planSchedule(ctx, m, now, prefsCache, recipientsByGroup)
+		target, planErr := s.planSchedule(ctx, m, now, prefsCache, sweep)
 		if planErr != nil {
 			stats.Failed++
 			slog.Error("maintenance reminder failed",
@@ -138,23 +137,26 @@ type maintenanceTarget struct {
 	// email service is configured; processOne then only writes rows.
 	commodity  *models.Commodity
 	recipients []maintenanceRecipient
+	// daysLeft is the days until the due date; 0 for an overdue schedule.
+	daysLeft int
 }
 
 // planSchedule works out maintenanceTarget for m. A past-due schedule gets
 // the overdue reminder alone, for every recipient: once the date has passed
 // the lead times no longer apply. Otherwise each recipient has their own
-// lead times (#2805), the schedule is checked at the union of them, and
-// processOne sends a lead time only to the recipients who chose it. A
+// lead times (#2805) and the schedule is checked at the union of them. A
 // schedule N days from due matches every lead time T where N <= T, so with
-// [14, 7, 1] a row 7 days out returns [14, 7]. The idempotency row keeps
-// each (schedule, threshold) to one send until the next MarkDone clears
-// them.
+// [14, 7, 1] a row 7 days out returns [14, 7]. Every matched threshold gets
+// its idempotency row, but a recipient is emailed only for the closest lead
+// time they have reached (DueLeadTime), here 7, so a missed sweep or a
+// newly added longer lead time does not send a burst. The rows keep each
+// (schedule, threshold) to one send until the next MarkDone clears them.
 func (s *MaintenanceReminderService) planSchedule(
 	ctx context.Context,
 	m *models.MaintenanceSchedule,
 	now time.Time,
 	prefsCache *notifications.Cache,
-	recipientsByGroup map[string][]maintenanceRecipient,
+	sweep *maintenanceSweep,
 ) (maintenanceTarget, error) {
 	var target maintenanceTarget
 	if string(m.NextDueAt) == "" {
@@ -162,7 +164,17 @@ func (s *MaintenanceReminderService) planSchedule(
 	}
 	overdue := m.IsOverdue(now)
 	daysLeft := 0
-	if !overdue {
+	if overdue {
+		// The overdue reminder is the only one left for this cycle, so
+		// once it is sent there is nothing to resolve.
+		sent, err := s.factorySet.MaintenanceReminderRegistry.HasSent(ctx, m.ID, int(models.MaintenanceReminderOverdue))
+		if err != nil {
+			return target, errxtrace.Wrap("maintenance reminder: check existing row", err)
+		}
+		if sent {
+			return target, nil
+		}
+	} else {
 		due := m.NextDueAt.ToTime()
 		if due.IsZero() {
 			return target, nil
@@ -176,7 +188,7 @@ func (s *MaintenanceReminderService) planSchedule(
 	}
 	leadTimes := models.DefaultMaintenanceLeadTimes()
 	if s.emailSvc != nil {
-		if err := s.resolveTarget(ctx, m, prefsCache, recipientsByGroup, &target); err != nil {
+		if err := s.resolveTarget(ctx, m, prefsCache, sweep, &target); err != nil {
 			return target, err
 		}
 		var union []int
@@ -190,6 +202,11 @@ func (s *MaintenanceReminderService) planSchedule(
 	if overdue {
 		target.thresholds = []models.MaintenanceReminderThreshold{models.MaintenanceReminderOverdue}
 		return target, nil
+	}
+	target.daysLeft = daysLeft
+	for i := range target.recipients {
+		r := &target.recipients[i]
+		r.due, r.hasDue = DueLeadTime(r.leadTimes, daysLeft)
 	}
 	for _, d := range leadTimes {
 		t := models.MaintenanceReminderThreshold(d)
@@ -208,10 +225,10 @@ func (s *MaintenanceReminderService) resolveTarget(
 	ctx context.Context,
 	m *models.MaintenanceSchedule,
 	prefsCache *notifications.Cache,
-	recipientsByGroup map[string][]maintenanceRecipient,
+	sweep *maintenanceSweep,
 	target *maintenanceTarget,
 ) error {
-	commodity, err := s.lookupCommodity(ctx, m.CommodityID)
+	commodity, err := s.cachedCommodity(ctx, m.CommodityID, sweep)
 	if err != nil {
 		return errxtrace.Wrap("maintenance reminder: lookup commodity", err)
 	}
@@ -219,7 +236,7 @@ func (s *MaintenanceReminderService) resolveTarget(
 	if commodity == nil {
 		return nil
 	}
-	recipients, err := s.cachedRecipients(ctx, commodity, recipientsByGroup)
+	recipients, err := s.cachedRecipients(ctx, commodity, sweep.recipientsByGroup)
 	if err != nil {
 		return errxtrace.Wrap("maintenance reminder: resolve recipients", err)
 	}
@@ -229,6 +246,35 @@ func (s *MaintenanceReminderService) resolveTarget(
 		target.recipients[i] = r
 	}
 	return nil
+}
+
+// maintenanceSweep holds what one sweep looks up once and reuses: the
+// commodities behind the schedules (several schedules often share one) and
+// the admin recipients of each group, which depend only on the group.
+type maintenanceSweep struct {
+	commodities       map[string]*models.Commodity
+	recipientsByGroup map[string][]maintenanceRecipient
+}
+
+func newMaintenanceSweep() *maintenanceSweep {
+	return &maintenanceSweep{
+		commodities:       map[string]*models.Commodity{},
+		recipientsByGroup: map[string][]maintenanceRecipient{},
+	}
+}
+
+// cachedCommodity returns lookupCommodity, reusing a commodity already
+// looked up in this sweep. A missing commodity is cached as nil.
+func (s *MaintenanceReminderService) cachedCommodity(ctx context.Context, id string, sweep *maintenanceSweep) (*models.Commodity, error) {
+	if c, ok := sweep.commodities[id]; ok {
+		return c, nil
+	}
+	c, err := s.lookupCommodity(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	sweep.commodities[id] = c
+	return c, nil
 }
 
 // cachedRecipients returns recipientsForCommodity, reusing the admin list
@@ -291,14 +337,23 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		return s.commitWithoutSend(ctx, m, threshold, now, "no recipients", commodity)
 	}
 
+	superseded, err := s.supersededByCloserSend(ctx, m, threshold, target)
+	if err != nil {
+		return false, err
+	}
+	if superseded {
+		return s.commitWithoutSend(ctx, m, threshold, now, "closer reminder already sent", commodity)
+	}
+
 	attempted, enqueueErrs, firstEnqueueErr := s.fanOutToRecipients(ctx, m, threshold, commodity, recipients, prefsCache)
 	if attempted > 0 && enqueueErrs == attempted {
 		return false, errxtrace.Wrap("maintenance reminder: all enqueues failed", firstEnqueueErr)
 	}
 	if attempted == 0 {
-		// Every recipient opted out. Persist the row so we don't
-		// sweep this tuple every tick, but report (false, nil) — no
-		// email was enqueued so SentByThreshold must not move.
+		// Every recipient opted out, or none is due this threshold
+		// because each has reached a closer one. Persist the row so we
+		// don't sweep this tuple every tick, but report (false, nil) —
+		// no email was enqueued so SentByThreshold must not move.
 		return s.commitWithoutSend(ctx, m, threshold, now, "all opted out", commodity)
 	}
 	ok, err := s.commitReminderRow(ctx, m, threshold, now)
@@ -306,6 +361,28 @@ func (s *MaintenanceReminderService) processOne(ctx context.Context, m *models.M
 		return false, errxtrace.Wrap("maintenance reminder: insert idempotency row", err)
 	}
 	return ok, nil
+}
+
+// supersededByCloserSend reports whether a reminder at a closer lead time
+// than threshold has already gone out for m in this cycle, while threshold
+// is due for some recipient. See the warranty service: a larger lead time
+// is never sent after a smaller one. The overdue reminder is never
+// superseded.
+func (s *MaintenanceReminderService) supersededByCloserSend(ctx context.Context, m *models.MaintenanceSchedule, threshold models.MaintenanceReminderThreshold, target maintenanceTarget) (bool, error) {
+	if threshold == models.MaintenanceReminderOverdue {
+		return false, nil
+	}
+	due := func(r maintenanceRecipient) bool { return r.hasDue && r.due == int(threshold) }
+	if !slices.ContainsFunc(target.recipients, due) {
+		return false, nil
+	}
+	// The overdue row (threshold 0) belongs to a past due date, not to a
+	// closer lead time.
+	closer, err := s.factorySet.MaintenanceReminderRegistry.HasSentInRange(ctx, m.ID, max(target.daysLeft, 1), int(threshold))
+	if err != nil {
+		return false, errxtrace.Wrap("maintenance reminder: check closer reminders", err)
+	}
+	return closer, nil
 }
 
 // commitWithoutSend handles the four "commit the row, no email
@@ -357,9 +434,10 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 	dueDate := string(m.NextDueAt)
 	url := s.buildCommodityURL(ctx, commodity)
 	for _, r := range recipients {
-		if threshold != models.MaintenanceReminderOverdue && !slices.Contains(r.leadTimes, int(threshold)) {
-			// This recipient chose other lead times; another one chose
-			// this. The overdue reminder goes to everyone.
+		if threshold != models.MaintenanceReminderOverdue && (!r.hasDue || r.due != int(threshold)) {
+			// This recipient did not choose this lead time, or has
+			// already reached a closer one and gets only that. The
+			// overdue reminder goes to everyone.
 			continue
 		}
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, commodity.TenantID, commodity.GroupID, notifications.CategoryMaintenanceReminder, notifications.ChannelEmail) {
@@ -408,6 +486,11 @@ type maintenanceRecipient struct {
 	// leadTimes are the recipient's maintenance lead times, set by
 	// planSchedule from their notification settings.
 	leadTimes []int
+	// due is the closest lead time the recipient has reached, the only
+	// one they are emailed for before the due date; hasDue is false when
+	// none is reached.
+	due    int
+	hasDue bool
 	// fromMembership is true for group admins and false for the
 	// commodity-creator fallback.
 	fromMembership bool

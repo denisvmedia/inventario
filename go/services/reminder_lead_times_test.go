@@ -152,7 +152,9 @@ func TestMaintenanceReminderService_PerUserLeadTimes(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(maintenanceSends(email), qt.DeepEquals, []sentTo{{To: "owner@example.com", Days: 21}})
 
-	// 7 days out: the partner gets 14 and 7, the owner nothing more.
+	// 7 days out: the sweeps missed the partner's 14-day mark, so the
+	// partner gets only the closest reached lead time, 7. The owner gets
+	// nothing more.
 	_, err = svc.RemindOnce(env.ctx, now.AddDate(0, 0, 13))
 	c.Assert(err, qt.IsNil)
 	// Overdue: everyone gets the overdue reminder, whatever their lead times.
@@ -161,10 +163,113 @@ func TestMaintenanceReminderService_PerUserLeadTimes(t *testing.T) {
 	c.Assert(maintenanceSends(email), qt.DeepEquals, []sentTo{
 		{To: "owner@example.com", Days: 21},
 		{To: "owner@example.com", Days: 0},
-		{To: partner.Email, Days: 14},
 		{To: partner.Email, Days: 7},
 		{To: partner.Email, Days: 0},
 	})
+}
+
+// Raising a lead time must not send a burst of reminders for items that
+// are already closer than it, or that already had a closer reminder.
+func TestWarrantyReminderService_RaisingALeadTimeSendsNoBurst(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	addItem := func(name string, days int) {
+		expires := dateOffset(now, days)
+		_, err := env.regSet.CommodityRegistry.Create(env.ctx, models.Commodity{
+			Name:              name,
+			ShortName:         name,
+			Type:              models.CommodityTypeWhiteGoods,
+			Status:            models.CommodityStatusInUse,
+			Count:             1,
+			WarrantyExpiresAt: &expires,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	addItem("tomorrow", 1)
+	addItem("in-45", 45)
+	addItem("in-75", 75)
+	addItem("in-200", 200)
+
+	email := &recordingEmailService{}
+	svc := services.NewWarrantyReminderService(env.fs, email, urlBuilder).
+		WithPreferences(notifications.NewService(env.fs.SettingsRegistryFactory))
+	sends := func() map[string][]int {
+		out := map[string][]int{}
+		for _, call := range email.snapshot() {
+			out[call.commodityName] = append(out[call.commodityName], call.thresholdDays)
+		}
+		return out
+	}
+
+	// Default lead times 60, 30, 7: one email per item inside 60 days, at
+	// the closest lead time reached.
+	_, err := svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sends(), qt.DeepEquals, map[string][]int{"tomorrow": {7}, "in-45": {60}})
+
+	// The owner raises the longest lead time to 365. Only the item that
+	// had no reminder yet gets one; "tomorrow" is past every new lead
+	// time except the 7 already sent, and "in-45" already had its 60.
+	setUserSetting(c, env.fs, env.user, models.SettingNameNotificationsWarrantyLeadTimes, []int{365, 30, 7})
+	_, err = svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sends(), qt.DeepEquals, map[string][]int{
+		"tomorrow": {7},
+		"in-45":    {60},
+		"in-75":    {365},
+		"in-200":   {365},
+	})
+
+	// 15 days later "in-45" reaches 30 and gets it; nothing else is due.
+	_, err = svc.RemindOnce(env.ctx, now.AddDate(0, 0, 15))
+	c.Assert(err, qt.IsNil)
+	c.Assert(sends(), qt.DeepEquals, map[string][]int{
+		"tomorrow": {7},
+		"in-45":    {60, 30},
+		"in-75":    {365},
+		"in-200":   {365},
+	})
+}
+
+func TestMaintenanceReminderService_RaisingALeadTimeSendsNoBurst(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	now := time.Date(2026, 11, 25, 9, 0, 0, 0, time.UTC)
+	addSchedule := func(title string, days int) {
+		_, err := env.regSet.MaintenanceScheduleRegistry.Create(env.ctx, models.MaintenanceSchedule{
+			CommodityID:  env.commodity.ID,
+			Title:        title,
+			IntervalDays: 365,
+			NextDueAt:    dateOffset(now, days),
+			Enabled:      true,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	addSchedule("tomorrow", 1)
+	addSchedule("in-10", 10)
+	addSchedule("in-40", 40)
+
+	email := &recordingMaintenanceEmailService{}
+	svc := services.NewMaintenanceReminderService(env.fs, email, urlBuilder).
+		WithPreferences(notifications.NewService(env.fs.SettingsRegistryFactory))
+	sends := func() map[string][]int {
+		out := map[string][]int{}
+		for _, call := range email.snapshot() {
+			out[call.title] = append(out[call.title], call.thresholdDays)
+		}
+		return out
+	}
+
+	// Default lead times 14, 7, 1.
+	_, err := svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sends(), qt.DeepEquals, map[string][]int{"tomorrow": {1}, "in-10": {14}})
+
+	setUserSetting(c, env.fs, env.user, models.SettingNameNotificationsMaintenanceLeadTimes, []int{60, 7, 1})
+	_, err = svc.RemindOnce(env.ctx, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sends(), qt.DeepEquals, map[string][]int{"tomorrow": {1}, "in-10": {14}, "in-40": {60}})
 }
 
 func TestLoanReminderService_LenderLeadTime(t *testing.T) {
