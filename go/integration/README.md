@@ -64,9 +64,10 @@ func TestCLIWorkflowIntegration(t *testing.T)
 
 None. The suite brings its own PostgreSQL: `internal/pgtest` starts an
 embedded server on a free port the first time a test asks for a DSN, and
-`TestMain` stops it when the package finishes. The server binary is downloaded
-once and cached under `~/.embedded-postgres-go`, so the first run is slower
-than the rest.
+`TestMain` stops it when the package finishes. The server binaries and the
+embedded-postgres supervisor are downloaded once and cached under the user
+cache directory (`~/.cache/embedded-postgres/v2` on Linux), so the first run is
+slower than the rest.
 
 The same applies to `registry/postgres`, `schema/bootstrap`,
 `schema/migrations/migrator` and the `cmd/inventario/db` suites.

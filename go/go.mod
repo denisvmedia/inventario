@@ -18,7 +18,6 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.33.21
 	github.com/aws/aws-sdk-go-v2/service/sesv2 v1.80.0
 	github.com/bojanz/currency v1.5.1
-	github.com/fergusstrange/embedded-postgres v1.34.0
 	github.com/fergusstrange/embedded-postgres/v2 v2.0.1
 	github.com/frankban/quicktest v1.14.6
 	github.com/gabriel-vasile/mimetype v1.4.16
@@ -191,7 +190,6 @@ require (
 	github.com/swaggo/files/v2 v2.0.2 // indirect
 	github.com/tursodatabase/libsql-client-go v0.0.0-20260528064733-9d5d30a29a60 // indirect
 	github.com/urfave/cli/v2 v2.27.7 // indirect
-	github.com/xi2/xz v0.0.0-20171230120015-48954b6210f8 // indirect
 	github.com/xrash/smetrics v0.0.0-20240521201337-686a1a2994c1 // indirect
 	github.com/yuin/gopher-lua v1.1.2 // indirect
 	github.com/zclconf/go-cty v1.19.0 // indirect
