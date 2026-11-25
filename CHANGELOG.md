@@ -12,6 +12,23 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- Save as draft in the Add item dialog saves the form and its files on the
+  server as a draft of the group, so an item started on one device can be
+  finished on another. Nothing is required to save a draft; a **Save draft**
+  button is on every step while the switch is on. The Items page lists the
+  group's drafts in a **Drafts** card with Continue and Discard. Finishing a
+  draft creates exactly one item and moves the draft's files to it, and a save
+  repeated after a lost response does not make a second draft. Discarding
+  sends the files nothing else uses to the Trash. A save made on another
+  device since the draft was opened is not overwritten: the dialog offers to
+  load it or save as a new draft. Drafts stay out of item lists, counts,
+  search, reports, reminders and backups; their files are standalone files in
+  backups. The short name of a new item follows the name until one is typed.
+  The new API is `/drafts` (list, create with a client key, save with a
+  revision, discard, promote). The dialog no longer creates items flagged as
+  drafts; editing an item keeps that switch
+  ([#2812](https://github.com/denisvmedia/inventario/issues/2812)).
+
 - An item has a brand and a model, both optional text of up to 100
   characters. Cards, list rows and the item page show "Brand · Model" under
   the name, the insurance reports put the brand in the item's title and the

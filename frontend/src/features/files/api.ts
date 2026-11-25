@@ -157,8 +157,9 @@ export interface UpdateFileRequest {
 }
 
 // The entity kinds a user can attach a file to. Backup export bundles carry
-// an "export" link too, but that one is never created or removed here.
-export type FileLinkEntityType = "commodity" | "location" | "area"
+// an "export" link too, but that one is never created or removed here. A
+// "draft" link holds a file for an unfinished item (#2812).
+export type FileLinkEntityType = "commodity" | "location" | "area" | "draft"
 
 export interface AttachFileRequest {
   entityType: FileLinkEntityType

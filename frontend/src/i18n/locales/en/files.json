@@ -119,6 +119,7 @@
     "type": {
       "area": "Area",
       "commodity": "Item",
+      "draft": "Draft",
       "location": "Location"
     }
   },

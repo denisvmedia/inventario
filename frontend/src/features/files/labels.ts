@@ -86,6 +86,8 @@ export function useLinkTypeLabel(): (entityType: string | undefined) => string {
         return t("files:links.type.location", { defaultValue: "Location" })
       case "area":
         return t("files:links.type.area", { defaultValue: "Area" })
+      case "draft":
+        return t("files:links.type.draft", { defaultValue: "Draft" })
       default:
         return entityType ?? ""
     }

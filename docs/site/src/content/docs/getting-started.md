@@ -35,7 +35,7 @@ An **item** is anything you want to keep track of — an appliance, a laptop, a 
 Items don't have to be placed in a location to be saved. If you skip that, the item appears with a small banner offering to **Place in location** — you can do that whenever you like, or leave it unassigned.
 :::
 
-If you're trying Inventario from the public landing page before creating an account, you can draft your first item right there. After you sign up, the app finishes adding it for you — your draft is never lost.
+If you're trying Inventario from the public landing page before creating an account, you can draft your first item right there. Until you sign up, it is kept in this browser only: closing the form offers **Keep on this device**, which takes you to sign in. After you sign up, the app finishes adding it for you — your draft is never lost.
 
 See [Items](../items/) for a full reference to every field.
 

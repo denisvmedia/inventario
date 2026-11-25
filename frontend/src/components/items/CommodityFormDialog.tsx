@@ -9,6 +9,7 @@ import {
   ChevronDown,
   ChevronRight,
   File as FileIcon,
+  HardDrive,
   Image as ImageIcon,
   Plus,
   RefreshCw,
@@ -89,6 +90,25 @@ import {
   type ScanAcceptMeta,
 } from "@/components/items/AiScanStep"
 import { BrandModelFields } from "@/components/items/BrandModelFields"
+import { DraftSaveAlert, type DraftSaveState } from "@/components/items/DraftSaveAlert"
+import { suggestShortName } from "@/features/commodities/shortName"
+import { getDraft, revisionConflict, type DraftValues } from "@/features/drafts/api"
+import {
+  useDraft,
+  useDraftFiles,
+  useInvalidateDrafts,
+  type DraftRef,
+} from "@/features/drafts/hooks"
+import {
+  clearDraftSession,
+  clientKeyFor,
+  readBaseRevision,
+  replaceClientKey,
+  sameDraftValues,
+  saveDraftWithFiles,
+  writeBaseRevision,
+} from "@/features/drafts/save"
+import { deleteFile, detachFile, ordinaryLinks, type ListedFile } from "@/features/files/api"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { cn } from "@/lib/utils"
 
@@ -108,8 +128,11 @@ interface CommodityFormDialogProps {
   // dialog can run post-create work — currently uploading + linking
   // pending files from the Files step. Callers in edit mode may
   // return void (the row already exists, nothing to link).
+  // In create mode `draft` names the server draft the form was opened
+  // from (#2812); the caller promotes it instead of creating an item.
   onSubmit: (
-    values: CreateCommodityRequest & UpdateCommodityRequest
+    values: CreateCommodityRequest & UpdateCommodityRequest,
+    draft?: DraftRef
   ) => Promise<{ id?: string } | void>
   isPending?: boolean
   // Stable localStorage key used to auto-save the form draft (per #1383).
@@ -154,6 +177,13 @@ interface CommodityFormDialogProps {
   // onOpenChange. Defaults undefined: authenticated save-as-draft just
   // persists locally and closes.
   onSaveDraft?: () => void
+  // Server drafts (#2812). In create mode for a signed-in user, "Save as
+  // draft" stores the form and its files on the server as a draft of the
+  // group, which can be finished on any device. Local recovery stays as
+  // the fallback while a save has not succeeded.
+  serverDrafts?: boolean
+  // Opens this server draft to finish it. Needs serverDrafts.
+  resumeDraftId?: string | null
 }
 
 // Files step model lives in features/commodities/draft.ts as
@@ -239,6 +269,8 @@ export function CommodityFormDialog({
   enableAiScan = true,
   defaultDraft = false,
   onSaveDraft,
+  serverDrafts = false,
+  resumeDraftId,
 }: CommodityFormDialogProps) {
   const { t } = useTranslation()
   // Create mode opens on the AI offer surface; edit mode jumps
@@ -258,7 +290,9 @@ export function CommodityFormDialog({
   // row already exists). (Copilot flagged this vs the original PR text; the
   // edit-mode rewind is intentional and the PR description was updated.)
   const aiStepAvailable = enableAiScan
-  const initialStep: StepKey = mode === "create" && enableAiScan ? "ai" : "basics"
+  const serverMode = mode === "create" && !anonymous && serverDrafts
+  const resumeId = serverMode ? (resumeDraftId ?? null) : null
+  const initialStep: StepKey = mode === "create" && enableAiScan && !resumeId ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
   // Tracks which form steps the user has already landed on, so the
   // segmented stepper bar lets them click back-and-forth between
@@ -314,9 +348,36 @@ export function CommodityFormDialog({
   // save-as-draft confirm and the user loses the draft silently
   // (the same problem the auto-save was trying to prevent).
   const [draftRehydrated, setDraftRehydrated] = useState(false)
+  // Local recovery slot. A resumed server draft gets a slot of its own, so
+  // opening one draft never overwrites the unsaved input of another or of
+  // a new item.
+  const localKey = draftKey && resumeId ? `${draftKey}:${resumeId}` : draftKey
   // Drafts only persist for create mode — editing an existing item
   // never auto-saves to storage (the BE row is the canonical state).
-  const persistDrafts = mode === "create" && !!draftKey
+  const persistDrafts = mode === "create" && !!localKey
+  // Server draft session (#2812): the draft this form saves to, with the
+  // revision its values are based on.
+  const resumedQuery = useDraft(resumeId)
+  const resumed = resumedQuery.data
+  const resumeLoading = !!resumeId && resumedQuery.isPending
+  const [serverDraft, setServerDraft] = useState<DraftRef | null>(null)
+  // The resume notices describe why the form opened empty; once the form
+  // holds the draft, a later refetch (after promoting it here, say) must
+  // not raise them.
+  const resumeFailed = !!resumeId && resumedQuery.isError && !serverDraft
+  const resumePromoted = resumed?.status === "promoted" && !serverDraft
+  const [draftSave, setDraftSave] = useState<DraftSaveState>({ kind: "idle" })
+  // True when the form opened with input kept on this device that the
+  // server does not have.
+  const [restoredUnsaved, setRestoredUnsaved] = useState(false)
+  const draftFilesQuery = useDraftFiles(serverMode ? serverDraft?.id : null)
+  const invalidateDrafts = useInvalidateDrafts()
+  // The resumed draft seeds the form once per opening; a refetch must not
+  // wipe what the user typed since.
+  const seededRef = useRef<string | null>(null)
+  // Whether the short name was typed by the user (or set by the AI scan);
+  // until then it follows the name (#2812).
+  const shortNameEdited = useRef(false)
 
   const defaults = useMemo<CommodityFormInput>(
     () => buildDefaults(initialValues, defaultCurrency, defaultDraft),
@@ -345,23 +406,51 @@ export function CommodityFormDialog({
     watch,
     getValues,
   } = form
+  // Draft mode: the "Save as draft" switch is on in a form that saves to
+  // the server. Save draft is then offered on every step.
+  const draftMode = serverMode && !!watch("draft")
 
   // Reset to defaults whenever the dialog opens. In create mode we try
   // to rehydrate from the localStorage draft key first (per #1383) — if
   // the user partially filled the form on a previous visit, the values
   // come back. Otherwise we fall through to the static defaults.
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      seededRef.current = null
+      return
+    }
+    if (resumeId) {
+      if (resumeLoading || seededRef.current === resumeId) return
+      seededRef.current = resumeId
+    }
     let starting = defaults
     let restoredFromDraft = false
-    if (persistDrafts && draftKey) {
-      const restored = readDraft(draftKey)
+    let unsaved = false
+    // A resumed draft opens to be finished: the item path is the default
+    // and Save draft is one switch away.
+    const openDraft = resumed && resumed.status === "open" ? resumed : null
+    let baseRevision: number | null = openDraft?.revision ?? null
+    if (openDraft) {
+      starting = { ...defaults, ...(openDraft.values as Partial<CommodityFormInput>), draft: false }
+    }
+    if (persistDrafts && localKey) {
+      const restored = readDraft(localKey)
       if (restored) {
-        starting = { ...defaults, ...restored }
+        const merged = { ...starting, ...restored }
+        unsaved = !sameDraftValues(merged, starting)
+        starting = merged
         restoredFromDraft = true
+        if (openDraft) baseRevision = readBaseRevision(localKey) ?? baseRevision
       }
     }
     reset(starting)
+    shortNameEdited.current =
+      mode === "edit" ||
+      (starting.short_name.trim() !== "" && starting.short_name !== suggestShortName(starting.name))
+    setServerDraft(openDraft && baseRevision ? { id: openDraft.id, revision: baseRevision } : null)
+    if (openDraft && baseRevision && localKey) writeBaseRevision(localKey, baseRevision)
+    setDraftSave({ kind: "idle" })
+    setRestoredUnsaved(serverMode && unsaved)
     setStep(initialStep)
     setServerError(null)
     // Track whether reset() seeded values from a localStorage draft.
@@ -385,9 +474,9 @@ export function CommodityFormDialog({
     // through them. `loadPendingFiles` is async — until it resolves
     // (and the load gate flips true) the save mirror skips, so we
     // never overwrite stored entries with the freshly-reset `[]`.
-    if (persistDrafts && draftKey) {
+    if (persistDrafts && localKey) {
       let cancelled = false
-      void loadPendingFiles(draftKey).then((restored) => {
+      void loadPendingFiles(localKey).then((restored) => {
         if (cancelled) return
         if (restored.length > 0) {
           setPendingFiles((prev) => (prev.length === 0 ? restored : prev))
@@ -403,7 +492,19 @@ export function CommodityFormDialog({
       // a draftKey) still propagate.
       setPendingFilesLoaded(true)
     }
-  }, [open, defaults, reset, persistDrafts, draftKey, initialStep, mode])
+  }, [
+    open,
+    defaults,
+    reset,
+    persistDrafts,
+    localKey,
+    initialStep,
+    mode,
+    resumeId,
+    resumeLoading,
+    resumed,
+    serverMode,
+  ])
 
   // Mark each form step visited the moment we land on it. The
   // segmented stepper uses this to decide whether a forward jump is
@@ -431,13 +532,28 @@ export function CommodityFormDialog({
   // is open in create mode. Debounced to a single rAF tick so a burst
   // of typing doesn't write to storage on every keystroke.
   useEffect(() => {
-    if (!open || !persistDrafts || !draftKey) return
+    if (!open || !persistDrafts || !localKey) return
     const subscription = watch((values) => {
-      const id = window.requestAnimationFrame(() => writeDraft(draftKey, values))
+      const id = window.requestAnimationFrame(() => writeDraft(localKey, values))
       return () => window.cancelAnimationFrame(id)
     })
     return () => subscription.unsubscribe()
-  }, [open, persistDrafts, draftKey, watch])
+  }, [open, persistDrafts, localKey, watch])
+
+  // The short name follows the name until the user types one (#2812), so
+  // quick capture needs one name. Create mode only: an existing item keeps
+  // the short name it has.
+  useEffect(() => {
+    if (!open || mode !== "create") return
+    const subscription = watch((values, { name }) => {
+      if (name !== "name" || shortNameEdited.current) return
+      const suggestion = suggestShortName(values.name ?? "")
+      if ((values.short_name ?? "") !== suggestion) {
+        setValue("short_name", suggestion, { shouldDirty: true })
+      }
+    })
+    return () => subscription.unsubscribe()
+  }, [open, mode, watch, setValue])
 
   // Mirror pendingFiles into IndexedDB so the staged Files-step
   // attachments survive a manual reload, mobile tab-kill, etc. Gated
@@ -445,14 +561,18 @@ export function CommodityFormDialog({
   // reset doesn't race ahead of the IDB read and overwrite the stored
   // entries with an empty array.
   useEffect(() => {
-    if (!open || !persistDrafts || !draftKey || !pendingFilesLoaded) return
-    void savePendingFiles(draftKey, pendingFiles)
-  }, [open, persistDrafts, draftKey, pendingFiles, pendingFilesLoaded])
+    if (!open || !persistDrafts || !localKey || !pendingFilesLoaded) return
+    void savePendingFiles(localKey, pendingFiles)
+  }, [open, persistDrafts, localKey, pendingFiles, pendingFilesLoaded])
 
   async function nextStep() {
-    const fields = STEP_FIELDS[step]
-    const ok = await trigger(fields, { shouldFocus: true })
-    if (!ok) return
+    // A server draft takes the form as it is, so draft mode walks the
+    // steps without checking them.
+    if (!draftMode) {
+      const fields = STEP_FIELDS[step]
+      const ok = await trigger(fields, { shouldFocus: true })
+      if (!ok) return
+    }
     if (step === "ai") {
       // AI is the alternative entry point — Next ("Fill manually")
       // hands off to the first form step.
@@ -487,18 +607,28 @@ export function CommodityFormDialog({
   // the draft. Three outcomes: Save as draft (preserve localStorage,
   // close), Discard (clear draft, close), Keep editing (do nothing).
   function requestClose() {
-    if (mode === "create" && persistDrafts && (isDirty || draftRehydrated)) {
+    if (draftSave.kind === "saving") return
+    const carriesFiles = serverMode && pendingFiles.length > 0
+    if (mode === "create" && persistDrafts && (isDirty || draftRehydrated || carriesFiles)) {
       setCloseConfirmOpen(true)
       return
     }
     onOpenChange(false)
   }
 
-  function confirmCloseSaveDraft() {
+  async function confirmCloseSaveDraft() {
+    // A signed-in user's draft goes to the server. When the save fails the
+    // confirm closes onto the form, which shows why and keeps the input.
+    if (serverMode) {
+      const saved = await saveToServer()
+      setCloseConfirmOpen(false)
+      if (saved) onOpenChange(false)
+      return
+    }
     // Auto-save effect already wrote the latest values to localStorage;
     // re-write defensively so the final keystroke can't be stranded.
-    if (persistDrafts && draftKey) {
-      writeDraft(draftKey, getValues())
+    if (persistDrafts && localKey) {
+      writeDraft(localKey, getValues())
     }
     setCloseConfirmOpen(false)
     // Anonymous flow (#1988): a "save as draft" can't persist server-side
@@ -514,18 +644,123 @@ export function CommodityFormDialog({
   }
 
   function confirmCloseDiscard() {
-    if (draftKey) {
-      clearDraft(draftKey)
-      void clearPendingFiles(draftKey)
+    // Drops what this device kept. A resumed server draft stays as it was
+    // last saved.
+    if (localKey) {
+      clearDraft(localKey)
+      void clearPendingFiles(localKey)
+      clearDraftSession(localKey)
     }
     setCloseConfirmOpen(false)
     onOpenChange(false)
   }
 
+  // saveToServer stores the form and its staged files as a server draft
+  // (#2812). It resolves true once the draft holds everything; otherwise
+  // the form shows why, and the input stays here and in local recovery.
+  async function saveToServer(opts: { asNew?: boolean } = {}): Promise<boolean> {
+    if (!localKey) return false
+    setDraftSave({ kind: "saving" })
+    setServerError(null)
+    const values = getValues() as DraftValues
+    writeDraft(localKey, values)
+    const clientKey = opts.asNew ? replaceClientKey(localKey) : clientKeyFor(localKey)
+    try {
+      const result = await saveDraftWithFiles({
+        draft: opts.asNew ? null : serverDraft,
+        clientKey,
+        values,
+        pendingFiles,
+        onFileSaved: (entry) =>
+          setPendingFiles((prev) => prev.filter((pending) => pending.id !== entry.id)),
+      })
+      setServerDraft({ id: result.draft.id, revision: result.draft.revision })
+      writeBaseRevision(localKey, result.draft.revision)
+      void invalidateDrafts()
+      if (result.failedFiles.length > 0) {
+        const first = result.failedFiles[0].error
+        setDraftSave({
+          kind: "error",
+          message: classifyServerError(first, t("commodities:drafts.saveFailed")).message,
+          failedFiles: result.failedFiles.map((f) => f.entry.file.name),
+        })
+        return false
+      }
+      // The server holds everything now; local recovery has nothing left
+      // to recover.
+      clearDraft(localKey)
+      void clearPendingFiles(localKey)
+      clearDraftSession(localKey)
+      setDraftSave({ kind: "idle" })
+      toast.success(t("commodities:drafts.saved"))
+      return true
+    } catch (err) {
+      if (revisionConflict(err)) {
+        setDraftSave({ kind: "conflict" })
+        return false
+      }
+      setDraftSave({
+        kind: "error",
+        message: classifyServerError(err, t("commodities:drafts.saveFailed")).message,
+        failedFiles: [],
+      })
+      return false
+    }
+  }
+
+  async function saveDraftAndClose(opts: { asNew?: boolean } = {}) {
+    if (await saveToServer(opts)) onOpenChange(false)
+  }
+
+  // loadNewerDraft settles a conflict by taking the version saved
+  // elsewhere. Staged files stay staged.
+  async function loadNewerDraft() {
+    if (!serverDraft || !localKey) return
+    try {
+      const fresh = await getDraft(serverDraft.id)
+      const next = {
+        ...defaults,
+        ...(fresh.values as Partial<CommodityFormInput>),
+        draft: getValues("draft"),
+      }
+      reset(next)
+      writeDraft(localKey, next)
+      setServerDraft({ id: fresh.id, revision: fresh.revision })
+      writeBaseRevision(localKey, fresh.revision)
+      setDraftSave({ kind: "idle" })
+      void draftFilesQuery.refetch()
+    } catch (err) {
+      setDraftSave({
+        kind: "error",
+        message: classifyServerError(err, t("commodities:drafts.saveFailed")).message,
+        failedFiles: [],
+      })
+    }
+  }
+
+  // removeSavedFile takes a file off the draft. A file the draft alone
+  // used goes to Trash; a file attached elsewhere stays there.
+  async function removeSavedFile(row: ListedFile) {
+    if (!serverDraft) return
+    const link = (row.file.links ?? []).find(
+      (l) => l.entity_type === "draft" && l.entity_id === serverDraft.id
+    )
+    try {
+      if (link?.id) {
+        const rest = await detachFile(row.file.id, link.id)
+        if (ordinaryLinks(rest).length === 0) await deleteFile(row.file.id)
+      }
+      void draftFilesQuery.refetch()
+      void invalidateDrafts()
+    } catch (err) {
+      toast.error(classifyServerError(err, t("commodities:drafts.removeFileFailed")).message)
+    }
+  }
+
   const submit = async (values: CommodityFormInput) => {
     setServerError(null)
     try {
-      const created = await onSubmit(toRequest(values, defaultCurrency))
+      const created = await onSubmit(toRequest(values, defaultCurrency), serverDraft ?? undefined)
       // Anonymous flow (#1988): the wrapper's onSubmit has just stashed
       // the draft + the pending-first-item marker and is about to redirect
       // to login. We must NOT clear the draft, NOT upload files (there is
@@ -563,11 +798,19 @@ export function CommodityFormDialog({
       // Submitted successfully — drop the draft so a fresh dialog open
       // doesn't replay yesterday's data. Clear both the localStorage
       // draft (form fields) and the IDB pending-files store.
-      if (persistDrafts && draftKey) {
-        clearDraft(draftKey)
-        void clearPendingFiles(draftKey)
+      if (persistDrafts && localKey) {
+        clearDraft(localKey)
+        void clearPendingFiles(localKey)
+        clearDraftSession(localKey)
       }
     } catch (err) {
+      // The draft was saved elsewhere after this form loaded it: the
+      // draft alert offers to load that version or keep this one as a
+      // new draft, as for a save.
+      if (serverDraft && revisionConflict(err)) {
+        setDraftSave({ kind: "conflict" })
+        return
+      }
       // Map BE field-level validation errors back onto RHF fields
       // (so the failing input gets highlighted and the inline error
       // copy renders next to it) and jump to the step owning the
@@ -647,7 +890,10 @@ export function CommodityFormDialog({
       setValue(name, value, { shouldDirty: true, shouldValidate: false })
     }
     if (values.name !== undefined) apply("name", values.name)
-    if (values.short_name !== undefined) apply("short_name", values.short_name)
+    if (values.short_name !== undefined) {
+      shortNameEdited.current = values.short_name.trim() !== ""
+      apply("short_name", values.short_name)
+    }
     if (values.brand !== undefined) apply("brand", values.brand)
     if (values.model !== undefined) apply("model", values.model)
     if (values.type !== undefined) apply("type", values.type)
@@ -695,6 +941,7 @@ export function CommodityFormDialog({
   // warranty step disable its inputs without waiting for a re-render.
   const liveCount = Number(watch("count"))
   const isBundle = Number.isFinite(liveCount) && liveCount > 1
+  const draftSaving = draftSave.kind === "saving"
 
   return (
     <Dialog
@@ -834,7 +1081,7 @@ export function CommodityFormDialog({
             Lifted out of BasicsStep so the toggle stays visible across
             every form step. Hidden on the AI step (where the form
             isn't yet active). */}
-        {step !== "ai" ? (
+        {step !== "ai" && !resumeLoading ? (
           <div className="flex items-center gap-3 rounded-lg border border-border bg-muted/30 px-3 py-2.5">
             <Controller
               control={control}
@@ -867,6 +1114,28 @@ export function CommodityFormDialog({
               <p className="text-xs text-muted-foreground">{t("commodities:fields.draftHelp")}</p>
             </div>
           </div>
+        ) : null}
+
+        {resumeFailed ? (
+          <Alert variant="destructive" data-testid="draft-resume-failed">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertTitle>{t("commodities:drafts.notFoundTitle")}</AlertTitle>
+            <AlertDescription>{t("commodities:drafts.notFoundBody")}</AlertDescription>
+          </Alert>
+        ) : null}
+        {resumePromoted ? (
+          <Alert data-testid="draft-resume-promoted">
+            <AlertTriangle className="size-4" aria-hidden="true" />
+            <AlertTitle>{t("commodities:drafts.promotedTitle")}</AlertTitle>
+            <AlertDescription>{t("commodities:drafts.promotedBody")}</AlertDescription>
+          </Alert>
+        ) : null}
+        {restoredUnsaved ? (
+          <Alert data-testid="draft-restored-locally">
+            <HardDrive className="size-4" aria-hidden="true" />
+            <AlertTitle>{t("commodities:drafts.restoredTitle")}</AlertTitle>
+            <AlertDescription>{t("commodities:drafts.restoredBody")}</AlertDescription>
+          </Alert>
         ) : null}
 
         {isBundle ? (
@@ -919,7 +1188,9 @@ export function CommodityFormDialog({
             if (!target || target.tagName !== "INPUT") return
             e.preventDefault()
             if (step === "ai") return
-            if (isLastStep) {
+            if (isLastStep && draftMode) {
+              void saveDraftAndClose()
+            } else if (isLastStep) {
               submitForm()
             } else {
               void nextStep()
@@ -929,7 +1200,15 @@ export function CommodityFormDialog({
           noValidate
         >
           <StepResizeWrapper>
-            {step === "ai" ? (
+            {/* A resumed draft fills the form once it has loaded, so the
+                fields stay hidden until then: input typed earlier would
+                be replaced. */}
+            {resumeLoading ? (
+              <p className="py-6 text-sm text-muted-foreground" data-testid="draft-resume-loading">
+                {t("commodities:drafts.loading")}
+              </p>
+            ) : null}
+            {!resumeLoading && step === "ai" ? (
               <AiScanStep
                 slug={activeSlug ?? ""}
                 defaultCurrency={defaultCurrency}
@@ -938,7 +1217,7 @@ export function CommodityFormDialog({
                 anonymous={anonymous}
               />
             ) : null}
-            {step === "basics" ? (
+            {!resumeLoading && step === "basics" ? (
               <BasicsStep
                 register={register}
                 control={control}
@@ -950,9 +1229,12 @@ export function CommodityFormDialog({
                 locations={locations}
                 showStatus={mode === "edit"}
                 showLocationPicker={mode === "edit"}
+                onShortNameInput={(value: string) => {
+                  shortNameEdited.current = value.trim() !== ""
+                }}
               />
             ) : null}
-            {step === "purchase" ? (
+            {!resumeLoading && step === "purchase" ? (
               <PurchaseStep
                 register={register}
                 control={control}
@@ -961,16 +1243,28 @@ export function CommodityFormDialog({
                 defaultCurrency={defaultCurrency}
               />
             ) : null}
-            {step === "warranty" ? (
+            {!resumeLoading && step === "warranty" ? (
               <WarrantyStep register={register} errors={errors} watch={watch} isBundle={isBundle} />
             ) : null}
-            {step === "extras" ? (
+            {!resumeLoading && step === "extras" ? (
               <ExtrasStep register={register} errors={errors} watch={watch} setValue={setValue} />
             ) : null}
-            {step === "files" ? (
-              <FilesStep pendingFiles={pendingFiles} setPendingFiles={setPendingFiles} />
+            {!resumeLoading && step === "files" ? (
+              <FilesStep
+                pendingFiles={pendingFiles}
+                setPendingFiles={setPendingFiles}
+                savedFiles={serverMode && serverDraft ? (draftFilesQuery.data ?? []) : []}
+                onRemoveSaved={removeSavedFile}
+              />
             ) : null}
           </StepResizeWrapper>
+
+          <DraftSaveAlert
+            state={draftSave}
+            onRetry={() => void saveDraftAndClose()}
+            onLoadNewer={() => void loadNewerDraft()}
+            onSaveAsNew={() => void saveDraftAndClose({ asNew: true })}
+          />
 
           <ServerErrorBanner
             error={serverError}
@@ -1026,15 +1320,33 @@ export function CommodityFormDialog({
             {!isLastStep ? (
               <Button
                 type="button"
-                variant={mode === "edit" ? "outline" : "default"}
+                variant={mode === "edit" || draftMode ? "outline" : "default"}
                 onClick={nextStep}
+                disabled={resumeLoading}
                 data-testid="commodity-form-next"
               >
                 {t("commodities:form.continue")}
                 <ChevronRight className="size-4" aria-hidden="true" />
               </Button>
             ) : null}
-            {isLastStep || mode === "edit" ? (
+            {draftMode ? (
+              <Button
+                type="button"
+                onClick={() => void saveDraftAndClose()}
+                disabled={draftSaving}
+                data-testid="commodity-form-save-draft"
+              >
+                {draftSaving ? (
+                  <>
+                    <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                    {t("commodities:drafts.saving")}
+                  </>
+                ) : (
+                  t("commodities:drafts.saveDraft")
+                )}
+              </Button>
+            ) : null}
+            {!draftMode && (isLastStep || mode === "edit") ? (
               <Button
                 type="button"
                 onClick={submitForm}
@@ -1066,7 +1378,13 @@ export function CommodityFormDialog({
         <DialogContent className="sm:max-w-sm" data-testid="commodity-form-close-confirm">
           <DialogHeader>
             <DialogTitle>{t("commodities:form.closeConfirm.title")}</DialogTitle>
-            <DialogDescription>{t("commodities:form.closeConfirm.description")}</DialogDescription>
+            <DialogDescription>
+              {serverMode
+                ? t("commodities:form.closeConfirm.serverDescription")
+                : anonymous
+                  ? t("commodities:form.closeConfirm.deviceDescription")
+                  : t("commodities:form.closeConfirm.description")}
+            </DialogDescription>
           </DialogHeader>
           <DialogFooter className="gap-2">
             <Button
@@ -1082,16 +1400,29 @@ export function CommodityFormDialog({
               type="button"
               variant="outline"
               onClick={confirmCloseDiscard}
+              disabled={draftSaving}
               data-testid="commodity-form-close-confirm-discard"
             >
-              {t("commodities:form.closeConfirm.discard")}
+              {resumeId
+                ? t("commodities:form.closeConfirm.discardChanges")
+                : t("commodities:form.closeConfirm.discard")}
             </Button>
             <Button
               type="button"
-              onClick={confirmCloseSaveDraft}
+              onClick={() => void confirmCloseSaveDraft()}
+              disabled={draftSaving}
               data-testid="commodity-form-close-confirm-save"
             >
-              {t("commodities:form.closeConfirm.saveDraft")}
+              {draftSaving ? (
+                <>
+                  <RefreshCw className="size-3.5 animate-spin" aria-hidden="true" />
+                  {t("commodities:drafts.saving")}
+                </>
+              ) : anonymous ? (
+                t("commodities:form.closeConfirm.keepOnDevice")
+              ) : (
+                t("commodities:form.closeConfirm.saveDraft")
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -1147,6 +1478,7 @@ function BasicsStep(props: any) {
     locations,
     showStatus,
     showLocationPicker,
+    onShortNameInput,
   } = props
   return (
     <div className="space-y-4 py-2" data-testid="commodity-form-basics-step">
@@ -1174,7 +1506,10 @@ function BasicsStep(props: any) {
           className="font-mono text-sm"
           aria-required
           placeholder={t("commodities:fields.shortNamePlaceholder")}
-          {...register("short_name")}
+          {...register("short_name", {
+            onChange: (e: React.ChangeEvent<HTMLInputElement>) =>
+              onShortNameInput?.(e.target.value),
+          })}
           aria-invalid={!!errors.short_name}
         />
         {errors.short_name ? (
@@ -1785,6 +2120,9 @@ function ExtrasStep(props: any) {
 interface FilesStepProps {
   pendingFiles: PendingFile[]
   setPendingFiles: (next: PendingFile[] | ((prev: PendingFile[]) => PendingFile[])) => void
+  // Files already saved with the server draft the form edits (#2812).
+  savedFiles?: ListedFile[]
+  onRemoveSaved?: (row: ListedFile) => void
 }
 
 // FilesStep collects attachments locally — files don't hit the BE
@@ -1793,7 +2131,12 @@ interface FilesStepProps {
 // single dropzone with auto-categorisation by MIME (images /
 // documents / other) and an inline per-file tag chip-input the
 // user can fill while still inside the wizard.
-function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
+function FilesStep({
+  pendingFiles,
+  setPendingFiles,
+  savedFiles = [],
+  onRemoveSaved,
+}: FilesStepProps) {
   const { t } = useTranslation()
   // `useId` so the input/label association is stable but unique even
   // if multiple FilesSteps mount in the same tree (and so React's HMR
@@ -1855,6 +2198,22 @@ function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
           }}
         />
       </label>
+      {savedFiles.length > 0 ? (
+        <div className="min-w-0 space-y-1.5" data-testid="draft-saved-files">
+          <p className="text-xs font-medium text-muted-foreground">
+            {t("commodities:drafts.savedFiles")}
+          </p>
+          <ul className="flex min-w-0 flex-col gap-1.5">
+            {savedFiles.map((row) => (
+              <SavedFileRow
+                key={row.file.id}
+                row={row}
+                onRemove={onRemoveSaved ? () => onRemoveSaved(row) : undefined}
+              />
+            ))}
+          </ul>
+        </div>
+      ) : null}
       {pendingFiles.length > 0 ? (
         <ul className="flex min-w-0 flex-col gap-1.5">
           {pendingFiles.map((entry) => (
@@ -1868,6 +2227,36 @@ function FilesStep({ pendingFiles, setPendingFiles }: FilesStepProps) {
         </ul>
       ) : null}
     </div>
+  )
+}
+
+// SavedFileRow is a file the server draft already holds: it needs no
+// upload, and removing it takes it off the draft.
+function SavedFileRow({ row, onRemove }: { row: ListedFile; onRemove?: () => void }) {
+  const { t } = useTranslation()
+  const name = `${row.file.path || row.file.title || ""}${row.file.ext ?? ""}`
+  const isImage = row.file.category === "images"
+  const Icon = isImage ? ImageIcon : row.file.category === "documents" ? BookOpen : FileIcon
+  return (
+    <li className="flex min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-border bg-card px-3 py-2">
+      <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+        <Icon aria-hidden="true" className="size-3.5" />
+      </div>
+      <p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
+      <span className="shrink-0 text-xs text-muted-foreground">
+        {formatBytes(row.file.size_bytes ?? 0)}
+      </span>
+      {onRemove ? (
+        <button
+          type="button"
+          aria-label={t("commodities:drafts.removeFile", { name })}
+          onClick={onRemove}
+          className="shrink-0 text-muted-foreground hover:text-foreground"
+        >
+          <X aria-hidden="true" className="size-3.5" />
+        </button>
+      ) : null}
+    </li>
   )
 }
 

@@ -248,7 +248,8 @@
     "type": {
       "area": "Oblast",
       "commodity": "Položka",
-      "location": "Lokace"
+      "location": "Lokace",
+      "draft": "Koncept"
     }
   }
 }

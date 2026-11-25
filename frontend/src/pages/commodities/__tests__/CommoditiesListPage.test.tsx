@@ -624,9 +624,8 @@ describe("<CommoditiesListPage />", () => {
 
   it("submits a new item via the create dialog and clears the form", async () => {
     // Replays the regression that motivated #1629: walk past the
-    // initial AI placeholder step, fill Basics (Name + Short name +
-    // Type), skip Save-as-draft so the schema's
-    // whenNotDraft fields stay optional, walk Purchase → Warranty →
+    // initial AI placeholder step, fill Basics (Name and Type; the
+    // short name follows the name), walk Purchase → Warranty →
     // Extras → Files, then submit. After 201 the dialog closes and
     // the page navigates to /commodities/:newId.
     const user = userEvent.setup()
@@ -693,11 +692,7 @@ describe("<CommoditiesListPage />", () => {
     // is the canonical "skip the scanner" affordance.
     await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
     await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
-    await user.type(screen.getByLabelText(/^Short name$/i), "Couch")
     await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
-    // Save-as-draft so purchase_date + price triad stay optional —
-    // the test asserts the navigation contract, not the schema.
-    await user.click(screen.getByLabelText(/Save as draft/i))
     await user.click(screen.getByTestId("commodity-form-next"))
     // Walk Purchase → Warranty → Extras → Files.
     await screen.findByLabelText(/Purchase date/i)
@@ -725,7 +720,7 @@ describe("<CommoditiesListPage />", () => {
           short_name: "Couch",
           type: "furniture",
           status: "in_use",
-          draft: true,
+          draft: false,
         },
       },
     })

@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link } from "react-router-dom"
-import { Box, MapPin, Package, X } from "lucide-react"
+import { Box, FilePen, MapPin, Package, X } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { ordinaryLinks, type FileEntity, type FileLink } from "@/features/files/api"
@@ -21,6 +21,8 @@ function entityPath(slug: string, link: FileLink): string | null {
       return `${base}/locations/${encodeURIComponent(id)}`
     case "area":
       return `${base}/areas/${encodeURIComponent(id)}`
+    case "draft":
+      return `${base}/commodities/new?draft=${encodeURIComponent(id)}`
     default:
       return null
   }
@@ -33,6 +35,8 @@ function LinkIcon({ entityType }: { entityType?: string }) {
       return <MapPin className={className} aria-hidden="true" />
     case "area":
       return <Box className={className} aria-hidden="true" />
+    case "draft":
+      return <FilePen className={className} aria-hidden="true" />
     default:
       return <Package className={className} aria-hidden="true" />
   }

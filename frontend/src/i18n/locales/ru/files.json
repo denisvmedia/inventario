@@ -248,7 +248,8 @@
     "type": {
       "area": "Зона",
       "commodity": "Предмет",
-      "location": "Локация"
+      "location": "Локация",
+      "draft": "Черновик"
     }
   }
 }
