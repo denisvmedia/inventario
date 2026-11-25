@@ -346,6 +346,7 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
     params.set("tags_exclude", sorted(opts.tagsExclude).join(","))
   }
   if (opts.noTags) params.set("no_tags", "true")
+  if (opts.trashed) params.set("trashed", "true")
   // Sent as written, replacing the readable default written above, so the
   // server refuses the request instead of applying a filter the URL did not
   // ask for.

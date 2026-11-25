@@ -15,6 +15,7 @@ import (
 type EntityService struct {
 	factorySet  *registry.FactorySet
 	fileService *FileService
+	trash       *TrashService
 }
 
 // NewEntityService creates a new entity service
@@ -22,10 +23,13 @@ func NewEntityService(factorySet *registry.FactorySet, uploadLocation string) *E
 	return &EntityService{
 		factorySet:  factorySet,
 		fileService: NewFileService(factorySet, uploadLocation),
+		trash:       NewTrashService(factorySet, uploadLocation),
 	}
 }
 
-// DeleteCommodityRecursive deletes a commodity and detaches its files.
+// DeleteCommodityRecursive deletes a commodity for good and detaches its
+// files. A user's delete moves the item to Trash instead (TrashService); this
+// path serves the restore that replaces a group's data.
 //
 // Ordering is row-first, blob-best-effort (#2120): the commodity row is
 // dropped first — its children (loans/services/supply-links) CASCADE and its
@@ -56,10 +60,38 @@ func (s *EntityService) DeleteCommodityRecursive(ctx context.Context, id string)
 	return nil
 }
 
-// DeleteAreaRecursive deletes an area and all its commodities recursively
-//
-//nolint:dupl // deliberately mirrors DeleteLocationRecursive one level up the hierarchy; extracting a generic helper would obscure the per-entity delete contracts documented inline
+// removeCommodityFunc removes one item during a recursive area or location
+// delete: to Trash for a user's delete, for good for a restore.
+type removeCommodityFunc func(ctx context.Context, id string) error
+
+func (s *EntityService) trashCommodity(ctx context.Context, id string) error {
+	_, err := s.trash.TrashCommodity(ctx, id)
+	return err
+}
+
+// DeleteAreaRecursive moves every item of the area to Trash and deletes the
+// area. The area has no Trash of its own: a restored item whose area is gone
+// comes back without an area.
 func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) error {
+	return s.deleteAreaRecursive(ctx, id, s.trashCommodity)
+}
+
+// PurgeLocationRecursive deletes a location, its areas and their items for
+// good. The restore that replaces a group's data uses it; a user's delete goes
+// through DeleteLocationRecursive.
+func (s *EntityService) PurgeLocationRecursive(ctx context.Context, id string) error {
+	return s.deleteLocationRecursive(ctx, id, s.DeleteCommodityRecursive)
+}
+
+// EmptyTrash deletes every item and file in the group's Trash for good.
+func (s *EntityService) EmptyTrash(ctx context.Context) error {
+	_, _, err := s.trash.EmptyTrash(ctx)
+	return err
+}
+
+// deleteAreaRecursive removes every item of the area with removeCommodity,
+// then deletes the area.
+func (s *EntityService) deleteAreaRecursive(ctx context.Context, id string, removeCommodity removeCommodityFunc) error {
 	areaReg, err := s.factorySet.AreaRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create area registry", err)
@@ -87,9 +119,9 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 		return errxtrace.Wrap("failed to get commodities", err)
 	}
 
-	// Delete all commodities recursively (this will also delete their files)
+	// Remove every item (to Trash or for good, see removeCommodity).
 	for _, commodityID := range commodities {
-		if err := s.DeleteCommodityRecursive(ctx, commodityID); err != nil {
+		if err := removeCommodity(ctx, commodityID); err != nil {
 			// If the commodity is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
 				return errxtrace.Wrap("failed to delete commodity recursively", err, errx.Attrs("commodity_id", commodityID))
@@ -116,10 +148,15 @@ func (s *EntityService) DeleteAreaRecursive(ctx context.Context, id string) erro
 	return nil
 }
 
-// DeleteLocationRecursive deletes a location and all its areas and commodities recursively
-//
-//nolint:dupl // deliberately mirrors DeleteAreaRecursive one level down the hierarchy; extracting a generic helper would obscure the per-entity delete contracts documented inline
+// DeleteLocationRecursive moves every item of the location's areas to Trash
+// and deletes the areas and the location.
 func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) error {
+	return s.deleteLocationRecursive(ctx, id, s.trashCommodity)
+}
+
+// deleteLocationRecursive removes every item of the location's areas with
+// removeCommodity, then deletes the areas and the location.
+func (s *EntityService) deleteLocationRecursive(ctx context.Context, id string, removeCommodity removeCommodityFunc) error {
 	locReg, err := s.factorySet.LocationRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create location registry", err)
@@ -148,9 +185,9 @@ func (s *EntityService) DeleteLocationRecursive(ctx context.Context, id string) 
 		return errxtrace.Wrap("failed to get areas", err)
 	}
 
-	// Delete all areas recursively (this will also delete their commodities)
+	// Delete every area with its items.
 	for _, areaID := range areas {
-		if err := s.DeleteAreaRecursive(ctx, areaID); err != nil {
+		if err := s.deleteAreaRecursive(ctx, areaID, removeCommodity); err != nil {
 			// If the area is already deleted, that's fine - continue with others
 			if !errors.Is(err, registry.ErrNotFound) {
 				return errxtrace.Wrap("failed to delete area recursively", err, errx.Attrs("areaID", areaID))

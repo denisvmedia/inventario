@@ -3156,6 +3156,12 @@ const docTemplate = `{
                         "description": "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent",
                         "name": "lent_out",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "true lists the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -3221,7 +3227,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-delete": {
             "post": {
-                "description": "Delete every commodity whose id appears in the body. The\nresponse lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
+                "description": "Move every commodity whose id appears in the body to Trash.\nThe response lists succeeded vs. failed ids so the frontend\ncan render partial-failure UX without parsing per-id HTTP\nstatuses.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3488,6 +3494,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Count the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -3675,7 +3687,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete a commodity by ID and all its linked files",
+                "description": "Move the commodity to Trash with the files no other item,\narea or location uses. It can be restored from Trash until\nthe retention runs out.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5712,7 +5724,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/files/bulk-delete": {
             "post": {
-                "description": "Delete every file whose id appears in the body, including\nthe physical blob. The response lists succeeded vs.\nfailed ids so the frontend can render partial-failure UX\nwithout parsing per-id HTTP statuses.",
+                "description": "Move every file whose id appears in the body to Trash. The\nresponse lists succeeded vs.\nfailed ids so the frontend can render partial-failure UX\nwithout parsing per-id HTTP statuses.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5930,7 +5942,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "delete file and its associated file",
+                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7306,7 +7318,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/search": {
             "get": {
-                "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except ` + "`" + `type` + "`" + ` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.",
+                "description": "Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).\nEvery filter parameter of that endpoint except ` + "`" + `type` + "`" + ` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.\nDrafts and inactive items are included unless include_inactive=false.\nLocations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.\nTags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7337,7 +7349,8 @@ const docTemplate = `{
                             "commodities",
                             "files",
                             "areas",
-                            "locations"
+                            "locations",
+                            "tags"
                         ],
                         "type": "string",
                         "description": "Entity type to search",
@@ -7438,6 +7451,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Commodities only: true = only items currently lent, false = only items not lent",
                         "name": "lent_out",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: true searches the items in Trash instead of the live ones (default false); cannot be combined with lent_out",
+                        "name": "trashed",
                         "in": "query"
                     },
                     {
@@ -8126,6 +8145,496 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash": {
+            "delete": {
+                "description": "Deletes every item and file in the group's Trash for good.\nRequires the admin or owner role.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Empty Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "What was deleted",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.EmptyTrashResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin role required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/commodities": {
+            "get": {
+                "description": "Items deleted in this group, most recently deleted first, with\nwho deleted them, when they expire and the files that went\nwith them.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "List items in Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TrashedCommoditiesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/commodities/purge": {
+            "post": {
+                "description": "Requires the admin or owner role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Delete items in Trash for good",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item IDs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin role required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/commodities/restore": {
+            "post": {
+                "description": "Restores every item whose id appears in the body. The response\nlists the restored ids, the failures, and the restored items\nthat came back without an area.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Restore items from Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Item IDs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TrashBulkRestoreResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/commodities/{commodityID}": {
+            "delete": {
+                "description": "Deletes the item, its history and the files that went to Trash\nwith it. A file another item or place still uses is kept.\nRequires the admin or owner role.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Delete an item in Trash for good",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "description": "Admin role required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Item not in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/commodities/{commodityID}/restore": {
+            "post": {
+                "description": "Brings the item back with its history, loans, service records,\nmaintenance schedules and the files that went to Trash with\nit. An item whose area was deleted meanwhile comes back\nwithout an area (meta.area_removed).",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Restore an item from Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Restored item",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityRestoreResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Item not in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/files": {
+            "get": {
+                "description": "Files deleted on their own in this group, most recently\ndeleted first. Files that went to Trash with an item are\nlisted with that item instead.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "List files in Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.TrashedFilesResponse"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/files/purge": {
+            "post": {
+                "description": "Requires the admin or owner role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Delete files in Trash for good",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File IDs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Admin role required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/files/restore": {
+            "post": {
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Restore files from Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "File IDs",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkIDsRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Per-id outcome",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.BulkResultResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Bad request body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/files/{fileID}": {
+            "delete": {
+                "description": "Requires the admin or owner role. A file that went to Trash\nwith an item is deleted with that item.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Delete a file in Trash for good",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "fileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "403": {
+                        "description": "Admin role required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "File not in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "File went to Trash with an item",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/trash/files/{fileID}/restore": {
+            "post": {
+                "description": "Only a file deleted on its own can be restored here; a file\nthat went to Trash with an item comes back with that item.",
+                "tags": [
+                    "trash"
+                ],
+                "summary": "Restore a file from Trash",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "File ID",
+                        "name": "fileID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No content"
+                    },
+                    "404": {
+                        "description": "File not in Trash",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "File went to Trash with an item",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -12177,6 +12686,32 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityRestoreMeta": {
+            "type": "object",
+            "properties": {
+                "area_removed": {
+                    "description": "AreaRemoved is true when the item's area was deleted while the item\nwas in Trash; the item came back without an area.",
+                    "type": "boolean"
+                },
+                "files_restored": {
+                    "description": "FilesRestored counts the files that came back with the item.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                }
+            }
+        },
+        "jsonapi.CommodityRestoreResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityResponseData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CommodityRestoreMeta"
+                }
+            }
+        },
         "jsonapi.CommodityScanAttributes": {
             "type": "object",
             "properties": {
@@ -12778,6 +13313,47 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/jsonapi.CurrencyMigrationResponseData"
                     }
+                }
+            }
+        },
+        "jsonapi.EmptyTrashAttrs": {
+            "type": "object",
+            "properties": {
+                "commodities": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "files": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.EmptyTrashData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.EmptyTrashAttrs"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "trash"
+                    ],
+                    "example": "trash"
+                }
+            }
+        },
+        "jsonapi.EmptyTrashResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.EmptyTrashData"
                 }
             }
         },
@@ -14890,6 +15466,189 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.TrashBulkRestoreAttrs": {
+            "type": "object",
+            "properties": {
+                "area_removed": {
+                    "description": "AreaRemoved lists the restored items whose area was deleted while\nthey were in Trash; they came back without an area.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "failed": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.BulkResultFail"
+                    }
+                },
+                "succeeded": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.TrashBulkRestoreData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.TrashBulkRestoreAttrs"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TrashBulkRestoreResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.TrashBulkRestoreData"
+                }
+            }
+        },
+        "jsonapi.TrashEntryMeta": {
+            "type": "object",
+            "properties": {
+                "deleted_by_name": {
+                    "description": "DeletedByName is the name of the member who deleted the entry, empty\nwhen that user no longer exists.",
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is when the entry is deleted for good.",
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.TrashListMeta": {
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 50
+                },
+                "retention_days": {
+                    "description": "RetentionDays is how many days an entry stays in Trash.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 30
+                },
+                "total": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.TrashedCommoditiesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.TrashedCommodityData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TrashListMeta"
+                }
+            }
+        },
+        "jsonapi.TrashedCommodityData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.Commodity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TrashedCommodityMeta"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodities"
+                    ],
+                    "example": "commodities"
+                }
+            }
+        },
+        "jsonapi.TrashedCommodityMeta": {
+            "type": "object",
+            "properties": {
+                "deleted_by_name": {
+                    "description": "DeletedByName is the name of the member who deleted the entry, empty\nwhen that user no longer exists.",
+                    "type": "string"
+                },
+                "expires_at": {
+                    "description": "ExpiresAt is when the entry is deleted for good.",
+                    "type": "string"
+                },
+                "file_bytes": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 204800
+                },
+                "file_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                }
+            }
+        },
+        "jsonapi.TrashedFileData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/models.FileEntity"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TrashEntryMeta"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "files"
+                    ],
+                    "example": "files"
+                }
+            }
+        },
+        "jsonapi.TrashedFilesResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.TrashedFileData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.TrashListMeta"
+                }
+            }
+        },
         "jsonapi.URLData": {
             "type": "object",
             "properties": {
@@ -15197,6 +15956,16 @@ const docTemplate = `{
                     "type": "number",
                     "x-nullable": "true"
                 },
+                "deleted_at": {
+                    "description": "DeletedAt is when the item was moved to Trash, nil while it is live. A\ntrashed item keeps its id, asset number, history, loans, service\nrecords, maintenance schedules and attachments, and is left out of every\nordinary read of the registries until it is restored or purged (see\nregistry.CommodityRegistry). Server-managed: only the registry's trash\noperations write it; Create and Update ignore a caller's value.",
+                    "type": "string",
+                    "readOnly": true
+                },
+                "deleted_by": {
+                    "description": "DeletedBy is the id of the user who moved the item to Trash.",
+                    "type": "string",
+                    "readOnly": true
+                },
                 "draft": {
                     "type": "boolean"
                 },
@@ -15298,7 +16067,8 @@ const docTemplate = `{
                 "sent_for_service",
                 "back_from_service",
                 "service_updated",
-                "deleted"
+                "deleted",
+                "restored"
             ],
             "x-enum-varnames": [
                 "CommodityEventKindCreated",
@@ -15314,7 +16084,8 @@ const docTemplate = `{
                 "CommodityEventKindSentForService",
                 "CommodityEventKindBackFromService",
                 "CommodityEventKindServiceUpdated",
-                "CommodityEventKindDeleted"
+                "CommodityEventKindDeleted",
+                "CommodityEventKindRestored"
             ]
         },
         "models.CommodityEventPayload": {
@@ -15728,6 +16499,21 @@ const docTemplate = `{
                 "created_at": {
                     "description": "CreatedAt is when the file was created",
                     "type": "string"
+                },
+                "deleted_at": {
+                    "description": "DeletedAt is when the file was moved to Trash, nil while it is live. A\ntrashed file keeps its row, links and blob, and is left out of every\nordinary read of the file registry until it is restored or purged (see\nregistry.FileRegistry). Server-managed: only the registry's trash\noperations write it.",
+                    "type": "string",
+                    "readOnly": true
+                },
+                "deleted_by": {
+                    "description": "DeletedBy is the id of the user who moved the file to Trash.",
+                    "type": "string",
+                    "readOnly": true
+                },
+                "deleted_with_commodity_id": {
+                    "description": "DeletedWithCommodityID is set when the file went to Trash because the\nitem it was attached to was deleted, and names that item. Restoring the\nitem restores such files; a file deleted on its own has it nil, is a\nTrash entry of its own and stays in Trash when an item it was attached\nto is restored.",
+                    "type": "string",
+                    "readOnly": true
                 },
                 "description": {
                     "description": "Description is an optional description of the file",
@@ -16658,6 +17444,9 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "other": {
+                    "type": "integer"
+                },
+                "trash": {
                     "type": "integer"
                 }
             }

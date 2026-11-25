@@ -360,8 +360,8 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 	r.lock.RLock()
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		file := pair.Value
-		if file == nil {
-			continue
+		if file == nil || file.IsTrashed() {
+			continue // a trashed file belongs to the Trash purge, not to this GC
 		}
 		links := r.links.byFile[file.ID]
 		if !orphanShapeEligible(links, olderThan) {
@@ -394,7 +394,10 @@ func (r *FileRegistry) ListOrphanCandidates(ctx context.Context, olderThan time.
 		var err error
 		switch link.EntityType {
 		case models.FileLinkCommodity:
-			_, err = comReg.Get(ctx, link.EntityID)
+			// A trashed item still exists: it can be restored with its files.
+			if _, err = comReg.Get(ctx, link.EntityID); errors.Is(err, registry.ErrNotFound) {
+				_, err = comReg.GetTrashed(ctx, link.EntityID)
+			}
 		case models.FileLinkArea:
 			_, err = areaReg.Get(ctx, link.EntityID)
 		case models.FileLinkLocation:
@@ -522,22 +525,26 @@ func (r *FileRegistry) ExistingIDs(_ context.Context, ids []string) ([]string, e
 }
 
 // SumSizeBreakdown mirrors the postgres aggregator: per-category byte
-// totals with export bundles split out of "other". Every file counts once,
-// however many links it has. The shared file map
-// is already group-scoped via the user registry's groupID, so this
+// totals with export bundles split out of "other" and trashed files counted
+// in Trash. Every file counts once, however many links it has. The shared
+// file map is already group-scoped via the user registry's groupID, so this
 // iterates the group's files only.
-func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBreakdown, error) {
-	files, err := r.List(ctx)
-	if err != nil {
-		return registry.StorageBreakdown{}, err
-	}
+func (r *FileRegistry) SumSizeBreakdown(_ context.Context) (registry.StorageBreakdown, error) {
+	return sumSizeBreakdown(r.attachLinks(r.listAll())), nil
+}
 
+// sumSizeBreakdown places each file's bytes into its bucket.
+func sumSizeBreakdown(files []*models.FileEntity) registry.StorageBreakdown {
 	var breakdown registry.StorageBreakdown
 	for _, file := range files {
 		if file.File == nil {
 			continue
 		}
 		size := file.SizeBytes
+		if file.IsTrashed() {
+			breakdown.Trash += size
+			continue
+		}
 		if file.IsExportOwned() {
 			breakdown.Exports += size
 			continue
@@ -551,7 +558,7 @@ func (r *FileRegistry) SumSizeBreakdown(ctx context.Context) (registry.StorageBr
 			breakdown.Other += size
 		}
 	}
-	return breakdown, nil
+	return breakdown
 }
 
 // SumSizeBreakdownByGroup mirrors SumSizeBreakdown but for an explicit
@@ -563,27 +570,7 @@ func (r *FileRegistry) SumSizeBreakdownByGroup(ctx context.Context, tenantID, gr
 	if err != nil {
 		return registry.StorageBreakdown{}, err
 	}
-
-	var breakdown registry.StorageBreakdown
-	for _, file := range files {
-		if file.File == nil {
-			continue
-		}
-		size := file.SizeBytes
-		if file.IsExportOwned() {
-			breakdown.Exports += size
-			continue
-		}
-		switch file.Category {
-		case models.FileCategoryImages:
-			breakdown.Images += size
-		case models.FileCategoryDocuments:
-			breakdown.Documents += size
-		default:
-			breakdown.Other += size
-		}
-	}
-	return breakdown, nil
+	return sumSizeBreakdown(files), nil
 }
 
 // ListByLinkedEntity returns files linked to a specific entity
@@ -605,14 +592,33 @@ func (r *FileRegistry) ListByLinkedEntity(ctx context.Context, entityType, entit
 }
 
 // ListByGroup returns every file belonging to the given (tenant_id, group_id)
-// tuple, bypassing the registry's user/group filtering. Mirrors the postgres
-// counterpart used by GroupPurgeService to avoid a full file-table scan.
+// tuple, trashed files included, bypassing the registry's user/group
+// filtering. Mirrors the postgres counterpart used by GroupPurgeService to
+// avoid a full file-table scan.
 func (r *FileRegistry) ListByGroup(_ context.Context, tenantID, groupID string) ([]*models.FileEntity, error) {
 	r.lock.RLock()
 	var filtered []*models.FileEntity
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		file := pair.Value
 		if file.TenantID == tenantID && file.GroupID == groupID {
+			v := *file
+			filtered = append(filtered, &v)
+		}
+	}
+	r.lock.RUnlock()
+	return r.attachLinks(filtered), nil
+}
+
+// ListByTenant returns every file of the tenant, trashed files included.
+func (r *FileRegistry) ListByTenant(_ context.Context, tenantID string) ([]*models.FileEntity, error) {
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	r.lock.RLock()
+	var filtered []*models.FileEntity
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		file := pair.Value
+		if file.TenantID == tenantID {
 			v := *file
 			filtered = append(filtered, &v)
 		}

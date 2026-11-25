@@ -67,7 +67,7 @@ func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
 		return nil, registry.ErrNotFound
 	}
 
-	if !r.isItemVisible(item) {
+	if !r.isItemVisible(item) || isTrashed(item) {
 		return nil, registry.ErrNotFound
 	}
 
@@ -83,7 +83,7 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		item := pair.Value
 
-		if !r.isItemVisible(item) {
+		if !r.isItemVisible(item) || isTrashed(item) {
 			continue
 		}
 
@@ -104,7 +104,7 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 		return nil, registry.ErrNotFound
 	}
 
-	if !r.isItemVisible(existingItem) {
+	if !r.isItemVisible(existingItem) || isTrashed(existingItem) {
 		return nil, registry.ErrNotFound
 	}
 
@@ -158,17 +158,29 @@ func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
-	if r.userID != "" || r.groupID != "" {
-		count := 0
-		for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
-			if r.isItemVisible(pair.Value) {
-				count++
-			}
+	count := 0
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		if r.isItemVisible(pair.Value) && !isTrashed(pair.Value) {
+			count++
 		}
-		return count, nil
 	}
+	return count, nil
+}
 
-	return r.items.Len(), nil
+// trashable is implemented by the models that go to Trash instead of being
+// deleted (models.Commodity, models.FileEntity).
+type trashable interface {
+	IsTrashed() bool
+}
+
+// isTrashed reports whether item is in Trash. The ordinary reads of the base
+// registry (Get, List, Count, Update and their *WithUser forms) skip trashed
+// items, matching the deleted_at IS NULL filter of the postgres registries;
+// the trash methods of the commodity and file registries read the map
+// directly.
+func isTrashed[P any](item P) bool {
+	t, ok := any(item).(trashable)
+	return ok && t.IsTrashed()
 }
 
 // isItemVisible checks if an item should be visible to the current registry context.
@@ -282,7 +294,7 @@ func (r *Registry[_, P]) GetWithUser(ctx context.Context, id string) (P, error) 
 	r.lock.RLock()
 	item, ok := r.items.Get(id)
 	r.lock.RUnlock()
-	if !ok {
+	if !ok || isTrashed(item) {
 		return nil, registry.ErrNotFound
 	}
 
@@ -313,6 +325,9 @@ func (r *Registry[_, P]) ListWithUser(ctx context.Context) ([]P, error) {
 	// Iterate from the oldest to the newest
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		item := pair.Value
+		if isTrashed(item) {
+			continue
+		}
 
 		// Check if the entity belongs to the user
 		if userAware, ok := any(item).(models.UserAware); ok {
@@ -359,7 +374,7 @@ func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) 
 	defer r.lock.Unlock()
 
 	existingItem, ok := r.items.Get(iitem.GetID())
-	if !ok {
+	if !ok || isTrashed(existingItem) {
 		return nil, registry.ErrNotFound
 	}
 

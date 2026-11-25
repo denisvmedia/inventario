@@ -17,6 +17,7 @@ import {
   SlidersHorizontal,
   Sparkles,
   Tag,
+  Trash2,
   User,
   Users,
   Wrench,
@@ -166,6 +167,12 @@ const MANAGE: NavEntry[] = [
     labelKey: "common:nav.system",
     to: (g) => (g?.id ? `/groups/${encodeURIComponent(g.id)}/settings` : null),
     icon: Settings,
+  },
+  {
+    // Deleted items and files wait here until restored or purged.
+    labelKey: "common:nav.trash",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/trash` : null),
+    icon: Trash2,
   },
 ]
 

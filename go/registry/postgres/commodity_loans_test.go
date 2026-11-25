@@ -244,7 +244,8 @@ func TestCommodityLoanRegistry_Postgres_FKCascade(t *testing.T) {
 
 // CountEach counts each set of options with the WHERE clause of the list, so
 // every count is the total ListPaginated reports for the same options,
-// including the loans join, and only the group of the context is counted.
+// including the loans join and the Trash filter, and only the group of the
+// context is counted.
 func TestCommodityRegistry_Postgres_CountEachMatchesTheListTotals(t *testing.T) {
 	c := qt.New(t)
 	fx := newLoanPGFixture(t)
@@ -258,16 +259,23 @@ func TestCommodityRegistry_Postgres_CountEachMatchesTheListTotals(t *testing.T) 
 	})
 	c.Assert(err, qt.IsNil)
 
+	// An item in Trash is left out of the live counts and counted with
+	// Trashed, as the list does.
+	trashedID := seedTagCommodity(c, fx.groupASet, fx.ctxA, area, "Trashed saw", "tools")
+	_, err = reg.Trash(fx.ctxA, trashedID, fx.user.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+
 	opts := []registry.CommodityListOptions{
 		{IncludeInactive: true},
 		{IncludeInactive: true, LentOut: new(true)},
 		{IncludeInactive: true, LentOut: new(false)},
 		{IncludeInactive: true, Search: "saw"},
 		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"tools"}}},
+		{IncludeInactive: true, Trashed: true},
 	}
 	counts, err := reg.CountEach(fx.ctxA, opts)
 	c.Assert(err, qt.IsNil)
-	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 1, 1})
+	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 1, 1, 1})
 	for i, o := range opts {
 		_, total, err := reg.ListPaginated(fx.ctxA, 0, 1, o)
 		c.Assert(err, qt.IsNil)

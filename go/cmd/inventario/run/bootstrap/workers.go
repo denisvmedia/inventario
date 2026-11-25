@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"strings"
 	"sync"
@@ -208,6 +209,22 @@ func StartGroupPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) fun
 	return worker.Stop
 }
 
+// StartTrashPurgeWorker wires and starts the worker that deletes Trash
+// entries older than --trash-retention and returns its stop function.
+func StartTrashPurgeWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	trash := services.NewTrashService(rs.FactorySet, rs.Params.UploadLocation)
+	opts := []services.TrashPurgeOption{
+		services.WithTrashRetention(rs.WorkerDurations.TrashRetention),
+		services.WithTrashPurgeInterval(rs.WorkerDurations.TrashPurgeInterval),
+	}
+	if rs.PauseController != nil {
+		opts = append(opts, services.WithTrashPurgePauseController(rs.PauseController))
+	}
+	worker := services.NewTrashPurgeWorker(trash, opts...)
+	worker.Start(ctx)
+	return worker.Stop
+}
+
 // StartOrphanFileGCWorker wires and starts the orphan-file GC sweeper (#2237)
 // and returns its stop function.
 //
@@ -241,8 +258,13 @@ func StartOrphanFileGCWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config)
 	deps := services.OrphanFileGCDeps{
 		Files: fs.FileRegistryFactory.CreateServiceRegistry(),
 		Probes: services.OrphanFileGCProbes{
+			// A trashed item still exists: it can be restored with its
+			// files, so a link to it is not dangling.
 			Commodity: func(ctx context.Context, id string) error {
 				_, err := commodityReg.Get(ctx, id)
+				if errors.Is(err, registry.ErrNotFound) {
+					_, err = commodityReg.GetTrashed(ctx, id)
+				}
 				return err
 			},
 			Area: func(ctx context.Context, id string) error {

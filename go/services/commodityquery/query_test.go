@@ -82,6 +82,8 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "a search text over the length limit", query: "q=" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "q"},
 		{name: "a search text over the term limit", query: "q=a+b+c+d+e+f+g+h+i+j+k", param: "q"},
 		{name: "too many tags", query: "tags=" + manyTags(commodityquery.MaxTags+1), param: "tags"},
+		{name: "trashed that is neither", query: "trashed=deleted", param: "trashed"},
+		{name: "lent_out in the trash", query: "trashed=true&lent_out=false", param: "lent_out"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -207,6 +209,7 @@ func TestQuery_ValuesRoundTrip(t *testing.T) {
 			SortField: registry.CommoditySortCurrentPrice,
 		}},
 		{name: "untagged", q: commodityquery.Query{IncludeInactive: true, Tags: registry.CommodityTagFilter{Untagged: true}}},
+		{name: "trashed", q: commodityquery.Query{Text: "drill", IncludeInactive: true, Trashed: true}},
 		{name: "all is the default mode", q: commodityquery.Query{
 			IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"a"}},
 		}},
@@ -240,4 +243,19 @@ func TestQuery_ListOptions(t *testing.T) {
 	c.Check(opts.Tags, qt.DeepEquals, q.Tags)
 	c.Check(opts.SortDesc, qt.IsTrue)
 	c.Check(opts.SearchTagLabels, qt.IsNil)
+	c.Check(opts.Trashed, qt.IsFalse)
+}
+
+func TestParse_Trashed(t *testing.T) {
+	c := qt.New(t)
+	q, err := commodityquery.Parse(url.Values{"trashed": {"TRUE"}, "q": {"drill"}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Trashed, qt.IsTrue)
+	c.Check(q.ListOptions().Trashed, qt.IsTrue)
+
+	// trashed=false is the default and does not conflict with lent_out.
+	q, err = commodityquery.Parse(url.Values{"trashed": {"false"}, "lent_out": {"true"}})
+	c.Assert(err, qt.IsNil)
+	c.Check(q.Trashed, qt.IsFalse)
+	c.Check(q.LentOut, qt.DeepEquals, new(true))
 }

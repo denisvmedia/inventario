@@ -32,14 +32,14 @@ func TestFileWhereSQL(t *testing.T) {
 		args     []any
 	}{
 		{
-			name: "no filter yields no clause",
-			want: "SELECT * FROM files",
+			name: "no filter leaves only the live-row clause",
+			want: "SELECT * FROM files WHERE deleted_at IS NULL",
 		},
 		{
 			name:     "type and category",
 			fileType: &fileType,
 			category: &category,
-			want:     "SELECT * FROM files WHERE type = $1 AND category = $2",
+			want:     "SELECT * FROM files WHERE deleted_at IS NULL AND type = $1 AND category = $2",
 			args:     []any{fileType, category},
 		},
 		{
@@ -47,27 +47,27 @@ func TestFileWhereSQL(t *testing.T) {
 			name:     "the linked-entity pair",
 			linkType: &linkedType,
 			linkID:   &linkedID,
-			want: "SELECT * FROM files WHERE EXISTS (SELECT 1 FROM file_links fl " +
+			want: "SELECT * FROM files WHERE deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_links fl " +
 				"WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2)",
 			args: []any{linkedType, linkedID},
 		},
 		{
-			name:     "half a linked-entity pair applies nothing",
+			name:     "half a linked-entity pair applies no link clause",
 			linkType: &linkedType,
-			want:     "SELECT * FROM files",
+			want:     "SELECT * FROM files WHERE deleted_at IS NULL",
 		},
 		{
 			// Containment, so every requested tag has to be present rather
 			// than any of them.
 			name: "tags use containment",
 			tags: []string{"invoice", "tax"},
-			want: "SELECT * FROM files WHERE tags @> $1",
+			want: "SELECT * FROM files WHERE deleted_at IS NULL AND tags @> $1",
 			args: []any{[]byte(`["invoice","tax"]`)},
 		},
 		{
 			name:  "search spans four columns",
 			query: "receipt",
-			want: "SELECT * FROM files WHERE (title ILIKE $1 OR description ILIKE $2 OR " +
+			want: "SELECT * FROM files WHERE deleted_at IS NULL AND (title ILIKE $1 OR description ILIKE $2 OR " +
 				"path ILIKE $3 OR original_path ILIKE $4)",
 			args: []any{"%receipt%", "%receipt%", "%receipt%", "%receipt%"},
 		},
@@ -79,7 +79,7 @@ func TestFileWhereSQL(t *testing.T) {
 			tags:     []string{"invoice"},
 			linkType: &linkedType,
 			linkID:   &linkedID,
-			want: "SELECT * FROM files WHERE type = $1 AND category = $2 AND " +
+			want: "SELECT * FROM files WHERE deleted_at IS NULL AND type = $1 AND category = $2 AND " +
 				"EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $3 AND fl.entity_id = $4) AND tags @> $5 AND " +
 				"(title ILIKE $6 OR description ILIKE $7 OR path ILIKE $8 OR original_path ILIKE $9)",
 			args: []any{
@@ -117,14 +117,14 @@ func TestFileListPaginatedSQLSharesThePredicate(t *testing.T) {
 	countSB.AddWhereClause(where)
 	countSQL, countArgs := countSB.Build()
 	c.Check(countSQL, qt.Equals,
-		"SELECT COUNT(*) FROM files WHERE EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2)")
+		"SELECT COUNT(*) FROM files WHERE deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2)")
 	c.Check(countArgs, qt.DeepEquals, []any{linkedType, linkedID})
 
 	dataSB := orderFilesNewestFirst(newSelect().Select("*").From("files")).Limit(24).Offset(48)
 	dataSB.AddWhereClause(where)
 	dataSQL, dataArgs := dataSB.Build()
 	c.Check(dataSQL, qt.Equals,
-		"SELECT * FROM files WHERE EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2) "+
+		"SELECT * FROM files WHERE deleted_at IS NULL AND EXISTS (SELECT 1 FROM file_links fl WHERE fl.file_id = files.id AND fl.entity_type = $1 AND fl.entity_id = $2) "+
 			"ORDER BY created_at DESC, id DESC LIMIT $3 OFFSET $4")
 	c.Check(dataArgs, qt.DeepEquals, []any{linkedType, linkedID, 24, 48})
 }

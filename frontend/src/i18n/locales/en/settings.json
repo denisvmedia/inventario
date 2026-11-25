@@ -460,13 +460,16 @@
       "exports": "Exports",
       "images": "Images",
       "invoices": "Invoices",
-      "other": "Other"
+      "other": "Other",
+      "trash": "Trash"
     },
     "errorBody": "Couldn't load storage usage right now. Try again in a moment.",
     "free": "Free",
     "manageFiles": "Manage files",
     "noGroup": "Select a group to view its storage usage.",
+    "openTrash": "Open trash",
     "title": "Storage usage",
+    "trashNote": "{{size}} of this is in the trash. It is freed when the trash is emptied or the entries expire.",
     "unlimited": "{{used}} used",
     "usageOfQuota": "{{used}} of {{quota}}",
     "usagePercent": "{{percent}}% of group quota"

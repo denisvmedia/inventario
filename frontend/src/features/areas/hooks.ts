@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 
 import { commodityKeys } from "@/features/commodities/keys"
+import { trashKeys } from "@/features/trash/keys"
 
 import {
   createArea,
@@ -139,6 +140,7 @@ export function useDeleteArea() {
       // given (the empty-area default never touches items). #2137
       if (vars.strategy) {
         qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
+        qc.invalidateQueries({ queryKey: trashKeys.group(slug) })
       }
     },
   })

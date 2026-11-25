@@ -60,6 +60,7 @@ func TestParseSaved_Refuses(t *testing.T) {
 	}{
 		{"an absolute warranty date", "warranty_expires_before=2026-12-31", "warranty_expires_before"},
 		{"items that are not lent out", "lent_out=false", "lent_out"},
+		{"the items in Trash", "trashed=true", "trashed"},
 		{"a parameter of the page", "page=2", "page"},
 		{"an unknown parameter", "colour=red", "colour"},
 		{"an unknown status", "status=borrowed", "status"},

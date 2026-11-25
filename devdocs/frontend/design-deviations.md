@@ -62,6 +62,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2796 by the 2026-11-24 goal to implement the open enhancements; toast and focus return agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a create affordance to its pickers. Item types (#2802) and sellers (#2804) take the same pattern when their pickers land.
 
+#### 2026-11-25 — Delete confirmations say items and files go to the trash; Undo on the delete toast; restored event in the history
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx), [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx), [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx), [`FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) and [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) word every delete confirmation as "will be permanently deleted. This cannot be undone."
+- **Reality**: The item, bulk item, file, bulk file and "Delete everything" (location and area) confirmations say the entries move to the trash and can be restored; the success toasts say "moved to the trash". The item and bulk item delete toasts carry an **Undo** action that restores the items (`features/trash/useUndoItemDelete.ts`). The item history timeline labels the `deleted` event "Moved this item to the trash" and renders the new `restored` event with a `RotateCcw` icon, noting when the item came back without a location.
+- **Why**: Deleting no longer removes data at once, so the mock's wording would be false. The Undo action goes beyond the issue text and is agent-suggested: it answers the wrong-click case without a trip to the Trash page.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements; the Undo action agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent for the copy while deletes go to the trash. Drop the Undo action if the owner prefers the Trash page alone.
+
 #### 2026-11-24 — Label print page for items and areas (`/g/:slug/labels`)
 
 - **Issue/PR**: #2807 / PR (pending)
@@ -587,6 +596,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-25 — Storage card: Trash bucket and note
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (Data & Storage) shows used storage without a Trash share.
+- **Reality**: On the storage card (Group settings → Data & storage), `frontend/src/features/storage/StoragePie.tsx` adds a **Trash** slice and legend row (warm gray `#8c8279`). When the group has bytes in Trash, `StorageCard.tsx` adds a line "N of this is in the trash. It is freed when the trash is emptied or the entries expire." with an **Open trash** link.
+- **Why**: The issue asks to show the trash portion of storage so cleanup has a predictable effect. Trashed files still count toward the quota until they are purged.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock if `inventario-design` adds a storage breakdown with Trash.
+
 #### 2026-11-24 — Personal API tokens: Privacy & security row, `/profile/api-tokens` page, create dialog with one-time reveal
 
 - **Issue/PR**: #2808 / PR (pending)
@@ -715,6 +733,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2793 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` draws saved views in its sidebar.
 
+#### 2026-11-25 — Trash entry in the sidebar and the command palette
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) have no Trash entry.
+- **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Trash** (`Trash2` icon) as the last row of the Group section, after Settings, linking to `/g/:slug/trash`. `CommandPalette.tsx` lists the same entry after Settings. Both resolve the label through `lib/nav-labels.ts` (`common:nav.trash`).
+- **Why**: not present in mock. The issue asks for a Trash page in the sidebar.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Move the row if `inventario-design` places Trash elsewhere.
+
 #### 2026-05-08 — Persistent "currency migration in progress" banner in Shell
 
 - **Issue/PR**: #1553 / PR #1604
@@ -760,6 +787,42 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) for skipping steps and for launching once a group is active (#2787 decisions), and for the narrow-screen gate with the user-menu entry left out (2026-11-24, after #2816 merged: a guided tour of a collapsed sidebar on a phone has no good shape).
 - **Reversion plan**: Permanent for the no-group behavior. If the tour gains a mobile variant (for example one that opens the sidebar sheet first), drop the narrow-screen gate.
 
+#### 2026-11-25 — TopBar search entry on narrow screens
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The header in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) has a "Search…" button with a `⌘ K` `KbdGroup` and an "Open command palette" tooltip. It is `hidden sm:flex`, so below the `sm` breakpoint the header has no way into the palette.
+- **Reality**: `frontend/src/components/HeaderSearch.tsx` renders the mock's button from `sm` up. Below `sm` it renders an outline icon `Button` (`size="icon"`, `Search` icon, accessible name "Search") in the same place, so phones and touch devices can open the palette.
+- **Why**: The issue asks for a search entry that works by click and touch, on narrow screens too. The mock's button does not fit next to the group switcher and the toggles at phone width.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` gives the header a narrow-screen search entry.
+
+#### 2026-11-25 — TopBar search entry: shortcut label and focus
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The header search button in [`design-mocks/src/App.tsx`](../../design-mocks/src/App.tsx) always shows `⌘` and has no focus style.
+- **Reality**: `HeaderSearch` shows `⌘ K` on Apple platforms and `Ctrl K` elsewhere (the same detection the shortcuts dialog uses), sets `aria-keyshortcuts`, and has the `focus-visible` ring of the other outline controls. Closing the palette returns focus to the entry that opened it.
+- **Why**: The shortcut is Ctrl+K on Windows and Linux, so `⌘` there names a key the keyboard does not have. The issue asks for a keyboard-accessible entry, and a control without a focus style is not.
+- **Approved by**: agent-suggested — listed in the PR for confirmation
+- **Reversion plan**: Permanent unless the mock adopts its own platform label and focus style.
+
+#### 2026-11-25 — Command palette lists search results by kind
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) shows fixed groups (Navigate, Recent Items, Recent Files, Locations) filtered on the client by cmdk; item and file rows end in a category `Badge`.
+- **Reality**: `frontend/src/components/CommandPalette.tsx` searches the active group through `GET /search` from two characters on. Under the "Search …" row that opens the search page it lists Items, Locations, Areas, Files and Tags, each only when it has matches, then the Navigation group. Rows keep the mock's anatomy (`size-7` muted icon box, medium title, muted `text-xs` subtitle); the subtitle carries the matched field, the asset ID, the address, the path or the tag kind instead of a category badge. The Items group ends in an "All matching items (N)" row that opens the items list with the same query. Area and tag rows have a second option, "Show items" (or "Show files" for a file tag), next to the row. With an empty query a Recent group lists the results opened from the palette or the search page. A status line under the input says to type more, that the search runs, or that nothing matched.
+- **Why**: The issue asks for results grouped by kind, a "show its items" action for tags and areas, recent results, and a way to all results. Locations get no "show items" action because the item list has no location filter yet.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock if `inventario-design` draws a palette with live results.
+
+#### 2026-11-25 — Search page: tags group, item links and recent results
+
+- **Issue/PR**: #2801 / PR (pending)
+- **Mock**: The search page is not in the mock. Its result rows follow the [`CommandPalette`](../../design-mocks/src/components/CommandPalette.tsx) title-and-subtitle row.
+- **Reality**: `frontend/src/pages/SearchPage.tsx` lists matching tags (label, and "Item tag" or "File tag") instead of the "not available yet" card. Area and tag cards carry a ghost "Show items" (or "Show files") button at their right edge that opens the item or file list filtered by that area or tag; those cards drop the chevron. Opening a result records it, so the recent list on the empty page fills, and each recent row names its kind (Item, Location, Area, File, Tag).
+- **Why**: not present in mock. The issue asks for the same grouping and "show its items" action as the palette, and the page's recent list stayed empty because nothing recorded a visit.
+- **Approved by**: user (explicit) — pre-approved for #2801 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Follow the mock once `inventario-design` adds a search page.
+
 #### 2026-11-25 — "Upcoming" sidebar entry
 
 - **Issue/PR**: #2805
@@ -781,6 +844,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-25 — Trash page (`/g/:slug/trash`)
+
+- **Issue/PR**: #2799 / PR #2835
+- **Mock**: Not present in mock. `design-mocks/` has no Trash or recycle-bin view; the issue notes that it needs a mock in `inventario-design` or a recorded deviation. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (Table in a bordered rounded container, line Tabs, Button, the empty-state block) and the shared `BulkActionBar`.
+- **Reality**: `frontend/src/pages/trash/TrashPage.tsx` uses the standard `PageHeader` (title, a subtitle that states the retention in days from the list response) with a destructive **Empty trash** button for admins and owners. Line tabs split **Items (n)** and **Files (n)**. Each tab (`components/trash/TrashedItemsTab.tsx`, `TrashedFilesTab.tsx`) is a table with a selection checkbox, the name, the files that went to Trash with the item (count and size) or the places a file was attached to, the deletion date with the member who deleted it, the date it is deleted for good, and per-row **Restore** and **Delete now** buttons (both outline, Delete now in the destructive color; an outline button keeps its own background, so the red text keeps its contrast on a hovered row). Selecting rows opens the `BulkActionBar` with the same two actions. Viewers see the lists without actions; users restore; admins and owners also delete for good. Restoring an item whose area is gone shows a warning toast with an **Open** action. An empty tab shows the empty-state block with a `Trash2` icon.
+- **Why**: not present in mock. The issue asks for restore, delete now and empty trash.
+- **Approved by**: user (explicit) — pre-approved for #2799 by the 2026-11-24 goal to implement the open enhancements
+- **Reversion plan**: Reconcile when `inventario-design` adds a Trash view; the data layer in `features/trash/` stays.
 
 #### 2026-05-20 — Admin Tenants list is a divide-y card list, not a `<Table>`
 

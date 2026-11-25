@@ -34,6 +34,7 @@ import (
 type filesAPI struct {
 	uploadLocation     string
 	fileService        *services.FileService
+	trashService       *services.TrashService
 	fileSigningService *services.FileSigningService
 	tagService         *services.TagService
 	linkService        *services.FileLinkService
@@ -598,12 +599,15 @@ func renderFileLinkError(w http.ResponseWriter, r *http.Request, err error) {
 
 // fillLinkNames sets the display name of every link's entity, for the "Linked
 // to" list. Each entity is read once through the caller's group-scoped
-// registries; an entity that cannot be read keeps an empty name.
+// registries; an entity that cannot be read keeps an empty name. A link to an
+// item in Trash is left out: the item is hidden everywhere until it is
+// restored, and the link comes back with it.
 func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*models.FileEntity) {
 	if registrySet == nil {
 		return
 	}
 	names := map[string]string{}
+	trashed := map[string]bool{}
 	lookup := func(entityType, entityID string) string {
 		key := entityType + "/" + entityID
 		if name, ok := names[key]; ok {
@@ -612,8 +616,14 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		var name string
 		switch entityType {
 		case models.FileLinkCommodity:
-			if c, err := registrySet.CommodityRegistry.Get(ctx, entityID); err == nil {
+			c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
+			switch {
+			case err == nil:
 				name = c.Name
+			case errors.Is(err, registry.ErrNotFound):
+				if _, trashErr := registrySet.CommodityRegistry.GetTrashed(ctx, entityID); trashErr == nil {
+					trashed[key] = true
+				}
 			}
 		case models.FileLinkLocation:
 			if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
@@ -631,15 +641,23 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		if f == nil {
 			continue
 		}
-		for i := range f.Links {
-			f.Links[i].EntityName = lookup(f.Links[i].EntityType, f.Links[i].EntityID)
+		kept := f.Links[:0]
+		for _, l := range f.Links {
+			l.EntityName = lookup(l.EntityType, l.EntityID)
+			if trashed[l.EntityType+"/"+l.EntityID] {
+				continue
+			}
+			kept = append(kept, l)
 		}
+		f.Links = kept
 	}
 }
 
-// deleteFile deletes a file.
+// deleteFile moves a file to Trash.
 // @Summary Delete a file
-// @Description delete file and its associated file
+// @Description Move the file to Trash. It keeps its links, so restoring it
+// @Description puts it back where it was. An export bundle is deleted for
+// @Description good.
 // @Tags files
 // @Accept json-api
 // @Produce json-api
@@ -651,8 +669,7 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
 
-	// Use file service to delete both physical file and database record
-	err := api.fileService.DeleteFileWithPhysical(r.Context(), fileID)
+	err := api.trashService.TrashFile(r.Context(), fileID)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -786,11 +803,10 @@ func (api *filesAPI) listCategoryCounts(w http.ResponseWriter, r *http.Request) 
 }
 
 // Files sets up the files API routes.
-// bulkDeleteFiles deletes a list of files (record + physical blob) in a
-// single request.
+// bulkDeleteFiles moves a list of files to Trash in a single request.
 // @Summary Bulk-delete files
-// @Description Delete every file whose id appears in the body, including
-// @Description the physical blob. The response lists succeeded vs.
+// @Description Move every file whose id appears in the body to Trash. The
+// @Description response lists succeeded vs.
 // @Description failed ids so the frontend can render partial-failure UX
 // @Description without parsing per-id HTTP statuses.
 // @Tags files
@@ -811,7 +827,7 @@ func (api *filesAPI) bulkDeleteFiles(w http.ResponseWriter, r *http.Request) {
 	succeeded := make([]string, 0, len(input.Data.Attributes.IDs))
 	failed := make([]jsonapi.BulkResultFail, 0)
 	for _, id := range input.Data.Attributes.IDs {
-		if err := api.fileService.DeleteFileWithPhysical(r.Context(), id); err != nil {
+		if err := api.trashService.TrashFile(r.Context(), id); err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
 			continue
 		}
@@ -829,6 +845,7 @@ func Files(params Params) func(r chi.Router) {
 	api := &filesAPI{
 		uploadLocation:     params.UploadLocation,
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
+		trashService:       services.NewTrashService(params.FactorySet, params.UploadLocation),
 		fileSigningService: fileSigningService,
 		tagService:         services.NewTagService(params.FactorySet),
 		linkService:        services.NewFileLinkService(params.FactorySet),

@@ -49,6 +49,12 @@ func newSystemStatsFunc(dbx *sqlx.DB) registry.SystemStatsFunc {
 			}
 			for _, c := range counts {
 				query := fmt.Sprintf("SELECT count(*) FROM %s", c.table)
+				if c.table == tableNames.Commodities() || c.table == tableNames.Files() {
+					// Trashed items and files are not part of the inventory;
+					// their bytes still count in the storage figures below,
+					// because they are still on disk.
+					query += " WHERE deleted_at IS NULL"
+				}
 				if err := tx.QueryRowxContext(ctx, query).Scan(c.dst); err != nil {
 					return errxtrace.Wrap("failed to count rows", err)
 				}

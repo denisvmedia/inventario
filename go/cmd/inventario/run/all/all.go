@@ -119,6 +119,9 @@ func (c *Command) run() error {
 	stopOrphanFileGC := bootstrap.StartOrphanFileGCWorker(ctx, rs, c.cfg)
 	defer stopOrphanFileGC()
 
+	stopTrashPurge := bootstrap.StartTrashPurgeWorker(ctx, rs, c.cfg)
+	defer stopTrashPurge()
+
 	stopWarrantyReminder := bootstrap.StartWarrantyReminderWorker(ctx, rs, c.cfg)
 	defer stopWarrantyReminder()
 

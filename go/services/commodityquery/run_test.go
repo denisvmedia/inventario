@@ -3,6 +3,7 @@ package commodityquery_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/shopspring/decimal"
@@ -119,8 +120,9 @@ func TestList_PagesKeepTheTotal(t *testing.T) {
 	c.Check(page.Matches, qt.HasLen, 1)
 }
 
-// CountEach gives, per query, the total List reports for it, with no query
-// and with the lent-out filter the memory backend resolves to item IDs.
+// CountEach gives, per query, the total List reports for it, with no query,
+// with the lent-out filter the memory backend resolves to item IDs, and with
+// an item in Trash, which both leave out.
 func TestCountEach_MatchesTheListTotals(t *testing.T) {
 	c := qt.New(t)
 	ctx, set := newMemorySet(c)
@@ -137,10 +139,16 @@ func TestCountEach_MatchesTheListTotals(t *testing.T) {
 		{IncludeInactive: true, Text: "saw"},
 		{IncludeInactive: true, LentOut: new(true)},
 		{IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"none"}}},
+		{IncludeInactive: true, Trashed: true},
 	}
+	// An item in Trash is left out, as the list leaves it out.
+	trashed := seedItem(c, ctx, set, "Red trashed", "red")
+	_, err = set.CommodityRegistry.Trash(ctx, trashed.ID, "user-1", time.Now())
+	c.Assert(err, qt.IsNil)
+
 	counts, err := commodityquery.CountEach(ctx, set, qs)
 	c.Assert(err, qt.IsNil)
-	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 0})
+	c.Assert(counts, qt.DeepEquals, []int{2, 1, 1, 0, 1})
 	for i, q := range qs {
 		page, err := commodityquery.List(ctx, set, q, 0, 1)
 		c.Assert(err, qt.IsNil)

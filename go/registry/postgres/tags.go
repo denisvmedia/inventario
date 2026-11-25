@@ -180,10 +180,10 @@ func (r *TagRegistry) Delete(ctx context.Context, id string) error {
 // kind).
 func (r *TagRegistry) kindUsageExpr(kind models.TagKind) string {
 	commodityExpr := fmt.Sprintf(
-		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
+		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug) AND deleted_at IS NULL)`,
 		r.tableNames.Commodities())
 	fileExpr := fmt.Sprintf(
-		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug))`,
+		`(SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array(t.slug) AND deleted_at IS NULL)`,
 		r.tableNames.Files())
 	switch kind {
 	case models.TagKindCommodity:
@@ -238,7 +238,8 @@ func (r *TagRegistry) ListPaginated(ctx context.Context, offset, limit int, opts
 // Search filters by. It is nil when neither a search term nor a concrete kind
 // narrows the list.
 //
-// The search term matches the label or the slug. The kind filter is
+// The search term matches the label or the slug as a literal substring, as
+// in the memory backend: a % or _ in it matches only itself. The kind filter is
 // intrinsic: a tag passes ?kind=commodity when its stored kind is
 // "commodity", and the same for file. The zero kind adds no condition and
 // lists across all kinds, which only internal callers ask for.
@@ -246,7 +247,7 @@ func tagWhere(search string, kind models.TagKind) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	if search != "" {
-		pattern := "%" + search + "%"
+		pattern := containsPattern(search)
 		exprs = append(exprs, cond.Or(cond.ILike("t.label", pattern), cond.ILike("t.slug", pattern)))
 	}
 	if kind == models.TagKindCommodity || kind == models.TagKindFile {
@@ -370,7 +371,7 @@ func (r *TagRegistry) GetUsageBatch(ctx context.Context, kind models.TagKind, sl
 			counts AS (
 				SELECT t.value AS slug, COUNT(DISTINCT id)::int AS cnt
 				FROM %s, jsonb_array_elements_text(tags) AS t(value)
-				WHERE tags ?| $1::text[]
+				WHERE tags ?| $1::text[] AND deleted_at IS NULL
 				GROUP BY t.value
 			)
 			SELECT input.slug, COALESCE(c.cnt, 0) AS cnt
@@ -421,10 +422,10 @@ func (r *TagRegistry) GetStats(ctx context.Context) (registry.TagStats, error) {
 				(SELECT COUNT(*) FROM %s) AS tags_total,
 				(SELECT COUNT(*) FROM %s WHERE kind = 'commodity') AS commodity_tags_total,
 				(SELECT COUNT(*) FROM %s WHERE kind = 'file') AS file_tags_total,
-				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS items_tagged,
-				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS items_untagged,
-				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0) AS files_tagged,
-				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0) AS files_untagged
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0 AND deleted_at IS NULL) AS items_tagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0 AND deleted_at IS NULL) AS items_untagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) > 0 AND deleted_at IS NULL) AS files_tagged,
+				(SELECT COUNT(*) FROM %s WHERE jsonb_array_length(COALESCE(tags, '[]'::jsonb)) = 0 AND deleted_at IS NULL) AS files_untagged
 		`,
 			r.tableNames.Tags(),
 			r.tableNames.Tags(), r.tableNames.Tags(),
@@ -450,7 +451,7 @@ func (r *TagRegistry) GetUsage(ctx context.Context, kind models.TagKind, slug st
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(
-			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)`,
+			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text) AND deleted_at IS NULL`,
 			r.tableForKind(kind),
 		)
 		return tx.QueryRowxContext(ctx, query, slug).Scan(&cnt)
@@ -846,10 +847,11 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		}
 
 		// Usage counts only the tag's own kind table — a commodity tag's
-		// usage is its commodities, never files that happen to share the slug.
+		// usage is its commodities, never files that happen to share the slug —
+		// and only live rows, the ones a user can see.
 		var refCount int
 		usageQuery := fmt.Sprintf(
-			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text)`,
+			`SELECT COUNT(*) FROM %s WHERE tags @> jsonb_build_array($1::text) AND deleted_at IS NULL`,
 			r.tableForKind(current.Kind))
 		if err := tx.QueryRowxContext(ctx, usageQuery, current.Slug).Scan(&refCount); err != nil {
 			return errxtrace.Wrap("failed to compute tag usage", err)
@@ -859,13 +861,13 @@ func (r *TagRegistry) DeleteAtomic(ctx context.Context, id string, force bool) (
 		if refCount > 0 && !force {
 			return registry.ErrTagInUse
 		}
-		if refCount > 0 {
-			stripQuery := fmt.Sprintf(
-				`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
-				r.tableForKind(current.Kind), jsonbStripSlugExpr(1))
-			if _, err := tx.ExecContext(ctx, stripQuery, current.Slug); err != nil {
-				return errxtrace.Wrap("failed to strip tag references", err)
-			}
+		// The strip covers trashed rows too, so a restored item does not
+		// bring back a tag that no longer exists.
+		stripQuery := fmt.Sprintf(
+			`UPDATE %s SET tags = %s WHERE tags @> jsonb_build_array($1::text)`,
+			r.tableForKind(current.Kind), jsonbStripSlugExpr(1))
+		if _, err := tx.ExecContext(ctx, stripQuery, current.Slug); err != nil {
+			return errxtrace.Wrap("failed to strip tag references", err)
 		}
 
 		if _, err := tx.ExecContext(ctx,

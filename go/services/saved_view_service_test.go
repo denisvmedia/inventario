@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -249,10 +250,10 @@ func TestSavedViewService_StoredQueryThatNoLongerParses(t *testing.T) {
 	c.Assert(fixed.QueryError, qt.Equals, (*commodityquery.Error)(nil))
 }
 
-func seedSavedViewCommodity(c *qt.C, f *savedViewFixture, ctx context.Context, name string, status models.CommodityStatus, tags ...string) {
+func seedSavedViewCommodity(c *qt.C, f *savedViewFixture, ctx context.Context, name string, status models.CommodityStatus, tags ...string) *models.Commodity {
 	c.Helper()
 	reg := f.factory.CommodityRegistryFactory.MustCreateUserRegistry(ctx)
-	_, err := reg.Create(ctx, models.Commodity{
+	created, err := reg.Create(ctx, models.Commodity{
 		Name:      name,
 		ShortName: name,
 		Type:      models.CommodityTypeOther,
@@ -261,11 +262,13 @@ func seedSavedViewCommodity(c *qt.C, f *savedViewFixture, ctx context.Context, n
 		Tags:      tags,
 	})
 	c.Assert(err, qt.IsNil)
+	return created
 }
 
 // The counts use the filter of the list path, so each is the total the items
-// list reports for the same query string. They cover the views the member
-// shows in the sidebar or on the dashboard, and only those.
+// list reports for the same query string, items in Trash left out. They cover
+// the views the member shows in the sidebar or on the dashboard, and only
+// those.
 func TestSavedViewService_CountsMatchTheList(t *testing.T) {
 	c := qt.New(t)
 	f := newSavedViewFixture()
@@ -274,6 +277,9 @@ func TestSavedViewService_CountsMatchTheList(t *testing.T) {
 	seedSavedViewCommodity(c, f, ctx, "Vase", models.CommodityStatusInUse, "fragile")
 	seedSavedViewCommodity(c, f, ctx, "Glass", models.CommodityStatusSold, "fragile")
 	seedSavedViewCommodity(c, f, ctx, "Hammer", models.CommodityStatusInUse)
+	trashed := seedSavedViewCommodity(c, f, ctx, "Broken vase", models.CommodityStatusInUse, "fragile")
+	_, err := f.factory.CommodityRegistryFactory.MustCreateUserRegistry(ctx).Trash(ctx, trashed.ID, "alice", time.Now())
+	c.Assert(err, qt.IsNil)
 
 	fragile, err := f.svc.Create(ctx, alice, viewInput("Fragile", "tags=fragile", false))
 	c.Assert(err, qt.IsNil)

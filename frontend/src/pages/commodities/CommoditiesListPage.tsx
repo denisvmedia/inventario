@@ -97,6 +97,7 @@ import {
 } from "@/features/commodities/listContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import { labelsPageHref } from "@/features/labels/links"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
@@ -244,6 +245,7 @@ export function CommoditiesListPage() {
   const locationsQuery = useLocations({ enabled })
 
   const bulkDelete = useBulkDeleteCommodities()
+  const undoDelete = useUndoItemDelete()
   const bulkMove = useBulkMoveCommodities()
   const create = useCreateCommodity()
   const toast = useAppToast()
@@ -507,7 +509,9 @@ export function CommoditiesListPage() {
     if (!ok) return
     try {
       await bulkDelete.mutateAsync(ids)
-      toast.success(t("commodities:toast.bulkDeleted", { count: ids.length }))
+      toast.success(t("commodities:toast.bulkDeleted", { count: ids.length }), {
+        action: undoDelete(ids),
+      })
       setSelected(new Set())
     } catch {
       toast.error(t("commodities:toast.bulkDeleteError"))

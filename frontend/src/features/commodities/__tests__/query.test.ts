@@ -291,6 +291,13 @@ describe("listOptionsToParams", () => {
   it("sends no_tags", () => {
     expect(listOptionsToParams({ noTags: true }).toString()).toBe("no_tags=true")
   })
+
+  it("sends trashed only when it selects the trash", () => {
+    expect(listOptionsToParams({ trashed: true, search: "drill" }).toString()).toBe(
+      "q=drill&trashed=true"
+    )
+    expect(listOptionsToParams({ trashed: false }).has("trashed")).toBe(false)
+  })
 })
 
 describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {

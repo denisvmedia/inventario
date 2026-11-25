@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { Route } from "react-router-dom"
+import { Route, useLocation, useNavigate } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
@@ -38,6 +38,24 @@ function areaResource(id: string, attrs: { name: string; location_id: string; ic
   return { id, type: "areas", attributes: { ...attrs, id } }
 }
 
+// Navigates within the route, so the page stays mounted, and shows the
+// current query string.
+function UrlControls() {
+  const navigate = useNavigate()
+  const location = useLocation()
+  return (
+    <>
+      <output data-testid="url-search">{location.search}</output>
+      <button type="button" onClick={() => void navigate(`/g/${SLUG}/locations`)}>
+        no q
+      </button>
+      <button type="button" onClick={() => void navigate(`/g/${SLUG}/locations?q=boat`)}>
+        q boat
+      </button>
+    </>
+  )
+}
+
 function renderList(initialPath = `/g/${SLUG}/locations`) {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -49,6 +67,7 @@ function renderList(initialPath = `/g/${SLUG}/locations`) {
           <ConfirmProvider>
             <GroupProvider>
               <LocationsListPage />
+              <UrlControls />
             </GroupProvider>
           </ConfirmProvider>
         }
@@ -204,6 +223,93 @@ describe("<LocationsListPage />", () => {
       expect(screen.getAllByTestId("location-card")).toHaveLength(1)
       expect(screen.getByText("Main House")).toBeInTheDocument()
     })
+  })
+
+  it("starts filtered by the q parameter the search page links with (#2801)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", { name: "Main House" }),
+        locationResource("loc2", { name: "Garage" }),
+      ]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList(`/g/${SLUG}/locations?q=garage`)
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("Garage")).toBeInTheDocument()
+    expect(screen.getByTestId("locations-search")).toHaveValue("garage")
+  })
+
+  it("keeps the search box and q in step while the page stays mounted", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", { name: "Main House" }),
+        locationResource("loc2", { name: "Garage" }),
+        locationResource("loc3", { name: "Boathouse" }),
+      ]),
+      ...areaHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    const user = userEvent.setup()
+    renderList(`/g/${SLUG}/locations?q=garage`)
+    const search = await screen.findByTestId("locations-search")
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+
+    // A link to the list without q drops the filter.
+    await user.click(screen.getByRole("button", { name: "no q" }))
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(3))
+    expect(search).toHaveValue("")
+
+    // A link with another q replaces it.
+    await user.click(screen.getByRole("button", { name: "q boat" }))
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(search).toHaveValue("boat")
+    expect(screen.getByText("Boathouse")).toBeInTheDocument()
+
+    // Typing goes into the URL once it pauses, and a trailing space being
+    // typed is not trimmed away from the box.
+    await user.clear(search)
+    await user.type(search, "main ")
+    await waitFor(() => expect(screen.getByTestId("url-search")).toHaveTextContent("?q=main"))
+    expect(search).toHaveValue("main ")
+    expect(screen.getAllByTestId("location-card")).toHaveLength(1)
+
+    await user.clear(search)
+    await waitFor(() => expect(screen.getByTestId("url-search")).toBeEmptyDOMElement())
+    expect(screen.getAllByTestId("location-card")).toHaveLength(3)
+  })
+
+  it("needs every word of q, each in the name, the address or an area name", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.list(SLUG, [
+        locationResource("loc1", { name: "Weekend Cottage", address: "Lakeside Road 7" }),
+        locationResource("loc2", { name: "Boathouse", address: "Lakeside Road 9" }),
+        locationResource("loc3", { name: "City flat", address: "Main street 1" }),
+      ]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Boat shed", location_id: "loc3" })]),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    // "cottage" is in the name and "road" in the address of one location;
+    // the search page matches locations the same way.
+    renderList(`/g/${SLUG}/locations?q=${encodeURIComponent("cottage road")}`)
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("Weekend Cottage")).toBeInTheDocument()
+
+    // One word still matches an area name, and a word may come from an
+    // area while another comes from the address.
+    const search = screen.getByTestId("locations-search")
+    const user = userEvent.setup()
+    await user.clear(search)
+    await user.type(search, "shed main")
+    await waitFor(() => expect(screen.getAllByTestId("location-card")).toHaveLength(1))
+    expect(screen.getByText("City flat")).toBeInTheDocument()
+
+    await user.clear(search)
+    await user.type(search, "lakeside nowhere")
+    await waitFor(() => expect(screen.queryAllByTestId("location-card")).toHaveLength(0))
   })
 
   it("opens the create dialog from the header CTA", async () => {
