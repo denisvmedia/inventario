@@ -234,6 +234,11 @@ type CommodityListOptions struct {
 	// are hidden, so a caller does not combine it with LentOut
 	// (services/commodityquery refuses the pair).
 	Trashed bool
+	// DraftsOnly keeps only the items marked as draft (Commodity.Draft),
+	// whatever their status. The default view hides drafts, so a caller
+	// sets IncludeInactive with it; without it nothing matches. It is not
+	// part of the item query contract: the inbox reads it (#2794).
+	DraftsOnly bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -1484,6 +1489,11 @@ type CommodityDraftRegistry interface {
 	// ListOpen returns a page of the group's open drafts, most recently
 	// saved first, with the total.
 	ListOpen(ctx context.Context, offset, limit int) ([]*models.CommodityDraft, int, error)
+
+	// OpenIDs returns the ids of every open draft of the group, in the order
+	// of ListOpen. It reads ids only, for a caller that counts the drafts
+	// or merges them with other records without loading their values.
+	OpenIDs(ctx context.Context) ([]string, error)
 
 	// SaveValues replaces the values of an open draft and increments its
 	// revision. revision is the revision the values were based on:

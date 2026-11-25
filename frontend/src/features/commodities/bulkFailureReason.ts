@@ -22,6 +22,25 @@ export function bulkFailureReason(t: TFunction, f: CommodityBulkFailure): string
   }
 }
 
+// itemFieldProblem says in the user's language what is wrong with one item
+// field the server refused, from the field's name and the validator's code:
+// a sentence of its own for the rules this knows, otherwise the field's
+// label and the translated message for the code. message is the server's
+// English text, kept when the code has no translation.
+export function itemFieldProblem(
+  t: TFunction,
+  field: string,
+  code: string,
+  message: string,
+  params?: Record<string, unknown>
+): string {
+  const known = invalidReason(t, field, code)
+  if (known !== undefined) return known
+  const text = code ? t(`errors:validation.${code}`, { ...params, defaultValue: message }) : message
+  const label = fieldLabel(t, field)
+  return label === undefined ? text : `${label}: ${text}`
+}
+
 function failed(t: TFunction): string {
   return t("commodities:bulk.result.failed")
 }

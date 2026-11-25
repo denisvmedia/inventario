@@ -1,7 +1,7 @@
 /**
  * E2E coverage for server drafts (#2812).
  *
- *   1. A draft saved with a photo on one device shows up under Drafts on
+ *   1. A draft saved with a photo on one device shows up in the inbox on
  *      another (a fresh browser context, so nothing is shared through
  *      local storage), opens with its values and the photo, and finishing
  *      it creates one item that carries the photo.
@@ -138,11 +138,11 @@ test.describe("Server drafts (#2812)", () => {
       const page2 = await other.newPage();
       await page2.goto("/");
       await ensureAuthenticated(page2);
-      await page2.goto(`/g/${encodeURIComponent(slug)}/commodities`);
-      const row = page2.getByTestId(`draft-row-${draftId}`);
+      await page2.goto(`/g/${encodeURIComponent(slug)}/inbox?reason=draft`);
+      const row = page2.getByTestId(`inbox-row-draft-${draftId}`);
       await expect(row).toContainText(name);
       await expect(row).toContainText("1 file");
-      await row.getByTestId(`draft-resume-${draftId}`).click();
+      await row.getByTestId(`inbox-resume-${draftId}`).click();
 
       await expect(page2.locator("#commodity-name")).toHaveValue(name);
       await expect(page2.locator("#commodity-short-name")).toHaveValue("Cordless drill");

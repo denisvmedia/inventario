@@ -248,6 +248,8 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 
 	t.Run("trashed items", func(t *testing.T) { runTrashedItemsCase(t, newEnv) })
 
+	t.Run("drafts only", func(t *testing.T) { runDraftsOnlyCase(t, newEnv) })
+
 	t.Run("tag labels stay within their kind", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -587,4 +589,52 @@ func runTrashedItemsCase(t *testing.T, newEnv func(t *testing.T) CommoditySearch
 		{Brand: "bosch", Count: 1},
 		{Brand: "Gardena", Count: 1},
 	})
+}
+
+// runDraftsOnlyCase checks DraftsOnly: it keeps the live items marked as
+// draft, whatever their status, and leaves out a draft in Trash. The default
+// view hides drafts, so DraftsOnly alone selects nothing.
+func runDraftsOnlyCase(t *testing.T, newEnv func(t *testing.T) CommoditySearchEnv) {
+	c := qt.New(t)
+	env := newEnv(t)
+	seedSearchGroup(c, env)
+	at := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
+	for _, seed := range []struct {
+		name    string
+		status  models.CommodityStatus
+		trashed bool
+	}{
+		{name: "Draft Lamp", status: models.CommodityStatusInUse},
+		{name: "Draft Bike", status: models.CommodityStatusSold},
+		{name: "Draft Chair", status: models.CommodityStatusInUse, trashed: true},
+	} {
+		created, err := env.Commodities.Create(env.Ctx, models.Commodity{
+			Name:   seed.name,
+			Type:   models.CommodityTypeOther,
+			AreaID: new(env.AreaID),
+			Count:  1,
+			Status: seed.status,
+			Draft:  true,
+		})
+		c.Assert(err, qt.IsNil, qt.Commentf("seeding %s", seed.name))
+		if seed.trashed {
+			_, err := env.Commodities.Trash(env.Ctx, created.ID, "registrytest", at)
+			c.Assert(err, qt.IsNil, qt.Commentf("trashing %s", seed.name))
+		}
+	}
+
+	opts := registry.CommodityListOptions{IncludeInactive: true, DraftsOnly: true}
+	got, total, err := env.Commodities.ListPaginated(env.Ctx, 0, 50, opts)
+	c.Assert(err, qt.IsNil)
+	c.Check(names(got), qt.DeepEquals, []string{"Draft Bike", "Draft Lamp"})
+	c.Check(total, qt.Equals, 2)
+
+	counts, err := env.Commodities.CountEach(env.Ctx, []registry.CommodityListOptions{
+		opts,
+		{DraftsOnly: true},
+		{IncludeInactive: true, DraftsOnly: true, Statuses: []models.CommodityStatus{models.CommodityStatusInUse}},
+		{IncludeInactive: true, DraftsOnly: true, Trashed: true},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Check(counts, qt.DeepEquals, []int{2, 0, 1, 1})
 }
