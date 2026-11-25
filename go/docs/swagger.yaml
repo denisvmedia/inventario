@@ -1780,6 +1780,15 @@ definitions:
     type: object
   jsonapi.CommodityScanAttributes:
     properties:
+      custom_fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        description: |-
+          CustomFields are the values read for the group's custom fields
+          (#2803), keyed by field ID, in the form an item write takes them: a
+          string for text, long text, URL, date and a select field's option ID,
+          a number, or a boolean. Absent when the scan read none.
+        type: object
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
@@ -1811,6 +1820,10 @@ definitions:
     type: object
   jsonapi.CommodityScanItem:
     properties:
+      custom_fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        type: object
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'

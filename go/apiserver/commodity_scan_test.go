@@ -18,6 +18,7 @@ import (
 	"go.5x5.cz/inventario/internal/aivision"
 	"go.5x5.cz/inventario/internal/aivision/mock"
 	"go.5x5.cz/inventario/internal/checkers"
+	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 )
@@ -419,4 +420,76 @@ func TestCommodityScan_OffersTheGroupsItemTypes(t *testing.T) {
 	c.Assert(provider.req.ItemTypes, qt.HasLen, len(models.BuiltinItemTypes)+1)
 	c.Check(provider.req.ItemTypes[0], qt.Equals, aivision.ItemTypeOption{Slug: "white_goods", Name: "Appliance"})
 	c.Check(provider.req.ItemTypes[len(models.BuiltinItemTypes)], qt.Equals, aivision.ItemTypeOption{Slug: "vehicle", Name: "Vehicle"})
+}
+
+// cannedScanProvider answers every scan with result.
+type cannedScanProvider struct {
+	result aivision.ScanResult
+}
+
+func (p *cannedScanProvider) Scan(context.Context, aivision.ScanRequest) (*aivision.ScanResult, error) {
+	result := p.result
+	return &result, nil
+}
+
+func (*cannedScanProvider) Name() string  { return "canned" }
+func (*cannedScanProvider) Model() string { return "canned" }
+
+// The response carries the custom field values read, by field ID, with a
+// select field's label turned into its option ID (#2803).
+func TestCommodityScan_ReturnsCustomFieldGuesses(t *testing.T) {
+	c := qt.New(t)
+
+	provider := &cannedScanProvider{}
+	params, userID, slug := newScanParams(provider, services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100})
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	user, err := params.FactorySet.UserRegistry.Get(context.Background(), userID)
+	c.Assert(err, qt.IsNil)
+	regSet := getRegistrySetFromParams(params, user)
+	plate, err := regSet.CustomFieldRegistry.Create(context.Background(), models.CustomFieldDefinition{
+		Name: "Plate", Type: models.CustomFieldTypeText,
+	})
+	c.Assert(err, qt.IsNil)
+	fuel, err := regSet.CustomFieldRegistry.Create(context.Background(), models.CustomFieldDefinition{
+		Name: "Fuel", Type: models.CustomFieldTypeSelect,
+		Options: models.ValuerSlice[models.CustomFieldOption]{{Label: "Petrol"}, {Label: "Diesel"}},
+	})
+	c.Assert(err, qt.IsNil)
+	guesses := map[string]aivision.FieldGuess{
+		plate.ID: {Value: "AB 123", Confidence: 0.9},
+		fuel.ID:  {Value: "Diesel", Confidence: 0.7},
+	}
+	provider.result = aivision.ScanResult{
+		Fields:       map[string]aivision.FieldGuess{"name": {Value: "Car", Confidence: 0.9}},
+		CustomFields: guesses,
+		Items: []aivision.ScanItem{
+			{Fields: map[string]aivision.FieldGuess{"name": {Value: "Car"}}, CustomFields: guesses},
+			{Fields: map[string]aivision.FieldGuess{"name": {Value: "Trailer"}}},
+		},
+	}
+
+	body, contentType := buildScanMultipart(c, []struct {
+		name string
+		mime string
+		body []byte
+	}{
+		{name: "front.jpg", mime: "image/jpeg", body: bytes.Repeat([]byte("a"), 128)},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/g/"+slug+"/commodities/scan", body)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, userID)
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+
+	var resp jsonapi.CommodityScanResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+	attrs := resp.Data.Attributes
+	c.Assert(attrs.CustomFields, qt.HasLen, 2)
+	c.Check(attrs.CustomFields[plate.ID].Value, qt.Equals, "AB 123")
+	c.Check(attrs.CustomFields[fuel.ID].Value, qt.Equals, fuel.Options[1].ID)
+	c.Assert(attrs.Items, qt.HasLen, 2)
+	c.Check(attrs.Items[0].CustomFields[fuel.ID].Value, qt.Equals, fuel.Options[1].ID)
+	c.Check(attrs.Items[1].CustomFields, qt.IsNil)
 }

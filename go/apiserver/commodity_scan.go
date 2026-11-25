@@ -560,8 +560,11 @@ type commodityScanResource struct {
 // optional value + confidence; absent fields mean "no signal". Items is
 // present only for a multi-product scan (the FE renders a chooser).
 type commodityScanResultDT struct {
-	Fields     map[string]commodityScanFieldDT `json:"fields"`
-	Items      []commodityScanItemDT           `json:"items,omitempty"`
+	Fields map[string]commodityScanFieldDT `json:"fields"`
+	// CustomFields are the custom field values read, by field ID, in the
+	// form an item write takes (#2803).
+	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
+	Items        []commodityScanItemDT           `json:"items,omitempty"`
 	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
 	UsedTokens int                             `json:"used_tokens,omitempty"`
 	LatencyMS  int64                           `json:"latency_ms,omitempty"`
@@ -569,7 +572,8 @@ type commodityScanResultDT struct {
 
 // commodityScanItemDT is one candidate product in a multi-product scan.
 type commodityScanItemDT struct {
-	Fields map[string]commodityScanFieldDT `json:"fields"`
+	Fields       map[string]commodityScanFieldDT `json:"fields"`
+	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
 }
 
 type commodityScanFieldDT struct {
@@ -592,15 +596,28 @@ func marshalScanFields(fields map[string]aivision.FieldGuess) map[string]commodi
 	return out
 }
 
+// marshalCustomFieldGuesses is marshalScanFields for the custom field
+// guesses; nil when there are none, so the key is left out.
+func marshalCustomFieldGuesses(fields map[string]aivision.FieldGuess) map[string]commodityScanFieldDT {
+	if len(fields) == 0 {
+		return nil
+	}
+	return marshalScanFields(fields)
+}
+
 func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
 	dt := commodityScanResultDT{
-		Fields:     marshalScanFields(r.Fields),
-		Warnings:   r.Warnings,
-		UsedTokens: r.UsedTokens,
-		LatencyMS:  r.LatencyMS,
+		Fields:       marshalScanFields(r.Fields),
+		CustomFields: marshalCustomFieldGuesses(r.CustomFields),
+		Warnings:     r.Warnings,
+		UsedTokens:   r.UsedTokens,
+		LatencyMS:    r.LatencyMS,
 	}
 	for _, it := range r.Items {
-		dt.Items = append(dt.Items, commodityScanItemDT{Fields: marshalScanFields(it.Fields)})
+		dt.Items = append(dt.Items, commodityScanItemDT{
+			Fields:       marshalScanFields(it.Fields),
+			CustomFields: marshalCustomFieldGuesses(it.CustomFields),
+		})
 	}
 	return &commodityScanResponse{
 		Data:       commodityScanResource{Type: "commodity_scan", Attributes: dt},

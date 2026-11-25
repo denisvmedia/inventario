@@ -13801,6 +13801,15 @@ export type components = {
             meta?: components["schemas"]["jsonapi.CommodityRestoreMeta"];
         };
         "jsonapi.CommodityScanAttributes": {
+            /**
+             * @description CustomFields are the values read for the group's custom fields
+             *     (#2803), keyed by field ID, in the form an item write takes them: a
+             *     string for text, long text, URL, date and a select field's option ID,
+             *     a number, or a boolean. Absent when the scan read none.
+             */
+            custom_fields?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
+            };
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
@@ -13820,6 +13829,9 @@ export type components = {
             value?: Record<string, never>;
         };
         "jsonapi.CommodityScanItem": {
+            custom_fields?: {
+                [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
+            };
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
