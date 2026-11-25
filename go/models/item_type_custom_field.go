@@ -39,7 +39,7 @@ type ItemTypeCustomField struct {
 	// field's type (CustomFieldData.JSON), or null for none. A link to an
 	// item has no default.
 	//ptah:schema:field name="default_value" type="JSONB"
-	DefaultValue JSONValue `json:"default_value" db:"default_value" swaggertype:"object"`
+	DefaultValue JSONValue `json:"default_value" db:"default_value"`
 
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"-" db:"created_at" userinput:"false"`

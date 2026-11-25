@@ -293,6 +293,10 @@ type Params struct {
 	// operators know the installation-wide business gauges are exposed.
 	MetricsToken string
 
+	// CommodityDraftServiceOptions configure the draft service behind the
+	// draft and inbox routes. Tests set the clock with them.
+	CommodityDraftServiceOptions []services.CommodityDraftServiceOption
+
 	// ThumbnailService queues thumbnail jobs when a thumbnail is requested
 	// before it exists, and holds the per-user rate limit for that. The
 	// caller owns it and stops it at shutdown. Nil gives the download routes
@@ -971,6 +975,9 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// Saved views carry no write gate: viewers keep personal views too;
 		// the service checks who may share and edit.
 		r.Route("/saved-views", SavedViews(params, groupService))
+		// The inbox (#2794) shows records only; its entries are cleared
+		// through /drafts and /commodities, which carry their own gates.
+		r.Route("/inbox", Inbox(params, groupService))
 	}
 }
 

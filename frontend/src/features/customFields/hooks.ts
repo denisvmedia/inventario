@@ -83,10 +83,13 @@ export function useUpdateCustomField() {
 
 export function useDeleteCustomField() {
   const invalidate = useInvalidate()
-  return useMutation<number, Error, { id: string; deleteValues: boolean }>({
-    mutationFn: ({ id, deleteValues }) => deleteCustomField(id, deleteValues),
-    onSuccess: () => invalidate.fieldsAndItems(),
-    // A refused delete means the counts this client showed were stale.
-    onError: () => invalidate.fields(),
-  })
+  return useMutation<number, Error, { id: string; deleteValues: boolean; expectedValues?: number }>(
+    {
+      mutationFn: ({ id, deleteValues, expectedValues }) =>
+        deleteCustomField(id, deleteValues, expectedValues),
+      onSuccess: () => invalidate.fieldsAndItems(),
+      // A refused delete means the counts this client showed were stale.
+      onError: () => invalidate.fields(),
+    }
+  )
 }

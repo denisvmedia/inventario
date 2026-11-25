@@ -20,35 +20,57 @@ the section matching the tag and publishes it as the GitHub Release body. See
   menu offers the group's fields), the item page and the single-item
   insurance report list an item's values, and a link shows the linked item
   by name, marked when it is in the Trash. Items store a value per field;
-  zero, `false` and empty text are values, distinct from no value. Renaming
-  a field or a select option keeps its values, and deleting a field that
-  items have values for asks to confirm with the number of items that lose a
-  value (the API needs `delete_values=true`, 409 `custom_field.in_use`
-  otherwise, with the item counts). A field can be offered on some item
-  types, each with an optional default: picking the type in an item form
-  shows the field and fills in the default where the item has no value. On
-  **All Items**, the **Fields** menu filters by custom field values (typed
-  comparisons, ranges with "at least" and "at most"), **Sort by** lists the
-  custom fields, the list layout shows up to four of them as **Columns**,
-  and search finds their text and names the field it matched. A saved view
-  or link that names a deleted field marks it "Deleted field".
+  zero, `false` and empty text are values, distinct from no value. A number
+  is returned as a decimal string, so no digit is lost; a write takes a
+  string or a JSON number. Renaming a field or a select option keeps its
+  values, and deleting a field that items have values for asks to confirm
+  with the number of items that lose a value, and asks again when that
+  number changed meanwhile (the API needs `delete_values=true`, 409
+  `custom_field.in_use` otherwise, with the item counts, and refuses a
+  delete whose `expected_values` is not the current count). A field can be
+  offered on some item types, each with an optional default: picking the
+  type in an item form shows the field and fills in the default where the
+  item has no value. On **All Items**, the **Fields** menu filters by custom
+  field values (typed comparisons, ranges with "at least" and "at most"),
+  **Sort by** lists the custom fields, the list layout shows up to four of
+  them as **Columns**, and search finds their text and names the field it
+  matched. A saved view or link that names a deleted field marks it
+  "Deleted field".
   The API gains `/g/{slug}/custom-fields`; item writes take `custom_fields`
-  and refuse a value its field cannot hold with 422; the items list filters
+  and refuse a value its field cannot hold with 422
+  `custom_field.invalid_value`, the reasons under
+  `data.attributes.custom_fields.<field id>`; the items list filters
   with `cf=<field id>:<op>[:<value>]` and sorts with `sort=cf.<field id>`,
   names linked items in `meta.linked_items`, saved views keep both, and
   search reads text fields and option labels. AI
   scan fills the group's fields except money and links, after the member
   reviews them. A draft of a new item keeps the values typed in the Add item
-  dialog, and promoting it checks and writes them with the new item. Backups carry the fields, templates and values, also those of drafts
-  (format 3.6), and a restore matches fields by name and type, creating the
-  missing ones
+  dialog, and promoting it checks and writes them with the new item. Backups
+  carry the fields, templates and values, also those of drafts (format
+  3.6), and a restore matches a field by the field it was backed up from,
+  then by name and type, and an option by the option, then by label,
+  creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+
+- An Inbox page lists what in the group is still unfinished: the drafts of
+  new items and the items marked as draft. Each row says why it is there and
+  offers the step that clears it: Continue opens a draft in the Add item
+  dialog over the inbox, Discard deletes it, and Mark as reviewed turns an
+  item's draft switch off, with Undo. Tabs filter by reason. The sidebar entry
+  shows the number of records that need attention, counting each record once,
+  and the dashboard shows a "Needs attention" card while there are any. A
+  Missing details section links the No location and untagged item lists,
+  which stay out of the inbox: a missing detail is not unfinished work. The
+  Items page shows a line with an Open inbox button in place of the Drafts
+  card. The new API is `GET /inbox` (paged, filtered by `reason`) and
+  `GET /inbox/count`
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
 - Save as draft in the Add item dialog saves the form and its files on the
   server as a draft of the group, so an item started on one device can be
   finished on another. Nothing is required to save a draft; a **Save draft**
-  button is on every step while the switch is on. The Items page lists the
-  group's drafts in a **Drafts** card with Continue and Discard. Finishing a
+  button is on every step while the switch is on. The Inbox lists the
+  group's drafts with Continue and Discard. Finishing a
   draft creates exactly one item and moves the draft's files to it, and a save
   repeated after a lost response does not make a second draft. Discarding
   sends the files nothing else uses to the Trash. A save made on another

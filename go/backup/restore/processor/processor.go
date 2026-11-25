@@ -366,6 +366,7 @@ func (w *inbWalker) applyPendingCovers() error {
 		}
 		coverID := coverFileDBID
 		commodity.CoverFileID = &coverID
+		commodity.CustomFields = nil // only the cover changes
 		if _, updErr := comReg.Update(w.ctx, *commodity); updErr != nil {
 			return errxtrace.Wrap("failed to patch commodity cover", updErr, errx.Attrs("commodity_id", pc.commodityUUID))
 		}

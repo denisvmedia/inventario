@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"slices"
@@ -535,6 +536,52 @@ func TestCommodityBulkService_UpdateKeepsAnEditSavedAfterTheSelection(t *testing
 	got := f.get(c, lamp.ID)
 	c.Assert(got.Type, qt.Equals, models.CommodityTypeElectronics)
 	c.Assert(got.Comments, qt.Equals, "saved by someone else")
+}
+
+// lateCustomFieldEdit is a commodity registry where another member saves a
+// custom field value right after each Get, so the copy a bulk action read is
+// stale by the time it writes.
+type lateCustomFieldEdit struct {
+	registry.CommodityRegistry
+	fieldID string
+}
+
+func (r lateCustomFieldEdit) Get(ctx context.Context, id string) (*models.Commodity, error) {
+	read, err := r.CommodityRegistry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	edit := *read
+	edit.CustomFields = models.CustomFieldValues{r.fieldID: json.RawMessage(`"saved later"`)}
+	if _, err := r.CommodityRegistry.Update(ctx, edit); err != nil {
+		return nil, err
+	}
+	return read, nil
+}
+
+// A bulk action edits no custom field, so it keeps a value saved after it
+// read the item.
+func TestCommodityBulkService_KeepsACustomFieldValueSavedMeanwhile(t *testing.T) {
+	c := qt.New(t)
+	f := newBulkFixture(c)
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	plate := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Plate", Type: models.CustomFieldTypeText}))
+	location := must.Must(f.set.LocationRegistry.Create(f.ctx, models.Location{Name: "Home"}))
+	area := must.Must(f.set.AreaRegistry.Create(f.ctx, models.Area{Name: "Garage", LocationID: location.ID}))
+	items := lateCustomFieldEdit{CommodityRegistry: f.set.CommodityRegistry, fieldID: plate.ID}
+	withPlate := func(c *models.Commodity) {
+		c.CustomFields = models.CustomFieldValues{plate.ID: json.RawMessage(`"read first"`)}
+	}
+
+	moved := f.item(c, "Van", withPlate)
+	out := f.svc.Move(f.ctx, items, byID(moved.ID), area.ID)
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{moved.ID})
+	c.Check(string(f.get(c, moved.ID).CustomFields[plate.ID]), qt.Equals, `"saved later"`)
+
+	retyped := f.item(c, "Car", withPlate)
+	out = f.svc.Update(f.ctx, items, byID(retyped.ID), parsePatch(c, services.CommodityPatchInput{Type: new("electronics")}))
+	c.Assert(out.Succeeded, qt.DeepEquals, []string{retyped.ID})
+	c.Check(string(f.get(c, retyped.ID).CustomFields[plate.ID]), qt.Equals, `"saved later"`)
 }
 
 // fileTrashFails is a file registry whose Trash always fails, as when the

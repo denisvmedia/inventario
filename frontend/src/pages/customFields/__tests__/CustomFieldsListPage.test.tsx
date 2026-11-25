@@ -276,7 +276,25 @@ describe("<CustomFieldsListPage />", () => {
     await waitFor(() =>
       expect(screen.queryByTestId("custom-field-delete-dialog")).not.toBeInTheDocument()
     )
-    expect(calls).toEqual(["true"])
+    expect(calls).toEqual(["delete_values=true&expected_values=4"])
+  })
+
+  it("asks again when the count changed after the member confirmed", async () => {
+    const calls: string[] = []
+    seed()
+    server.use(...customFieldHandlers.remove(SLUG, "cf-plate", calls, { live: 5, trashed: 1 }))
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("custom-field-row-cf-plate-delete"))
+    const dialog = await screen.findByTestId("custom-field-delete-dialog")
+    await user.click(within(dialog).getByTestId("custom-field-delete-values"))
+    await user.click(within(dialog).getByTestId("custom-field-delete-confirm"))
+    expect(await within(dialog).findByTestId("custom-field-delete-refused")).toBeVisible()
+    expect(within(dialog).getByTestId("custom-field-delete-description")).toHaveTextContent(
+      "6 items have a value for this field."
+    )
+    expect(within(dialog).getByTestId("custom-field-delete-confirm")).toBeDisabled()
+    expect(calls).toEqual(["delete_values=true&expected_values=4"])
   })
 
   it("asks again when values were written after the page loaded", async () => {

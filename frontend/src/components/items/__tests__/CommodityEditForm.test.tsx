@@ -11,6 +11,7 @@ import {
   type Commodity,
   type UpdateCommodityRequest,
 } from "@/features/commodities/api"
+import { CUSTOM_FIELD_INVALID_VALUE } from "@/features/customFields/api"
 import { GroupProvider } from "@/features/group/GroupContext"
 import type { ListNavigation } from "@/hooks/useListNavigation"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -128,6 +129,24 @@ function validationError(attributes: Record<string, string>) {
       {
         status: "Unprocessable Entity",
         error: { type: "validation.Errors", error: { data: { attributes } } },
+      },
+    ],
+  })
+}
+
+// customFieldValueError is the 422 the server sends for a refused custom
+// field value: the reason and its code nested under the field id.
+function customFieldValueError(fieldId: string, message: string, code: string) {
+  return new HttpError("invalid", 422, "/commodities/c1", {
+    errors: [
+      {
+        status: "Unprocessable Entity",
+        code: CUSTOM_FIELD_INVALID_VALUE,
+        error: {
+          type: "validation.Errors",
+          error: { data: { attributes: { custom_fields: { [fieldId]: message } } } },
+          errorCodes: { data: { attributes: { custom_fields: { [fieldId]: { code } } } } },
+        },
       },
     ],
   })
@@ -362,7 +381,7 @@ describe("<CommodityEditForm /> custom fields", () => {
   ]
   const stored = {
     "cf-plate": "AB 123",
-    "cf-weight": 12.5,
+    "cf-weight": "12.5",
     // A field this client does not know yet.
     "cf-new": "kept",
   } as unknown as Commodity["custom_fields"]
@@ -452,7 +471,11 @@ describe("<CommodityEditForm /> custom fields", () => {
       { custom_fields: stored },
       {
         onSubmit: async () => {
-          throw validationError({ "custom_fields.cf-plate": "the value is too long" })
+          throw customFieldValueError(
+            "cf-plate",
+            "must be at most 200 characters",
+            "custom_field_too_long"
+          )
         },
       }
     )
@@ -460,7 +483,50 @@ describe("<CommodityEditForm /> custom fields", () => {
     await user.type(plate, "!")
     await user.click(screen.getByTestId("commodity-edit-save"))
     expect(await screen.findByTestId("custom-field-cf-plate-error")).toHaveTextContent(
-      "the value is too long"
+      "must be at most 200 characters"
     )
+  })
+
+  it("names the currency picker of a money field and flags it with the amount", async () => {
+    const insured = customFieldHandlers.field({
+      id: "cf-insured",
+      name: "Insured value",
+      type: "money",
+    })
+    server.use(...customFieldHandlers.list(SLUG, [insured]))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({
+      custom_fields: {
+        "cf-insured": { amount: 12, currency: "EUR" },
+      } as unknown as Commodity["custom_fields"],
+    })
+    const picker = await screen.findByRole("combobox", { name: "Currency of Insured value" })
+    expect(picker).toHaveTextContent("EUR")
+    expect(picker).not.toHaveAttribute("aria-invalid")
+    const amount = screen.getByLabelText("Insured value")
+    await user.clear(amount)
+    await user.type(amount, "a lot")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    expect(await screen.findByTestId("custom-field-cf-insured-error")).toBeVisible()
+    expect(picker).toHaveAttribute("aria-invalid", "true")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  // The API sends a number as a decimal string, and the form sends it back
+  // with every digit.
+  it("keeps every digit of a number", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({
+      custom_fields: { "cf-weight": "0.0000005" } as unknown as Commodity["custom_fields"],
+    })
+    const weight = await screen.findByLabelText("Weight")
+    expect(weight).toHaveValue("0.0000005")
+    await user.clear(weight)
+    await user.type(weight, "1234567890.1234567891")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
+    expect(req.custom_fields).toEqual({ "cf-weight": "1234567890.1234567891" })
   })
 })

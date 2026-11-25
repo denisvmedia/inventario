@@ -17,6 +17,10 @@ function field(id: string, type: CustomField["type"]): CustomField {
 describe("toFormValue / toFormValues", () => {
   it("reads every API form into the form's text", () => {
     expect(toFormValue("AB 123")).toEqual({ value: "AB 123", currency: "" })
+    expect(toFormValue("123456789012345.1234567891")).toEqual({
+      value: "123456789012345.1234567891",
+      currency: "",
+    })
     expect(toFormValue(0)).toEqual({ value: "0", currency: "" })
     expect(toFormValue(false)).toEqual({ value: "false", currency: "" })
     expect(toFormValue({ amount: 12.5, currency: "EUR" })).toEqual({
@@ -37,7 +41,11 @@ describe("toFormValue / toFormValues", () => {
 
 describe("toApiValue", () => {
   it("turns the form's text into the API form of the type", () => {
-    expect(toApiValue("number", { value: " 12.50 ", currency: "" })).toBe(12.5)
+    expect(toApiValue("number", { value: " 12.50 ", currency: "" })).toBe("12.50")
+    // More digits than a double holds go as typed.
+    expect(toApiValue("number", { value: "123456789012345.1234567891", currency: "" })).toBe(
+      "123456789012345.1234567891"
+    )
     expect(toApiValue("money", { value: "3", currency: "eur" })).toEqual({
       amount: 3,
       currency: "EUR",
@@ -55,7 +63,7 @@ describe("customFieldsRequest", () => {
     expect(
       customFieldsRequest(
         fields,
-        { plate: "AB", weight: 2, unknown: "kept" },
+        { plate: "AB", weight: "2", unknown: "kept" },
         { plate: { value: "XY", currency: "" }, fuel: { value: "opt-1", currency: "" } }
       )
     ).toEqual({ plate: "XY", weight: null, fuel: "opt-1" })
@@ -84,6 +92,8 @@ describe("validateFormValue", () => {
     expect(validateFormValue(field("u", "url"), v("https://example.com"))).toBeUndefined()
     expect(validateFormValue(field("t", "text"), v("x".repeat(201)))).toBe("tooLong")
     expect(validateFormValue(field("t", "text"), v(""))).toBeUndefined()
+    expect(validateFormValue(field("d", "date"), v("0000-01-01"))).toBe("date")
+    expect(validateFormValue(field("d", "date"), v("2028-02-29"))).toBeUndefined()
   })
 })
 

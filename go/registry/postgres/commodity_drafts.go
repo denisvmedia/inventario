@@ -264,6 +264,22 @@ func (r *CommodityDraftRegistry) ListOpen(ctx context.Context, offset, limit int
 	return drafts, total, nil
 }
 
+// OpenIDs returns the ids of the open drafts, without their values; see the
+// interface doc.
+func (r *CommodityDraftRegistry) OpenIDs(ctx context.Context) ([]string, error) {
+	ids := make([]string, 0)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(
+			`SELECT id FROM %s WHERE status = $1 ORDER BY updated_at DESC, id DESC`,
+			r.tableNames.CommodityDrafts())
+		return tx.SelectContext(ctx, &ids, query, string(models.CommodityDraftOpen))
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list open commodity draft ids", err)
+	}
+	return ids, nil
+}
+
 // ListDiscarding returns the drafts whose discard stopped before the given
 // time; see the interface doc.
 func (r *CommodityDraftRegistry) ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error) {

@@ -3196,6 +3196,75 @@ definitions:
         example: exports
         type: string
     type: object
+  jsonapi.InboxCountResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.InboxCounts'
+    type: object
+  jsonapi.InboxCounts:
+    properties:
+      reasons:
+        additionalProperties:
+          type: integer
+        type: object
+      total:
+        example: 3
+        type: integer
+    type: object
+  jsonapi.InboxEntry:
+    properties:
+      file_count:
+        description: |-
+          FileCount is the number of live files attached to a draft; 0 for an
+          item.
+        example: 1
+        type: integer
+      id:
+        example: 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11
+        type: string
+      kind:
+        enum:
+        - draft
+        - commodity
+        example: draft
+        type: string
+      reasons:
+        description: Reasons holds at least one reason, each once, in display order.
+        example:
+        - draft
+        items:
+          enum:
+          - draft
+          - item_draft
+          type: string
+        type: array
+      title:
+        example: Cordless drill
+        type: string
+      updated_at:
+        description: |-
+          UpdatedAt is when the record was last saved; drafts carry it, items
+          do not.
+        type: string
+        x-nullable: "true"
+    type: object
+  jsonapi.InboxMeta:
+    properties:
+      counts:
+        $ref: '#/definitions/jsonapi.InboxCounts'
+      entries:
+        example: 2
+        type: integer
+    type: object
+  jsonapi.InboxResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.InboxEntry'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.InboxMeta'
+    type: object
   jsonapi.InviteInfoAttr:
     properties:
       expired:
@@ -4968,13 +5037,14 @@ definitions:
         type: number
         x-nullable: "true"
       custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.CustomFieldValuesSchema'
         description: |-
           CustomFields are the item's custom field values (#2803), keyed by
           field ID; see CustomFieldValues for the read and write rules. They are
           rows of commodity_custom_field_values, not a column: the registries
           read them with the item and write them in the item's transaction,
           after checking each one against its field.
-        type: object
       deleted_at:
         description: |-
           DeletedAt is when the item was moved to Trash, nil while it is live. A
@@ -5373,11 +5443,13 @@ definitions:
     type: object
   models.CustomFieldTemplate:
     properties:
-      default_value:
-        type: object
+      default_value: {}
       item_type_id:
         example: 8f1c...
         type: string
+    type: object
+  models.CustomFieldValuesSchema:
+    additionalProperties: {}
     type: object
   models.Export:
     properties:
@@ -10246,6 +10318,12 @@ paths:
         in: query
         name: delete_values
         type: boolean
+      - description: 'With delete_values=true: how many items the member confirmed
+          to lose a value. When another number of items has one, the delete is refused
+          with 409 custom_field.in_use and the counts in meta'
+        in: query
+        name: expected_values
+        type: integer
       produces:
       - application/vnd.api+json
       responses:
@@ -10258,11 +10336,13 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "409":
-          description: Items have a value of the field and delete_values was not true
+          description: Items have a value of the field and delete_values was not true,
+            or expected_values is not how many items have one
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: delete_values is not a boolean
+          description: delete_values is not a boolean, or expected_values is not a
+            whole number of at least 0
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a custom field
@@ -11427,6 +11507,80 @@ paths:
       summary: File category counts
       tags:
       - files
+  /g/{groupSlug}/inbox:
+    get:
+      description: |-
+        The records of the group that still need attention, one entry per record with
+        every reason it is there for. The default inbox holds unfinished work only: open
+        drafts of new items (reason draft, kind draft) and items marked as draft, whose
+        review is not complete (reason item_draft, kind commodity). Missing information
+        such as no location, no photo or an unknown price does not put an item here.
+        Entries are ordered by their first reason in the order draft, item_draft; drafts
+        most recently saved first, items most recently added first. meta.entries counts
+        the entries the reason filter keeps; meta.counts describes the whole inbox and
+        counts each record once in total, whatever its number of reasons. Every member of
+        the group can read it. When a member who can edit items reads it, the draft
+        discards that stopped more than ten minutes ago are finished first, as for
+        GET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Keep the entries with this reason
+        enum:
+        - draft
+        - item_draft
+        in: query
+        name: reason
+        type: string
+      - description: Page number
+        in: query
+        name: page
+        type: integer
+      - description: Entries per page (at most 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InboxResponse'
+        "400":
+          description: Unknown reason (query.invalid_parameter)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List the inbox
+      tags:
+      - inbox
+  /g/{groupSlug}/inbox/count:
+    get:
+      description: |-
+        How many records of the group need attention, for the sidebar and the dashboard.
+        total counts each record once, whatever its number of reasons; reasons counts,
+        per reason, the records that have it. The counts cover only what the group holds,
+        so they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished
+        first, as for GET /g/{groupSlug}/inbox.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InboxCountResponse'
+      summary: Count the inbox
+      tags:
+      - inbox
   /g/{groupSlug}/item-types:
     get:
       consumes:

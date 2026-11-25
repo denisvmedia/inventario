@@ -316,7 +316,7 @@ type Commodity struct {
 	// rows of commodity_custom_field_values, not a column: the registries
 	// read them with the item and write them in the item's transaction,
 	// after checking each one against its field.
-	CustomFields CustomFieldValues `json:"custom_fields,omitempty" db:"-" swaggertype:"object"`
+	CustomFields CustomFieldValues `json:"custom_fields,omitempty" db:"-"`
 }
 
 // PurchasePriceInGroupCurrency returns the purchase price in the group

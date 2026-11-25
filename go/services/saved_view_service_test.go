@@ -410,7 +410,7 @@ func TestSavedViewService_KeepsAndCountsTheCustomFieldFilter(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(counts, qt.DeepEquals, map[string]int{view.View.ID: 1})
 
-	_, err = fields.DeleteWithValues(ctx, watts.ID)
+	_, err = fields.DeleteWithValues(ctx, watts.ID, registry.AnyValueCount)
 	c.Assert(err, qt.IsNil)
 	entry, err := f.svc.Get(ctx, alice, view.View.ID)
 	c.Assert(err, qt.IsNil)

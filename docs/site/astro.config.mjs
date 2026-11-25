@@ -96,6 +96,7 @@ export default defineConfig({
           translations: { cs: 'Práce s Inventariem', ru: 'Работа с Inventario' },
           items: [
             { slug: 'items' },
+            { slug: 'inbox' },
             { slug: 'locations-and-areas' },
             { slug: 'tags' },
             { slug: 'sellers' },

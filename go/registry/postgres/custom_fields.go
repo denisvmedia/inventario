@@ -103,10 +103,24 @@ func (r *CustomFieldRegistry) GetByName(ctx context.Context, name string) (*mode
 	return r.getBy(ctx, "name_key", models.CustomFieldNameKey(name))
 }
 
+// readOneSnapshot makes every later statement of tx read the same snapshot.
+// A field and its templates are two reads, and under the default READ
+// COMMITTED an update committed between them would pair the old options
+// with the new defaults. It must run before the first query of tx.
+func readOneSnapshot(ctx context.Context, tx *sqlx.Tx) error {
+	if _, err := tx.ExecContext(ctx, "SET TRANSACTION ISOLATION LEVEL REPEATABLE READ"); err != nil {
+		return errxtrace.Wrap("failed to set the read snapshot", err)
+	}
+	return nil
+}
+
 // getBy reads one field by a column the caller names in code.
 func (r *CustomFieldRegistry) getBy(ctx context.Context, column, value string) (*models.CustomFieldDefinition, error) {
 	var d models.CustomFieldDefinition
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := readOneSnapshot(ctx, tx); err != nil {
+			return err
+		}
 		query := fmt.Sprintf(`SELECT * FROM %s WHERE %s = $1 LIMIT 1`, r.tableNames.CustomFieldDefinitions(), column)
 		if err := scanOne(ctx, tx, &d, query, value); err != nil {
 			return err
@@ -124,6 +138,9 @@ func (r *CustomFieldRegistry) getBy(ctx context.Context, column, value string) (
 func (r *CustomFieldRegistry) List(ctx context.Context) ([]*models.CustomFieldDefinition, error) {
 	var defs []*models.CustomFieldDefinition
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := readOneSnapshot(ctx, tx); err != nil {
+			return err
+		}
 		var err error
 		query := fmt.Sprintf(`SELECT * FROM %s ORDER BY name_key, id`, r.tableNames.CustomFieldDefinitions())
 		if defs, err = scanAll[models.CustomFieldDefinition](ctx, tx, query); err != nil {
@@ -267,22 +284,23 @@ func (r *CustomFieldRegistry) dropRemovedOptionsInTx(ctx context.Context, tx *sq
 
 // Delete deletes a field no item has a value of.
 func (r *CustomFieldRegistry) Delete(ctx context.Context, id string) error {
-	_, err := r.deleteField(ctx, id, registry.ErrCustomFieldInUse)
+	_, err := r.deleteField(ctx, id, 0)
 	return err
 }
 
 // DeleteWithValues deletes the field, its values and its template entries;
 // the foreign keys cascade.
-func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string) (int, error) {
-	return r.deleteField(ctx, id, nil)
+func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string, expected int) (int, error) {
+	return r.deleteField(ctx, id, expected)
 }
 
 // deleteField deletes the field and returns how many items had a value of
-// it. When inUse is set and items have a value, it fails with inUse and
-// deletes nothing. The field's row is locked FOR UPDATE before the values
-// are counted, so an item write that sets a value of the field either
-// commits first and is counted, or waits and then finds the field gone.
-func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, inUse error) (int, error) {
+// it. When another number of items than expected has one, it fails with
+// ErrCustomFieldInUse and deletes nothing. The field's row is locked FOR
+// UPDATE before the values are counted, so an item write that sets a value
+// of the field either commits first and is counted, or waits and then finds
+// the field gone.
+func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expected int) (int, error) {
 	items := 0
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		var stored models.CustomFieldDefinition
@@ -294,8 +312,8 @@ func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, inUse 
 		if err := tx.GetContext(ctx, &items, count, id); err != nil {
 			return errxtrace.Wrap("failed to count custom field values", err)
 		}
-		if items > 0 && inUse != nil {
-			return errxtrace.Classify(inUse, errx.Attrs("custom_field_id", id, "items", items))
+		if err := registry.CheckCustomFieldValueCount(id, items, expected); err != nil {
+			return err
 		}
 		if _, err := tx.ExecContext(ctx, fmt.Sprintf(`DELETE FROM %s WHERE id = $1`, r.tableNames.CustomFieldDefinitions()), id); err != nil {
 			return errxtrace.Wrap("failed to delete custom field", err)

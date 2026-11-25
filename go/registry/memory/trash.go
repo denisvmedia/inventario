@@ -24,8 +24,7 @@ func (r *Registry[_, P]) listAll() []P {
 		if !r.isItemVisible(pair.Value) {
 			continue
 		}
-		v := *pair.Value
-		items = append(items, &v)
+		items = append(items, copyOut(pair.Value))
 	}
 	return items
 }
@@ -88,8 +87,7 @@ func (r *CommodityRegistry) GetTrashed(_ context.Context, id string) (*models.Co
 	if !ok || !r.isItemVisible(c) || !c.IsTrashed() {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
 	}
-	cp := *c
-	return &cp, nil
+	return copyOut(c), nil
 }
 
 // trashedItems returns copies of the visible trashed items that pass keep.
@@ -102,8 +100,7 @@ func (r *CommodityRegistry) trashedItems(keep func(*models.Commodity) bool) []*m
 		if c == nil || !c.IsTrashed() || !r.isItemVisible(c) || !keep(c) {
 			continue
 		}
-		cp := *c
-		out = append(out, &cp)
+		out = append(out, copyOut(c))
 	}
 	return out
 }
@@ -118,11 +115,11 @@ func (r *CommodityRegistry) liveAndTrashed() (live, trashed []*models.Commodity)
 		if c == nil || !r.isItemVisible(c) {
 			continue
 		}
-		cp := *c
+		cp := copyOut(c)
 		if c.IsTrashed() {
-			trashed = append(trashed, &cp)
+			trashed = append(trashed, cp)
 		} else {
-			live = append(live, &cp)
+			live = append(live, cp)
 		}
 	}
 	return live, trashed

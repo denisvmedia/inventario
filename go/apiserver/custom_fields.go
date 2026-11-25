@@ -27,12 +27,15 @@ const (
 	// customFieldNameTakenCode: another field of the group has this name.
 	customFieldNameTakenCode = "custom_field.name_taken"
 	// customFieldInUseCode: a delete without delete_values named a field
-	// that items, in Trash or not, have a value of. Meta carries the counts.
+	// that items, in Trash or not, have a value of, or one with
+	// expected_values named another number of items than have a value.
+	// Meta carries the counts.
 	customFieldInUseCode = "custom_field.in_use"
 	// customFieldLimitCode: the group has the most fields it can have.
 	customFieldLimitCode = "custom_field.limit_reached"
 	// customFieldInvalidValueCode: an item write carried a custom field
-	// value its field refuses. The field errors are under custom_fields.<id>.
+	// value its field refuses. The field errors are under
+	// data.attributes.custom_fields.<id>.
 	customFieldInvalidValueCode = "custom_field.invalid_value"
 )
 
@@ -94,12 +97,15 @@ func isValidationErrors(err error) bool {
 // customFieldSentinelJSONAPIError maps the custom field errors that reach
 // renderEntityError from other handlers. An item write whose custom field
 // values are refused is a 422 with one field error per value under
-// custom_fields.<field id>, so a form marks each input.
+// data.attributes.custom_fields.<field id>, where a binding error puts the
+// item's other fields, so a form marks each input.
 func customFieldSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if valueErr, ok := errors.AsType[*registry.CustomFieldValueError](err); ok {
 		fields := validation.Errors{}
 		maps.Copy(fields, valueErr.Fields)
-		jsErr := NewUnprocessableEntityError(validation.Errors{"custom_fields": fields})
+		jsErr := NewUnprocessableEntityError(validation.Errors{
+			"data": validation.Errors{"attributes": validation.Errors{"custom_fields": fields}},
+		})
 		jsErr.Err = err
 		jsErr.Code = customFieldInvalidValueCode
 		return jsErr, true
@@ -283,10 +289,11 @@ func (*customFieldsAPI) updateCustomField(w http.ResponseWriter, r *http.Request
 // @Param groupSlug path string true "Group slug"
 // @Param customFieldID path string true "Custom field ID"
 // @Param delete_values query bool false "Delete the field's values along with it"
+// @Param expected_values query int false "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta"
 // @Success 200 {object} jsonapi.CustomFieldDeleteResponse "Deleted; meta.deleted_values counts the values removed"
 // @Failure 404 {object} jsonapi.Errors "Custom field not found"
-// @Failure 409 {object} jsonapi.Errors "Items have a value of the field and delete_values was not true"
-// @Failure 422 {object} jsonapi.Errors "delete_values is not a boolean"
+// @Failure 409 {object} jsonapi.Errors "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one"
+// @Failure 422 {object} jsonapi.Errors "delete_values is not a boolean, or expected_values is not a whole number of at least 0"
 // @Router /g/{groupSlug}/custom-fields/{customFieldID} [delete].
 func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request) {
 	d := customFieldFromContext(r.Context())
@@ -304,10 +311,19 @@ func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request
 		}
 		deleteValues = v
 	}
+	expected := registry.AnyValueCount
+	if raw := r.URL.Query().Get("expected_values"); raw != "" {
+		v, err := strconv.Atoi(raw)
+		if err != nil || v < 0 {
+			unprocessableEntityError(w, r, validation.Errors{"expected_values": errors.New("must be a whole number of at least 0")})
+			return
+		}
+		expected = v
+	}
 	n := 0
 	var err error
 	if deleteValues {
-		n, err = regSet.CustomFieldRegistry.DeleteWithValues(r.Context(), d.ID)
+		n, err = regSet.CustomFieldRegistry.DeleteWithValues(r.Context(), d.ID, expected)
 	} else {
 		err = regSet.CustomFieldRegistry.Delete(r.Context(), d.ID)
 	}
@@ -332,9 +348,8 @@ func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request
 }
 
 // linkedItemSummaries names the items the item link values of commodities
-// point at: the live ones in one query, a trashed one by its own lookup. A
-// link always names an item of the group, because purging the item deletes
-// the value.
+// point at, live or in Trash, in one query. A link always names an item of
+// the group, because purging the item deletes the value.
 func linkedItemSummaries(ctx context.Context, set *registry.Set, commodities ...*models.Commodity) (map[string]jsonapi.LinkedItemSummary, error) {
 	if set == nil || set.CustomFieldRegistry == nil || !anyCustomFieldValues(commodities) {
 		return nil, nil
@@ -343,45 +358,28 @@ func linkedItemSummaries(ctx context.Context, set *registry.Set, commodities ...
 	if err != nil {
 		return nil, err
 	}
-	var ids []string
+	ids := map[string]bool{}
 	for _, d := range defs {
 		if d.Type != models.CustomFieldTypeItemLink {
 			continue
 		}
 		for _, commodity := range commodities {
-			raw, ok := commodity.CustomFields[d.ID]
-			if !ok {
-				continue
-			}
 			var id string
-			if json.Unmarshal(raw, &id) == nil && id != "" && !slices.Contains(ids, id) {
-				ids = append(ids, id)
+			if raw, ok := commodity.CustomFields[d.ID]; ok && json.Unmarshal(raw, &id) == nil && id != "" {
+				ids[id] = true
 			}
 		}
 	}
 	if len(ids) == 0 {
 		return nil, nil
 	}
-	live, err := set.CommodityRegistry.GetMany(ctx, ids)
+	names, err := set.CommodityRegistry.GetNames(ctx, slices.Collect(maps.Keys(ids)))
 	if err != nil {
 		return nil, err
 	}
-	out := make(map[string]jsonapi.LinkedItemSummary, len(ids))
-	for _, c := range live {
-		out[c.ID] = jsonapi.LinkedItemSummary{Name: c.Name}
-	}
-	for _, id := range ids {
-		if _, ok := out[id]; ok {
-			continue
-		}
-		trashed, err := set.CommodityRegistry.GetTrashed(ctx, id)
-		switch {
-		case errors.Is(err, registry.ErrNotFound):
-			continue
-		case err != nil:
-			return nil, err
-		}
-		out[id] = jsonapi.LinkedItemSummary{Name: trashed.Name, Trashed: true}
+	out := make(map[string]jsonapi.LinkedItemSummary, len(names))
+	for _, n := range names {
+		out[n.ID] = jsonapi.LinkedItemSummary{Name: n.Name, Trashed: n.Trashed}
 	}
 	return out, nil
 }

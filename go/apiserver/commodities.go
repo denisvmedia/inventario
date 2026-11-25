@@ -662,6 +662,9 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	}
 
 	updateData := *commodity
+	// Only the cover changes; the custom field values read with the item
+	// would overwrite one written since.
+	updateData.CustomFields = nil
 	if desired == "" {
 		updateData.CoverFileID = nil
 	} else {

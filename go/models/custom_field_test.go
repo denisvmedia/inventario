@@ -32,8 +32,18 @@ func TestCustomFieldDefinition_ParseValue(t *testing.T) {
 		{name: "text over the limit", def: def(models.CustomFieldTypeText), in: `"` + strings.Repeat("a", models.MaxCustomFieldTextRunes+1) + `"`, code: "custom_field_too_long"},
 		{name: "text that is a number", def: def(models.CustomFieldTypeText), in: `12`, code: "custom_field_invalid_text"},
 		{name: "long text keeps its spaces", def: def(models.CustomFieldTypeLongText), in: `" a\nb "`, want: `" a\nb "`},
-		{name: "number", def: def(models.CustomFieldTypeNumber), in: `12.50`, want: `12.5`},
-		{name: "number as a string", def: def(models.CustomFieldTypeNumber), in: `" 0 "`, want: `0`},
+		{name: "number", def: def(models.CustomFieldTypeNumber), in: `12.50`, want: `"12.5"`},
+		{name: "number as a string", def: def(models.CustomFieldTypeNumber), in: `" 0 "`, want: `"0"`},
+		// More digits than a JavaScript number keeps, and a small number
+		// a JavaScript number prints with an exponent: both stay decimal
+		// strings with every digit.
+		{name: "text with a NUL", def: def(models.CustomFieldTypeText), in: `"a\u0000b"`, code: "custom_field_invalid_character"},
+		{name: "long text with a NUL", def: def(models.CustomFieldTypeLongText), in: `"\u0000"`, code: "custom_field_invalid_character"},
+		{name: "empty text", def: def(models.CustomFieldTypeText), in: `""`, want: `""`},
+		{name: "date in year zero", def: def(models.CustomFieldTypeDate), in: `"0000-01-01"`, code: "custom_field_invalid_date"},
+		{name: "leap day", def: def(models.CustomFieldTypeDate), in: `"2028-02-29"`, want: `"2028-02-29"`},
+		{name: "number with every digit", def: def(models.CustomFieldTypeNumber), in: `"123456789012345.1234567891"`, want: `"123456789012345.1234567891"`},
+		{name: "small number", def: def(models.CustomFieldTypeNumber), in: `0.0000005`, want: `"0.0000005"`},
 		{name: "number too precise", def: def(models.CustomFieldTypeNumber), in: `0.12345678901`, code: "custom_field_too_precise"},
 		{name: "number too large", def: def(models.CustomFieldTypeNumber), in: `1e15`, code: "custom_field_too_large"},
 		{name: "number that is a word", def: def(models.CustomFieldTypeNumber), in: `"ten"`, code: "custom_field_invalid_number"},
@@ -130,7 +140,7 @@ func TestCustomFieldDefinition_NormalizeAndValidate(t *testing.T) {
 	}
 	c.Assert(withDefault.ValidateFields(t.Context()), qt.IsNil)
 	c.Check(withDefault.Templates[0].ItemTypeID, qt.Equals, "t")
-	c.Check(string(withDefault.Templates[0].DefaultValue), qt.Equals, `4`, qt.Commentf("a default is stored in its canonical form"))
+	c.Check(string(withDefault.Templates[0].DefaultValue), qt.Equals, `"4"`, qt.Commentf("a default is stored in its canonical form"))
 	c.Check(withDefault.Templates[1].DefaultValue.IsNull(), qt.IsTrue)
 }
 

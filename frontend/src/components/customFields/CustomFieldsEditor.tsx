@@ -245,6 +245,8 @@ export function CustomFieldValueInput({
             onChange={(currency) => set({ currency })}
             disabled={disabled}
             placeholder={t("customFields:section.currencyLabel", { name: field.name })}
+            ariaLabel={t("customFields:section.currencyLabel", { name: field.name })}
+            ariaInvalid={invalid}
           />
         </div>
       )

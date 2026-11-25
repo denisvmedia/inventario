@@ -54,7 +54,7 @@ import {
   type CommodityCardProps,
 } from "@/components/items/CommodityPhotoCard"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
-import { DraftsCard } from "@/components/items/DraftsCard"
+import { InboxNotice } from "@/components/items/InboxNotice"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
 import { TagPill } from "@/components/tags/TagPill"
@@ -579,7 +579,7 @@ export function CommoditiesListPage() {
           }
         />
 
-        <DraftsCard />
+        <InboxNotice />
 
         <Toolbar
           searchInput={searchInput}
