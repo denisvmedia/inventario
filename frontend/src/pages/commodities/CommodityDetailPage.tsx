@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Link,
   useLocation,
@@ -300,6 +300,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
   const setQuickEdit = (field: QuickEditField | null) =>
     setQuickEditOn(field ? { id, field } : null)
+  // Read after an await, where the render's own value is stale.
+  const quickEditOpen = useRef(false)
+  useEffect(() => {
+    quickEditOpen.current = quickEdit !== null
+  }, [quickEdit])
   // #1448 quick-attach state. `pendingDropFiles` holds files seeded by
   // the page-level drop catcher; the upload dialog reads them on open
   // and queues them in the select step. The button-triggered open
@@ -441,7 +446,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     } catch {
       return
     }
-    if (!stillHere()) return
+    // A quick edit opened while the list was read holds unsaved input:
+    // the page stays on the item rather than drop it.
+    if (!stillHere() || quickEditOpen.current) return
     if (next) goToNeighbor(next, false)
     else if (backToList) navigate(listContextHref(backToList))
   }

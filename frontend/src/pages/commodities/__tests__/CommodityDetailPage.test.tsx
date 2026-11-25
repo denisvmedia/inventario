@@ -1461,6 +1461,33 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
   })
 
+  it("stays on the item when a quick edit was opened while the next item was looked up", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    // The save refreshes the list once; the lookup of the next item is the
+    // read after that, held until the edit below is open.
+    const lookup = gate()
+    let reads = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async () => {
+        reads += 1
+        if (reads >= 2) await lookup.promise
+        return undefined
+      })
+    )
+    await user.click(mark)
+    await waitFor(() => expect(reads).toBe(2))
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Check the tires")
+    lookup.release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    expect(screen.getByTestId("commodity-quick-notes-input")).toHaveValue("Check the tires")
+  })
+
   it("waits for a quick edit to save before a review", async () => {
     const user = userEvent.setup()
     const put = gate()
