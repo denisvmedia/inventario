@@ -23,7 +23,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import type { CommodityQuery } from "@/features/commodities/query"
+import { sameCommodityQuery, type CommodityQuery } from "@/features/commodities/query"
 import { useAreas } from "@/features/areas/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useTagIndex } from "@/features/tags/hooks"
@@ -40,6 +40,7 @@ import {
   hasStaleReferences,
   isSavedViewChanged,
   savedViewHref,
+  savedViewQuery,
   savedViewQueryString,
   staleReferences,
   type StaleReferences,
@@ -87,10 +88,14 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
   }
 
   async function saveChanges(view: SavedView) {
+    // The query is sent only when the list changed it: the stored one may
+    // have been rewritten since the views loaded (a tag rename), and a
+    // layout-only save must not put the old slug back.
+    const queryChanged = !sameCommodityQuery(savedViewQuery(view), query)
     try {
       const saved = await update.mutateAsync({
         id: view.id,
-        patch: { query: savedViewQueryString(query), layout },
+        patch: queryChanged ? { query: savedViewQueryString(query), layout } : { layout },
       })
       toast.success(t("commodities:savedViews.toast.updated", { name: saved.name }))
     } catch (err) {
@@ -274,6 +279,10 @@ export interface OpenedSavedView {
   // The saved views are still loading, so the list cannot tell yet whether
   // the view it was opened from can run.
   pending: boolean
+  // The saved views failed to load and none are cached, so the list cannot
+  // tell whether the view can run; retry loads them again.
+  unknown: boolean
+  retry: () => void
   // The view the list was opened from, when its stored query cannot run.
   broken?: SavedView
 }
@@ -282,16 +291,43 @@ export interface OpenedSavedView {
 // URL. A link to a view whose query cannot run (an old bookmark, a view that
 // went bad after the link was made) must not run: the URL holds only the
 // part of the query the list can read, so the list would show more than the
-// view.
+// view. Until the views load, or while they fail to, the list cannot tell,
+// so it does not run either.
 export function useOpenedSavedView(): OpenedSavedView {
   const [searchParams] = useSearchParams()
   const id = searchParams.get(SAVED_VIEW_PARAM) ?? ""
   const savedViews = useSavedViews({ enabled: id !== "" })
-  if (!id) return { pending: false }
+  const retry = () => void savedViews.refetch()
+  if (!id) return { pending: false, unknown: false, retry }
   return {
     pending: savedViews.isLoading,
+    unknown: savedViews.isError && !savedViews.data,
+    retry,
     broken: savedViews.data?.views.find((v) => v.id === id && !!v.queryError),
   }
+}
+
+// Shown by the items list in place of the items while the saved views it
+// needs to check the opened view against fail to load.
+export function SavedViewUnavailableAlert({ onRetry }: { onRetry: () => void }) {
+  const { t } = useTranslation()
+  const closeView = useCloseSavedView()
+  return (
+    <Alert variant="destructive" data-testid="saved-view-unavailable-alert">
+      <AlertTitle>{t("commodities:savedViews.unavailable.title")}</AlertTitle>
+      <AlertDescription className="flex flex-col items-start gap-2">
+        <span>{t("commodities:savedViews.unavailable.description")}</span>
+        <div className="flex gap-2">
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            {t("common:serverError.retry")}
+          </Button>
+          <Button variant="outline" size="sm" onClick={closeView}>
+            {t("commodities:savedViews.menu.close")}
+          </Button>
+        </div>
+      </AlertDescription>
+    </Alert>
+  )
 }
 
 // Shown by the items list in place of the items of a view whose stored query
@@ -332,13 +368,14 @@ function QueryErrorNotice({ parameter }: { parameter: string | undefined }) {
 // What the query names that no longer exists, once areas and tags have
 // loaded; undefined before that, when either failed to load, or without a
 // query. A catalogue that failed to load lists no tags, which would mark
-// every tag of the query as deleted. Sellers are checked only once the
-// group's sellers have loaded.
+// every tag of the query as deleted, and the previous group's catalogue,
+// kept while a group switch loads the new one, would mark the new group's
+// tags. Sellers are checked only once the group's sellers have loaded.
 export function useStaleReferences(query: CommodityQuery | undefined): StaleReferences | undefined {
   const areas = useAreas({ enabled: !!query })
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellerCatalog()
-  const tagsUnknown = tagIndex.isLoading || tagIndex.isError
+  const tagsUnknown = tagIndex.isLoading || tagIndex.isError || tagIndex.isPlaceholderData
   return useMemo(() => {
     if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))

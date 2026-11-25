@@ -417,6 +417,8 @@ describe("<DashboardPage /> — saved views", () => {
         { id: "sv1", name: "Tools", query: "type=equipment", show_on_dashboard: true },
         { id: "sv2", name: "Hidden", query: "lent_out=true", show_on_dashboard: false },
       ]),
+      // A count from another refresh than the rows: the card states the
+      // rows' own total once they load.
       ...savedViewHandlers.counts(SLUG, { sv1: 12, sv2: 1 })
     )
     renderDashboard()
@@ -424,10 +426,8 @@ describe("<DashboardPage /> — saved views", () => {
     const card = await screen.findByTestId("dashboard-saved-view")
     expect(card).toHaveTextContent("Tools")
     expect(screen.getAllByTestId("dashboard-saved-view")).toHaveLength(1)
-    await waitFor(() =>
-      expect(within(card).getByTestId("dashboard-saved-view-count")).toHaveTextContent("12 items")
-    )
     expect(await within(card).findAllByTestId("dashboard-saved-view-row")).toHaveLength(2)
+    expect(within(card).getByTestId("dashboard-saved-view-count")).toHaveTextContent("2 items")
     expect(within(card).getByTestId("dashboard-saved-view-open").getAttribute("href")).toContain(
       "saved_view=sv1"
     )

@@ -84,8 +84,11 @@ export function SavedViewsPage() {
     [areas.data]
   )
   // A tag catalogue that failed to load lists no tags; reading that as
-  // "every tag is deleted" would mark every tag condition.
-  const referencesLoaded = !!areas.data && !tagIndex.isLoading && !tagIndex.isError
+  // "every tag is deleted" would mark every tag condition. The previous
+  // group's catalogue, kept during a group switch, would mark the new
+  // group's tags.
+  const referencesLoaded =
+    !!areas.data && !tagIndex.isLoading && !tagIndex.isError && !tagIndex.isPlaceholderData
   const areaIds = useMemo(() => new Set(areaNames.keys()), [areaNames])
   const tagSlugs = useMemo(() => new Set(tagIndex.tags.map((tag) => tag.slug)), [tagIndex.tags])
   const editable = views.filter((v) => v.canEdit)

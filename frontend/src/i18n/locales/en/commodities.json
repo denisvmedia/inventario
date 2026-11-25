@@ -613,7 +613,7 @@
       "subtitle": "Filters kept under a name. Personal views are yours alone; shared views show to the whole group, and each member sees only the items they can see."
     },
     "queryError": {
-      "long": "This view uses a filter that is no longer supported ({{parameter}}). Delete it and save the filter again from the items list.",
+      "long": "This view has a filter that can no longer run ({{parameter}}). Delete it and save the filter again from the items list.",
       "short": "Needs an update",
       "title": "This view cannot be opened"
     },
@@ -656,6 +656,10 @@
       "reorderFailed": "Could not move the view.",
       "updated": "Updated view “{{name}}”",
       "updateFailed": "Could not update the view."
+    },
+    "unavailable": {
+      "description": "The list stays hidden until the view loads, so it never shows items the view leaves out.",
+      "title": "This view could not be loaded"
     }
   },
   "searchMatch": {

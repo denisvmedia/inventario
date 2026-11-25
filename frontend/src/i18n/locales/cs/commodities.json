@@ -621,7 +621,7 @@
       "subtitle": "Filtry uložené pod názvem. Osobní pohledy vidíte jen vy; sdílené vidí celá skupina a každý člen v nich vidí jen položky, které vidět smí."
     },
     "queryError": {
-      "long": "Tento pohled používá filtr, který už není podporován ({{parameter}}). Smažte ho a uložte filtr znovu ze seznamu položek.",
+      "long": "Tento pohled má filtr, který už nelze použít ({{parameter}}). Smažte ho a uložte filtr znovu ze seznamu položek.",
       "short": "Vyžaduje úpravu",
       "title": "Tento pohled nelze otevřít"
     },
@@ -668,6 +668,10 @@
       "reorderFailed": "Pohled se nepodařilo přesunout.",
       "updated": "Pohled „{{name}}“ upraven",
       "updateFailed": "Pohled se nepodařilo upravit."
+    },
+    "unavailable": {
+      "description": "Seznam zůstane skrytý, dokud se pohled nenačte, aby nikdy neukázal položky, které pohled vynechává.",
+      "title": "Tento pohled se nepodařilo načíst"
     }
   },
   "searchMatch": {

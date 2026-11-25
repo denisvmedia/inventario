@@ -222,6 +222,28 @@ describe("<SavedViewControl /> on the items list", () => {
     })
   })
 
+  // The stored query may have been rewritten since the views loaded (a tag
+  // rename); a save that changes only the layout leaves it alone.
+  it("saves a layout-only change without the query", async () => {
+    const user = userEvent.setup()
+    let sent: Record<string, unknown> | undefined
+    const gridView: SavedViewFixture = { ...SOLD, layout: "grid" }
+    server.use(
+      ...savedViewHandlers.list(SLUG, [gridView]),
+      ...savedViewHandlers.update(SLUG, gridView, (attrs) => {
+        sent = attrs
+      })
+    )
+    renderList("?status=sold&view=list&saved_view=sv1")
+
+    expect(await screen.findByTestId("saved-views-changed")).toBeInTheDocument()
+    await user.click(screen.getByTestId("saved-views-menu"))
+    await user.click(await screen.findByTestId("saved-views-save-changes"))
+
+    await waitFor(() => expect(sent).toBeDefined())
+    expect(sent).toEqual({ layout: "list" })
+  })
+
   it("reverts a changed view to what it keeps", async () => {
     const user = userEvent.setup()
     server.use(...savedViewHandlers.list(SLUG, [SOLD]))
@@ -368,6 +390,95 @@ describe("<SavedViewControl /> on the items list", () => {
     )
     await waitFor(() => expect(listRequests).toBeGreaterThan(0))
     expect(screen.queryByTestId("saved-view-query-error-alert")).not.toBeInTheDocument()
+  })
+
+  // A filter this client does not know yet (one a newer server added)
+  // would be dropped on the way into the list, which would then show more
+  // than the view.
+  it("does not open a view whose stored query the list cannot read in full", async () => {
+    const user = userEvent.setup()
+    let listRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv5", name: "Newer", query: "include_inactive=false&item_type=abc&sort=name" },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () => {
+        listRequests++
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderList("?saved_view=sv5")
+
+    const alert = await screen.findByTestId("saved-view-query-error-alert")
+    expect(alert).toHaveTextContent("item_type")
+    expect(listRequests).toBe(0)
+    await user.click(screen.getByTestId("saved-views-menu"))
+    const item = await screen.findByTestId("saved-views-item")
+    expect(item).toHaveAttribute("aria-disabled", "true")
+  })
+
+  // Without the saved views the list cannot tell whether the view it was
+  // opened from can run, so it waits rather than run the URL's filters.
+  it("does not run the list while the saved views fail to load", async () => {
+    const user = userEvent.setup()
+    let listRequests = 0
+    let failing = true
+    server.use(
+      msw.get(apiUrl(`/g/${SLUG}/saved-views`), () =>
+        failing
+          ? HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+          : HttpResponse.json({
+              data: [
+                {
+                  id: "sv1",
+                  type: "saved_views",
+                  attributes: { name: "Sold things", query: SOLD.query, query_version: 1 },
+                },
+              ],
+              meta: { total: 1, limits: {} },
+            })
+      ),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () => {
+        listRequests++
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderList("?status=sold&saved_view=sv1")
+
+    const alert = await screen.findByTestId("saved-view-unavailable-alert")
+    expect(alert).toHaveTextContent("This view could not be loaded")
+    expect(listRequests).toBe(0)
+
+    failing = false
+    await user.click(within(alert).getByRole("button", { name: "Try again" }))
+    await waitFor(() =>
+      expect(screen.queryByTestId("saved-view-unavailable-alert")).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(listRequests).toBeGreaterThan(0))
+    expect(screen.getByTestId("saved-views-menu-label")).toHaveTextContent("Sold things")
+  })
+
+  it("closes a view whose saved views fail to load and shows the list", async () => {
+    const user = userEvent.setup()
+    let listRequests = 0
+    server.use(
+      msw.get(apiUrl(`/g/${SLUG}/saved-views`), () =>
+        HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      ),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () => {
+        listRequests++
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderList("?status=sold&saved_view=sv1")
+
+    const alert = await screen.findByTestId("saved-view-unavailable-alert")
+    await user.click(within(alert).getByRole("button", { name: "Close view" }))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-search")).not.toHaveTextContent("saved_view")
+    )
+    expect(screen.getByTestId("location-search")).toHaveTextContent("status=sold")
+    await waitFor(() => expect(listRequests).toBeGreaterThan(0))
   })
 
   it("names no deleted tag while the tag catalogue fails to load", async () => {

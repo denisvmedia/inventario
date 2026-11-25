@@ -79,7 +79,11 @@ function SavedViewCard({ slug, view, count }: SavedViewCardProps) {
   }
   const list = useCommodities(options)
   const items = list.data?.commodities ?? []
-  const total = count ?? list.data?.total
+  // The rows' own total once they load, so the card never states a count
+  // from another refresh than the rows beside it (a failed counts refetch
+  // keeps the last count); the view count fills in until then. Both use
+  // the filter of the items list, so they agree when taken together.
+  const total = list.data?.total ?? count
   const href = savedViewHref(slug, view)
 
   return (

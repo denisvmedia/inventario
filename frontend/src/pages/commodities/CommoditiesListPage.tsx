@@ -130,6 +130,7 @@ import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
 import {
   SavedViewControl,
   SavedViewQueryErrorAlert,
+  SavedViewUnavailableAlert,
   useOpenedSavedView,
 } from "@/features/saved-views/SavedViewControl"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -285,9 +286,10 @@ export function CommoditiesListPage() {
   // sent, so the server applies the active-only default.
   const listOptions = commoditiesListOptions(listParams)
   // A list opened from a saved view whose stored query cannot run does not
-  // run (see useOpenedSavedView); until the views load it cannot tell.
+  // run (see useOpenedSavedView); until the views load, or while they fail
+  // to, it cannot tell.
   const openedView = useOpenedSavedView()
-  const listEnabled = enabled && !openedView.pending && !openedView.broken
+  const listEnabled = enabled && !openedView.pending && !openedView.unknown && !openedView.broken
   const list = useCommodities(listOptions, { enabled: listEnabled })
   // Tag counts load when the Tags menu opens, for the rest of the query.
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
@@ -741,6 +743,8 @@ export function CommoditiesListPage() {
 
         {openedView.broken ? (
           <SavedViewQueryErrorAlert view={openedView.broken} />
+        ) : openedView.unknown ? (
+          <SavedViewUnavailableAlert onRetry={openedView.retry} />
         ) : openedView.pending ? (
           <ListLoading viewMode={viewMode} />
         ) : invalidQuery !== null ? (

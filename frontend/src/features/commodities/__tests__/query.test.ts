@@ -14,6 +14,7 @@ import {
   parseCommodityQuery,
   primarySearchMatch,
   sameCommodityQuery,
+  unreadApiQueryParam,
   unreadableTagParamCount,
   withIncludedTag,
   withTagFilter,
@@ -349,6 +350,37 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     expect(q.tags.untagged).toBe(true)
     expect(q.sort).toBe("registered_date")
     expect(q.sortDesc).toBe(true)
+  })
+
+  describe("unreadApiQueryParam", () => {
+    // The server stores Go's url.Values encoding: keys sorted, and the
+    // include_inactive default left out.
+    const serverForm = (raw: string) => {
+      const entries = [...new URLSearchParams(raw)]
+        .filter(([name, value]) => !(name === "include_inactive" && value === "true"))
+        .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+      return new URLSearchParams(entries).toString()
+    }
+
+    it("reads every condition the list writes, in the server's form", () => {
+      expect(unreadApiQueryParam(serverForm(commodityQueryToApiQuery(FULL)))).toBeUndefined()
+      expect(
+        unreadApiQueryParam(serverForm(commodityQueryToApiQuery(DEFAULT_COMMODITY_QUERY)))
+      ).toBeUndefined()
+      expect(unreadApiQueryParam("")).toBeUndefined()
+      expect(unreadApiQueryParam("lent_out=true")).toBeUndefined()
+      expect(unreadApiQueryParam("q=+drill+&sort=name")).toBeUndefined()
+      expect(unreadApiQueryParam("sort=name&tags=red%2Cblue")).toBeUndefined()
+    })
+
+    it("names a parameter the list would drop", () => {
+      expect(unreadApiQueryParam("item_type=abc&sort=name")).toBe("item_type")
+    })
+
+    it("names a value the list would read as something else", () => {
+      expect(unreadApiQueryParam("sort=-unknown")).toBe("sort")
+      expect(unreadApiQueryParam("sort=unknown")).toBe("sort")
+    })
   })
 
   it("ignores parameters outside the contract", () => {

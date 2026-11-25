@@ -2,6 +2,7 @@
 // (see features/commodities/query) under a name; the server stores it in
 // the API form of the contract and validates it on every write. Hooks live
 // in ./hooks.ts.
+import { unreadApiQueryParam } from "@/features/commodities/query"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -30,8 +31,8 @@ export interface SavedView {
   owned: boolean
   canEdit: boolean
   canDelete: boolean
-  // Set when the stored query cannot run. Such a view has no count and is
-  // not opened.
+  // Set when the stored query cannot run, or when the items list cannot
+  // read all of it. Such a view is not opened.
   queryError?: SavedViewQueryError
 }
 
@@ -86,8 +87,18 @@ function toSavedView(data: Schema<"jsonapi.SavedViewData"> | undefined): SavedVi
     canDelete: a.can_delete ?? false,
     queryError: a.query_error
       ? { parameter: a.query_error.parameter ?? "", reason: a.query_error.reason ?? "" }
-      : undefined,
+      : unreadQueryError(a.query ?? ""),
   }
+}
+
+// A query the server runs but the items list cannot read in full is as
+// broken for this client as one the server refuses: opened, the list would
+// drop what it cannot read and show more than the view.
+function unreadQueryError(query: string): SavedViewQueryError | undefined {
+  const parameter = unreadApiQueryParam(query)
+  return parameter === undefined
+    ? undefined
+    : { parameter, reason: "is not shown by the items list" }
 }
 
 export async function listSavedViews(signal?: AbortSignal): Promise<SavedViewList> {

@@ -583,7 +583,15 @@ warning (**Needs an update**) in the **Views** menu and the sidebar, the
 **Saved views** page names the filter, and the view no longer opens: the list
 would leave that filter out and show more than the view. A link or bookmark to such a view shows **This view
 cannot be opened** instead of the list; **Close view** shows the list with the
-filters the link still has. Delete the view and save the filter again.
+filters the link still has. Delete the view and save the filter again. The same
+happens to a view with a filter the page you have open does not know yet
+(reload the page to get the current version), and to a view that required a
+deleted tag when the tag it excludes is renamed to the deleted tag's slug.
+
+If the saved views cannot be loaded, a link or bookmark to a view shows **This
+view could not be loaded** instead of the list, so the list never shows items
+the view leaves out. **Try again** loads the views again; **Close view** shows
+the list with the filters the link has.
 
 ## Select, move, and delete in bulk
 

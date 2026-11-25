@@ -405,6 +405,38 @@ export function commodityQueryFromApiQuery(raw: string): CommodityQuery {
   return parseCommodityQuery(page)
 }
 
+// The first parameter of a stored API query that commodityQueryFromApiQuery
+// drops or reads as something else, or undefined when the list reads all of
+// it. A parameter the list does not know yet (a filter a newer server added)
+// or a value it cannot show (an unknown sort field) is caught here: a list
+// opened without it would show more, or other, items than the view. The
+// query read back may add parameters the stored one leaves at their default
+// (the sort, include_inactive), so only the stored parameters are compared.
+export function unreadApiQueryParam(raw: string): string | undefined {
+  const stored = apiQueryValues(raw)
+  const read = apiQueryValues(commodityQueryToApiQuery(commodityQueryFromApiQuery(raw)))
+  for (const [name, values] of stored) {
+    if (read.get(name) !== values) return name
+  }
+  return undefined
+}
+
+// The values of each parameter of an API query, as a set: repeated and
+// comma-joined values are split and sorted, and the search text is trimmed
+// (the server splits it into terms).
+function apiQueryValues(raw: string): Map<string, string> {
+  const params = new URLSearchParams(raw)
+  const out = new Map<string, string>()
+  for (const name of new Set(params.keys())) {
+    const values = params
+      .getAll(name)
+      .flatMap((v) => (name === "tags" || name === "tags_exclude" ? v.split(",") : [v]))
+      .map((v) => (name === "q" ? v.trim() : v))
+    out.set(name, JSON.stringify(values.sort()))
+  }
+  return out
+}
+
 // Whether a and b select the same items in the same order, compared in the
 // form a saved view stores. The server stores tag slugs normalized and
 // without repeats, so a list showing tags=Fragile still shows a view that
