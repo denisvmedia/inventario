@@ -308,6 +308,46 @@ func RestoreAssetNumberFromContext(ctx context.Context) (int, bool) {
 	return n, true
 }
 
+// restoredDraftCtxKey keys the archived state of a draft that a backup
+// restore recreates (see WithRestoredDraft).
+type restoredDraftCtxKey struct{}
+
+// RestoredDraft is the archived revision and timestamps of a draft.
+type RestoredDraft struct {
+	Revision  int
+	CreatedAt time.Time
+	UpdatedAt time.Time
+}
+
+// WithRestoredDraft marks ctx so a CommodityDraftRegistry.Create or
+// CreateOrGet that creates a draft keeps the archived revision and timestamps
+// instead of starting at revision 1 now, so a restored draft keeps its place
+// in the drafts list. It is the backup restore's seam, a context signal for
+// the same reason as WithRestoreAssetNumber: the API path never sets it.
+func WithRestoredDraft(ctx context.Context, d RestoredDraft) context.Context {
+	return context.WithValue(ctx, restoredDraftCtxKey{}, d)
+}
+
+// RestoredDraftFromContext returns the state set by WithRestoredDraft. A
+// revision below 1 or a zero timestamp is replaced by what a new draft gets:
+// revision 1 and now.
+func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft, bool) {
+	d, ok := ctx.Value(restoredDraftCtxKey{}).(RestoredDraft)
+	if !ok {
+		return RestoredDraft{}, false
+	}
+	if d.Revision < 1 {
+		d.Revision = 1
+	}
+	if d.CreatedAt.IsZero() {
+		d.CreatedAt = now
+	}
+	if d.UpdatedAt.IsZero() {
+		d.UpdatedAt = d.CreatedAt
+	}
+	return d, true
+}
+
 // CommodityRegistry stores items.
 //
 // Trash: an item moved to Trash keeps its row with deleted_at set
@@ -541,6 +581,16 @@ type FileRegistry interface {
 	// own. ErrNotFound when the file does not exist or is already in Trash.
 	Trash(ctx context.Context, id, deletedBy, withCommodityID string, at time.Time) error
 
+	// TrashUnlessHeld moves a live file to Trash unless a link other than
+	// the one to the entity named by entityType and entityID holds it live,
+	// and reports whether it did. Every link holds a file live except one to
+	// an item in Trash; when such links are all that is left, the file goes
+	// to Trash with the item linked first, so restoring that item brings the
+	// file back. The check and the update are one statement, so a link added
+	// concurrently keeps the file. Discarding a draft calls it for each of
+	// the draft's files.
+	TrashUnlessHeld(ctx context.Context, id, entityType, entityID, deletedBy string, at time.Time) (bool, error)
+
 	// Restore makes a trashed file live again. ErrNotFound when the file does
 	// not exist or is live.
 	Restore(ctx context.Context, id string) error
@@ -561,6 +611,10 @@ type FileRegistry interface {
 	// ListByLinkedEntity returns the files linked to an entity through
 	// file_links, newest first.
 	ListByLinkedEntity(ctx context.Context, entityType, entityID string) ([]*models.FileEntity, error)
+
+	// CountLinkedTo returns, for each of the entities of entityType, how many
+	// live files are linked to it. Entities without files are absent.
+	CountLinkedTo(ctx context.Context, entityType string, entityIDs []string) (map[string]int, error)
 
 	// ListByLinkedEntityAndMeta returns the files whose link to the entity
 	// carries the given meta (bucket), newest first.
@@ -1381,6 +1435,87 @@ type CommodityReminderRegistry interface {
 	// ListByCommodity returns the reminders of one item, ordered by
 	// due_on ascending.
 	ListByCommodity(ctx context.Context, commodityID string) ([]*models.CommodityReminder, error)
+}
+
+// CommodityDraftRegistry is the group-scoped registry of commodity_drafts,
+// the unfinished items saved on the server (#2812). A draft is not an item:
+// no CommodityRegistry read returns it.
+//
+// List and Count see open and promoted drafts; ListOpen sees open drafts
+// only. A promoted draft keeps its row with the values cleared, so a
+// repeated create with its client key or a repeated promotion finds it.
+type CommodityDraftRegistry interface {
+	Registry[models.CommodityDraft]
+
+	// CreateOrGet stores a new open draft unless the group already has a
+	// draft with the same ClientKey, which is returned unchanged with
+	// created=false. The registry sets the ids, tenant, group, author,
+	// status, revision and timestamps; a backup restore passes the archived
+	// revision and timestamps through WithRestoredDraft.
+	CreateOrGet(ctx context.Context, draft models.CommodityDraft) (stored *models.CommodityDraft, created bool, err error)
+
+	// GetByClientKey returns the group's draft with the key; ErrNotFound
+	// when there is none.
+	GetByClientKey(ctx context.Context, clientKey string) (*models.CommodityDraft, error)
+
+	// ListOpen returns a page of the group's open drafts, most recently
+	// saved first, with the total.
+	ListOpen(ctx context.Context, offset, limit int) ([]*models.CommodityDraft, int, error)
+
+	// SaveValues replaces the values of an open draft and increments its
+	// revision. revision is the revision the values were based on:
+	// ErrDraftRevisionConflict when it is not the current one,
+	// ErrDraftPromoted when the draft is promoted, ErrDraftDiscarded when
+	// its discard has begun, ErrNotFound when it does not exist.
+	SaveValues(ctx context.Context, id string, revision int, values models.CommodityDraftValues) (*models.CommodityDraft, error)
+
+	// Promote turns an open draft into an item in one step: it creates the
+	// item from commodity the way CommodityRegistry.Create does, moves the
+	// draft's file links to the item, and marks the draft promoted with its
+	// values cleared and promotionKey stored. Either all of it happens or
+	// none of it.
+	//
+	// A repeat with the same promotionKey changes nothing and returns the
+	// promoted draft with a nil Commodity, whatever revision says; the
+	// caller reads the item through PromotedCommodityID. Another key on a
+	// promoted draft gets ErrDraftPromoted. On an open draft revision must
+	// be the current one (ErrDraftRevisionConflict); a draft whose discard
+	// has begun gets ErrDraftDiscarded. The caller validates the item and
+	// normalizes its tags beforehand.
+	Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (DraftPromotion, error)
+
+	// AttachFile links a file to an open draft, holding the draft row so a
+	// promotion or a discard cannot happen between the check and the
+	// insert. It returns the existing link with created=false when the file
+	// is already attached; ErrDraftPromoted or ErrDraftDiscarded when the
+	// draft is not open, ErrNotFound when the draft or the file is not in
+	// the group.
+	AttachFile(ctx context.Context, draftID string, link models.FileLink) (stored *models.FileLink, created bool, err error)
+
+	// MarkDiscarding begins the discard of an open draft: from then on it
+	// cannot be saved, promoted or given files, and no list shows it. On a
+	// draft already being discarded it returns the draft unchanged, so a
+	// discard that stopped half way can be finished. ErrDraftPromoted when
+	// the draft is an item, ErrNotFound when it does not exist.
+	MarkDiscarding(ctx context.Context, id string) (*models.CommodityDraft, error)
+
+	// DeleteDiscarding deletes a draft whose discard has begun; ErrNotFound
+	// when there is no such draft.
+	DeleteDiscarding(ctx context.Context, id string) error
+
+	// ListDiscarding returns, oldest first, at most limit of the group's
+	// drafts whose discard began before the given time and did not finish.
+	// MarkDiscarding sets UpdatedAt, so it is the time the discard began.
+	ListDiscarding(ctx context.Context, before time.Time, limit int) ([]*models.CommodityDraft, error)
+}
+
+// DraftPromotion is the result of CommodityDraftRegistry.Promote.
+type DraftPromotion struct {
+	// Draft is the draft after the call, in the promoted state.
+	Draft *models.CommodityDraft
+	// Commodity is the item this call created. It is nil when the draft
+	// was promoted before the call.
+	Commodity *models.Commodity
 }
 
 // SellerRegistry is the group-scoped registry of sellers (#2804). Create and
@@ -2969,6 +3104,7 @@ type Set struct {
 	SupplyLinkRegistry             SupplyLinkRegistry
 	MaintenanceScheduleRegistry    MaintenanceScheduleRegistry
 	CommodityReminderRegistry      CommodityReminderRegistry
+	CommodityDraftRegistry         CommodityDraftRegistry
 	SellerRegistry                 SellerRegistry
 	ItemTypeRegistry               ItemTypeRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
@@ -3065,6 +3201,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.SupplyLinkRegistry, validation.Required),
 		validation.Field(&s.MaintenanceScheduleRegistry, validation.Required),
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
+		validation.Field(&s.CommodityDraftRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
 		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),

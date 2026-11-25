@@ -48,7 +48,13 @@ package export
 // An item's type stays the slug it was, so a 3.3 reader restores a 3.4
 // archive as before: the built-in types restore and an item whose type is a
 // custom one fails as an item of an unknown type would.
-const INBFormatVersion = "3.4"
+//
+// 3.5 adds the group's open drafts of new items (INBDraftsName) and the links
+// of files to them: a draft's file is referenced from the files member with
+// linked entity type "draft". A 3.4 reader restores a 3.5 archive without the
+// drafts. It counts an error for the drafts member and one for each link to a
+// draft, and leaves out a file that only drafts use.
+const INBFormatVersion = "3.5"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -69,7 +75,7 @@ const INBFilesPrefix = "files/"
 
 // INBFilesName is the inner-tar member holding the NON-commodity files document
 // (issue #2235): every group file that is not a commodity attachment — files
-// linked to a location or an area, and standalone (unlinked) files. Commodity
+// linked to a location, an area or a draft, and standalone (unlinked) files. Commodity
 // attachments are NOT repeated here; they stay nested under their commodity
 // (INBCommodity.Images/Invoices/Manuals).
 //
@@ -89,6 +95,15 @@ const INBFilesPrefix = "files/"
 // Written ONLY when at least one non-commodity file is in scope, so an archive
 // without any stays byte-stable (no empty member, no manifest pointer).
 const INBFilesName = INBFilesPrefix + "_index.json"
+
+// INBDraftsName is the inner-tar member holding the group's open drafts of new
+// items (#2812, format 3.5). It lives under the `files/` prefix for the same
+// reason as INBFilesName: an older reader routes it to its file handler
+// instead of its location handler. It is written after the location and
+// unassigned documents, so the areas a draft names are restored before it,
+// and before INBFilesName, so a draft exists when the links of its files
+// are restored. Written only when a whole-group export has an open draft.
+const INBDraftsName = INBFilesPrefix + "_drafts.json"
 
 // INBEntityFilesPrefix / INBStandaloneFilesPrefix are the archive homes of the
 // non-commodity file BYTES (issue #2235):
@@ -131,6 +146,9 @@ type INBManifest struct {
 	// Restore keys off member names, so a 2.0 archive without this field
 	// round-trips unchanged.
 	FilesFile string `json:"filesFile,omitempty"`
+	// DraftsFile names the drafts member (format 3.5), or "" when the
+	// archive carries no draft.
+	DraftsFile string `json:"draftsFile,omitempty"`
 	// Sellers are the group's sellers (format 3.3): every seller in a
 	// whole-group export, and the sellers the exported items name in a
 	// selected-items export. Omitted when there is none.
@@ -312,6 +330,25 @@ type INBFilesDoc struct {
 	Files []INBEntityFileRef `json:"files"`
 }
 
+// INBDraftsDoc is the document written as the INBDraftsName member.
+type INBDraftsDoc struct {
+	Drafts []INBDraft `json:"drafts"`
+}
+
+// INBDraft is an open draft of a new item. ID is the draft's UUID, which the
+// files member names as the linked entity of the draft's files; the restore
+// gives the draft new ids. Values are the form values as stored, except
+// area_id and seller_id, which carry the UUID of the area and the seller
+// instead of their DB id and are left out when they name neither.
+type INBDraft struct {
+	ID        string         `json:"id"`
+	ClientKey string         `json:"clientKey"`
+	Values    map[string]any `json:"values"`
+	Revision  int            `json:"revision"`
+	CreatedAt string         `json:"createdAt,omitempty"`
+	UpdatedAt string         `json:"updatedAt,omitempty"`
+}
+
 // INBEntityFileRef is a file reference that carries its OWN polymorphic link, so
 // the restore side can recreate the link with the original entity type, entity
 // and meta instead of assuming a commodity attachment (issue #2235).
@@ -326,12 +363,14 @@ type INBFilesDoc struct {
 type INBEntityFileRef struct {
 	INBFileRef
 
-	// LinkedEntityType is "location", "area", or "" for a standalone file.
-	LinkedEntityType string `json:"linkedEntityType,omitempty"`
-	// LinkedEntityID is the linked location/area UUID; "" for a standalone file.
-	LinkedEntityID string `json:"linkedEntityId,omitempty"`
-	// LinkedEntityMeta is the location/area bucket ("images" or "files"); "" for
+	// LinkedEntityType is "location", "area", "draft" (format 3.5), or "" for
 	// a standalone file.
+	LinkedEntityType string `json:"linkedEntityType,omitempty"`
+	// LinkedEntityID is the linked location, area or draft UUID; "" for a
+	// standalone file.
+	LinkedEntityID string `json:"linkedEntityId,omitempty"`
+	// LinkedEntityMeta is the location/area bucket ("images" or "files") or
+	// the draft bucket ("images" or "documents"); "" for a standalone file.
 	LinkedEntityMeta string `json:"linkedEntityMeta,omitempty"`
 	// Type / Category are the models.FileType / models.FileCategory values as
 	// stored, carried verbatim so they round-trip losslessly.

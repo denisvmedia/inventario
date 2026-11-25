@@ -476,7 +476,9 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 // @Description new file, no upload, no storage charge. Attaching a file to an
 // @Description entity it is already attached to is a no-op and answers 200.
 // @Description The entity must be in the same group as the file. A backup
-// @Description export file cannot be attached.
+// @Description export file cannot be attached. A draft must be open: a promoted
+// @Description draft answers 409 draft.promoted with meta.commodity_id, a draft
+// @Description being discarded 409 draft.discarded.
 // @Tags files
 // @Accept json-api
 // @Produce json-api
@@ -486,6 +488,7 @@ func (api *filesAPI) updateFile(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.FileResponse "Already attached"
 // @Success 201 {object} jsonapi.FileResponse "Attached"
 // @Failure 404 {object} jsonapi.Errors "File not found"
+// @Failure 409 {object} jsonapi.Errors "The draft is promoted or being discarded"
 // @Failure 422 {object} jsonapi.Errors "Invalid entity, entity not found, or export file"
 // @Router /g/{groupSlug}/files/{fileID}/links [post].
 func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
@@ -503,6 +506,10 @@ func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
 	attrs := input.Data.Attributes
 
 	file, created, err := api.linkService.Attach(r.Context(), chi.URLParam(r, "fileID"), attrs.EntityType, attrs.EntityID, attrs.Meta)
+	if errors.Is(err, registry.ErrDraftPromoted) || errors.Is(err, registry.ErrDraftDiscarded) {
+		renderDraftErrorFor(w, r, err, attrs.EntityID)
+		return
+	}
 	if err != nil {
 		renderFileLinkError(w, r, err)
 		return
@@ -617,26 +624,9 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		if name, ok := names[key]; ok {
 			return name
 		}
-		var name string
-		switch entityType {
-		case models.FileLinkCommodity:
-			c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
-			switch {
-			case err == nil:
-				name = c.Name
-			case errors.Is(err, registry.ErrNotFound):
-				if _, trashErr := registrySet.CommodityRegistry.GetTrashed(ctx, entityID); trashErr == nil {
-					trashed[key] = true
-				}
-			}
-		case models.FileLinkLocation:
-			if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
-				name = l.Name
-			}
-		case models.FileLinkArea:
-			if a, err := registrySet.AreaRegistry.Get(ctx, entityID); err == nil {
-				name = a.Name
-			}
+		name, inTrash := linkEntityName(ctx, registrySet, entityType, entityID)
+		if inTrash {
+			trashed[key] = true
 		}
 		names[key] = name
 		return name
@@ -655,6 +645,38 @@ func fillLinkNames(ctx context.Context, registrySet *registry.Set, files ...*mod
 		}
 		f.Links = kept
 	}
+}
+
+// linkEntityName reads the display name of a link's entity. inTrash reports
+// an item that is in Trash; its name stays empty.
+func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, entityID string) (name string, inTrash bool) {
+	switch entityType {
+	case models.FileLinkCommodity:
+		c, err := registrySet.CommodityRegistry.Get(ctx, entityID)
+		switch {
+		case err == nil:
+			return c.Name, false
+		case errors.Is(err, registry.ErrNotFound):
+			_, trashErr := registrySet.CommodityRegistry.GetTrashed(ctx, entityID)
+			return "", trashErr == nil
+		}
+	case models.FileLinkLocation:
+		if l, err := registrySet.LocationRegistry.Get(ctx, entityID); err == nil {
+			return l.Name, false
+		}
+	case models.FileLinkArea:
+		if a, err := registrySet.AreaRegistry.Get(ctx, entityID); err == nil {
+			return a.Name, false
+		}
+	case models.FileLinkDraft:
+		if registrySet.CommodityDraftRegistry == nil {
+			return "", false
+		}
+		if d, err := registrySet.CommodityDraftRegistry.Get(ctx, entityID); err == nil {
+			return d.Values.Title(), false
+		}
+	}
+	return "", false
 }
 
 // deleteFile moves a file to Trash.

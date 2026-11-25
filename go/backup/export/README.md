@@ -25,24 +25,27 @@ An `.inb` artifact is an **outer tar** (`internal/inb`) holding:
    - `manifest.json` — written first; format, signing-key info, per-location index, and aggregate statistics (see `inb_types.go`).
    - one `location-<slug>-<uuid>.json` member per location (location → areas → commodities, each commodity bundling its image/invoice/manual file references), each immediately followed by that location's commodity file bytes at `files/<loc-slug>/<commodity-uuid>/<bucket>/<file-uuid>/<name>`.
    - `unassigned-commodities.json` — area-less commodities, written only when at least one is in scope (issue #1986), followed by their file bytes.
-   - `files/_index.json` — the **non-commodity files** document (issue #2235): every location-linked, area-linked and standalone file, each carrying its own `linkedEntityType` / `linkedEntityId` (the linked entity's immutable **UUID**) / `linkedEntityMeta` plus its `type` and `category`. Written only when at least one such file is in scope. Its bytes follow at `files/_entity/<type>/<entity-uuid>/<bucket>/<file-uuid>/<name>` and `files/_standalone/<file-uuid>/<name>`.
+   - `files/_drafts.json` — the group's **open drafts** of new items (#2812, format 3.5): each with its UUID, client key, form values, revision and timestamps. The form values name the draft's area and seller by UUID. Written only by a whole-class export of a group that has an open draft; promoted drafts and drafts being discarded are left out.
+   - `files/_index.json` — the **non-commodity files** document (issue #2235): every location-linked, area-linked, draft-linked and standalone file, each carrying its own `linkedEntityType` / `linkedEntityId` (the linked entity's immutable **UUID**) / `linkedEntityMeta` plus its `type` and `category`. Written only when at least one such file is in scope. Its bytes follow at `files/_entity/<type>/<entity-uuid>/<bucket>/<file-uuid>/<name>` and `files/_standalone/<file-uuid>/<name>`.
 
-Ordering is load-bearing in two ways: a JSON document always precedes the file bytes it references (restore registers each reference, then matches the members against it), and `files/_index.json` is written **last** — restore resolves each entity link through the location/area ID mapping, which only fills as the location documents are applied.
+Ordering is load-bearing in two ways: a JSON document always precedes the file bytes it references (restore registers each reference, then matches the members against it), and `files/_index.json` is written **last** — restore resolves each entity link through the location/area ID mapping, which only fills as the location documents are applied, and through the drafts that `files/_drafts.json` recreated.
 
 The exporter stamps the resulting `FileEntity` with `Ext=".inb"`, `MIMEType="application/x-inventario-backup"`, and `LinkedEntityMeta="inb-2.0"` (`exportFileMeta` in `jsonexport.go`). That stamp is a `FileEntity` meta value, not the format version.
 
 ### Format versioning
 
-`INBFormatVersion` (manifest `version`) is currently `"2.1"`. The **MAJOR** component is the compatibility contract the restore side enforces: a reader accepts any archive whose major version it knows and rejects a higher one with `ErrUnsupportedFormatVersion` *before* touching any data. MINOR bumps are additive-only — a new **optional** member plus an optional manifest pointer, dispatched by member name — so a 2.0 archive still restores unchanged on a 2.1 reader.
+`INBFormatVersion` (manifest `version`) is currently `"3.5"`; `inb_types.go` records what each version added. The **MAJOR** component is the compatibility contract the restore side enforces: a reader accepts any archive whose major version it knows and rejects a higher one with `ErrUnsupportedFormatVersion` *before* touching any data. MINOR bumps are additive-only — a new **optional** member plus an optional manifest pointer, dispatched by member name — so a 2.0 archive still restores unchanged on a 2.1 reader.
 
-Both optional members (`unassignedFile`, `filesFile`) are omitted entirely when empty, so an archive that uses neither is byte-stable against the 2.0 layout.
+The optional members (`unassignedFile`, `draftsFile`, `filesFile`) are omitted entirely when empty, so an archive that uses none of them is byte-stable against the 2.0 layout.
 
 ### Scope rules for files
 
-| Export type | Commodity attachments | Location/area files | Standalone files |
-| --- | --- | --- | --- |
-| whole-class (`full_database`, `locations`, `areas`, `commodities`) | of every emitted commodity | all | all |
-| `selected_items` | of every emitted commodity | only of the locations/areas **explicitly selected** | none |
+| Export type | Commodity attachments | Location/area files | Draft files | Standalone files |
+| --- | --- | --- | --- | --- |
+| whole-class (`full_database`, `locations`, `areas`, `commodities`) | of every emitted commodity | all | of every open draft | all |
+| `selected_items` | of every emitted commodity | only of the locations/areas **explicitly selected** | none | none |
+
+A link to a draft the archive does not carry is left out; a file with no other link counts as a standalone file.
 
 Standalone files have no parent entity that could imply them into a selection, so they ride along with whole-class exports only — matching the legacy XML exporter.
 
