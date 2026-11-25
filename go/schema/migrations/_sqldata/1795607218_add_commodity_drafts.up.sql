@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-11-25T10:39:17+01:00
+-- Generated on: 2026-11-25T12:46:58+01:00
 -- Direction: UP
 -- +ptah lock_timeout=3s
 -- +ptah statement_timeout=30s
@@ -12,6 +12,7 @@ CREATE TABLE "commodity_drafts" (
   "status" TEXT NOT NULL DEFAULT 'open',
   "promoted_commodity_id" TEXT,
   "promoted_at" TIMESTAMP,
+  "promotion_key" TEXT,
   "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "updated_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   "tenant_id" TEXT NOT NULL,

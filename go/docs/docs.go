@@ -5179,7 +5179,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe.",
+                "description": "Save unfinished form values as a new draft. The values are stored as given and\nare not validated as an item. client_key is the client's identity for the draft:\na create with a key the group already has returns that draft with 200 instead of\nmaking another one, so a retry after a lost response is safe. A key whose draft\nis being discarded answers 409 draft.discarded. Known fields of the item form\nmust have the type the form uses (text, a number or numeric text, a list of\ntext, true or false); a field of another type is refused with 422 on\nvalues.\u003cfield\u003e.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5232,7 +5232,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/drafts/{draftID}": {
             "get": {
-                "description": "One draft with its values and revision. A promoted draft is returned too, with\nits values cleared and the id of the item it became. Its files are listed by GET\n/g/{groupSlug}/files?linked_entity_type=draft\u0026linked_entity_id={draftID}.",
+                "description": "One draft with its values and revision. A promoted draft is returned too, with\nits values cleared and the id of the item it became. A draft being discarded\nanswers 404. Its files are listed by GET\n/g/{groupSlug}/files?linked_entity_type=draft\u0026linked_entity_id={draftID}.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -5272,7 +5272,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Replace the values of an open draft. revision is the revision the values were\nbased on; the response carries the next one. A save based on an older revision\nis refused with 409 draft.revision_conflict and the current revision in meta, so\na stale tab cannot overwrite newer input. A promoted draft answers 409\ndraft.promoted.",
+                "description": "Replace the values of an open draft. revision is the revision the values were\nbased on; the response carries the next one. A save based on an older revision\nis refused with 409 draft.revision_conflict and the current revision in meta, so\na stale tab cannot overwrite newer input. A promoted draft answers 409\ndraft.promoted, a draft being discarded 409 draft.discarded. The values are\nchecked as on create.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5322,7 +5322,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Stale revision or promoted draft",
+                        "description": "Stale revision, promoted draft, or draft being discarded",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -5336,7 +5336,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Delete an open draft. Its files that nothing else uses go to Trash, where they\ncan be restored as standalone files until the Trash retention runs out; files\nattached elsewhere only lose the link to the draft. A promoted draft answers 409\ndraft.promoted.",
+                "description": "Delete an open draft. Its files that nothing else uses go to Trash, where they\ncan be restored as standalone files until the Trash retention runs out; files\nattached elsewhere only lose the link to the draft. A promoted draft answers 409\ndraft.promoted. Once the discard has begun the draft can no longer be saved,\npromoted or given files; repeating a discard that did not finish completes it.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -5381,7 +5381,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/drafts/{draftID}/promote": {
             "post": {
-                "description": "Create the item from the finished form and move the draft's files to it, in one\nstep. The body is the item as for POST /g/{groupSlug}/commodities, validated the\nsame way, and meta.revision is the draft revision it was based on (409\ndraft.revision_conflict when it is stale). Promoting a draft that is already\npromoted creates nothing and returns the item it became with 200, so a retry\nafter a lost response is safe; when that item no longer exists the answer is 409\ndraft.promoted.",
+                "description": "Create the item from the finished form and move the draft's files to it, in one\nstep. The body is the item as for POST /g/{groupSlug}/commodities, validated the\nsame way, and meta.revision is the draft revision it was based on (409\ndraft.revision_conflict when it is stale). meta.promotion_key is required: a key\nthe client makes for this promotion (a UUID) and sends again on every retry until\none succeeds. A repeat with the key of the promotion that happened creates nothing\nand returns the item with 200, so a retry after a lost response is safe; any other\nkey, or the same key once that item no longer exists, answers 409 draft.promoted\nwith meta.commodity_id. A draft being discarded answers 409 draft.discarded.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -5437,7 +5437,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Stale revision, or the item the draft became is gone",
+                        "description": "Stale revision, draft promoted by another request, or draft being discarded",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6414,7 +6414,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/files/{fileID}/links": {
             "post": {
-                "description": "Creates a link from the file to the entity and nothing else: no\nnew file, no upload, no storage charge. Attaching a file to an\nentity it is already attached to is a no-op and answers 200.\nThe entity must be in the same group as the file. A backup\nexport file cannot be attached.",
+                "description": "Creates a link from the file to the entity and nothing else: no\nnew file, no upload, no storage charge. Attaching a file to an\nentity it is already attached to is a no-op and answers 200.\nThe entity must be in the same group as the file. A backup\nexport file cannot be attached. A draft must be open: a promoted\ndraft answers 409 draft.promoted with meta.commodity_id, a draft\nbeing discarded 409 draft.discarded.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6465,6 +6465,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "File not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The draft is promoted or being discarded",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -12441,6 +12447,10 @@ const docTemplate = `{
         "jsonapi.CommodityDraftPromoteMeta": {
             "type": "object",
             "properties": {
+                "promotion_key": {
+                    "type": "string",
+                    "example": "6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10"
+                },
                 "revision": {
                     "type": "integer",
                     "example": 3
@@ -12551,7 +12561,7 @@ const docTemplate = `{
                     "type": "integer"
                 },
                 "status": {
-                    "description": "Status is open until the draft is promoted.",
+                    "description": "Status is open until the draft is promoted or its discard begins.",
                     "allOf": [
                         {
                             "$ref": "#/definitions/models.CommodityDraftStatus"
@@ -16436,11 +16446,13 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "open",
-                "promoted"
+                "promoted",
+                "discarding"
             ],
             "x-enum-varnames": [
                 "CommodityDraftOpen",
-                "CommodityDraftPromoted"
+                "CommodityDraftPromoted",
+                "CommodityDraftDiscarding"
             ]
         },
         "models.CommodityDraftValues": {

@@ -6,6 +6,8 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
+	"github.com/go-extras/errx"
+	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/jsonapi"
@@ -22,6 +24,9 @@ const (
 	// DraftPromotedCode: the draft has already become an item. Meta carries
 	// the item id when it is known.
 	DraftPromotedCode = "draft.promoted"
+	// DraftDiscardedCode: the draft's discard has begun; it can no longer be
+	// saved, promoted or given files.
+	DraftDiscardedCode = "draft.discarded"
 )
 
 // commodityDraftsAPI serves the drafts of a group: unfinished items saved on
@@ -54,11 +59,17 @@ func Drafts(params Params) func(r chi.Router) {
 // already promoted draft are 409s with a code and the facts the client needs
 // to recover; invalid values are 422s.
 func renderDraftError(w http.ResponseWriter, r *http.Request, err error) {
+	renderDraftErrorFor(w, r, err, chi.URLParam(r, "draftID"))
+}
+
+// renderDraftErrorFor is renderDraftError for the draft draftID, for routes
+// that name the draft elsewhere than in the path.
+func renderDraftErrorFor(w http.ResponseWriter, r *http.Request, err error, draftID string) {
 	switch {
 	case errors.Is(err, registry.ErrDraftRevisionConflict):
 		meta := map[string]any{}
 		if regSet := RegistrySetFromContext(r.Context()); regSet != nil {
-			if current, getErr := regSet.CommodityDraftRegistry.Get(r.Context(), chi.URLParam(r, "draftID")); getErr == nil {
+			if current, getErr := regSet.CommodityDraftRegistry.Get(r.Context(), draftID); getErr == nil {
 				meta["revision"] = current.Revision
 			}
 		}
@@ -66,11 +77,13 @@ func renderDraftError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, registry.ErrDraftPromoted):
 		meta := map[string]any{}
 		if regSet := RegistrySetFromContext(r.Context()); regSet != nil {
-			if current, getErr := regSet.CommodityDraftRegistry.Get(r.Context(), chi.URLParam(r, "draftID")); getErr == nil && current.PromotedCommodityID != nil {
+			if current, getErr := regSet.CommodityDraftRegistry.Get(r.Context(), draftID); getErr == nil && current.PromotedCommodityID != nil {
 				meta["commodity_id"] = *current.PromotedCommodityID
 			}
 		}
 		_ = codedConflictError(w, r, err, DraftPromotedCode, meta)
+	case errors.Is(err, registry.ErrDraftDiscarded):
+		_ = codedConflictError(w, r, err, DraftDiscardedCode, nil)
 	default:
 		if _, ok := errors.AsType[validation.Errors](err); ok {
 			_ = unprocessableEntityError(w, r, err)
@@ -133,7 +146,8 @@ func (api *commodityDraftsAPI) list(w http.ResponseWriter, r *http.Request) {
 //
 // @Summary Get a draft
 // @Description One draft with its values and revision. A promoted draft is returned too, with
-// @Description its values cleared and the id of the item it became. Its files are listed by GET
+// @Description its values cleared and the id of the item it became. A draft being discarded
+// @Description answers 404. Its files are listed by GET
 // @Description /g/{groupSlug}/files?linked_entity_type=draft&linked_entity_id={draftID}.
 // @Tags drafts
 // @Produce json-api
@@ -149,6 +163,9 @@ func (api *commodityDraftsAPI) get(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	draft, err := regSet.CommodityDraftRegistry.Get(r.Context(), chi.URLParam(r, "draftID"))
+	if err == nil && draft.IsDiscarding() {
+		err = errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity_draft", "entity_id", draft.ID))
+	}
 	if err != nil {
 		renderDraftError(w, r, err)
 		return
@@ -169,7 +186,11 @@ func (api *commodityDraftsAPI) get(w http.ResponseWriter, r *http.Request) {
 // @Description Save unfinished form values as a new draft. The values are stored as given and
 // @Description are not validated as an item. client_key is the client's identity for the draft:
 // @Description a create with a key the group already has returns that draft with 200 instead of
-// @Description making another one, so a retry after a lost response is safe.
+// @Description making another one, so a retry after a lost response is safe. A key whose draft
+// @Description is being discarded answers 409 draft.discarded. Known fields of the item form
+// @Description must have the type the form uses (text, a number or numeric text, a list of
+// @Description text, true or false); a field of another type is refused with 422 on
+// @Description values.<field>.
 // @Tags drafts
 // @Accept json-api
 // @Produce json-api
@@ -212,7 +233,8 @@ func (api *commodityDraftsAPI) create(w http.ResponseWriter, r *http.Request) {
 // @Description based on; the response carries the next one. A save based on an older revision
 // @Description is refused with 409 draft.revision_conflict and the current revision in meta, so
 // @Description a stale tab cannot overwrite newer input. A promoted draft answers 409
-// @Description draft.promoted.
+// @Description draft.promoted, a draft being discarded 409 draft.discarded. The values are
+// @Description checked as on create.
 // @Tags drafts
 // @Accept json-api
 // @Produce json-api
@@ -221,7 +243,7 @@ func (api *commodityDraftsAPI) create(w http.ResponseWriter, r *http.Request) {
 // @Param draft body jsonapi.CommodityDraftSaveRequest true "Values and revision"
 // @Success 200 {object} jsonapi.CommodityDraftResponse "Saved"
 // @Failure 404 {object} jsonapi.Errors "Draft not found"
-// @Failure 409 {object} jsonapi.Errors "Stale revision or promoted draft"
+// @Failure 409 {object} jsonapi.Errors "Stale revision, promoted draft, or draft being discarded"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/drafts/{draftID} [put].
 func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
@@ -252,7 +274,8 @@ func (api *commodityDraftsAPI) save(w http.ResponseWriter, r *http.Request) {
 // @Description Delete an open draft. Its files that nothing else uses go to Trash, where they
 // @Description can be restored as standalone files until the Trash retention runs out; files
 // @Description attached elsewhere only lose the link to the draft. A promoted draft answers 409
-// @Description draft.promoted.
+// @Description draft.promoted. Once the discard has begun the draft can no longer be saved,
+// @Description promoted or given files; repeating a discard that did not finish completes it.
 // @Tags drafts
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
@@ -298,10 +321,12 @@ func validateDraftSeller(r *http.Request, sellerID *string) error {
 // @Description Create the item from the finished form and move the draft's files to it, in one
 // @Description step. The body is the item as for POST /g/{groupSlug}/commodities, validated the
 // @Description same way, and meta.revision is the draft revision it was based on (409
-// @Description draft.revision_conflict when it is stale). Promoting a draft that is already
-// @Description promoted creates nothing and returns the item it became with 200, so a retry
-// @Description after a lost response is safe; when that item no longer exists the answer is 409
-// @Description draft.promoted.
+// @Description draft.revision_conflict when it is stale). meta.promotion_key is required: a key
+// @Description the client makes for this promotion (a UUID) and sends again on every retry until
+// @Description one succeeds. A repeat with the key of the promotion that happened creates nothing
+// @Description and returns the item with 200, so a retry after a lost response is safe; any other
+// @Description key, or the same key once that item no longer exists, answers 409 draft.promoted
+// @Description with meta.commodity_id. A draft being discarded answers 409 draft.discarded.
 // @Tags drafts
 // @Accept json-api
 // @Produce json-api
@@ -311,7 +336,7 @@ func validateDraftSeller(r *http.Request, sellerID *string) error {
 // @Success 201 {object} jsonapi.CommodityResponse "Item created"
 // @Success 200 {object} jsonapi.CommodityResponse "The draft was already promoted to this item"
 // @Failure 404 {object} jsonapi.Errors "Draft not found"
-// @Failure 409 {object} jsonapi.Errors "Stale revision, or the item the draft became is gone"
+// @Failure 409 {object} jsonapi.Errors "Stale revision, draft promoted by another request, or draft being discarded"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/drafts/{draftID}/promote [post].
 func (api *commodityDraftsAPI) promote(w http.ResponseWriter, r *http.Request) {
@@ -356,7 +381,7 @@ func (api *commodityDraftsAPI) promote(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	item, created, err := api.service.Promote(r.Context(), chi.URLParam(r, "draftID"), input.Meta.Revision, commodity)
+	item, created, err := api.service.Promote(r.Context(), chi.URLParam(r, "draftID"), input.Meta.Revision, input.Meta.PromotionKey, commodity)
 	if err != nil {
 		renderDraftError(w, r, err)
 		return

@@ -115,6 +115,7 @@ func (r *CommodityDraftRegistry) newDraft(ctx context.Context, draft models.Comm
 	draft.Revision = 1
 	draft.PromotedCommodityID = nil
 	draft.PromotedAt = nil
+	draft.PromotionKey = nil
 	draft.CreatedAt = now
 	draft.UpdatedAt = now
 	created, err := r.Registry.CreateWithUser(ctx, draft)
@@ -208,10 +209,22 @@ func (r *CommodityDraftRegistry) ListOpen(ctx context.Context, offset, limit int
 	return open[offset:end], total, nil
 }
 
+// checkOpen mirrors the postgres check.
+func checkOpen(draft *models.CommodityDraft) error {
+	switch draft.Status {
+	case models.CommodityDraftOpen:
+		return nil
+	case models.CommodityDraftDiscarding:
+		return errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("entity_id", draft.ID))
+	default:
+		return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", draft.ID))
+	}
+}
+
 // checkOpenRevision mirrors the postgres check.
 func checkOpenRevision(draft *models.CommodityDraft, revision int) error {
-	if !draft.IsOpen() {
-		return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", draft.ID))
+	if err := checkOpen(draft); err != nil {
+		return err
 	}
 	if draft.Revision != revision {
 		return errxtrace.Classify(registry.ErrDraftRevisionConflict,
@@ -238,9 +251,12 @@ func (r *CommodityDraftRegistry) SaveValues(ctx context.Context, id string, revi
 // Promote mirrors the postgres transaction step by step. The memory backend
 // has no transaction: a failure after the item is created leaves the item
 // and an open draft, which the dev and test uses of this backend accept.
-func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revision int, commodity models.Commodity) (registry.DraftPromotion, error) {
+func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (registry.DraftPromotion, error) {
 	if err := r.requireGroup(); err != nil {
 		return registry.DraftPromotion{}, err
+	}
+	if promotionKey == "" {
+		return registry.DraftPromotion{}, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "PromotionKey"))
 	}
 	r.factory.writes.Lock()
 	defer r.factory.writes.Unlock()
@@ -249,7 +265,7 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 	if err != nil {
 		return registry.DraftPromotion{}, errxtrace.Wrap("failed to promote commodity draft", err)
 	}
-	if !draft.IsOpen() {
+	if draft.Status == models.CommodityDraftPromoted && draft.PromotionKey != nil && *draft.PromotionKey == promotionKey {
 		return registry.DraftPromotion{Draft: draft}, nil
 	}
 	if err := checkOpenRevision(draft, revision); err != nil {
@@ -275,6 +291,7 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 	draft.Status = models.CommodityDraftPromoted
 	draft.PromotedCommodityID = new(item.ID)
 	draft.PromotedAt = new(now)
+	draft.PromotionKey = new(promotionKey)
 	draft.Values = models.CommodityDraftValues{}
 	draft.Revision++
 	updated, err := r.Update(ctx, *draft)
@@ -282,4 +299,65 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		return registry.DraftPromotion{}, errxtrace.Wrap("failed to mark the draft promoted", err)
 	}
 	return registry.DraftPromotion{Draft: updated, Commodity: item}, nil
+}
+
+// AttachFile mirrors the postgres method. The draft check and the link are
+// made under the writes lock, which promotion and discard hold too.
+func (r *CommodityDraftRegistry) AttachFile(ctx context.Context, draftID string, link models.FileLink) (*models.FileLink, bool, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, false, err
+	}
+	r.factory.writes.Lock()
+	defer r.factory.writes.Unlock()
+	draft, err := r.Get(ctx, draftID)
+	if err != nil {
+		return nil, false, errxtrace.Wrap("failed to attach file to commodity draft", err)
+	}
+	if err := checkOpen(draft); err != nil {
+		return nil, false, errxtrace.Wrap("failed to attach file to commodity draft", err)
+	}
+	files, err := r.factory.fileFactory.createUserFileRegistry(ctx)
+	if err != nil {
+		return nil, false, errxtrace.Wrap("failed to create file registry", err)
+	}
+	// A file in Trash takes no new links; Get does not see it.
+	if _, err := files.Get(ctx, link.FileID); err != nil {
+		return nil, false, errxtrace.Wrap("failed to attach file to commodity draft", err)
+	}
+	link.EntityType = models.FileLinkDraft
+	link.EntityID = draftID
+	return files.AddLink(ctx, link)
+}
+
+// MarkDiscarding mirrors the postgres method.
+func (r *CommodityDraftRegistry) MarkDiscarding(ctx context.Context, id string) (*models.CommodityDraft, error) {
+	r.factory.writes.Lock()
+	defer r.factory.writes.Unlock()
+	draft, err := r.Get(ctx, id)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to begin the discard of commodity draft", err)
+	}
+	switch draft.Status {
+	case models.CommodityDraftDiscarding:
+		return draft, nil
+	case models.CommodityDraftOpen:
+	default:
+		return nil, errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", id))
+	}
+	draft.Status = models.CommodityDraftDiscarding
+	return r.Update(ctx, *draft)
+}
+
+// DeleteDiscarding mirrors the postgres method.
+func (r *CommodityDraftRegistry) DeleteDiscarding(ctx context.Context, id string) error {
+	r.factory.writes.Lock()
+	defer r.factory.writes.Unlock()
+	draft, err := r.Get(ctx, id)
+	if err != nil {
+		return errxtrace.Wrap("failed to delete commodity draft", err)
+	}
+	if !draft.IsDiscarding() {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity_draft", "entity_id", id))
+	}
+	return r.Delete(ctx, id)
 }

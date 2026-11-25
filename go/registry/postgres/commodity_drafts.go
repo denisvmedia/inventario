@@ -135,6 +135,7 @@ func resetNewDraft(draft *models.CommodityDraft, now time.Time) {
 	draft.Revision = 1
 	draft.PromotedCommodityID = nil
 	draft.PromotedAt = nil
+	draft.PromotionKey = nil
 	draft.CreatedAt = now
 	draft.UpdatedAt = now
 	if draft.Values == nil {
@@ -264,11 +265,23 @@ func (r *CommodityDraftRegistry) lockDraft(ctx context.Context, tx *sqlx.Tx, id 
 	return &draft, nil
 }
 
+// checkOpen reports why draft cannot change, or nil when it is open.
+func checkOpen(draft *models.CommodityDraft) error {
+	switch draft.Status {
+	case models.CommodityDraftOpen:
+		return nil
+	case models.CommodityDraftDiscarding:
+		return errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("entity_id", draft.ID))
+	default:
+		return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", draft.ID))
+	}
+}
+
 // checkOpenRevision reports why a write that expects revision cannot change
 // draft, or nil when it can.
 func checkOpenRevision(draft *models.CommodityDraft, revision int) error {
-	if !draft.IsOpen() {
-		return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", draft.ID))
+	if err := checkOpen(draft); err != nil {
+		return err
 	}
 	if draft.Revision != revision {
 		return errxtrace.Classify(registry.ErrDraftRevisionConflict,
@@ -305,9 +318,12 @@ func (r *CommodityDraftRegistry) SaveValues(ctx context.Context, id string, revi
 // Promote creates the item, moves the draft's file links to it and marks the
 // draft promoted in one transaction. Every statement runs in that
 // transaction; no other registry is called while it is open.
-func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revision int, commodity models.Commodity) (registry.DraftPromotion, error) {
+func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (registry.DraftPromotion, error) {
 	if r.service {
 		return registry.DraftPromotion{}, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	if promotionKey == "" {
+		return registry.DraftPromotion{}, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "PromotionKey"))
 	}
 	requestedAssetNumber := prepareNewCommodity(ctx, &commodity)
 
@@ -320,7 +336,7 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		if err != nil {
 			return err
 		}
-		if !draft.IsOpen() {
+		if draft.Status == models.CommodityDraftPromoted && draft.PromotionKey != nil && *draft.PromotionKey == promotionKey {
 			result = *draft
 			return nil
 		}
@@ -351,11 +367,11 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 
 		now := time.Now()
 		markPromoted := fmt.Sprintf(`
-			UPDATE %s SET status = $1, promoted_commodity_id = $2, promoted_at = $3,
+			UPDATE %s SET status = $1, promoted_commodity_id = $2, promoted_at = $3, promotion_key = $4,
 				form_values = '{}'::jsonb, revision = revision + 1, updated_at = $3
-			WHERE id = $4
+			WHERE id = $5
 			RETURNING *`, r.tableNames.CommodityDrafts())
-		if err := tx.QueryRowxContext(ctx, markPromoted, string(models.CommodityDraftPromoted), commodity.ID, now, draft.ID).StructScan(&result); err != nil {
+		if err := tx.QueryRowxContext(ctx, markPromoted, string(models.CommodityDraftPromoted), commodity.ID, now, promotionKey, draft.ID).StructScan(&result); err != nil {
 			return errxtrace.Wrap("failed to mark the draft promoted", err)
 		}
 
@@ -370,4 +386,96 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		return registry.DraftPromotion{}, errxtrace.Wrap("failed to promote commodity draft", err)
 	}
 	return registry.DraftPromotion{Draft: &result, Commodity: item}, nil
+}
+
+// AttachFile links a file to an open draft. The draft row is read FOR SHARE
+// and stays locked until the link is written, so a promotion or a discard,
+// which lock it FOR UPDATE, runs before or after the attachment, never in
+// between. The link is written with the file registry's statements on this
+// transaction; no other registry opens a transaction of its own.
+func (r *CommodityDraftRegistry) AttachFile(ctx context.Context, draftID string, link models.FileLink) (*models.FileLink, bool, error) {
+	if r.service {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+	if link.FileID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "FileID"))
+	}
+	link.EntityType = models.FileLinkDraft
+	link.EntityID = draftID
+	files := &FileRegistry{tableNames: r.tableNames, createdByUserID: r.createdByUserID}
+	var (
+		stored  *models.FileLink
+		created bool
+	)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var draft models.CommodityDraft
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR SHARE`, r.tableNames.CommodityDrafts())
+		if err := tx.QueryRowxContext(ctx, query, draftID).StructScan(&draft); err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity_draft", "entity_id", draftID))
+			}
+			return errxtrace.Wrap("failed to read commodity draft", err)
+		}
+		if err := checkOpen(&draft); err != nil {
+			return err
+		}
+		file, err := files.lockFileForShare(ctx, tx, link.FileID)
+		if err != nil {
+			return err
+		}
+		if file.IsTrashed() {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file", "entity_id", link.FileID))
+		}
+		stored, created, err = files.insertLink(ctx, tx, file, link)
+		return err
+	})
+	if err != nil {
+		return nil, false, errxtrace.Wrap("failed to attach file to commodity draft", err)
+	}
+	return stored, created, nil
+}
+
+// MarkDiscarding begins the discard of an open draft; see the interface doc.
+func (r *CommodityDraftRegistry) MarkDiscarding(ctx context.Context, id string) (*models.CommodityDraft, error) {
+	var marked models.CommodityDraft
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		draft, err := r.lockDraft(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		switch draft.Status {
+		case models.CommodityDraftDiscarding:
+			marked = *draft
+			return nil
+		case models.CommodityDraftOpen:
+		default:
+			return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", id))
+		}
+		update := fmt.Sprintf(`UPDATE %s SET status = $1, updated_at = $2 WHERE id = $3 RETURNING *`, r.tableNames.CommodityDrafts())
+		return tx.QueryRowxContext(ctx, update, string(models.CommodityDraftDiscarding), time.Now(), id).StructScan(&marked)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to begin the discard of commodity draft", err)
+	}
+	return &marked, nil
+}
+
+// DeleteDiscarding deletes a draft whose discard has begun; see the
+// interface doc.
+func (r *CommodityDraftRegistry) DeleteDiscarding(ctx context.Context, id string) error {
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`DELETE FROM %s WHERE id = $1 AND status = $2`, r.tableNames.CommodityDrafts())
+		deleted, err := execAffected(ctx, tx, query, id, string(models.CommodityDraftDiscarding))
+		if err != nil {
+			return err
+		}
+		if !deleted {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity_draft", "entity_id", id))
+		}
+		return nil
+	})
+	if err != nil {
+		return errxtrace.Wrap("failed to delete commodity draft", err)
+	}
+	return nil
 }

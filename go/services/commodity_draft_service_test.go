@@ -94,6 +94,7 @@ func TestCommodityDraftService_Create_ValidatesTheClientFields(t *testing.T) {
 		{name: "client key with a space", key: "a b"},
 		{name: "client key too long", key: strings.Repeat("k", models.CommodityDraftClientKeyMaxLength+1)},
 		{name: "values too large", key: "k", values: models.CommodityDraftValues{"comments": strings.Repeat("x", models.CommodityDraftValuesMaxBytes)}},
+		{name: "a form field of the wrong type", key: "k", values: models.CommodityDraftValues{"short_name": nil}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -124,7 +125,7 @@ func TestCommodityDraftService_Promote(t *testing.T) {
 	draft := f.draft(c, "k", "Drill")
 	photo := f.file(c, "photo", draftLink(draft.ID))
 
-	item, created, err := f.drafts.Promote(f.ctx, draft.ID, draft.Revision, f.item("Drill"))
+	item, created, err := f.drafts.Promote(f.ctx, draft.ID, draft.Revision, "key-1", f.item("Drill"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsTrue)
 
@@ -138,8 +139,8 @@ func TestCommodityDraftService_Promote(t *testing.T) {
 	c.Assert(events, qt.HasLen, 1)
 	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindCreated)
 
-	// A retry returns the same item and records nothing.
-	again, created, err := f.drafts.Promote(f.ctx, draft.ID, draft.Revision, f.item("Drill"))
+	// A retry with the same key returns the same item and records nothing.
+	again, created, err := f.drafts.Promote(f.ctx, draft.ID, draft.Revision, "key-1", f.item("Drill"))
 	c.Assert(err, qt.IsNil)
 	c.Assert(created, qt.IsFalse)
 	c.Assert(again.ID, qt.Equals, item.ID)
@@ -147,10 +148,15 @@ func TestCommodityDraftService_Promote(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(events, qt.HasLen, 1)
 
+	// Another device's promotion is told the draft is an item, and does not
+	// take this item for its own.
+	_, _, err = f.drafts.Promote(f.ctx, draft.ID, draft.Revision, "key-2", f.item("Drill"))
+	c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
+
 	// Once the item is gone, the retry cannot hand it out.
 	_, err = services.NewTrashService(f.factorySet, uploadLocationForTempDir(c.TempDir())).TrashCommodity(f.ctx, item.ID)
 	c.Assert(err, qt.IsNil)
-	_, _, err = f.drafts.Promote(f.ctx, draft.ID, draft.Revision, f.item("Drill"))
+	_, _, err = f.drafts.Promote(f.ctx, draft.ID, draft.Revision, "key-1", f.item("Drill"))
 	c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted)
 
 	// A promoted draft cannot be discarded.
@@ -204,6 +210,31 @@ func TestCommodityDraftService_Discard(t *testing.T) {
 	c.Assert(f.drafts.Discard(f.ctx, draft.ID), qt.ErrorIs, registry.ErrNotFound)
 }
 
+func TestCommodityDraftService_DiscardFinishesAnInterruptedDiscard(t *testing.T) {
+	c := qt.New(t)
+	f := newDraftFixture(c)
+	draft := f.draft(c, "k", "Drill")
+	photo := f.file(c, "photo", draftLink(draft.ID))
+
+	// A discard that stopped after taking the draft out of play.
+	_, err := f.regs.CommodityDraftRegistry.MarkDiscarding(f.ctx, draft.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The draft is out of reach: its key cannot make it again and nothing
+	// can be attached.
+	_, _, err = f.drafts.Create(f.ctx, "k", models.CommodityDraftValues{"name": "Drill"})
+	c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)
+	late := f.file(c, "late")
+	_, _, err = f.links.Attach(f.ctx, late.ID, models.FileLinkDraft, draft.ID, "")
+	c.Assert(err, qt.ErrorIs, registry.ErrDraftDiscarded)
+
+	c.Assert(f.drafts.Discard(f.ctx, draft.ID), qt.IsNil)
+	_, err = f.regs.CommodityDraftRegistry.Get(f.ctx, draft.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, photo.ID)
+	c.Assert(err, qt.IsNil)
+}
+
 func TestFileLinkService_AttachToDraft(t *testing.T) {
 	c := qt.New(t)
 	f := newDraftFixture(c)
@@ -224,9 +255,9 @@ func TestFileLinkService_AttachToDraft(t *testing.T) {
 	_, _, err = f.links.Attach(f.ctx, scan.ID, models.FileLinkDraft, draft.ID, models.FileLinkMetaFiles)
 	c.Assert(err, qt.ErrorIs, services.ErrFileLinkInvalid)
 
-	_, _, err = f.drafts.Promote(f.ctx, draft.ID, draft.Revision, f.item("Drill"))
+	_, _, err = f.drafts.Promote(f.ctx, draft.ID, draft.Revision, "key-1", f.item("Drill"))
 	c.Assert(err, qt.IsNil)
 	late := f.file(c, "late")
 	_, _, err = f.links.Attach(f.ctx, late.ID, models.FileLinkDraft, draft.ID, "")
-	c.Assert(err, qt.ErrorIs, services.ErrFileLinkTargetNotFound, qt.Commentf("a promoted draft takes no more files"))
+	c.Assert(err, qt.ErrorIs, registry.ErrDraftPromoted, qt.Commentf("a promoted draft takes no more files"))
 }

@@ -42,7 +42,8 @@ func (s *CommodityDraftService) drafts(ctx context.Context) (registry.CommodityD
 // Create stores a new draft, or returns the group's draft with the same
 // client key unchanged (created=false). A repeated create after a lost
 // response therefore gives the client the draft it already made, never a
-// second one.
+// second one. A key whose draft is being discarded gets
+// registry.ErrDraftDiscarded.
 func (s *CommodityDraftService) Create(ctx context.Context, clientKey string, values models.CommodityDraftValues) (*models.CommodityDraft, bool, error) {
 	draft := models.CommodityDraft{ClientKey: clientKey, Values: values}
 	if err := draft.ValidateFields(ctx); err != nil {
@@ -52,7 +53,14 @@ func (s *CommodityDraftService) Create(ctx context.Context, clientKey string, va
 	if err != nil {
 		return nil, false, err
 	}
-	return reg.CreateOrGet(ctx, draft)
+	stored, created, err := reg.CreateOrGet(ctx, draft)
+	if err != nil {
+		return nil, false, err
+	}
+	if stored.IsDiscarding() {
+		return nil, false, errxtrace.Classify(registry.ErrDraftDiscarded, errx.Attrs("entity_id", stored.ID))
+	}
+	return stored, created, nil
 }
 
 // Save replaces the values of an open draft. revision is the revision the
@@ -98,16 +106,17 @@ func (s *CommodityDraftService) FileCounts(ctx context.Context, ids []string) (m
 
 // Promote turns an open draft into an item, moving its files to the item,
 // and records the item's "created" event. The caller validated the item and
-// normalized its tags. On a draft that is already promoted it returns the
-// item the draft became with created=false, so a retry after a lost response
-// creates nothing. When that item no longer exists, it returns
-// registry.ErrDraftPromoted.
-func (s *CommodityDraftService) Promote(ctx context.Context, id string, revision int, commodity models.Commodity) (*models.Commodity, bool, error) {
+// normalized its tags. promotionKey identifies this promotion: a repeat with
+// the same key after a lost response creates nothing and returns the item
+// the draft became with created=false; another key gets
+// registry.ErrDraftPromoted, as does the same key when that item no longer
+// exists.
+func (s *CommodityDraftService) Promote(ctx context.Context, id string, revision int, promotionKey string, commodity models.Commodity) (*models.Commodity, bool, error) {
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return nil, false, err
 	}
-	result, err := reg.Promote(ctx, id, revision, commodity)
+	result, err := reg.Promote(ctx, id, revision, promotionKey, commodity)
 	if err != nil {
 		return nil, false, err
 	}
@@ -141,32 +150,30 @@ func (s *CommodityDraftService) Promote(ctx context.Context, id string, revision
 // items in Trash goes to Trash with the first of them, so restoring that item
 // brings the file back.
 //
-// The steps run in an order that a retry can repeat: files to Trash, then
-// the links, then the draft row. A discard that stopped half way leaves an
-// open draft with fewer files, never links to a missing draft.
+// It runs in two phases so that it cannot interleave with a promotion or an
+// attachment. MarkDiscarding first takes the draft out of play under its row
+// lock: from then on a promotion, a save or an attachment is refused, and a
+// promotion that won the lock makes the discard fail with
+// registry.ErrDraftPromoted instead. The files are then sent to Trash or
+// released, each by a conditional update that a link added meanwhile
+// overrides, and the row is deleted last. A discard that stopped half way
+// leaves a draft being discarded, which no list shows; discarding it again
+// finishes the work.
 func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 	reg, err := s.drafts(ctx)
 	if err != nil {
 		return err
 	}
-	draft, err := reg.Get(ctx, id)
-	if err != nil {
-		return errxtrace.Wrap("failed to get draft", err)
-	}
-	if !draft.IsOpen() {
-		return errxtrace.Classify(registry.ErrDraftPromoted, errx.Attrs("entity_id", id))
-	}
 	userID, err := actorID(ctx)
 	if err != nil {
 		return err
 	}
+	if _, err := reg.MarkDiscarding(ctx, id); err != nil {
+		return errxtrace.Wrap("failed to begin the discard", err)
+	}
 	fileReg, err := s.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create file registry", err)
-	}
-	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to create commodity registry", err)
 	}
 
 	files, err := fileReg.ListByLinkedEntity(ctx, models.FileLinkDraft, id)
@@ -175,50 +182,15 @@ func (s *CommodityDraftService) Discard(ctx context.Context, id string) error {
 	}
 	now := s.now().UTC()
 	for _, file := range files {
-		keep, trashWith, err := draftFileFate(ctx, comReg, file, id)
-		if err != nil {
-			return err
-		}
-		if keep {
-			continue
-		}
-		if err := fileReg.Trash(ctx, file.ID, userID, trashWith, now); err != nil && !errors.Is(err, registry.ErrNotFound) {
+		if _, err := fileReg.TrashUnlessHeld(ctx, file.ID, models.FileLinkDraft, id, userID, now); err != nil {
 			return errxtrace.Wrap("failed to move draft file to Trash", err, errx.Attrs("file_id", file.ID))
 		}
 	}
 	if _, err := fileReg.RemoveLinksToEntity(ctx, models.FileLinkDraft, id); err != nil {
 		return errxtrace.Wrap("failed to remove draft file links", err)
 	}
-	if err := reg.Delete(ctx, id); err != nil {
+	if err := reg.DeleteDiscarding(ctx, id); err != nil {
 		return errxtrace.Wrap("failed to delete draft", err)
 	}
 	return nil
-}
-
-// draftFileFate decides what discarding draftID does to file: keep it when
-// another link holds it live, otherwise move it to Trash, with trashWith
-// naming the trashed item it goes with ("" for a Trash entry of its own).
-// Links to other drafts, areas, locations and exports hold a file live, as do
-// links to items that are live or that the lookup cannot find (see
-// linkedItemState).
-func draftFileFate(ctx context.Context, comReg registry.CommodityRegistry, file *models.FileEntity, draftID string) (keep bool, trashWith string, err error) {
-	for _, l := range file.Links {
-		if l.EntityType == models.FileLinkDraft && l.EntityID == draftID {
-			continue
-		}
-		if l.EntityType != models.FileLinkCommodity {
-			return true, "", nil
-		}
-		state, err := linkedItemState(ctx, comReg, l.EntityID)
-		if err != nil {
-			return false, "", err
-		}
-		if state != itemInTrash {
-			return true, "", nil
-		}
-		if trashWith == "" {
-			trashWith = l.EntityID
-		}
-	}
-	return false, trashWith, nil
 }

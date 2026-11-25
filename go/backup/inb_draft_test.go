@@ -7,12 +7,14 @@ import (
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // TestINBRoundTrip_DraftFileIsStandalone: drafts are not in a backup (#2812).
 // A file attached only to a draft is still a file of the group, so the backup
 // carries it as a standalone file, and the restore brings it back without a
-// link to a draft the archive does not hold.
+// link to a draft the archive does not hold. A full replace leaves the group
+// with what the archive holds, so the draft itself is gone afterwards.
 func TestINBRoundTrip_DraftFileIsStandalone(t *testing.T) {
 	c := qt.New(t)
 	signer := testSigner(c)
@@ -41,4 +43,10 @@ func TestINBRoundTrip_DraftFileIsStandalone(t *testing.T) {
 
 	restored := f.fileByUUID(c, photo)
 	c.Assert(restored.Links, qt.HasLen, 0)
+
+	_, err = drafts.Get(f.ctx, draft.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	left, err := drafts.List(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(left, qt.HasLen, 0)
 }

@@ -100,11 +100,12 @@ types.RestoreStrategyFullReplace // "full_replace"
 - **Use Case**: Complete replacement from backup
 - **Risk**: All current data is lost
 
-`clearExistingData` runs three passes, in order (see `processor_shared.go`):
+`clearExistingData` runs four passes, in order (see `processor_shared.go`):
 
 1. `DeleteLocationRecursive` per location — cascades areas, their commodities, and the files of that subtree.
 2. `DeleteCommodityRecursive` per **surviving** commodity. Commodities are enumerated directly because `commodity.area_id` is nullable since #1986: an area-less commodity is unreachable through the location → area recursion, so before #2236 its row survived the wipe while the file sweep still deleted its attachments — a zombie item with no files, whose preserved UUID then collided with the archive's own copy on re-create.
-3. A type-agnostic sweep of the remaining file rows + blobs, catching standalone files and any orphan.
+3. The group's drafts, in every state, with their file links. A backup holds no drafts, so the group has none after the restore; the archive carries a draft's files as standalone files.
+4. A type-agnostic sweep of the remaining file rows + blobs, catching standalone files and any orphan.
 
 Files with `linked_entity_type = "export"` are skipped by the sweep: that is the archive being restored, plus the backup history — not user inventory.
 
