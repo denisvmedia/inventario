@@ -19,8 +19,27 @@ export interface FakeInboxEntry {
   file_count?: number
 }
 
+export interface FakeInboxCheck {
+  key: string
+  query: string
+  count: number
+}
+
+// The checks the server sends, in its order, with no items in any.
+export function defaultChecks(): FakeInboxCheck[] {
+  return [
+    { key: "no_location", query: "include_inactive=false&unassigned=true", count: 0 },
+    { key: "no_photo", query: "include_inactive=false&no_photo=true", count: 0 },
+    { key: "no_purchase_price", query: "include_inactive=false&no_purchase_price=true", count: 0 },
+    { key: "no_purchase_date", query: "include_inactive=false&no_purchase_date=true", count: 0 },
+    { key: "untagged", query: "include_inactive=false&no_tags=true", count: 0 },
+  ]
+}
+
 export interface FakeInboxBackend {
   entries: FakeInboxEntry[]
+  // What GET /inbox/checks answers; never part of the counts.
+  checks: FakeInboxCheck[]
   // Ids of the items whose review was completed, in order.
   reviewed: string[]
   // When set, PUT /commodities/{id} answers with this status and body; see
@@ -89,6 +108,7 @@ export function backend(slug: string, seed: FakeInboxEntry[] = []): FakeInboxBac
   const base = `/g/${encodeURIComponent(slug)}`
   const state: FakeInboxBackend = {
     entries: seed.map((e) => ({ ...e })),
+    checks: defaultChecks(),
     reviewed: [],
     failReview: null,
     countCalls: 0,
@@ -102,6 +122,7 @@ export function backend(slug: string, seed: FakeInboxEntry[] = []): FakeInboxBac
       state.countCalls += 1
       return HttpResponse.json({ data: counts(state.entries) })
     }),
+    http.get(apiUrl(`${base}/inbox/checks`), () => HttpResponse.json({ data: state.checks })),
     http.get(apiUrl(`${base}/inbox`), ({ request }) => {
       const url = new URL(request.url)
       const reason = url.searchParams.get("reason")

@@ -231,6 +231,22 @@ type CommodityListOptions struct {
 	// sets IncludeInactive with it; without it nothing matches. It is not
 	// part of the item query contract: the inbox reads it (#2794).
 	DraftsOnly bool
+	// NoPhoto keeps the items without a photo: no live file in the item's
+	// images bucket with Type=image and Category=images, the files
+	// FirstPhotos picks a cover from. Postgres applies it as a NOT EXISTS
+	// subquery on the file links; memory reads PhotoCommodityIDs. The files
+	// of an item in Trash are in Trash too, so a caller does not combine it
+	// with Trashed (services/commodityquery refuses the pair).
+	NoPhoto bool
+	// PhotoCommodityIDs is the pre-resolved set of the group's item IDs
+	// that have a photo, for a backend that is not a NativePhotoFilterer.
+	// Callers populate it iff NoPhoto is set; postgres ignores it.
+	PhotoCommodityIDs []string
+	// NoPurchasePrice keeps the items whose purchase price (OriginalPrice)
+	// is unknown. A known zero is a price and does not match (#2813).
+	NoPurchasePrice bool
+	// NoPurchaseDate keeps the items whose purchase date is unknown.
+	NoPurchaseDate bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -499,6 +515,16 @@ type NativeLentOutFilterer interface {
 	SupportsNativeLentOutFilter()
 }
 
+// NativePhotoFilterer is the capability marker of a CommodityRegistry that
+// resolves CommodityListOptions.NoPhoto in the database, as postgres does
+// with a NOT EXISTS subquery on the file links. Callers pre-resolve
+// PhotoCommodityIDs from FileRegistry.CommodityIDsWithPhotos only for a
+// backend without it. As with NativeLentOutFilterer, the type assertion is
+// the gate and the method is never called.
+type NativePhotoFilterer interface {
+	SupportsNativePhotoFilter()
+}
+
 type LocationRegistry interface {
 	Registry[models.Location]
 
@@ -638,6 +664,13 @@ type FileRegistry interface {
 	// Category=images; the oldest by created_at wins, the lowest id on a
 	// tie. Items without a photo are absent from the map.
 	FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error)
+
+	// CommodityIDsWithPhotos returns the ID of every item of the group that
+	// has a photo in the sense of FirstPhotos, live items and items in
+	// Trash alike, each once and in no particular order. It backs the
+	// NoPhoto filter of a CommodityRegistry that is not a
+	// NativePhotoFilterer.
+	CommodityIDsWithPhotos(ctx context.Context) ([]string, error)
 
 	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
 	// Meta come from the argument; the registry sets the ids, tenant, group,

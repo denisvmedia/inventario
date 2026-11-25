@@ -36,6 +36,7 @@ func TestParse_EveryParameter(t *testing.T) {
 		"tags=Fragile,power+tools", "tags=red",
 		"tag_mode=any",
 		"tags_exclude=garage",
+		"no_photo=1", "no_purchase_price=true", "no_purchase_date=True",
 		"sort=-purchase_date",
 	}, "&"))
 	c.Assert(err, qt.IsNil)
@@ -58,8 +59,11 @@ func TestParse_EveryParameter(t *testing.T) {
 			Mode:    registry.TagMatchAny,
 			Exclude: []string{"garage"},
 		},
-		SortField: registry.CommoditySortPurchaseDate,
-		SortDesc:  true,
+		NoPhoto:         true,
+		NoPurchasePrice: true,
+		NoPurchaseDate:  true,
+		SortField:       registry.CommoditySortPurchaseDate,
+		SortDesc:        true,
 	})
 }
 
@@ -88,6 +92,10 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "too many sellers", query: manySellers(commodityquery.MaxSellers + 1), param: "seller_id"},
 		{name: "trashed that is neither", query: "trashed=deleted", param: "trashed"},
 		{name: "lent_out in the trash", query: "trashed=true&lent_out=false", param: "lent_out"},
+		{name: "no_photo that is neither", query: "no_photo=maybe", param: "no_photo"},
+		{name: "no_purchase_price that is neither", query: "no_purchase_price=unknown", param: "no_purchase_price"},
+		{name: "no_purchase_date given twice", query: "no_purchase_date=1&no_purchase_date=0", param: "no_purchase_date"},
+		{name: "no_photo in the trash", query: "trashed=true&no_photo=true", param: "no_photo"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -223,6 +231,10 @@ func TestQuery_ValuesRoundTrip(t *testing.T) {
 		}},
 		{name: "untagged", q: commodityquery.Query{IncludeInactive: true, Tags: registry.CommodityTagFilter{Untagged: true}}},
 		{name: "trashed", q: commodityquery.Query{Text: "drill", IncludeInactive: true, Trashed: true}},
+		{name: "missing data", q: commodityquery.Query{NoPhoto: true, NoPurchasePrice: true, NoPurchaseDate: true}},
+		{name: "unknown purchase data in the trash", q: commodityquery.Query{
+			IncludeInactive: true, Trashed: true, NoPurchasePrice: true, NoPurchaseDate: true,
+		}},
 		{name: "all is the default mode", q: commodityquery.Query{
 			IncludeInactive: true, Tags: registry.CommodityTagFilter{Include: []string{"a"}},
 		}},
@@ -259,6 +271,13 @@ func TestQuery_ListOptions(t *testing.T) {
 	c.Check(opts.SortDesc, qt.IsTrue)
 	c.Check(opts.SearchTagLabels, qt.IsNil)
 	c.Check(opts.Trashed, qt.IsFalse)
+
+	missing := commodityquery.Query{NoPhoto: true, NoPurchasePrice: true, NoPurchaseDate: true}.ListOptions()
+	c.Check(missing.NoPhoto, qt.IsTrue)
+	c.Check(missing.NoPurchasePrice, qt.IsTrue)
+	c.Check(missing.NoPurchaseDate, qt.IsTrue)
+	// Resolve fills the photo IDs; ListOptions leaves them to it.
+	c.Check(missing.PhotoCommodityIDs, qt.IsNil)
 }
 
 func TestParse_Trashed(t *testing.T) {

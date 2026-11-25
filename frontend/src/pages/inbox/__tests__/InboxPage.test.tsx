@@ -312,23 +312,55 @@ describe("<InboxPage />", () => {
   })
 
   it("says when nothing needs attention and links the missing-detail lists", async () => {
+    const fake = inboxHandlers.backend(SLUG)
+    fake.checks = inboxHandlers
+      .defaultChecks()
+      .map((c) => (c.key === "no_photo" ? { ...c, count: 4 } : c))
     server.use(
       ...authHandlers.signedIn(),
       ...groupHandlers.list(groups),
       members("user"),
-      ...inboxHandlers.empty(SLUG)
+      ...fake.handlers
     )
     renderPage()
     expect(await screen.findByTestId("inbox-empty")).toHaveTextContent("Nothing needs attention")
+    // The checks are not unfinished work: four items without a photo leave
+    // the inbox empty.
     expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (0)")
-    expect(screen.getByTestId("inbox-missing-no-location")).toHaveAttribute(
-      "href",
-      `/g/${SLUG}/commodities?unassigned=1`
+    const links: [string, string][] = [
+      ["no-location", "unassigned=1"],
+      ["no-photo", "no_photo=1"],
+      ["no-purchase-price", "no_purchase_price=1"],
+      ["no-purchase-date", "no_purchase_date=1"],
+      ["untagged", "no_tags=1"],
+    ]
+    for (const [key, qs] of links) {
+      expect(await screen.findByTestId(`inbox-missing-${key}`)).toHaveAttribute(
+        "href",
+        `/g/${SLUG}/commodities?${qs}`
+      )
+    }
+    expect(screen.getByTestId("inbox-missing-no-photo-count")).toHaveTextContent("4")
+    expect(screen.getByTestId("inbox-missing-no-location-count")).toHaveTextContent("0")
+  })
+
+  it("leaves out a check it does not know or would read differently", async () => {
+    const fake = inboxHandlers.backend(SLUG)
+    fake.checks = [
+      { key: "no_photo", query: "include_inactive=false&no_photo=true", count: 1 },
+      { key: "no_serial", query: "include_inactive=false&no_serial=true", count: 2 },
+      { key: "untagged", query: "include_inactive=false&no_tags=true&shape=round", count: 3 },
+    ]
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
     )
-    expect(screen.getByTestId("inbox-missing-untagged")).toHaveAttribute(
-      "href",
-      `/g/${SLUG}/commodities?no_tags=1`
-    )
+    renderPage()
+    expect(await screen.findByTestId("inbox-missing-no-photo")).toBeInTheDocument()
+    const card = screen.getByTestId("inbox-missing")
+    expect(within(card).getAllByRole("link")).toHaveLength(1)
   })
 
   it("pages a long inbox", async () => {

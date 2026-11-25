@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"net/http"
+	"strconv"
 	"testing"
 	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/shopspring/decimal"
 
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/appctx"
@@ -239,4 +241,69 @@ func TestInboxAPI_LeavesARecentDiscard(t *testing.T) {
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.total"), float64(0))
 	running := must.Must(regs.CommodityDraftRegistry.Get(ctx, id))
 	c.Check(running.Status, qt.Equals, models.CommodityDraftDiscarding)
+}
+
+func decodeInboxChecks(c *qt.C, body []byte) map[string]jsonapi.InboxCheck {
+	c.Helper()
+	var resp jsonapi.InboxChecksResponse
+	c.Assert(json.Unmarshal(body, &resp), qt.IsNil)
+	out := make(map[string]jsonapi.InboxCheck, len(resp.Data))
+	for _, check := range resp.Data {
+		out[check.Key] = check
+	}
+	return out
+}
+
+// Each check's count is the total the items list reports for the check's
+// query, so the link the inbox builds from it shows that many items. A
+// draft is in the inbox, not in a check, and a known zero price is a price.
+func TestInboxAPI_ChecksMatchTheItemList(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+
+	get := func() map[string]jsonapi.InboxCheck {
+		rr := env.do(http.MethodGet, "/inbox/checks", "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+		return decodeInboxChecks(c, rr.Body.Bytes())
+	}
+	before := get()
+	c.Assert(before, qt.HasLen, 5)
+
+	must.Must(regs.CommodityRegistry.Create(ctx, models.Commodity{
+		Name: "Lamp", Type: models.CommodityTypeOther, Status: models.CommodityStatusInUse, Count: 1,
+	}))
+	must.Must(regs.CommodityRegistry.Create(ctx, models.Commodity{
+		Name: "Free chair", Type: models.CommodityTypeOther, Status: models.CommodityStatusInUse, Count: 1,
+		OriginalPrice: new(decimal.Zero), OriginalPriceCurrency: "USD", Tags: []string{"seat"},
+	}))
+	must.Must(regs.CommodityRegistry.Create(ctx, models.Commodity{
+		Name: "Desk", Type: models.CommodityTypeOther, Status: models.CommodityStatusInUse, Count: 1, Draft: true,
+	}))
+
+	after := get()
+	for key, delta := range map[string]int{
+		"no_location":       2,
+		"no_photo":          2,
+		"no_purchase_price": 1,
+		"no_purchase_date":  2,
+		"untagged":          1,
+	} {
+		c.Check(after[key].Count-before[key].Count, qt.Equals, delta, qt.Commentf("check %s", key))
+	}
+	for key, check := range after {
+		rr := env.do(http.MethodGet, "/commodities?"+check.Query, "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("check %s, body=%s", key, rr.Body.String()))
+		c.Check(rr.Header().Get("X-Total"), qt.Equals, strconv.Itoa(check.Count), qt.Commentf("check %s", key))
+	}
+	c.Check(after["no_photo"].Query, qt.Equals, "include_inactive=false&no_photo=true")
+
+	// The checks are not part of the inbox.
+	rr := env.do(http.MethodGet, "/inbox/count", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.total"), float64(1))
+
+	env.setRole(models.GroupRoleViewer)
+	c.Check(get(), qt.HasLen, 5)
 }

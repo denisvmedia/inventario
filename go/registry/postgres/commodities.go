@@ -48,6 +48,30 @@ var _ registry.NativeLentOutFilterer = (*CommodityRegistry)(nil)
 // the pre-resolve fetch and let the single query do the join.
 func (*CommodityRegistry) SupportsNativeLentOutFilter() {}
 
+var _ registry.NativePhotoFilterer = (*CommodityRegistry)(nil)
+
+// SupportsNativePhotoFilter marks this backend as resolving
+// CommodityListOptions.NoPhoto with the NOT EXISTS subquery of noPhotoExpr.
+func (*CommodityRegistry) SupportsNativePhotoFilter() {}
+
+// commodityTables names the tables the list's WHERE clause reads: the
+// items, and the loans and file links its subqueries join.
+type commodityTables struct {
+	commodities string
+	loans       string
+	fileLinks   string
+	files       string
+}
+
+func (r *CommodityRegistry) whereTables() commodityTables {
+	return commodityTables{
+		commodities: string(r.tableNames.Commodities()),
+		loans:       string(r.tableNames.CommodityLoans()),
+		fileLinks:   string(r.tableNames.FileLinks()),
+		files:       string(r.tableNames.Files()),
+	}
+}
+
 func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistryFactory {
 	return NewCommodityRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
@@ -334,7 +358,7 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 // see registry.CommodityListOptions for the field-by-field semantics. The
 // total reflects the filtered count (post-WHERE, pre-LIMIT).
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
+	where := commodityWhere(opts, r.whereTables())
 
 	var commodities []*models.Commodity
 	var total int
@@ -395,7 +419,7 @@ func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.Commodity
 	if limit <= 0 {
 		return []string{}, nil
 	}
-	where := commodityWhere(opts, string(r.tableNames.Commodities()), string(r.tableNames.CommodityLoans()))
+	where := commodityWhere(opts, r.whereTables())
 	ids := make([]string, 0)
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -434,7 +458,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 			if o.WarrantyNow.IsZero() {
 				o.WarrantyNow = now
 			}
-			where := commodityWhere(o, table, string(r.tableNames.CommodityLoans()))
+			where := commodityWhere(o, r.whereTables())
 			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
 			n, err := countRows(ctx, tx, query, args...)
 			if err != nil {
@@ -457,7 +481,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 // WHERE clause is the list's, so the counts describe the same commodities.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
 	commodities := string(r.tableNames.Commodities())
-	where := commodityWhere(opts, commodities, string(r.tableNames.CommodityLoans()))
+	where := commodityWhere(opts, r.whereTables())
 	sb := commodityTagCountsSelect(commodities)
 	query, args := addWhere(sb, where).Build()
 
@@ -542,13 +566,13 @@ func commodityTagCountsSelect(commodities string) *sqlb.SelectBuilder {
 }
 
 // commodityWhere assembles the WHERE clause for the filtered list queries.
-// Both table names are passed in so a TableNames override flows through to the
-// correlated subquery's outer reference too — hard-coding "commodities.id"
+// The table names are passed in so a TableNames override flows through to the
+// correlated subqueries' outer reference too — hard-coding "commodities.id"
 // would silently break the join on any non-default deployment.
 //
 // The count and the data query share one clause, so the total always describes
 // the page.
-func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansTable string) *sqlb.WhereClause {
+func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	add := func(expr string) {
@@ -601,7 +625,18 @@ func commodityWhere(opts registry.CommodityListOptions, commoditiesTable, loansT
 			cond.LessThan("warranty_expires_at", opts.WarrantyExpiresBefore),
 		))
 	}
-	add(lentOutExpr(opts.LentOut, commoditiesTable, loansTable))
+	add(lentOutExpr(opts.LentOut, tables.commodities, tables.loans))
+	if opts.NoPhoto {
+		add(noPhotoExpr(cond, tables))
+	}
+	if opts.NoPurchasePrice {
+		add(cond.IsNull("original_price"))
+	}
+	if opts.NoPurchaseDate {
+		// An empty string is the PDate zero value, the same defense as
+		// the warranty date above.
+		add(cond.Or(cond.IsNull("purchase_date"), cond.Equal("purchase_date", "")))
+	}
 
 	return andWhere(cond, exprs...)
 }
@@ -734,6 +769,21 @@ func lentOutExpr(lentOut *bool, commoditiesTable, loansTable string) string {
 	return fmt.Sprintf(
 		"%s (SELECT 1 FROM %s WHERE commodity_id = %s.id AND returned_at IS NULL)",
 		op, loansTable, commoditiesTable,
+	)
+}
+
+// noPhotoExpr keeps the items without a photo: no live image file linked in
+// the item's images bucket, the files FileRegistry.FirstPhotos picks a cover
+// from. Row-level security on the file tables keeps the subquery to the
+// caller's group.
+func noPhotoExpr(cond *sqlb.Cond, tables commodityTables) string {
+	return fmt.Sprintf(
+		"NOT EXISTS (SELECT 1 FROM %s l JOIN %s f ON f.id = l.file_id "+
+			"WHERE l.entity_id = %s.id AND l.entity_type = %s AND l.meta = %s "+
+			"AND f.deleted_at IS NULL AND f.type = %s AND f.category = %s)",
+		tables.fileLinks, tables.files, tables.commodities,
+		cond.Var(models.FileLinkCommodity), cond.Var(models.FileLinkMetaImages),
+		cond.Var(string(models.FileTypeImage)), cond.Var(string(models.FileCategoryImages)),
 	)
 }
 

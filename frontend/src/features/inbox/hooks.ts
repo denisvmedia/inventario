@@ -5,9 +5,11 @@ import { commodityKeys } from "@/features/commodities/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 
 import {
+  getInboxChecks,
   getInboxCount,
   listInbox,
   setCommodityDraft,
+  type InboxCheck,
   type InboxCounts,
   type InboxListOptions,
   type InboxPage,
@@ -48,6 +50,17 @@ export function useInboxCount({ enabled = true }: QueryOptions = {}) {
     queryFn: ({ signal }) => getInboxCount(signal),
     enabled: enabled && !!slug,
     placeholderData: (prev) => prev,
+  })
+}
+
+// The quality checks next to the inbox, with the server's counts. Missing
+// details are not unfinished work, so these never add to useInboxCount.
+export function useInboxChecks({ enabled = true }: QueryOptions = {}) {
+  const slug = useSlug()
+  return useQuery<InboxCheck[]>({
+    queryKey: inboxKeys.checks(slug),
+    queryFn: ({ signal }) => getInboxChecks(signal),
+    enabled: enabled && !!slug,
   })
 }
 

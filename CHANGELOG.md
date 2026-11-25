@@ -26,6 +26,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `GET /inbox/count`
   ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
+- The Items page has a Missing filter for items without a photo, without a
+  purchase price or without a purchase date. An unknown price or date counts
+  as missing even after the item was reviewed with it; a price of 0 is a
+  price. The inbox's Missing details section lists these three next to No
+  location and No tags, each with the number of items its link shows, and
+  none of them adds to the inbox count. Saved views keep the new filters. The
+  item query API takes `no_photo`, `no_purchase_price` and
+  `no_purchase_date`, and `GET /inbox/checks` returns the counts
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
 - Save as draft in the Add item dialog saves the form and its files on the
   server as a draft of the group, so an item started on one device can be
   finished on another. Nothing is required to save a draft; a **Save draft**

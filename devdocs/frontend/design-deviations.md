@@ -401,6 +401,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the Missing details section, Undo and the page size agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
 
+#### 2026-11-25 — Missing filter on the items list toolbar
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no filter for missing details.
+- **Reality**: `MissingFilterMenu` in `frontend/src/pages/commodities/CommoditiesListPage.tsx`, after the **No location** toggle: an outline small `DropdownMenu` button "Missing" with a `ListFilter` icon, a count `Badge` and a chevron, filled while a choice is on, built like the Warranty menu. Its `DropdownMenuCheckboxItem`s are **No photo**, **No purchase price** and **No purchase date**; they combine with AND and are kept in the page URL (`no_photo=1` and so on). Saved views show them as condition chips.
+- **Why**: not present in mock. #2794 asks for missing photo, price and purchase date as optional quality views, separate from the inbox. One menu keeps the toolbar from growing by three toggles.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; grouping the three in one menu agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws these filters.
+
+#### 2026-11-25 — Counts in the inbox's Missing details card
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: none, as for the Inbox page above.
+- **Reality**: The **Missing details** `Card` on the Inbox page lists five links (**Items without a location**, **without a photo**, **without a purchase price**, **without a purchase date**, **without tags**), each with a `Badge` that holds the number of items the link shows (secondary when above zero, outline at zero). The links and counts come from `GET /inbox/checks`; skeleton rows show while it loads and a retry row on failure.
+- **Why**: #2794 asks for missing-data views that stay separate from the inbox count. The counts say which list is worth opening without adding to the inbox. The badges are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the badges agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
 #### 2026-11-25 — Inbox notice on the Items page instead of a Drafts filter
 
 - **Issue/PR**: #2794 / PR #2867

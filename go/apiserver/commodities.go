@@ -54,6 +54,9 @@ type commoditiesAPI struct {
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
 // @Param tags_exclude query []string false "Only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
 // @Param no_tags query bool false "Only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
+// @Param no_purchase_price query bool false "Only items whose purchase price is unknown; a known zero is a price"
+// @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true; false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
@@ -158,6 +161,9 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 // @Param tag_mode query string false "Validated as for GET /commodities, then set aside for the counts" Enums(all,any)
 // @Param tags_exclude query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
 // @Param no_tags query bool false "Validated as for GET /commodities, then set aside for the counts"
+// @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
+// @Param no_purchase_price query bool false "Only items whose purchase price is unknown"
+// @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
 // @Param sort query string false "Accepted and ignored"
 // @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"

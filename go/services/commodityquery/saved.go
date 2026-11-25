@@ -13,7 +13,8 @@ import (
 var savedParams = []string{
 	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamLentOut,
-	ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags, ParamSort,
+	ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
+	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate, ParamSort,
 }
 
 // SavedParams returns the name of every parameter ParseSaved accepts.

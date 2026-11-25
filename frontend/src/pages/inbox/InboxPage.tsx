@@ -3,10 +3,13 @@ import { useTranslation } from "react-i18next"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import {
+  CalendarX,
   ChevronRight,
   CircleCheck,
   CircleAlert,
+  DollarSign,
   FilePen,
+  ImageOff,
   Inbox,
   MapPinOff,
   Package,
@@ -27,7 +30,11 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { commodityKeys } from "@/features/commodities/keys"
-import { commodityListHref, DEFAULT_COMMODITY_QUERY } from "@/features/commodities/query"
+import {
+  commodityListHref,
+  commodityQueryFromApiQuery,
+  unreadApiQueryParam,
+} from "@/features/commodities/query"
 import { useDiscardDraft } from "@/features/drafts/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useMyGroupRole } from "@/features/group/roles"
@@ -38,7 +45,7 @@ import {
   type InboxEntry,
   type InboxReason,
 } from "@/features/inbox/api"
-import { useInbox, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
+import { useInbox, useInboxChecks, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
 import { reviewRefusal } from "@/features/inbox/reviewRefusal"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -68,9 +75,9 @@ type TFn = ReturnType<typeof useTranslation>["t"]
 // each record once; the tabs filter by reason on the server too, so their
 // counts stay right on every page.
 //
-// Missing details (no location, no tags) are not unfinished work, so they
-// stay out of the list and its count. The section under the list links to
-// the item filters that show them.
+// Missing details (no location, photo, purchase price or date, no tags) are
+// not unfinished work, so they stay out of the list and its count. The
+// section under the list links to the item filters that show them.
 export function InboxPage() {
   const { t } = useTranslation(["inbox", "common"])
   const { currentGroup } = useCurrentGroup()
@@ -450,28 +457,30 @@ function ItemRow({ entry, slug, canWrite }: RowProps) {
   )
 }
 
-// Optional checks on item details. An unknown location or a missing tag is
-// not unfinished work, so these open the items list with the matching
-// filter instead of adding to the inbox.
+// The checks this client shows, in display order, with their icon and label.
+// A check a newer server added is left out.
+const MISSING_CHECKS: { key: string; icon: LucideIcon; label: (t: TFn) => string }[] = [
+  { key: "no_location", icon: MapPinOff, label: (t) => t("inbox:missing.noLocation") },
+  { key: "no_photo", icon: ImageOff, label: (t) => t("inbox:missing.noPhoto") },
+  {
+    key: "no_purchase_price",
+    icon: DollarSign,
+    label: (t) => t("inbox:missing.noPurchasePrice"),
+  },
+  { key: "no_purchase_date", icon: CalendarX, label: (t) => t("inbox:missing.noPurchaseDate") },
+  { key: "untagged", icon: Tag, label: (t) => t("inbox:missing.untagged") },
+]
+
+// Optional checks on item details. A missing location, photo, price, date
+// or tag is not unfinished work, so these open the items list with the
+// matching filter instead of adding to the inbox. The server sends each
+// check's item query and the total the list reports for it, so the count
+// next to a link is the number of items the link shows.
 function MissingDetails({ slug }: { slug: string }) {
   const { t } = useTranslation(["inbox"])
+  const checks = useInboxChecks()
   if (!slug) return null
-  const links: { key: string; icon: LucideIcon; label: string; href: string }[] = [
-    {
-      key: "no-location",
-      icon: MapPinOff,
-      label: t("inbox:missing.noLocation"),
-      href: commodityListHref(slug, { unassigned: true }),
-    },
-    {
-      key: "untagged",
-      icon: Tag,
-      label: t("inbox:missing.untagged"),
-      href: commodityListHref(slug, {
-        tags: { ...DEFAULT_COMMODITY_QUERY.tags, untagged: true },
-      }),
-    },
-  ]
+  const byKey = new Map((checks.data ?? []).map((c) => [c.key, c]))
   return (
     <Card className="gap-3 py-4" data-testid="inbox-missing">
       <CardHeader className="px-4">
@@ -482,24 +491,46 @@ function MissingDetails({ slug }: { slug: string }) {
         <CardDescription>{t("inbox:missing.description")}</CardDescription>
       </CardHeader>
       <CardContent className="px-4">
-        <ul className="divide-y divide-border">
-          {links.map((l) => {
-            const Icon = l.icon
-            return (
-              <li key={l.key}>
-                <Link
-                  to={l.href}
-                  className="flex items-center gap-3 py-2 text-sm hover:text-primary"
-                  data-testid={`inbox-missing-${l.key}`}
-                >
-                  <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  <span className="flex-1">{l.label}</span>
-                  <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
+        {checks.isError ? (
+          <ListLoadError testId="inbox-missing-error" onRetry={() => void checks.refetch()} />
+        ) : (
+          <ul className="divide-y divide-border">
+            {MISSING_CHECKS.map(({ key, icon: Icon, label }) => {
+              const check = byKey.get(key)
+              const testId = `inbox-missing-${key.replaceAll("_", "-")}`
+              if (checks.isPending) {
+                return (
+                  <li key={key} className="py-2">
+                    <Skeleton className="h-5" />
+                  </li>
+                )
+              }
+              // A check the server did not send, or whose query this
+              // client would read differently, gets no link.
+              if (!check || unreadApiQueryParam(check.query) !== undefined) return null
+              return (
+                <li key={key}>
+                  <Link
+                    to={commodityListHref(slug, commodityQueryFromApiQuery(check.query))}
+                    className="flex items-center gap-3 py-2 text-sm hover:text-primary"
+                    data-testid={testId}
+                  >
+                    <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <span className="flex-1">{label(t)}</span>
+                    <Badge
+                      variant={check.count > 0 ? "secondary" : "outline"}
+                      className="tabular-nums"
+                      data-testid={`${testId}-count`}
+                    >
+                      {check.count}
+                    </Badge>
+                    <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )

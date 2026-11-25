@@ -20,6 +20,10 @@ func TestCountEachContract_Postgres(t *testing.T) {
 	registrytest.RunCountEachContract(t, newPostgresTrashEnv)
 }
 
+func TestMissingDataContract_Postgres(t *testing.T) {
+	registrytest.RunMissingDataContract(t, newPostgresTrashEnv)
+}
+
 // newPostgresTrashEnv returns registries scoped to the test group, with one
 // area to place items in.
 func newPostgresTrashEnv(t *testing.T) registrytest.TrashEnv {

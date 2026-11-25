@@ -63,15 +63,25 @@ for them.
 
 ## Missing details
 
-An item without a location or without tags is not unfinished, so it is not in
-the inbox and not in its count. The **Missing details** section under the list
-opens **All Items** with the matching filter:
+An item that lacks a detail is not unfinished, so it is not in the inbox and
+not in its count. The **Missing details** section under the list shows how
+many items lack each detail and opens **All Items** with the matching filter:
 
 - **Items without a location** turns on the **No location** filter.
+- **Items without a photo**, **Items without a purchase price**, and **Items
+  without a purchase date** turn on the matching choice of the **Missing**
+  filter.
 - **Items without tags** shows the untagged items.
 
-You can [save either list as a view](../items/#saved-views) to keep it one
-click away.
+The counts cover the items that **All Items** shows by default: items in use
+that are not marked as draft. Items marked as draft are in the inbox list
+instead. An unknown purchase price or date counts as missing even after you
+reviewed the item with it unknown: reviewing says the item is done, and these
+lists stay available for the details you may still want to fill in. A price of
+0 is a price.
+
+You can [save any of these lists as a view](../items/#saved-views) to keep it
+one click away.
 
 ## Who can do what
 

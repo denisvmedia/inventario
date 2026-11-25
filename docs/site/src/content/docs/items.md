@@ -497,6 +497,11 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.
 - **No location** — show only items not placed in any area.
+- **Missing** — show items without a photo, without a purchase price, or
+  without a purchase date. Pick more than one to find items that lack all of
+  them. An unknown price or date counts as missing even after the item was
+  reviewed; a price of 0 is a price. The [inbox](../inbox/#missing-details)
+  links these lists with their counts.
 - **Sort by** — **Name**, **Date added**, **Purchase date**, **Current value**,
   **Original price**, or **Quantity**. Items with an unknown date or price
   come last in either direction.

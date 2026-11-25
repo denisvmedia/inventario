@@ -112,6 +112,21 @@ export function QueryConditions({
   if (query.tags.untagged) {
     chips.push({ key: "untagged", label: t("commodities:savedViews.conditions.untagged") })
   }
+  if (query.noPhoto) {
+    chips.push({ key: "noPhoto", label: t("commodities:filter.missingOptions.noPhoto") })
+  }
+  if (query.noPurchasePrice) {
+    chips.push({
+      key: "noPurchasePrice",
+      label: t("commodities:filter.missingOptions.noPurchasePrice"),
+    })
+  }
+  if (query.noPurchaseDate) {
+    chips.push({
+      key: "noPurchaseDate",
+      label: t("commodities:filter.missingOptions.noPurchaseDate"),
+    })
+  }
   if (query.includeInactive) {
     chips.push({ key: "inactive", label: t("commodities:savedViews.conditions.inactive") })
   }

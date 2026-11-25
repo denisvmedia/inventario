@@ -4084,6 +4084,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Only items with no tags; cannot be combined with tags or tags_exclude */
                     no_tags?: boolean;
+                    /** @description Only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Only items whose purchase price is unknown; a known zero is a price */
+                    no_purchase_price?: boolean;
+                    /** @description Only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Include drafts and non-in_use commodities (default true; false hides them) */
                     include_inactive?: boolean;
                     /** @description Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending */
@@ -4626,6 +4632,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Validated as for GET /commodities, then set aside for the counts */
                     no_tags?: boolean;
+                    /** @description Only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Only items whose purchase price is unknown */
+                    no_purchase_price?: boolean;
+                    /** @description Only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Accepted and ignored */
                     sort?: string;
                 };
@@ -7869,6 +7881,56 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/inbox/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the inbox's quality checks
+         * @description The items of the group that lack one piece of information: no location, no
+         *     photo, an unknown purchase price, an unknown purchase date, no tags. Missing
+         *     information is not unfinished work, so these items are not in the inbox and
+         *     its counts do not include them. Each check carries its item query in the
+         *     parameter names of GET /g/{groupSlug}/commodities and the total that list
+         *     reports for it. The queries use the list's default view: items in use that
+         *     are not marked as draft. An unknown value counts as missing whether or not
+         *     the item was reviewed with it; a known zero price is a price. Every member of
+         *     the group can read it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxChecksResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/inbox/count": {
         parameters: {
             query?: never;
@@ -9989,6 +10051,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Commodities only: only items with no tags; cannot be combined with tags or tags_exclude */
                     no_tags?: boolean;
+                    /** @description Commodities only: only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Commodities only: only items whose purchase price is unknown */
+                    no_purchase_price?: boolean;
+                    /** @description Commodities only: only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
                     status?: string[];
                     /** @description Commodities only: filter by exact area ID */
@@ -15669,6 +15737,20 @@ export type components = {
              * @enum {string}
              */
             type?: "exports";
+        };
+        "jsonapi.InboxCheck": {
+            /** @example 4 */
+            count?: number;
+            /**
+             * @example no_photo
+             * @enum {string}
+             */
+            key?: "no_location" | "no_photo" | "no_purchase_price" | "no_purchase_date" | "untagged";
+            /** @example include_inactive=false&no_photo=true */
+            query?: string;
+        };
+        "jsonapi.InboxChecksResponse": {
+            data?: components["schemas"]["jsonapi.InboxCheck"][];
         };
         "jsonapi.InboxCountResponse": {
             data?: components["schemas"]["jsonapi.InboxCounts"];

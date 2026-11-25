@@ -11,6 +11,7 @@ import type { Schema } from "@/types"
 type InboxEnvelope = Schema<"jsonapi.InboxResponse">
 type InboxCountEnvelope = Schema<"jsonapi.InboxCountResponse">
 type InboxCountsView = Schema<"jsonapi.InboxCounts">
+type InboxChecksEnvelope = Schema<"jsonapi.InboxChecksResponse">
 
 // The reasons this client knows how to show and act on, in display order.
 // An entry can carry a reason a newer server added; the page shows it
@@ -85,6 +86,25 @@ export async function listInbox(
 export async function getInboxCount(signal?: AbortSignal): Promise<InboxCounts> {
   const body = await http.get<InboxCountEnvelope>("/inbox/count", { signal })
   return toCounts(body.data)
+}
+
+// An optional quality check next to the inbox: the items that lack one
+// piece of information. It is not part of the inbox or its counts. query is
+// the check's item query in the API's parameter names; count is the total
+// the items list reports for it.
+export interface InboxCheck {
+  key: string
+  query: string
+  count: number
+}
+
+export async function getInboxChecks(signal?: AbortSignal): Promise<InboxCheck[]> {
+  const body = await http.get<InboxChecksEnvelope>("/inbox/checks", { signal })
+  return (body.data ?? []).map((c) => ({
+    key: c.key ?? "",
+    query: c.query ?? "",
+    count: c.count ?? 0,
+  }))
 }
 
 // setCommodityDraft marks an item as draft or clears the mark, keeping the

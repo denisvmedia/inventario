@@ -12,8 +12,11 @@
   "markReviewed": "Mark as reviewed",
   "markReviewedLabel": "Mark as reviewed: {{title}}",
   "missing": {
-    "description": "Optional checks. An unknown detail does not make an item unfinished, so these lists stay out of the inbox and its count.",
+    "description": "Optional checks. A missing detail does not make an item unfinished, so these lists stay out of the inbox and its count. An unknown price or date counts as missing even after review.",
     "noLocation": "Items without a location",
+    "noPhoto": "Items without a photo",
+    "noPurchaseDate": "Items without a purchase date",
+    "noPurchasePrice": "Items without a purchase price",
     "title": "Missing details",
     "untagged": "Items without tags"
   },
