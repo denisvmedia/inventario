@@ -423,6 +423,14 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		}
 
 		now := time.Now()
+		// The document another system delivered for the draft (#2809)
+		// points at the item from now on.
+		documents := fmt.Sprintf(`
+			UPDATE %s SET commodity_id = $1, updated_at = $2
+			WHERE group_id = $3 AND draft_id = $4`, r.tableNames.IntakeDocuments())
+		if _, err := tx.ExecContext(ctx, documents, commodity.ID, now.UTC(), r.groupID, draft.ID); err != nil {
+			return errxtrace.Wrap("failed to record the item on the delivered document", err)
+		}
 		markPromoted := fmt.Sprintf(`
 			UPDATE %s SET status = $1, promoted_commodity_id = $2, promoted_at = $3, promotion_key = $4,
 				form_values = '{}'::jsonb, revision = revision + 1, updated_at = $3

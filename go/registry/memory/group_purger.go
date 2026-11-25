@@ -46,6 +46,14 @@ type GroupPurger struct {
 	// itemTypes is set by SetItemTypeFactory. The purge drops a group's
 	// types without the delete rules, which would keep the last one.
 	itemTypes *ItemTypeRegistryFactory
+	// intakeDocuments is set by SetIntakeDocumentFactory.
+	intakeDocuments registry.IntakeDocumentRegistryFactory
+}
+
+// SetIntakeDocumentFactory attaches the delivered documents (#2809) the
+// purge drops with the group.
+func (r *GroupPurger) SetIntakeDocumentFactory(docs registry.IntakeDocumentRegistryFactory) {
+	r.intakeDocuments = docs
 }
 
 // SetItemTypeFactory attaches the item types the purge drops with the
@@ -212,6 +220,14 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// candidates and file links with it.
 		{"intake_sessions", func() error {
 			reg := r.intake.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Delivered documents (#2809).
+		{"intake_documents", func() error {
+			if r.intakeDocuments == nil {
+				return nil
+			}
+			reg := r.intakeDocuments.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Currency-migration audit rows (#2095) dropped before the migration

@@ -6791,6 +6791,150 @@
                 }
             }
         },
+        "/g/{groupSlug}/intake": {
+            "post": {
+                "description": "Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.\nThe fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part \"file\" carries the document.\nNo AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.\nsource_system, source_instance and document_id identify the document in the group.\nDelivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.\nDelivering it with other values is refused with 409 intake.document_changed and changes nothing.",
+                "consumes": [
+                    "application/json",
+                    "application/x-www-form-urlencoded",
+                    "multipart/form-data"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "Deliver a document from another system",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The delivered document",
+                        "name": "request",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeDeliveryRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "The document was delivered before; nothing was made",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeDocumentResponse"
+                        }
+                    },
+                    "201": {
+                        "description": "The document was delivered and its draft made",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeDocumentResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "No API token, a read-only token, a token for another group, or a role that cannot edit items",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "intake.document_changed: the document was delivered before with other values",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "413": {
+                        "description": "The file or the fields are too large",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "415": {
+                        "description": "Unsupported Media Type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "A field is missing, unknown or malformed",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "423": {
+                        "description": "A currency migration is running in the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "429": {
+                        "description": "Too Many Requests",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/intake/documents": {
+            "get": {
+                "description": "Lists the documents other systems delivered (#2809) whose draft is one of draft_id or whose item is one of commodity_id. Both take a comma-separated list of ids; at least one is required.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "intake"
+                ],
+                "summary": "List delivered documents",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Draft ids, comma-separated",
+                        "name": "draft_id",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ids, comma-separated",
+                        "name": "commodity_id",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.IntakeDocumentsResponse"
+                        }
+                    },
+                    "422": {
+                        "description": "Neither draft_id nor commodity_id is given",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/intake/limits": {
             "get": {
                 "description": "The limits of a new intake batch and how full the group's scan queue is.\nenabled is false when no AI scan provider is configured.",
@@ -16099,6 +16243,14 @@
                         "draft"
                     ]
                 },
+                "source": {
+                    "description": "Source is the other system a draft came from (#2809); absent for a\ndraft made in the app and for other kinds.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.InboxSource"
+                        }
+                    ]
+                },
                 "title": {
                     "type": "string",
                     "example": "Cordless drill"
@@ -16154,6 +16306,21 @@
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.InboxMeta"
+                }
+            }
+        },
+        "jsonapi.InboxSource": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "description": "Name is how the system is shown, e.g. \"Paperless-ngx\".",
+                    "type": "string",
+                    "example": "Paperless-ngx"
+                },
+                "url": {
+                    "description": "URL links to the document in that system; empty when it sent none.",
+                    "type": "string",
+                    "example": "https://paperless.example.com/documents/117/"
                 }
             }
         },
@@ -16222,6 +16389,179 @@
                         "intake_candidates"
                     ],
                     "example": "intake_candidates"
+                }
+            }
+        },
+        "jsonapi.IntakeDeliveryRequest": {
+            "type": "object",
+            "required": [
+                "document_id",
+                "source_system",
+                "title"
+            ],
+            "properties": {
+                "amount": {
+                    "type": "string",
+                    "example": "129.90"
+                },
+                "currency": {
+                    "type": "string",
+                    "example": "EUR"
+                },
+                "document_id": {
+                    "description": "DocumentID is the document's id in the other system.",
+                    "type": "string",
+                    "example": "117"
+                },
+                "purchase_date": {
+                    "type": "string",
+                    "example": "2024-03-14"
+                },
+                "seller": {
+                    "description": "Seller, PurchaseDate (YYYY-MM-DD), Amount and Currency are the\npurchase data the other system knows. Each is optional; what is left\nout stays unknown. Amount may start with a currency code (\"EUR12.30\").",
+                    "type": "string",
+                    "example": "Hardware Store"
+                },
+                "source_instance": {
+                    "description": "SourceInstance tells installations of one system apart. Optional.",
+                    "type": "string",
+                    "example": "home"
+                },
+                "source_name": {
+                    "description": "SourceName is how the other system is shown. Optional.",
+                    "type": "string",
+                    "example": "Paperless-ngx"
+                },
+                "source_system": {
+                    "description": "SourceSystem names the other system; with SourceInstance and\nDocumentID it identifies the document in the group.",
+                    "type": "string",
+                    "example": "paperless-ngx"
+                },
+                "source_url": {
+                    "description": "SourceURL links to the document there: absolute http or https. It is\nstored and shown, never fetched.",
+                    "type": "string",
+                    "example": "https://paperless.example.com/documents/117/"
+                },
+                "title": {
+                    "description": "Title becomes the draft's name.",
+                    "type": "string",
+                    "example": "Invoice 2024-117"
+                }
+            }
+        },
+        "jsonapi.IntakeDocumentResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.IntakeDocumentResponseData"
+                }
+            }
+        },
+        "jsonapi.IntakeDocumentResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.IntakeDocumentView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "intake_documents"
+                    ],
+                    "example": "intake_documents"
+                }
+            }
+        },
+        "jsonapi.IntakeDocumentView": {
+            "type": "object",
+            "properties": {
+                "commodity_id": {
+                    "type": "string",
+                    "x-nullable": "true"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "draft_id": {
+                    "type": "string",
+                    "x-nullable": "true"
+                },
+                "external_document_id": {
+                    "type": "string"
+                },
+                "external_instance": {
+                    "type": "string"
+                },
+                "external_system": {
+                    "type": "string"
+                },
+                "file_id": {
+                    "description": "FileID is the delivered file, stored as a file of the group.",
+                    "type": "string",
+                    "x-nullable": "true"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "session_id": {
+                    "description": "SessionID is the intake session that carried the delivery. The\nsession can be deleted, so there is no foreign key.",
+                    "type": "string",
+                    "x-nullable": "true"
+                },
+                "source_name": {
+                    "description": "SourceName is how the other system is shown, e.g. \"Paperless-ngx\".",
+                    "type": "string"
+                },
+                "source_url": {
+                    "description": "SourceURL links to the document in the other system. It is stored and\nshown, never fetched.",
+                    "type": "string"
+                },
+                "state": {
+                    "enum": [
+                        "pending",
+                        "draft",
+                        "item",
+                        "removed"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeDocumentState"
+                        }
+                    ],
+                    "example": "draft"
+                },
+                "updated_at": {
+                    "type": "string"
+                },
+                "uuid": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.IntakeDocumentsMeta": {
+            "type": "object",
+            "properties": {
+                "documents": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 1
+                }
+            }
+        },
+        "jsonapi.IntakeDocumentsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.IntakeDocumentResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.IntakeDocumentsMeta"
                 }
             }
         },
@@ -19891,6 +20231,21 @@
                 "IntakeCandidateCreated",
                 "IntakeCandidateSkipped",
                 "IntakeCandidateFailed"
+            ]
+        },
+        "models.IntakeDocumentState": {
+            "type": "string",
+            "enum": [
+                "pending",
+                "draft",
+                "item",
+                "removed"
+            ],
+            "x-enum-varnames": [
+                "IntakeDocumentPending",
+                "IntakeDocumentDraft",
+                "IntakeDocumentItem",
+                "IntakeDocumentRemoved"
             ]
         },
         "models.IntakeFieldGuess": {

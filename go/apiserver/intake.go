@@ -47,6 +47,7 @@ func Intake(params Params) func(r chi.Router) {
 	}
 	return func(r chi.Router) {
 		r.Get("/limits", api.limits)
+		r.Get("/documents", api.documents)
 		r.Get("/sessions", api.list)
 		r.Post("/sessions", api.create)
 		r.Route("/sessions/{sessionID}", func(r chi.Router) {
@@ -76,6 +77,8 @@ func renderIntakeError(w http.ResponseWriter, r *http.Request, err error) {
 		_ = codedConflictError(w, r, err, IntakeSourceHasDraftsCode, nil)
 	case errors.Is(err, registry.ErrIntakeCandidateFinished):
 		_ = codedConflictError(w, r, err, IntakeCandidateFinishedCode, nil)
+	case errors.Is(err, services.ErrIntakeSourceDelivered):
+		_ = codedConflictError(w, r, err, IntakeSourceDeliveredCode, nil)
 	default:
 		if _, ok := errors.AsType[validation.Errors](err); ok {
 			_ = unprocessableEntityError(w, r, err)

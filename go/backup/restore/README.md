@@ -83,7 +83,7 @@ Background worker that manages restore processing:
 - Configurable poll interval (default: 10 seconds) and max-concurrency (default: 1)
 
 #### `.inb` Schemas (`types/types_inb.go`)
-Decoded counterparts to the export-side `.inb` documents (kept in sync with `backup/export/inb_types.go`): `INBLocationDoc`, `INBLocation`, `INBArea`, `INBCommodity`, `INBFileRef`, `INBUnassignedDoc`, `INBDraftsDoc`, `INBDraft`, `INBFilesDoc`, `INBEntityFileRef`, `INBFileLink`, plus the member-name constants `INBManifestMember`, `INBUnassignedMember`, `INBDraftsMember`, `INBFilesMember`.
+Decoded counterparts to the export-side `.inb` documents (kept in sync with `backup/export/inb_types.go`): `INBLocationDoc`, `INBLocation`, `INBArea`, `INBCommodity`, `INBFileRef`, `INBUnassignedDoc`, `INBDraftsDoc`, `INBDraft`, `INBIntakeDocumentsDoc`, `INBIntakeDocument`, `INBFilesDoc`, `INBEntityFileRef`, `INBFileLink`, plus the member-name constants `INBManifestMember`, `INBUnassignedMember`, `INBDraftsMember`, `INBIntakeDocumentsMember`, `INBFilesMember`.
 
 #### Restore Types (`types/types.go`)
 - **RestoreOptions**: `Strategy`, `IncludeFileData`, `DryRun`
@@ -104,7 +104,7 @@ types.RestoreStrategyFullReplace // "full_replace"
 
 1. `DeleteLocationRecursive` per location — cascades areas, their commodities, and the files of that subtree.
 2. `DeleteCommodityRecursive` per **surviving** commodity. Commodities are enumerated directly because `commodity.area_id` is nullable since #1986: an area-less commodity is unreachable through the location → area recursion, so before #2236 its row survived the wipe while the file sweep still deleted its attachments — a zombie item with no files, whose preserved UUID then collided with the archive's own copy on re-create.
-3. The group's drafts, in every state, with their file links. The archive's open drafts take their place: `files/_drafts.json` recreates them and `files/_index.json` links their files to them again.
+3. The group's drafts, in every state, with their file links. The archive's open drafts take their place: `files/_drafts.json` recreates them and `files/_index.json` links their files to them again. The group's intake sessions and its record of delivered documents go too; `files/_intake_documents.json` brings back the archive's record.
 4. A type-agnostic sweep of the remaining file rows + blobs, catching standalone files and any orphan.
 
 Files with `linked_entity_type = "export"` are skipped by the sweep: that is the archive being restored, plus the backup history — not user inventory.
@@ -128,6 +128,10 @@ types.RestoreStrategyMergeUpdate // "merge_update"
 ### Drafts
 
 `files/_drafts.json` (format 3.5) holds the group's open drafts of new items. The walker recreates each one with new ids and the archived revision and timestamps (through `registry.WithRestoredDraft`). Its `area_id` and `seller_id` values carry UUIDs and are mapped to the restored area and seller; one that maps to nothing is left out. Its `type` is mapped onto the group's item types as an item's is: the same slug, the type with the archived name, or a type the restore creates; a kept draft creates no type. Its tags are created in the group if missing, as for an item. In a merge, a draft whose client key the group already has is kept as it is, and the restore log gets a skipped step for it that says whether the group's draft is open, already an item, or being discarded. A draft that fails to restore is a counted error. A link to a draft the walker did not recreate (kept, failed, or not in the archive) is left out without an error, and a file that only such drafts use is restored as a standalone file.
+
+### Delivered documents
+
+`files/_intake_documents.json` (format 3.6) holds the group's record of the documents other systems delivered through the intake endpoint (#2809). The walker recreates each one with new ids and the archived payload hash and timestamps. Its draft and item are mapped to the ones the restore made; a document whose draft was made but which the restore brings back neither as a draft nor as an item gets an empty draft id, so a repeat of the delivery after the restore still makes no draft. In a merge, a document whose identity the group already has is kept as it is. A restore from an archive without the member, as from an older backup, recreates no record, and a full replace then leaves the group without one.
 
 ## Data Flow
 

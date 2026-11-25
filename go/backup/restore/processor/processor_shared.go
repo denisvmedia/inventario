@@ -484,6 +484,9 @@ func (l *RestoreOperationProcessor) clearExistingData(ctx context.Context) error
 	if err := l.clearIntake(ctx); err != nil {
 		return err
 	}
+	if err := l.clearIntakeDocuments(ctx); err != nil {
+		return err
+	}
 
 	files, err := fileReg.List(ctx)
 	if err != nil {
@@ -527,6 +530,28 @@ func (l *RestoreOperationProcessor) clearDrafts(ctx context.Context, fileReg reg
 		}
 		if err := draftReg.Delete(ctx, draft.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
 			return errxtrace.Wrap("failed to delete draft", err, errx.Attrs("draft_id", draft.ID))
+		}
+	}
+	return nil
+}
+
+// clearIntakeDocuments deletes the record of the documents other systems
+// delivered to the group (#2809). The archive brings back its own.
+func (l *RestoreOperationProcessor) clearIntakeDocuments(ctx context.Context) error {
+	if l.factorySet.IntakeDocumentRegistryFactory == nil {
+		return nil
+	}
+	reg, err := l.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create user intake document registry for clear", err)
+	}
+	docs, err := reg.List(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list intake documents for deletion", err)
+	}
+	for _, doc := range docs {
+		if err := reg.Delete(ctx, doc.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete intake document", err, errx.Attrs("intake_document_id", doc.ID))
 		}
 	}
 	return nil

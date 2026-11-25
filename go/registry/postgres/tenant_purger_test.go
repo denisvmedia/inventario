@@ -83,6 +83,10 @@ func seedTenantWithDependents(c *qt.C, ctx context.Context, fs *registry.Factory
 		models.IntakeSession{ClientKey: "intake-" + slug, Origin: models.IntakeOriginUpload},
 		[]registry.IntakeSourceInput{{FileIDs: []string{fileID}}}, 0)
 	c.Assert(err, qt.IsNil)
+	_, _, err = userSet.IntakeDocumentRegistry.CreateOrGet(userCtx, models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: slug, PayloadHash: "h",
+	})
+	c.Assert(err, qt.IsNil)
 
 	// Tenant-only auth rows.
 	_, err = svc.RefreshTokenRegistry.Create(ctx, models.RefreshToken{
@@ -149,7 +153,7 @@ func TestTenantPurger_Postgres_PurgesAllTenantDependents(t *testing.T) {
 	// Every dependent table is empty for tenant A.
 	for _, table := range []string{
 		"locations", "areas", "commodities", "files", "tags", "commodity_drafts",
-		"intake_sessions", "intake_sources", "location_groups", "users",
+		"intake_sessions", "intake_sources", "intake_documents", "location_groups", "users",
 		"refresh_tokens", "login_events",
 	} {
 		c.Assert(countRowsForTenant(c, dbx, table, a.tenantID), qt.Equals, 0,
@@ -166,7 +170,7 @@ func TestTenantPurger_Postgres_PurgesAllTenantDependents(t *testing.T) {
 	// Tenant B is untouched — same table set still carries its rows.
 	for _, table := range []string{
 		"locations", "areas", "commodities", "files", "tags", "commodity_drafts",
-		"intake_sessions", "intake_sources", "location_groups", "users",
+		"intake_sessions", "intake_sources", "intake_documents", "location_groups", "users",
 		"refresh_tokens", "login_events",
 	} {
 		c.Assert(countRowsForTenant(c, dbx, table, b.tenantID) > 0, qt.IsTrue,

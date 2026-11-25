@@ -4,6 +4,7 @@ package export
 
 import (
 	"archive/tar"
+	"cmp"
 	"context"
 	"fmt"
 	"maps"
@@ -77,6 +78,10 @@ type inbBuilder struct {
 	// first, and draftUUIDByDBID resolves a file link to one of them.
 	drafts          []*models.CommodityDraft
 	draftUUIDByDBID map[string]string
+	// intakeDocuments are the documents other systems delivered, in a
+	// whole-group export; commodityUUIDByDBID resolves the items they name.
+	intakeDocuments     []*models.IntakeDocument
+	commodityUUIDByDBID map[string]string
 	// itemTypes are the group's item types in list order; usedItemTypes
 	// collects the slugs the planned items have.
 	itemTypes     []*models.ItemType
@@ -165,6 +170,13 @@ type plannedUnassigned struct {
 // is written. present is false when no draft is in scope, so the member is
 // omitted.
 type plannedDrafts struct {
+	present bool
+	data    []byte
+}
+
+// plannedIntakeDocuments is the plan for the delivered documents member, as
+// plannedDrafts is for the drafts.
+type plannedIntakeDocuments struct {
 	present bool
 	data    []byte
 }
@@ -299,7 +311,9 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		return err
 	}
 	b.commoditiesByAreaID = make(map[string][]*models.Commodity, len(commodities))
+	b.commodityUUIDByDBID = make(map[string]string, len(commodities))
 	for _, com := range commodities {
+		b.commodityUUIDByDBID[com.ID] = com.UUID
 		// Area is optional (issue #1986): only index commodities that have an
 		// area under it; collect the area-less ones for the unassigned member.
 		if com.AreaID != nil && *com.AreaID != "" {
@@ -314,6 +328,10 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 	}
 
 	if err := b.loadItemTypes(); err != nil {
+		return err
+	}
+
+	if err := b.loadIntakeDocuments(scope); err != nil {
 		return err
 	}
 
@@ -415,6 +433,67 @@ func (b *inbBuilder) planDrafts() (plannedDrafts, error) {
 			errx.Attrs("member", INBDraftsName, "size", len(data), "max", limit, "drafts", len(doc.Drafts)))
 	}
 	return plannedDrafts{present: true, data: data}, nil
+}
+
+// loadIntakeDocuments lists the documents other systems delivered to the
+// group. Like the drafts, only a whole-group export carries them.
+func (b *inbBuilder) loadIntakeDocuments(scope *inbScope) error {
+	if !scope.wholeClass || b.svc.factorySet.IntakeDocumentRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create intake document registry", err)
+	}
+	docs, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list intake documents", err)
+	}
+	slices.SortFunc(docs, func(x, y *models.IntakeDocument) int {
+		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
+	})
+	b.intakeDocuments = docs
+	return nil
+}
+
+// planIntakeDocuments builds the delivered documents member. The draft and
+// the item a document names are written as their UUIDs, and left out when
+// the archive does not carry them.
+func (b *inbBuilder) planIntakeDocuments() (plannedIntakeDocuments, error) {
+	if len(b.intakeDocuments) == 0 {
+		return plannedIntakeDocuments{}, nil
+	}
+	doc := INBIntakeDocumentsDoc{Documents: make([]INBIntakeDocument, 0, len(b.intakeDocuments))}
+	for _, d := range b.intakeDocuments {
+		entry := INBIntakeDocument{
+			ID:                 d.UUID,
+			ExternalSystem:     d.ExternalSystem,
+			ExternalInstance:   d.ExternalInstance,
+			ExternalDocumentID: d.ExternalDocumentID,
+			SourceName:         d.SourceName,
+			SourceURL:          d.SourceURL,
+			PayloadHash:        d.PayloadHash,
+			DraftMade:          d.DraftID != nil,
+			CreatedAt:          d.CreatedAt.UTC().Format(time.RFC3339),
+			UpdatedAt:          d.UpdatedAt.UTC().Format(time.RFC3339),
+		}
+		if d.DraftID != nil {
+			entry.DraftID = b.draftUUIDByDBID[*d.DraftID]
+		}
+		if d.CommodityID != nil {
+			entry.CommodityID = b.commodityUUIDByDBID[*d.CommodityID]
+		}
+		doc.Documents = append(doc.Documents, entry)
+	}
+	data, err := encodeJSONMember(INBIntakeDocumentsName, doc)
+	if err != nil {
+		return plannedIntakeDocuments{}, err
+	}
+	if limit := jsonDocLimit(); int64(len(data)) > limit {
+		return plannedIntakeDocuments{}, errx.Classify(ErrIntakeDocumentsTooLarge,
+			errx.Attrs("member", INBIntakeDocumentsName, "size", len(data), "max", limit, "documents", len(doc.Documents)))
+	}
+	return plannedIntakeDocuments{present: true, data: data}, nil
 }
 
 // exportDraftReference replaces the DB id in values[key] with the UUID
@@ -1209,6 +1288,7 @@ type inbPlan struct {
 	manifestLocs []INBManifestLoc
 	unassigned   plannedUnassigned
 	drafts       plannedDrafts
+	intakeDocs   plannedIntakeDocuments
 	files        plannedFiles
 	sellers      []INBSeller
 	itemTypes    []INBItemType
@@ -1244,12 +1324,17 @@ func (b *inbBuilder) run() (inbPlan, error) {
 	if err != nil {
 		return inbPlan{}, err
 	}
+	intakeDocs, err := b.planIntakeDocuments()
+	if err != nil {
+		return inbPlan{}, err
+	}
 
 	return inbPlan{
 		locations:    planned,
 		manifestLocs: manifestLocs,
 		unassigned:   unassigned,
 		drafts:       drafts,
+		intakeDocs:   intakeDocs,
 		files:        b.planFiles(scope),
 		// After every item is planned, so usedSellers is complete.
 		sellers: b.manifestSellers(scope),
@@ -1304,6 +1389,15 @@ func (b *inbBuilder) writeDrafts(pd plannedDrafts) error {
 		return nil
 	}
 	return b.writeMember(INBDraftsName, pd.data)
+}
+
+// writeIntakeDocuments writes the delivered documents member; a no-op when no
+// document is in scope.
+func (b *inbBuilder) writeIntakeDocuments(pd plannedIntakeDocuments) error {
+	if !pd.present {
+		return nil
+	}
+	return b.writeMember(INBIntakeDocumentsName, pd.data)
 }
 
 // writeFiles writes the non-commodity files member (issue #2235): its JSON

@@ -898,6 +898,21 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			CommodityScan(params.CommodityScanService, params.CommodityScanMaxBodyBytes, params.CommodityScanMaxPhotoBytes),
 		)
 
+		// Intake from another system (#2809): a webhook such as a
+		// Paperless-ngx workflow posts a document as JSON, form fields or a
+		// multipart form with the file, so the JSON:API content-type guard
+		// stays off, as for uploads. The handler takes API tokens only; the
+		// token middleware refuses a read-only token and one for another
+		// group and rate-limits per address and per token. The role gate and
+		// the currency-migration lock are the ones /intake has. Only the
+		// exact path is mounted here: /intake/limits, /intake/sessions and
+		// the other intake routes stay on the group router.
+		intakeDelivery := newIntakeDeliveryAPI(params)
+		r.With(append(groupUploadMiddlewares,
+			requireGroupNotMigrating(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration}),
+			requireGroupRoleForWrite(groupService, models.GroupRoleUser),
+		)...).Post("/g/{groupSlug}/intake", intakeDelivery.handler())
+
 		// File downloads use signed URL validation instead of JWT authentication
 		fileSigningService := services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration)
 		signedURLMiddleware := SignedURLMiddleware(

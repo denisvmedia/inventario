@@ -3053,6 +3053,12 @@ definitions:
           - intake
           type: string
         type: array
+      source:
+        allOf:
+        - $ref: '#/definitions/jsonapi.InboxSource'
+        description: |-
+          Source is the other system a draft came from (#2809); absent for a
+          draft made in the app and for other kinds.
       title:
         example: Cordless drill
         type: string
@@ -3092,6 +3098,18 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.InboxMeta'
+    type: object
+  jsonapi.InboxSource:
+    properties:
+      name:
+        description: Name is how the system is shown, e.g. "Paperless-ngx".
+        example: Paperless-ngx
+        type: string
+      url:
+        description: URL links to the document in that system; empty when it sent
+          none.
+        example: https://paperless.example.com/documents/117/
+        type: string
     type: object
   jsonapi.IntakeCandidateResponse:
     properties:
@@ -3137,6 +3155,140 @@ definitions:
         - intake_candidates
         example: intake_candidates
         type: string
+    type: object
+  jsonapi.IntakeDeliveryRequest:
+    properties:
+      amount:
+        example: "129.90"
+        type: string
+      currency:
+        example: EUR
+        type: string
+      document_id:
+        description: DocumentID is the document's id in the other system.
+        example: "117"
+        type: string
+      purchase_date:
+        example: "2024-03-14"
+        type: string
+      seller:
+        description: |-
+          Seller, PurchaseDate (YYYY-MM-DD), Amount and Currency are the
+          purchase data the other system knows. Each is optional; what is left
+          out stays unknown. Amount may start with a currency code ("EUR12.30").
+        example: Hardware Store
+        type: string
+      source_instance:
+        description: SourceInstance tells installations of one system apart. Optional.
+        example: home
+        type: string
+      source_name:
+        description: SourceName is how the other system is shown. Optional.
+        example: Paperless-ngx
+        type: string
+      source_system:
+        description: |-
+          SourceSystem names the other system; with SourceInstance and
+          DocumentID it identifies the document in the group.
+        example: paperless-ngx
+        type: string
+      source_url:
+        description: |-
+          SourceURL links to the document there: absolute http or https. It is
+          stored and shown, never fetched.
+        example: https://paperless.example.com/documents/117/
+        type: string
+      title:
+        description: Title becomes the draft's name.
+        example: Invoice 2024-117
+        type: string
+    required:
+    - document_id
+    - source_system
+    - title
+    type: object
+  jsonapi.IntakeDocumentResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.IntakeDocumentResponseData'
+    type: object
+  jsonapi.IntakeDocumentResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.IntakeDocumentView'
+      id:
+        type: string
+      type:
+        enum:
+        - intake_documents
+        example: intake_documents
+        type: string
+    type: object
+  jsonapi.IntakeDocumentView:
+    properties:
+      commodity_id:
+        type: string
+        x-nullable: "true"
+      created_at:
+        type: string
+      draft_id:
+        type: string
+        x-nullable: "true"
+      external_document_id:
+        type: string
+      external_instance:
+        type: string
+      external_system:
+        type: string
+      file_id:
+        description: FileID is the delivered file, stored as a file of the group.
+        type: string
+        x-nullable: "true"
+      id:
+        type: string
+      session_id:
+        description: |-
+          SessionID is the intake session that carried the delivery. The
+          session can be deleted, so there is no foreign key.
+        type: string
+        x-nullable: "true"
+      source_name:
+        description: SourceName is how the other system is shown, e.g. "Paperless-ngx".
+        type: string
+      source_url:
+        description: |-
+          SourceURL links to the document in the other system. It is stored and
+          shown, never fetched.
+        type: string
+      state:
+        allOf:
+        - $ref: '#/definitions/models.IntakeDocumentState'
+        enum:
+        - pending
+        - draft
+        - item
+        - removed
+        example: draft
+      updated_at:
+        type: string
+      uuid:
+        type: string
+    type: object
+  jsonapi.IntakeDocumentsMeta:
+    properties:
+      documents:
+        example: 1
+        format: int64
+        type: integer
+    type: object
+  jsonapi.IntakeDocumentsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.IntakeDocumentResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.IntakeDocumentsMeta'
     type: object
   jsonapi.IntakeDraftsMeta:
     properties:
@@ -5986,6 +6138,18 @@ definitions:
     - IntakeCandidateCreated
     - IntakeCandidateSkipped
     - IntakeCandidateFailed
+  models.IntakeDocumentState:
+    enum:
+    - pending
+    - draft
+    - item
+    - removed
+    type: string
+    x-enum-varnames:
+    - IntakeDocumentPending
+    - IntakeDocumentDraft
+    - IntakeDocumentItem
+    - IntakeDocumentRemoved
   models.IntakeFieldGuess:
     properties:
       confidence:
@@ -11633,6 +11797,112 @@ paths:
       summary: Count the inbox
       tags:
       - inbox
+  /g/{groupSlug}/intake:
+    post:
+      consumes:
+      - application/json
+      - application/x-www-form-urlencoded
+      - multipart/form-data
+      description: |-
+        Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.
+        The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document.
+        No AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.
+        source_system, source_instance and document_id identify the document in the group.
+        Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
+        Delivering it with other values is refused with 409 intake.document_changed and changes nothing.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: The delivered document
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.IntakeDeliveryRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: The document was delivered before; nothing was made
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeDocumentResponse'
+        "201":
+          description: The document was delivered and its draft made
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeDocumentResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: No API token, a read-only token, a token for another group,
+            or a role that cannot edit items
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'intake.document_changed: the document was delivered before
+            with other values'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "413":
+          description: The file or the fields are too large
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "415":
+          description: Unsupported Media Type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: A field is missing, unknown or malformed
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: A currency migration is running in the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Deliver a document from another system
+      tags:
+      - intake
+  /g/{groupSlug}/intake/documents:
+    get:
+      description: Lists the documents other systems delivered (#2809) whose draft
+        is one of draft_id or whose item is one of commodity_id. Both take a comma-separated
+        list of ids; at least one is required.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Draft ids, comma-separated
+        in: query
+        name: draft_id
+        type: string
+      - description: Item ids, comma-separated
+        in: query
+        name: commodity_id
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.IntakeDocumentsResponse'
+        "422":
+          description: Neither draft_id nor commodity_id is given
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List delivered documents
+      tags:
+      - intake
   /g/{groupSlug}/intake/limits:
     get:
       description: |-

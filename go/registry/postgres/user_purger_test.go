@@ -151,10 +151,17 @@ func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
 	linked, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(linked.Links, qt.HasLen, 1)
+	// The record of a document the user's token delivered goes with them.
+	doc, _, err := fx.set.IntakeDocumentRegistry.CreateOrGet(fx.ctx, models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: "7", PayloadHash: "h",
+	})
+	c.Assert(err, qt.IsNil)
 
 	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(context.Background(), fx.user.TenantID, fx.user.ID), qt.IsNil)
 
 	_, err = fx.factorySet.IntakeRegistryFactory.CreateServiceRegistry().Get(context.Background(), session.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fx.factorySet.IntakeDocumentRegistryFactory.CreateServiceRegistry().Get(context.Background(), doc.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	kept, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
 	c.Assert(err, qt.IsNil)

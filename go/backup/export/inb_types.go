@@ -54,7 +54,12 @@ package export
 // linked entity type "draft". A 3.4 reader restores a 3.5 archive without the
 // drafts. It counts an error for the drafts member and one for each link to a
 // draft, and leaves out a file that only drafts use.
-const INBFormatVersion = "3.5"
+//
+// 3.6 adds the documents other systems delivered to the group
+// (INBIntakeDocumentsName), so a restored group still knows them and a
+// repeated delivery makes no second draft. A 3.5 reader restores a 3.6
+// archive without them and counts an error for the member.
+const INBFormatVersion = "3.6"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -105,6 +110,14 @@ const INBFilesName = INBFilesPrefix + "_index.json"
 // are restored. Written only when a whole-group export has an open draft.
 const INBDraftsName = INBFilesPrefix + "_drafts.json"
 
+// INBIntakeDocumentsName is the inner-tar member holding the documents other
+// systems delivered to the group (#2809, format 3.6). It lives under the
+// `files/` prefix for the same reason as INBDraftsName, and is written after
+// the location, unassigned and drafts members, so the items and drafts the
+// documents name are restored before it. Written only when a whole-group
+// export has a delivered document.
+const INBIntakeDocumentsName = INBFilesPrefix + "_intake_documents.json"
+
 // INBEntityFilesPrefix / INBStandaloneFilesPrefix are the archive homes of the
 // non-commodity file BYTES (issue #2235):
 //
@@ -149,6 +162,9 @@ type INBManifest struct {
 	// DraftsFile names the drafts member (format 3.5), or "" when the
 	// archive carries no draft.
 	DraftsFile string `json:"draftsFile,omitempty"`
+	// IntakeDocumentsFile names the delivered documents member (format
+	// 3.6), or "" when the archive carries none.
+	IntakeDocumentsFile string `json:"intakeDocumentsFile,omitempty"`
 	// Sellers are the group's sellers (format 3.3): every seller in a
 	// whole-group export, and the sellers the exported items name in a
 	// selected-items export. Omitted when there is none.
@@ -347,6 +363,35 @@ type INBDraft struct {
 	Revision  int            `json:"revision"`
 	CreatedAt string         `json:"createdAt,omitempty"`
 	UpdatedAt string         `json:"updatedAt,omitempty"`
+}
+
+// INBIntakeDocumentsDoc is the document written as the INBIntakeDocumentsName
+// member.
+type INBIntakeDocumentsDoc struct {
+	Documents []INBIntakeDocument `json:"documents"`
+}
+
+// INBIntakeDocument is a document another system delivered to the group. The
+// external system, instance and document id identify it. DraftID is the UUID
+// of the draft the delivery made when the archive carries that draft, and
+// CommodityID the UUID of the item the draft became when the archive carries
+// that item. DraftMade is set once the delivery made its draft, so a restore
+// that brings back neither still knows not to make one again. The file and
+// the intake session of the delivery are not carried: sessions are not
+// backed up, and the file is a file of the draft or the item.
+type INBIntakeDocument struct {
+	ID                 string `json:"id"`
+	ExternalSystem     string `json:"externalSystem"`
+	ExternalInstance   string `json:"externalInstance,omitempty"`
+	ExternalDocumentID string `json:"externalDocumentId"`
+	SourceName         string `json:"sourceName,omitempty"`
+	SourceURL          string `json:"sourceUrl,omitempty"`
+	PayloadHash        string `json:"payloadHash"`
+	DraftMade          bool   `json:"draftMade,omitempty"`
+	DraftID            string `json:"draftId,omitempty"`
+	CommodityID        string `json:"commodityId,omitempty"`
+	CreatedAt          string `json:"createdAt,omitempty"`
+	UpdatedAt          string `json:"updatedAt,omitempty"`
 }
 
 // INBEntityFileRef is a file reference that carries its OWN polymorphic link, so

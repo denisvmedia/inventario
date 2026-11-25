@@ -29,6 +29,15 @@ type CommodityDraftRegistryFactory struct {
 	writes           *sync.Mutex
 	commodityFactory *CommodityRegistryFactory
 	fileFactory      *FileRegistryFactory
+	// intakeDocuments is set by SetIntakeDocumentFactory. A promotion
+	// records the item on the delivered document the draft came from.
+	intakeDocuments *IntakeDocumentRegistryFactory
+}
+
+// SetIntakeDocumentFactory attaches the delivered documents (#2809), whose
+// item a promotion records.
+func (f *CommodityDraftRegistryFactory) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactory) {
+	f.intakeDocuments = docs
 }
 
 // CommodityDraftRegistry is the context-aware in-memory registry of drafts.
@@ -320,6 +329,9 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 	files.moveLinks(models.FileLinkDraft, draft.ID, models.FileLinkCommodity, item.ID)
 
 	now := time.Now()
+	if r.factory.intakeDocuments != nil {
+		r.factory.intakeDocuments.promoted(draft.GroupID, draft.ID, item.ID, now.UTC())
+	}
 	draft.Status = models.CommodityDraftPromoted
 	draft.PromotedCommodityID = new(item.ID)
 	draft.PromotedAt = new(now)

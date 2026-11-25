@@ -4,7 +4,6 @@ package processor
 
 import (
 	"archive/tar"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -32,47 +31,16 @@ const maxRestoredDraftRevision = math.MaxInt32 / 2
 // each draft. It comes after the location documents, so the areas the drafts
 // name are mapped, and before the files member, which links files to them.
 func (w *inbWalker) handleDraftsMember(hdr *tar.Header, r io.Reader) error {
-	if hdr.Size < 0 || hdr.Size > maxJSONDocBytes {
-		return errx.Classify(ErrJSONDocTooLarge, errx.Attrs("member", hdr.Name, "size", hdr.Size, "max", maxJSONDocBytes))
-	}
-	data, err := io.ReadAll(io.LimitReader(r, hdr.Size))
-	if err != nil {
-		return errxtrace.Wrap("failed to read drafts member", err, errx.Attrs("member", hdr.Name))
-	}
 	var doc types.INBDraftsDoc
-	if err := json.Unmarshal(data, &doc); err != nil {
-		return errxtrace.Wrap("failed to decode drafts document", err, errx.Attrs("member", hdr.Name))
+	if err := decodeJSONMember(hdr, r, "drafts", &doc); err != nil {
+		return err
 	}
 	if w.proc.factorySet.CommodityDraftRegistryFactory == nil {
 		return nil
 	}
-
-	l := w.proc
-	l.createRestoreStep(w.ctx, draftsStep, models.RestoreStepResultInProgress, "")
-	restored, kept, failed := 0, 0, 0
-	for i := range doc.Drafts {
-		created, err := w.applyDraft(&doc.Drafts[i])
-		switch {
-		case errors.Is(err, ErrMalformedEntity):
-			l.updateRestoreStep(w.ctx, draftsStep, models.RestoreStepResultError, err.Error())
-			return err
-		case err != nil:
-			failed++
-			w.stats.ErrorCount++
-			w.stats.Errors = append(w.stats.Errors, fmt.Sprintf("failed to process draft: %v", err))
-		case created:
-			restored++
-		default:
-			kept++
-		}
-	}
-	reason := fmt.Sprintf("%d restored, %d kept as they were, %d failed", restored, kept, failed)
-	result := models.RestoreStepResultSuccess
-	if failed > 0 {
-		result = models.RestoreStepResultError
-	}
-	l.updateRestoreStep(w.ctx, draftsStep, result, reason)
-	return nil
+	return w.restoreRecords(draftsStep, "draft", len(doc.Drafts), func(i int) (bool, error) {
+		return w.applyDraft(&doc.Drafts[i])
+	})
 }
 
 // applyDraft recreates one archived draft with new ids, or keeps the group's

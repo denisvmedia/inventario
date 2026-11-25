@@ -230,8 +230,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		}
 
 		// Intake sessions (#2810) the user created, after the links to their
-		// sources. created_by_user_id is a NOT NULL FK -> users(id) with NO
-		// ACTION on the sessions, sources and candidates.
+		// sources, and the delivered documents (#2809) the user's API tokens
+		// created. created_by_user_id is a NOT NULL FK -> users(id) with NO
+		// ACTION on all four tables.
 		if err := r.purgeIntakeSessions(ctx, tx, tenantID, userID); err != nil {
 			return err
 		}
@@ -294,9 +295,10 @@ func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tx *sqlx.Tx, tena
 }
 
 // purgeIntakeSessions deletes the intake sessions the user created, with
-// their sources, candidates and the file links of the sources. The files and
-// the drafts made from the sessions stay; the drafts are the user's drafts and
-// go with purgeCommodityDrafts.
+// their sources, candidates and the file links of the sources, and the
+// documents other systems delivered through the user's API tokens. The files
+// and the drafts made from the sessions stay; the drafts are the user's drafts
+// and go with purgeCommodityDrafts.
 func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
 	sources := string(r.tableNames.IntakeSources())
 	links := fmt.Sprintf(`
@@ -312,6 +314,7 @@ func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenan
 		string(r.tableNames.IntakeCandidates()),
 		sources,
 		string(r.tableNames.IntakeSessions()),
+		string(r.tableNames.IntakeDocuments()),
 	} {
 		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", table)
 		if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {

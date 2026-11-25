@@ -55,6 +55,14 @@ type UserPurger struct {
 	files         registry.FileRegistryFactory
 	savedViews    registry.SavedViewRegistryFactory
 	itemTypes     *ItemTypeRegistryFactory
+	// intakeDocuments is set by SetIntakeDocumentFactory.
+	intakeDocuments registry.IntakeDocumentRegistryFactory
+}
+
+// SetIntakeDocumentFactory wires the delivered documents (#2809); the ones
+// the user's API tokens created leave with the account, as on postgres.
+func (r *UserPurger) SetIntakeDocumentFactory(docs registry.IntakeDocumentRegistryFactory) {
+	r.intakeDocuments = docs
 }
 
 // SetItemTypeFactory wires the item type store, whose types the user created
@@ -140,6 +148,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
 		{"commodity_drafts", func() error { return r.purgeCommodityDrafts(ctx, tenantID, userID) }},
 		{"intake_sessions", func() error { return r.purgeIntakeSessions(ctx, tenantID, userID) }},
+		{"intake_documents", func() error { return r.purgeIntakeDocuments(ctx, tenantID, userID) }},
 		// Where the user shows the views of others, then the views the user
 		// created, shared ones included: both carry a NOT NULL user column,
 		// like the postgres DELETEs.
@@ -306,6 +315,28 @@ func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tenantID, userID s
 			continue
 		}
 		if err := reg.Delete(ctx, session.ID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeIntakeDocuments deletes the delivered documents (#2809) the user's API
+// tokens created, the same rows the postgres purger removes.
+func (r *UserPurger) purgeIntakeDocuments(ctx context.Context, tenantID, userID string) error {
+	if r.intakeDocuments == nil {
+		return nil
+	}
+	reg := r.intakeDocuments.CreateServiceRegistry()
+	all, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, doc := range all {
+		if doc.TenantID != tenantID || doc.CreatedByUserID != userID {
+			continue
+		}
+		if err := reg.Delete(ctx, doc.ID); err != nil {
 			return err
 		}
 	}

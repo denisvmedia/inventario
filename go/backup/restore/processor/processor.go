@@ -474,6 +474,9 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 	case hdr.Name == types.INBDraftsMember:
 		// Drafts document (format 3.5), also under `files/`.
 		return w.handleDraftsMember(hdr, r)
+	case hdr.Name == types.INBIntakeDocumentsMember:
+		// Delivered documents (format 3.6), also under `files/`.
+		return w.handleIntakeDocumentsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
 	case hdr.Name == types.INBUnassignedMember:

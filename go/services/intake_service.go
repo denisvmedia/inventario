@@ -29,6 +29,11 @@ const (
 // the registry's sentinel, which checks the limit atomically.
 var ErrIntakeQueueFull = registry.ErrIntakeQueueFull
 
+// ErrIntakeSourceDelivered is returned when a rescan reaches a source another
+// system delivered (#2809): it carries the values that system sent, and no
+// scan runs for it.
+var ErrIntakeSourceDelivered = errx.NewSentinel("the intake source was delivered by another system")
+
 // IntakeConfig carries the limits of batch intake. The per-purchase file
 // count, the file size and the accepted types come from the scan service,
 // since every source is one scan.
@@ -679,6 +684,11 @@ func (s *IntakeService) Rescan(ctx context.Context, sessionID, sourceID string) 
 	}
 	if src.SessionID != session.ID {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "intake_source", "entity_id", sourceID))
+	}
+	if session.Origin == models.IntakeOriginExternal {
+		// Another system delivered the product with its values; there is
+		// nothing to scan.
+		return nil, errxtrace.Classify(ErrIntakeSourceDelivered, errx.Attrs("entity_id", sourceID))
 	}
 	if err := s.recordMadeDrafts(ctx, reg, session.ID, src.ID); err != nil {
 		return nil, err

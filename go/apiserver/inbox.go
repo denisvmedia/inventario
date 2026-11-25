@@ -67,6 +67,9 @@ func inboxEntries(entries []services.InboxEntry) []jsonapi.InboxEntry {
 		if e.Intake != nil {
 			entry.Intake = &jsonapi.InboxIntake{State: e.Intake.State(), Summary: *e.Intake}
 		}
+		if e.Source != nil {
+			entry.Source = &jsonapi.InboxSource{Name: e.Source.Name, URL: e.Source.URL}
+		}
 		out = append(out, entry)
 	}
 	return out

@@ -86,6 +86,29 @@ type InboxEntry struct {
 	FileCount int
 	// Intake is the progress of a batch of files; nil for other kinds.
 	Intake *models.IntakeSessionSummary
+	// Source is the other system a draft came from (#2809); nil for a draft
+	// made in the app and for other kinds. Only the entries of a page carry
+	// it.
+	Source *InboxEntrySource
+}
+
+// InboxEntrySource names the other system a draft came from and links to
+// the document there.
+type InboxEntrySource struct {
+	// Name is the display name the system sent, or its system name when it
+	// sent none.
+	Name string
+	// URL links to the document in that system; empty when none was sent.
+	URL string
+}
+
+// NewInboxEntrySource describes the source of a delivered document.
+func NewInboxEntrySource(doc *models.IntakeDocument) *InboxEntrySource {
+	name := doc.SourceName
+	if name == "" {
+		name = doc.ExternalSystem
+	}
+	return &InboxEntrySource{Name: name, URL: doc.SourceURL}
 }
 
 // InboxRef names a record a source flags and why, without the record's
@@ -363,7 +386,8 @@ func (DraftInboxSource) Collect(ctx context.Context, regSet *registry.Set) ([]In
 	}
 }
 
-// Detail fills in the file count of the drafts among entries, in one read.
+// Detail fills in the file count of the drafts among entries and the system
+// each came from, one read each.
 func (DraftInboxSource) Detail(ctx context.Context, regSet *registry.Set, entries []*InboxEntry) error {
 	var ids []string
 	for _, e := range entries {
@@ -378,9 +402,18 @@ func (DraftInboxSource) Detail(ctx context.Context, regSet *registry.Set, entrie
 	if err != nil {
 		return errxtrace.Wrap("inbox: count draft files", err)
 	}
+	docs, err := regSet.IntakeDocumentRegistry.ListByDrafts(ctx, ids...)
+	if err != nil {
+		return errxtrace.Wrap("inbox: list delivered documents", err)
+	}
+	sources := make(map[string]*InboxEntrySource, len(docs))
+	for _, doc := range docs {
+		sources[*doc.DraftID] = NewInboxEntrySource(doc)
+	}
 	for _, e := range entries {
 		if e.Kind == InboxKindDraft {
 			e.FileCount = counts[e.ID]
+			e.Source = sources[e.ID]
 		}
 	}
 	return nil
