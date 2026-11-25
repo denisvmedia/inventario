@@ -143,7 +143,7 @@ import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { fetchListRecordAt, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
+import { fetchRecordAfter, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
 import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import {
@@ -410,14 +410,16 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
   // Clears the draft mark of an item opened from the inbox, then moves to
   // the next item to review, or back to the inbox after the last one. The
-  // save takes this item out of the list and moves the one after it to its
-  // place, so the next item is the one at that place in the list as read
-  // after the save. A user who moved on while the save ran stays where they
-  // went, and a list that could not be read is not taken for one that
-  // ended: the page stays on the item.
+  // next item is read from the list after the save: the one that followed
+  // this item while the list still holds it, else the one now in this
+  // item's place (hooks/useListNavigation.ts, fetchRecordAfter). A user who
+  // moved on while the save ran stays where they went, and a list that
+  // could not be read is not taken for one that ended: the page stays on
+  // the item.
   async function markReviewedAndNext(title: string) {
     const walk = source
     const offset = nav.position === null ? null : nav.position - 1
+    const followed = nav.next?.id ?? null
     const backToList = currentContext
     const stillHere = guardLocation()
     try {
@@ -442,7 +444,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     if (!walk || offset === null) return
     let next: ListNeighbor | null
     try {
-      next = await fetchListRecordAt(queryClient, walk, offset, id)
+      next = await fetchRecordAfter(queryClient, walk, offset, { skipId: id, expected: followed })
     } catch {
       return
     }

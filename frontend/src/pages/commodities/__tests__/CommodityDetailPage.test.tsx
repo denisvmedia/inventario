@@ -1387,6 +1387,31 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     )
   })
 
+  it("opens the next item when an earlier one left the list meanwhile", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([
+      draftRow("c1", "Bike"),
+      draftRow("c2", "Lamp"),
+      draftRow("c3", "Desk"),
+    ])
+    renderReview(`/g/${SLUG}/commodities/c2?${FROM_INBOX}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 3 to review"
+      )
+    )
+    // Another member reviews the first item while this one is on screen:
+    // after the save, the next item is the only one left, before this
+    // item's old place.
+    puts.push({ id: "c1", attributes: { ...itemRow("c1", "Bike").attributes, draft: false } })
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        `/g/${SLUG}/commodities/c3?${FROM_INBOX}`
+      )
+    )
+  })
+
   it("opens the next item across a page edge", async () => {
     const user = userEvent.setup()
     const rows = Array.from({ length: 52 }, (_, i) => draftRow(`c${i + 1}`, `Item ${i + 1}`))

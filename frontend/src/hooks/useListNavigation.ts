@@ -205,31 +205,50 @@ function outsideList({
 }
 
 /**
- * The record at a 0-based offset of the list, read from the server, or null
- * when the list ends before it. A save that takes the current record out of
- * the list moves the record after it to its offset, so the record at that
- * offset read after the save is the one to go to next: a record that left
- * the list in the meantime (changed or deleted elsewhere) is not opened.
+ * The record to go to once the record at a 0-based offset has left the list,
+ * read from the server; null when there is none.
+ *
+ * `expected` is the record that followed it before it left. While the list
+ * still holds that record on the page of the offset or the page before it
+ * (records move up when earlier ones leave the list, here or elsewhere), it
+ * is the one: no record after it is skipped and none before it comes back.
+ * Otherwise it is the record now at the offset, the one the record after it
+ * moved up to; a record that left the list in the meantime is not opened.
  * `skipId`, when it still sits at the offset, is passed over.
  */
-export async function fetchListRecordAt(
+export async function fetchRecordAfter(
   queryClient: QueryClient,
   source: ListPageSource,
   offset: number,
-  skipId?: string
+  { skipId, expected }: { skipId?: string; expected?: string | null } = {}
 ): Promise<ListNeighbor | null> {
-  const read = async (at: number): Promise<ListNeighbor | null> => {
+  const pages = new Map<number, Promise<ListPage>>()
+  const readPage = (page: number): Promise<ListPage> => {
+    let read = pages.get(page)
+    if (!read) {
+      const query = source.pageQuery(page)
+      read = queryClient
+        .fetchQuery({ queryKey: query.queryKey, queryFn: query.queryFn })
+        .then(query.select)
+      pages.set(page, read)
+    }
+    return read
+  }
+  const readAt = async (at: number): Promise<ListNeighbor | null> => {
     const page = Math.floor(at / source.pageSize) + 1
-    const query = source.pageQuery(page)
-    const data = query.select(
-      await queryClient.fetchQuery({ queryKey: query.queryKey, queryFn: query.queryFn })
-    )
+    const data = await readPage(page)
     if (at >= data.total) return null
     const id = data.ids[at % source.pageSize]
     return id ? { id, page } : null
   }
-  const found = await read(offset)
-  return found && found.id === skipId ? read(offset + 1) : found
+  if (expected) {
+    const page = Math.floor(offset / source.pageSize) + 1
+    for (const p of page > 1 ? [page, page - 1] : [page]) {
+      if ((await readPage(p)).ids.includes(expected)) return { id: expected, page: p }
+    }
+  }
+  const found = await readAt(offset)
+  return found && found.id === skipId ? readAt(offset + 1) : found
 }
 
 export interface ListNavigation {
