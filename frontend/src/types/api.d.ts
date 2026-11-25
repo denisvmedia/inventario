@@ -7779,6 +7779,8 @@ export type paths = {
          * @description Search one entity type. For commodities, the query string is the item query contract shared with GET /commodities (services/commodityquery).
          *     Every filter parameter of that endpoint except `type` (taken here by the entity type) is accepted, and an unknown parameter or an unreadable value is a 400.
          *     Drafts and inactive items are included unless include_inactive=false.
+         *     Locations match on name and address and areas on name: every white-space separated term of q has to be found, ignoring case; results are sorted by name.
+         *     Tags (item and file tags) match when q is found in the label or the slug, ignoring case; results are sorted by label.
          */
         get: {
             parameters: {
@@ -7786,7 +7788,7 @@ export type paths = {
                     /** @description Search text; for commodities, white-space separated terms that must all match (see GET /commodities) */
                     q: string;
                     /** @description Entity type to search */
-                    type?: "commodities" | "files" | "areas" | "locations";
+                    type?: "commodities" | "files" | "areas" | "locations" | "tags";
                     /** @description Maximum number of results */
                     limit?: number;
                     /** @description Number of results to skip */
