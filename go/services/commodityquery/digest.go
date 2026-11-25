@@ -23,19 +23,22 @@ func Digest(ids []string) string {
 	return hex.EncodeToString(sum[:])
 }
 
-// SelectionDigest returns the Digest of the items q selects. When q selects
-// more than limit items, ok is false and there is no digest: a bulk action
-// cannot take that selection anyway.
-func SelectionDigest(ctx context.Context, set *registry.Set, q Query, limit int) (digest string, ok bool, err error) {
+// SelectionDigest returns the Digest of the items q selects, given total,
+// the number of items the list counted for q. It reads at most total+1 ids.
+// When it reads another number of ids, because items changed between the
+// count and this read, ok is false and there is no digest: a digest that
+// disagrees with the count the list shows would name a set the user did not
+// see.
+func SelectionDigest(ctx context.Context, set *registry.Set, q Query, total int) (digest string, ok bool, err error) {
 	opts, err := Resolve(ctx, set, q)
 	if err != nil {
 		return "", false, err
 	}
-	ids, err := set.CommodityRegistry.ListIDs(ctx, opts, limit+1)
+	ids, err := set.CommodityRegistry.ListIDs(ctx, opts, total+1)
 	if err != nil {
 		return "", false, errxtrace.Wrap("failed to list item ids", err)
 	}
-	if len(ids) > limit {
+	if len(ids) != total {
 		return "", false, nil
 	}
 	return Digest(ids), true, nil

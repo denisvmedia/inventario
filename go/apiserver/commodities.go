@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
 	"strings"
@@ -92,11 +93,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	covers := api.resolveCoversForList(r, regSet.FileRegistry, result.Commodities)
 
-	digest, err := listSelectionDigest(r.Context(), regSet, query, offset, result)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
-	}
+	digest := listSelectionDigest(r.Context(), regSet, query, offset, result)
 
 	resp := jsonapi.NewCommoditiesResponseWithCovers(result.Commodities, result.Total, page, perPage, covers).
 		WithMatches(result.Matches).
@@ -108,25 +105,31 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 }
 
 // listSelectionDigest returns the digest of the items a list query selects,
-// for meta.selection_digest, or "" when a bulk action could not take them.
-// When the page holds every item the query selects, the digest comes from
-// the page; otherwise from one more query that reads ids only.
-func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commodityquery.Query, offset int, result commodityquery.Page) (string, error) {
+// on every page, for a bulk action on all of them (meta.selection_digest).
+// It is empty when a bulk action cannot take the query (in Trash, no items,
+// more than services.MaxBulkQueryItems), when the ids read do not add up to
+// the total the list counted, and when reading them fails: the digest is
+// optional, so a failed lookup is logged and the page renders without it.
+func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commodityquery.Query, offset int, result commodityquery.Page) string {
 	if query.Trashed || result.Total == 0 || result.Total > services.MaxBulkQueryItems {
-		return "", nil
+		return ""
 	}
 	if offset == 0 && len(result.Commodities) == result.Total {
 		ids := make([]string, 0, len(result.Commodities))
 		for _, c := range result.Commodities {
 			ids = append(ids, c.ID)
 		}
-		return commodityquery.Digest(ids), nil
+		return commodityquery.Digest(ids)
 	}
-	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, services.MaxBulkQueryItems)
-	if err != nil || !ok {
-		return "", err
+	digest, ok, err := commodityquery.SelectionDigest(ctx, regSet, query, result.Total)
+	if err != nil {
+		slog.WarnContext(ctx, "items list: selection digest lookup failed; rendering without it", "err", err)
+		return ""
 	}
-	return digest, nil
+	if !ok {
+		return ""
+	}
+	return digest
 }
 
 // countCommodityTags counts, per tag, the items a query selects with its tag

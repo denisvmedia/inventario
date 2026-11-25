@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -95,6 +96,24 @@ func (f *bulkFixture) eventKinds(c *qt.C, id string) []models.CommodityEventKind
 		}
 	}
 	return kinds
+}
+
+// snapshot copies item with its own copies of the slices and pointers Apply
+// could change in place, so a mutation of item cannot also change the copy
+// it is compared against.
+func snapshot(item models.Commodity) models.Commodity {
+	out := item
+	out.Tags = slices.Clone(item.Tags)
+	if item.StatusDate != nil {
+		out.StatusDate = new(*item.StatusDate)
+	}
+	if item.SalePrice != nil {
+		out.SalePrice = new(*item.SalePrice)
+	}
+	if item.AreaID != nil {
+		out.AreaID = new(*item.AreaID)
+	}
+	return out
 }
 
 // byID names items by id only, as an ids selection does.
@@ -273,7 +292,7 @@ func TestCommodityPatch_Apply(t *testing.T) {
 			if tt.item != nil {
 				tt.item(&item)
 			}
-			original := item
+			original := snapshot(item)
 			got, changed := parsePatch(c, tt.patch).Apply(item)
 			c.Assert(changed, qt.Equals, tt.changed)
 			if !tt.changed {
@@ -318,10 +337,15 @@ func TestResolveBulkSelection_Query(t *testing.T) {
 	})
 
 	c.Run("the list digest of the query is the one it expects", func(c *qt.C) {
-		listed, ok, err := commodityquery.SelectionDigest(f.ctx, f.set, query, services.MaxBulkQueryItems)
+		listed, ok, err := commodityquery.SelectionDigest(f.ctx, f.set, query, 2)
 		c.Assert(err, qt.IsNil)
 		c.Assert(ok, qt.IsTrue)
 		c.Assert(listed, qt.Equals, digest)
+
+		// A count that no longer matches the ids gives no digest.
+		_, ok, err = commodityquery.SelectionDigest(f.ctx, f.set, query, 3)
+		c.Assert(err, qt.IsNil)
+		c.Assert(ok, qt.IsFalse)
 	})
 
 	c.Run("refuses when the query selects a different number", func(c *qt.C) {

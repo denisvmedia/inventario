@@ -58,16 +58,17 @@ func (r *BulkIDsRequest) Bind(_ *http.Request) error {
 // Query is a query string of the item query contract
 // (devdocs/item-query-contract.md), without pagination. ExpectedCount and
 // ExpectedDigest are the number of items the caller saw the query select
-// and the meta.selection_digest the items list returned for it. When the
-// query selects other items by the time the request runs, more, fewer or
-// the same number with one swapped, the request fails with 409 and changes
-// nothing, so an action the user confirmed never reaches items they did not
-// see.
+// and the meta.selection_digest the items list returned for it, copied
+// unchanged. When the query selects more than 500 items by the time the
+// request runs, it fails with 422 bulk.too_many; when it selects other items
+// within that limit, more, fewer or the same number with one swapped, it
+// fails with 409. Either way nothing changes, so an action the user
+// confirmed never reaches items they did not see.
 type CommodityBulkSelection struct {
 	IDs            []string `json:"ids,omitempty"`
 	Query          *string  `json:"query,omitempty" example:"status=in_use&tags=garage&include_inactive=false"`
 	ExpectedCount  *int     `json:"expected_count,omitempty" example:"37"`
-	ExpectedDigest *string  `json:"expected_digest,omitempty" example:"5d41402abc4b2a76b9719d911017c592"`
+	ExpectedDigest *string  `json:"expected_digest,omitempty" example:"1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"`
 }
 
 // validate checks the shape of the selection; resolving the query is the

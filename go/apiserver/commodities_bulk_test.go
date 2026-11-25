@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -11,8 +12,10 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
 
+	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 )
 
 // bulkItem creates a live item in the env's group.
@@ -255,13 +258,69 @@ func TestCommodityList_SelectionDigest(t *testing.T) {
 	env.bulkItem("Digest A", "digest")
 	env.bulkItem("Digest B", "digest")
 	env.bulkItem("Digest C", "digest")
+	inTrash := env.bulkItem("Digest Trashed", "digest")
+	rr := env.do(http.MethodDelete, "/commodities/"+inTrash.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("body=%s", rr.Body.String()))
 
 	whole := env.listDigest("tags=digest")
 	c.Assert(whole, qt.Not(qt.Equals), "")
 	c.Assert(env.listDigest("tags=digest&page=2&per_page=2"), qt.Equals, whole)
 	c.Assert(env.listDigest("tags=digest&sort=-name"), qt.Equals, whole)
-	c.Assert(env.listDigest("tags=nothing-has-this"), qt.Equals, "")
-	c.Assert(env.listDigest("tags=digest&trashed=true"), qt.Equals, "")
+
+	c.Run("no digest for a query without matches", func(c *qt.C) {
+		c.Assert(env.listDigest("tags=nothing-has-this"), qt.Equals, "")
+	})
+
+	// The Trash query matches an item, but bulk actions take live items
+	// only, so the list gives no digest for it.
+	c.Run("no digest for items in Trash", func(c *qt.C) {
+		rr := env.do(http.MethodGet, "/commodities?tags=digest&trashed=true", "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.meta.commodities"), float64(1))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data[0].id"), inTrash.ID)
+		c.Assert(env.listDigest("tags=digest&trashed=true"), qt.Equals, "")
+	})
+}
+
+// listIDsFails is a commodity registry whose id lookup fails, as when the
+// database drops the connection after the page was read.
+type listIDsFails struct{ registry.CommodityRegistry }
+
+func (listIDsFails) ListIDs(context.Context, registry.CommodityListOptions, int) ([]string, error) {
+	return nil, errors.New("connection lost")
+}
+
+type listIDsFailsFactory struct {
+	registry.CommodityRegistryFactory
+}
+
+func (f listIDsFailsFactory) CreateUserRegistry(ctx context.Context) (registry.CommodityRegistry, error) {
+	reg, err := f.CommodityRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return listIDsFails{reg}, nil
+}
+
+// The digest is optional: when reading the ids for it fails, the list still
+// answers with its page, without a digest.
+func TestCommodityList_DigestLookupFailureKeepsTheList(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	env.bulkItem("Lookup A", "lookup")
+	env.bulkItem("Lookup B", "lookup")
+
+	fs := *env.params.FactorySet
+	fs.CommodityRegistryFactory = listIDsFailsFactory{fs.CommodityRegistryFactory}
+	params := env.params
+	params.FactorySet = &fs
+	env.handler = apiserver.APIServer(params, &mockRestoreWorker{})
+
+	// Page 2 holds one of the two items, so the digest needs the id lookup.
+	rr := env.do(http.MethodGet, "/commodities?tags=lookup&page=2&per_page=1", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.meta.commodities"), float64(2))
+	c.Assert(rr.Body.String(), qt.Not(qt.Contains), "selection_digest")
 }
 
 func TestCommodityBulkMove_RefusesAMissingArea(t *testing.T) {

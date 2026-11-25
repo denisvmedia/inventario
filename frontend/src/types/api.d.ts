@@ -4237,6 +4237,7 @@ export type paths = {
          * @description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
          *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
          *     The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
+         *     A retry sends the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4273,7 +4274,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -4282,7 +4283,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items */
+                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4313,6 +4314,7 @@ export type paths = {
          * @description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
          *     An area_id that is not an area of the group is refused with 422 before any item changes.
          *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     A retry sends the same area_id with the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4349,7 +4351,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -4358,7 +4360,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items */
+                /** @description Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4392,16 +4394,21 @@ export type paths = {
          *     (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
          *     `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
          *     `in_use` clears the status date and note. `sold` is refused, since it needs a sale price for each item.
+         *     An item that already has the status keeps its status date and note: the patch does not change them,
+         *     even when it sends another date or note. The other parts of the patch still apply to that item.
          *     A part left out of the patch is left unchanged.
          *
          *     The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
          *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
          *     `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
-         *     GET /commodities returned for it. The query is run when the request arrives; when it selects
-         *     other items (more, fewer, or as many with one swapped) the request fails with 409 and changes
-         *     nothing. It may select at most 500 items and no items in Trash.
+         *     GET /commodities returned for it. The query is run when the request arrives and may select no items
+         *     in Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this
+         *     check comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items
+         *     within that limit (more, fewer, or as many with one swapped), the request fails with 409
+         *     bulk.selection_changed. Either way nothing changes.
          *
-         *     The response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+         *     The response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).
+         *     To retry, send the same patch again with the failed ids as `ids`, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.
          */
         post: {
             parameters: {
@@ -4438,7 +4445,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description bulk.selection_changed: the query selects other items than expected_count and expected_digest describe */
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -4447,7 +4454,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Bad request body or patch, or bulk.too_many: the query selects more than 500 items */
+                /** @description Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -6902,7 +6909,8 @@ export type paths = {
          *     `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
          *     A tag cannot be in both lists, and each list holds at most 50 tags.
          *
-         *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+         *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).
+         *     A retry sends the same patch with the failed ids, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -12411,7 +12419,7 @@ export type components = {
             area_id?: string;
             /** @example 37 */
             expected_count?: number;
-            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
             expected_digest?: string;
             ids?: string[];
             /** @example status=in_use&tags=garage&include_inactive=false */
@@ -12529,11 +12537,14 @@ export type components = {
             per_page?: number;
             /**
              * @description SelectionDigest names the set of items the query selects, on every
-             *     page (commodityquery.Digest). A bulk action on the query sends it back
-             *     as expected_digest, and is refused when the query no longer selects
-             *     exactly these items. Omitted when the query selects no items, more
-             *     than a bulk action takes (500), or items in Trash.
-             * @example 5d41402abc4b2a76b9719d911017c592
+             *     page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
+             *     bulk action on the query sends it back unchanged as expected_digest,
+             *     and is refused when the query no longer selects exactly these items.
+             *     Omitted when the query selects no items, more than a bulk action takes
+             *     (500), or items in Trash, and when the items changed while the list was
+             *     read or the lookup failed; a client then offers no bulk action on the
+             *     query.
+             * @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
              */
             selection_digest?: string;
             /**
@@ -12573,7 +12584,7 @@ export type components = {
         "jsonapi.CommodityBulkSelection": {
             /** @example 37 */
             expected_count?: number;
-            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
             expected_digest?: string;
             ids?: string[];
             /** @example status=in_use&tags=garage&include_inactive=false */
@@ -12592,7 +12603,7 @@ export type components = {
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
             expected_count?: number;
-            /** @example 5d41402abc4b2a76b9719d911017c592 */
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
             expected_digest?: string;
             ids?: string[];
             patch?: components["schemas"]["jsonapi.CommodityBulkPatch"];

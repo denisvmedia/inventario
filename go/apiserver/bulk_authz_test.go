@@ -101,6 +101,73 @@ func TestCommodityBulkUpdate_CrossGroup(t *testing.T) {
 	c.Assert([]string(got.Tags), qt.DeepEquals, []string{"owner"})
 }
 
+// bulkAuthzArea creates an area, in a location of its own, in group.
+func bulkAuthzArea(c *qt.C, env *filesAuthzEnv, group *models.LocationGroup) *models.Area {
+	c.Helper()
+	ctx := createTestUserContextWithGroup(group.CreatedBy, group.TenantID, group.ID)
+	set := must.Must(env.params.FactorySet.CreateUserRegistrySet(ctx))
+	location := must.Must(set.LocationRegistry.Create(ctx, models.Location{Name: "Home of " + group.Name}))
+	return must.Must(set.AreaRegistry.Create(ctx, models.Area{Name: "Shed", LocationID: location.ID}))
+}
+
+func TestCommodityBulkMoveAndDelete_CrossGroup(t *testing.T) {
+	c := qt.New(t)
+	env := newFilesAuthzEnv(c)
+	item := bulkAuthzItem(c, env)
+	ownerArea := bulkAuthzArea(c, env, env.ownerGroup)
+	otherArea := bulkAuthzArea(c, env, env.otherGroup)
+
+	c.Run("a move to the owner's area from the neighbour's group is refused", func(c *qt.C) {
+		rr := postBulk(c, env, env.otherGroupSlug, "/commodities/bulk-move", env.otherGroupTok, "commodities",
+			map[string]any{"ids": []string{item.ID}, "area_id": ownerArea.ID})
+		c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), qt.Contains, "area_not_found")
+	})
+
+	c.Run("a move of the owner's ids from the neighbour's group finds none", func(c *qt.C) {
+		rr := postBulk(c, env, env.otherGroupSlug, "/commodities/bulk-move", env.otherGroupTok, "commodities",
+			map[string]any{"ids": []string{item.ID}, "area_id": otherArea.ID})
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{})
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.failed[0].code"), "not_found")
+	})
+
+	c.Run("a move by query from the neighbour's group selects only its items", func(c *qt.C) {
+		rr := postBulk(c, env, env.otherGroupSlug, "/commodities/bulk-move", env.otherGroupTok, "commodities",
+			map[string]any{"query": "", "expected_count": 1, "expected_digest": "owner-digest", "area_id": otherArea.ID})
+		c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].meta.matched"), "0")
+	})
+
+	c.Run("a delete of the owner's ids from the neighbour's group finds none", func(c *qt.C) {
+		rr := postBulk(c, env, env.otherGroupSlug, "/commodities/bulk-delete", env.otherGroupTok, "commodities",
+			map[string]any{"ids": []string{item.ID}})
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.succeeded"), []any{})
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.attributes.failed[0].code"), "not_found")
+	})
+
+	c.Run("a delete by query from the neighbour's group selects only its items", func(c *qt.C) {
+		rr := postBulk(c, env, env.otherGroupSlug, "/commodities/bulk-delete", env.otherGroupTok, "commodities",
+			map[string]any{"query": "", "expected_count": 1, "expected_digest": "owner-digest"})
+		c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+		c.Check(rr.Body.String(), checkers.JSONPathEquals("$.errors[0].meta.matched"), "0")
+	})
+
+	c.Run("the owner's group refuses the neighbour", func(c *qt.C) {
+		rr := postBulk(c, env, env.ownerGroup.Slug, "/commodities/bulk-move", env.otherGroupTok, "commodities",
+			map[string]any{"ids": []string{item.ID}, "area_id": ownerArea.ID})
+		c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf("body=%s", rr.Body.String()))
+		rr = postBulk(c, env, env.ownerGroup.Slug, "/commodities/bulk-delete", env.otherGroupTok, "commodities",
+			map[string]any{"ids": []string{item.ID}})
+		c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf("body=%s", rr.Body.String()))
+	})
+
+	got := ownerItem(c, env, item.ID)
+	c.Assert(got.IsTrashed(), qt.IsFalse)
+	c.Assert(got.AreaID, qt.DeepEquals, item.AreaID)
+}
+
 func TestFileBulkUpdate_CrossGroup(t *testing.T) {
 	c := qt.New(t)
 	env := newFilesAuthzEnv(c)

@@ -30,6 +30,7 @@ import (
 // @Description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
 // @Description The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
 // @Description The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
+// @Description A retry sends the failed ids as `ids`, in batches of at most 100.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -37,8 +38,8 @@ import (
 // @Param body body jsonapi.CommodityBulkDeleteRequest true "The items to delete"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
-// @Failure 422 {object} jsonapi.Errors "Bad request body, or bulk.too_many: the query selects more than 500 items"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe"
+// @Failure 422 {object} jsonapi.Errors "Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409)"
 // @Router /g/{groupSlug}/commodities/bulk-delete [post].
 func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -65,6 +66,7 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 // @Description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
 // @Description An area_id that is not an area of the group is refused with 422 before any item changes.
 // @Description The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+// @Description A retry sends the same area_id with the failed ids as `ids`, in batches of at most 100.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -72,8 +74,8 @@ func (api *commoditiesAPI) bulkDeleteCommodities(w http.ResponseWriter, r *http.
 // @Param body body jsonapi.BulkMoveRequest true "The items and the destination area_id"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
-// @Failure 422 {object} jsonapi.Errors "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe"
+// @Failure 422 {object} jsonapi.Errors "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409)"
 // @Router /g/{groupSlug}/commodities/bulk-move [post].
 func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())
@@ -116,16 +118,21 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 // @Description (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
 // @Description `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
 // @Description `in_use` clears the status date and note. `sold` is refused, since it needs a sale price for each item.
+// @Description An item that already has the status keeps its status date and note: the patch does not change them,
+// @Description even when it sends another date or note. The other parts of the patch still apply to that item.
 // @Description A part left out of the patch is left unchanged.
 // @Description
 // @Description The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
 // @Description (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
 // @Description `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
-// @Description GET /commodities returned for it. The query is run when the request arrives; when it selects
-// @Description other items (more, fewer, or as many with one swapped) the request fails with 409 and changes
-// @Description nothing. It may select at most 500 items and no items in Trash.
+// @Description GET /commodities returned for it. The query is run when the request arrives and may select no items
+// @Description in Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this
+// @Description check comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items
+// @Description within that limit (more, fewer, or as many with one swapped), the request fails with 409
+// @Description bulk.selection_changed. Either way nothing changes.
 // @Description
-// @Description The response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+// @Description The response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).
+// @Description To retry, send the same patch again with the failed ids as `ids`, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -133,8 +140,8 @@ func (api *commoditiesAPI) bulkMoveCommodities(w http.ResponseWriter, r *http.Re
 // @Param body body jsonapi.CommodityBulkUpdateRequest true "The items and the patch"
 // @Success 200 {object} jsonapi.BulkResultResponse "Per-id outcome"
 // @Failure 400 {object} jsonapi.Errors "The query is not a valid item query, or selects items in Trash"
-// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe"
-// @Failure 422 {object} jsonapi.Errors "Bad request body or patch, or bulk.too_many: the query selects more than 500 items"
+// @Failure 409 {object} jsonapi.Errors "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe"
+// @Failure 422 {object} jsonapi.Errors "Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409)"
 // @Router /g/{groupSlug}/commodities/bulk-update [post].
 func (api *commoditiesAPI) bulkUpdateCommodities(w http.ResponseWriter, r *http.Request) {
 	regSet := RegistrySetFromContext(r.Context())

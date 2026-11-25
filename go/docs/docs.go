@@ -3279,7 +3279,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-delete": {
             "post": {
-                "description": "Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nThe response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.",
+                "description": "Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nThe response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.\nA retry sends the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3322,13 +3322,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe",
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
-                        "description": "Bad request body, or bulk.too_many: the query selects more than 500 items",
+                        "description": "Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -3338,7 +3338,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-move": {
             "post": {
-                "description": "Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.\nAn area_id that is not an area of the group is refused with 422 before any item changes.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.",
+                "description": "Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.\nAn area_id that is not an area of the group is refused with 422 before any item changes.\nThe items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.\nA retry sends the same area_id with the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3381,13 +3381,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe",
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
-                        "description": "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items",
+                        "description": "Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -3397,7 +3397,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/bulk-update": {
             "post": {
-                "description": "Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).\n\nThe patch: ` + "`" + `tags.add` + "`" + ` and ` + "`" + `tags.remove` + "`" + ` add and remove tags without touching the others\n(` + "`" + `add` + "`" + ` takes slugs or the text of a new tag, at most 50 per list); ` + "`" + `type` + "`" + ` sets the type;\n` + "`" + `status` + "`" + ` sets the status with ` + "`" + `date` + "`" + ` (required for every status but in_use) and an optional ` + "`" + `note` + "`" + `.\n` + "`" + `in_use` + "`" + ` clears the status date and note. ` + "`" + `sold` + "`" + ` is refused, since it needs a sale price for each item.\nA part left out of the patch is left unchanged.\n\nThe items are given as ` + "`" + `ids` + "`" + ` (at most 100) or as ` + "`" + `query` + "`" + `, a query string of the item query contract\n(the filter parameters of GET /commodities, without page and per_page), with ` + "`" + `expected_count` + "`" + ` and\n` + "`" + `expected_digest` + "`" + `: the number of items the caller saw it select and the ` + "`" + `meta.selection_digest` + "`" + `\nGET /commodities returned for it. The query is run when the request arrives; when it selects\nother items (more, fewer, or as many with one swapped) the request fails with 409 and changes\nnothing. It may select at most 500 items and no items in Trash.\n\nThe response lists, per item, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.",
+                "description": "Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the same history events (a status change event for a status, an updated event for tags and type).\n\nThe patch: ` + "`" + `tags.add` + "`" + ` and ` + "`" + `tags.remove` + "`" + ` add and remove tags without touching the others\n(` + "`" + `add` + "`" + ` takes slugs or the text of a new tag, at most 50 per list); ` + "`" + `type` + "`" + ` sets the type;\n` + "`" + `status` + "`" + ` sets the status with ` + "`" + `date` + "`" + ` (required for every status but in_use) and an optional ` + "`" + `note` + "`" + `.\n` + "`" + `in_use` + "`" + ` clears the status date and note. ` + "`" + `sold` + "`" + ` is refused, since it needs a sale price for each item.\nAn item that already has the status keeps its status date and note: the patch does not change them,\neven when it sends another date or note. The other parts of the patch still apply to that item.\nA part left out of the patch is left unchanged.\n\nThe items are given as ` + "`" + `ids` + "`" + ` (at most 100) or as ` + "`" + `query` + "`" + `, a query string of the item query contract\n(the filter parameters of GET /commodities, without page and per_page), with ` + "`" + `expected_count` + "`" + ` and\n` + "`" + `expected_digest` + "`" + `: the number of items the caller saw it select and the ` + "`" + `meta.selection_digest` + "`" + `\nGET /commodities returned for it. The query is run when the request arrives and may select no items\nin Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this\ncheck comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items\nwithin that limit (more, fewer, or as many with one swapped), the request fails with 409\nbulk.selection_changed. Either way nothing changes.\n\nThe response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).\nTo retry, send the same patch again with the failed ids as ` + "`" + `ids` + "`" + `, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3440,13 +3440,13 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "bulk.selection_changed: the query selects other items than expected_count and expected_digest describe",
+                        "description": "bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
                     "422": {
-                        "description": "Bad request body or patch, or bulk.too_many: the query selects more than 500 items",
+                        "description": "Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -5906,7 +5906,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/files/bulk-update": {
             "post": {
-                "description": "Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:\nunlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name\nstay on each file, and the title, description and file name stay as they are.\n` + "`" + `tags.add` + "`" + ` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; ` + "`" + `tags.remove` + "`" + ` takes slugs.\nA tag cannot be in both lists, and each list holds at most 50 tags.\n\nThe response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.",
+                "description": "Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:\nunlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name\nstay on each file, and the title, description and file name stay as they are.\n` + "`" + `tags.add` + "`" + ` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; ` + "`" + `tags.remove` + "`" + ` takes slugs.\nA tag cannot be in both lists, and each list holds at most 50 tags.\n\nThe response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).\nA retry sends the same patch with the failed ids, in batches of at most 100.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11741,7 +11741,7 @@ const docTemplate = `{
                 },
                 "expected_digest": {
                     "type": "string",
-                    "example": "5d41402abc4b2a76b9719d911017c592"
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
                 },
                 "ids": {
                     "type": "array",
@@ -11949,9 +11949,9 @@ const docTemplate = `{
                     "example": 50
                 },
                 "selection_digest": {
-                    "description": "SelectionDigest names the set of items the query selects, on every\npage (commodityquery.Digest). A bulk action on the query sends it back\nas expected_digest, and is refused when the query no longer selects\nexactly these items. Omitted when the query selects no items, more\nthan a bulk action takes (500), or items in Trash.",
+                    "description": "SelectionDigest names the set of items the query selects, on every\npage: the hex SHA-256 of their sorted ids (commodityquery.Digest). A\nbulk action on the query sends it back unchanged as expected_digest,\nand is refused when the query no longer selects exactly these items.\nOmitted when the query selects no items, more than a bulk action takes\n(500), or items in Trash, and when the items changed while the list was\nread or the lookup failed; a client then offers no bulk action on the\nquery.",
                     "type": "string",
-                    "example": "5d41402abc4b2a76b9719d911017c592"
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
                 },
                 "total_pages": {
                     "type": "integer",
@@ -12035,7 +12035,7 @@ const docTemplate = `{
                 },
                 "expected_digest": {
                     "type": "string",
-                    "example": "5d41402abc4b2a76b9719d911017c592"
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
                 },
                 "ids": {
                     "type": "array",
@@ -12080,7 +12080,7 @@ const docTemplate = `{
                 },
                 "expected_digest": {
                     "type": "string",
-                    "example": "5d41402abc4b2a76b9719d911017c592"
+                    "example": "1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5"
                 },
                 "ids": {
                     "type": "array",

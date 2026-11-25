@@ -17,7 +17,8 @@ import (
 // @Description `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
 // @Description A tag cannot be in both lists, and each list holds at most 50 tags.
 // @Description
-// @Description The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason). A retry can send the failed ids alone.
+// @Description The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).
+// @Description A retry sends the same patch with the failed ids, in batches of at most 100.
 // @Tags files
 // @Accept json-api
 // @Produce json-api
