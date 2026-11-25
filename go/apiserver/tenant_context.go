@@ -273,55 +273,62 @@ func PublicTenantMiddleware(resolver TenantResolver, tenantRegistry registry.Ten
 			// that carries no slug at all, so the domain is checked first and
 			// slug resolution stays exactly as it was. `tenants.domain` is
 			// indexed for this lookup (#1036).
-			if tenant, ok := tenantByRequestDomain(w, r, tenantRegistry); ok {
-				if tenant == nil {
-					return // the lookup failed and the response is already written
-				}
-				serveResolvedTenant(w, r, next, tenant)
-				return
+			tenant, ok := tenantByRequestDomain(w, r, tenantRegistry)
+			if !ok {
+				tenant = tenantByRequestSlug(w, r, resolver, tenantRegistry, catchAllSlug)
 			}
-
-			slug, err := resolver.ResolveTenant(r)
-			if err != nil {
-				if catchAllSlug == "" {
-					slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
-					http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
-					return
-				}
-				slog.Debug("Host did not resolve; using the catch-all tenant",
-					"host", r.Host, "catch_all", catchAllSlug, "error", err)
-				slug = catchAllSlug
-			}
-
-			var tenant *models.Tenant
-			if slug != "" {
-				tenant, err = tenantRegistry.GetBySlug(r.Context(), slug)
-				// Only a missing tenant falls through to the catch-all. A
-				// database error has to stay an error: answering it with
-				// somebody else's tenant would turn an outage into a silent
-				// mis-route.
-				if errors.Is(err, registry.ErrNotFound) && catchAllSlug != "" && slug != catchAllSlug {
-					slog.Debug("No tenant for host; using the catch-all tenant",
-						"host", r.Host, "slug", slug, "catch_all", catchAllSlug)
-					tenant, err = tenantRegistry.GetBySlug(r.Context(), catchAllSlug)
-				}
-				if err != nil {
-					http.Error(w, "Tenant not found", http.StatusNotFound)
-					return
-				}
-			} else {
-				// Single-tenant mode: use the tenant marked as default in the database.
-				tenant, err = tenantRegistry.GetDefault(r.Context())
-				if err != nil {
-					slog.Error("Failed to get default tenant", "error", err)
-					http.Error(w, "No default tenant configured", http.StatusServiceUnavailable)
-					return
-				}
+			if tenant == nil {
+				return // the lookup failed and the response is already written
 			}
 
 			serveResolvedTenant(w, r, next, tenant)
 		})
 	}
+}
+
+// tenantByRequestSlug resolves the tenant from the slug in the request host,
+// with the catch-all tenant as the fallback when one is configured, and the
+// default tenant when the host carries no slug (single-tenant mode).
+//
+// It returns nil when it has already written the error response.
+func tenantByRequestSlug(w http.ResponseWriter, r *http.Request, resolver TenantResolver, tenantRegistry registry.TenantRegistry, catchAllSlug string) *models.Tenant {
+	slug, err := resolver.ResolveTenant(r)
+	if err != nil {
+		if catchAllSlug == "" {
+			slog.Error("Tenant resolution failed", "error", err, "host", r.Host)
+			http.Error(w, "Tenant resolution failed", http.StatusServiceUnavailable)
+			return nil
+		}
+		slog.Debug("Host did not resolve; using the catch-all tenant",
+			"host", r.Host, "catch_all", catchAllSlug, "error", err)
+		slug = catchAllSlug
+	}
+
+	if slug == "" {
+		// Single-tenant mode: use the tenant marked as default in the database.
+		tenant, err := tenantRegistry.GetDefault(r.Context())
+		if err != nil {
+			slog.Error("Failed to get default tenant", "error", err)
+			http.Error(w, "No default tenant configured", http.StatusServiceUnavailable)
+			return nil
+		}
+		return tenant
+	}
+
+	tenant, err := tenantRegistry.GetBySlug(r.Context(), slug)
+	// Only a missing tenant falls through to the catch-all. A database error
+	// has to stay an error: answering it with somebody else's tenant would
+	// turn an outage into a silent mis-route.
+	if errors.Is(err, registry.ErrNotFound) && catchAllSlug != "" && slug != catchAllSlug {
+		slog.Debug("No tenant for host; using the catch-all tenant",
+			"host", r.Host, "slug", slug, "catch_all", catchAllSlug)
+		tenant, err = tenantRegistry.GetBySlug(r.Context(), catchAllSlug)
+	}
+	if err != nil {
+		http.Error(w, "Tenant not found", http.StatusNotFound)
+		return nil
+	}
+	return tenant
 }
 
 // tenantByRequestDomain looks the request host up as a tenant's custom domain.
