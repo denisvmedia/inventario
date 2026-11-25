@@ -377,6 +377,7 @@ export function CommodityEditForm({
             <EditField
               label={t("commodities:fields.purchaseDate")}
               htmlFor="edit-purchased"
+              hint={t("commodities:fields.purchaseDateHelp")}
               error={errors.purchase_date}
             >
               <Input
@@ -390,6 +391,7 @@ export function CommodityEditForm({
               <EditField
                 label={t("commodities:fields.originalPrice")}
                 htmlFor="edit-price"
+                hint={t("commodities:fields.originalPriceHelp")}
                 error={errors.original_price ?? errors.original_price_currency}
               >
                 <div className="flex gap-2">

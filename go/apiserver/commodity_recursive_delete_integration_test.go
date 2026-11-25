@@ -30,9 +30,9 @@ func TestCommodityDeleteRecursive_Integration(t *testing.T) {
 		Type:                  models.CommodityTypeElectronics,
 		Status:                models.CommodityStatusInUse,
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(100.00),
+		OriginalPrice:         new(decimal.NewFromFloat(100.00)),
 		OriginalPriceCurrency: "USD",
-		CurrentPrice:          decimal.NewFromFloat(80.00),
+		CurrentPrice:          new(decimal.NewFromFloat(80.00)),
 	}
 
 	// Get the first area to link the commodity to
@@ -171,9 +171,9 @@ func TestCommodityDeleteRecursive_NoFiles_Integration(t *testing.T) {
 		Type:                  models.CommodityTypeElectronics,
 		Status:                models.CommodityStatusInUse,
 		Count:                 1,
-		OriginalPrice:         decimal.NewFromFloat(50.00),
+		OriginalPrice:         new(decimal.NewFromFloat(50.00)),
 		OriginalPriceCurrency: "USD",
-		CurrentPrice:          decimal.NewFromFloat(40.00),
+		CurrentPrice:          new(decimal.NewFromFloat(40.00)),
 	}
 
 	// Get the first area to link the commodity to

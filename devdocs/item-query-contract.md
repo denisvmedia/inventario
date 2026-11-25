@@ -40,7 +40,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `tag_mode` | `all` (default) or `any` | `all`: every tag in `tags`; `any`: at least one. |
 | `tags_exclude` | slugs, comma-separated or repeated, at most 50 | Item carries none of these tags. |
 | `no_tags` | `true`/`false` | Item has no tags. |
-| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. |
+| `sort` | field, `-` prefix for descending | Order. Not a filter: an unknown field falls back to `name`. An unknown date or price (NULL) comes after every known one in both directions, and a known zero sorts as a value; `registrytest.RunCommoditySearchContract` holds both backends to it. |
 
 All conditions are combined with AND. Within a repeatable parameter the values are combined with OR, except `tags` with `tag_mode=all`.
 

@@ -412,19 +412,28 @@ func sqlEscape(s string) string {
 // changed across the conversion. Used to skip emitting commodity_events
 // for no-op rows (e.g. zero-priced commodities under any rate).
 func priceImagesDiffer(before, after currency.RowImage) bool {
-	if !before.OriginalPrice.Equal(after.OriginalPrice) {
+	if !models.SamePrice(before.OriginalPrice, after.OriginalPrice) {
 		return true
 	}
 	if before.OriginalPriceCurrency != after.OriginalPriceCurrency {
 		return true
 	}
-	if !before.ConvertedOriginalPrice.Equal(after.ConvertedOriginalPrice) {
+	if !models.SamePrice(before.ConvertedOriginalPrice, after.ConvertedOriginalPrice) {
 		return true
 	}
-	if !before.CurrentPrice.Equal(after.CurrentPrice) {
+	if !models.SamePrice(before.CurrentPrice, after.CurrentPrice) {
 		return true
 	}
 	return false
+}
+
+// eventPrice renders a price for an event payload: its plain text form, or
+// JSON null when it is unknown (the same shape CommodityEventService writes).
+func eventPrice(price *decimal.Decimal) any {
+	if price == nil {
+		return nil
+	}
+	return price.String()
 }
 
 // buildPriceChangedEvent returns the CommodityEvent row for one
@@ -437,16 +446,16 @@ func buildPriceChangedEvent(op *models.CurrencyMigration, diff *currency.PerRowD
 		Kind:        models.CommodityEventKindPriceChanged,
 		OccurredAt:  now,
 		Before: models.CommodityEventPayload{
-			"original_price":           diff.Before.OriginalPrice.String(),
+			"original_price":           eventPrice(diff.Before.OriginalPrice),
 			"original_price_currency":  string(diff.Before.OriginalPriceCurrency),
-			"converted_original_price": diff.Before.ConvertedOriginalPrice.String(),
-			"current_price":            diff.Before.CurrentPrice.String(),
+			"converted_original_price": eventPrice(diff.Before.ConvertedOriginalPrice),
+			"current_price":            eventPrice(diff.Before.CurrentPrice),
 		},
 		After: models.CommodityEventPayload{
-			"original_price":           diff.After.OriginalPrice.String(),
+			"original_price":           eventPrice(diff.After.OriginalPrice),
 			"original_price_currency":  string(diff.After.OriginalPriceCurrency),
-			"converted_original_price": diff.After.ConvertedOriginalPrice.String(),
-			"current_price":            diff.After.CurrentPrice.String(),
+			"converted_original_price": eventPrice(diff.After.ConvertedOriginalPrice),
+			"current_price":            eventPrice(diff.After.CurrentPrice),
 			"_source":                  "currency_migration",
 			"_migration_id":            op.ID,
 		},

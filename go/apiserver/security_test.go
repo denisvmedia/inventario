@@ -365,7 +365,7 @@ func TestSecurityServerGeneratedIDs(t *testing.T) {
 						Count:                 1,
 						Type:                  models.CommodityTypeElectronics,
 						Status:                models.CommodityStatusInUse,
-						OriginalPrice:         must.Must(decimal.NewFromString("100.00")),
+						OriginalPrice:         new(must.Must(decimal.NewFromString("100.00"))),
 						OriginalPriceCurrency: "USD",
 						PurchaseDate:          models.ToPDate("2024-01-01"),
 					},

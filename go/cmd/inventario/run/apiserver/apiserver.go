@@ -76,6 +76,12 @@ func (c *Command) run() error {
 	stopFileLinkMove := bootstrap.StartFileLinkMove(context.Background(), rs, c.cfg)
 	defer stopFileLinkMove()
 
+	// Prices stored before an unknown price existed are rewritten before the
+	// API serves them, so a "not set" zero never reads as a known zero. Safe
+	// to run concurrently with the workers process, like the move above.
+	stopLegacyPriceBackfill := bootstrap.StartLegacyPriceBackfill(context.Background(), rs, c.cfg)
+	defer stopLegacyPriceBackfill()
+
 	restoreStatus := restore.NewRegistryStatusQuerier(rs.FactorySet.CreateServiceRegistrySet())
 	srv, errCh := bootstrap.StartAPIServer(c.cfg, rs, restoreStatus)
 	probeSrv, probeErrCh := bootstrap.StartProbes(c.cfg, rs)

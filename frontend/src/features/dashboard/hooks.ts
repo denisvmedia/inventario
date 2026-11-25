@@ -25,9 +25,11 @@ export interface DashboardData {
   // Total number of commodities in the active group. Drives the
   // "Total Items" stat card.
   totalItems: number
-  // Sum of `current_price` across all commodities, in the group's
-  // group currency (precomputed by `/commodities/values`).
+  // Sum of the known item values in the group currency, precomputed by
+  // `/commodities/values`: the current value, else the purchase price.
   totalValue: number
+  // Items left out of `totalValue` because neither amount is known.
+  unvaluedCount: number
   // Five most recently added commodities, sorted by registered_date
   // descending (falling back to last_modified_date if registered_date
   // is missing). The list is what the "Recently Added" card renders.
@@ -135,6 +137,7 @@ export function useDashboardData(): DashboardData {
       isError: commodities.isError || values.isError,
       totalItems: commodities.data?.total ?? list.length,
       totalValue: values.data?.globalValue ?? 0,
+      unvaluedCount: values.data?.unvaluedCount ?? 0,
       recent: recentlyAdded(list, 5),
       warrantyStatusCounts: counts,
       expiringWarranties: expiring,

@@ -55,6 +55,7 @@ import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
 import { useLocations } from "@/features/locations/hooks"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
+import { formatPrice } from "@/features/commodities/price"
 import {
   useBulkDeleteCommodities,
   useBulkMoveCommodities,
@@ -1431,7 +1432,7 @@ function CommodityGridCard({
             ) : null}
           </div>
           <span className="shrink-0 font-medium text-foreground">
-            {formatCurrency(Number(row.current_price ?? 0), currency)}
+            {formatPrice(row.current_price, currency, "—", formatCurrency)}
           </span>
         </div>
         {row.tags && row.tags.length > 0 ? (
@@ -1593,7 +1594,7 @@ function CommoditiesTable({
                   )}
                 </span>
                 <span className="pointer-events-none w-24 text-right text-sm font-medium">
-                  {formatCurrency(Number(row.current_price ?? 0), currency)}
+                  {formatPrice(row.current_price, currency, "—", formatCurrency)}
                 </span>
               </div>
             </li>

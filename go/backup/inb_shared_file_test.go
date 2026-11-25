@@ -10,6 +10,7 @@ import (
 	"github.com/go-extras/go-kit/must"
 	"gocloud.dev/blob"
 
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/models"
 )
@@ -144,7 +145,7 @@ func TestINBExport_SharedFileStoredOnce(t *testing.T) {
 
 	var manifest map[string]any
 	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
-	c.Assert(manifest["version"], qt.Equals, "3.0")
+	c.Assert(manifest["version"], qt.Equals, export.INBFormatVersion)
 	stats := manifest["statistics"].(map[string]any)
 	c.Assert(stats["fileCount"], qt.Equals, float64(1))
 	c.Assert(stats["totalFileSize"], qt.Equals, float64(sharedReceiptSize))

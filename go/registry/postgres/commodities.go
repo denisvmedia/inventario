@@ -115,6 +115,10 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 	// filter and match no real area.
 	commodity.NormalizeAreaID()
 
+	// Every row written now tells an unknown price from a zero one.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
+
 	// The asset number is server-managed: whatever the caller sent is
 	// dropped and the number is assigned inside the insert transaction.
 	// Only the backup restore may ask for a specific (archived) number.
@@ -592,15 +596,23 @@ func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOpti
 	}
 	column := "name"
 	caseInsensitive := false
+	// Dates and prices are NULL when unknown. NULLS LAST keeps them after
+	// every known value in both directions (PostgreSQL's default puts them
+	// first on DESC); the memory backend orders them the same way.
+	nullable := false
 	switch field {
 	case registry.CommoditySortRegisteredDate:
 		column = "registered_date"
+		nullable = true
 	case registry.CommoditySortPurchaseDate:
 		column = "purchase_date"
+		nullable = true
 	case registry.CommoditySortCurrentPrice:
 		column = "current_price"
+		nullable = true
 	case registry.CommoditySortOriginalPrice:
 		column = "original_price"
+		nullable = true
 	case registry.CommoditySortCount:
 		column = "count"
 	case registry.CommoditySortName:
@@ -617,12 +629,16 @@ func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOpti
 	if caseInsensitive {
 		expr = "LOWER(" + column + ")"
 	}
+	nulls := ""
+	if nullable {
+		nulls = " NULLS LAST"
+	}
 	// Per-column direction, not sb.Desc(): that appends one keyword after the
 	// whole list, which would leave the leading column ascending.
 	if opts.SortDesc {
-		sb.OrderByDesc(expr).OrderByDesc("id")
+		sb.OrderBy(expr + " DESC" + nulls).OrderByDesc("id")
 	} else {
-		sb.OrderByAsc(expr).OrderByAsc("id")
+		sb.OrderBy(expr + " ASC" + nulls).OrderByAsc("id")
 	}
 }
 
@@ -637,11 +653,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	if existing, err := r.get(ctx, commodity.GetID()); err == nil && existing != nil {
 		commodity.AcquisitionPrice = clonePtrDecimal(existing.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existing.AcquisitionCurrency)
+		commodity.UnsetEchoedLegacyZeros(existing)
 	}
 
 	// Normalize an explicit empty area to nil (#1986) — un-assigning via an
 	// empty string persists as NULL, consistent with the IS NULL filter.
 	commodity.NormalizeAreaID()
+
+	// The caller's prices tell unknown from zero, whatever the row held.
+	registry.NormalizeCommodityPrices(ctx, &commodity)
+	commodity.LegacyZeroPrices = false
 
 	reg := r.newSQLRegistry()
 

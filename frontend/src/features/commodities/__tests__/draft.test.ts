@@ -25,8 +25,7 @@ function pending(name: string): PendingFile {
 
 // buildDefaults' `defaultDraft` seam backs the anonymous "add your first
 // item" flow (#1988): the landing dialog passes true so a first-time
-// visitor only has to fill name/short_name/type (price/date relax to
-// optional in the draft schema).
+// visitor's item lands as a draft to finish later.
 describe("buildDefaults", () => {
   it("defaults a new item to non-draft", () => {
     expect(buildDefaults(undefined, "USD").draft).toBe(false)

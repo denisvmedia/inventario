@@ -683,7 +683,9 @@ func TestRestoreService_SampleXMLStructure(t *testing.T) {
 	c.Assert(winterClothes, qt.IsNotNil)
 	c.Assert(winterClothes.OriginalPrice.String(), qt.Equals, "1200")
 	c.Assert(string(winterClothes.OriginalPriceCurrency), qt.Equals, "CZK")
-	c.Assert(winterClothes.ConvertedOriginalPrice.String(), qt.Equals, "0")
+	// The XML format wrote 0 for a converted price that was not set, so it
+	// restores as unknown.
+	c.Assert(winterClothes.ConvertedOriginalPrice, qt.IsNil)
 }
 
 func TestRestoreService_ActualSampleXML(t *testing.T) {

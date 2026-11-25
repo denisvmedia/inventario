@@ -2,6 +2,7 @@ import { useNavigate } from "react-router-dom"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { writeDraft } from "@/features/commodities/draft"
+import { priceToFormValue } from "@/features/commodities/price"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { savePendingFirstItem } from "@/features/auth/firstItemHandoff"
 import { inferDefaultCurrency } from "@/lib/currency-default"
@@ -99,13 +100,10 @@ export function AnonymousCommodityDialog({
         type: values.type,
         status: values.status,
         count: values.count !== undefined ? String(values.count) : "1",
-        original_price: values.original_price !== undefined ? String(values.original_price) : "",
+        original_price: priceToFormValue(values.original_price),
         original_price_currency: values.original_price_currency,
-        converted_original_price:
-          values.converted_original_price !== undefined
-            ? String(values.converted_original_price)
-            : "",
-        current_price: values.current_price !== undefined ? String(values.current_price) : "",
+        converted_original_price: priceToFormValue(values.converted_original_price),
+        current_price: priceToFormValue(values.current_price),
         serial_number: values.serial_number,
         purchase_date: values.purchase_date ?? "",
         comments: values.comments,

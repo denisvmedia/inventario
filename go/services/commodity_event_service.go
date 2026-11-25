@@ -78,16 +78,16 @@ func (s *CommodityEventService) EmitUpdated(ctx context.Context, before, after *
 	if priceChanged(before, after) {
 		s.emit(ctx, after.ID, models.CommodityEventKindPriceChanged,
 			models.CommodityEventPayload{
-				"original_price":           decimalString(before.OriginalPrice),
+				"original_price":           priceValue(before.OriginalPrice),
 				"original_price_currency":  string(before.OriginalPriceCurrency),
-				"converted_original_price": decimalString(before.ConvertedOriginalPrice),
-				"current_price":            decimalString(before.CurrentPrice),
+				"converted_original_price": priceValue(before.ConvertedOriginalPrice),
+				"current_price":            priceValue(before.CurrentPrice),
 			},
 			models.CommodityEventPayload{
-				"original_price":           decimalString(after.OriginalPrice),
+				"original_price":           priceValue(after.OriginalPrice),
 				"original_price_currency":  string(after.OriginalPriceCurrency),
-				"converted_original_price": decimalString(after.ConvertedOriginalPrice),
-				"current_price":            decimalString(after.CurrentPrice),
+				"converted_original_price": priceValue(after.ConvertedOriginalPrice),
+				"current_price":            priceValue(after.CurrentPrice),
 			},
 		)
 		emittedSpecific = true
@@ -249,13 +249,14 @@ func (s *CommodityEventService) emit(ctx context.Context, commodityID string, ki
 	}
 }
 
-// priceChanged reports whether any of the four price-related fields shifted.
-// Decimal equality uses Decimal.Equal so 17500.00 == 17500 doesn't false-positive.
+// priceChanged reports whether any of the four price-related fields shifted,
+// including between unknown and known. models.SamePrice ignores scale, so
+// 17500.00 == 17500 doesn't false-positive.
 func priceChanged(before, after *models.Commodity) bool {
-	return !before.OriginalPrice.Equal(after.OriginalPrice) ||
+	return !models.SamePrice(before.OriginalPrice, after.OriginalPrice) ||
 		before.OriginalPriceCurrency != after.OriginalPriceCurrency ||
-		!before.ConvertedOriginalPrice.Equal(after.ConvertedOriginalPrice) ||
-		!before.CurrentPrice.Equal(after.CurrentPrice)
+		!models.SamePrice(before.ConvertedOriginalPrice, after.ConvertedOriginalPrice) ||
+		!models.SamePrice(before.CurrentPrice, after.CurrentPrice)
 }
 
 // genericUpdateChanged reports whether any user-meaningful field changed
@@ -325,6 +326,15 @@ func snapshotForUpdate(c *models.Commodity) models.CommodityEventPayload {
 // JSONB doesn't have a native decimal type and float coercion would lose
 // precision (the prices the user is auditing are exact).
 func decimalString(d decimal.Decimal) string {
+	return d.String()
+}
+
+// priceValue renders a nullable price for an event payload: its plain text
+// representation (see decimalString), or JSON null when the price is unknown.
+func priceValue(d *decimal.Decimal) any {
+	if d == nil {
+		return nil
+	}
 	return d.String()
 }
 
