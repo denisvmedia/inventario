@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react"
-import { hashKey, useQueries, type QueryKey } from "@tanstack/react-query"
+import { hashKey, useQueries, type QueryClient, type QueryKey } from "@tanstack/react-query"
 
 // Previous / next within the list a record was opened from.
 //
@@ -202,6 +202,34 @@ function outsideList({
     previous,
     next,
   }
+}
+
+/**
+ * The record at a 0-based offset of the list, read from the server, or null
+ * when the list ends before it. A save that takes the current record out of
+ * the list moves the record after it to its offset, so the record at that
+ * offset read after the save is the one to go to next: a record that left
+ * the list in the meantime (changed or deleted elsewhere) is not opened.
+ * `skipId`, when it still sits at the offset, is passed over.
+ */
+export async function fetchListRecordAt(
+  queryClient: QueryClient,
+  source: ListPageSource,
+  offset: number,
+  skipId?: string
+): Promise<ListNeighbor | null> {
+  const read = async (at: number): Promise<ListNeighbor | null> => {
+    const page = Math.floor(at / source.pageSize) + 1
+    const query = source.pageQuery(page)
+    const data = query.select(
+      await queryClient.fetchQuery({ queryKey: query.queryKey, queryFn: query.queryFn })
+    )
+    if (at >= data.total) return null
+    const id = data.ids[at % source.pageSize]
+    return id ? { id, page } : null
+  }
+  const found = await read(offset)
+  return found && found.id === skipId ? read(offset + 1) : found
 }
 
 export interface ListNavigation {

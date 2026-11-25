@@ -306,6 +306,37 @@ describe("<InboxPage />", () => {
     expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
   })
 
+  it("opens nothing when the user leaves the inbox while the walk loads", async () => {
+    seed()
+    let release = () => {}
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let walkRequested = false
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async ({ request }) => {
+        if (new URL(request.url).searchParams.get("reason") !== "item_draft") return undefined
+        walkRequested = true
+        await loaded
+        return HttpResponse.json({
+          data: [inboxHandlers.itemDraft("c1", "Bike")],
+          meta: { entries: 1, counts: { total: 3, reasons: { draft: 2, item_draft: 1 } } },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-walk"))
+    await waitFor(() => expect(walkRequested).toBe(true))
+    await user.click(screen.getByTestId("inbox-missing-no-location"))
+    const loc = await screen.findByTestId("loc")
+    const left = loc.textContent
+    expect(left).toContain(`/g/${SLUG}/commodities`)
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("loc")).toHaveTextContent(left ?? "")
+  })
+
   it("offers no walk without items to review or to a viewer", async () => {
     seed("viewer")
     renderPage()

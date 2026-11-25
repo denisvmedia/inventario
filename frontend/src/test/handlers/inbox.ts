@@ -42,8 +42,8 @@ export interface FakeInboxBackend {
   checks: FakeInboxCheck[]
   // Ids of the items whose review was completed, in order.
   reviewed: string[]
-  // When set, PUT /commodities/{id} answers with this status and body; see
-  // refusedReview for the server's 422.
+  // When set, PATCH /commodities/{id}/draft answers with this status and
+  // body; see refusedReview for the server's 422.
   failReview: { status: number; body: JsonBodyType } | null
   // How many times GET /inbox/count was served.
   countCalls: number
@@ -153,22 +153,20 @@ export function backend(slug: string, seed: FakeInboxEntry[] = []): FakeInboxBac
         },
       })
     }),
-    http.put(apiUrl(`${base}/commodities/:id`), async ({ params, request }) => {
+    http.patch(apiUrl(`${base}/commodities/:id/draft`), async ({ params, request }) => {
       if (state.failReview !== null) {
         return HttpResponse.json(state.failReview.body, { status: state.failReview.status })
       }
       const id = String(params.id)
       const item = items.get(id)
       if (!item) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
-      const body = (await request.json()) as {
-        data: { attributes: { draft?: boolean; name?: string } }
-      }
-      const isDraft = body.data.attributes.draft === true
+      const body = (await request.json()) as { data: { attributes: { draft: boolean } } }
+      const isDraft = body.data.attributes.draft
       state.entries = state.entries.filter((e) => e.id !== id)
       if (isDraft) state.entries.push(item)
       else state.reviewed.push(id)
       return HttpResponse.json({
-        data: { id, type: "commodities", attributes: body.data.attributes },
+        data: { id, type: "commodities", attributes: { name: item.title, draft: isDraft } },
       })
     }),
   ]

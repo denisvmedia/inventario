@@ -4,7 +4,7 @@
 // record, with every reason it is there for. The server merges the sources
 // and counts each record once, so the counter never comes from the length
 // of a page.
-import { getCommodity, updateCommodity, type Commodity } from "@/features/commodities/api"
+import { setCommodityDraftMark, type Commodity } from "@/features/commodities/api"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -107,10 +107,9 @@ export async function getInboxChecks(signal?: AbortSignal): Promise<InboxCheck[]
   }))
 }
 
-// setCommodityDraft marks an item as draft or clears the mark, keeping the
-// rest of the item as the server has it. The update replaces the item, so
-// the current values are read first.
-export async function setCommodityDraft(id: string, draft: boolean): Promise<Commodity> {
-  const { commodity } = await getCommodity(id)
-  return updateCommodity(id, { ...commodity, draft })
+// setCommodityDraft marks an item as draft or clears the mark. The server
+// changes the mark alone, so an edit of the item saved at the same time
+// stays.
+export function setCommodityDraft(id: string, draft: boolean): Promise<Commodity> {
+  return setCommodityDraftMark(id, draft)
 }

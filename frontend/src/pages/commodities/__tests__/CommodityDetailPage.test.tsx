@@ -119,8 +119,9 @@ function itemRow(id: string, name: string): { id: string; type: string; attribut
 }
 
 // Items behind list, detail and update, so a save shows up in what the page
-// reads next. Returns the PUT bodies in order; with `gate`, a PUT is recorded
-// at once and answered when the gate resolves.
+// reads next. Returns the writes in order, a PUT as its body and a draft
+// mark as the item it leaves; with `gate`, a write is recorded at once and
+// answered when the gate resolves.
 function serveItems(rows: ReturnType<typeof itemRow>[], opts: { gate?: Promise<void> } = {}) {
   const store = new Map(rows.map((r) => [r.id, { ...r, attributes: { ...r.attributes } }]))
   const puts: Array<{ id: string; attributes: Attrs }> = []
@@ -149,6 +150,20 @@ function serveItems(rows: ReturnType<typeof itemRow>[], opts: { gate?: Promise<v
       puts.push({ id, attributes: body.data.attributes })
       await opts.gate
       const row = { id, type: "commodities", attributes: { ...body.data.attributes, id } }
+      store.set(id, row)
+      return HttpResponse.json({ data: row })
+    }),
+    // The draft mark changes on the item as stored when the write lands,
+    // as the server does it; it is recorded with the item it leaves.
+    http.patch(apiUrl(`/g/${SLUG}/commodities/:id/draft`), async ({ params, request }) => {
+      const id = params.id as string
+      const body = (await request.json()) as { data: { attributes: { draft: boolean } } }
+      const draft = body.data.attributes.draft
+      puts.push({ id, attributes: { ...store.get(id)?.attributes, draft } })
+      await opts.gate
+      const stored = store.get(id)
+      if (!stored) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+      const row = { ...stored, attributes: { ...stored.attributes, draft } }
       store.set(id, row)
       return HttpResponse.json({ data: row })
     })
@@ -1251,9 +1266,13 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
   }
 
   // The items behind serveItems, with the inbox listing those still marked
-  // as draft, and the member's role.
-  function serveReview(rows: ReturnType<typeof itemRow>[], role = "user") {
-    const puts = serveItems(rows)
+  // as draft page by page, and the member's role.
+  function serveReview(
+    rows: ReturnType<typeof itemRow>[],
+    role = "user",
+    opts: { gate?: Promise<void> } = {}
+  ) {
+    const puts = serveItems(rows, opts)
     const stillDraft = () =>
       rows.filter((r) => {
         const last = puts.filter((p) => p.id === r.id).at(-1)
@@ -1272,12 +1291,15 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
           ],
         })
       ),
-      http.get(apiUrl(`/g/${SLUG}/inbox`), () => {
+      http.get(apiUrl(`/g/${SLUG}/inbox`), ({ request }) => {
+        const url = new URL(request.url)
+        const page = Number(url.searchParams.get("page") ?? "1")
+        const perPage = Number(url.searchParams.get("per_page") ?? "50")
         const entries = stillDraft().map((r) =>
           inboxHandlers.itemDraft(r.id, String(r.attributes.name))
         )
         return HttpResponse.json({
-          data: entries,
+          data: entries.slice((page - 1) * perPage, page * perPage),
           meta: {
             entries: entries.length,
             counts: { total: entries.length, reasons: { item_draft: entries.length } },
@@ -1320,6 +1342,7 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     )
     // Back returns to the inbox list it came from.
     expect(screen.getByTestId("commodity-detail-back")).toHaveAttribute("href", REVIEW)
+    expect(screen.getByTestId("commodity-detail-back")).toHaveTextContent("Back to inbox")
     await user.click(screen.getByTestId("commodity-review-mark"))
     await waitFor(() => expect(puts).toHaveLength(1))
     expect(puts[0]).toMatchObject({ id: "c1", attributes: { name: "Bike", draft: false } })
@@ -1335,6 +1358,53 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     // The reviewed item left the list: the next one is now the only one.
     expect(await screen.findByTestId("commodity-review-position")).toHaveTextContent(
       "Item 1 of 1 to review"
+    )
+  })
+
+  it("opens the item that now follows when the next one left the list meanwhile", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([
+      draftRow("c1", "Bike"),
+      draftRow("c2", "Lamp"),
+      draftRow("c3", "Desk"),
+    ])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 1 of 3 to review"
+      )
+    )
+    // Another member reviews the next item while this one is on screen.
+    puts.push({ id: "c2", attributes: { ...itemRow("c2", "Lamp").attributes, draft: false } })
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(
+        `/g/${SLUG}/commodities/c3?${FROM_INBOX}`
+      )
+    )
+    expect(await screen.findByTestId("commodity-review-position")).toHaveTextContent(
+      "Item 1 of 1 to review"
+    )
+  })
+
+  it("opens the next item across a page edge", async () => {
+    const user = userEvent.setup()
+    const rows = Array.from({ length: 52 }, (_, i) => draftRow(`c${i + 1}`, `Item ${i + 1}`))
+    serveReview(rows)
+    renderReview(`/g/${SLUG}/commodities/c50?${FROM_INBOX}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 50 of 52 to review"
+      )
+    )
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c51?`)
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 50 of 51 to review"
+      )
     )
   })
 
@@ -1364,6 +1434,76 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
       `/g/${SLUG}/commodities/c2?${FROM_INBOX}`
     )
     expect(puts).toHaveLength(0)
+  })
+
+  it("stays where the user went while the review saved", async () => {
+    const user = userEvent.setup()
+    const put = gate()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp"), draftRow("c3", "Desk")], "user", {
+      gate: put.promise,
+    })
+    renderReview(`/g/${SLUG}/commodities/c2?${FROM_INBOX}`)
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 3 to review"
+      )
+    )
+    await user.click(screen.getByTestId("commodity-review-mark"))
+    // Nothing else to start while the review saves.
+    expect(screen.getByTestId("commodity-review-skip")).toBeDisabled()
+    expect(screen.getByTestId("commodity-detail-edit")).toBeDisabled()
+    await user.click(screen.getByTestId("commodity-detail-previous"))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    )
+    put.release()
+    await waitFor(() => expect(toastSpies.success).toHaveBeenCalled())
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+  })
+
+  it("waits for a quick edit to save before a review", async () => {
+    const user = userEvent.setup()
+    const put = gate()
+    const puts = serveReview([draftRow("c1", "Bike")], "user", { gate: put.promise })
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    await user.type(screen.getByTestId("commodity-quick-notes-input"), "Check the tires")
+    await user.click(screen.getByTestId("commodity-quick-notes-save"))
+    await waitFor(() => expect(puts).toHaveLength(1))
+    expect(screen.getByTestId("commodity-review-mark")).toBeDisabled()
+    put.release()
+    await waitFor(() => expect(screen.getByTestId("commodity-review-mark")).toBeEnabled())
+  })
+
+  it("keeps Mark as reviewed off while a quick edit is open", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    await user.click(await screen.findByTestId("commodity-quick-edit-notes"))
+    expect(mark).toBeDisabled()
+    expect(mark).toHaveAttribute("title", "Save or cancel the open edit first.")
+  })
+
+  it("stays on the item when the list to review could not be read", async () => {
+    const user = userEvent.setup()
+    const puts = serveReview([draftRow("c1", "Bike")])
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    // The list was read; reading it again after the save fails.
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), () =>
+        HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      )
+    )
+    await user.click(mark)
+    await waitFor(() => expect(puts).toHaveLength(1))
+    await waitFor(() => expect(toastSpies.success).toHaveBeenCalled())
+    // Not the end of the list, just an unknown one: no trip to the inbox.
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
   })
 
   it("shows no review bar to a viewer or on a reviewed item", async () => {

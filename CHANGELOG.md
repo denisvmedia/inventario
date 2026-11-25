@@ -42,7 +42,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   the next item, or returns to the inbox after the last one; Skip opens the
   next item unchanged. Previous, Next and Save and next in the edit form walk
   the same list. Continue on a draft opens the Add item dialog on the first
-  step that still needs input instead of Basics
+  step that still needs input instead of Basics, with the field to correct
+  marked. Mark as reviewed, on the inbox and in the review bar, changes the
+  draft switch alone, so an edit of the item saved at the same moment is
+  kept; the new API is `PATCH /commodities/{id}/draft`
   ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
 - Save as draft in the Add item dialog saves the form and its files on the

@@ -51,7 +51,9 @@
   "undo": "Undo",
   "undoFailed": "The item could not be marked as draft again.",
   "walk": {
+    "back": "Back to inbox",
     "failed": "The items to review could not be loaded.",
+    "finishEdit": "Save or cancel the open edit first.",
     "label": "Review",
     "position": "Item {{position}} of {{total}} to review",
     "skip": "Skip",

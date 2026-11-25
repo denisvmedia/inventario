@@ -341,6 +341,24 @@ export async function deleteCommodity(id: string): Promise<void> {
   await http.del<void>(`/commodities/${encodeURIComponent(id)}`)
 }
 
+// Sets (true) or clears (false) the draft mark of an item and changes no
+// other field, so an edit saved in the meantime stays. The server refuses
+// the mark of an item that a full save would refuse, with the same field
+// errors.
+export async function setCommodityDraftMark(id: string, draft: boolean): Promise<Commodity> {
+  const req: Schema<"jsonapi.CommodityDraftMarkRequest"> = {
+    data: { type: "commodity_draft_mark", attributes: { draft } },
+  }
+  const body = await http.patch<CommodityResponseEnvelope>(
+    `/commodities/${encodeURIComponent(id)}/draft`,
+    req
+  )
+  if (!body.data?.attributes) {
+    throw new Error(`setCommodityDraftMark ${id} response missing data.attributes`)
+  }
+  return { ...body.data.attributes, id: body.data.id }
+}
+
 // Sets or clears the explicit cover-photo override for a commodity
 // (issue #1451 option B). `fileId === null` clears the override; the
 // resolver falls back to the auto-pick first-photo path on the next

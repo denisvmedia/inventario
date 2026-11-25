@@ -59,6 +59,7 @@ import {
 import { reviewRefusal } from "@/features/inbox/reviewRefusal"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatRelative } from "@/lib/intl"
 import type { ListContext } from "@/lib/list-context"
 import { parseServerError } from "@/lib/server-error"
@@ -173,16 +174,19 @@ function ReviewWalkButton({ slug }: { slug: string }) {
   const location = useLocation()
   const qc = useQueryClient()
   const toast = useAppToast()
+  const guardLocation = useLocationGuard()
 
   async function start() {
     const opts = inboxReviewOptions(1)
+    // Opens nothing when the user left the inbox while the list loaded.
+    const stillHere = guardLocation()
     try {
       const first = await qc.fetchQuery({
         queryKey: inboxKeys.list(slug, opts),
         queryFn: ({ signal }) => listInbox(opts, signal),
       })
       const id = first.entries[0]?.id
-      if (!id) return
+      if (!id || !stillHere()) return
       navigate(commodityHref(slug, id, inboxReviewContext(slug)), {
         state: { background: location },
       })

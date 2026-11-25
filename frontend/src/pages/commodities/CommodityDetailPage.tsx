@@ -143,7 +143,8 @@ import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
+import { fetchListRecordAt, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
+import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import {
   listContextHref,
@@ -351,6 +352,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const role = useMyGroupRole()
   const canWrite = role === "user" || role === "admin" || role === "owner"
   const setDraft = useSetItemDraft()
+  // A review and the item's own saves are not started together: a quick
+  // save sends the item as the page last read it, draft mark included, and
+  // would put the mark back if it landed after the review.
+  const itemSaving = update.isPending || setDraft.isPending
+  const guardLocation = useLocationGuard()
 
   // Navigates without leaving the sheet: the sheet's background (the list
   // behind it) moves along to the list page the context now points at.
@@ -399,9 +405,16 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
   // Clears the draft mark of an item opened from the inbox, then moves to
   // the next item to review, or back to the inbox after the last one. The
-  // next item is read before the save, which takes this one out of the list.
+  // save takes this item out of the list and moves the one after it to its
+  // place, so the next item is the one at that place in the list as read
+  // after the save. A user who moved on while the save ran stays where they
+  // went, and a list that could not be read is not taken for one that
+  // ended: the page stays on the item.
   async function markReviewedAndNext(title: string) {
-    const next = nav.next
+    const walk = source
+    const offset = nav.position === null ? null : nav.position - 1
+    const backToList = currentContext
+    const stillHere = guardLocation()
     try {
       await setDraft.mutateAsync({ id, draft: false })
     } catch (err) {
@@ -421,8 +434,16 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         },
       },
     })
+    if (!walk || offset === null) return
+    let next: ListNeighbor | null
+    try {
+      next = await fetchListRecordAt(queryClient, walk, offset, id)
+    } catch {
+      return
+    }
+    if (!stillHere()) return
     if (next) goToNeighbor(next, false)
-    else if (currentContext) navigate(listContextHref(currentContext))
+    else if (backToList) navigate(listContextHref(backToList))
   }
 
   const commodity = detail.data?.commodity
@@ -673,7 +694,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       locations={locations.data ?? []}
       defaultCurrency={currency}
       onSubmit={handleDialogSave}
-      isPending={update.isPending}
+      isPending={itemSaving}
     />
   )
 
@@ -695,7 +716,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             locations={locations.data ?? []}
             groupCurrency={groupCurrency}
             onSubmit={(req) => update.mutateAsync(req)}
-            isPending={update.isPending}
+            isPending={itemSaving}
             nav={nav}
             hrefFor={(target) => itemHref(target.id, contextAt(target.page), true)}
             onExit={stopEditing}
@@ -775,7 +796,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               data-testid="commodity-detail-back"
             >
               <ArrowLeft className="size-3.5" aria-hidden="true" />
-              {t("commodities:detail.backToList")}
+              {reviewList ? t("inbox:walk.back") : t("commodities:detail.backToList")}
             </Link>
             {nav.active ? (
               <ListPager
@@ -797,9 +818,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             position={nav.position}
             total={nav.total}
             hasNext={!!nav.next}
-            pending={setDraft.isPending}
-            disabled={migrationLock.locked}
-            disabledReason={t("errors:lockedDuringMigration")}
+            pending={itemSaving || nav.loading}
+            disabled={migrationLock.locked || quickEdit !== null}
+            disabledReason={
+              migrationLock.locked ? t("errors:lockedDuringMigration") : t("inbox:walk.finishEdit")
+            }
             onSkip={() => {
               if (nav.next) goToNeighbor(nav.next, false)
             }}
@@ -965,7 +988,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             onClick={startEditing}
             data-testid="commodity-detail-edit"
             className="flex-1 gap-1.5"
-            disabled={migrationLock.locked}
+            disabled={migrationLock.locked || setDraft.isPending}
             title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
             aria-disabled={migrationLock.locked || undefined}
           >
@@ -1067,7 +1090,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
-                  disabled={update.isPending || migrationLock.locked}
+                  disabled={itemSaving || migrationLock.locked}
                   title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
                   aria-disabled={migrationLock.locked || undefined}
                 >
@@ -1138,7 +1161,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               size="sm"
               className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
               onClick={() => handleStatusTransition("in_use")}
-              disabled={update.isPending || migrationLock.locked}
+              disabled={itemSaving || migrationLock.locked}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
               aria-disabled={migrationLock.locked || undefined}
               data-testid="commodity-detail-revert-status"
@@ -1182,7 +1205,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 quickEdit={migrationLock.locked ? null : quickEdit}
                 onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
-                saving={update.isPending}
+                saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
               />
@@ -1213,7 +1236,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 quickEdit={migrationLock.locked ? null : quickEdit}
                 onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
-                saving={update.isPending}
+                saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
               />
@@ -1308,7 +1331,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         targetStatus={transitionTarget}
         purchaseCurrency={purchaseCurrency}
         onSubmit={handleTransitionConfirm}
-        isPending={update.isPending}
+        isPending={itemSaving}
       />
 
       <UploadFilesDialog

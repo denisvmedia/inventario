@@ -57,7 +57,9 @@
   "undo": "Zpět",
   "undoFailed": "Položku se nepodařilo znovu označit jako koncept.",
   "walk": {
+    "back": "Zpět do schránky",
     "failed": "Položky ke kontrole se nepodařilo načíst.",
+    "finishEdit": "Nejdřív uložte nebo zrušte otevřenou úpravu.",
     "label": "Kontrola",
     "position": "Položka {{position}} z {{total}} ke kontrole",
     "skip": "Přeskočit",

@@ -74,14 +74,17 @@ review. An item opened from the inbox shows a review bar with its place in
 the list, for example "Item 1 of 4 to review":
 
 - **Mark as reviewed** marks the item as reviewed, as on the inbox row, and
-  opens the next item. After the last one, you are back in the inbox.
+  opens the next item still waiting for review. After the last one, you are
+  back in the inbox.
 - **Skip** opens the next item and leaves this one in the inbox.
 
 Edit the item on its page as usual in between: the fields of the **Details**
-tab, or **Edit** for the whole form. **Previous** and **Next** at the top, and
-**Save and next** in the edit form, move through the same list (see
-[Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).
-**Back to items** returns to the inbox.
+tab, or **Edit** for the whole form. **Mark as reviewed** waits while a field
+of the **Details** tab is open or being saved; save or cancel it first. Marking
+an item as reviewed changes nothing else on it. **Previous** and **Next** at
+the top, and **Save and next** in the edit form, move through the same list
+(see [Go through a list one item at a time](../items/#go-through-a-list-one-item-at-a-time)).
+**Back to inbox** returns to the inbox.
 
 ## Missing details
 

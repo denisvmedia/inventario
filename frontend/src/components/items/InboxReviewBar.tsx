@@ -10,6 +10,7 @@ interface InboxReviewBarProps {
   position: number | null
   total: number | null
   hasNext: boolean
+  // A save of the item runs, or the list is still loading: both actions wait.
   pending: boolean
   disabled: boolean
   disabledReason?: string
@@ -60,6 +61,7 @@ export function InboxReviewBar({
             variant="ghost"
             size="sm"
             onClick={onSkip}
+            disabled={pending}
             data-testid="commodity-review-skip"
           >
             {t("inbox:walk.skip")}

@@ -395,7 +395,7 @@ it no longer matches the search, the page says so. **Save and next** still opens
 the item that came after it.
 
 An item opened from the [Inbox](../inbox/#review-the-items-one-by-one) walks
-the inbox's items to review the same way, and **Back to items** returns to the
+the inbox's items to review the same way, and **Back to inbox** returns to the
 inbox.
 
 ## Asset IDs and QR labels
