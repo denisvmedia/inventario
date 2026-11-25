@@ -88,21 +88,35 @@ func (s *FileService) GenerateThumbnails(ctx context.Context, file *models.FileE
 		// Create thumbnail
 		thumbnail := s.imageProcessor.CreateThumbnail(img, maxSize)
 
-		// Save thumbnail to storage
-		writer, err := b.NewWriter(ctx, thumbnailPath, nil)
-		if err != nil {
-			return errxtrace.Wrap("failed to create thumbnail writer", err)
-		}
-
-		// Always encode thumbnails as JPEG for consistency and smaller file sizes
-		err = jpeg.Encode(writer, thumbnail, &jpeg.Options{Quality: 90})
-
-		writer.Close()
-		if err != nil {
-			return errxtrace.Wrap("failed to encode thumbnail", err)
+		if err := writeThumbnail(ctx, b, thumbnailPath, thumbnail); err != nil {
+			return err
 		}
 	}
 
+	return nil
+}
+
+// writeThumbnail stores one thumbnail as JPEG, for consistency and smaller
+// files. The blob exists only when the write returns nil: a failed encode
+// cancels the write, and a failed commit is an error, so the job that asked
+// for the thumbnail fails rather than completing without it.
+func writeThumbnail(ctx context.Context, b *blob.Bucket, key string, img image.Image) error {
+	// Canceling the writer's context before Close discards the write.
+	writeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	writer, err := b.NewWriter(writeCtx, key, nil)
+	if err != nil {
+		return errxtrace.Wrap("failed to create thumbnail writer", err)
+	}
+	if err := jpeg.Encode(writer, img, &jpeg.Options{Quality: 90}); err != nil {
+		cancel()
+		_ = writer.Close()
+		return errxtrace.Wrap("failed to encode thumbnail", err)
+	}
+	if err := writer.Close(); err != nil {
+		return errxtrace.Wrap("failed to save thumbnail", err)
+	}
 	return nil
 }
 

@@ -174,8 +174,8 @@ const coverFixture = {
 }
 
 // Three photos linked to the item; f2 is the cover.
-function photoFiles() {
-  const photos = ["f1", "f2", "f3"].map((id) => ({
+function photoFiles(ids: string[] = ["f1", "f2", "f3"]) {
+  const photos = ids.map((id) => ({
     id,
     attributes: {
       title: `Photo ${id}`,
@@ -930,12 +930,12 @@ describe("<CommodityDetailPage />", () => {
     )
     const { container } = renderDetail()
     const cover = await screen.findByTestId("commodity-detail-cover")
-    expect(cover).toHaveAccessibleName(/view photos of macbook pro 16/i)
     const img = within(cover).getByRole("img")
     expect(img.getAttribute("srcset")).toContain("https://files.example.test/f2/large.jpg 600w")
     expect(await within(cover).findByTestId("commodity-detail-photo-count")).toHaveTextContent(
       "3 photos"
     )
+    expect(cover).toHaveAccessibleName(/view 3 photos of macbook pro 16/i)
     expect(await axe(container)).toHaveNoViolations()
 
     // Enter on the focused cover opens the viewer on the cover photo.
@@ -947,6 +947,61 @@ describe("<CommodityDetailPage />", () => {
     expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("3 / 3")
     await user.keyboard("{Escape}")
     await waitFor(() => expect(screen.queryByTestId("file-image-viewer")).toBeNull())
+  })
+
+  it("leads the viewer with the cover when the photo list does not hold it (#2797)", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture, coverFixture),
+      // The list holds the newest photos; the cover is older than all of them.
+      ...photoFiles(["f3", "f4", "f5"])
+    )
+    renderDetail()
+    const cover = await screen.findByTestId("commodity-detail-cover")
+    await within(cover).findByTestId("commodity-detail-photo-count")
+    await user.click(cover)
+    const viewer = await screen.findByTestId("file-image-viewer")
+    expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("1 / 4")
+    expect(within(viewer).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://files.example.test/f2/large.jpg"
+    )
+    await user.click(within(viewer).getByTestId("image-viewer-next"))
+    expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("2 / 4")
+  })
+
+  it("keeps the viewer on the cover when the photo list arrives while it is open (#2797)", async () => {
+    const user = userEvent.setup()
+    const held = gate()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture, coverFixture),
+      // Answers nothing until released, then falls through to the list.
+      http.get(apiUrl(`/g/${SLUG}/files`), async () => {
+        await held.promise
+      }),
+      ...photoFiles()
+    )
+    renderDetail()
+    await user.click(await screen.findByTestId("commodity-detail-cover"))
+    const viewer = await screen.findByTestId("file-image-viewer")
+    expect(within(viewer).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://files.example.test/f2/large.jpg"
+    )
+    expect(within(viewer).queryByTestId("image-viewer-position")).toBeNull()
+
+    held.release()
+    await waitFor(() =>
+      expect(within(viewer).getByTestId("image-viewer-position")).toHaveTextContent("2 / 3")
+    )
+    expect(within(viewer).getByRole("img")).toHaveAttribute(
+      "src",
+      "https://files.example.test/f2/raw"
+    )
   })
 
   it("keeps the small type tile when the item has no photo (#2797)", async () => {

@@ -46,38 +46,50 @@ export function CommodityCoverPanel({ commodity, className }: CommodityCoverPane
   // useFiles keeps the previous key's data while the next loads, which on
   // Previous / Next would be the previous item's photos.
   const current = photos.isPlaceholderData ? undefined : photos.data
-  const gallery: GalleryImage[] = useMemo(
-    () =>
-      (current?.files ?? [])
-        .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
-        .map(({ file, signedUrl }) => ({
-          id: file.id,
-          url: signedUrl?.url ?? "",
-          alt: file.title?.trim() || file.path?.trim() || name,
-        })),
-    [current, name]
-  )
-  const photoCount = current?.total ?? 0
-  const [viewerIndex, setViewerIndex] = useState<number | null>(null)
-  // Before the photo list arrives, the viewer shows the cover's largest
-  // thumbnail on its own.
-  const fallbackUrl =
+  const coverId = cover?.fileId ?? ""
+  const coverUrl =
     cover?.thumbnails.large ?? cover?.thumbnails.medium ?? cover?.thumbnails.small ?? ""
+  const gallery: GalleryImage[] = useMemo(() => {
+    const listed: GalleryImage[] = (current?.files ?? [])
+      .filter(({ file, signedUrl }) => isImageMime(file.mime_type) && !!signedUrl?.url)
+      .map(({ file, signedUrl }) => ({
+        id: file.id,
+        url: signedUrl?.url ?? "",
+        alt: file.title?.trim() || file.path?.trim() || name,
+      }))
+    if (listed.some((photo) => photo.id === coverId) || !coverUrl) return listed
+    // The list holds the newest photos and the default cover is the oldest,
+    // so the cover can be missing from it. It then leads the gallery, drawn
+    // from its largest thumbnail; before the list arrives it is the gallery.
+    return [{ id: coverId, url: coverUrl, alt: name }, ...listed]
+  }, [current, name, coverId, coverUrl])
+  const photoCount = current?.total ?? 0
+  // The viewer tracks the photo it shows, not a position, so the list
+  // arriving while it is open keeps it on the cover.
+  const [viewerPhotoId, setViewerPhotoId] = useState<string | null>(null)
+  const viewerIndex = Math.max(
+    0,
+    gallery.findIndex((photo) => photo.id === viewerPhotoId)
+  )
 
-  function openViewer() {
-    const index = gallery.findIndex((photo) => photo.id === cover?.fileId)
-    setViewerIndex(index >= 0 ? index : 0)
-  }
   function onViewerOpenChange(open: boolean) {
-    if (!open) setViewerIndex(null)
+    if (!open) setViewerPhotoId(null)
+  }
+  function onViewerIndexChange(index: number) {
+    const photo = gallery[index]
+    if (photo) setViewerPhotoId(photo.id)
   }
 
   return (
     <>
       <button
         type="button"
-        onClick={openViewer}
-        aria-label={t("commodities:detail.cover.open", { name })}
+        onClick={() => setViewerPhotoId(coverId)}
+        aria-label={
+          photoCount > 1
+            ? t("commodities:detail.cover.openWithCount", { name, count: photoCount })
+            : t("commodities:detail.cover.open", { name })
+        }
         className={cn(
           "relative block aspect-[4/3] cursor-zoom-in overflow-hidden rounded-xl border bg-muted",
           "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50 focus-visible:outline-none",
@@ -107,18 +119,11 @@ export function CommodityCoverPanel({ commodity, className }: CommodityCoverPane
       </button>
       {gallery.length > 0 ? (
         <ImageViewer
-          open={viewerIndex !== null}
+          open={viewerPhotoId !== null}
           onOpenChange={onViewerOpenChange}
           siblings={gallery}
-          index={viewerIndex ?? 0}
-          onIndexChange={setViewerIndex}
-        />
-      ) : fallbackUrl ? (
-        <ImageViewer
-          open={viewerIndex !== null}
-          onOpenChange={onViewerOpenChange}
-          url={fallbackUrl}
-          alt={name}
+          index={viewerIndex}
+          onIndexChange={onViewerIndexChange}
         />
       ) : null}
     </>

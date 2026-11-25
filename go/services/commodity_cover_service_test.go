@@ -9,6 +9,7 @@ import (
 
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 )
@@ -253,4 +254,87 @@ func TestCommodityCoverService_OverrideFromOtherCommodityRejected(t *testing.T) 
 
 	_, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-B", other.ID), "user-1", "")
 	c.Assert(ok, qt.IsFalse)
+}
+
+// coverReadCounter counts the reads the cover resolver makes.
+type coverReadCounter struct {
+	registry.FileRegistry
+	reads map[string]int
+}
+
+func (r *coverReadCounter) Get(ctx context.Context, id string) (*models.FileEntity, error) {
+	r.reads["Get"]++
+	return r.FileRegistry.Get(ctx, id)
+}
+
+func (r *coverReadCounter) ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error) {
+	r.reads["ListByLinkedEntityAndMeta"]++
+	return r.FileRegistry.ListByLinkedEntityAndMeta(ctx, entityType, entityID, meta)
+}
+
+func (r *coverReadCounter) GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error) {
+	r.reads["GetMany"]++
+	return r.FileRegistry.GetMany(ctx, ids)
+}
+
+func (r *coverReadCounter) FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error) {
+	r.reads["FirstPhotos"]++
+	return r.FileRegistry.FirstPhotos(ctx, commodityIDs)
+}
+
+// A page of items costs two reads however many items it holds: one for the
+// covers items name, one for the first photos of the rest. A stale override
+// joins the first-photo read.
+func TestCommodityCoverService_ResolveMany_ReadsOncePerKind(t *testing.T) {
+	c := qt.New(t)
+	ctx, fileReg := newCoverTestContext(c)
+
+	t1 := time.Date(2026, 2, 1, 12, 0, 0, 0, time.UTC)
+	t2 := time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC)
+	aFirst, err := fileReg.Create(ctx, makeImage("a-first", "commodity-A", t1))
+	c.Assert(err, qt.IsNil)
+	aPicked, err := fileReg.Create(ctx, makeImage("a-picked", "commodity-A", t2))
+	c.Assert(err, qt.IsNil)
+	bFirst, err := fileReg.Create(ctx, makeImage("b-first", "commodity-B", t1))
+	c.Assert(err, qt.IsNil)
+	cFirst, err := fileReg.Create(ctx, makeImage("c-first", "commodity-C", t1))
+	c.Assert(err, qt.IsNil)
+
+	counting := &coverReadCounter{FileRegistry: fileReg, reads: map[string]int{}}
+	coverSvc := services.NewCommodityCoverService(services.NewFileSigningService(signingKey32, time.Hour))
+
+	items := []*models.Commodity{
+		commodityRefWithCover("commodity-A", aPicked.ID),
+		commodityRefWithCover("commodity-B", "no-such-file"),
+		commodityRef("commodity-C"),
+		commodityRef("commodity-D"),
+	}
+	resolved := coverSvc.ResolveMany(ctx, counting, items, "user-1", "")
+
+	c.Assert(counting.reads, qt.DeepEquals, map[string]int{"GetMany": 1, "FirstPhotos": 1})
+	c.Assert(resolved, qt.HasLen, 3)
+	c.Assert(resolved["commodity-A"].FileID, qt.Equals, aPicked.ID)
+	c.Assert(resolved["commodity-A"].Source, qt.Equals, services.CoverSourceExplicit)
+	c.Assert(resolved["commodity-B"].FileID, qt.Equals, bFirst.ID)
+	c.Assert(resolved["commodity-B"].Source, qt.Equals, services.CoverSourceFirstPhoto)
+	c.Assert(resolved["commodity-C"].FileID, qt.Equals, cFirst.ID)
+	c.Assert(aFirst.ID, qt.Not(qt.Equals), resolved["commodity-A"].FileID)
+}
+
+// An item in Trash has no cover, and its photos are not read.
+func TestCommodityCoverService_SkipsTrashedItems(t *testing.T) {
+	c := qt.New(t)
+	ctx, fileReg := newCoverTestContext(c)
+
+	_, err := fileReg.Create(ctx, makeImage("photo", "commodity-A", time.Now()))
+	c.Assert(err, qt.IsNil)
+
+	trashed := commodityRef("commodity-A")
+	trashed.DeletedAt = new(time.Now())
+	counting := &coverReadCounter{FileRegistry: fileReg, reads: map[string]int{}}
+	coverSvc := services.NewCommodityCoverService(services.NewFileSigningService(signingKey32, time.Hour))
+
+	resolved := coverSvc.ResolveMany(ctx, counting, []*models.Commodity{trashed}, "user-1", "")
+	c.Assert(resolved, qt.HasLen, 0)
+	c.Assert(counting.reads, qt.HasLen, 0)
 }

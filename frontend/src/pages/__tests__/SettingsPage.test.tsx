@@ -433,6 +433,33 @@ describe("<SettingsPage />", () => {
     expect(screen.getByTestId("preferred-currency-row")).toBeInTheDocument()
   })
 
+  it("changing Default view saves it and drops this device's toolbar layout (#2797)", async () => {
+    localStorage.setItem("commodities:viewMode", "list")
+    let lastPatch: { field: string; body: unknown } | null = null
+    server.use(
+      ...withGroupHandlers({}),
+      msw.patch(api("/g/household/settings/:field"), async ({ params, request }) => {
+        const body = (await request.json()) as unknown
+        lastPatch = { field: String(params.field), body }
+        return HttpResponse.json({ appearanceDefaultItemsView: body })
+      })
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-appearance"))
+    const trigger = await screen.findByTestId("default-view-select", undefined, { timeout: 4000 })
+    await waitFor(() => expect(trigger).not.toBeDisabled(), { timeout: 4000 })
+    await pickRadixSelect(user, /^Default view$/i, { optionLabel: /compact cards/i })
+    await waitFor(
+      () => {
+        expect(lastPatch?.field).toBe("appearance.default_items_view")
+        expect(lastPatch?.body).toBe("compact")
+      },
+      { timeout: 4000 }
+    )
+    expect(localStorage.getItem("commodities:viewMode")).toBeNull()
+  })
+
   // #1683 — Region & formatting dropdown decouples Intl.* locale from
   // the UI translation language. Lives in the same Appearance section
   // and follows the same autosave path (PATCH /settings/{field}).

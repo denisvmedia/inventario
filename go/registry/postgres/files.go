@@ -347,6 +347,91 @@ func (r *FileRegistry) ListByLinkedEntityAndMeta(ctx context.Context, entityType
 	return files, nil
 }
 
+// GetMany returns the live files among ids, with their links, in one read.
+func (r *FileRegistry) GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1) AND %s`, r.tableNames.Files(), liveRow)
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, ids)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get files", err)
+	}
+	return files, nil
+}
+
+// FirstPhotos returns the oldest photo of each item among commodityIDs that
+// is not in Trash. DISTINCT ON keeps the first row per item in the ORDER BY, so the photo
+// filter runs before the pick and a non-photo cannot shadow a photo.
+func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error) {
+	out := make(map[string]*models.FileEntity, len(commodityIDs))
+	if len(commodityIDs) == 0 {
+		return out, nil
+	}
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		pickQuery := fmt.Sprintf(`
+			SELECT DISTINCT ON (l.entity_id) l.entity_id, f.id
+			FROM %s l
+			JOIN %s f ON f.id = l.file_id
+			WHERE l.entity_type = $1 AND l.meta = $2 AND l.entity_id = ANY($3)
+				AND f.deleted_at IS NULL AND f.type = $4 AND f.category = $5
+				AND NOT EXISTS (
+					SELECT 1 FROM %s c WHERE c.id = l.entity_id AND c.deleted_at IS NOT NULL
+				)
+			ORDER BY l.entity_id, f.created_at, f.id`,
+			r.tableNames.FileLinks(), r.tableNames.Files(), r.tableNames.Commodities())
+		rows, err := tx.QueryxContext(ctx, pickQuery,
+			models.FileLinkCommodity, models.FileLinkMetaImages, commodityIDs, models.FileTypeImage, models.FileCategoryImages)
+		if err != nil {
+			return err
+		}
+		picked := make(map[string]string, len(commodityIDs))
+		fileIDs := make([]string, 0, len(commodityIDs))
+		for rows.Next() {
+			var commodityID, fileID string
+			if err := rows.Scan(&commodityID, &fileID); err != nil {
+				rows.Close()
+				return err
+			}
+			picked[commodityID] = fileID
+			fileIDs = append(fileIDs, fileID)
+		}
+		rows.Close()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		if len(fileIDs) == 0 {
+			return nil
+		}
+
+		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1)`, r.tableNames.Files()), fileIDs)
+		if err != nil {
+			return err
+		}
+		byID := make(map[string]*models.FileEntity, len(files))
+		for _, f := range files {
+			byID[f.ID] = f
+		}
+		for commodityID, fileID := range picked {
+			if f, ok := byID[fileID]; ok {
+				out[commodityID] = f
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to pick first photos", err)
+	}
+	return out, nil
+}
+
 // fileWhere assembles the WHERE clause shared by Search, ListPaginated, and
 // CountByCategory. It always keeps trashed files out, so it is never empty. The
 // outer query selects from the files table without an alias; the linked-entity

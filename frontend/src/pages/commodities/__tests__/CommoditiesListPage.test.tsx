@@ -1282,6 +1282,65 @@ describe("<CommoditiesListPage />", () => {
     expect(screen.getByTestId("commodities-pagination")).toBeInTheDocument()
   })
 
+  it("counts pages of 24 in a link without a page size, whatever this device picked (#2797)", async () => {
+    localStorage.setItem("commodities:pageSize", "48")
+    const queries: URLSearchParams[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).searchParams)
+        return HttpResponse.json({
+          data: [commodityRes("c1", { name: "Item" })],
+          meta: { commodities: 120 },
+        })
+      })
+    )
+    renderList(`/g/${SLUG}/commodities?page=3`)
+    await screen.findByTestId("commodity-card")
+    expect(queries.at(-1)?.get("per_page")).toBe("24")
+    expect(queries.at(-1)?.get("page")).toBe("3")
+    expect(screen.getByTestId("commodities-page-size")).toHaveTextContent("24")
+  })
+
+  it("writes the page size picked on this device into the URL items carry (#2797)", async () => {
+    localStorage.setItem("commodities:pageSize", "48")
+    // The list writes its URL only while it is the page itself, not the
+    // backdrop of an open item, and reads that from the window.
+    window.history.replaceState(null, "", `/g/${SLUG}/commodities`)
+    try {
+      server.use(
+        ...groupHandlers.list(groupFixture),
+        ...areaHandlers.list(SLUG, areaFixture),
+        msw.get(apiUrl(`/g/${SLUG}/commodities`), () =>
+          HttpResponse.json({
+            data: [commodityRes("c1", { name: "Item" })],
+            meta: { commodities: 120 },
+          })
+        )
+      )
+      renderList()
+      await screen.findByTestId("commodity-card")
+      await waitFor(() => {
+        const href = screen.getByTestId("commodity-card-link").getAttribute("href") ?? ""
+        expect(decodeURIComponent(href)).toContain(`from=/g/${SLUG}/commodities?per_page=48`)
+      })
+    } finally {
+      window.history.replaceState(null, "", "/")
+    }
+  })
+
+  it("labels each item's checkbox with the item's name (#2797)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "Desk lamp" })])
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+    expect(screen.getByTestId("commodity-select")).toHaveAccessibleName("Select Desk lamp")
+  })
+
   it("hides the page size choice when every item fits on the smallest page (#2797)", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
