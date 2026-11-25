@@ -547,7 +547,8 @@ link. The files that went to Trash with the item are settled like this:
   row points at the same blob.
 
 The purge of an item holds the group's currency-migration lock, so it waits
-for a running currency migration of that group to finish.
+for a running currency migration of that group to finish. So does deleting
+an area, which clears the area of the items in Trash that were in it.
 
 Every sweep also settles, whatever their age, the files that went to Trash
 with an item that is no longer there: a file whose item is live again comes

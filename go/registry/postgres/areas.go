@@ -218,10 +218,21 @@ func (r *AreaRegistry) Update(ctx context.Context, area models.Area) (*models.Ar
 //
 // Trashed items do not block the delete: the same transaction clears their
 // area, and they keep the area they came from in deleted_from_area_id, so a
-// restore can tell the user the item came back unassigned.
+// restore can tell the user the item came back unassigned. Clearing it
+// updates several item rows, so the transaction first takes the group's
+// currency-migration lock, as the conversion does before it updates the
+// same rows; without it the two could each hold a row the other needs.
 func (r *AreaRegistry) Delete(ctx context.Context, id string) error {
 	reg := r.newSQLRegistry()
 	err := reg.Delete(ctx, id, func(ctx context.Context, tx *sqlx.Tx) error {
+		var groupID string
+		groupQuery := fmt.Sprintf(`SELECT group_id FROM %s WHERE id = $1`, r.tableNames.Areas())
+		if err := tx.GetContext(ctx, &groupID, groupQuery, id); err != nil {
+			return errxtrace.Wrap("failed to read area group", err)
+		}
+		if err := lockGroupCurrencyMigration(ctx, tx, groupID); err != nil {
+			return err
+		}
 		// Check if the area has commodities
 		commodities, err := r.getCommodities(ctx, tx, id)
 		if err != nil {

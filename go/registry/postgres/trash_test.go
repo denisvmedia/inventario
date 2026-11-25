@@ -385,3 +385,42 @@ func TestTrash_Postgres_PurgeWaitsForACurrencyMigration(t *testing.T) {
 	c.Assert(<-done, qt.IsNil)
 	c.Assert(deleted, qt.IsTrue)
 }
+
+func TestTrash_Postgres_AreaDeleteWaitsForACurrencyMigration(t *testing.T) {
+	c := qt.New(t)
+	fx := newTrashPGFixture(t)
+
+	first := fx.item(c, "Drill")
+	second := fx.item(c, "Saw")
+	for _, id := range []string{first.ID, second.ID} {
+		_, err := fx.set.CommodityRegistry.Trash(fx.ctx, id, fx.user.ID, time.Now())
+		c.Assert(err, qt.IsNil)
+	}
+
+	// A running migration holds the group's lock while it updates the
+	// group's items, trashed ones included.
+	tx, err := fx.dbx.BeginTxx(fx.ctx, nil)
+	c.Assert(err, qt.IsNil)
+	defer func() { _ = tx.Rollback() }()
+	_, err = tx.ExecContext(fx.ctx, `SELECT pg_advisory_xact_lock(hashtext('currency_migration'), hashtext($1))`, fx.groupID)
+	c.Assert(err, qt.IsNil)
+
+	done := make(chan error, 1)
+	go func() { done <- fx.set.AreaRegistry.Delete(fx.ctx, fx.area.ID) }()
+	fx.waitForLockWaiter(c, done)
+
+	var released int
+	c.Assert(tx.GetContext(fx.ctx, &released,
+		`SELECT COUNT(*) FROM commodities WHERE id IN ($1, $2) AND area_id IS NULL`, first.ID, second.ID), qt.IsNil)
+	c.Assert(released, qt.Equals, 0, qt.Commentf("the area delete waits before it touches the items"))
+	c.Assert(tx.Commit(), qt.IsNil)
+
+	c.Assert(<-done, qt.IsNil)
+	for _, id := range []string{first.ID, second.ID} {
+		got, err := fx.set.CommodityRegistry.GetTrashed(fx.ctx, id)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.AreaID, qt.IsNil)
+		c.Assert(got.DeletedFromAreaID, qt.IsNotNil)
+		c.Assert(*got.DeletedFromAreaID, qt.Equals, fx.area.ID)
+	}
+}
