@@ -3,6 +3,7 @@ import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 
+import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -19,6 +20,9 @@ function LocationProbe() {
   return <div data-testid="loc" data-pathname={loc.pathname + loc.search + loc.hash} />
 }
 
+// The router mounts UngroupedRedirect behind ProtectedRoute, which waits for
+// /auth/me, and GroupProvider inside it. The test does the same, so the
+// redirect sees the user's default group whichever request answers first.
 function renderAt(path: string) {
   setAccessToken("good-token")
   return renderWithProviders({
@@ -28,9 +32,11 @@ function renderAt(path: string) {
         <Route
           element={
             <AuthProvider>
-              <GroupProvider>
-                <UngroupedRedirect />
-              </GroupProvider>
+              <ProtectedRoute>
+                <GroupProvider>
+                  <UngroupedRedirect />
+                </GroupProvider>
+              </ProtectedRoute>
             </AuthProvider>
           }
           path="/files"
@@ -38,9 +44,11 @@ function renderAt(path: string) {
         <Route
           element={
             <AuthProvider>
-              <GroupProvider>
-                <UngroupedRedirect />
-              </GroupProvider>
+              <ProtectedRoute>
+                <GroupProvider>
+                  <UngroupedRedirect />
+                </GroupProvider>
+              </ProtectedRoute>
             </AuthProvider>
           }
           path="/locations/:id"
