@@ -26,6 +26,7 @@ func NewFactorySet() *registry.FactorySet {
 	commodityLoanFactory := NewCommodityLoanRegistryFactory()
 	commodityServiceFactory := NewCommodityServiceRegistryFactory()
 	supplyLinkFactory := NewSupplyLinkRegistryFactory()
+	savedViewFactory := NewSavedViewRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
@@ -53,6 +54,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityLoanRegistryFactory = commodityLoanFactory
 	fs.CommodityServiceRegistryFactory = commodityServiceFactory
 	fs.SupplyLinkRegistryFactory = supplyLinkFactory
+	fs.SavedViewRegistryFactory = savedViewFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
@@ -133,6 +135,7 @@ func NewFactorySet() *registry.FactorySet {
 		commodityLoanFactory,
 		commodityServiceFactory,
 		supplyLinkFactory,
+		savedViewFactory,
 		tagFactory,
 		exportFactory,
 		restoreOperationFactory,
@@ -161,6 +164,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupMembershipRegistry,
 		fs.SystemAdminGrantRegistry,
 		fs.GroupInviteAuditRegistry,
+		savedViewFactory,
 	)
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request

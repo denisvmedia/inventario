@@ -24,6 +24,7 @@ type GroupPurger struct {
 	commodityLoans       registry.CommodityLoanRegistryFactory
 	commodityServices    registry.CommodityServiceRegistryFactory
 	supplyLinks          registry.SupplyLinkRegistryFactory
+	savedViews           registry.SavedViewRegistryFactory
 	tags                 registry.TagRegistryFactory
 	exports              registry.ExportRegistryFactory
 	restoreOperations    registry.RestoreOperationRegistryFactory
@@ -50,6 +51,7 @@ func NewGroupPurger(
 	commodityLoans registry.CommodityLoanRegistryFactory,
 	commodityServices registry.CommodityServiceRegistryFactory,
 	supplyLinks registry.SupplyLinkRegistryFactory,
+	savedViews registry.SavedViewRegistryFactory,
 	tags registry.TagRegistryFactory,
 	exports registry.ExportRegistryFactory,
 	restoreOperations registry.RestoreOperationRegistryFactory,
@@ -71,6 +73,7 @@ func NewGroupPurger(
 		commodityLoans:       commodityLoans,
 		commodityServices:    commodityServices,
 		supplyLinks:          supplyLinks,
+		savedViews:           savedViews,
 		tags:                 tags,
 		exports:              exports,
 		restoreOperations:    restoreOperations,
@@ -211,6 +214,12 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 		// that referenced them, mirroring the postgres order.
 		{"tags", func() error {
 			reg := r.tags.CreateServiceRegistry()
+			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
+		}},
+		// Saved views: group_id -> location_groups is NO ACTION, like the
+		// postgres purger's explicit DELETE.
+		{"saved_views", func() error {
+			reg := r.savedViews.CreateServiceRegistry()
 			return purgeByTenantGroup(ctx, tenantID, groupID, reg.List, reg.Delete)
 		}},
 		// Per-user/per-group notification overrides (#2095). The registry is

@@ -180,6 +180,21 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			return err
 		}
 
+		// Saved views are per-user settings that carry created_by_user_id
+		// rather than user_id: a member's views, shared ones included, go
+		// with the member. The column is NOT NULL FK -> users(id) NO ACTION.
+		savedViews := string(r.tableNames.SavedViews())
+		savedViewQuery := fmt.Sprintf(
+			"DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", savedViews,
+		)
+		if _, err := tx.ExecContext(ctx, savedViewQuery, tenantID, userID); err != nil {
+			return errxtrace.Wrap(
+				"failed to purge user saved views",
+				err,
+				errx.Attrs("table", savedViews, "tenant_id", tenantID, "user_id", userID),
+			)
+		}
+
 		// system_admin_grants is NON-RLS and carries NO tenant_id column, so it
 		// can't ride the tenant_id template. Two FKs point at users(id):
 		//   user_id    -> ON DELETE CASCADE (the granted user) — DELETE the row.

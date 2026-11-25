@@ -47,6 +47,7 @@ type UserPurger struct {
 	memberships   registry.GroupMembershipRegistry
 	adminGrants   registry.SystemAdminGrantRegistry
 	inviteAudit   registry.GroupInviteAuditRegistry
+	savedViews    registry.SavedViewRegistryFactory
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -62,6 +63,7 @@ func NewUserPurger(
 	memberships registry.GroupMembershipRegistry,
 	adminGrants registry.SystemAdminGrantRegistry,
 	inviteAudit registry.GroupInviteAuditRegistry,
+	savedViews registry.SavedViewRegistryFactory,
 ) *UserPurger {
 	return &UserPurger{
 		refreshTokens: refreshTokens,
@@ -74,6 +76,7 @@ func NewUserPurger(
 		memberships:   memberships,
 		adminGrants:   adminGrants,
 		inviteAudit:   inviteAudit,
+		savedViews:    savedViews,
 	}
 }
 
@@ -107,6 +110,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
+		// Saved views the user created, shared ones included: they carry a
+		// NOT NULL created_by_user_id, like the postgres DELETE.
+		{"saved_views", func() error { return r.purgeSavedViews(ctx, tenantID, userID) }},
 		// System-admin grant the user HOLDS. RevokeAtomic(allowZero=true)
 		// removes it idempotently. The granted_by back-ref is nulled only on
 		// the postgres side; the memory grant registry has no granted_by index
@@ -218,6 +224,25 @@ func (r *UserPurger) purgeMemberships(ctx context.Context, tenantID, userID stri
 			continue
 		}
 		if err := r.memberships.Delete(ctx, m.GetID()); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// purgeSavedViews deletes every saved view the user created in the tenant,
+// personal and shared, through the service registry that sees all of them.
+func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID string) error {
+	reg := r.savedViews.CreateServiceRegistry()
+	views, err := reg.List(ctx)
+	if err != nil {
+		return err
+	}
+	for _, v := range views {
+		if v.TenantID != tenantID || v.CreatedByUserID != userID {
+			continue
+		}
+		if err := reg.Delete(ctx, v.ID); err != nil {
 			return err
 		}
 	}

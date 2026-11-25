@@ -894,6 +894,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			r.Route("/storage-usage", StorageUsage())
 			r.Route("/plan", GroupPlan())
 			r.Route("/notifications", GroupNotifications(params.FactorySet))
+			// Saved views carry no write gate: viewers keep personal
+			// views too; the service checks who may share and edit.
+			r.Route("/saved-views", SavedViews(params, groupService))
 		})
 
 		// Uploads need special middleware without content type restrictions (group-scoped).

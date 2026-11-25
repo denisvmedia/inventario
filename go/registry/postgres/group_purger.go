@@ -116,6 +116,10 @@ var purgeOrder = []func(t store.TableNames) string{
 	// by now; the tags table itself is plain (tenant_id + group_id).
 	func(t store.TableNames) string { return string(t.Tags()) },
 
+	// Saved views. group_id -> location_groups and created_by_user_id ->
+	// users are NO ACTION; no incoming FK.
+	func(t store.TableNames) string { return string(t.SavedViews()) },
+
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups is NO ACTION, so they must be cleared explicitly
 	// before the orchestration layer drops the group row.

@@ -1020,6 +1020,34 @@ type SupplyLinkRegistry interface {
 	CountByCommodity(ctx context.Context, commodityIDs []string) (map[string]int, error)
 }
 
+// SavedViewRegistry stores the saved views of one group. A user registry
+// sees the views its user created and every view shared with the group; Get,
+// Update and Delete answer ErrNotFound for another member's personal view, so
+// a view a member cannot see is indistinguishable from one that does not
+// exist. Who may change a view they can see is decided by the service. A
+// service registry sees every row of every group.
+type SavedViewRegistry interface {
+	// Create stores a view after every view of the group: its Position is
+	// one past the highest position in the group, whatever the caller set.
+	// Get, List, Update, Delete and Count follow the visibility rule above.
+	Registry[models.SavedView]
+
+	// Reorder gives the views named in ids, which must be visible and
+	// distinct, the positions they hold now, sorted and handed out in the
+	// order of ids. Views not named keep their positions, so a member can
+	// reorder the views they may edit without moving the others. An id that
+	// is unknown, invisible or repeated fails with ErrNotFound and nothing
+	// is changed.
+	Reorder(ctx context.Context, ids []string) error
+
+	// RewriteQueries calls rewrite for every view of the group, including
+	// the personal views of other members, and stores the query it returns
+	// when changed is true. It returns how many views changed. It is meant
+	// for changes that every reference has to follow, such as a tag slug
+	// rename, and runs in one transaction.
+	RewriteQueries(ctx context.Context, rewrite func(view models.SavedView) (query string, changed bool)) (int, error)
+}
+
 // MaintenanceListOptions narrows the result of
 // MaintenanceScheduleRegistry.ListPaginated.
 type MaintenanceListOptions struct {
