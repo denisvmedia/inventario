@@ -183,9 +183,28 @@ func TestCommodityDraftsAPI_DraftBeingDiscarded(t *testing.T) {
 	rr := env.do(http.MethodPost, "/drafts", draftCreateBody("key-1", "Drill"))
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
 	draftID := decodeDraft(c, rr.Body.Bytes()).Data.ID
+	file := must.Must(regs.FileRegistry.Create(ctx, models.FileEntity{
+		Title:    "photo",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		File:     &models.File{Path: "photo", OriginalPath: "photo.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+		Links:    []models.FileLink{{EntityType: models.FileLinkDraft, EntityID: draftID, Meta: models.FileLinkMetaImages}},
+	}))
+	rr = env.do(http.MethodGet, "/files/"+file.ID, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, `"entity_name":"Drill"`)
 	// A discard that stopped after its first step.
 	_, err := regs.CommodityDraftRegistry.MarkDiscarding(ctx, draftID)
 	c.Assert(err, qt.IsNil)
+
+	// The file no longer names the draft, or links to it.
+	for _, path := range []string{"/files/" + file.ID, "/files"} {
+		rr = env.do(http.MethodGet, path, "")
+		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("%s body=%s", path, rr.Body.String()))
+		c.Check(rr.Body.String(), qt.Contains, file.ID)
+		c.Check(rr.Body.String(), qt.Not(qt.Contains), `"entity_name":"Drill"`)
+		c.Check(rr.Body.String(), qt.Not(qt.Contains), draftID)
+	}
 
 	rr = env.do(http.MethodGet, "/drafts/"+draftID, "")
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound, qt.Commentf("body=%s", rr.Body.String()))
