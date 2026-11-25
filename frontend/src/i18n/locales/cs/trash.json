@@ -107,7 +107,11 @@
     "itemsRestored_many": "{{count}} položky obnoveno.",
     "itemsRestored_one": "{{count}} položka obnovena.",
     "itemsRestored_other": "{{count}} položek obnoveno.",
-    "openItem": "Otevřít"
+    "openItem": "Otevřít",
+    "restoreUnknown_one": "Pro {{count}} položku nepřišla odpověď, možná byla obnovena. Zkontrolujte seznam.",
+    "restoreUnknown_few": "Pro {{count}} položky nepřišla odpověď, možná byly obnoveny. Zkontrolujte seznam.",
+    "restoreUnknown_many": "Pro {{count}} položky nepřišla odpověď, možná byly obnoveny. Zkontrolujte seznam.",
+    "restoreUnknown_other": "Pro {{count}} položek nepřišla odpověď, možná byly obnoveny. Zkontrolujte seznam."
   },
   "undo": "Zpět"
 }

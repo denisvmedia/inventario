@@ -147,7 +147,9 @@ func (api *trashAPI) restoreCommodity(w http.ResponseWriter, r *http.Request) {
 // @Summary Restore items from Trash
 // @Description Restores every item whose id appears in the body. The response
 // @Description lists the restored ids, the failures, and the restored items
-// @Description that came back without an area.
+// @Description that came back without an area. A failure's code is not_found
+// @Description when the item is not in Trash (restored already, never deleted,
+// @Description or not in the group), and failed for any other error.
 // @Tags trash
 // @Accept json-api
 // @Produce json-api
@@ -167,7 +169,7 @@ func (api *trashAPI) bulkRestoreCommodities(w http.ResponseWriter, r *http.Reque
 	for _, id := range input.Data.Attributes.IDs {
 		result, err := api.trash.RestoreCommodity(r.Context(), id)
 		if err != nil {
-			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			failed = append(failed, bulkResultFail(r.Context(), "commodities", services.BulkFailure{ID: id, Err: err}))
 			continue
 		}
 		succeeded = append(succeeded, id)

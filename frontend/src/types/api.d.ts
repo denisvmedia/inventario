@@ -4236,10 +4236,10 @@ export type paths = {
         put?: never;
         /**
          * Bulk-delete commodities
-         * @description Move every commodity whose id appears in the body to Trash.
-         *     The response lists succeeded vs. failed ids so the frontend
-         *     can render partial-failure UX without parsing per-id HTTP
-         *     statuses.
+         * @description Move the selected items to Trash, each as DELETE /commodities/{id} does: with the files no other item, area or location uses, and a deleted event in its history.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     The response lists succeeded and failed ids. An item that went to Trash while moving its files there failed is succeeded, with a files_kept note.
+         *     A retry sends the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4251,10 +4251,10 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs to delete */
+            /** @description The items to delete */
             requestBody: {
                 content: {
-                    "application/vnd.api+json": components["schemas"]["jsonapi.BulkIDsRequest"];
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkDeleteRequest"];
                 };
             };
             responses: {
@@ -4267,7 +4267,25 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -4295,8 +4313,10 @@ export type paths = {
         put?: never;
         /**
          * Bulk-move commodities to a new area
-         * @description Update every commodity whose id appears in the body to
-         *     belong to the supplied area_id.
+         * @description Put the selected items into the area area_id. An item already in that area is reported as skipped. Each moved item gets a moved event in its history.
+         *     An area_id that is not an area of the group is refused with 422 before any item changes.
+         *     The items are given as ids (at most 100) or as a query of the item query contract with the count and digest of the items it was seen to select (at most 500); see POST /commodities/bulk-update for the selection rules.
+         *     A retry sends the same area_id with the failed ids as `ids`, in batches of at most 100.
          */
         post: {
             parameters: {
@@ -4308,7 +4328,7 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            /** @description List of commodity IDs and the destination area_id */
+            /** @description The items and the destination area_id */
             requestBody: {
                 content: {
                     "application/vnd.api+json": components["schemas"]["jsonapi.BulkMoveRequest"];
@@ -4324,7 +4344,122 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
                     };
                 };
-                /** @description Bad request body */
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body, an area_id that is not an area of the group, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update commodities
+         * @description Apply one patch to the selected items. Each item is changed and validated as PUT /commodities/{id} changes it, and gets the history events that edit would give it:
+         *     a status change event when its status changes, and an updated event when only its tags or type change. As for PUT, a status change event stands for the whole change,
+         *     so a type or tag change in the same patch gets no event of its own.
+         *
+         *     The patch: `tags.add` and `tags.remove` add and remove tags without touching the others
+         *     (`add` takes slugs or the text of a new tag, at most 50 per list); `type` sets the type;
+         *     `status` sets the status with `date` (required for every status but in_use) and an optional `note`.
+         *     `in_use` takes neither: send it without `date` and `note` (a non-empty one is refused with 422), and it clears
+         *     the status date, note and sale price. `sold` is refused, since it needs a sale price for each item.
+         *     An item that already has the status keeps its status date and note: the patch does not change them,
+         *     even when it sends another date or note. The other parts of the patch still apply to that item.
+         *     A part left out of the patch is left unchanged.
+         *
+         *     The items are given as `ids` (at most 100) or as `query`, a query string of the item query contract
+         *     (the filter parameters of GET /commodities, without page and per_page), with `expected_count` and
+         *     `expected_digest`: the number of items the caller saw it select and the `meta.selection_digest`
+         *     GET /commodities returned for it. The query is run when the request arrives and may select no items
+         *     in Trash. When it now selects more than 500 items, the request fails with 422 bulk.too_many; this
+         *     check comes first, so a set that grew past 500 is a 422, not a 409. When it selects other items
+         *     within that limit (more, fewer, or as many with one swapped), the request fails with 409
+         *     bulk.selection_changed. Either way nothing changes.
+         *
+         *     The response lists, per item, whether it changed (succeeded), no part of the patch changed it (skipped) or it could not be changed (failed, with a code and the reason).
+         *     To retry, send the same patch again with the failed ids as `ids`, in batches of at most 100, not the query: after the first run it may select other items, and it also selects the ones that succeeded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The items and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description The query is not a valid item query, or selects items in Trash */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description bulk.selection_changed: the query selects at most 500 items, but other ones than expected_count and expected_digest describe */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Bad request body or patch, or bulk.too_many: the query selects more than 500 items (checked before the 409) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -6748,6 +6883,69 @@ export type paths = {
                     };
                 };
                 /** @description Bad request body */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/files/bulk-update": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bulk-update files
+         * @description Add tags to and remove tags from the files whose ids (at most 100) the body lists. Only the tags change:
+         *     unlike PUT /files/{id}, which replaces the tag list with the one it is sent, tags the patch does not name
+         *     stay on each file, and the title, description and file name stay as they are.
+         *     `tags.add` takes slugs or the text of a new tag, which is created as PUT /files/{id} creates it; `tags.remove` takes slugs.
+         *     A tag cannot be in both lists, and each list holds at most 50 tags.
+         *
+         *     The response lists, per file, whether it changed (succeeded), already had what the patch sets (skipped) or could not be changed (failed, with a code and the reason).
+         *     A retry sends the same patch with the failed ids, in batches of at most 100.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The files and the patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.FileBulkUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description Per-id outcome */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.BulkResultResponse"];
+                    };
+                };
+                /** @description Bad request body or patch */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -9821,7 +10019,9 @@ export type paths = {
          * Restore items from Trash
          * @description Restores every item whose id appears in the body. The response
          *     lists the restored ids, the failures, and the restored items
-         *     that came back without an area.
+         *     that came back without an area. A failure's code is not_found
+         *     when the item is not in Trash (restored already, never deleted,
+         *     or not in the group), and failed for any other error.
          */
         post: {
             parameters: {
@@ -13096,7 +13296,13 @@ export type components = {
         };
         "jsonapi.BulkMoveAttributes": {
             area_id?: string;
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
             ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
         };
         "jsonapi.BulkMoveRequest": {
             data?: components["schemas"]["jsonapi.BulkMoveRequestData"];
@@ -13107,6 +13313,16 @@ export type components = {
         };
         "jsonapi.BulkResultAttrs": {
             failed?: components["schemas"]["jsonapi.BulkResultFail"][];
+            /**
+             * @description Notes adds to succeeded ids something the caller should know. Absent
+             *     when there is nothing to add.
+             */
+            notes?: components["schemas"]["jsonapi.BulkResultNote"][];
+            /**
+             * @description Skipped lists the ids the action left as they were because there was
+             *     nothing to change. Absent when there are none.
+             */
+            skipped?: components["schemas"]["jsonapi.BulkResultSkip"][];
             succeeded?: string[];
         };
         "jsonapi.BulkResultData": {
@@ -13115,11 +13331,53 @@ export type components = {
             type?: string;
         };
         "jsonapi.BulkResultFail": {
+            /**
+             * @description Code classifies the failure: not_found (the item does not exist or is
+             *     in Trash), invalid (the change does not pass the item's validation;
+             *     Error says why) or failed (anything else).
+             * @enum {string}
+             */
+            code?: "not_found" | "invalid" | "failed";
             error?: string;
+            /**
+             * @description Field and Reason come with invalid: the field the validation refused
+             *     and the validator's code for why (for example short_name and
+             *     validation_required), so a client can say it in the user's language.
+             *     Error is the English message.
+             * @example short_name
+             */
+            field?: string;
             id?: string;
+            /** @description Name is the item's name when the item could be read. */
+            name?: string;
+            /** @example validation_required */
+            reason?: string;
+        };
+        "jsonapi.BulkResultNote": {
+            /**
+             * @description Code is files_kept: the item went to Trash, but moving its files there
+             *     failed, so some of them stayed live.
+             * @enum {string}
+             */
+            code?: "files_kept";
+            id?: string;
+            name?: string;
         };
         "jsonapi.BulkResultResponse": {
             data?: components["schemas"]["jsonapi.BulkResultData"];
+        };
+        "jsonapi.BulkResultSkip": {
+            id?: string;
+            name?: string;
+            /**
+             * @description Reason is unchanged: the item already had what the action sets.
+             * @enum {string}
+             */
+            reason?: "unchanged";
+        };
+        "jsonapi.BulkTagsPatch": {
+            add?: string[];
+            remove?: string[];
         };
         "jsonapi.CommoditiesMeta": {
             /**
@@ -13157,6 +13415,18 @@ export type components = {
              */
             per_page?: number;
             /**
+             * @description SelectionDigest names the set of items the query selects, on every
+             *     page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
+             *     bulk action on the query sends it back unchanged as expected_digest,
+             *     and is refused when the query no longer selects exactly these items.
+             *     Omitted when the query selects no items, more than a bulk action takes
+             *     (500), or items in Trash, and when the items changed while the list was
+             *     read or the lookup failed; a client then offers no bulk action on the
+             *     query.
+             * @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5
+             */
+            selection_digest?: string;
+            /**
              * Format: int64
              * @example 1
              */
@@ -13168,6 +13438,64 @@ export type components = {
         };
         "jsonapi.CommodityBrandsResponse": {
             data?: components["schemas"]["registry.CommodityBrandCount"][];
+        };
+        "jsonapi.CommodityBulkDeleteRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkDeleteRequestData"];
+        };
+        "jsonapi.CommodityBulkDeleteRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkSelection"];
+            /** @example commodities */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkPatch": {
+            /**
+             * @description Status changes the status, with the date and note a single status
+             *     change records.
+             */
+            status?: components["schemas"]["jsonapi.CommodityBulkStatusPatch"];
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
+            /**
+             * @description Type sets the item type.
+             * @example electronics
+             */
+            type?: string;
+        };
+        "jsonapi.CommodityBulkSelection": {
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
+            ids?: string[];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkStatusPatch": {
+            /** @example 2026-11-25 */
+            date?: string;
+            note?: string;
+            /**
+             * @example disposed
+             * @enum {string}
+             */
+            value?: "in_use" | "lost" | "disposed" | "written_off";
+        };
+        "jsonapi.CommodityBulkUpdateAttributes": {
+            /** @example 37 */
+            expected_count?: number;
+            /** @example 1eb7c54d52831bbfe8942af0b1c56b7409523a59ed6ca99c1174fef7eb32c1b5 */
+            expected_digest?: string;
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.CommodityBulkPatch"];
+            /** @example status=in_use&tags=garage&include_inactive=false */
+            query?: string;
+        };
+        "jsonapi.CommodityBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.CommodityBulkUpdateRequestData"];
+        };
+        "jsonapi.CommodityBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityBulkUpdateAttributes"];
+            /** @example commodities */
+            type?: string;
         };
         "jsonapi.CommodityCover": {
             file_id?: string;
@@ -13914,6 +14242,21 @@ export type components = {
         "jsonapi.ExportsResponse": {
             data?: components["schemas"]["jsonapi.ExportResponseData"][];
             meta?: components["schemas"]["jsonapi.ExportsMeta"];
+        };
+        "jsonapi.FileBulkPatch": {
+            tags?: components["schemas"]["jsonapi.BulkTagsPatch"];
+        };
+        "jsonapi.FileBulkUpdateAttributes": {
+            ids?: string[];
+            patch?: components["schemas"]["jsonapi.FileBulkPatch"];
+        };
+        "jsonapi.FileBulkUpdateRequest": {
+            data?: components["schemas"]["jsonapi.FileBulkUpdateRequestData"];
+        };
+        "jsonapi.FileBulkUpdateRequestData": {
+            attributes?: components["schemas"]["jsonapi.FileBulkUpdateAttributes"];
+            /** @example files */
+            type?: string;
         };
         "jsonapi.FileCategoryBytes": {
             /**
