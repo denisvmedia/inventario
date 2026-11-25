@@ -43,6 +43,7 @@ import { http } from "@/lib/http"
 import { cn } from "@/lib/utils"
 import { COMMODITY_TYPES, type CommodityTypeValue } from "@/features/commodities/constants"
 import { BRAND_MAX_LEN, MODEL_MAX_LEN } from "@/features/commodities/schemas"
+import { SELLER_NAME_MAX } from "@/features/sellers/api"
 import { useScanCommodityPhotos } from "@/features/commodities/scanHooks"
 import type {
   ScanFieldGuess,
@@ -113,6 +114,9 @@ export interface ScanAcceptedValues {
   short_name?: string
   brand?: string
   model?: string
+  // The seller's name. The dialog picks the group's seller of that name, or
+  // offers to create one.
+  seller?: string
   type?: CommodityTypeValue
   original_price?: string
   original_price_currency?: string
@@ -296,10 +300,17 @@ export function AiScanStep({
     const ac = new AbortController()
     abortRef.current = ac
     try {
-      const r = await scan.mutateAsync({
+      const scanned = await scan.mutateAsync({
         photos: photos.map((p) => p.file),
         signal: ac.signal,
       })
+      // Sellers belong to a group, and the anonymous flow has none to put
+      // the seller in, so the seller goes into the comments there.
+      const r = anonymous
+        ? sellerIntoComments(scanned, (name) =>
+            t("commodities:form.step.ai.sellerComment", { name })
+          )
+        : scanned
       // Nothing usable came back (an unreadable document, or a model
       // truncation). Don't drop the user into a green-but-empty "review" —
       // keep them on the offer with a retry hint.
@@ -385,6 +396,11 @@ export function AiScanStep({
         case "model":
           if (typeof value === "string" && value.trim() !== "") {
             out.model = value.trim().slice(0, MODEL_MAX_LEN)
+          }
+          break
+        case "seller":
+          if (typeof value === "string" && value.trim() !== "") {
+            out.seller = value.trim().replace(/\s+/g, " ").slice(0, SELLER_NAME_MAX)
           }
           break
         case "type":
@@ -938,6 +954,7 @@ function ReviewPanel({
     "type",
     "serial_number",
     "purchase_date",
+    "seller",
     "warranty_expires_at",
     "original_price",
     "original_price_currency",
@@ -1142,6 +1159,8 @@ function fieldLabelKey(field: ScanFieldName): string {
       return "brand"
     case "model":
       return "model"
+    case "seller":
+      return "seller"
     case "type":
       return "type"
     case "serial_number":
@@ -1228,6 +1247,36 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
       return t("commodities:form.step.ai.errors.providerError.title")
     default:
       return null
+  }
+}
+
+// sellerIntoComments moves the scanned seller into the comments, as a line of
+// its own after any comment the scan read. The merged comment keeps the more
+// confident of the two guesses, so a confident seller is not left unchecked
+// behind a weak comment, or the other way round.
+function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => string): ScanResult {
+  const fold = (fields: ScanResultFields): ScanResultFields => {
+    const { seller, ...rest } = fields
+    const name = seller?.value.trim() ?? ""
+    if (!seller || !name) return rest
+    const line = sellerLine(name)
+    const comments = rest.comments
+    const text = comments?.value.trim() ?? ""
+    return {
+      ...rest,
+      comments:
+        comments && text
+          ? {
+              value: `${text}\n${line}`,
+              confidence: Math.max(comments.confidence, seller.confidence),
+            }
+          : { value: line, confidence: seller.confidence },
+    }
+  }
+  return {
+    ...result,
+    fields: fold(result.fields),
+    items: result.items.map((item) => ({ ...item, fields: fold(item.fields) })),
   }
 }
 

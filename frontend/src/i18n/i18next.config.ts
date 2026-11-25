@@ -22,6 +22,7 @@ import enMembers from "./locales/en/members.json"
 import enReminders from "./locales/en/reminders.json"
 import enReports from "./locales/en/reports.json"
 import enSearch from "./locales/en/search.json"
+import enSellers from "./locales/en/sellers.json"
 import enServices from "./locales/en/services.json"
 import enSettings from "./locales/en/settings.json"
 import enStubs from "./locales/en/stubs.json"
@@ -47,6 +48,7 @@ export const I18N_NAMESPACES = [
   "commodities",
   "files",
   "tags",
+  "sellers",
   "loans",
   "maintenance",
   "reminders",
@@ -81,6 +83,7 @@ const enResources = {
   commodities: enCommodities,
   files: enFiles,
   tags: enTags,
+  sellers: enSellers,
   loans: enLoans,
   maintenance: enMaintenance,
   reminders: enReminders,

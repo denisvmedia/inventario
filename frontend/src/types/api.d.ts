@@ -4072,6 +4072,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms */
                     q?: string;
                     /** @description Only items with these tag slugs (comma-separated or repeated); see tag_mode */
@@ -4469,6 +4471,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Only commodities with no area */
                     unassigned?: boolean;
+                    /** @description Filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Include drafts and non-in_use commodities (default true) */
                     include_inactive?: boolean;
                     /** @description Filter by computed warranty status */
@@ -8063,6 +8067,8 @@ export type paths = {
                     area_id?: string;
                     /** @description Commodities only: only items with no area (ignored when area_id is set) */
                     unassigned?: boolean;
+                    /** @description Commodities only: filter by seller ID; repeat for several (OR) */
+                    seller_id?: string[];
                     /** @description Commodities only: include drafts and non-in_use items (default true; false hides them) */
                     include_inactive?: boolean;
                     /** @description Commodities only: filter by computed warranty status (active, expiring, expired, none); repeat to OR */
@@ -8111,6 +8117,245 @@ export type paths = {
         options?: never;
         head?: never;
         patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/sellers": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List sellers
+         * @description The sellers of the group sorted by name, each with the number of items bought from it (drafts and inactive items included, items in Trash left out).
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Keep sellers whose name contains this text, ignoring case */
+                    q?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellersResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Create a seller
+         * @description The name is required and unique in the group, ignoring case and runs of spaces. The website, when set, is an absolute http(s) URL.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description Seller object */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SellerRequest"];
+                };
+            };
+            responses: {
+                /** @description Seller created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Another seller of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/sellers/{sellerID}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a seller */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        /**
+         * Delete a seller
+         * @description Deletes the seller. The items bought from it are kept and no longer name a seller.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a seller
+         * @description Attributes left out keep their value. The merged seller is validated as on create.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Seller ID */
+                    sellerID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Seller patch */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.SellerUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.SellerResponse"];
+                    };
+                };
+                /** @description Seller not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Another seller of the group has this name */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         trace?: never;
     };
     "/g/{groupSlug}/services": {
@@ -13657,6 +13902,86 @@ export type components = {
             data?: unknown;
             meta?: components["schemas"]["jsonapi.SearchMeta"];
         };
+        "jsonapi.SellerRequest": {
+            data?: components["schemas"]["jsonapi.SellerRequestDataWrapper"];
+        };
+        "jsonapi.SellerRequestData": {
+            /** @example orders@hardware.example */
+            contact?: string;
+            /** @example Hardware Store */
+            name?: string;
+            note?: string;
+            /** @example https://hardware.example */
+            website?: string;
+        };
+        "jsonapi.SellerRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SellerRequestData"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerResponse": {
+            data?: components["schemas"]["jsonapi.SellerResponseData"];
+        };
+        "jsonapi.SellerResponseData": {
+            attributes?: components["schemas"]["jsonapi.SellerView"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerUpdateRequest": {
+            data?: components["schemas"]["jsonapi.SellerUpdateRequestDataWrapper"];
+        };
+        "jsonapi.SellerUpdateRequestData": {
+            contact?: string;
+            name?: string;
+            note?: string;
+            website?: string;
+        };
+        "jsonapi.SellerUpdateRequestDataWrapper": {
+            attributes?: components["schemas"]["jsonapi.SellerUpdateRequestData"];
+            id?: string;
+            /**
+             * @example sellers
+             * @enum {string}
+             */
+            type?: "sellers";
+        };
+        "jsonapi.SellerView": {
+            /** @description Contact is free text: an email address, a phone number, a person. */
+            contact?: string;
+            created_at?: string;
+            id?: string;
+            /**
+             * Format: int64
+             * @example 3
+             */
+            item_count?: number;
+            /** @description Name is the seller as shown on items and in the sellers list. */
+            name?: string;
+            note?: string;
+            updated_at?: string;
+            uuid?: string;
+            /** @description Website is an absolute http(s) URL, or empty. */
+            website?: string;
+        };
+        "jsonapi.SellersMeta": {
+            /**
+             * Format: int64
+             * @example 12
+             */
+            sellers?: number;
+        };
+        "jsonapi.SellersResponse": {
+            data?: components["schemas"]["jsonapi.SellerResponseData"][];
+            meta?: components["schemas"]["jsonapi.SellersMeta"];
+        };
         "jsonapi.ServiceCommodityRef": {
             id?: string;
             name?: string;
@@ -14222,6 +14547,14 @@ export type components = {
              *     currency — sale-side currency reporting is out of scope for #1611.
              */
             sale_price?: number;
+            /**
+             * @description SellerID is the seller the item was bought from (#2804), or nil.
+             *     Deleting the seller leaves the item without one. The seller must be in
+             *     the item's group: the postgres registry looks it up under the group's
+             *     row-level security before every write, since the foreign key alone
+             *     would accept a seller of any group.
+             */
+            seller_id?: string;
             serial_number?: string;
             short_name?: string;
             status?: components["schemas"]["models.CommodityStatus"];

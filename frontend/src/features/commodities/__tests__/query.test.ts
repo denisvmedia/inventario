@@ -5,6 +5,7 @@ import {
   DEFAULT_COMMODITY_QUERY,
   commodityListHref,
   commodityQueryToListOptions,
+  commoditySellerHref,
   commodityTagHref,
   hasCommodityFilters,
   listOptionsToParams,
@@ -23,6 +24,7 @@ const FULL: CommodityQuery = {
   statuses: ["in_use", "sold"],
   areaId: "a1",
   unassigned: true,
+  sellerIds: ["s2", "s1"],
   includeInactive: true,
   warrantyStatuses: ["active", "expired"],
   lentOut: true,
@@ -152,6 +154,10 @@ describe("commodityListHref", () => {
     expect(commodityListHref("h", {})).toBe("/g/h/commodities")
   })
 
+  it("links one seller with inactive items included", () => {
+    expect(commoditySellerHref("h", "s-1")).toBe("/g/h/commodities?seller=s-1&inactive=1")
+  })
+
   it("links one tag with inactive items included, escaping its slug", () => {
     expect(commodityTagHref("h", "usb-кабель")).toBe(
       `/g/h/commodities?inactive=1&tags=${encodeURIComponent("usb-кабель")}`
@@ -243,6 +249,7 @@ describe("listOptionsToParams", () => {
       warranty_status: ["active", "expired"],
       lent_out: ["true"],
       unassigned: ["true"],
+      seller_id: ["s1", "s2"],
       tags: ["garage,red"],
       tag_mode: ["any"],
       tags_exclude: ["broken"],
@@ -283,6 +290,16 @@ describe("listOptionsToParams", () => {
     expect(listOptionsToParams(commodityQueryToListOptions(anyOnly)).toString()).toBe(
       listOptionsToParams(commodityQueryToListOptions(DEFAULT_COMMODITY_QUERY)).toString()
     )
+  })
+
+  it("reads repeated sellers without duplicates and sends them as seller_id", () => {
+    const q = parseCommodityQuery(new URLSearchParams("seller=b&seller=a&seller=b&seller="))
+    expect(q.sellerIds).toEqual(["b", "a"])
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, sellerIds: ["a"] })).toBe(true)
+    expect(listOptionsToParams(commodityQueryToListOptions(q)).getAll("seller_id")).toEqual([
+      "a",
+      "b",
+    ])
   })
 
   it("sends no_tags", () => {

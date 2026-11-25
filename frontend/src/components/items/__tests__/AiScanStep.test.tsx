@@ -114,3 +114,58 @@ describe("<AiScanStep /> source-file retention (#1983 Part A)", () => {
     expect(onAccept).not.toHaveBeenCalled()
   })
 })
+
+describe("<AiScanStep /> seller in the anonymous flow (#2804)", () => {
+  beforeEach(() => {
+    server.use(
+      http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR", "GBP", "CZK"]))
+    )
+  })
+
+  function publicScan(fields: Record<string, { value: string; confidence: number }>) {
+    server.use(
+      http.post(apiUrl(`/public/commodities/scan`), () =>
+        HttpResponse.json({
+          data: { type: "commodity_scan", attributes: { fields, warnings: [] } },
+        })
+      )
+    )
+  }
+
+  async function scanAnonymously() {
+    const user = userEvent.setup()
+    const onAccept =
+      vi.fn<(values: ScanAcceptedValues, meta: ScanAcceptMeta, files: File[]) => void>()
+    renderWithProviders({
+      children: (
+        <AiScanStep slug="" anonymous defaultCurrency="USD" onAccept={onAccept} onSkip={vi.fn()} />
+      ),
+    })
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makeImage())
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    expect(onAccept).toHaveBeenCalledTimes(1)
+    return onAccept.mock.calls[0][0]
+  }
+
+  it("puts the scanned seller into the comments", async () => {
+    publicScan({
+      name: { value: "Kettle", confidence: 0.9 },
+      seller: { value: "Corner Market", confidence: 0.8 },
+    })
+    const values = await scanAnonymously()
+    expect(values.comments).toBe("Seller: Corner Market")
+    expect(values.seller).toBeUndefined()
+  })
+
+  it("adds the seller after a comment the scan read", async () => {
+    publicScan({
+      name: { value: "Kettle", confidence: 0.9 },
+      comments: { value: "Paid in cash", confidence: 0.6 },
+      seller: { value: "Corner Market", confidence: 0.8 },
+    })
+    const values = await scanAnonymously()
+    expect(values.comments).toBe("Paid in cash\nSeller: Corner Market")
+  })
+})

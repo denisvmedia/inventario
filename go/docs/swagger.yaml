@@ -3177,6 +3177,124 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.SearchMeta'
     type: object
+  jsonapi.SellerRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SellerRequestDataWrapper'
+    type: object
+  jsonapi.SellerRequestData:
+    properties:
+      contact:
+        example: orders@hardware.example
+        type: string
+      name:
+        example: Hardware Store
+        type: string
+      note:
+        type: string
+      website:
+        example: https://hardware.example
+        type: string
+    type: object
+  jsonapi.SellerRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SellerRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - sellers
+        example: sellers
+        type: string
+    type: object
+  jsonapi.SellerResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SellerResponseData'
+    type: object
+  jsonapi.SellerResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SellerView'
+      id:
+        type: string
+      type:
+        enum:
+        - sellers
+        example: sellers
+        type: string
+    type: object
+  jsonapi.SellerUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.SellerUpdateRequestDataWrapper'
+    type: object
+  jsonapi.SellerUpdateRequestData:
+    properties:
+      contact:
+        type: string
+      name:
+        type: string
+      note:
+        type: string
+      website:
+        type: string
+    type: object
+  jsonapi.SellerUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.SellerUpdateRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - sellers
+        example: sellers
+        type: string
+    type: object
+  jsonapi.SellerView:
+    properties:
+      contact:
+        description: 'Contact is free text: an email address, a phone number, a person.'
+        type: string
+      created_at:
+        type: string
+      id:
+        type: string
+      item_count:
+        example: 3
+        format: int64
+        type: integer
+      name:
+        description: Name is the seller as shown on items and in the sellers list.
+        type: string
+      note:
+        type: string
+      updated_at:
+        type: string
+      uuid:
+        type: string
+      website:
+        description: Website is an absolute http(s) URL, or empty.
+        type: string
+    type: object
+  jsonapi.SellersMeta:
+    properties:
+      sellers:
+        example: 12
+        format: int64
+        type: integer
+    type: object
+  jsonapi.SellersResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.SellerResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.SellersMeta'
+    type: object
   jsonapi.ServiceCommodityRef:
     properties:
       id:
@@ -3971,6 +4089,14 @@ definitions:
           for any other status. Stored in the commodity's original purchase
           currency — sale-side currency reporting is out of scope for #1611.
         type: number
+      seller_id:
+        description: |-
+          SellerID is the seller the item was bought from (#2804), or nil.
+          Deleting the seller leaves the item without one. The seller must be in
+          the item's group: the postgres registry looks it up under the group's
+          row-level security before every write, since the foreign key alone
+          would accept a seller of any group.
+        type: string
       serial_number:
         type: string
       short_name:
@@ -7532,6 +7658,13 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - collectionFormat: multi
+        description: Filter by seller ID; repeat for several (OR)
+        in: query
+        items:
+          type: string
+        name: seller_id
+        type: array
       - description: 'Search text: space-separated terms, quotes keep a phrase; every
           term must match the name, short name, brand, model, a serial or part number,
           a tag, a note or the asset ID. At most 200 characters and 10 terms'
@@ -8717,6 +8850,13 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - collectionFormat: multi
+        description: Filter by seller ID; repeat for several (OR)
+        in: query
+        items:
+          type: string
+        name: seller_id
+        type: array
       - description: Include drafts and non-in_use commodities (default true)
         in: query
         name: include_inactive
@@ -10357,6 +10497,13 @@ paths:
         in: query
         name: unassigned
         type: boolean
+      - collectionFormat: multi
+        description: 'Commodities only: filter by seller ID; repeat for several (OR)'
+        in: query
+        items:
+          type: string
+        name: seller_id
+        type: array
       - description: 'Commodities only: include drafts and non-in_use items (default
           true; false hides them)'
         in: query
@@ -10404,6 +10551,169 @@ paths:
       summary: Advanced search
       tags:
       - search
+  /g/{groupSlug}/sellers:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: The sellers of the group sorted by name, each with the number of
+        items bought from it (drafts and inactive items included, items in Trash left
+        out).
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Keep sellers whose name contains this text, ignoring case
+        in: query
+        name: q
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SellersResponse'
+      summary: List sellers
+      tags:
+      - sellers
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: The name is required and unique in the group, ignoring case and
+        runs of spaces. The website, when set, is an absolute http(s) URL.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Seller object
+        in: body
+        name: seller
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SellerRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Seller created
+          schema:
+            $ref: '#/definitions/jsonapi.SellerResponse'
+        "409":
+          description: Another seller of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a seller
+      tags:
+      - sellers
+  /g/{groupSlug}/sellers/{sellerID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: Deletes the seller. The items bought from it are kept and no longer
+        name a seller.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Seller ID
+        in: path
+        name: sellerID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "204":
+          description: No content
+        "404":
+          description: Seller not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a seller
+      tags:
+      - sellers
+    get:
+      consumes:
+      - application/vnd.api+json
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Seller ID
+        in: path
+        name: sellerID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SellerResponse'
+        "404":
+          description: Seller not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a seller
+      tags:
+      - sellers
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: Attributes left out keep their value. The merged seller is validated
+        as on create.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Seller ID
+        in: path
+        name: sellerID
+        required: true
+        type: string
+      - description: Seller patch
+        in: body
+        name: seller
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.SellerUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.SellerResponse'
+        "404":
+          description: Seller not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Another seller of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a seller
+      tags:
+      - sellers
   /g/{groupSlug}/services:
     get:
       consumes:

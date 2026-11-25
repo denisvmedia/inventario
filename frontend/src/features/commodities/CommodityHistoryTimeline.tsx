@@ -32,6 +32,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { useAreas } from "@/features/areas/hooks"
 import { useCommodityEvents } from "@/features/commodities/hooks"
+import { useSellers } from "@/features/sellers/hooks"
 import type { CommodityEvent, CommodityEventKind } from "@/features/commodities/api"
 import { formatDateTime } from "@/lib/intl"
 
@@ -50,6 +51,7 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
   const { t } = useTranslation()
   const events = useCommodityEvents(commodityId)
   const areas = useAreas({ enabled: true })
+  const sellers = useSellers()
   const [expanded, setExpanded] = useState(false)
 
   const areaName = useMemo(() => {
@@ -59,6 +61,14 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
     }
     return (id?: string) => (id ? (map.get(id) ?? id) : "")
   }, [areas.data])
+
+  // A seller deleted since the event is named as such: the event keeps only
+  // its id.
+  const sellerName = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const s of sellers.data ?? []) map.set(s.id, s.name ?? "")
+    return (id: string) => map.get(id) ?? t("commodities:detail.historyEvent.sellerDeleted")
+  }, [sellers.data, t])
 
   if (events.isLoading) {
     return (
@@ -117,7 +127,7 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
           <>
             <ol className="relative ml-2 border-l border-border pl-4 space-y-3">
               {visible.map((ev) => (
-                <TimelineRow key={ev.id} event={ev} areaName={areaName} />
+                <TimelineRow key={ev.id} event={ev} areaName={areaName} sellerName={sellerName} />
               ))}
             </ol>
             {hidden > 0 && !expanded ? (
@@ -152,9 +162,10 @@ export function CommodityHistoryTimeline({ commodityId }: Props) {
 interface RowProps {
   event: CommodityEvent
   areaName: (id?: string) => string
+  sellerName: (id: string) => string
 }
 
-function TimelineRow({ event, areaName }: RowProps) {
+function TimelineRow({ event, areaName, sellerName }: RowProps) {
   const { t } = useTranslation()
   const actor = event.actor?.name?.trim() || event.actor?.email?.trim() || ""
   // Pin to UTC so the rendered calendar day agrees with the meta-grid
@@ -175,7 +186,7 @@ function TimelineRow({ event, areaName }: RowProps) {
         {renderEventIcon(event.kind, "size-3")}
       </span>
       <div className="flex flex-col gap-0.5">
-        <span className="font-medium">{labelFor(event, t, areaName)}</span>
+        <span className="font-medium">{labelFor(event, t, areaName, sellerName)}</span>
         <span className="text-xs text-muted-foreground">
           {occurred}
           {actor ? ` · ${t("commodities:detail.historyEvent.by", { name: actor })}` : ""}
@@ -235,7 +246,8 @@ function renderEventIcon(kind: CommodityEventKind, className: string) {
 function labelFor(
   ev: CommodityEvent,
   t: TFunction,
-  areaName: (id?: string) => string
+  areaName: (id?: string) => string,
+  sellerName: (id: string) => string
 ): string {
   switch (ev.kind) {
     case "created":
@@ -354,10 +366,49 @@ function labelFor(
       })
     }
     case "updated":
-      return t("commodities:detail.historyEvent.updatedLabel")
+      return sellerOnlyLabel(ev, t, sellerName) ?? t("commodities:detail.historyEvent.updatedLabel")
     default:
       return t("commodities:detail.historyEvent.updatedLabel")
   }
+}
+
+// sellerOnlyLabel names the sellers of an "updated" event whose only change
+// is the seller (#2804). An edit that changed more keeps the generic copy, so
+// the row never hides the other changes behind the seller.
+function sellerOnlyLabel(
+  ev: CommodityEvent,
+  t: TFunction,
+  sellerName: (id: string) => string
+): string | null {
+  const changed = changedKeys(ev.before, ev.after)
+  if (changed.length !== 1 || changed[0] !== "seller_id") return null
+  const from = stringField(ev.before, "seller_id")
+  const to = stringField(ev.after, "seller_id")
+  if (from && to) {
+    return t("commodities:detail.historyEvent.sellerChangedLabel", {
+      from: sellerName(from),
+      to: sellerName(to),
+    })
+  }
+  if (to) return t("commodities:detail.historyEvent.sellerChangedLabelSet", { to: sellerName(to) })
+  if (from) {
+    return t("commodities:detail.historyEvent.sellerChangedLabelCleared", {
+      from: sellerName(from),
+    })
+  }
+  return null
+}
+
+// changedKeys lists the keys whose values differ between two snapshots. The
+// values are strings, numbers, booleans or string lists, so comparing their
+// JSON is exact.
+function changedKeys(
+  before: Record<string, unknown> | undefined,
+  after: Record<string, unknown> | undefined
+): string[] {
+  if (!before || !after) return []
+  const keys = new Set([...Object.keys(before), ...Object.keys(after)])
+  return [...keys].filter((k) => JSON.stringify(before[k]) !== JSON.stringify(after[k]))
 }
 
 // changedLoanFields lists the keys whose values differ between a
