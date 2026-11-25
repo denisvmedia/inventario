@@ -211,13 +211,11 @@ describe("<CommoditiesListPage /> custom fields (#2803)", () => {
     const row = screen.getByTestId("commodity-row")
     expect(within(row).getByTestId("commodity-row-cf-cf-plate")).toHaveTextContent("AB 123")
     expect(within(row).getByTestId("commodity-row-cf-cf-fuel")).toHaveTextContent("Diesel")
-    expect(within(row).getByTestId("commodity-row-cf-cf-charger")).toHaveTextContent(
-      "Wall charger"
-    )
+    expect(within(row).getByTestId("commodity-row-cf-cf-charger")).toHaveTextContent("Wall charger")
     expect(within(row).getByTestId("commodity-row-cf-cf-odo")).toHaveTextContent("—")
-    expect(JSON.parse(localStorage.getItem(`commodities:customFieldColumns:${SLUG}`) ?? "")).toEqual(
-      ["cf-plate", "cf-fuel", "cf-charger", "cf-odo"]
-    )
+    expect(
+      JSON.parse(localStorage.getItem(`commodities:customFieldColumns:${SLUG}`) ?? "")
+    ).toEqual(["cf-plate", "cf-fuel", "cf-charger", "cf-odo"])
   })
 
   it("names the custom field a search matched", async () => {
@@ -227,7 +225,9 @@ describe("<CommoditiesListPage /> custom fields (#2803)", () => {
           data: [van],
           meta: {
             commodities: 1,
-            matches: { c1: [{ field: "custom_fields", custom_field_id: "cf-plate", value: "AB 123" }] },
+            matches: {
+              c1: [{ field: "custom_fields", custom_field_id: "cf-plate", value: "AB 123" }],
+            },
           },
         })
       )

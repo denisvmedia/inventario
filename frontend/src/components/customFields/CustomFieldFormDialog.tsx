@@ -119,7 +119,10 @@ export function CustomFieldFormDialog({
     })
     setTemplates(
       Object.fromEntries(
-        (field?.templates ?? []).map((entry) => [entry.item_type_id, toFormValue(entry.default_value)])
+        (field?.templates ?? []).map((entry) => [
+          entry.item_type_id,
+          toFormValue(entry.default_value),
+        ])
       )
     )
     setTemplateErrors({})
@@ -131,9 +134,7 @@ export function CustomFieldFormDialog({
   const draftField: CustomField = {
     ...(field ?? { id: "", name: "", options: [], templates: [] }),
     type,
-    options: currentOptions
-      .filter((o) => o.id)
-      .map((o) => ({ id: o.id, label: o.label })),
+    options: currentOptions.filter((o) => o.id).map((o) => ({ id: o.id, label: o.label })),
   }
 
   // Items that lose their value when the removed options go.
@@ -159,8 +160,7 @@ export function CustomFieldFormDialog({
       const key = values.type === "item_link" ? undefined : validateFormValue(checkedField, v)
       if (key) nextErrors[itemTypeId] = `customFields:errors.${key}`
       const removedOption = values.type === "select" && !savedOptions.has(v.value)
-      const def =
-        values.type === "item_link" || removedOption ? null : toApiValue(values.type, v)
+      const def = values.type === "item_link" || removedOption ? null : toApiValue(values.type, v)
       entries.push({ item_type_id: itemTypeId, default_value: def })
     }
     setTemplateErrors(nextErrors)

@@ -73,7 +73,11 @@ function draftValue(field: CustomField, draft: Draft): string | null {
 // (#2803): it lists the query's conditions, each removable, and builds a
 // new one from a field, a comparison its type takes, and a value. A
 // condition on a deleted field stays listed, marked, so it can be removed.
-export function CustomFieldFilterMenu({ fields, conditions, onChange }: CustomFieldFilterMenuProps) {
+export function CustomFieldFilterMenu({
+  fields,
+  conditions,
+  onChange,
+}: CustomFieldFilterMenuProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState<Draft>(EMPTY_DRAFT)
@@ -151,9 +155,7 @@ export function CustomFieldFilterMenu({ fields, conditions, onChange }: CustomFi
             })}
           </ul>
         ) : (
-          <p className="px-3 py-2 text-sm text-muted-foreground">
-            {t("customFields:filter.none")}
-          </p>
+          <p className="px-3 py-2 text-sm text-muted-foreground">{t("customFields:filter.none")}</p>
         )}
         <Separator />
         {full ? (
@@ -170,7 +172,11 @@ export function CustomFieldFilterMenu({ fields, conditions, onChange }: CustomFi
                 value={draft.fieldId}
                 onValueChange={(id) => {
                   const next = fields.find((f) => f.id === id)
-                  setDraft({ ...EMPTY_DRAFT, fieldId: id, op: next ? opsForType(next.type)[0] : "" })
+                  setDraft({
+                    ...EMPTY_DRAFT,
+                    fieldId: id,
+                    op: next ? opsForType(next.type)[0] : "",
+                  })
                 }}
               >
                 <SelectTrigger

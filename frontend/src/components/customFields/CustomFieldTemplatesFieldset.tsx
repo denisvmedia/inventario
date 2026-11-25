@@ -49,12 +49,12 @@ export function CustomFieldTemplatesFieldset({
     <fieldset className="space-y-2" data-testid="custom-field-templates">
       <legend className="text-sm font-medium">{t("customFields:templates.label")}</legend>
       <p className="text-xs text-muted-foreground">
-        {takesDefault ? t("customFields:templates.hint") : t("customFields:templates.hintNoDefault")}
+        {takesDefault
+          ? t("customFields:templates.hint")
+          : t("customFields:templates.hintNoDefault")}
       </p>
       {field.type === "select" && field.options.length === 0 ? (
-        <p className="text-xs text-muted-foreground">
-          {t("customFields:templates.optionsFirst")}
-        </p>
+        <p className="text-xs text-muted-foreground">{t("customFields:templates.optionsFirst")}</p>
       ) : null}
       <ul className="flex max-h-72 flex-col gap-2 overflow-y-auto rounded-md border border-border p-2">
         {lookup.types.map((type) => {
@@ -91,7 +91,9 @@ export function CustomFieldTemplatesFieldset({
                     field={field}
                     inputId={inputId}
                     value={value[type.id] as CustomFieldFormValue}
-                    set={(patch) => onChange({ ...value, [type.id]: { ...value[type.id], ...patch } })}
+                    set={(patch) =>
+                      onChange({ ...value, [type.id]: { ...value[type.id], ...patch } })
+                    }
                     invalid={!!error}
                     describedBy={errorId}
                     groupCurrency={groupCurrency}

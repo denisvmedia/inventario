@@ -53,7 +53,7 @@ export function parseCustomFieldCondition(raw: string): CustomFieldCondition | n
   const op = second < 0 ? rest : rest.slice(0, second)
   const value = second < 0 ? "" : rest.slice(second + 1)
   if (!isOp(op)) return null
-  if (opTakesValue(op) !== (second >= 0)) return null
+  if (opTakesValue(op) !== second >= 0) return null
   return { fieldId, op, value }
 }
 

@@ -413,8 +413,7 @@ export function CommoditiesListPage() {
   // Sorts by a custom field, the same way: picking it again reverses the
   // order.
   function setCustomFieldSort(field: CustomField) {
-    const desc =
-      query.customFieldSort === field.id ? !query.sortDesc : sortsDescendingFirst(field)
+    const desc = query.customFieldSort === field.id ? !query.sortDesc : sortsDescendingFirst(field)
     updateQuery({ sort: "name", sortDesc: desc, customFieldSort: field.id })
   }
   function clearFilters() {

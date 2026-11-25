@@ -14,7 +14,9 @@ export function readCustomFieldColumns(slug: string): string[] {
   try {
     const parsed: unknown = JSON.parse(localStorage.getItem(storageKey(slug)) ?? "[]")
     return Array.isArray(parsed)
-      ? parsed.filter((id): id is string => typeof id === "string").slice(0, CUSTOM_FIELD_COLUMNS_MAX)
+      ? parsed
+          .filter((id): id is string => typeof id === "string")
+          .slice(0, CUSTOM_FIELD_COLUMNS_MAX)
       : []
   } catch {
     // Unreadable or unavailable storage shows no columns.
