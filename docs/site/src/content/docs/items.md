@@ -210,12 +210,13 @@ it, to open it full screen; use the arrows or the left and right arrow keys to
 go through the item's photos, and Esc to close. An item without a photo shows
 its type icon instead.
 
-![An item detail page showing the cover photo, key facts, and the row of tabs](../../assets/screenshots/item-detail.png)
+![An item detail page showing the cover photo, key facts, the row of tabs, and the Reminders card below the details](../../assets/screenshots/item-detail.png)
 
 - **Details** — name, status, type, location/area, prices, serial numbers, part
-  numbers, links, tags, notes, and dates. Click a tag, the area, or the type
-  (under the name) to open **All Items** filtered by it alone, with **Show
-  inactive** on.
+  numbers, links, tags, notes, and dates, followed by the item's **Reminders**
+  (see [Item reminders](../warranties-loans-maintenance/#item-reminders)) and its
+  history. Click a tag, the area, or the type (under the name) to open **All
+  Items** filtered by it alone, with **Show inactive** on.
 - **Warranty** — expiry, notes, and a reminder of how long is left. See
   [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 - **Files** — every file attached to this item, filterable by **All**,

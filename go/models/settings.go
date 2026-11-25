@@ -90,6 +90,7 @@ const (
 	SettingNameNotificationsWeeklyDigest        SettingName = "notifications.weekly_digest"
 	SettingNameNotificationsPriceDrop           SettingName = "notifications.price_drop"
 	SettingNameNotificationsLoanReminder        SettingName = "notifications.loan_reminder"
+	SettingNameNotificationsItemReminder        SettingName = "notifications.item_reminder"
 	SettingNameNotificationsChannelEmail        SettingName = "notifications.channel.email"
 	SettingNameNotificationsChannelPush         SettingName = "notifications.channel.push"
 
@@ -118,32 +119,33 @@ const (
 // `settings` table — one row per non-nil field. Nil pointers mean
 // "not set" and the read path falls back to defaults defined in code.
 type SettingsObject struct {
-	Theme             *string `configfield:"uiconfig.theme"`
-	ShowDebugInfo     *bool   `configfield:"uiconfig.show_debug_info"`
-	DefaultDateFormat *string `configfield:"uiconfig.default_date_format"`
+	Theme             *string `json:"theme,omitempty" configfield:"uiconfig.theme"`
+	ShowDebugInfo     *bool   `json:"showDebugInfo,omitempty" configfield:"uiconfig.show_debug_info"`
+	DefaultDateFormat *string `json:"defaultDateFormat,omitempty" configfield:"uiconfig.default_date_format"`
 
 	// Notification category toggles. Each category controls a class of
 	// outbound notifications (warranty expiry mailers, weekly digests,
 	// etc.). Transactional senders — password reset, email verification —
 	// never consult these and so cannot be opted out.
-	NotificationsWarrantyExpiry      *bool `configfield:"notifications.warranty_expiry"`
-	NotificationsMaintenanceReminder *bool `configfield:"notifications.maintenance_reminder"`
-	NotificationsWeeklyDigest        *bool `configfield:"notifications.weekly_digest"`
-	NotificationsPriceDrop           *bool `configfield:"notifications.price_drop"`
-	NotificationsLoanReminder        *bool `configfield:"notifications.loan_reminder"`
+	NotificationsWarrantyExpiry      *bool `json:"notificationsWarrantyExpiry,omitempty" configfield:"notifications.warranty_expiry"`
+	NotificationsMaintenanceReminder *bool `json:"notificationsMaintenanceReminder,omitempty" configfield:"notifications.maintenance_reminder"`
+	NotificationsWeeklyDigest        *bool `json:"notificationsWeeklyDigest,omitempty" configfield:"notifications.weekly_digest"`
+	NotificationsPriceDrop           *bool `json:"notificationsPriceDrop,omitempty" configfield:"notifications.price_drop"`
+	NotificationsLoanReminder        *bool `json:"notificationsLoanReminder,omitempty" configfield:"notifications.loan_reminder"`
+	NotificationsItemReminder        *bool `json:"notificationsItemReminder,omitempty" configfield:"notifications.item_reminder"`
 	// Channel toggles act as a master switch per delivery channel: when
 	// false, no category-level notification is delivered through that
 	// channel regardless of the per-category toggle.
-	NotificationsChannelEmail *bool `configfield:"notifications.channel.email"`
-	NotificationsChannelPush  *bool `configfield:"notifications.channel.push"`
+	NotificationsChannelEmail *bool `json:"notificationsChannelEmail,omitempty" configfield:"notifications.channel.email"`
+	NotificationsChannelPush  *bool `json:"notificationsChannelPush,omitempty" configfield:"notifications.channel.push"`
 
 	// Per-user appearance preferences.
-	AppearanceDefaultItemsView         *string `configfield:"appearance.default_items_view"`
-	AppearancePreferredDisplayCurrency *string `configfield:"appearance.preferred_display_currency"`
-	AppearanceNumberFormatLocale       *string `configfield:"appearance.number_format_locale"`
+	AppearanceDefaultItemsView         *string `json:"appearanceDefaultItemsView,omitempty" configfield:"appearance.default_items_view"`
+	AppearancePreferredDisplayCurrency *string `json:"appearancePreferredDisplayCurrency,omitempty" configfield:"appearance.preferred_display_currency"`
+	AppearanceNumberFormatLocale       *string `json:"appearanceNumberFormatLocale,omitempty" configfield:"appearance.number_format_locale"`
 	// AppearanceLanguage is the user's UI language (en/cs/ru) and the source
 	// of truth for localizing transactional emails (#2090).
-	AppearanceLanguage *string `configfield:"appearance.language"`
+	AppearanceLanguage *string `json:"appearanceLanguage,omitempty" configfield:"appearance.language"`
 }
 
 func (s *SettingsObject) Set(field string, value any) error {

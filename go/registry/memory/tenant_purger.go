@@ -145,6 +145,15 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.MaintenanceSchedule])
 		}},
+		// Item reminder sends before their reminders (#2805).
+		{"commodity_reminder_sends", func() error {
+			return purgeReminderSends(ctx, fs.CommodityReminderRegistryFactory, fs.CommodityReminderSendRegistry,
+				func(rem *models.CommodityReminder) bool { return rem.TenantID == tenantID })
+		}},
+		{"commodity_reminders", func() error {
+			reg := fs.CommodityReminderRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.CommodityReminder])
+		}},
 		// Commodity sub-resources before commodities.
 		{"commodity_supply_links", func() error {
 			reg := fs.SupplyLinkRegistryFactory.CreateServiceRegistry()

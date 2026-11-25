@@ -236,6 +236,8 @@
       "channelEmailDescription": "Receive notifications at the email address on your account.",
       "channelPush": "Push notifications",
       "channelPushDescription": "Browser and mobile push (requires permission).",
+      "itemReminder": "Item reminders",
+      "itemReminderDescription": "Emails for the reminders you set on your items.",
       "loanReminder": "Loan reminders",
       "loanReminderDescription": "Notify when an item you've lent out is due back or overdue.",
       "maintenanceReminder": "Maintenance reminders",

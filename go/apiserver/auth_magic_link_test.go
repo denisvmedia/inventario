@@ -91,6 +91,10 @@ func (m *recordingMagicLinkEmailService) SendMaintenanceReminderEmail(_ context.
 	return nil
 }
 
+func (*recordingMagicLinkEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
 func (m *recordingMagicLinkEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

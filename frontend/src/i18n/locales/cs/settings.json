@@ -238,6 +238,8 @@
       "channelEmailDescription": "Dostávejte oznámení na e-mailovou adresu uvedenou u vašeho účtu.",
       "channelPush": "Push oznámení",
       "channelPushDescription": "Push v prohlížeči a na mobilu (vyžaduje povolení).",
+      "itemReminder": "Připomínky položek",
+      "itemReminderDescription": "E-maily k připomínkám, které jste nastavili u svých položek.",
       "loanReminder": "Připomínky zápůjček",
       "loanReminderDescription": "Upozornit, když má být zapůjčená položka vrácena nebo je vrácení po termínu.",
       "maintenanceReminder": "Připomínky údržby",

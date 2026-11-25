@@ -1,0 +1,11 @@
+Dobrý den {{.Name}},
+
+{{if eq .ReminderDaysLeft 0}}Vaše připomínka u položky {{.CommodityName}} nastává dnes.{{else if eq .ReminderDaysLeft 1}}Vaše připomínka u položky {{.CommodityName}} nastává zítra.{{else}}Vaše připomínka u položky {{.CommodityName}} nastane za {{.ReminderDaysLeft}} dní.{{end}}
+
+Připomínka: {{.ReminderTitle}}
+Datum: {{.ReminderDueDate}}
+{{if .CommodityURL}}
+Položku si můžete prohlédnout zde: {{.CommodityURL}}
+{{end}}
+Tuto připomínku jste nastavili u položky v Inventariu. Změnit nebo smazat
+ji můžete na stránce položky.

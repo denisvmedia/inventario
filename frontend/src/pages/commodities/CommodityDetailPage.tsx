@@ -65,6 +65,7 @@ import {
 } from "@/components/items/StatusTransitionDialog"
 import { LendTab } from "@/components/loans/LendTab"
 import { MaintenanceTab } from "@/components/maintenance/MaintenanceTab"
+import { CommodityRemindersSection } from "@/components/reminders/CommodityRemindersSection"
 import { ServiceTab } from "@/components/services/ServiceTab"
 import { SuppliesTab } from "@/components/supplies/SuppliesTab"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -1137,6 +1138,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
               />
+              {commodity.id ? (
+                <CommodityRemindersSection commodityId={commodity.id} className="my-6" />
+              ) : null}
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
             </>
           ) : tab === "warranty" ? (
