@@ -168,7 +168,7 @@ func (w *inbWalker) restoreCustomFieldTemplates(archived []types.INBCustomFieldT
 	}
 	out := make([]models.CustomFieldTemplate, 0, len(archived))
 	for _, t := range archived {
-		id, err := resolver.typeID(w.ctx, models.CommodityType(t.ItemType))
+		id, err := resolver.typeID(w.ctx, models.CommodityType(t.ItemType), w.stats)
 		if err != nil {
 			return nil, err
 		}
@@ -303,11 +303,11 @@ func (w *inbWalker) commodityDBID(uuid string) string {
 // or "" when the resolver writes nothing (a dry run) or the group was too
 // full to create the type: a template entry for that type would otherwise
 // land on the fallback type.
-func (r *itemTypeResolver) typeID(ctx context.Context, slug models.CommodityType) (string, error) {
+func (r *itemTypeResolver) typeID(ctx context.Context, slug models.CommodityType, stats *types.RestoreStats) (string, error) {
 	if r.reg == nil || slug == "" {
 		return "", nil
 	}
-	dest, err := r.resolve(ctx, slug)
+	dest, err := r.resolve(ctx, slug, stats)
 	if err != nil {
 		return "", err
 	}

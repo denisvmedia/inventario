@@ -24,6 +24,9 @@ export const ITEM_TYPE_LAST = "item_type.last"
 export const ITEM_TYPE_LIMIT = "item_type.limit"
 // Limit mirrors MaxItemTypesPerGroup in go/models/item_type.go.
 export const ITEM_TYPES_MAX = 100
+// The validation code on a type the group does not have, on an item write
+// and on a bulk patch alike.
+export const ITEM_TYPE_UNKNOWN_FIELD = "item_type_unknown"
 
 export interface ItemTypeInput {
   name: string

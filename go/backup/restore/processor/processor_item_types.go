@@ -93,10 +93,7 @@ func (r *itemTypeResolver) importArchived(ctx context.Context, archived []types.
 		}
 		if full {
 			r.fellBack[slug] = true
-			stats.ErrorCount++
-			stats.Errors = append(stats.Errors, fmt.Sprintf(
-				"item type %s: the group already has %d item types, the most it keeps; its items get the type %s",
-				a.Slug, models.MaxItemTypesPerGroup, created))
+			recordGroupFull(stats, a.Slug, created)
 		}
 		r.slugs[slug] = created
 	}
@@ -106,8 +103,11 @@ func (r *itemTypeResolver) importArchived(ctx context.Context, archived []types.
 // resolve returns the destination slug of an item's archived type, creating
 // the type when the group has neither it nor a type of that name. This
 // covers archives that carry no item types (older formats and the XML
-// backup) and types importArchived could not create.
-func (r *itemTypeResolver) resolve(ctx context.Context, slug models.CommodityType) (models.CommodityType, error) {
+// backup) and types importArchived could not create. A type it cannot
+// create because the group is full is counted in stats once, as
+// importArchived counts it; the cache keeps later items of that type from
+// counting it again.
+func (r *itemTypeResolver) resolve(ctx context.Context, slug models.CommodityType, stats *types.RestoreStats) (models.CommodityType, error) {
 	if r.reg == nil || slug == "" {
 		return slug, nil
 	}
@@ -137,10 +137,24 @@ func (r *itemTypeResolver) resolve(ctx context.Context, slug models.CommodityTyp
 		}
 		if full {
 			r.fellBack[slug] = true
+			recordGroupFull(stats, string(slug), dest)
 		}
 	}
 	r.slugs[slug] = dest
 	return dest, nil
+}
+
+// recordGroupFull counts an archived type the restore could not create
+// because the group already keeps the most item types it may, and names the
+// type its items get instead.
+func recordGroupFull(stats *types.RestoreStats, archived string, fallback models.CommodityType) {
+	if stats == nil {
+		return
+	}
+	stats.ErrorCount++
+	stats.Errors = append(stats.Errors, fmt.Sprintf(
+		"item type %s: the group already has %d item types, the most it keeps; its items get the type %s",
+		archived, models.MaxItemTypesPerGroup, fallback))
 }
 
 // find looks the type up by slug, then by name, and returns the slug of the

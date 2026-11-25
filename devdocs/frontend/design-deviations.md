@@ -62,6 +62,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; substring matching, edit-form suggestions, keyboard selection and the short-name fallback agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Add model suggestions if the mock's `ModelInput` is wanted with real data; otherwise permanent. The short-name fallback stays while brand and model are optional.
 
+#### 2026-11-25 — Items bulk bar: Edit menu, select all matching, result dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has no bulk selection at all; the shared `BulkActionBar` is itself a recorded deviation (the 2026-06-05 entry below), and this extends it. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (DropdownMenu with a label and separator, Dialog, Select, link Button) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: The Items bar moved out of the list page into `frontend/src/components/items/CommodityBulkActions.tsx` (Print labels with it) and is wider (`max-w-3xl` instead of the shared `max-w-xl`) to fit one more control; the shared bar's action row now wraps, so the four buttons fit a phone. Between Move and Print labels an outline **Edit** `DropdownMenu` trigger (chevron) offers **Tags…**, **Type…**, a separator, a **Set status** label and the statuses In Use, Lost, Disposed and Written Off. **Tags…** opens `BulkTagsDialog` (`frontend/src/components/tags/`, shared with the Files bar): two `TagPalette`s, **Add tags** (with the new-tag input) and **Remove tags** (existing tags only, through a new `allowCreate={false}` prop); picking a tag on one side takes it off the other. **Type…** opens `BulkTypeDialog` with the edit form's `ItemTypeField` (the group's item types and **New type**, #2802); a type the server refuses because another member deleted it is named on the field. Lost, Disposed and Written Off reuse `StatusTransitionDialog` with a new optional `title` / `description` pair that speaks of N items; In Use is a confirm dialog. Once the whole page is selected, a link button next to the count offers **Select all N matching items**; then the count reads "All N matching items selected", a **Clear selection** link button follows it, and Print labels is hidden. Above 500 matching items a muted line says to narrow the filters instead. When some items fail, `BulkResultDialog` shows the counts in its description, a bordered scrolling list of the failed items (the name links to the item) with the reason, and **Close** / **Retry failed items**.
+- **Why**: not present in mock. The issue asks for bulk tags, type and status (with the date and note dialog of a single change), for "Select all N matching" as an action separate from "Select this page", and for a report of completed, skipped and failed items with a retry of the failed subset. The grouping under one Edit menu, the wider bar, the link to each failed item, keeping the failed items selected, and leaving Sold out of the bulk statuses go beyond the issue text and are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the Edit menu grouping, wider bar, failed-item links, kept selection and the Sold omission agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the items list; reconcile with the Files bar through the shared component.
+
 #### 2026-11-25 — Seller on the item: picker with New seller, AI suggestion, items-list filter, Details row
 
 - **Issue/PR**: #2804 / PR #2844
@@ -451,6 +460,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage in the stats strip.
 
 ### Files & Attachments
+
+#### 2026-11-25 — Files bulk bar: Tags… button and dialog
+
+- **Issue/PR**: #2798 / PR (pending)
+- **Mock**: Not present in mock. [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no bulk selection; the bar itself is the recorded deviation of 2026-05-16 below. Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (outline Button with an icon, Dialog) and the mock's tag palette (`ItemEditForm` in [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx)).
+- **Reality**: `frontend/src/pages/files/FilesListPage.tsx` adds an outline **Tags…** button (`Tag` icon, `data-testid="files-bulk-tags"`) between **Move to…** and **Delete selected**. It opens the items' bulk tag dialog, now `frontend/src/components/tags/BulkTagsDialog.tsx` with `kind="file"`: **Add tags** (with the new-tag input) and **Remove tags** (existing file tags only). The outcome is a toast; files that failed stay selected instead of opening a result dialog, so **Tags…** retries them. The shared `BulkActionBar` lets its action row wrap, which this third control needs on a phone.
+- **Why**: not present in mock. The issue asks for bulk add and remove of file tags. Reusing the items dialog keeps the two surfaces alike; keeping failed files selected with a toast rather than the items' result dialog is agent-suggested, since a file failure carries no reason the user can act on beyond retrying.
+- **Approved by**: user (explicit) — pre-approved for #2798 by the 2026-11-24 goal to implement the open enhancements; the toast-and-keep-selected outcome agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a bulk-selection pattern to the file browser.
 
 #### 2026-11-25 — Files page: "More tags" picker for any file tag
 

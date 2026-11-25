@@ -263,6 +263,26 @@ export async function createCommodityViaAPI(
 }
 
 /**
+ * GET a live commodity's attributes by id.
+ */
+export async function getCommodityViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  id: string,
+): Promise<Record<string, unknown>> {
+  const resp = await request.get(
+    `/api/v1/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(id)}`,
+    { headers: authHeaders(auth) },
+  )
+  if (!resp.ok()) {
+    throw new Error(`getCommodityViaAPI: GET /commodities/${id} → ${resp.status()} ${await resp.text()}`)
+  }
+  const body = await resp.json()
+  return (body?.data?.attributes ?? {}) as Record<string, unknown>
+}
+
+/**
  * DELETE a commodity by id. Best-effort cleanup — silent on 404 so
  * test teardown doesn't blow up if a previous step already removed
  * the row.

@@ -16,6 +16,8 @@ export interface TagPaletteProps {
   onChange: (next: string[]) => void
   /** id of the new-tag input, for a label's `htmlFor`. */
   inputId: string
+  /** False hides the new-tag input, for picking from existing tags only. */
+  allowCreate?: boolean
   testId?: string
 }
 
@@ -26,7 +28,14 @@ export interface TagPaletteProps {
 // The input under the pills adds a tag the group does not have yet; the
 // server creates it on save. Text that matches an existing tag's label or
 // slug selects that tag instead.
-export function TagPalette({ kind, values, onChange, inputId, testId }: TagPaletteProps) {
+export function TagPalette({
+  kind,
+  values,
+  onChange,
+  inputId,
+  allowCreate = true,
+  testId,
+}: TagPaletteProps) {
   const { t } = useTranslation()
   const catalog = useTagCatalog(kind).data ?? []
   const [draft, setDraft] = useState("")
@@ -93,38 +102,40 @@ export function TagPalette({ kind, values, onChange, inputId, testId }: TagPalet
           ))}
         </div>
       ) : null}
-      <div className="mt-1 flex gap-1.5">
-        <Input
-          id={inputId}
-          value={draft}
-          onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key !== "Enter") return
-            // Enter also ends an IME composition; adding here would turn a
-            // half-composed word into a tag.
-            if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
-            // Enter adds the tag; it must not also submit the form around it.
-            e.preventDefault()
-            addDraft()
-          }}
-          placeholder={t("tags:palette.newTagPlaceholder")}
-          aria-label={t("tags:palette.newTagLabel")}
-          className="h-8 text-sm"
-          data-testid={testId ? `${testId}-input` : undefined}
-        />
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          className="gap-1"
-          onClick={addDraft}
-          disabled={!draft.trim()}
-          data-testid={testId ? `${testId}-add` : undefined}
-        >
-          <Plus className="size-3.5" aria-hidden="true" />
-          {t("tags:palette.add")}
-        </Button>
-      </div>
+      {allowCreate ? (
+        <div className="mt-1 flex gap-1.5">
+          <Input
+            id={inputId}
+            value={draft}
+            onChange={(e) => setDraft(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key !== "Enter") return
+              // Enter also ends an IME composition; adding here would turn a
+              // half-composed word into a tag.
+              if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return
+              // Enter adds the tag; it must not also submit the form around it.
+              e.preventDefault()
+              addDraft()
+            }}
+            placeholder={t("tags:palette.newTagPlaceholder")}
+            aria-label={t("tags:palette.newTagLabel")}
+            className="h-8 text-sm"
+            data-testid={testId ? `${testId}-input` : undefined}
+          />
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="gap-1"
+            onClick={addDraft}
+            disabled={!draft.trim()}
+            data-testid={testId ? `${testId}-add` : undefined}
+          >
+            <Plus className="size-3.5" aria-hidden="true" />
+            {t("tags:palette.add")}
+          </Button>
+        </div>
+      ) : null}
     </div>
   )
 }

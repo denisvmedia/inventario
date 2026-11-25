@@ -477,8 +477,8 @@ describe("<CommoditiesListPage />", () => {
     renderList()
     await screen.findByTestId("commodity-card")
     await user.click(screen.getByTestId("commodities-filter-type"))
-    // Furniture is one of the static type options rendered with its
-    // Lucide icon from COMMODITY_TYPE_ICONS (#1392).
+    // Furniture is one of the group's item types (the built-in ones the
+    // default MSW handler serves), listed with its icon.
     await user.click(await screen.findByRole("menuitemcheckbox", { name: /Furniture/i }))
     // After toggling, the badge counter on the trigger flips to 1.
     await waitFor(() => {
