@@ -519,6 +519,25 @@ func TestINBRestore_ArchiveWithoutDrafts(t *testing.T) {
 	c.Check(draftLink(f.fileByUUID(c, photo), draft.ID), qt.IsNotNil)
 }
 
+// TestINBRestore_FullReplaceWithoutADraftRegistry: a factory set without a
+// draft registry restores a backup that carries drafts. The drafts are left
+// out and the full replace still clears and restores everything else.
+func TestINBRestore_FullReplaceWithoutADraftRegistry(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDraftFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+	f.fs.CommodityDraftRegistryFactory = nil
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyFullReplace)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(f.commodityByUUID(c, f.tvUUID).Name, qt.Not(qt.Equals), "")
+	receipt := f.fileByUUID(c, f.receipt)
+	c.Assert(receipt.Links, qt.HasLen, 1)
+	c.Check(receipt.Links[0].EntityType, qt.Equals, models.FileLinkCommodity)
+}
+
 // TestINBRestore_DryRunWritesNoDrafts: a dry run reports the drafts it would
 // restore and changes none. A dry run of a full replace restores no item, so
 // the receipt's bytes, stored under the TV, match no reference; the draft's
