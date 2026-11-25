@@ -385,3 +385,58 @@ func TestAccountDeletionService_DeleteAccount_RemovesTheMembersItemReminders(t *
 	_, err = reminders.Get(ctx, theirs.ID)
 	c.Assert(err, qt.IsNil)
 }
+
+// TestAccountDeletionService_DeleteAccount_RemovesTheMembersDrafts covers
+// #2812 on the memory backend: the drafts a member created go with the
+// account, and a file another member attached to one of them stays as a
+// standalone file instead of pointing at a missing draft.
+func TestAccountDeletionService_DeleteAccount_RemovesTheMembersDrafts(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "draft-group-slug-000000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	stayingCtx := appctx.WithGroup(appctx.WithUser(ctx, staying), group)
+	createDraft := func(userCtx context.Context, key string) *models.CommodityDraft {
+		reg, err := fs.CommodityDraftRegistryFactory.CreateUserRegistry(userCtx)
+		c.Assert(err, qt.IsNil)
+		draft, created, err := reg.CreateOrGet(userCtx, models.CommodityDraft{ClientKey: key, Values: models.CommodityDraftValues{"name": key}})
+		c.Assert(err, qt.IsNil)
+		c.Assert(created, qt.IsTrue)
+		return draft
+	}
+	mine := createDraft(leavingCtx, "leaving-draft")
+	theirs := createDraft(stayingCtx, "staying-draft")
+
+	files, err := fs.FileRegistryFactory.CreateUserRegistry(stayingCtx)
+	c.Assert(err, qt.IsNil)
+	photo, err := files.Create(stayingCtx, models.FileEntity{
+		Title:    "photo",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		Links:    []models.FileLink{{EntityType: models.FileLinkDraft, EntityID: mine.ID, Meta: models.FileLinkMetaImages}},
+		File:     &models.File{Path: "photo", OriginalPath: "photo.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	drafts := fs.CommodityDraftRegistryFactory.CreateServiceRegistry()
+	_, err = drafts.Get(ctx, mine.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = drafts.Get(ctx, theirs.ID)
+	c.Assert(err, qt.IsNil)
+	kept, err := files.Get(stayingCtx, photo.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(kept.Links, qt.HasLen, 0)
+}

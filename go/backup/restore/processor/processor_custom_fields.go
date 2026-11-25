@@ -233,6 +233,44 @@ func (w *inbWalker) restoredCustomFieldValues(c *types.INBCommodity) (models.Cus
 	return out, links
 }
 
+// restoreDraftCustomFields maps the entries archived draft values hold under
+// "custom_fields" onto the destination fields, as an item's values are
+// mapped: a select option onto the destination option, a link onto the item
+// it names, one this restore created (the drafts member follows every item
+// member) or one the group already had. The entries stay as the form kept
+// them otherwise; the promotion checks them. One that maps to nothing is
+// left out, like the draft's other references, so a draft never names a
+// field, an option or an item outside the group.
+func (w *inbWalker) restoreDraftCustomFields(values models.CommodityDraftValues) {
+	raw, ok := values["custom_fields"]
+	if !ok {
+		return
+	}
+	entries, _ := raw.(map[string]any)
+	out := make(map[string]any, len(entries))
+	for archivedID, entry := range entries {
+		field := w.customFields[archivedID]
+		if field == nil || entry == nil {
+			continue
+		}
+		switch field.def.Type {
+		case models.CustomFieldTypeSelect:
+			entry = models.MapDraftCustomFieldReference(entry, func(id string) string { return field.options[id] })
+		case models.CustomFieldTypeItemLink:
+			entry = models.MapDraftCustomFieldReference(entry, w.commodityDBID)
+		}
+		if entry == nil {
+			continue
+		}
+		out[field.def.ID] = entry
+	}
+	if len(out) == 0 {
+		delete(values, "custom_fields")
+		return
+	}
+	values["custom_fields"] = out
+}
+
 // value returns raw as the destination field stores it: a select value
 // names the destination option.
 func (f *restoredCustomField) value(raw json.RawMessage) (json.RawMessage, error) {

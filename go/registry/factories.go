@@ -96,6 +96,13 @@ type CommodityReminderRegistryFactory interface {
 	ServiceRegistryFactory[models.CommodityReminder, CommodityReminderRegistry]
 }
 
+// CommodityDraftRegistryFactory creates CommodityDraftRegistry instances
+// with proper context (#2812).
+type CommodityDraftRegistryFactory interface {
+	UserRegistryFactory[models.CommodityDraft, CommodityDraftRegistry]
+	ServiceRegistryFactory[models.CommodityDraft, CommodityDraftRegistry]
+}
+
 // SellerRegistryFactory creates SellerRegistry instances with proper
 // context (#2804).
 type SellerRegistryFactory interface {
@@ -211,6 +218,7 @@ type FactorySet struct {
 	MaintenanceScheduleRegistryFactory    MaintenanceScheduleRegistryFactory
 	SavedViewRegistryFactory              SavedViewRegistryFactory // Saved item views; group-scoped, per-user visibility applied by the registry
 	CommodityReminderRegistryFactory      CommodityReminderRegistryFactory
+	CommodityDraftRegistryFactory         CommodityDraftRegistryFactory
 	SellerRegistryFactory                 SellerRegistryFactory
 	ItemTypeRegistryFactory               ItemTypeRegistryFactory
 	CustomFieldRegistryFactory            CustomFieldRegistryFactory
@@ -416,7 +424,7 @@ func (fs *FactorySet) CreateUserRegistrySet(ctx context.Context) (*Set, error) {
 
 // addUserContentRegistries creates the user-aware registries of the content
 // around items (tags, loans, services, supply links, maintenance, reminders,
-// sellers, item types and custom fields) and sets them on set.
+// sellers, item types, custom fields and drafts) and sets them on set.
 func (fs *FactorySet) addUserContentRegistries(ctx context.Context, set *Set) error {
 	var err error
 	if set.TagRegistry, err = fs.TagRegistryFactory.CreateUserRegistry(ctx); err != nil {
@@ -443,7 +451,10 @@ func (fs *FactorySet) addUserContentRegistries(ctx context.Context, set *Set) er
 	if set.ItemTypeRegistry, err = fs.ItemTypeRegistryFactory.CreateUserRegistry(ctx); err != nil {
 		return err
 	}
-	set.CustomFieldRegistry, err = fs.CustomFieldRegistryFactory.CreateUserRegistry(ctx)
+	if set.CustomFieldRegistry, err = fs.CustomFieldRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	set.CommodityDraftRegistry, err = fs.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
 	return err
 }
 
@@ -465,6 +476,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		SupplyLinkRegistry:             fs.SupplyLinkRegistryFactory.CreateServiceRegistry(),
 		MaintenanceScheduleRegistry:    fs.MaintenanceScheduleRegistryFactory.CreateServiceRegistry(),
 		CommodityReminderRegistry:      fs.CommodityReminderRegistryFactory.CreateServiceRegistry(),
+		CommodityDraftRegistry:         fs.CommodityDraftRegistryFactory.CreateServiceRegistry(),
 		SellerRegistry:                 fs.SellerRegistryFactory.CreateServiceRegistry(),
 		ItemTypeRegistry:               fs.ItemTypeRegistryFactory.CreateServiceRegistry(),
 		CustomFieldRegistry:            fs.CustomFieldRegistryFactory.CreateServiceRegistry(),

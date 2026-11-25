@@ -46,9 +46,11 @@ func NewFileLinkService(factorySet *registry.FactorySet) *FileLinkService {
 // through the caller's group-scoped registries, so a file can only be attached
 // to an entity in its own group. An empty meta picks the bucket from the file's
 // category. Attaching a file to an entity it is already attached to returns the
-// existing link with created=false.
+// existing link with created=false. A file can be attached to an open draft
+// (#2812) like to an item; the link moves to the item when the draft is
+// promoted.
 func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entityID, meta string) (*models.FileEntity, bool, error) {
-	if !models.IsOrdinaryFileLinkType(entityType) {
+	if !models.IsAttachableFileLinkType(entityType) {
 		return nil, false, errxtrace.Classify(ErrFileLinkInvalid, errx.Attrs("entity_type", entityType))
 	}
 	if entityID == "" {
@@ -75,19 +77,26 @@ func (s *FileLinkService) Attach(ctx context.Context, fileID, entityType, entity
 		return nil, false, errxtrace.Classify(ErrFileLinkInvalid, errx.Attrs("meta", meta))
 	}
 
-	if err := s.requireTarget(ctx, entityType, entityID); err != nil {
-		return nil, false, err
-	}
-
 	firstPlacement := len(file.OrdinaryLinks()) == 0
-	_, created, err := fileReg.AddLink(ctx, models.FileLink{
+	link := models.FileLink{
 		FileID:     file.ID,
 		EntityType: entityType,
 		EntityID:   entityID,
 		Meta:       meta,
-	})
-	if err != nil {
-		return nil, false, errxtrace.Wrap("failed to attach file", err)
+	}
+	var created bool
+	if entityType == models.FileLinkDraft {
+		created, err = s.attachToDraft(ctx, link)
+		if err != nil {
+			return nil, false, err
+		}
+	} else {
+		if err := s.requireTarget(ctx, entityType, entityID); err != nil {
+			return nil, false, err
+		}
+		if _, created, err = fileReg.AddLink(ctx, link); err != nil {
+			return nil, false, errxtrace.Wrap("failed to attach file", err)
+		}
 	}
 
 	// The first attachment into a bucket the caller chose places the file: a
@@ -138,6 +147,26 @@ func (s *FileLinkService) requireTarget(ctx context.Context, entityType, entityI
 		return errxtrace.Wrap("failed to look up the attachment target", err)
 	}
 	return nil
+}
+
+// attachToDraft links the file to an open draft. The draft registry checks
+// the draft and writes the link in one transaction holding the draft row, so
+// a promotion or a discard cannot slip in between. A promoted draft has
+// handed its files to the item and answers registry.ErrDraftPromoted; a
+// draft being discarded answers registry.ErrDraftDiscarded.
+func (s *FileLinkService) attachToDraft(ctx context.Context, link models.FileLink) (bool, error) {
+	reg, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to create draft registry", err)
+	}
+	_, created, err := reg.AttachFile(ctx, link.EntityID, link)
+	if errors.Is(err, registry.ErrNotFound) {
+		return false, errxtrace.Classify(ErrFileLinkTargetNotFound, errx.Attrs("entity_type", link.EntityType, "entity_id", link.EntityID))
+	}
+	if err != nil {
+		return false, errxtrace.Wrap("failed to attach file", err)
+	}
+	return created, nil
 }
 
 // Detach removes one attachment of a file. The file stays, also when this was

@@ -29,6 +29,7 @@ func NewFactorySet() *registry.FactorySet {
 	savedViewFactory := NewSavedViewRegistryFactory()
 	maintenanceScheduleFactory := NewMaintenanceScheduleRegistryFactory()
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
+	commodityDraftFactory := NewCommodityDraftRegistryFactory(commodityFactory, fileFactory)
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
@@ -72,6 +73,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.SavedViewRegistryFactory = savedViewFactory
 	fs.MaintenanceScheduleRegistryFactory = maintenanceScheduleFactory
 	fs.CommodityReminderRegistryFactory = commodityReminderFactory
+	fs.CommodityDraftRegistryFactory = commodityDraftFactory
 	fs.SellerRegistryFactory = sellerFactory
 	fs.ItemTypeRegistryFactory = itemTypeFactory
 	fs.CustomFieldRegistryFactory = customFieldFactory
@@ -169,6 +171,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.MaintenanceReminderRegistry,
 		commodityReminderFactory,
 		fs.CommodityReminderSendRegistry,
+		commodityDraftFactory,
 		fs.CurrencyMigrationRegistryFactory,
 		fs.GroupNotificationPrefRegistry,
 		fs.GroupMembershipRegistry,
@@ -193,6 +196,8 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupInviteAuditRegistry,
 		commodityReminderFactory,
 		fs.CommodityReminderSendRegistry,
+		commodityDraftFactory,
+		fileFactory,
 		savedViewFactory,
 	)
 	userPurger.SetItemTypeFactory(itemTypeFactory)

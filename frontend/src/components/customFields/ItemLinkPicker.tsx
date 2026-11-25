@@ -58,10 +58,7 @@ export function ItemLinkPicker({
   // Names picked in this form, for a value the response did not name.
   const [picked, setPicked] = useState<Record<string, string>>({})
 
-  const results = useCommodities(
-    { search: debounced || undefined, perPage: 20 },
-    { enabled: open }
-  )
+  const results = useCommodities({ search: debounced || undefined, perPage: 20 }, { enabled: open })
   const options = (results.data?.commodities ?? []).filter((c) => c.id && c.id !== selfId)
 
   const known = value ? linkedItems?.[value] : undefined
@@ -88,10 +85,7 @@ export function ItemLinkPicker({
           aria-invalid={ariaInvalid}
           aria-label={ariaLabel}
           disabled={disabled}
-          className={cn(
-            "w-full justify-between font-normal",
-            !value && "text-muted-foreground"
-          )}
+          className={cn("w-full justify-between font-normal", !value && "text-muted-foreground")}
         >
           <span className="truncate">{label}</span>
           <ChevronsUpDown aria-hidden="true" className="ml-2 size-4 shrink-0 opacity-50" />

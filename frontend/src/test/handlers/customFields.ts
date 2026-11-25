@@ -15,7 +15,9 @@ function groupPath(slug: string, rest = "") {
 }
 
 // field returns a custom field without values, with the given overrides.
-export function field(overrides: Partial<CustomField> & Pick<CustomField, "id" | "name">): CustomField {
+export function field(
+  overrides: Partial<CustomField> & Pick<CustomField, "id" | "name">
+): CustomField {
   return {
     type: "text",
     options: [],
@@ -98,7 +100,9 @@ export function remove(
           { status: 409 }
         )
       }
-      return HttpResponse.json({ meta: { deleted_values: counts ? counts.live + counts.trashed : 0 } })
+      return HttpResponse.json({
+        meta: { deleted_values: counts ? counts.live + counts.trashed : 0 },
+      })
     }),
   ]
 }

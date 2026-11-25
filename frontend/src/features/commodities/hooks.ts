@@ -358,9 +358,7 @@ export function useSetCommodityCover(id: string) {
   return useMutation<{ commodity: Commodity; meta: CommodityMeta }, Error, string | null>({
     mutationFn: (fileId) => setCommodityCover(id, fileId),
     onSuccess: ({ commodity, meta }) => {
-      const cached = qc.getQueryData<{ linkedItems?: Record<string, LinkedItemSummary> }>(
-        detailKey
-      )
+      const cached = qc.getQueryData<{ linkedItems?: Record<string, LinkedItemSummary> }>(detailKey)
       qc.setQueryData(detailKey, {
         commodity: { ...commodity, id },
         meta,
