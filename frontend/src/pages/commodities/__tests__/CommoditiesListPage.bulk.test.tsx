@@ -480,6 +480,131 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
   })
 
+  it("a retry from an earlier result leaves a newer selection alone", async () => {
+    const user = userEvent.setup()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    const requests: Record<string, unknown>[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkMove(SLUG, {
+        onRequest: (a) => requests.push(a),
+        respond: async () => {
+          if (requests.length > 1) return bulkResultResponse({ succeeded: ["c1", "c2"] })
+          await gate
+          return bulkResultResponse({
+            failed: [
+              { id: "c1", name: "First", code: "failed", error: "boom" },
+              { id: "c2", name: "Second", code: "failed", error: "boom" },
+            ],
+          })
+        },
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a1")
+    await user.click(screen.getByTestId("bulk-move-confirm"))
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    const cards = screen.getAllByTestId("commodity-card")
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+
+    release()
+    const result = await screen.findByTestId("bulk-result-dialog")
+    await user.click(within(result).getByTestId("bulk-result-retry"))
+    await waitFor(() => expect(requests).toHaveLength(2))
+    await waitFor(() => expect(screen.queryByTestId("bulk-result-dialog")).not.toBeInTheDocument())
+    // The retry succeeded, but the selection it would clear is not the one
+    // the earlier result left: the user changed it in the meantime.
+    expect(screen.getByTestId("commodities-bulk-count")).toHaveTextContent("1 item selected")
+  })
+
+  it("a late move keeps the area picked in a newer move dialog", async () => {
+    const user = userEvent.setup()
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => (release = resolve))
+    let answered = false
+    server.use(
+      ...areaHandlers.list(SLUG, [
+        ...areaFixture,
+        { id: "a2", type: "areas", attributes: { id: "a2", name: "Attic", location_id: "l1" } },
+      ]),
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkMove(SLUG, {
+        respond: async () => {
+          await gate
+          answered = true
+          return bulkResultResponse({ succeeded: ["c1", "c2"] })
+        },
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a1")
+    await user.click(screen.getByTestId("bulk-move-confirm"))
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+
+    // A new move dialog, with another area picked, is open when the first
+    // move ends.
+    await user.click(screen.getByTestId("commodities-bulk-move"))
+    await user.selectOptions(await screen.findByTestId("bulk-move-area"), "a2")
+    release()
+    await waitFor(() => expect(answered).toBe(true))
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith("2 items moved.", expect.anything())
+    )
+    expect(screen.getByTestId("bulk-move-area")).toHaveValue("a2")
+  })
+
+  it("offers Undo for items that may be in Trash when none is known to be", async () => {
+    const user = userEvent.setup()
+    const restored: unknown[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkDelete(SLUG, {
+        respond: () =>
+          bulkResultResponse({
+            failed: [
+              { id: "c1", name: "First", code: "not_found", error: "not found" },
+              { id: "c2", code: "unknown" },
+            ],
+          }),
+      }),
+      msw.post(apiUrl(`/g/${SLUG}/trash/commodities/restore`), async ({ request }) => {
+        restored.push(await request.json())
+        return HttpResponse.json({
+          data: { attributes: { succeeded: ["c2"], failed: [], area_removed: [] } },
+        })
+      })
+    )
+    renderList()
+    await selectBoth(user)
+    await user.click(screen.getByTestId("commodities-bulk-delete"))
+    await waitFor(() => expect(document.body).toHaveAttribute("data-scroll-locked"))
+    const buttons = screen.getAllByRole("button", { name: /^Delete$/i })
+    await user.click(buttons[buttons.length - 1])
+
+    await waitFor(() =>
+      expect(toast.warning).toHaveBeenCalledWith(
+        "No answer came back for 1 item, so it may be in the trash.",
+        expect.objectContaining({ action: expect.objectContaining({ label: "Undo" }) })
+      )
+    )
+    expect(toast.success).not.toHaveBeenCalledWith(
+      expect.stringContaining("moved to the trash"),
+      expect.anything()
+    )
+    const undo = vi
+      .mocked(toast.warning)
+      .mock.calls.find(([message]) => String(message).startsWith("No answer came back"))?.[1] as
+      { action: { onClick: () => void } } | undefined
+    act(() => undo!.action.onClick())
+    await waitFor(() => expect(restored).toHaveLength(1))
+    expect(restored[0]).toEqual({ data: { type: "commodities", attributes: { ids: ["c2"] } } })
+  })
+
   it("says when an item may have changed, and Undo of a delete tries it too", async () => {
     const user = userEvent.setup()
     const restored: unknown[] = []

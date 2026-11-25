@@ -9,17 +9,24 @@ interface Matching {
   digest: string
 }
 
+// SelectionVersion names one state of the selection: every change makes a
+// new one, so a bulk request can tell whether the selection it was sent for
+// is still the current one (settle).
+export type SelectionVersion = symbol
+
 interface SelectionState {
   ids: ReadonlySet<string>
   // Every item the list query matches, on every page, as it was then.
   matching: Matching | null
-  // Counts the changes of the selection, so a bulk request can tell whether
-  // the selection it was sent for is still the current one (settle).
-  version: number
+  version: SelectionVersion
 }
 
-function next(s: SelectionState, ids: Iterable<string>, matching: Matching | null): SelectionState {
-  return { ids: new Set(ids), matching, version: s.version + 1 }
+function next(
+  ids: Iterable<string>,
+  matching: Matching | null,
+  version: SelectionVersion = Symbol("selection")
+): SelectionState {
+  return { ids: new Set(ids), matching, version }
 }
 
 export interface CommoditySelectionControls {
@@ -32,7 +39,7 @@ export interface CommoditySelectionControls {
   /** How many items the selection holds. */
   count: number
   /** Changes with every change of the selection; see settle. */
-  version: number
+  version: SelectionVersion
   toggle: (id: string, pageIds: string[]) => void
   togglePage: (pageIds: string[]) => void
   /** Selects the total items the query matches now, which digest names. */
@@ -42,8 +49,11 @@ export interface CommoditySelectionControls {
    * keeps the given ids selected, or clears the selection when there are
    * none. Does nothing when the selection changed since, so a request that
    * ends late never replaces or clears one the user made in the meantime.
+   * When it applies, the new selection gets the version `as`, if given, so
+   * the caller can later send a request for exactly that selection (a retry
+   * of the failed items it kept).
    */
-  settle: (version: number, keep: string[]) => void
+  settle: (version: SelectionVersion, keep: string[], as?: SelectionVersion) => void
   clear: () => void
   /** The selection as a bulk request names it. */
   toRequest: (query: string) => CommoditySelection
@@ -71,15 +81,15 @@ export function useCommoditySelection(
   queryKey: string,
   pageKey: string
 ): CommoditySelectionControls {
-  const [state, setState] = useState<SelectionState>({ ids: new Set(), matching: null, version: 0 })
+  const [state, setState] = useState<SelectionState>(() => next([], null))
 
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- a new query starts a new selection
-    setState((s) => next(s, [], null))
+    setState(next([], null))
   }, [queryKey])
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- ids picked on a page do not outlive it
-    setState((s) => (s.matching ? s : next(s, [], null)))
+    setState((s) => (s.matching ? s : next([], null)))
   }, [pageKey])
 
   const toggle = useCallback((id: string, pageIds: string[]) => {
@@ -88,33 +98,33 @@ export function useCommoditySelection(
       const ids = new Set(s.matching ? pageIds : s.ids)
       if (ids.has(id)) ids.delete(id)
       else ids.add(id)
-      return next(s, ids, null)
+      return next(ids, null)
     })
   }, [])
 
   const togglePage = useCallback((pageIds: string[]) => {
     setState((s) => {
-      if (s.matching) return next(s, [], null)
+      if (s.matching) return next([], null)
       const all = pageIds.length > 0 && pageIds.every((id) => s.ids.has(id))
       const ids = new Set(s.ids)
       for (const id of pageIds) {
         if (all) ids.delete(id)
         else ids.add(id)
       }
-      return next(s, ids, null)
+      return next(ids, null)
     })
   }, [])
 
   const selectAllMatching = useCallback(
-    (total: number, digest: string) => setState((s) => next(s, [], { total, digest })),
+    (total: number, digest: string) => setState(next([], { total, digest })),
     []
   )
   const settle = useCallback(
-    (version: number, keep: string[]) =>
-      setState((s) => (s.version === version ? next(s, keep, null) : s)),
+    (version: SelectionVersion, keep: string[], as?: SelectionVersion) =>
+      setState((s) => (s.version === version ? next(keep, null, as) : s)),
     []
   )
-  const clear = useCallback(() => setState((s) => next(s, [], null)), [])
+  const clear = useCallback(() => setState(next([], null)), [])
 
   return useMemo(
     () => ({

@@ -619,6 +619,10 @@
     "written_off": "Odepsáno"
   },
   "toast": {
+    "bulkDeleteUnknown_one": "Pro {{count}} položku nepřišla odpověď, možná je v koši.",
+    "bulkDeleteUnknown_few": "Pro {{count}} položky nepřišla odpověď, možná jsou v koši.",
+    "bulkDeleteUnknown_many": "Pro {{count}} položky nepřišla odpověď, možná jsou v koši.",
+    "bulkDeleteUnknown_other": "Pro {{count}} položek nepřišla odpověď, možná jsou v koši.",
     "bulkDeleted_one": "{{count}} položka přesunuta do koše.",
     "bulkDeleted_few": "{{count}} položky přesunuty do koše.",
     "bulkDeleted_many": "{{count}} položky přesunuto do koše.",

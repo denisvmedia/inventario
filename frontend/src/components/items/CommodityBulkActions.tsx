@@ -42,7 +42,7 @@ import {
 } from "@/features/commodities/hooks"
 import { commodityHref } from "@/features/commodities/listContext"
 import { commodityQueryParam, type CommodityQuery } from "@/features/commodities/query"
-import type { CommoditySelectionControls } from "@/features/commodities/selection"
+import type { CommoditySelectionControls, SelectionVersion } from "@/features/commodities/selection"
 import { labelsPageHref } from "@/features/labels/links"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import { useAppToast } from "@/hooks/useAppToast"
@@ -68,16 +68,25 @@ type BulkAction =
 interface Target {
   selection: CommoditySelection
   count: number
-  version: number
+  version: SelectionVersion
 }
 
 // What a request needs to know when it ends, to touch only what is still
 // its own: the selection version it was sent for, the dialog session that
 // sent it (none for a confirm or a retry), and its place among requests.
 interface RequestContext {
-  version: number
+  version: SelectionVersion
   session?: number
   seq: number
+}
+
+// A result with failures, for the result dialog. version is the selection
+// the result left (its failed items), so a retry from the dialog changes
+// the selection only while it is still that one.
+interface Outcome {
+  action: BulkAction
+  result: CommodityBulkResult
+  version: SelectionVersion
 }
 
 type DialogKind = "move" | "tags" | "type" | "status"
@@ -130,10 +139,7 @@ export function CommodityBulkActions({
   const [statusTarget, setStatusTarget] = useState<TerminalBulkStatus | null>(null)
   const [moveArea, setMoveArea] = useState("")
   const [editOpen, setEditOpen] = useState(false)
-  const [outcome, setOutcome] = useState<{
-    action: BulkAction
-    result: CommodityBulkResult
-  } | null>(null)
+  const [outcome, setOutcome] = useState<Outcome | null>(null)
   // Requests can overlap: the user can cancel a dialog while its request
   // runs, change the filters, select other items and start another action.
   // dialogSession counts the dialogs opened, requestSeq the requests sent,
@@ -163,19 +169,24 @@ export function CommodityBulkActions({
   }
 
   // closeDialog closes the dialog of session, and leaves one opened since.
-  function closeDialog(session: number | undefined) {
-    if (session === dialogSession.current) setDialog(null)
+  // It returns whether it closed it.
+  function closeDialog(session: number | undefined): boolean {
+    if (session !== dialogSession.current) return false
+    setDialog(null)
+    return true
   }
 
   // showOutcome opens the result dialog for a request, unless it already
   // shows the result of a later one: then the earlier failures get a toast.
-  function showOutcome(action: BulkAction, result: CommodityBulkResult, seq: number) {
+  function showOutcome(outcome: Outcome, seq: number) {
     if (outcomeSeq.current > seq) {
-      toast.warning(t("commodities:bulk.result.failedCount", { count: result.failed.length }))
+      toast.warning(
+        t("commodities:bulk.result.failedCount", { count: outcome.result.failed.length })
+      )
       return
     }
     outcomeSeq.current = seq
-    setOutcome({ action, result })
+    setOutcome(outcome)
   }
 
   // closeOutcome closes the result dialog when it shows an earlier request,
@@ -230,21 +241,15 @@ export function CommodityBulkActions({
 
   function report(action: BulkAction, result: CommodityBulkResult, req: RequestContext) {
     const done = result.succeeded.length
-    if (action.kind === "delete" && done > 0) {
-      // An item whose request failed may have gone to Trash: Undo tries it.
-      const maybeDeleted = result.failed.filter((f) => f.code === "unknown").map((f) => f.id)
-      toast.success(t("commodities:toast.bulkDeleted", { count: done }), {
-        action: undoDelete(result.succeeded, maybeDeleted),
-      })
-      const filesKept = result.notes.filter((n) => n.code === "files_kept").length
-      if (filesKept > 0) toast.warning(t("commodities:toast.bulkFilesKept", { count: filesKept }))
-    }
+    if (action.kind === "delete") reportDelete(result)
     if (result.failed.length > 0) {
-      showOutcome(action, result, req.seq)
       // The failed items stay selected, to retry them or fix them another way.
+      const left = Symbol("bulk result")
+      showOutcome({ action, result, version: left }, req.seq)
       selection.settle(
         req.version,
-        result.failed.map((f) => f.id)
+        result.failed.map((f) => f.id),
+        left
       )
       return
     }
@@ -264,6 +269,25 @@ export function CommodityBulkActions({
         ? t("commodities:toast.bulkMoved", { count: done })
         : t("commodities:toast.bulkUpdated", { count: done })
     toast.success(message, { description })
+  }
+
+  // reportDelete offers Undo for what a delete moved to Trash. An item whose
+  // request got no answer (unknown) may be there too, so Undo tries it, and
+  // when no item is known to be in Trash the offer still stands for those.
+  function reportDelete(result: CommodityBulkResult) {
+    const done = result.succeeded.length
+    const maybeDeleted = result.failed.filter((f) => f.code === "unknown").map((f) => f.id)
+    if (done > 0) {
+      toast.success(t("commodities:toast.bulkDeleted", { count: done }), {
+        action: undoDelete(result.succeeded, maybeDeleted),
+      })
+    } else if (maybeDeleted.length > 0) {
+      toast.warning(t("commodities:toast.bulkDeleteUnknown", { count: maybeDeleted.length }), {
+        action: undoDelete([], maybeDeleted),
+      })
+    }
+    const filesKept = result.notes.filter((n) => n.code === "files_kept").length
+    if (filesKept > 0) toast.warning(t("commodities:toast.bulkFilesKept", { count: filesKept }))
   }
 
   // unchangedMessage says why an action changed no item. For tags it names
@@ -306,13 +330,13 @@ export function CommodityBulkActions({
   }
 
   // submit sends the action of the open dialog, and closes that dialog when
-  // the request went through. It returns whether it did.
+  // the request went through and the dialog is still the one that sent it.
+  // It returns whether it closed it.
   async function submit(action: BulkAction): Promise<boolean> {
     if (!target) return false
     const session = dialogSession.current
     if (!(await run(action, target.selection, { version: target.version, session }))) return false
-    closeDialog(session)
-    return true
+    return closeDialog(session)
   }
 
   async function handleDelete() {
@@ -349,12 +373,14 @@ export function CommodityBulkActions({
     openDialog("status")
   }
 
+  // retry sends the action again for the failed items. Its outcome changes
+  // the selection only while that is still the one the result left.
   async function retry() {
     if (!outcome) return
     await run(
       outcome.action,
       { ids: outcome.result.failed.map((f) => f.id) },
-      { version: selection.version }
+      { version: outcome.version }
     )
   }
 

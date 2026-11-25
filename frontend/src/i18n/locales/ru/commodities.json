@@ -619,6 +619,10 @@
     "written_off": "Списано"
   },
   "toast": {
+    "bulkDeleteUnknown_one": "По {{count}} предмету не пришёл ответ, он может быть в корзине.",
+    "bulkDeleteUnknown_few": "По {{count}} предметам не пришёл ответ, они могут быть в корзине.",
+    "bulkDeleteUnknown_many": "По {{count}} предметам не пришёл ответ, они могут быть в корзине.",
+    "bulkDeleteUnknown_other": "По {{count}} предмета не пришёл ответ, они могут быть в корзине.",
     "bulkDeleted_one": "{{count}} предмет перемещён в корзину.",
     "bulkDeleted_few": "{{count}} предмета перемещено в корзину.",
     "bulkDeleted_many": "{{count}} предметов перемещено в корзину.",

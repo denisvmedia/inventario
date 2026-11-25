@@ -598,6 +598,8 @@
     "bulkDeleted_one": "{{count}} item moved to the trash.",
     "bulkDeleted_other": "{{count}} items moved to the trash.",
     "bulkDeleteError": "Couldn't delete the selected items.",
+    "bulkDeleteUnknown_one": "No answer came back for {{count}} item, so it may be in the trash.",
+    "bulkDeleteUnknown_other": "No answer came back for {{count}} items, so they may be in the trash.",
     "bulkFilesKept_one": "{{count}} item is in the trash, but some of its files stayed. You'll find them under Files.",
     "bulkFilesKept_other": "{{count}} items are in the trash, but some of their files stayed. You'll find them under Files.",
     "bulkMoved_one": "{{count}} item moved.",
