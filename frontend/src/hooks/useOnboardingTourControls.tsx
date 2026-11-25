@@ -7,6 +7,11 @@ import { createContext, useContext, type ReactNode } from "react"
 //     sheet, so nothing the tour points at is on screen.
 export type TourBlocker = "noGroup" | "narrowScreen"
 
+// How long a blocker has to last before it closes an open tour; until then
+// the tour is only hidden. Well above the few frames a full-page screenshot
+// keeps the page at 1x1, and invisible to the user either way.
+export const TOUR_BLOCKER_GRACE_MS = 1000
+
 export interface OnboardingTourControls {
   // Clears the "seen" flag and opens the tour at its first step.
   restart: () => void

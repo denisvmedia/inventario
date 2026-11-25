@@ -253,6 +253,11 @@ function Overlay({ spot, isCenter, onSkip }: OverlayProps) {
 interface OnboardingTourProps {
   // 0-based position among the shown steps (not an index into TOUR_STEPS).
   step: number
+  // Renders nothing and ignores the keyboard while true, but keeps the
+  // steps it resolved when it opened. Shell sets it while a tour blocker
+  // is present, which can be for a moment only; the sidebar the steps point
+  // at may be gone in that moment.
+  hidden?: boolean
   onNext: () => void
   onPrev: () => void
   onFinish: () => void
@@ -264,6 +269,7 @@ interface OnboardingTourProps {
 
 export function OnboardingTour({
   step,
+  hidden = false,
   onNext,
   onPrev,
   onFinish,
@@ -273,7 +279,8 @@ export function OnboardingTour({
   const { t } = useTranslation()
   // Resolved once per opening. The overlay blocks the page while the tour
   // is open, so the sidebar cannot change under it, and Shell unmounts
-  // this component on close, so the next opening resolves afresh.
+  // this component on close, so the next opening resolves afresh. While
+  // `hidden` the sidebar can go away and come back; the steps stay.
   const [shownSteps] = useState(() => resolveShownSteps())
   const totalSteps = shownSteps.length
   const index = Math.min(step, totalSteps - 1)
@@ -306,8 +313,10 @@ export function OnboardingTour({
     if (nothingToShow) onClose()
   }, [nothingToShow, onClose])
 
+  // Re-runs when the tour comes back from `hidden`: the target may have
+  // been re-rendered in the meantime, so scroll to it and measure again.
   useEffect(() => {
-    if (!currentStep) return
+    if (!currentStep || hidden) return
     const el = document.querySelector(currentStep.target)
     if (el && "scrollIntoView" in el) {
       ;(el as Element).scrollIntoView({ behavior: "smooth", block: "nearest" })
@@ -322,13 +331,13 @@ export function OnboardingTour({
       window.removeEventListener("resize", onResize)
       window.removeEventListener("scroll", onScroll, true)
     }
-  }, [measure, currentStep])
+  }, [measure, currentStep, hidden])
 
   // Keyboard: Esc skips, ArrowLeft/Right navigates, Enter advances /
   // finishes. Bound at the document level so users don't need to click
   // the card first.
   useEffect(() => {
-    if (nothingToShow) return
+    if (nothingToShow || hidden) return
     function handleKey(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault()
@@ -344,9 +353,9 @@ export function OnboardingTour({
     }
     document.addEventListener("keydown", handleKey)
     return () => document.removeEventListener("keydown", handleKey)
-  }, [nothingToShow, index, totalSteps, onNext, onPrev, onSkip, onFinish])
+  }, [nothingToShow, hidden, index, totalSteps, onNext, onPrev, onSkip, onFinish])
 
-  if (!currentStep || typeof document === "undefined") return null
+  if (!currentStep || hidden || typeof document === "undefined") return null
 
   const isCenter = currentStep.placement === "center"
   const isLast = index === totalSteps - 1
