@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -556,4 +557,199 @@ func TestTrashService_StorageCountsTrashSeparately(t *testing.T) {
 	c.Assert(after.Documents, qt.Equals, int64(0))
 	c.Assert(after.Trash, qt.Equals, int64(1000))
 	c.Assert(after.Total(), qt.Equals, int64(1000))
+}
+
+// failingRestoreFiles fails Restore for one file, as a storage outage would.
+type failingRestoreFiles struct {
+	registry.FileRegistry
+	failID string
+}
+
+func (r failingRestoreFiles) Restore(ctx context.Context, id string) error {
+	if id == r.failID {
+		return errors.New("storage unavailable")
+	}
+	return r.FileRegistry.Restore(ctx, id)
+}
+
+type failingRestoreFileFactory struct {
+	registry.FileRegistryFactory
+	failID string
+}
+
+func (f failingRestoreFileFactory) CreateUserRegistry(ctx context.Context) (registry.FileRegistry, error) {
+	reg, err := f.FileRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return failingRestoreFiles{FileRegistry: reg, failID: f.failID}, nil
+}
+
+// failingPurgeCommodities fails PurgeTrashed for one item.
+type failingPurgeCommodities struct {
+	registry.CommodityRegistry
+	failID string
+}
+
+func (r failingPurgeCommodities) PurgeTrashed(ctx context.Context, id string) (bool, error) {
+	if id == r.failID {
+		return false, errors.New("row is locked")
+	}
+	return r.CommodityRegistry.PurgeTrashed(ctx, id)
+}
+
+type failingPurgeCommodityFactory struct {
+	registry.CommodityRegistryFactory
+	failID string
+}
+
+func (f failingPurgeCommodityFactory) CreateServiceRegistry() registry.CommodityRegistry {
+	return failingPurgeCommodities{CommodityRegistry: f.CommodityRegistryFactory.CreateServiceRegistry(), failID: f.failID}
+}
+
+func TestTrashService_FailedFileRestoreLeavesItemInTrash(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	manual := f.file(c, "drill-manual.pdf", drill.ID)
+	receipt := f.file(c, "drill-receipt.pdf", drill.ID)
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+
+	broken := *f.factorySet
+	broken.FileRegistryFactory = failingRestoreFileFactory{FileRegistryFactory: f.factorySet.FileRegistryFactory, failID: receipt.ID}
+	_, err = services.NewTrashService(&broken, f.uploadLocation).RestoreCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.ErrorMatches, `.*storage unavailable.*`)
+
+	// The item stays in Trash, so the restore can be repeated.
+	_ = must.Must(f.regs.CommodityRegistry.GetTrashed(f.ctx, drill.ID))
+	_ = must.Must(f.regs.FileRegistry.GetTrashed(f.ctx, receipt.ID))
+
+	result, err := f.trash.RestoreCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Commodity.IsTrashed(), qt.IsFalse)
+	_ = must.Must(f.regs.FileRegistry.Get(f.ctx, manual.ID))
+	_ = must.Must(f.regs.FileRegistry.Get(f.ctx, receipt.ID))
+}
+
+func TestTrashService_SweepRestoresFilesOfALiveItem(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	manual := f.file(c, "drill-manual.pdf", drill.ID)
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+
+	// The item is back while its file is still in Trash: a delete that
+	// raced the restore leaves exactly this.
+	_ = must.Must(f.regs.CommodityRegistry.Restore(f.ctx, drill.ID))
+	_, err = f.regs.FileRegistry.Get(f.ctx, manual.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The file is not old enough to expire; the sweep restores it anyway.
+	services.NewTrashPurgeWorker(f.trash).Sweep(context.Background())
+
+	got := must.Must(f.regs.FileRegistry.Get(f.ctx, manual.ID))
+	c.Assert(got.IsTrashed(), qt.IsFalse)
+	c.Assert(got.LinkTo(models.FileLinkCommodity, drill.ID), qt.IsNotNil)
+	c.Assert(f.blobExists(c, "drill-manual.pdf"), qt.IsTrue)
+}
+
+func TestTrashService_EmptyTrashSettlesFilesOfAPurgedItem(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	manual := f.file(c, "drill-manual.pdf", drill.ID)
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+
+	// A purge that stopped right after deleting the item row: the file
+	// still links the item and is in neither Trash list.
+	c.Assert(must.Must(f.regs.CommodityRegistry.PurgeTrashed(f.ctx, drill.ID)), qt.IsTrue)
+	_, total, err := f.trash.ListTrashedFiles(f.ctx, 0, 10, services.DefaultTrashRetention)
+	c.Assert(err, qt.IsNil)
+	c.Assert(total, qt.Equals, 0)
+
+	items, files, err := f.trash.EmptyTrash(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(items, qt.Equals, 0)
+	c.Assert(files, qt.Equals, 1)
+	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, manual.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(f.blobExists(c, "drill-manual.pdf"), qt.IsFalse)
+}
+
+func TestTrashService_PurgeTakesFilesTheDeleteMissed(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	saw := f.item(c, "Saw", nil)
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+
+	// Files linked to the item after its delete listed its files, so they
+	// stayed live.
+	late := f.file(c, "late.pdf", drill.ID)
+	shared := f.file(c, "shared.pdf", drill.ID, saw.ID)
+
+	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+
+	_, err = f.regs.FileRegistry.Get(f.ctx, late.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, late.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Assert(f.blobExists(c, "late.pdf"), qt.IsFalse)
+
+	// The file the saw still uses stays, without the link to the purged item.
+	got := must.Must(f.regs.FileRegistry.Get(f.ctx, shared.ID))
+	c.Assert(got.Links, qt.HasLen, 1)
+	c.Assert(got.Links[0].EntityID, qt.Equals, saw.ID)
+}
+
+func TestTrashService_UnknownLinkedItemKeepsTheFile(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	drill := f.item(c, "Drill", nil)
+	// A link to an item this group cannot see. The link paths never create
+	// one; the trash code must still not read it as "no live link".
+	file := f.file(c, "manual.pdf", drill.ID, "item-the-group-cannot-see")
+
+	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
+	c.Assert(err, qt.IsNil)
+	_ = must.Must(f.regs.FileRegistry.Get(f.ctx, file.ID))
+
+	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+	got := must.Must(f.regs.FileRegistry.Get(f.ctx, file.ID))
+	c.Assert(got.Links, qt.HasLen, 1)
+	c.Assert(got.Links[0].EntityID, qt.Equals, "item-the-group-cannot-see")
+	c.Assert(f.blobExists(c, "manual.pdf"), qt.IsTrue)
+}
+
+func TestTrashService_PurgeExpiredGoesPastAFailingItem(t *testing.T) {
+	c := qt.New(t)
+	f := newTrashFixture(c)
+
+	now := time.Date(2026, 11, 1, 12, 0, 0, 0, time.UTC)
+	old := services.NewTrashService(f.factorySet, f.uploadLocation).WithClock(func() time.Time { return now.Add(-40 * 24 * time.Hour) })
+	first := f.item(c, "First", nil)
+	second := f.item(c, "Second", nil)
+	_, err := old.TrashCommodity(f.ctx, first.ID)
+	c.Assert(err, qt.IsNil)
+	_, err = old.TrashCommodity(f.ctx, second.ID)
+	c.Assert(err, qt.IsNil)
+
+	broken := *f.factorySet
+	broken.CommodityRegistryFactory = failingPurgeCommodityFactory{CommodityRegistryFactory: f.factorySet.CommodityRegistryFactory, failID: first.ID}
+	items, _, err := services.NewTrashService(&broken, f.uploadLocation).PurgeExpired(context.Background(), now.Add(-30*24*time.Hour), 10)
+	c.Assert(err, qt.ErrorMatches, `.*row is locked.*`)
+	c.Assert(items, qt.Equals, 1)
+
+	_ = must.Must(f.regs.CommodityRegistry.GetTrashed(f.ctx, first.ID))
+	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, second.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }

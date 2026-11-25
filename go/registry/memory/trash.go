@@ -319,35 +319,49 @@ func (r *FileRegistry) CountTrashedWith(_ context.Context, commodityIDs []string
 	return out, nil
 }
 
-// ListTrashedBefore returns up to limit expired Trash entries among files:
-// deleted on their own, or with an item that no longer exists. Oldest first.
+// ListTrashedBefore returns up to limit files deleted on their own before
+// cutoff, oldest first.
 func (r *FileRegistry) ListTrashedBefore(_ context.Context, cutoff time.Time, limit int) ([]*models.FileEntity, error) {
 	if limit <= 0 {
 		return nil, nil
 	}
-	itemExists := func(id string) bool {
+	candidates := r.trashedFiles(func(f *models.FileEntity, _ []models.FileLink) bool {
+		return f.DeletedWithCommodityID == nil && f.DeletedAt.Before(cutoff)
+	})
+	sortFilesOldestDeletedFirst(candidates)
+	return page(candidates, 0, limit), nil
+}
+
+// ListStrandedTrashed returns up to limit trashed files whose item is no
+// longer in Trash, oldest first.
+func (r *FileRegistry) ListStrandedTrashed(_ context.Context, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	itemInTrash := func(id string) bool {
 		if r.commodityFactory == nil {
 			return false
 		}
 		base := r.commodityFactory.baseCommodityRegistry
 		base.lock.RLock()
 		defer base.lock.RUnlock()
-		_, ok := base.items.Get(id)
-		return ok
+		c, ok := base.items.Get(id)
+		return ok && c != nil && c.IsTrashed()
 	}
 	candidates := r.trashedFiles(func(f *models.FileEntity, _ []models.FileLink) bool {
-		return f.DeletedAt.Before(cutoff)
+		return f.DeletedWithCommodityID != nil && !itemInTrash(*f.DeletedWithCommodityID)
 	})
-	candidates = slices.DeleteFunc(candidates, func(f *models.FileEntity) bool {
-		return f.DeletedWithCommodityID != nil && itemExists(*f.DeletedWithCommodityID)
-	})
-	slices.SortStableFunc(candidates, func(a, b *models.FileEntity) int {
+	sortFilesOldestDeletedFirst(candidates)
+	return page(candidates, 0, limit), nil
+}
+
+func sortFilesOldestDeletedFirst(files []*models.FileEntity) {
+	slices.SortStableFunc(files, func(a, b *models.FileEntity) int {
 		if c := a.DeletedAt.Compare(*b.DeletedAt); c != 0 {
 			return c
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
-	return page(candidates, 0, limit), nil
 }
 
 // isLiveFile reports whether a file is out of Trash.

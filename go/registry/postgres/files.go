@@ -884,8 +884,8 @@ func (r *FileRegistry) CountTrashedWith(ctx context.Context, commodityIDs []stri
 	return out, nil
 }
 
-// ListTrashedBefore returns up to limit expired Trash entries among files,
-// oldest first. On a service registry it spans every tenant and group.
+// ListTrashedBefore returns up to limit files deleted on their own before
+// cutoff, oldest first.
 func (r *FileRegistry) ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.FileEntity, error) {
 	if limit <= 0 {
 		return nil, nil
@@ -895,17 +895,42 @@ func (r *FileRegistry) ListTrashedBefore(ctx context.Context, cutoff time.Time, 
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT f.* FROM %s f
-			WHERE f.deleted_at IS NOT NULL AND f.deleted_at < $1
-				AND (f.deleted_with_commodity_id IS NULL
-					OR NOT EXISTS (SELECT 1 FROM %s c WHERE c.id = f.deleted_with_commodity_id))
+			WHERE f.deleted_at IS NOT NULL AND f.deleted_at < $1 AND f.deleted_with_commodity_id IS NULL
 			ORDER BY f.deleted_at ASC, f.id ASC
-			LIMIT $2`, r.tableNames.Files(), r.tableNames.Commodities())
+			LIMIT $2`, r.tableNames.Files())
 		var err error
 		files, err = r.queryFiles(ctx, tx, query, cutoff.UTC(), limit)
 		return err
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list expired trashed files", err)
+	}
+	return files, nil
+}
+
+// ListStrandedTrashed returns up to limit trashed files whose item is no
+// longer in Trash, oldest first.
+func (r *FileRegistry) ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+	var files []*models.FileEntity
+	reg := r.newSQLRegistry()
+	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT f.* FROM %s f
+			WHERE f.deleted_at IS NOT NULL AND f.deleted_with_commodity_id IS NOT NULL
+				AND NOT EXISTS (
+					SELECT 1 FROM %s c
+					WHERE c.id = f.deleted_with_commodity_id AND c.deleted_at IS NOT NULL)
+			ORDER BY f.deleted_at ASC, f.id ASC
+			LIMIT $1`, r.tableNames.Files(), r.tableNames.Commodities())
+		var err error
+		files, err = r.queryFiles(ctx, tx, query, limit)
+		return err
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list stranded trashed files", err)
 	}
 	return files, nil
 }

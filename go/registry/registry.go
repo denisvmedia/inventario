@@ -499,11 +499,20 @@ type FileRegistry interface {
 	// with it and their total size. Ids without such files are absent.
 	CountTrashedWith(ctx context.Context, commodityIDs []string) (map[string]TrashedFilesStats, error)
 
-	// ListTrashedBefore returns up to limit trashed files, in every tenant and
-	// group, that were deleted before cutoff and are Trash entries of their
-	// own: deleted on their own, or with an item that no longer exists. Oldest
-	// first. Service mode only: it backs the purge of expired Trash.
+	// ListTrashedBefore returns up to limit files, in every tenant and group,
+	// that were deleted on their own before cutoff. Oldest first. Service mode
+	// only: it backs the purge of expired Trash.
 	ListTrashedBefore(ctx context.Context, cutoff time.Time, limit int) ([]*models.FileEntity, error)
+
+	// ListStrandedTrashed returns up to limit trashed files that went to
+	// Trash with an item that is no longer in Trash: purged, or live again.
+	// Such a file is neither a Trash entry of its own nor listed under an
+	// item, so nothing shows it; an interrupted purge, restore or delete
+	// leaves it behind. services.TrashService settles it: restores it, hands
+	// it to another trashed item or deletes it. Oldest first, whatever the
+	// age. A user registry reads its group; a service registry reads every
+	// group.
+	ListStrandedTrashed(ctx context.Context, limit int) ([]*models.FileEntity, error)
 
 	// Trash moves a live file to Trash. withCommodityID names the item whose
 	// deletion takes the file along, or is empty for a file deleted on its
