@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useTranslation } from "react-i18next"
 import { Plus, Sparkles } from "lucide-react"
 
@@ -58,10 +58,29 @@ export function SellerField({
   const toast = useAppToast()
   const sellers = useSellers()
   const createSeller = useCreateSeller()
-  // Sellers created here, kept until the list includes them.
-  const [created, setCreated] = useState<Seller[]>([])
+  // Sellers created here, with the time the create was sent. Each one is
+  // shown until a fetch of the list lands after that time (a successful
+  // create refetches it); from then on the list is the truth, so a seller
+  // deleted elsewhere meanwhile drops out. A failed refetch keeps it.
+  const [created, setCreated] = useState<{ seller: Seller; sentAt: number }[]>([])
   const listed = sellers.data ?? []
-  const all = [...listed, ...created.filter((c) => !listed.some((s) => s.id === c.id))]
+  const pending = created
+    .filter((c) => c.sentAt > sellers.dataUpdatedAt && !listed.some((s) => s.id === c.seller.id))
+    .map((c) => c.seller)
+  const all = [...listed, ...pending]
+
+  // The selected seller is not in the group's list: another member deleted
+  // it after it was picked, or after the item was loaded.
+  const gone =
+    !!value && sellers.isSuccess && !sellers.isFetching && !all.some((s) => s.id === value)
+
+  // The server refuses a seller the group does not have with a 422 on the
+  // field. The list is fetched again, so the field can say the seller is gone.
+  const errorMessage = error?.message
+  const { refetch } = sellers
+  useEffect(() => {
+    if (errorMessage) void refetch()
+  }, [errorMessage, refetch])
 
   // The list closes before the dialog opens, or the dialog would open under
   // it; a letter typed on the closed select picks without opening the list,
@@ -111,9 +130,10 @@ export function SellerField({
 
   const opening = dialog?.id ?? 0
   async function submit(values: SellerFormValues) {
+    const sentAt = Date.now()
     const seller = await createSeller.mutateAsync(values)
     toast.success(t("sellers:toast.created"))
-    setCreated((prev) => [...prev, seller])
+    setCreated((prev) => [...prev, { seller, sentAt }])
     // Selected only while its dialog is still open, so a create that ends
     // after the dialog closed leaves a choice made meanwhile alone.
     if (openNow.current === opening) {
@@ -163,7 +183,11 @@ export function SellerField({
           </SelectItem>
         </SelectContent>
       </Select>
-      {error?.message ? (
+      {gone ? (
+        <p className="text-xs text-destructive" role="alert" data-testid={`${id}-gone`}>
+          {t("commodities:fields.sellerGone")}
+        </p>
+      ) : error?.message ? (
         <p className="text-xs text-destructive" role="alert">
           {t(error.message)}
         </p>
@@ -211,6 +235,12 @@ export function SellerField({
           defaultName={dialog?.name ?? ""}
           onSubmit={submit}
           isPending={createSeller.isPending}
+          findExisting={(name) => findSellerByName(listed, name)}
+          onUseExisting={(seller) => {
+            if (openNow.current !== opening) return
+            onChange(seller.id)
+            onSuggestionDone?.()
+          }}
           onCloseAutoFocus={(event) => {
             event.preventDefault()
             trigger.current?.focus()

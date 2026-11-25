@@ -9,6 +9,7 @@ import { useAllCommodities, useCommodity } from "@/features/commodities/hooks"
 import { useFiles } from "@/features/files/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useLocations } from "@/features/locations/hooks"
+import { useSellers } from "@/features/sellers/hooks"
 
 // The report page reads from a handful of feature hooks; mock them all so
 // the test drives pure presentation off fixtures (mirrors the
@@ -22,6 +23,7 @@ vi.mock("@/features/commodities/hooks", () => ({
 vi.mock("@/features/areas/hooks", () => ({ useAreas: vi.fn() }))
 vi.mock("@/features/locations/hooks", () => ({ useLocations: vi.fn() }))
 vi.mock("@/features/files/hooks", () => ({ useFiles: vi.fn() }))
+vi.mock("@/features/sellers/hooks", () => ({ useSellers: vi.fn() }))
 vi.mock("@/features/group/GroupContext", async () => {
   const actual = await vi.importActual<object>("@/features/group/GroupContext")
   return { ...actual, useCurrentGroup: vi.fn() }
@@ -32,6 +34,7 @@ const mockUseCommodity = vi.mocked(useCommodity)
 const mockUseAreas = vi.mocked(useAreas)
 const mockUseLocations = vi.mocked(useLocations)
 const mockUseFiles = vi.mocked(useFiles)
+const mockUseSellers = vi.mocked(useSellers)
 const mockUseCurrentGroup = vi.mocked(useCurrentGroup)
 
 const baseGroup = {
@@ -100,6 +103,15 @@ function baseHooks() {
     isLoading: false,
     isError: false,
   } as unknown as ReturnType<typeof useFiles>)
+  mockSellers({ data: [{ id: "s1", name: "Hardware Store", item_count: 1 }] })
+}
+
+function mockSellers(state: { data?: unknown[]; isLoading?: boolean; isError?: boolean }) {
+  mockUseSellers.mockReturnValue({
+    data: state.data,
+    isLoading: state.isLoading ?? false,
+    isError: state.isError ?? false,
+  } as unknown as ReturnType<typeof useSellers>)
 }
 
 afterEach(() => {
@@ -150,6 +162,37 @@ describe("<InsuranceReportPage /> — item mode", () => {
     expect(within(report).getByText("Classic Pro")).toBeInTheDocument()
     // The model replaces the short name as the subtitle.
     expect(within(report).queryByText("Gaggia", { exact: true })).toBeNull()
+  })
+
+  it("prints the item's seller by name (#2804)", () => {
+    mockUseCommodity.mockReturnValue({
+      data: { commodity: { ...itemC1, seller_id: "s1" }, meta: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCommodity>)
+    renderPage("?mode=item&item=c1")
+    expect(
+      within(screen.getByTestId("report-item")).getByText("Hardware Store")
+    ).toBeInTheDocument()
+  })
+
+  it("waits for the sellers instead of printing the seller as missing", () => {
+    mockUseCommodity.mockReturnValue({
+      data: { commodity: { ...itemC1, seller_id: "s1" }, meta: {} },
+      isLoading: false,
+      isError: false,
+    } as unknown as ReturnType<typeof useCommodity>)
+    mockSellers({ isLoading: true })
+    renderPage("?mode=item&item=c1")
+    expect(screen.getByTestId("insurance-report-loading")).toBeInTheDocument()
+    expect(screen.queryByTestId("report-item")).toBeNull()
+  })
+
+  it("shows the error when the sellers cannot be loaded", () => {
+    mockSellers({ isError: true })
+    renderPage("?mode=item&item=c1")
+    expect(screen.getByTestId("insurance-report-error")).toBeInTheDocument()
+    expect(screen.queryByTestId("report-item")).toBeNull()
   })
 
   it("detail fetch honors the raw item param even when it is absent from the list", () => {
@@ -210,6 +253,18 @@ describe("<InsuranceReportPage /> — location mode", () => {
     // Totals: count 2, purchase 700+50=750, value 650+40=690.
     expect(within(report).getByText("$750.00")).toBeInTheDocument()
     expect(within(report).getByText("$690.00")).toBeInTheDocument()
+  })
+
+  it("waits for the sellers and shows their error in location mode too", () => {
+    mockSellers({ isLoading: true })
+    const { unmount } = renderPage("?mode=location&location=loc1")
+    expect(screen.getByTestId("insurance-report-loading")).toBeInTheDocument()
+    expect(screen.queryByTestId("report-location")).toBeNull()
+    unmount()
+
+    mockSellers({ isError: true })
+    renderPage("?mode=location&location=loc1")
+    expect(screen.getByTestId("insurance-report-error")).toBeInTheDocument()
   })
 
   it("leaves unknown prices out of the totals and says so, but shows a zero", () => {

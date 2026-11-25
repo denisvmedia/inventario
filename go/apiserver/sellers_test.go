@@ -172,3 +172,53 @@ func longString(n int) string {
 	}
 	return string(b)
 }
+
+// TestSellers_ViewerCannotWrite checks the role gate on the /sellers routes:
+// a viewer reads the group's sellers but cannot create, rename or delete one,
+// while a user can.
+func TestSellers_ViewerCannotWrite(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+
+	rr := env.do(http.MethodPost, "/sellers", `{"data":{"type":"sellers","attributes":{"name":"Corner Market"}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	var created jsonapi.SellerResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &created), qt.IsNil)
+	sellerPath := "/sellers/" + created.Data.ID
+
+	env.setRole(models.GroupRoleViewer)
+	rr = env.do(http.MethodGet, "/sellers", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	rr = env.do(http.MethodGet, sellerPath, "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+
+	writes := []struct {
+		name   string
+		method string
+		path   string
+		body   string
+	}{
+		{"create", http.MethodPost, "/sellers", `{"data":{"type":"sellers","attributes":{"name":"Hardware Store"}}}`},
+		{"rename", http.MethodPatch, sellerPath, `{"data":{"id":"` + created.Data.ID + `","type":"sellers","attributes":{"name":"Renamed"}}}`},
+		{"delete", http.MethodDelete, sellerPath, ""},
+	}
+	for _, w := range writes {
+		c.Run(w.name, func(c *qt.C) {
+			rr := env.do(w.method, w.path, w.body)
+			c.Assert(rr.Code, qt.Equals, http.StatusForbidden,
+				qt.Commentf("a viewer got %d from %s %s: %s", rr.Code, w.method, w.path, rr.Body.String()))
+		})
+	}
+
+	// Nothing the viewer sent changed the seller list.
+	rr = env.do(http.MethodGet, "/sellers", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	var list jsonapi.SellersResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &list), qt.IsNil)
+	c.Assert(list.Data, qt.HasLen, 1)
+	c.Check(list.Data[0].Attributes.Name, qt.Equals, "Corner Market")
+
+	env.setRole(models.GroupRoleUser)
+	rr = env.do(http.MethodPost, "/sellers", `{"data":{"type":"sellers","attributes":{"name":"Hardware Store"}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+}

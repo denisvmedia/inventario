@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react"
+import { http, HttpResponse } from "msw"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
 import { Route } from "react-router-dom"
@@ -11,7 +12,7 @@ import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { capture } from "@/test/capture"
-import { groupHandlers, sellerHandlers } from "@/test/handlers"
+import { apiUrl, groupHandlers, sellerHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -30,10 +31,18 @@ beforeEach(() => {
   setAccessToken("good-token")
 })
 
+interface HarnessProps {
+  initial?: string
+  suggestion?: string
+}
+
 // Harness keeps the picked id in state, as the item form does, and shows it.
-function Harness({ initial = "", suggestion = "" }: { initial?: string; suggestion?: string }) {
+// The "fail" button stands in for a save the server refused with a 422 on
+// the seller.
+function Harness({ initial = "", suggestion = "" }: HarnessProps) {
   const [value, setValue] = useState(initial)
   const [scanned, setScanned] = useState(suggestion)
+  const [error, setError] = useState("")
   return (
     <>
       <SellerField
@@ -42,13 +51,17 @@ function Harness({ initial = "", suggestion = "" }: { initial?: string; suggesti
         onChange={setValue}
         suggestion={scanned}
         onSuggestionDone={() => setScanned("")}
+        error={error ? { message: error } : undefined}
       />
       <output data-testid="picked">{value}</output>
+      <button type="button" onClick={() => setError("no seller with this ID in the group")}>
+        fail
+      </button>
     </>
   )
 }
 
-function renderField(props: { initial?: string; suggestion?: string } = {}) {
+function renderField(props: HarnessProps = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/x`,
     routes: (
@@ -71,6 +84,22 @@ function seed(sellers = [hardware, market]) {
   )
 }
 
+// serveSellers answers GET /sellers from a list the test can change, and
+// counts the requests.
+function serveSellers(sellers: { id: string; name: string; item_count: number }[]) {
+  const state = { sellers, gets: 0 }
+  server.use(
+    http.get(apiUrl(`/g/${SLUG}/sellers`), () => {
+      state.gets++
+      return HttpResponse.json({
+        data: state.sellers.map((s) => ({ id: s.id, type: "sellers", attributes: s })),
+        meta: { sellers: state.sellers.length },
+      })
+    })
+  )
+  return state
+}
+
 describe("<SellerField />", () => {
   it("picks a seller of the group and clears it", async () => {
     seed()
@@ -89,9 +118,18 @@ describe("<SellerField />", () => {
 
   it("creates a seller from the list and selects it", async () => {
     const body = capture<{ data: { attributes: { name: string } } }>()
+    const garden = { id: "s3", name: "Garden Center", item_count: 0 }
     seed()
+    const served = serveSellers([hardware, market])
     server.use(
-      ...sellerHandlers.create(SLUG, { id: "s3", name: "Garden Center", item_count: 0 }, body)
+      http.post(apiUrl(`/g/${SLUG}/sellers`), async ({ request }) => {
+        body.value = (await request.json()) as typeof body.value
+        served.sellers = [...served.sellers, garden]
+        return HttpResponse.json(
+          { data: { id: garden.id, type: "sellers", attributes: garden } },
+          { status: 201 }
+        )
+      })
     )
     const user = userEvent.setup()
     renderField()
@@ -103,7 +141,25 @@ describe("<SellerField />", () => {
     await waitFor(() => expect(screen.queryByTestId("seller-form-dialog")).toBeNull())
     expect(body.value?.data.attributes.name).toBe("Garden Center")
     expect(screen.getByTestId("picked")).toHaveTextContent("s3")
-    // The new seller shows before the list is fetched again.
+    expect(screen.getByRole("combobox", { name: "Seller" })).toHaveTextContent("Garden Center")
+    expect(screen.queryByTestId("seller-gone")).toBeNull()
+  })
+
+  it("keeps showing a created seller when the list cannot be fetched again", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderField()
+    await user.click(await screen.findByRole("combobox", { name: "Seller" }))
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/sellers`), () => new HttpResponse(null, { status: 500 })),
+      ...sellerHandlers.create(SLUG, { id: "s3", name: "Garden Center", item_count: 0 })
+    )
+    await user.click(await screen.findByTestId("seller-new"))
+    const dialog = await screen.findByTestId("seller-form-dialog")
+    await user.type(within(dialog).getByTestId("seller-name-input"), "Garden Center{Enter}")
+
+    await waitFor(() => expect(screen.queryByTestId("seller-form-dialog")).toBeNull())
+    expect(screen.getByTestId("picked")).toHaveTextContent("s3")
     expect(screen.getByRole("combobox", { name: "Seller" })).toHaveTextContent("Garden Center")
   })
 
@@ -133,6 +189,75 @@ describe("<SellerField />", () => {
     await user.click(use)
     expect(screen.getByTestId("picked")).toHaveTextContent("s1")
     expect(screen.queryByTestId("seller-suggestion")).toBeNull()
+  })
+
+  it("offers the seller that has a taken name, once the list knows it", async () => {
+    seed()
+    // Another member created the seller after this list was loaded.
+    const served = serveSellers([hardware, market])
+    server.use(...sellerHandlers.nameTaken(SLUG))
+    const user = userEvent.setup()
+    renderField()
+    await user.click(await screen.findByRole("combobox", { name: "Seller" }))
+    await user.click(await screen.findByTestId("seller-new"))
+    const dialog = await screen.findByTestId("seller-form-dialog")
+    served.sellers = [hardware, market, { id: "s3", name: "Garden Center", item_count: 4 }]
+    await user.type(within(dialog).getByTestId("seller-name-input"), "garden  center{Enter}")
+
+    expect(await within(dialog).findByTestId("seller-name-error")).toHaveTextContent(
+      "Another seller of this group has this name."
+    )
+    const use = await within(dialog).findByTestId("seller-name-taken-use")
+    expect(use).toHaveTextContent("Use Garden Center")
+    await user.click(use)
+
+    await waitFor(() => expect(screen.queryByTestId("seller-form-dialog")).toBeNull())
+    expect(screen.getByTestId("picked")).toHaveTextContent("s3")
+    expect(screen.getByRole("combobox", { name: "Seller" })).toHaveTextContent("Garden Center")
+  })
+
+  it("drops a created seller deleted elsewhere once the list is fetched again", async () => {
+    seed()
+    // The list never includes the new seller: it was deleted right away.
+    serveSellers([hardware, market])
+    server.use(...sellerHandlers.create(SLUG, { id: "s3", name: "Garden Center", item_count: 0 }))
+    const user = userEvent.setup()
+    renderField()
+    await user.click(await screen.findByRole("combobox", { name: "Seller" }))
+    await user.click(await screen.findByTestId("seller-new"))
+    const dialog = await screen.findByTestId("seller-form-dialog")
+    await user.type(within(dialog).getByTestId("seller-name-input"), "Garden Center{Enter}")
+
+    await waitFor(() => expect(screen.queryByTestId("seller-form-dialog")).toBeNull())
+    expect(await screen.findByTestId("seller-gone")).toHaveTextContent(
+      "This seller was deleted. Pick another one or clear the seller."
+    )
+  })
+
+  it("says so when the picked seller is not in the group any more", async () => {
+    seed()
+    const user = userEvent.setup()
+    renderField({ initial: "s9" })
+    expect(await screen.findByTestId("seller-gone")).toBeVisible()
+    await user.click(screen.getByTestId("seller-clear"))
+    expect(screen.queryByTestId("seller-gone")).toBeNull()
+  })
+
+  it("fetches the list again when the server refuses the seller", async () => {
+    seed()
+    const served = serveSellers([hardware, market])
+    const user = userEvent.setup()
+    renderField({ initial: "s2" })
+    const trigger = await screen.findByRole("combobox", { name: "Seller" })
+    await waitFor(() => expect(trigger).toHaveTextContent("Corner Market"))
+    const before = served.gets
+
+    // Another member deleted the seller; the save is refused with a 422.
+    served.sellers = [hardware]
+    await user.click(screen.getByRole("button", { name: "fail" }))
+
+    await waitFor(() => expect(served.gets).toBe(before + 1))
+    expect(await screen.findByTestId("seller-gone")).toBeVisible()
   })
 
   it("creates nothing when the dialog is canceled", async () => {

@@ -15,6 +15,7 @@
     "noteLabel": "Заметка",
     "notePlaceholder": "Номер клиента, часы работы, всё, что стоит сохранить",
     "submitting": "Сохранение…",
+    "useExisting": "Выбрать {{name}}",
     "websiteLabel": "Сайт"
   },
   "list": {

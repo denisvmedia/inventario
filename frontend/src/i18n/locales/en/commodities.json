@@ -111,6 +111,10 @@
       "restoredLabelUnassigned": "Restored this item from the trash without a location; its area had been deleted",
       "returnedLabel": "Marked returned",
       "returnedLabelOn": "Marked returned on {{returnedAt}}",
+      "sellerChangedLabel": "Seller: {{from}} → {{to}}",
+      "sellerChangedLabelCleared": "Removed the seller {{from}}",
+      "sellerChangedLabelSet": "Seller set to {{to}}",
+      "sellerDeleted": "a deleted seller",
       "sentForServiceLabel": "Sent for service to {{provider}}",
       "sentForServiceLabelGeneric": "Sent for service",
       "sentForServiceLabelReason": "Sent to {{provider}} for {{reason}}",
@@ -262,6 +266,7 @@
     "revealPartNumbers": "Add part numbers",
     "seller": "Seller",
     "sellerCreateScanned": "Create seller",
+    "sellerGone": "This seller was deleted. Pick another one or clear the seller.",
     "sellerPlaceholder": "Pick a seller",
     "sellerScanned": "The scan read the seller “{{name}}”.",
     "sellerUseExisting": "Use {{name}}",
@@ -398,6 +403,7 @@
           "title": "Scanning your files…"
         },
         "scanPhotos": "Scan files",
+        "sellerComment": "Seller: {{name}}",
         "title": "Fill with AI"
       },
       "basics": {

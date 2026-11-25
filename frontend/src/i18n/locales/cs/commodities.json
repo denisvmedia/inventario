@@ -123,6 +123,10 @@
       "restoredLabelUnassigned": "Položka obnovena z koše bez umístění; její oblast byla mezitím smazána",
       "returnedLabel": "Označeno jako vráceno",
       "returnedLabelOn": "Označeno jako vráceno dne {{returnedAt}}",
+      "sellerChangedLabel": "Prodejce: {{from}} → {{to}}",
+      "sellerChangedLabelCleared": "Odebrán prodejce {{from}}",
+      "sellerChangedLabelSet": "Nastaven prodejce {{to}}",
+      "sellerDeleted": "smazaný prodejce",
       "sentForServiceLabel": "Odesláno do servisu k {{provider}}",
       "sentForServiceLabelGeneric": "Odesláno do servisu",
       "sentForServiceLabelReason": "Odesláno k {{provider}} z důvodu {{reason}}",
@@ -267,6 +271,7 @@
     "revealPartNumbers": "Přidat čísla dílů",
     "seller": "Prodejce",
     "sellerCreateScanned": "Vytvořit prodejce",
+    "sellerGone": "Tento prodejce byl smazán. Vyberte jiného nebo prodejce odeberte.",
     "sellerPlaceholder": "Vyberte prodejce",
     "sellerScanned": "Sken přečetl prodejce „{{name}}“.",
     "sellerUseExisting": "Použít {{name}}",
@@ -407,6 +412,7 @@
           "title": "Skenování vašich souborů…"
         },
         "scanPhotos": "Naskenovat soubory",
+        "sellerComment": "Prodejce: {{name}}",
         "title": "Vyplnit pomocí AI"
       },
       "basics": {

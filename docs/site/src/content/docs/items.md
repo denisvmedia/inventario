@@ -246,7 +246,8 @@ The header also has:
 ![A printable insurance report view of an item ready to print or save as PDF](../../assets/screenshots/item-print.png)
 
 A **History** section lists every change — who, when, and what — including
-status changes, price changes, moves, and cover-photo changes.
+status changes, price changes, moves, cover-photo changes, and a change of
+[seller](../sellers/).
 
 :::note
 Lending, service, and supplies tracking are only available on single-unit

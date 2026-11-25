@@ -15,6 +15,7 @@
     "noteLabel": "Poznámka",
     "notePlaceholder": "Zákaznické číslo, otevírací doba, cokoli užitečného",
     "submitting": "Ukládání…",
+    "useExisting": "Použít {{name}}",
     "websiteLabel": "Web"
   },
   "list": {

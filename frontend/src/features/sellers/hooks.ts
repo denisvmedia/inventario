@@ -2,11 +2,13 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import { commodityKeys } from "@/features/commodities/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { getServerErrorCode } from "@/lib/server-error"
 
 import {
   createSeller,
   deleteSeller,
   listSellers,
+  SELLER_NAME_TAKEN,
   updateSeller,
   type Seller,
   type SellerInput,
@@ -41,11 +43,19 @@ function useInvalidate() {
   }
 }
 
+// A name refused as taken belongs to a seller this client may not know yet,
+// created by another member or in another tab, so the list is fetched again
+// and the form can offer that seller.
+function refreshOnNameTaken(err: Error, refresh: () => unknown) {
+  if (getServerErrorCode(err) === SELLER_NAME_TAKEN) void refresh()
+}
+
 export function useCreateSeller() {
   const invalidate = useInvalidate()
   return useMutation<Seller, Error, SellerInput>({
     mutationFn: (input) => createSeller(input),
     onSuccess: () => invalidate.sellers(),
+    onError: (err) => refreshOnNameTaken(err, invalidate.sellers),
   })
 }
 
@@ -54,6 +64,7 @@ export function useUpdateSeller() {
   return useMutation<Seller, Error, { id: string; input: Partial<SellerInput> }>({
     mutationFn: ({ id, input }) => updateSeller(id, input),
     onSuccess: () => invalidate.sellers(),
+    onError: (err) => refreshOnNameTaken(err, invalidate.sellers),
   })
 }
 

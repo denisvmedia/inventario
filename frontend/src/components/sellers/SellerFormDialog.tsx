@@ -38,6 +38,8 @@ import {
   type ClassifiedServerError,
 } from "@/lib/server-error"
 
+const NAME_TAKEN_MESSAGE = "sellers:validation.nameTaken"
+
 export interface SellerFormDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
@@ -52,6 +54,12 @@ export interface SellerFormDialogProps {
   // Where the focus goes when the dialog closes, for a host that opens it
   // from somewhere other than a DialogTrigger (the item form's picker).
   onCloseAutoFocus?: (event: Event) => void
+  // For a host that picks a seller (the item form): when the server refuses
+  // the name as taken, findExisting looks up the seller that has it, and the
+  // dialog offers to use that seller instead. onUseExisting receives it, and
+  // the dialog then closes.
+  findExisting?: (name: string) => Seller | undefined
+  onUseExisting?: (seller: Seller) => void
 }
 
 // The create / edit form of a seller (#2804): name, website, contact, note.
@@ -65,9 +73,13 @@ export function SellerFormDialog({
   onSubmit,
   isPending = false,
   onCloseAutoFocus,
+  findExisting,
+  onUseExisting,
 }: SellerFormDialogProps) {
   const { t } = useTranslation()
   const [serverError, setServerError] = useState<ClassifiedServerError | null>(null)
+  // The name the server last refused as taken.
+  const [takenName, setTakenName] = useState("")
   const isEdit = !!seller
 
   const form = useForm<SellerFormInput, unknown, SellerFormValues>({
@@ -93,6 +105,7 @@ export function SellerFormDialog({
       note: seller?.note ?? "",
     })
     setServerError(null)
+    setTakenName("")
   }, [open, seller, defaultName, form])
 
   async function handle(values: SellerFormValues) {
@@ -102,7 +115,8 @@ export function SellerFormDialog({
       onOpenChange(false)
     } catch (err) {
       if (getServerErrorCode(err) === SELLER_NAME_TAKEN) {
-        form.setError("name", { type: "server", message: "sellers:validation.nameTaken" })
+        form.setError("name", { type: "server", message: NAME_TAKEN_MESSAGE })
+        setTakenName(values.name)
         return
       }
       const fieldResult = applyServerFieldErrors(err, form.setError, {
@@ -115,6 +129,14 @@ export function SellerFormDialog({
       )
     }
   }
+
+  // The seller that has the refused name, once the refreshed list knows it,
+  // and only while the name error still shows (typing clears it).
+  const existing =
+    takenName && onUseExisting && errors.name?.message === NAME_TAKEN_MESSAGE
+      ? findExisting?.(takenName)
+      : undefined
+  const offered = existing && existing.id !== seller?.id ? existing : undefined
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -152,6 +174,21 @@ export function SellerFormDialog({
               testId="seller-name-error"
               message={errors.name?.message}
             />
+            {offered && onUseExisting ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                className="h-7"
+                onClick={() => {
+                  onUseExisting(offered)
+                  onOpenChange(false)
+                }}
+                data-testid="seller-name-taken-use"
+              >
+                {t("sellers:dialog.useExisting", { name: offered.name })}
+              </Button>
+            ) : null}
           </div>
 
           <div className="space-y-1.5">

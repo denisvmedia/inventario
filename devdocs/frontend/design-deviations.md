@@ -46,11 +46,11 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Seller on the item: picker with New seller, AI suggestion, items-list filter, Details row
 
-- **Issue/PR**: #2804 / PR (pending)
+- **Issue/PR**: #2804 / PR #2844
 - **Mock**: No seller anywhere in the mock. The Purchase step of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has Purchase Date and Purchase Price only (L1158–L1180); `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has Purchase Date (L516–L517) and the Details tab a `DetailRow` for it (L793). The [`ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) toolbar has Type and Status `DropdownMenu` filters (L234–L297).
-- **Reality**: `frontend/src/components/sellers/SellerField.tsx` is a `Select` of the group's sellers under Purchase date, in the Purchase step and in the edit form's Purchase section, with **Clear seller** next to the label. The list ends with a `SelectSeparator` and **New seller** (a `Plus` icon), which opens `SellerFormDialog` over the form and selects the seller it created, the pattern of the Location picker (#2796). When the AI scan reads a seller the group does not have, a dashed box under the picker (`Sparkles` icon) names it with a **Create seller** button, or **Use {name}** when a seller with that name exists by then; nothing is created on its own. The scan review lists a Seller row after Purchase date. The items toolbar gets a **Seller** `DropdownMenu` of checkbox items, built like the Type filter, after Location; it shows once the group has a seller or the URL filters by one, and lists an unknown id as "Deleted seller" so it can be cleared. The Details tab shows a Seller row (`Store` icon) after Purchase date, linking to the items list filtered by the seller with inactive items shown.
-- **Why**: not present in mock. #2804 asks for a seller per item, created on the fly from the form, a filter on the items list, and the AI scan filling the seller. The suggestion box instead of creating the scanned seller, the "Deleted seller" entry and the Details link are agent-suggested.
-- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner.
+- **Reality**: `frontend/src/components/sellers/SellerField.tsx` is a `Select` of the group's sellers under Purchase date, in the Purchase step and in the edit form's Purchase section, with **Clear seller** next to the label. The list ends with a `SelectSeparator` and **New seller** (a `Plus` icon), which opens `SellerFormDialog` over the form and selects the seller it created, the pattern of the Location picker (#2796). When the AI scan reads a seller the group does not have, a dashed box under the picker (`Sparkles` icon) names it with a **Create seller** button, or **Use {name}** when a seller with that name exists by then; nothing is created on its own. The scan review lists a Seller row after Purchase date. The items toolbar gets a **Seller** `DropdownMenu` of checkbox items, built like the Type filter, after Location; it shows once the group has a seller or the URL filters by one, and lists an unknown id as "Deleted seller" so it can be cleared. The Details tab shows a Seller row (`Store` icon) after Purchase date, linking to the items list filtered by the seller with inactive items shown. When the server refuses a new seller's name as taken, the dialog adds a small outline **Use {name}** button under the name error once the refreshed list has that seller, and picking it selects that seller. A picked seller that is no longer in the group's list (deleted by another member) shows a destructive line under the picker asking to pick another one.
+- **Why**: not present in mock. #2804 asks for a seller per item, created on the fly from the form, a filter on the items list, and the AI scan filling the seller. The suggestion box instead of creating the scanned seller, the "Deleted seller" entry and the Details link are agent-suggested. The **Use {name}** offer and the deleted-seller line come from the #2844 review.
+- **Approved by**: user (explicit) — pre-approved for #2804 by the 2026-11-24 goal to implement the open enhancements; suggestion box, "Deleted seller" entry and Details link agent-suggested, listed in the PR for the owner; the taken-name offer and the deleted-seller line asked for in the PR review.
 - **Reversion plan**: Follow the mock once `inventario-design` adds a seller field.
 
 #### 2026-11-25 — Photo cards as the default Items list layout, compact cards kept as a third layout
@@ -539,7 +539,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Sellers page
 
-- **Issue/PR**: #2804 / PR (pending)
+- **Issue/PR**: #2804 / PR #2844
 - **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with an icon, a label, a usage line and edit / delete actions on hover.
 - **Reality**: `frontend/src/pages/sellers/SellersListPage.tsx` at `/g/:slug/sellers` follows that view without its stats bar, inline create row and item chips: a `PageHeader` with **New seller**, a search box that filters by name on the client (`?q=`), and a card of `SellerRow`s with a `Store` icon, the name (a link to the items list filtered by the seller, inactive items shown), the website host as an external link, "N items · contact", the note, and edit / delete buttons on hover. `SellerFormDialog` takes name, website, contact and note. Deleting asks for confirmation and names the number of items that lose the seller.
 - **Why**: not present in mock. #2804 asks for a page listing the sellers with their item counts, and for a confirmation naming the count before a seller is deleted.
@@ -765,7 +765,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-25 — Sellers entry in the sidebar and the command palette
 
-- **Issue/PR**: #2804 / PR (pending)
+- **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) lists Tags then Files (L66–L67), and [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) has no Sellers entry.
 - **Reality**: `frontend/src/components/AppSidebar.tsx` adds **Sellers** (`Store` icon) after Tags in the Group section, linking to `/g/:slug/sellers`. `CommandPalette.tsx` lists the same entry after Tags. Both resolve the label through `lib/nav-labels.ts` (`common:nav.sellers`).
 - **Why**: not present in mock. #2804 asks for a page listing the sellers.
@@ -1162,7 +1162,7 @@ _None yet._
 
 #### 2026-11-25 — Seller row in the insurance reports
 
-- **Issue/PR**: #2804 / PR (pending)
+- **Issue/PR**: #2804 / PR #2844
 - **Mock**: [`design-mocks/src/views/InsuranceReportView.tsx`](../../design-mocks/src/views/InsuranceReportView.tsx) item details and the location report's item sections have no seller.
 - **Reality**: `features/reports/components/ItemReport.tsx` adds a Seller detail (`Store` icon) after Purchase Date, and `LocationReport.tsx` a Seller row after Purchase Date in each item section; an item without a seller shows the same dash as the other empty values.
 - **Why**: not present in mock. #2804 asks for the seller in the insurance report.

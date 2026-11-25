@@ -15,6 +15,7 @@
     "noteLabel": "Note",
     "notePlaceholder": "Customer number, opening hours, anything worth keeping",
     "submitting": "Saving…",
+    "useExisting": "Use {{name}}",
     "websiteLabel": "Website"
   },
   "list": {

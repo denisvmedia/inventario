@@ -201,14 +201,18 @@ export function InsuranceReportPage() {
   // + header). Gate on these so the report doesn't flash an empty state /
   // zero totals while `areas` is still resolving after commodities settle
   // (#1370 review). Photos (`useFiles`) stay ungated — see the query above.
+  // Both modes print each item's seller by name, so they wait for the
+  // sellers too; without them a seller would print as "—" (#2804).
   const isLoading =
-    mode === "item"
+    sellers.isLoading ||
+    (mode === "item"
       ? detail.isLoading || commoditiesQuery.isLoading || areas.isLoading
-      : commoditiesQuery.isLoading || locations.isLoading || areas.isLoading
+      : commoditiesQuery.isLoading || locations.isLoading || areas.isLoading)
   const isError =
-    mode === "item"
+    sellers.isError ||
+    (mode === "item"
       ? detail.isError || commoditiesQuery.isError || areas.isError
-      : commoditiesQuery.isError || locations.isError || areas.isError
+      : commoditiesQuery.isError || locations.isError || areas.isError)
 
   return (
     <>

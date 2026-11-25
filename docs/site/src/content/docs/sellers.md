@@ -55,6 +55,13 @@ the **Purchase** section when you edit one.
    as it was.
 3. To remove the seller from the item, click **Clear seller** above the picker.
 
+If the name you type for a new seller is already taken, for example because
+another member added that seller a moment ago, the dialog says so and offers
+**Use {name}** to pick the existing seller instead.
+
+If another member deletes the seller while you have it picked, the picker says
+the seller was deleted. Pick another one or clear the seller before you save.
+
 The item page shows the seller in its **Details**, next to the purchase date.
 The seller's name links to the list of items bought from it.
 
@@ -69,6 +76,10 @@ on **Review extracted details**:
   name the scan read, with a **Create seller** button that opens the dialog
   with the name filled in. If a seller with that name exists by then,
   the button offers to use it instead.
+
+When you draft an item from the public landing page, before you have an
+account and a group, there are no sellers yet: the scan adds a "Seller: …" line
+to the item's **Comments** instead.
 
 ## See everything bought from a seller
 

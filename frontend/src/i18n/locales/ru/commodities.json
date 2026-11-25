@@ -123,6 +123,10 @@
       "restoredLabelUnassigned": "Предмет восстановлен из корзины без места хранения: его зона была удалена",
       "returnedLabel": "Отмечено как возвращённое",
       "returnedLabelOn": "Отмечено как возвращённое {{returnedAt}}",
+      "sellerChangedLabel": "Продавец: {{from}} → {{to}}",
+      "sellerChangedLabelCleared": "Убран продавец {{from}}",
+      "sellerChangedLabelSet": "Указан продавец {{to}}",
+      "sellerDeleted": "удалённый продавец",
       "sentForServiceLabel": "Отправлено на обслуживание в {{provider}}",
       "sentForServiceLabelGeneric": "Отправлено на обслуживание",
       "sentForServiceLabelReason": "Отправлено в {{provider}} для {{reason}}",
@@ -267,6 +271,7 @@
     "revealPartNumbers": "Добавить артикулы",
     "seller": "Продавец",
     "sellerCreateScanned": "Создать продавца",
+    "sellerGone": "Этот продавец удалён. Выберите другого или очистите поле.",
     "sellerPlaceholder": "Выберите продавца",
     "sellerScanned": "Скан распознал продавца «{{name}}».",
     "sellerUseExisting": "Выбрать {{name}}",
@@ -407,6 +412,7 @@
           "title": "Сканирование ваших файлов…"
         },
         "scanPhotos": "Сканировать файлы",
+        "sellerComment": "Продавец: {{name}}",
         "title": "Заполнить с ИИ"
       },
       "basics": {

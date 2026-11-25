@@ -30,6 +30,23 @@ describe("sellerNameKey / findSellerByName", () => {
     expect(findSellerByName(sellers, "café ré")?.id).toBe("s2")
   })
 
+  it("folds case the way the server does", () => {
+    // Full case folding expands ß and ẞ and treats every sigma alike.
+    expect(sellerNameKey("Straße")).toBe(sellerNameKey("STRASSE"))
+    expect(sellerNameKey("GROẞ")).toBe("gross")
+    expect(sellerNameKey("ΟΔΟΣ")).toBe(sellerNameKey("οδος"))
+    expect(sellerNameKey("ﬁne")).toBe("fine")
+    // The dotless ı has no folding of its own.
+    expect(sellerNameKey("Bıçak")).not.toBe(sellerNameKey("Bicak"))
+  })
+
+  it("splits on the white space the server knows", () => {
+    expect(sellerNameKey("Corner\u00a0Market")).toBe("corner market")
+    expect(sellerNameKey("Corner\u0085Market")).toBe("corner market")
+    // U+FEFF is not white space to the server.
+    expect(sellerNameKey("Corner\ufeffMarket")).toBe("corner\ufeffmarket")
+  })
+
   it("finds nothing for an empty name or an unknown one", () => {
     expect(findSellerByName(sellers, "   ")).toBeUndefined()
     expect(findSellerByName(sellers, "Corner Market")).toBeUndefined()

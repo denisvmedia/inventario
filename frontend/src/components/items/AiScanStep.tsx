@@ -305,8 +305,12 @@ export function AiScanStep({
         signal: ac.signal,
       })
       // Sellers belong to a group, and the anonymous flow has none to put
-      // the seller in.
-      const r = anonymous ? withoutSeller(scanned) : scanned
+      // the seller in, so the seller goes into the comments there.
+      const r = anonymous
+        ? sellerIntoComments(scanned, (name) =>
+            t("commodities:form.step.ai.sellerComment", { name })
+          )
+        : scanned
       // Nothing usable came back (an unreadable document, or a model
       // truncation). Don't drop the user into a green-but-empty "review" —
       // keep them on the offer with a retry hint.
@@ -1246,16 +1250,33 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
   }
 }
 
-function withoutSeller(result: ScanResult): ScanResult {
-  const strip = (fields: ScanResultFields): ScanResultFields => {
-    const rest = { ...fields }
-    delete rest.seller
-    return rest
+// sellerIntoComments moves the scanned seller into the comments, as a line of
+// its own after any comment the scan read. The merged comment keeps the more
+// confident of the two guesses, so a confident seller is not left unchecked
+// behind a weak comment, or the other way round.
+function sellerIntoComments(result: ScanResult, sellerLine: (name: string) => string): ScanResult {
+  const fold = (fields: ScanResultFields): ScanResultFields => {
+    const { seller, ...rest } = fields
+    const name = seller?.value.trim() ?? ""
+    if (!seller || !name) return rest
+    const line = sellerLine(name)
+    const comments = rest.comments
+    const text = comments?.value.trim() ?? ""
+    return {
+      ...rest,
+      comments:
+        comments && text
+          ? {
+              value: `${text}\n${line}`,
+              confidence: Math.max(comments.confidence, seller.confidence),
+            }
+          : { value: line, confidence: seller.confidence },
+    }
   }
   return {
     ...result,
-    fields: strip(result.fields),
-    items: result.items.map((item) => ({ ...item, fields: strip(item.fields) })),
+    fields: fold(result.fields),
+    items: result.items.map((item) => ({ ...item, fields: fold(item.fields) })),
   }
 }
 
