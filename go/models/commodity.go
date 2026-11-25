@@ -86,6 +86,13 @@ func (c CommodityType) Validate() error {
 	return nil
 }
 
+// MaxCommodityBrandRunes and MaxCommodityModelRunes cap an item's brand and
+// model. They count runes, as the frontend counts code points.
+const (
+	MaxCommodityBrandRunes = 100
+	MaxCommodityModelRunes = 100
+)
+
 var (
 	_ validation.Validatable            = (*Commodity)(nil)
 	_ validation.ValidatableWithContext = (*Commodity)(nil)
@@ -117,6 +124,15 @@ type Commodity struct {
 	Name string `json:"name" db:"name"`
 	//ptah:schema:field name="short_name" type="TEXT"
 	ShortName string `json:"short_name" db:"short_name"`
+	// Brand is the maker of the item ("Bosch"), as plain text. The brand
+	// input suggests the brands the group already uses (see
+	// CommodityRegistry.ListBrands), and the item search matches it.
+	//ptah:schema:field name="brand" type="TEXT" not_null="true" default=""
+	Brand string `json:"brand" db:"brand"`
+	// Model is the maker's model name or number ("SMV6ZCX42E"), as plain
+	// text.
+	//ptah:schema:field name="model" type="TEXT" not_null="true" default=""
+	Model string `json:"model" db:"model"`
 	//ptah:schema:field name="type" type="TEXT" not_null="true"
 	Type CommodityType `json:"type" db:"type"`
 	// AreaID is the area the commodity is filed under. Nullable (issue
@@ -231,9 +247,13 @@ type Commodity struct {
 	//ptah:schema:field name="asset_number" type="INTEGER"
 	AssetNumber *int `json:"asset_number,omitempty" db:"asset_number" userinput:"false" readonly:"true"`
 
-	// SearchText is a database-generated column holding every text field
-	// the item search reads (registry.CommoditySearchFields), in that
-	// order, joined by the unit separator U+001F. The free-text search
+	// SearchText is a database-generated column holding the text fields
+	// the item search reads (registry.CommoditySearchTextFields), in that
+	// order, joined by the unit separator U+001F. The brand and the model
+	// are matched on their own columns instead: adding them here would
+	// change the function's parameters, which the column depends on, and
+	// rewriting a generated column's expression in place needs
+	// PostgreSQL 17. The free-text search
 	// matches each term against it with ILIKE, which the trigram index
 	// commodities_search_text_trgm_idx serves. A search term never contains
 	// a control character, so a match cannot span two fields. PostgreSQL
@@ -346,7 +366,7 @@ func SamePrice(a, b *decimal.Decimal) bool {
 // CommoditySearchFunctions declares the function behind the generated
 // commodities.search_text column. It joins the text columns and the strings
 // of the three JSONB arrays (extra serial numbers, part numbers, tag slugs)
-// with U+001F, in the order of registry.CommoditySearchFields. It is
+// with U+001F, in the order of registry.CommoditySearchTextFields. It is
 // IMMUTABLE, which PostgreSQL requires of a generated column, and it
 // qualifies every catalog name with pg_catalog so the result does not depend
 // on the search_path of the role that writes the row. A JSONB value that is
@@ -554,6 +574,14 @@ type CommodityIndexes struct {
 	//ptah:schema:index name="commodities_search_text_trgm_idx" fields="search_text" type="GIN" ops="gin_trgm_ops" table="commodities"
 	_ int
 
+	// Trigram indexes for the brand and model, which the item search matches
+	// on their own columns (registry.CommodityColumnSearchFields) next to
+	// search_text, and the brand filter compares case-insensitively.
+	//ptah:schema:index name="commodities_brand_trgm_idx" fields="brand" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+	//ptah:schema:index name="commodities_model_trgm_idx" fields="model" type="GIN" ops="gin_trgm_ops" table="commodities"
+	_ int
+
 	// Partial index for warranty filtering — only commodities that have a
 	// warranty date set are interesting for the worker scan and the
 	// "expiring soon" filter. Skips the bulk of rows (no warranty).
@@ -618,6 +646,8 @@ func (a *Commodity) ValidateWithContext(ctx context.Context) error {
 	fields = append(fields,
 		validation.Field(&a.Name, rules.NotEmpty, validation.Length(1, 255)),
 		validation.Field(&a.ShortName, rules.NotEmpty, validation.Length(1, 40)),
+		validation.Field(&a.Brand, validation.RuneLength(0, MaxCommodityBrandRunes)),
+		validation.Field(&a.Model, validation.RuneLength(0, MaxCommodityModelRunes)),
 		validation.Field(&a.Type, rules.NotEmpty),
 		validation.Field(&a.Status, rules.NotEmpty),
 		// The purchase date is optional on every item, draft or reviewed.

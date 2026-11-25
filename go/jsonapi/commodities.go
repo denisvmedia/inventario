@@ -274,3 +274,21 @@ func (*CommodityTagCountsResponse) Render(_ http.ResponseWriter, r *http.Request
 	render.Status(r, http.StatusOK)
 	return nil
 }
+
+// CommodityBrandsResponse is the payload of GET /commodities/brands: the
+// brands the group's items carry, most used first.
+type CommodityBrandsResponse struct {
+	Data []registry.CommodityBrandCount `json:"data"`
+}
+
+func NewCommodityBrandsResponse(brands []registry.CommodityBrandCount) *CommodityBrandsResponse {
+	if brands == nil {
+		brands = []registry.CommodityBrandCount{}
+	}
+	return &CommodityBrandsResponse{Data: brands}
+}
+
+func (*CommodityBrandsResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}

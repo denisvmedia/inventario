@@ -216,6 +216,34 @@ func TestCommodityEventService_EmitUpdated_GenericUpdate(t *testing.T) {
 	c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindUpdated)
 }
 
+func TestCommodityEventService_EmitUpdated_BrandAndModel(t *testing.T) {
+	// The brand and the model are ordinary fields: changing either one is a
+	// generic update, and the snapshot carries both.
+	for _, tc := range []struct {
+		name   string
+		mutate func(*models.Commodity)
+	}{
+		{name: "brand", mutate: func(c *models.Commodity) { c.Brand = "Bosch" }},
+		{name: "model", mutate: func(c *models.Commodity) { c.Model = "GSR 12V-15" }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			ctx, svc, reg := newEventTestContext(c)
+
+			before := makeCommodity("c1")
+			after := makeCommodity("c1", tc.mutate)
+			svc.EmitUpdated(ctx, before, after)
+
+			events, err := reg.List(ctx)
+			c.Assert(err, qt.IsNil)
+			c.Assert(events, qt.HasLen, 1)
+			c.Assert(events[0].Kind, qt.Equals, models.CommodityEventKindUpdated)
+			c.Check(events[0].After["brand"], qt.Equals, after.Brand)
+			c.Check(events[0].After["model"], qt.Equals, after.Model)
+		})
+	}
+}
+
 func makeLoan(id, commodityID string, mutators ...func(*models.CommodityLoan)) *models.CommodityLoan {
 	due := models.Date("2026-06-01")
 	l := &models.CommodityLoan{

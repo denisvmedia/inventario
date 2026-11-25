@@ -12,38 +12,46 @@ import (
 )
 
 func TestTrashContract_Memory(t *testing.T) {
-	registrytest.RunTrashContract(t, func(t *testing.T) registrytest.TrashEnv {
-		c := qt.New(t)
+	registrytest.RunTrashContract(t, newMemoryTrashEnv)
+}
 
-		ctx := appctx.WithUser(t.Context(), &models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "user-1"},
-				TenantID: "tenant-1",
-			},
-		})
-		ctx = appctx.WithGroup(ctx, &models.LocationGroup{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: "group-1"},
-				TenantID: "tenant-1",
-			},
-			Slug:          "group-1",
-			GroupCurrency: "USD",
-		})
+func TestCoverPhotoContract_Memory(t *testing.T) {
+	registrytest.RunCoverPhotoContract(t, newMemoryTrashEnv)
+}
 
-		fs := memory.NewFactorySet()
-		set, err := fs.CreateUserRegistrySet(ctx)
-		c.Assert(err, qt.IsNil)
-		loc, err := set.LocationRegistry.Create(ctx, models.Location{Name: "Home", Address: "addr"})
-		c.Assert(err, qt.IsNil)
-		area, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Shed", LocationID: loc.GetID()})
-		c.Assert(err, qt.IsNil)
+// newMemoryTrashEnv returns registries scoped to one empty group, with one
+// area to place items in.
+func newMemoryTrashEnv(t *testing.T) registrytest.TrashEnv {
+	c := qt.New(t)
 
-		return registrytest.TrashEnv{
-			Ctx:          ctx,
-			Commodities:  set.CommodityRegistry,
-			Files:        set.FileRegistry,
-			ServiceFiles: fs.FileRegistryFactory.CreateServiceRegistry(),
-			AreaID:       area.GetID(),
-		}
+	ctx := appctx.WithUser(t.Context(), &models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "user-1"},
+			TenantID: "tenant-1",
+		},
 	})
+	ctx = appctx.WithGroup(ctx, &models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: "group-1"},
+			TenantID: "tenant-1",
+		},
+		Slug:          "group-1",
+		GroupCurrency: "USD",
+	})
+
+	fs := memory.NewFactorySet()
+	set, err := fs.CreateUserRegistrySet(ctx)
+	c.Assert(err, qt.IsNil)
+	loc, err := set.LocationRegistry.Create(ctx, models.Location{Name: "Home", Address: "addr"})
+	c.Assert(err, qt.IsNil)
+	area, err := set.AreaRegistry.Create(ctx, models.Area{Name: "Shed", LocationID: loc.GetID()})
+	c.Assert(err, qt.IsNil)
+
+	return registrytest.TrashEnv{
+		Ctx:          ctx,
+		Commodities:  set.CommodityRegistry,
+		Files:        set.FileRegistry,
+		ServiceFiles: fs.FileRegistryFactory.CreateServiceRegistry(),
+		AreaID:       area.GetID(),
+	}
 }

@@ -16,6 +16,7 @@ type RateLimiter struct {
 	limit        int           // requests per minute
 	window       time.Duration // time window (1 minute)
 	cleanupTimer *time.Timer
+	stopped      bool
 }
 
 // TokenBucket represents a token bucket for rate limiting
@@ -101,8 +102,14 @@ func (rl *RateLimiter) GetRemainingTokens(userID string) int {
 	return minInt(bucket.limit, bucket.tokens+tokensToAdd)
 }
 
-// startCleanup starts a background routine to clean up old buckets
+// startCleanup schedules the next sweep of old buckets, unless the limiter
+// is stopped.
 func (rl *RateLimiter) startCleanup() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	if rl.stopped {
+		return
+	}
 	rl.cleanupTimer = time.AfterFunc(5*time.Minute, func() {
 		rl.cleanup()
 		rl.startCleanup() // Reschedule
@@ -123,8 +130,12 @@ func (rl *RateLimiter) cleanup() {
 	}
 }
 
-// Stop stops the cleanup routine
+// Stop stops the cleanup routine for good: a sweep that is running when
+// Stop is called does not schedule another.
 func (rl *RateLimiter) Stop() {
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+	rl.stopped = true
 	if rl.cleanupTimer != nil {
 		rl.cleanupTimer.Stop()
 	}

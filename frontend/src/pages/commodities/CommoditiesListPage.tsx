@@ -68,6 +68,7 @@ import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
 import { useLocations } from "@/features/locations/hooks"
+import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import { formatPrice } from "@/features/commodities/price"
 import {
@@ -104,15 +105,18 @@ import {
   type CommodityTagFilter,
 } from "@/features/commodities/query"
 import {
+  COMMODITIES_PAGE_SIZE,
   COMMODITIES_PAGE_SIZES,
   COMMODITIES_PAGE_SIZE_PARAM,
   commodityHref,
+  commoditiesListPath,
   commoditiesListOptions,
   parsePageSize,
   parseCommoditiesListParams,
   storeCommoditiesPageSize,
   type CommoditiesPageSize,
 } from "@/features/commodities/listContext"
+import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
@@ -134,8 +138,6 @@ import { getServerErrorCode, getServerErrorMeta } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { withId } from "@/lib/with-id"
 import { Pagination } from "@/components/common/Pagination"
-
-const VIEW_MODE_KEY = "commodities:viewMode"
 
 // "grid" is the photo card grid, "compact" the cards with a small
 // thumbnail, "list" the table.
@@ -201,10 +203,11 @@ export function CommoditiesListPage() {
   // back to the user's Preferences default
   // (`appearance.default_items_view`) once it loads. Setting via the
   // toolbar writes to localStorage but NOT to user_preferences, so a
-  // per-session flip stays scoped to one device.
+  // toolbar flip stays scoped to one device. Changing the setting in
+  // Settings drops the flip on the device it is changed on.
   const [storedView, setStoredView] = useState<ViewMode | null>(() => {
     if (typeof window === "undefined") return null
-    const raw = localStorage.getItem(VIEW_MODE_KEY)
+    const raw = localStorage.getItem(COMMODITIES_VIEW_MODE_KEY)
     return isViewMode(raw) ? raw : null
   })
   const settingsQuery = useUserSettings()
@@ -235,6 +238,24 @@ export function CommoditiesListPage() {
   const setSearchParamsRef = useRef(setSearchParams)
   // eslint-disable-next-line react-hooks/refs -- assigning the latest setter is the well-known "always-current ref" pattern; the ref isn't read during render below.
   setSearchParamsRef.current = setSearchParams
+  // The size remembered on this device applies at page 1 of a URL without
+  // one (features/commodities/listContext). Writing it into the URL keeps the
+  // page numbers, and the list context of an item opened from here, the
+  // same on any device and in any tab.
+  const urlPageSize = parsePageSize(searchParams.get(COMMODITIES_PAGE_SIZE_PARAM))
+  useEffect(() => {
+    if (urlPageSize !== undefined || perPage === COMMODITIES_PAGE_SIZE) return
+    // As the backdrop of an open item the list must not navigate.
+    if (!slug || window.location.pathname !== commoditiesListPath(slug)) return
+    setSearchParamsRef.current(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.set(COMMODITIES_PAGE_SIZE_PARAM, String(perPage))
+        return next
+      },
+      { replace: true }
+    )
+  }, [urlPageSize, perPage, slug])
   // Re-seed input when URL search param changes (back/forward).
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => setSearchInput(search), [search])
@@ -434,7 +455,7 @@ export function CommoditiesListPage() {
   }
   function setViewMode(mode: ViewMode) {
     setStoredView(mode)
-    if (typeof window !== "undefined") localStorage.setItem(VIEW_MODE_KEY, mode)
+    if (typeof window !== "undefined") localStorage.setItem(COMMODITIES_VIEW_MODE_KEY, mode)
     updateParams((p) => p.set("view", mode), { keepPage: true })
   }
   function goToPage(p: number) {
@@ -1394,6 +1415,9 @@ function CommodityGridCard({
   const purchaseDateLabel = purchaseDateShort
     ? t("commodities:card.purchasedOn", { date: purchaseDateShort })
     : null
+  // The mock's "brand · model" line; an item with neither shows its short
+  // name there instead.
+  const subtitle = brandModelText(row) || row.short_name
   // Bare click opens the Sheet preview; ctrl/cmd/shift-click and
   // middle-click fall through to the underlying Link so the user can
   // open the canonical URL in a new tab. shiftKey/aux-button check
@@ -1435,7 +1459,7 @@ function CommodityGridCard({
             <Checkbox
               checked={selected}
               onCheckedChange={() => onToggleSelected(id)}
-              aria-label={`select ${row.name ?? ""}`}
+              aria-label={t("commodities:list.selectItem", { name: row.name ?? "" })}
               data-testid="commodity-select"
               className="relative z-10 pointer-events-auto"
             />
@@ -1492,15 +1516,20 @@ function CommodityGridCard({
         >
           {row.name}
         </CardTitle>
-        <CardDescription className="pointer-events-none text-xs">
-          {areaName(row.area_id)}
+        <CardDescription
+          className="pointer-events-none truncate text-xs"
+          data-testid="commodity-card-subtitle"
+        >
+          {subtitle}
         </CardDescription>
         <SearchMatchHint match={match} tagLabel={tagLabel} className="pointer-events-none" />
       </CardHeader>
       <CardContent className="pointer-events-none">
         <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
           <div className="flex min-w-0 items-center gap-2">
-            {row.short_name ? <span className="truncate">{row.short_name}</span> : null}
+            <span className="truncate" data-testid="commodity-card-area">
+              {areaName(row.area_id)}
+            </span>
             {purchaseDateShort ? (
               <span
                 className="inline-flex shrink-0 items-center gap-1"
@@ -1611,7 +1640,7 @@ function CommoditiesTable({
                 <Checkbox
                   checked={selected.has(id)}
                   onCheckedChange={() => onToggleSelected(id)}
-                  aria-label={`select ${row.name ?? ""}`}
+                  aria-label={t("commodities:list.selectItem", { name: row.name ?? "" })}
                   data-testid="commodity-row-select"
                   className="relative z-10 pointer-events-auto"
                 />
@@ -1648,8 +1677,13 @@ function CommoditiesTable({
                       </Badge>
                     ) : null}
                   </div>
-                  {row.short_name ? (
-                    <p className="text-xs text-muted-foreground truncate">{row.short_name}</p>
+                  {brandModelText(row) || row.short_name ? (
+                    <p
+                      className="text-xs text-muted-foreground truncate"
+                      data-testid="commodity-row-subtitle"
+                    >
+                      {brandModelText(row) || row.short_name}
+                    </p>
                   ) : null}
                   <SearchMatchHint match={primarySearchMatch(matches?.[id])} tagLabel={tagLabel} />
                 </div>

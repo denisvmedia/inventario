@@ -40,6 +40,9 @@ type filesAPI struct {
 	linkService        *services.FileLinkService
 	factorySet         *registry.FactorySet
 	thumbnailConfig    services.ThumbnailGenerationConfig
+	// thumbnailService queues on-demand thumbnail jobs. It holds the per-user
+	// rate limit, so the download routes share one instance.
+	thumbnailService *services.ThumbnailGenerationService
 }
 
 // mergeTagParams combines the comma-separated `?tags=a,b,c` form with
@@ -1002,8 +1005,7 @@ func (api *filesAPI) downloadThumbnail(w http.ResponseWriter, r *http.Request) {
 
 // servePlaceholderThumbnail serves a placeholder image while triggering thumbnail generation
 func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Request, fileID, size string) {
-	// Check if there's a thumbnail generation job for this file
-	thumbnailService := services.NewThumbnailGenerationService(api.factorySet, api.uploadLocation, api.thumbnailConfig)
+	thumbnailService := api.thumbnailService
 
 	// "No job yet" is the common first-view case — match the registry's
 	// own sentinel, not apiserver.ErrNotFound. The registry wraps
@@ -1132,11 +1134,18 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 
 // SignedFiles sets up the signed file download routes that use signed URL validation
 func SignedFiles(params Params) func(r chi.Router) {
+	thumbnailService := params.ThumbnailService
+	if thumbnailService == nil {
+		// Callers that do not own a service (tests) get one for the life of
+		// the router; its cleanup timer is never stopped.
+		thumbnailService = services.NewThumbnailGenerationService(params.FactorySet, params.UploadLocation, params.ThumbnailConfig)
+	}
 	api := &filesAPI{
-		uploadLocation:  params.UploadLocation,
-		fileService:     services.NewFileService(params.FactorySet, params.UploadLocation),
-		factorySet:      params.FactorySet,
-		thumbnailConfig: params.ThumbnailConfig,
+		uploadLocation:   params.UploadLocation,
+		fileService:      services.NewFileService(params.FactorySet, params.UploadLocation),
+		factorySet:       params.FactorySet,
+		thumbnailConfig:  params.ThumbnailConfig,
+		thumbnailService: thumbnailService,
 	}
 
 	return func(r chi.Router) {

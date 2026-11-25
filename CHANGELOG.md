@@ -12,6 +12,15 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
+- An item has a brand and a model, both optional text of up to 100
+  characters. Cards, list rows and the item page show "Brand · Model" under
+  the name, the insurance reports put the brand in the item's title and the
+  model under it, and search finds items by either. The brand input suggests
+  the brands the group already uses, most used first, from the new
+  `GET /commodities/brands` endpoint. AI scan fills both, and backups carry
+  them (format 3.2; a 3.1 archive restores with them empty)
+  ([#2804](https://github.com/denisvmedia/inventario/issues/2804)).
+
 - Item photos large enough to recognize an item by. The items list opens on
   photo cards: the cover photo on top at 4:3, then the name and key facts,
   from two cards a row on a phone to six on a wide screen. The previous cards
@@ -22,6 +31,7 @@ the section matching the tag and publishes it as the GitHub Release body. See
   Thumbnails gain a `large` size (600 px) for these surfaces; a photo uploaded
   earlier gets it the first time a card shows it
   ([#2797](https://github.com/denisvmedia/inventario/issues/2797)).
+
 - A search field in the top bar of every page, an icon button on phones,
   opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
   group's matching items, locations, areas, files and tags by kind. An area or

@@ -167,3 +167,83 @@ func TestCommoditySearch_SharedContract(t *testing.T) {
 		})
 	}
 }
+
+// The brand input suggests the brands the group already uses, most used
+// first, and the search finds an item by its brand or model.
+func TestCommodityBrands(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	ctx := createTestUserContextWithGroup(testUser.ID, testUser.TenantID, testGroup.ID)
+	commodityReg := must.Must(params.FactorySet.CommodityRegistryFactory.CreateUserRegistry(ctx))
+
+	for _, seed := range []struct{ name, brand, model string }{
+		{"Drill", "Bosch", "GSR 12V-15"},
+		{"Dishwasher", "Bosch", "SMV6ZCX42E"},
+		{"Fridge", "Liebherr", ""},
+		{"Toolbox", "", ""},
+	} {
+		must.Must(commodityReg.Create(ctx, models.Commodity{
+			Name:                  seed.name,
+			ShortName:             seed.name,
+			Brand:                 seed.brand,
+			Model:                 seed.model,
+			Type:                  models.CommodityTypeOther,
+			OriginalPriceCurrency: models.Currency("USD"),
+			Count:                 1,
+			Status:                models.CommodityStatusInUse,
+		}))
+	}
+
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+	get := func(c *qt.C, path string) (int, []byte) {
+		c.Helper()
+		req := must.Must(http.NewRequest("GET", "/api/v1/g/"+testGroup.Slug+path, nil))
+		addTestUserAuthHeader(req, testUser.ID)
+		rr := httptest.NewRecorder()
+		handler.ServeHTTP(rr, req)
+		return rr.Code, rr.Body.Bytes()
+	}
+
+	c.Run("most used first", func(c *qt.C) {
+		code, body := get(c, "/commodities/brands")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 2)
+		c.Check(body, checkers.JSONPathEquals("$.data[0].brand"), "Bosch")
+		c.Check(body, checkers.JSONPathEquals("$.data[0].count"), float64(2))
+		c.Check(body, checkers.JSONPathEquals("$.data[1].brand"), "Liebherr")
+	})
+
+	c.Run("q narrows and limit cuts", func(c *qt.C) {
+		code, body := get(c, "/commodities/brands?q=HERR")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+		c.Check(body, checkers.JSONPathEquals("$.data[0].brand"), "Liebherr")
+
+		code, body = get(c, "/commodities/brands?limit=1")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+	})
+
+	c.Run("no match is an empty list", func(c *qt.C) {
+		code, body := get(c, "/commodities/brands?q=nothing")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(string(body), qt.Contains, `"data":[]`)
+	})
+
+	for _, limit := range []string{"0", "101", "ten"} {
+		c.Run("refuses limit "+limit, func(c *qt.C) {
+			code, body := get(c, "/commodities/brands?limit="+limit)
+			c.Check(code, qt.Equals, http.StatusBadRequest, qt.Commentf("body: %s", body))
+		})
+	}
+
+	c.Run("the search finds an item by its model and says so", func(c *qt.C) {
+		code, body := get(c, "/commodities?q=smv6")
+		c.Assert(code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", body))
+		c.Check(body, checkers.JSONPathMatches("$.data", qt.HasLen), 1)
+		c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.name"), "Dishwasher")
+		c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.brand"), "Bosch")
+		c.Check(body, checkers.JSONPathEquals("$.data[0].attributes.model"), "SMV6ZCX42E")
+	})
+}

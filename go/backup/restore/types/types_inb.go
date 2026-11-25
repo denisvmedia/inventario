@@ -155,6 +155,8 @@ type INBCommodity struct {
 	ID                     string   `json:"id"`
 	Name                   string   `json:"name"`
 	ShortName              string   `json:"shortName,omitempty"`
+	Brand                  string   `json:"brand,omitempty"`
+	Model                  string   `json:"model,omitempty"`
 	Type                   string   `json:"type,omitempty"`
 	AreaID                 string   `json:"areaId"`
 	Count                  int      `json:"count"`
@@ -324,6 +326,8 @@ func (c *INBCommodity) ConvertToCommodity(reading PriceReading) (*models.Commodi
 		},
 		Name:                   c.Name,
 		ShortName:              c.ShortName,
+		Brand:                  c.Brand,
+		Model:                  c.Model,
 		Type:                   models.CommodityType(c.Type),
 		AreaID:                 inbAreaIDPtr(c.AreaID),
 		Count:                  c.Count,

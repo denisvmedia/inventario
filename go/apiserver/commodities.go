@@ -3,7 +3,9 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
+	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -45,7 +47,7 @@ type commoditiesAPI struct {
 // @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
-// @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
+// @Param q query string false "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms"
 // @Param tags query []string false "Only items with these tag slugs (comma-separated or repeated); see tag_mode" collectionFormat(multi)
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
 // @Param tags_exclude query []string false "Only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
@@ -149,6 +151,52 @@ func (*commoditiesAPI) countCommodityTags(w http.ResponseWriter, r *http.Request
 		return
 	}
 	if err := render.Render(w, r, jsonapi.NewCommodityTagCountsResponse(counts)); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// Brand suggestions: the default and the most a request may ask for.
+const (
+	defaultCommodityBrandsLimit = 20
+	maxCommodityBrandsLimit     = 100
+)
+
+// listCommodityBrands lists the brands the group's items carry, for the
+// brand input's suggestions.
+// @Summary List commodity brands
+// @Description The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so "Bosch" and "bosch" are two entries.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param q query string false "Only brands that contain this text, without regard to case"
+// @Param limit query int false "At most this many brands (1 to 100)" default(20)
+// @Success 200 {object} jsonapi.CommodityBrandsResponse "OK"
+// @Failure 400 {object} jsonapi.Errors "Invalid limit"
+// @Router /g/{groupSlug}/commodities/brands [get].
+func (*commoditiesAPI) listCommodityBrands(w http.ResponseWriter, r *http.Request) {
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	limit := defaultCommodityBrandsLimit
+	if v := r.URL.Query().Get("limit"); v != "" {
+		parsed, err := strconv.Atoi(v)
+		if err != nil || parsed < 1 || parsed > maxCommodityBrandsLimit {
+			badRequest(w, r, fmt.Errorf("limit must be a whole number from 1 to %d", maxCommodityBrandsLimit))
+			return
+		}
+		limit = parsed
+	}
+
+	brands, err := regSet.CommodityRegistry.ListBrands(r.Context(), r.URL.Query().Get("q"), limit)
+	if err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+	if err := render.Render(w, r, jsonapi.NewCommodityBrandsResponse(brands)); err != nil {
 		internalServerError(w, r, err)
 	}
 }
@@ -774,6 +822,7 @@ func Commodities(params Params) func(r chi.Router) {
 		r.Post("/bulk-delete", api.bulkDeleteCommodities) // POST /commodities/bulk-delete
 		r.Post("/bulk-move", api.bulkMoveCommodities)     // POST /commodities/bulk-move
 		r.Get("/tag-counts", api.countCommodityTags)      // GET /commodities/tag-counts
+		r.Get("/brands", api.listCommodityBrands)         // GET /commodities/brands
 		r.Route("/{commodityID}", func(r chi.Router) {
 			r.Use(commodityCtx())
 			r.Get("/", api.getCommodity)                          // GET /commodities/123

@@ -37,6 +37,14 @@ type thumbnailDownloadEnv struct {
 
 func newThumbnailDownloadEnv(c *qt.C) *thumbnailDownloadEnv {
 	c.Helper()
+	return newThumbnailDownloadEnvWithRateLimit(c, 60)
+}
+
+// newThumbnailDownloadEnvWithRateLimit builds the download API with one
+// thumbnail service, as SignedFiles does, allowing rateLimit on-demand jobs
+// per user and minute.
+func newThumbnailDownloadEnvWithRateLimit(c *qt.C, rateLimit int) *thumbnailDownloadEnv {
+	c.Helper()
 
 	fs := memory.NewFactorySet()
 
@@ -57,39 +65,53 @@ func newThumbnailDownloadEnv(c *qt.C) *thumbnailDownloadEnv {
 	}
 	ctx := appctx.WithGroup(appctx.WithUser(context.Background(), user), group)
 
-	created, err := fs.FileRegistryFactory.CreateServiceRegistry().Create(ctx, models.FileEntity{
+	config := services.ThumbnailGenerationConfig{
+		MaxConcurrentPerUser: 10,
+		RateLimitPerMinute:   rateLimit,
+		SlotDuration:         time.Minute,
+	}
+	thumbnailService := services.NewThumbnailGenerationService(fs, thumbnailTestBucket, config)
+	c.Cleanup(thumbnailService.Stop)
+
+	env := &thumbnailDownloadEnv{
+		api: &filesAPI{
+			factorySet:       fs,
+			uploadLocation:   thumbnailTestBucket,
+			fileService:      services.NewFileService(fs, thumbnailTestBucket),
+			thumbnailConfig:  config,
+			thumbnailService: thumbnailService,
+		},
+		ctx: ctx,
+	}
+	env.fileID = env.addImage(c, "photo-livingroom")
+	return env
+}
+
+// addImage records an image file without thumbnails and returns its id.
+func (e *thumbnailDownloadEnv) addImage(c *qt.C, path string) string {
+	c.Helper()
+
+	user := appctx.UserFromContext(e.ctx)
+	group := appctx.GroupFromContext(e.ctx)
+	created, err := e.api.factorySet.FileRegistryFactory.CreateServiceRegistry().Create(e.ctx, models.FileEntity{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
-			TenantID:        tenantID,
-			GroupID:         groupID,
-			CreatedByUserID: userID,
+			TenantID:        user.TenantID,
+			GroupID:         group.ID,
+			CreatedByUserID: user.ID,
 		},
 		Title:    "Cover",
 		Type:     models.FileTypeImage,
 		Category: models.FileCategoryImages,
 		File: &models.File{
-			Path:         "photo-livingroom",
-			OriginalPath: "t/t1/seed-abc.jpg",
+			Path:         path,
+			OriginalPath: "t/t1/" + path + ".jpg",
 			Ext:          ".jpg",
 			MIMEType:     "image/jpeg",
 			SizeBytes:    1,
 		},
 	})
 	c.Assert(err, qt.IsNil)
-
-	return &thumbnailDownloadEnv{
-		api: &filesAPI{
-			factorySet:     fs,
-			uploadLocation: thumbnailTestBucket,
-			fileService:    services.NewFileService(fs, thumbnailTestBucket),
-			thumbnailConfig: services.ThumbnailGenerationConfig{
-				MaxConcurrentPerUser: 10,
-				RateLimitPerMinute:   60,
-				SlotDuration:         time.Minute,
-			},
-		},
-		ctx:    ctx,
-		fileID: created.ID,
-	}
+	return created.ID
 }
 
 func (e *thumbnailDownloadEnv) get(c *qt.C, fileID, size string) *httptest.ResponseRecorder {
@@ -214,4 +236,25 @@ func TestDownloadThumbnail_MissingSizeAfterACompletedJobEnqueuesAgain(t *testing
 	c.Assert(err, qt.IsNil)
 	c.Check(job.ID, qt.Not(qt.Equals), done.ID)
 	c.Check(job.Status, qt.Equals, models.ThumbnailStatusPending)
+}
+
+// The download routes share one thumbnail service, so the per-user rate limit
+// holds across requests: with one job a minute, the second photo's thumbnail
+// waits even though both requests serve the placeholder.
+func TestDownloadThumbnail_RateLimitHoldsAcrossRequests(t *testing.T) {
+	c := qt.New(t)
+	env := newThumbnailDownloadEnvWithRateLimit(c, 1)
+	second := env.addImage(c, "photo-kitchen")
+
+	for _, fileID := range []string{env.fileID, second} {
+		w := env.get(c, fileID, "large")
+		c.Assert(w.Code, qt.Equals, http.StatusOK)
+		c.Check(w.Header().Get("Content-Type"), qt.Equals, "image/gif")
+	}
+
+	jobReg := env.api.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
+	jobs, err := jobReg.List(env.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobs, qt.HasLen, 1)
+	c.Check(jobs[0].FileID, qt.Equals, env.fileID)
 }

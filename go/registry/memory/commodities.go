@@ -429,6 +429,16 @@ func (r *CommodityRegistry) CountEach(_ context.Context, opts []registry.Commodi
 	return counts, nil
 }
 
+// ListBrands returns the brands of the group's commodities, see
+// registry.CountCommodityBrands.
+func (r *CommodityRegistry) ListBrands(ctx context.Context, query string, limit int) ([]registry.CommodityBrandCount, error) {
+	all, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	return registry.CountCommodityBrands(all, query, limit), nil
+}
+
 // listCandidates returns the rows the filters of opts run over: the live
 // items, or with opts.Trashed the items in Trash.
 func (r *CommodityRegistry) listCandidates(ctx context.Context, opts registry.CommodityListOptions) ([]*models.Commodity, error) {

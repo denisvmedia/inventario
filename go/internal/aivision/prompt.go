@@ -22,7 +22,9 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"put the seller/vendor/store name (there is no dedicated seller field) into \"comments\".\n" +
 	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
 	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
-	"Suggest 2–5 short, lowercase \"tags\" describing each product (brand, category, material, colour).\n" +
+	"Put the manufacturer's name into \"brand\" and the model name or number, as printed on the product, label, or document, into \"model\"; " +
+	"do not repeat them in \"name\" or \"short_name\" unless they are part of the product's usual name.\n" +
+	"Suggest 2–5 short, lowercase \"tags\" describing each product (category, material, colour).\n" +
 	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
 	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
 	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
@@ -84,7 +86,8 @@ func ResponseSchema() map[string]any {
 	}
 	// fieldGuessStringMax mirrors fieldGuessString but caps the value
 	// length, steering the model toward the form's limit (the FE still
-	// truncates defensively). Used for short_name (40 chars).
+	// truncates defensively). Used for short_name (40 chars) and for the
+	// brand and model (100 each).
 	fieldGuessStringMax := func(maxLen int) map[string]any {
 		return map[string]any{
 			"type": "object",
@@ -127,6 +130,8 @@ func ResponseSchema() map[string]any {
 	fields := map[string]any{
 		FieldNameName:                  fieldGuessString,
 		FieldNameShortName:             fieldGuessStringMax(40),
+		FieldNameBrand:                 fieldGuessStringMax(100),
+		FieldNameModel:                 fieldGuessStringMax(100),
 		FieldNameType:                  fieldGuessEnum(commodityTypes),
 		FieldNameOriginalPrice:         fieldGuessNumber,
 		FieldNameOriginalPriceCurrency: fieldGuessString,

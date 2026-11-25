@@ -3,9 +3,8 @@
 # Supports both production and testing builds
 
 # Stage 1: Build the React frontend
-# Node version pinned to match frontend/package.json's volta.node so the
-# in-Docker bundle matches what the macOS e2e lane (which uses the same
-# pin via .github/actions/vars) produces for darwin/arm64.
+# The container pins its Node base image independently. Local development
+# and the frontend builds in GitHub Actions use the Node pin in mise.toml.
 FROM node:26.13-alpine AS frontend-builder
 
 WORKDIR /app/frontend

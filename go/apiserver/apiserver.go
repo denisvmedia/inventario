@@ -293,6 +293,12 @@ type Params struct {
 	// operators know the installation-wide business gauges are exposed.
 	MetricsToken string
 
+	// ThumbnailService queues thumbnail jobs when a thumbnail is requested
+	// before it exists, and holds the per-user rate limit for that. The
+	// caller owns it and stops it at shutdown. Nil gives the download routes
+	// their own, built from ThumbnailConfig.
+	ThumbnailService *services.ThumbnailGenerationService
+
 	// EnableAPIDocs gates GET /swagger/* (Swagger UI + doc.json) (issue
 	// #2102 / L-5). Default true preserves dev / e2e; production sets it
 	// false so the API surface is not served publicly. When false the

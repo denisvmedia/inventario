@@ -121,7 +121,7 @@
     }
   },
   "appearance": {
-    "defaultViewHelp": "Sets the initial layout when opening the Items list. You can still flip per-session from the toolbar.",
+    "defaultViewHelp": "The layout the Items list opens with. A layout you pick from the Items list toolbar wins on that device until you change this setting there.",
     "defaultViewLabel": "Default view",
     "defaultViewOptions": {
       "compact": "Compact cards",

@@ -57,10 +57,10 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 }
 
 // ResolveMany returns the cover image for each commodity in the input
-// slice. Commodities without a usable photo are absent from the returned
-// map (no zero-value entries). Errors from individual commodities are
-// swallowed so the list endpoint never 500s on a partial failure — the
-// FE already handles the missing-cover fallback.
+// slice. Commodities without a usable photo, and items in Trash, are absent
+// from the returned map (no zero-value entries). Read errors are swallowed
+// so the list endpoint never 500s on a partial failure — the FE already
+// handles the missing-cover fallback.
 //
 // Resolution order per commodity (issue #1451):
 //
@@ -69,6 +69,9 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 //     any failure the path falls through to (2) so a stale override
 //     never blocks the auto-pick.
 //  2. First photo by `created_at` ASC (option A — the default).
+//
+// The whole slice costs at most two reads: one for the explicit covers and
+// one for the first photos of the items still without a cover.
 //
 // Caller must supply the user id used to sign the URLs; an empty userID
 // short-circuits to an empty result because the signed URL would be
@@ -80,15 +83,50 @@ func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registr
 		return out
 	}
 
+	live := make([]*models.Commodity, 0, len(commodities))
+	var coverIDs []string
 	for _, c := range commodities {
-		if c == nil || c.ID == "" {
+		if c == nil || c.ID == "" || c.IsTrashed() {
 			continue
 		}
-		cover, ok := s.resolveOne(ctx, fileReg, c, userID, binding)
-		if !ok {
+		live = append(live, c)
+		if id := explicitCoverID(c); id != "" {
+			coverIDs = append(coverIDs, id)
+		}
+	}
+
+	explicit := fetchExplicitCovers(ctx, fileReg, coverIDs)
+	needFirst := make([]string, 0, len(live))
+	for _, c := range live {
+		if id := explicitCoverID(c); id != "" {
+			if cover, ok := s.signCover(c.ID, explicitCoverFor(explicit[id], c.ID), CoverSourceExplicit, userID, binding); ok {
+				out[c.ID] = cover
+				continue
+			}
+			// Fall through to first-photo if the override is unusable
+			// (file deleted out from under us, type drifted, etc.). The
+			// FK ON DELETE SET NULL keeps the row consistent on
+			// hard-deletes; this branch covers the soft-delete /
+			// type-mismatch edge.
+		}
+		needFirst = append(needFirst, c.ID)
+	}
+	if len(needFirst) == 0 {
+		return out
+	}
+
+	first, err := fileReg.FirstPhotos(ctx, needFirst)
+	if err != nil {
+		return out
+	}
+	for _, id := range needFirst {
+		file := first[id]
+		if !isCoverEligible(file) {
 			continue
 		}
-		out[c.ID] = cover
+		if cover, ok := s.signCover(id, file, CoverSourceFirstPhoto, userID, binding); ok {
+			out[id] = cover
+		}
 	}
 	return out
 }
@@ -100,25 +138,16 @@ func (s *CommodityCoverService) ResolveOne(ctx context.Context, fileReg registry
 	if userID == "" || fileReg == nil || commodity == nil || commodity.ID == "" {
 		return ResolvedCover{}, false
 	}
-	return s.resolveOne(ctx, fileReg, commodity, userID, binding)
+	cover, ok := s.ResolveMany(ctx, fileReg, []*models.Commodity{commodity}, userID, binding)[commodity.ID]
+	return cover, ok
 }
 
-func (s *CommodityCoverService) resolveOne(ctx context.Context, fileReg registry.FileRegistry, commodity *models.Commodity, userID string, binding SessionBinding) (ResolvedCover, bool) {
-	if commodity.CoverFileID != nil && *commodity.CoverFileID != "" {
-		if cover, ok := s.signCover(commodity.ID, fetchExplicitCover(ctx, fileReg, commodity.ID, *commodity.CoverFileID), CoverSourceExplicit, userID, binding); ok {
-			return cover, true
-		}
-		// Fall through to first-photo if the override is unusable
-		// (file deleted out from under us, type drifted, etc.). The
-		// FK ON DELETE SET NULL keeps the row consistent on hard-deletes;
-		// this branch covers the soft-delete / type-mismatch edge.
+// explicitCoverID returns the file id the item names as its cover, or "".
+func explicitCoverID(c *models.Commodity) string {
+	if c.CoverFileID == nil {
+		return ""
 	}
-
-	first, ok := pickFirstPhoto(ctx, fileReg, commodity.ID)
-	if !ok {
-		return ResolvedCover{}, false
-	}
-	return s.signCover(commodity.ID, first, CoverSourceFirstPhoto, userID, binding)
+	return *c.CoverFileID
 }
 
 // signCover builds a ResolvedCover from a file entity by minting signed
@@ -158,47 +187,37 @@ func isCoverEligible(file *models.FileEntity) bool {
 	return file.Category == models.FileCategoryImages
 }
 
-// fetchExplicitCover loads the file pointed at by `commodity.CoverFileID`
-// and returns it only when it still belongs to this commodity and is a
-// usable cover photo (see isCoverEligible). Anything else (not found,
-// wrong commodity, non-image, non-images category) returns nil so the
-// caller can fall back to the first-photo path.
-func fetchExplicitCover(ctx context.Context, fileReg registry.FileRegistry, commodityID, fileID string) *models.FileEntity {
-	file, err := fileReg.Get(ctx, fileID)
-	if err != nil || file == nil {
-		return nil
+// fetchExplicitCovers loads the files the items name as their covers in one
+// read, keyed by file id. A failed read returns an empty map, which sends
+// every item to the first-photo path.
+func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fileIDs []string) map[string]*models.FileEntity {
+	out := make(map[string]*models.FileEntity, len(fileIDs))
+	if len(fileIDs) == 0 {
+		return out
 	}
-	if file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
+	files, err := fileReg.GetMany(ctx, fileIDs)
+	if err != nil {
+		return out
+	}
+	for _, f := range files {
+		if f != nil {
+			out[f.ID] = f
+		}
+	}
+	return out
+}
+
+// explicitCoverFor returns the file an item names as its cover only when it
+// still belongs to this commodity and is a usable cover photo (see
+// isCoverEligible). Anything else (not found, wrong commodity, non-image,
+// non-images category) returns nil so the caller can fall back to the
+// first-photo path.
+func explicitCoverFor(file *models.FileEntity, commodityID string) *models.FileEntity {
+	if file == nil || file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
 		return nil
 	}
 	if !isCoverEligible(file) {
 		return nil
 	}
 	return file
-}
-
-// pickFirstPhoto picks the earliest cover-eligible file linked to the
-// commodity. The link's "images" bucket scopes the query (officially
-// images-only); isCoverEligible enforces the actual
-// invariant in case a caller mis-classified an upload. Filtering happens
-// BEFORE the earliest-by-CreatedAt pick so a non-image row at the top of
-// the bucket can't shadow a valid photo uploaded a second later.
-func pickFirstPhoto(ctx context.Context, fileReg registry.FileRegistry, commodityID string) (*models.FileEntity, bool) {
-	files, err := fileReg.ListByLinkedEntityAndMeta(ctx, models.FileLinkCommodity, commodityID, models.FileLinkMetaImages)
-	if err != nil || len(files) == 0 {
-		return nil, false
-	}
-	var first *models.FileEntity
-	for _, f := range files {
-		if !isCoverEligible(f) {
-			continue
-		}
-		if first == nil || f.CreatedAt.Before(first.CreatedAt) {
-			first = f
-		}
-	}
-	if first == nil {
-		return nil, false
-	}
-	return first, true
 }

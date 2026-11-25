@@ -63,9 +63,13 @@ type areaSpec struct {
 type commoditySpec struct {
 	Name      string
 	ShortName string
-	Type      models.CommodityType
-	Area      string // area name, must match an areaSpec under the parent location
-	Count     int
+	// Brand and Model are optional; several items share a brand so the
+	// brand input has suggestions to offer.
+	Brand string
+	Model string
+	Type  models.CommodityType
+	Area  string // area name, must match an areaSpec under the parent location
+	Count int
 	// OriginalPrice + ConvertedOriginalPrice + CurrentPrice are
 	// expressed in source currency / CZK / CZK respectively — same
 	// convention the pre-existing seed used. A zero converted or
@@ -156,7 +160,7 @@ var locationCatalogue = []locationSpec{
 var commodityCatalogue = []commoditySpec{
 	// === Home / Living Room ==========================================
 	{
-		Name: "Smart TV", ShortName: "TV", Type: models.CommodityTypeElectronics,
+		Name: "Smart TV", ShortName: "TV", Brand: "Samsung", Model: "QE55Q80C", Type: models.CommodityTypeElectronics,
 		Area: "Living Room", Count: 1,
 		OriginalPrice: 1299.99, OriginalPriceCurrency: "USD", ConvertedOriginalPrice: 29899.77, CurrentPrice: 899.99,
 		SerialNumber: "TV123456789", Status: models.CommodityStatusInUse,
@@ -197,7 +201,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:           fixturePhotoLivingRoom,
 	},
 	{
-		Name: "Vinyl Player", ShortName: "Vinyl", Type: models.CommodityTypeElectronics,
+		Name: "Vinyl Player", ShortName: "Vinyl", Brand: "Audio-Technica", Model: "AT-LP120XUSB", Type: models.CommodityTypeElectronics,
 		Area: "Living Room", Count: 1,
 		OriginalPrice: 549.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 13725.00, CurrentPrice: 12500.00,
 		SerialNumber: "VP-AT-LP120", Status: models.CommodityStatusInUse,
@@ -209,7 +213,7 @@ var commodityCatalogue = []commoditySpec{
 
 	// === Home / Kitchen =============================================
 	{
-		Name: "Refrigerator", ShortName: "Fridge", Type: models.CommodityTypeWhiteGoods,
+		Name: "Refrigerator", ShortName: "Fridge", Brand: "Bosch", Model: "KGN39VLCT", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 1499.99, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 37499.75, CurrentPrice: 27599.77,
 		SerialNumber: "RF123456789", Status: models.CommodityStatusInUse,
@@ -219,7 +223,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:    fixturePhotoKitchen, PinCover: true,
 	},
 	{
-		Name: "Microwave Oven", ShortName: "Microwave", Type: models.CommodityTypeWhiteGoods,
+		Name: "Microwave Oven", ShortName: "Microwave", Brand: "Panasonic", Model: "NN-CD87", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 199.99, OriginalPriceCurrency: "USD", ConvertedOriginalPrice: 4599.77, CurrentPrice: 3449.77,
 		SerialNumber: "MW987654321", Status: models.CommodityStatusDisposed,
@@ -229,7 +233,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:    fixturePhotoKitchen,
 	},
 	{
-		Name: "Dishwasher", ShortName: "Dishwasher", Type: models.CommodityTypeWhiteGoods,
+		Name: "Dishwasher", ShortName: "Dishwasher", Brand: "Bosch", Model: "SMV6ZCX42E", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 699.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 17475.00, CurrentPrice: 15000.00,
 		SerialNumber: "DW-BSCH-08", Status: models.CommodityStatusInUse,
@@ -240,7 +244,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:         fixturePhotoKitchen, IncludeInvoice: true, IncludeManual: true,
 	},
 	{
-		Name: "Coffee Machine", ShortName: "Coffee", Type: models.CommodityTypeWhiteGoods,
+		Name: "Coffee Machine", ShortName: "Coffee", Brand: "De'Longhi", Model: "ECAM 22.110", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 4500.00, OriginalPriceCurrency: "CZK", CurrentPrice: 0,
 		SerialNumber: "CM123456789", Status: models.CommodityStatusInUse,
@@ -251,7 +255,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:           fixturePhotoKitchen,
 	},
 	{
-		Name: "Stand Mixer", ShortName: "Mixer", Type: models.CommodityTypeWhiteGoods,
+		Name: "Stand Mixer", ShortName: "Mixer", Brand: "KitchenAid", Model: "5KSM175", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 399.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 9975.00, CurrentPrice: 8500.00,
 		SerialNumber: "KA-CLASS-SM", Status: models.CommodityStatusInUse,
@@ -262,7 +266,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:         fixturePhotoKitchen, IncludeInvoice: true,
 	},
 	{
-		Name: "Kettle", ShortName: "Kettle", Type: models.CommodityTypeWhiteGoods,
+		Name: "Kettle", ShortName: "Kettle", Brand: "Bosch", Model: "TWK7203", Type: models.CommodityTypeWhiteGoods,
 		Area: "Kitchen", Count: 1,
 		OriginalPrice: 49.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 1225.00, CurrentPrice: 900.00,
 		SerialNumber: "BR-KT-01", Status: models.CommodityStatusInUse,
@@ -328,7 +332,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:         fixturePhotoWork, PinCover: true, IncludeInvoice: true, IncludeManual: true,
 	},
 	{
-		Name: "External SSD", ShortName: "SSD", Type: models.CommodityTypeElectronics,
+		Name: "External SSD", ShortName: "SSD", Brand: "Samsung", Model: "T7 Shield", Type: models.CommodityTypeElectronics,
 		Area: "Home Office", Count: 1,
 		OriginalPrice: 159.00, OriginalPriceCurrency: "USD", ConvertedOriginalPrice: 3659.00, CurrentPrice: 2200.00,
 		SerialNumber: "EX-SSD-2TB-04", Status: models.CommodityStatusLost,
@@ -351,7 +355,7 @@ var commodityCatalogue = []commoditySpec{
 
 	// === Home / Garage ==============================================
 	{
-		Name: "Power Drill", ShortName: "Drill", Type: models.CommodityTypeEquipment,
+		Name: "Power Drill", ShortName: "Drill", Brand: "Bosch", Model: "GSR 12V-15", Type: models.CommodityTypeEquipment,
 		Area: "Garage", Count: 1,
 		OriginalPrice: 189.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 4725.00, CurrentPrice: 3800.00,
 		SerialNumber: "DR-DEWALT-001", Status: models.CommodityStatusInUse,
@@ -361,7 +365,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:    fixturePhotoStorage, PinCover: true,
 	},
 	{
-		Name: "Lawn Mower", ShortName: "Mower", Type: models.CommodityTypeEquipment,
+		Name: "Lawn Mower", ShortName: "Mower", Brand: "Husqvarna", Model: "LC 140", Type: models.CommodityTypeEquipment,
 		Area: "Garage", Count: 1,
 		OriginalPrice: 459.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 11475.00, CurrentPrice: 9500.00,
 		SerialNumber: "LM-HUSQ-2025", Status: models.CommodityStatusInUse,
@@ -394,7 +398,7 @@ var commodityCatalogue = []commoditySpec{
 
 	// === Office / Work Desk =========================================
 	{
-		Name: "Laptop", ShortName: "Laptop", Type: models.CommodityTypeElectronics,
+		Name: "Laptop", ShortName: "Laptop", Brand: "Lenovo", Model: "ThinkPad X1 Carbon", Type: models.CommodityTypeElectronics,
 		Area: "Work Desk", Count: 1,
 		OriginalPrice: 1299.99, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 32499.75, CurrentPrice: 22499.75,
 		SerialNumber: "LT123456789", Status: models.CommodityStatusInUse,
@@ -405,7 +409,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:           fixturePhotoWork,
 	},
 	{
-		Name: "Monitor", ShortName: "Monitor", Type: models.CommodityTypeElectronics,
+		Name: "Monitor", ShortName: "Monitor", Brand: "Dell", Model: "U2723QE", Type: models.CommodityTypeElectronics,
 		Area: "Work Desk", Count: 2, // bundle
 		OriginalPrice: 349.99, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 8749.75, CurrentPrice: 7499.75,
 		SerialNumber:    "MN123456789",
@@ -427,7 +431,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:           fixturePhotoWork,
 	},
 	{
-		Name: "Camera Lens", ShortName: "Lens", Type: models.CommodityTypeElectronics,
+		Name: "Camera Lens", ShortName: "Lens", Brand: "Canon", Model: "RF 24-105mm F4", Type: models.CommodityTypeElectronics,
 		Area: "Work Desk", Count: 1,
 		OriginalPrice: 599.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 14975.00, CurrentPrice: 12500.00,
 		SerialNumber: "LN-SIGMA-2470", Status: models.CommodityStatusInUse,
@@ -439,7 +443,7 @@ var commodityCatalogue = []commoditySpec{
 
 	// === Office / Conference Room ===================================
 	{
-		Name: "Projector", ShortName: "Projector", Type: models.CommodityTypeElectronics,
+		Name: "Projector", ShortName: "Projector", Brand: "Epson", Model: "EB-L630U", Type: models.CommodityTypeElectronics,
 		Area: "Conference Room", Count: 1,
 		OriginalPrice: 799.99, OriginalPriceCurrency: "USD", ConvertedOriginalPrice: 18399.77, CurrentPrice: 16099.77,
 		SerialNumber: "PJ123456789", Status: models.CommodityStatusInUse,
@@ -525,7 +529,7 @@ var commodityCatalogue = []commoditySpec{
 		Photo:           fixturePhotoStorage,
 	},
 	{
-		Name: "Vacuum Cleaner", ShortName: "Vacuum", Type: models.CommodityTypeWhiteGoods,
+		Name: "Vacuum Cleaner", ShortName: "Vacuum", Brand: "Dyson", Model: "V15 Detect", Type: models.CommodityTypeWhiteGoods,
 		Area: "Unit B", Count: 1,
 		OriginalPrice: 499.00, OriginalPriceCurrency: "EUR", ConvertedOriginalPrice: 12475.00, CurrentPrice: 9500.00,
 		SerialNumber: "VC-DYS-V11", Status: models.CommodityStatusInUse,
@@ -665,6 +669,8 @@ func buildCommodity(spec commoditySpec, areaID string, user *models.User, group 
 		},
 		Name:                  spec.Name,
 		ShortName:             spec.ShortName,
+		Brand:                 spec.Brand,
+		Model:                 spec.Model,
 		Type:                  spec.Type,
 		AreaID:                &areaID,
 		Count:                 spec.Count,

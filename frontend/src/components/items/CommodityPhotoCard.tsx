@@ -11,6 +11,7 @@ import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagPill } from "@/components/tags/TagPill"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import type { Commodity } from "@/features/commodities/api"
+import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
 import {
   COMMODITY_STATUS_TONES,
@@ -69,9 +70,13 @@ export function CommodityPhotoGrid({
 }
 
 // The width a photo card's image is drawn at, for the browser to choose a
-// thumbnail size from: half the window on a phone, a third on a tablet,
-// at most 240 px on a desktop.
-const PHOTO_CARD_IMAGE_SIZES = "(min-width: 1280px) 240px, (min-width: 640px) 30vw, 50vw"
+// thumbnail size from: half the window on a phone, a third on a tablet, a
+// quarter on a small desktop and at most 240 px on a wide one. Each step is
+// at or a little above the real column width beside the sidebar, so a
+// standard display loads the 300 px thumbnail and only a high-density one
+// the 600 px.
+const PHOTO_CARD_IMAGE_SIZES =
+  "(min-width: 1280px) 240px, (min-width: 1024px) 25vw, (min-width: 640px) 33vw, 50vw"
 
 // CommodityPhotoCard is the photo-forward card of the Items list (#2797):
 // the cover photo on top at a fixed 4:3 ratio, then the name, the area, the
@@ -99,6 +104,7 @@ export function CommodityPhotoCard({
   const status = row.status as CommodityStatusValue | undefined
   const tone = status ? COMMODITY_STATUS_TONES[status] : ""
   const area = areaName(row.area_id)
+  const brandModel = brandModelText(row)
   const purchaseDateShort = row.purchase_date
     ? formatDate(row.purchase_date, { style: "short" })
     : null
@@ -146,7 +152,7 @@ export function CommodityPhotoCard({
       <Checkbox
         checked={selected}
         onCheckedChange={() => onToggleSelected(id)}
-        aria-label={`select ${row.name ?? ""}`}
+        aria-label={t("commodities:list.selectItem", { name: row.name ?? "" })}
         data-testid="commodity-select"
         className="pointer-events-auto absolute top-2 left-2 z-10 bg-background dark:bg-background"
       />
@@ -159,6 +165,15 @@ export function CommodityPhotoCard({
           >
             {row.name}
           </p>
+          {brandModel ? (
+            <p
+              className="mt-0.5 truncate text-xs text-muted-foreground"
+              title={brandModel}
+              data-testid="commodity-card-subtitle"
+            >
+              {brandModel}
+            </p>
+          ) : null}
           {area ? (
             <p className="mt-0.5 truncate text-xs text-muted-foreground" title={area}>
               {area}

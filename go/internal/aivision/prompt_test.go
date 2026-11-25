@@ -43,6 +43,10 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	// "short_name" carries the 40-char cap that mirrors the form limit.
 	c.Assert(fieldValue(aivision.FieldNameShortName)["maxLength"], qt.Equals, 40)
 
+	// "brand" and "model" carry the 100-char caps of the item's fields.
+	c.Assert(fieldValue(aivision.FieldNameBrand)["maxLength"], qt.Equals, 100)
+	c.Assert(fieldValue(aivision.FieldNameModel)["maxLength"], qt.Equals, 100)
+
 	// "warranty_expires_at" and "tags" are part of the extracted set.
 	_, hasWarranty := fields[aivision.FieldNameWarrantyExpiresAt]
 	c.Assert(hasWarranty, qt.IsTrue)

@@ -56,13 +56,13 @@ An item in Trash is never selected without `trashed=true`, and `trashed=true` ne
 
 Every term must match. A term matches an item when one of these holds:
 
-- it is a substring of one of the searched fields: name, short name, serial number, extra serial numbers, part numbers, tag slugs, notes (`comments`), warranty notes, status note;
+- it is a substring of one of the searched fields: name, short name, brand, model, serial number, extra serial numbers, part numbers, tag slugs, notes (`comments`), warranty notes, status note;
 - it is a substring of the label of an item tag the item carries (the labels are looked up per term in the item tag namespace before the query runs; file tags are never consulted);
 - it is the item's asset ID (`A-0042`, `a-42`, `A42`, `#42` and `42` all name asset number 42, see `models.ParseAssetID`).
 
 `%` and `_` are ordinary characters, as in a plain substring search.
 
-In PostgreSQL the searched fields are joined into the generated column `commodities.search_text` (by the `commodity_search_text` SQL function), which carries a trigram GIN index, so a term is one `ILIKE` on an indexed column. The memory registry evaluates `MatchCommoditySearch` in Go. `registry.CommoditySearchFields` must list the same fields as the generated column; a unit test compares the two.
+In PostgreSQL most searched fields are joined into the generated column `commodities.search_text` (by the `commodity_search_text` SQL function), which carries a trigram GIN index, so a term is one `ILIKE` on an indexed column. The brand and the model are matched with an `ILIKE` each on their own trigram-indexed columns: putting them into `search_text` would change the function's parameters, which the generated column depends on, and rewriting a generated column's expression in place needs PostgreSQL 17. The memory registry evaluates `MatchCommoditySearch` in Go. `registry.CommoditySearchTextFields` must list the fields of the generated column, and together with `registry.CommodityColumnSearchFields` the same fields as `registry.CommoditySearchFields`; a unit test checks both.
 
 Not part of the contract yet: `field:value` syntax (`serial:ABC123`, `tag:fragile`) and the text of attached PDFs. Until they are added, a colon is an ordinary character in a term.
 
@@ -79,7 +79,7 @@ With a non-empty `q`, the response carries `meta.matches`, keyed by item id:
 }
 ```
 
-`field` is one of `asset_id`, `name`, `short_name`, `serial_number`, `extra_serial_numbers`, `part_numbers`, `tags`, `comments`, `warranty_notes`, `status_note`, in that order. A list field reports the matching element; a tag reports its slug; a note reports an excerpt of up to 40 characters on each side of the first matching term, with an ellipsis where text was cut. The frontend shows the first match unless the name matched (`primarySearchMatch`), since the name is already the result's title.
+`field` is one of `asset_id`, `name`, `short_name`, `brand`, `model`, `serial_number`, `extra_serial_numbers`, `part_numbers`, `tags`, `comments`, `warranty_notes`, `status_note`, in that order. A list field reports the matching element; a tag reports its slug; a note reports an excerpt of up to 40 characters on each side of the first matching term, with an ellipsis where text was cut. The frontend shows the first match unless the name matched (`primarySearchMatch`), since the name is already the result's title.
 
 ## Tag filter
 
@@ -128,7 +128,7 @@ On the frontend, `commodityQueryToApiQuery` writes the stored form (sort and `in
 
 ## Frontend: page URL and API
 
-The items list page keeps its query in the page URL under names that predate the contract, so saved links keep working. `writeCommodityQuery` replaces only these names and leaves every other parameter (page, view) as it is; `parseCommodityQuery` reads them back. Defaults are left out of the URL.
+The items list page keeps its query in the page URL under names that predate the contract, so saved links keep working. `writeCommodityQuery` replaces only these names and leaves the parameters the list owns (`page`, `per_page`, `view`) as they are; `parseCommodityQuery` reads them back. Defaults are left out of the URL. A page number counts pages of `per_page` items, 24 when it is absent (see `frontend/src/features/commodities/listContext.ts`).
 
 | Page URL | API |
 | -------- | --- |

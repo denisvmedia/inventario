@@ -107,7 +107,9 @@ describe("GroupContext", () => {
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("household")
     )
-    expect(getCurrentGroupSlug()).toBe("household")
+    // The http slot is written by an effect that runs after the provider
+    // navigates to ?g=household, which can land after the probe updates.
+    await waitFor(() => expect(getCurrentGroupSlug()).toBe("household"))
     // Pathname stays at /profile; the group context lives in ?g=.
     expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/profile")
     expect(screen.getByTestId("loc").getAttribute("data-search")).toContain("g=household")
@@ -135,7 +137,7 @@ describe("GroupContext", () => {
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("office")
     )
-    expect(getCurrentGroupSlug()).toBe("office")
+    await waitFor(() => expect(getCurrentGroupSlug()).toBe("office"))
   })
 
   it("currentGroup stays null on redirect-target routes (no auto-set leak)", async () => {
@@ -191,7 +193,7 @@ describe("GroupContext", () => {
     await waitFor(() =>
       expect(screen.getByTestId("probe").getAttribute("data-current")).toBe("office")
     )
-    expect(getCurrentGroupSlug()).toBe("office")
+    await waitFor(() => expect(getCurrentGroupSlug()).toBe("office"))
   })
 
   it("redirects an unknown :groupSlug to the first known group", async () => {

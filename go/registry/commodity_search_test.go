@@ -3,6 +3,7 @@ package registry_test
 import (
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 
@@ -157,8 +158,9 @@ func TestCommodityTagFilter_Matches(t *testing.T) {
 }
 
 // The memory backend matches the fields in CommoditySearchFields, postgres
-// the generated search_text column. A field added to one and not the other
-// makes the backends disagree, so the annotation is read back here.
+// the generated search_text column plus the columns of
+// CommodityColumnSearchFields. A field added to one and not the other makes
+// the backends disagree, so the annotation is read back here.
 func TestCommoditySearchFields_MatchTheGeneratedColumn(t *testing.T) {
 	c := qt.New(t)
 	src, err := os.ReadFile("../models/commodity.go")
@@ -170,7 +172,17 @@ func TestCommoditySearchFields_MatchTheGeneratedColumn(t *testing.T) {
 	for arg := range strings.SplitSeq(string(m[1]), ",") {
 		args = append(args, registry.CommoditySearchField(strings.TrimSpace(arg)))
 	}
-	c.Assert(args, qt.DeepEquals, registry.CommoditySearchFields)
+	c.Assert(args, qt.DeepEquals, registry.CommoditySearchTextFields)
+
+	for _, f := range registry.CommodityColumnSearchFields {
+		c.Check(args, qt.Not(qt.Contains), f, qt.Commentf("%s is in search_text and matched on its column", f))
+		c.Check(regexp.MustCompile(`ptah:schema:field name="`+string(f)+`"`).Match(src), qt.IsTrue, qt.Commentf("%s has no column", f))
+	}
+	union := slices.Concat(registry.CommoditySearchTextFields, registry.CommodityColumnSearchFields)
+	slices.Sort(union)
+	all := slices.Clone(registry.CommoditySearchFields)
+	slices.Sort(all)
+	c.Assert(all, qt.DeepEquals, union)
 }
 
 func TestCountCommodityTags(t *testing.T) {

@@ -3084,7 +3084,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms",
+                        "description": "Search text: space-separated terms, quotes keep a phrase; every term must match the name, short name, brand, model, a serial or part number, a tag, a note or the asset ID. At most 200 characters and 10 terms",
                         "name": "q",
                         "in": "query"
                     },
@@ -3219,6 +3219,57 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/brands": {
+            "get": {
+                "description": "The distinct brands of the group's items outside Trash, drafts and inactive items included, with the number of items carrying each, most used first. Brands are compared exactly, so \"Bosch\" and \"bosch\" are two entries.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "List commodity brands",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only brands that contain this text, without regard to case",
+                        "name": "q",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "default": 20,
+                        "description": "At most this many brands (1 to 100)",
+                        "name": "limit",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityBrandsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Invalid limit",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -12013,6 +12064,17 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityBrandsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/registry.CommodityBrandCount"
+                    }
+                }
+            }
+        },
         "jsonapi.CommodityCover": {
             "type": "object",
             "properties": {
@@ -15943,6 +16005,10 @@ const docTemplate = `{
                     "type": "integer",
                     "readOnly": true
                 },
+                "brand": {
+                    "description": "Brand is the maker of the item (\"Bosch\"), as plain text. The brand\ninput suggests the brands the group already uses (see\nCommodityRegistry.ListBrands), and the item search matches it.",
+                    "type": "string"
+                },
                 "comments": {
                     "type": "string"
                 },
@@ -15986,6 +16052,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "last_modified_date": {
+                    "type": "string"
+                },
+                "model": {
+                    "description": "Model is the maker's model name or number (\"SMV6ZCX42E\"), as plain\ntext.",
                     "type": "string"
                 },
                 "name": {
@@ -17400,12 +17470,25 @@ const docTemplate = `{
                 }
             }
         },
+        "registry.CommodityBrandCount": {
+            "type": "object",
+            "properties": {
+                "brand": {
+                    "type": "string"
+                },
+                "count": {
+                    "type": "integer"
+                }
+            }
+        },
         "registry.CommoditySearchField": {
             "type": "string",
             "enum": [
                 "asset_id",
                 "name",
                 "short_name",
+                "brand",
+                "model",
                 "serial_number",
                 "extra_serial_numbers",
                 "part_numbers",
@@ -17418,6 +17501,8 @@ const docTemplate = `{
                 "CommoditySearchFieldAssetID",
                 "CommoditySearchFieldName",
                 "CommoditySearchFieldShortName",
+                "CommoditySearchFieldBrand",
+                "CommoditySearchFieldModel",
                 "CommoditySearchFieldSerialNumber",
                 "CommoditySearchFieldExtraSerialNumbers",
                 "CommoditySearchFieldPartNumbers",

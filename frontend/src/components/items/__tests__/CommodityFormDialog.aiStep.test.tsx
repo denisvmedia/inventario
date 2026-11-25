@@ -278,6 +278,30 @@ describe("<CommodityFormDialog /> AI scan step", () => {
     expect(nameInput.value).toBe("Sony WH-1000XM5")
   })
 
+  it("pre-fills the brand and the model the scan read, capped at the form limit", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          name: { value: "Wireless headphones", confidence: 0.92 },
+          brand: { value: "  Sony  ", confidence: 0.9 },
+          model: { value: "W".repeat(120), confidence: 0.8 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderDialog()
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      makeImage("front.jpg")
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    expect(await screen.findByTestId("commodity-form-ai-row-brand")).toHaveTextContent("Brand")
+    expect(screen.getByTestId("commodity-form-ai-row-model")).toHaveTextContent("Model")
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    expect(await screen.findByLabelText(/^Brand$/i)).toHaveValue("Sony")
+    expect(screen.getByLabelText(/^Model$/i)).toHaveValue("W".repeat(100))
+  })
+
   it("queues the scanned source files into the Files step on accept (#1983)", async () => {
     // Return a complete, high-confidence field set so accepting prefills
     // every required field — the wizard can then walk straight to the Files

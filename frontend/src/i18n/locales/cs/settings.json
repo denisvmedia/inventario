@@ -121,7 +121,7 @@
     }
   },
   "appearance": {
-    "defaultViewHelp": "Nastaví výchozí rozvržení při otevření seznamu položek. Stále jej můžete přepnout pro danou relaci z panelu nástrojů.",
+    "defaultViewHelp": "Rozvržení, ve kterém se otevírá seznam položek. Rozvržení zvolené na panelu nástrojů seznamu položek má na daném zařízení přednost, dokud toto nastavení na něm nezměníte.",
     "defaultViewLabel": "Výchozí zobrazení",
     "defaultViewOptions": {
       "compact": "Kompaktní karty",

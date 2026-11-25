@@ -383,6 +383,15 @@ type CommodityRegistry interface {
 	// The counts are taken in one transaction, so they describe one moment.
 	CountEach(ctx context.Context, opts []CommodityListOptions) ([]int, error)
 
+	// ListBrands returns the brands the commodities of the group carry, with
+	// how many carry each, for the brand input's suggestions. Every live
+	// commodity counts, drafts and inactive items included; items in Trash
+	// do not. A brand matches
+	// when it contains query as a case-insensitive literal substring; an
+	// empty query matches every brand. CountCommodityBrands states the rules
+	// and the order; at most limit brands are returned.
+	ListBrands(ctx context.Context, query string, limit int) ([]CommodityBrandCount, error)
+
 	// ListByGroup returns every commodity in the given (tenant_id, group_id)
 	// tuple, regardless of draft / status, trashed items included. Used by the
 	// currency-migration service (issue #202): the conversion needs to see all
@@ -548,6 +557,18 @@ type FileRegistry interface {
 	// ListByLinkedEntityAndMeta returns the files whose link to the entity
 	// carries the given meta (bucket), newest first.
 	ListByLinkedEntityAndMeta(ctx context.Context, entityType, entityID, meta string) ([]*models.FileEntity, error)
+
+	// GetMany returns the live files among ids, with their links, in one
+	// read. Ids that name no live file are skipped and duplicates are
+	// collapsed. An empty ids returns (nil, nil).
+	GetMany(ctx context.Context, ids []string) ([]*models.FileEntity, error)
+
+	// FirstPhotos returns, keyed by item id, the oldest photo of each item
+	// among commodityIDs that is not in Trash, in one read. A photo is a live
+	// file linked in the item's images bucket with Type=image and
+	// Category=images; the oldest by created_at wins, the lowest id on a
+	// tie. Items without a photo are absent from the map.
+	FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error)
 
 	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
 	// Meta come from the argument; the registry sets the ids, tenant, group,
