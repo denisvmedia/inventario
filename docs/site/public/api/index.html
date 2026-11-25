@@ -16,8 +16,15 @@
   <body>
     <!-- Both files are placed here by scripts/build-api-reference.mjs: the
          spec is copied from go/docs/swagger.yaml, the bundle from
-         node_modules. Neither is committed. -->
-    <redoc spec-url="./swagger.yaml" hide-download-button="false"></redoc>
-    <script src="./redoc.standalone.js"></script>
+         node_modules. Neither is committed.
+         Redoc 3 ships its standalone bundle as an ES module, so the script
+         needs type="module". Its usage telemetry is on by default; this page
+         keeps Redoc 2's behavior and sends nothing. -->
+    <redoc
+      spec-url="./swagger.yaml"
+      hide-download-buttons="false"
+      disable-telemetry="true"
+    ></redoc>
+    <script type="module" src="./redoc.standalone.js"></script>
   </body>
 </html>
