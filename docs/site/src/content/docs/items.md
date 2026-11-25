@@ -530,7 +530,8 @@ current filters and leaves the view.
 If a view refers to an area or a tag that was deleted, it still opens and still
 applies that condition, so it shows what still matches (often nothing, for a
 deleted area). The **Views** button shows a warning, and the menu says what no
-longer exists. Renaming a tag's slug on the [Tags](../tags/) page updates the
+longer exists; on the **Saved views** page the condition is marked
+**(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in
@@ -566,8 +567,12 @@ You can keep up to 50 views of your own in a group, and a group can have up to
 
 A view uses the filters of the All Items page. A link that filters by a
 warranty end date can't be saved as a view, because that date would never
-change. If a future update stops supporting a filter a view uses, the view is
-marked **Needs an update** instead of opening with that filter left out.
+change. If a future update stops supporting a filter a view uses, the view shows a
+warning (**Needs an update**) in the **Views** menu and the sidebar, the
+**Saved views** page names the filter, and the view no longer opens: the list
+would leave that filter out and show more than the view. A link or bookmark to such a view shows **This view
+cannot be opened** instead of the list; **Close view** shows the list with the
+filters the link still has. Delete the view and save the filter again.
 
 ## Select, move, and delete in bulk
 

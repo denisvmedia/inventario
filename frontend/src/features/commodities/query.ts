@@ -7,6 +7,7 @@
 // go/registry/commodity_search.go (what a search term and a tag filter
 // match). devdocs/item-query-contract.md describes the whole contract,
 // including how the page URL names map onto the API names.
+import { normaliseSlug } from "@/features/tags/schemas"
 import type { Schema } from "@/types"
 
 import type { ListCommoditiesOptions } from "./api"
@@ -389,9 +390,23 @@ export function commodityQueryFromApiQuery(raw: string): CommodityQuery {
 }
 
 // Whether a and b select the same items in the same order, compared in the
-// form a saved view stores.
+// form a saved view stores. The server stores tag slugs normalized and
+// without repeats, so a list showing tags=Fragile still shows a view that
+// stores tags=fragile.
 export function sameCommodityQuery(a: CommodityQuery, b: CommodityQuery): boolean {
-  return commodityQueryToApiQuery(a) === commodityQueryToApiQuery(b)
+  return commodityQueryToApiQuery(storedTags(a)) === commodityQueryToApiQuery(storedTags(b))
+}
+
+function storedTags(query: CommodityQuery): CommodityQuery {
+  const stored = (slugs: string[]) => [...new Set(slugs.map(normaliseSlug))]
+  return {
+    ...query,
+    tags: {
+      ...query.tags,
+      include: stored(query.tags.include),
+      exclude: stored(query.tags.exclude),
+    },
+  }
 }
 
 // Why an item matched the search text: the field and the value in it.

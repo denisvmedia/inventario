@@ -498,6 +498,7 @@
     "conditions": {
       "ascending": "vzestupně",
       "deletedArea": "Smazaná oblast",
+      "deletedTag": "{{condition}} (štítek smazán)",
       "descending": "sestupně",
       "inactive": "Včetně neaktivních",
       "notTag": "Bez {{tag}}",
@@ -595,7 +596,8 @@
     },
     "queryError": {
       "long": "Tento pohled používá filtr, který už není podporován ({{parameter}}). Smažte ho a uložte filtr znovu ze seznamu položek.",
-      "short": "Vyžaduje úpravu"
+      "short": "Vyžaduje úpravu",
+      "title": "Tento pohled nelze otevřít"
     },
     "stale": {
       "area": "Oblast tohoto pohledu byla smazána.",

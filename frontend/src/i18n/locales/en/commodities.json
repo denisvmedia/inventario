@@ -494,6 +494,7 @@
     "conditions": {
       "ascending": "ascending",
       "deletedArea": "Deleted area",
+      "deletedTag": "{{condition}} (deleted)",
       "descending": "descending",
       "inactive": "Inactive included",
       "notTag": "Not {{tag}}",
@@ -589,7 +590,8 @@
     },
     "queryError": {
       "long": "This view uses a filter that is no longer supported ({{parameter}}). Delete it and save the filter again from the items list.",
-      "short": "Needs an update"
+      "short": "Needs an update",
+      "title": "This view cannot be opened"
     },
     "stale": {
       "area": "The area of this view was deleted.",

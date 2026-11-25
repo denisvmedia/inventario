@@ -41,6 +41,8 @@ export function SavedViewsSection() {
   const slug = currentGroup?.slug ?? ""
   const savedViews = useSavedViews()
   const views = savedViews.data?.views ?? []
+  // A view whose stored query cannot run has no card: its rows would come
+  // from the part of the query that can.
   const onDashboard = views.filter((v) => v.showOnDashboard && !v.queryError)
   const counts = useSavedViewCounts({ enabled: onDashboard.length > 0 })
 
@@ -92,14 +94,16 @@ function SavedViewCard({ slug, view, count }: SavedViewCardProps) {
             ? " "
             : t("commodities:savedViews.dashboard.count", { count: total })}
         </CardDescription>
-        <CardAction>
-          <Button asChild variant="ghost" size="sm" className="gap-1">
-            <Link to={href} data-testid="dashboard-saved-view-open">
-              {t("commodities:savedViews.dashboard.open")}
-              <ArrowRight aria-hidden="true" className="size-3.5" />
-            </Link>
-          </Button>
-        </CardAction>
+        {href ? (
+          <CardAction>
+            <Button asChild variant="ghost" size="sm" className="gap-1">
+              <Link to={href} data-testid="dashboard-saved-view-open">
+                {t("commodities:savedViews.dashboard.open")}
+                <ArrowRight aria-hidden="true" className="size-3.5" />
+              </Link>
+            </Button>
+          </CardAction>
+        ) : null}
       </CardHeader>
       <CardContent className="p-0">
         {list.isLoading ? (

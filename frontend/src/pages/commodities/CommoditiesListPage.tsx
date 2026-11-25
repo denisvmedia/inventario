@@ -121,7 +121,11 @@ import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
 import { useTagIndex, type ResolvedTag } from "@/features/tags/hooks"
-import { SavedViewControl } from "@/features/saved-views/SavedViewControl"
+import {
+  SavedViewControl,
+  SavedViewQueryErrorAlert,
+  useOpenedSavedView,
+} from "@/features/saved-views/SavedViewControl"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -257,10 +261,14 @@ export function CommoditiesListPage() {
   // the pager describe the same set (#2128). includeInactive is always
   // sent, so the server applies the active-only default.
   const listOptions = commoditiesListOptions(listParams)
-  const list = useCommodities(listOptions, { enabled })
+  // A list opened from a saved view whose stored query cannot run does not
+  // run (see useOpenedSavedView); until the views load it cannot tell.
+  const openedView = useOpenedSavedView()
+  const listEnabled = enabled && !openedView.pending && !openedView.broken
+  const list = useCommodities(listOptions, { enabled: listEnabled })
   // Tag counts load when the Tags menu opens, for the rest of the query.
   const [tagMenuOpen, setTagMenuOpen] = useState(false)
-  const tagCounts = useCommodityTagCounts(listOptions, { enabled: enabled && tagMenuOpen })
+  const tagCounts = useCommodityTagCounts(listOptions, { enabled: listEnabled && tagMenuOpen })
   const areas = useAreas({ enabled })
   // Locations populate the create-dialog's Location → Area paired
   // selects. The schema only carries area_id; location_id is UI-only.
@@ -701,7 +709,11 @@ export function CommoditiesListPage() {
           </BulkActionBar>
         ) : null}
 
-        {invalidQuery !== null ? (
+        {openedView.broken ? (
+          <SavedViewQueryErrorAlert view={openedView.broken} />
+        ) : openedView.pending ? (
+          <ListLoading viewMode={viewMode} />
+        ) : invalidQuery !== null ? (
           <Alert variant="destructive" data-testid="commodities-invalid-query">
             <AlertTitle>{t("commodities:list.invalidQueryTitle")}</AlertTitle>
             <AlertDescription className="flex flex-col items-start gap-2">

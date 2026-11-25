@@ -345,6 +345,19 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     expect(sameCommodityQuery(a, b)).toBe(true)
     expect(sameCommodityQuery(a, { ...b, sortDesc: true })).toBe(false)
   })
+
+  // The server normalizes tag slugs and drops repeats before it stores them.
+  it("compares tag slugs as the server stores them", () => {
+    const tags = (include: string[], exclude: string[] = []) => ({
+      ...DEFAULT_COMMODITY_QUERY,
+      tags: { ...DEFAULT_COMMODITY_QUERY.tags, include, exclude },
+    })
+    expect(sameCommodityQuery(tags(["Fragile"]), tags(["fragile"]))).toBe(true)
+    expect(sameCommodityQuery(tags(["fragile", "FRAGILE"]), tags(["fragile"]))).toBe(true)
+    expect(sameCommodityQuery(tags([], ["Power Tools"]), tags([], ["power-tools"]))).toBe(true)
+    expect(sameCommodityQuery(tags(["fragile"]), tags(["fragile-2"]))).toBe(false)
+    expect(sameCommodityQuery(tags(["fragile"]), tags([], ["fragile"]))).toBe(false)
+  })
 })
 
 describe("primarySearchMatch", () => {

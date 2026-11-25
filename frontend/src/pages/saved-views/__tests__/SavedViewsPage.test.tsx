@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
+import { http as msw, HttpResponse } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -9,7 +10,13 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
-import { areaHandlers, groupHandlers, savedViewHandlers, tagHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  areaHandlers,
+  groupHandlers,
+  savedViewHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 import type { SavedViewFixture } from "@/test/handlers/savedViews"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -110,7 +117,27 @@ describe("<SavedViewsPage />", () => {
     await waitFor(() =>
       expect(within(row).getByText("Deleted area")).toHaveAttribute("data-stale", "true")
     )
-    expect(within(row).getByText("Not vanished")).toHaveAttribute("data-stale", "true")
+    // A deleted tag says so in words, not only in color.
+    expect(within(row).getByText("Not vanished (deleted)")).toHaveAttribute("data-stale", "true")
+  })
+
+  it("marks no tag as deleted while the tag catalogue fails to load", async () => {
+    let tagRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [ALSO_MINE]),
+      ...savedViewHandlers.counts(SLUG),
+      msw.get(apiUrl(`/g/${SLUG}/tags`), () => {
+        tagRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() => expect(tagRequests).toBeGreaterThan(0))
+    await waitFor(() => expect(within(row).getByText("Not vanished")).toBeInTheDocument())
+    expect(within(row).getByText("Not vanished")).not.toHaveAttribute("data-stale")
+    expect(within(row).queryByText(/\(deleted\)/)).not.toBeInTheDocument()
   })
 
   it("explains a view whose filter is no longer supported", async () => {

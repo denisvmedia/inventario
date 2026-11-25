@@ -1,6 +1,6 @@
 import { useTranslation } from "react-i18next"
 import { Link, useLocation } from "react-router-dom"
-import { Settings2 } from "lucide-react"
+import { AlertTriangle, Settings2 } from "lucide-react"
 
 import {
   SidebarGroup,
@@ -25,7 +25,9 @@ interface SidebarSavedViewsProps {
 // The sidebar section listing the saved views a member pinned there, each
 // with the number of items it selects. The count comes from the server's
 // count of the same query the list runs, so it matches the opened list.
-// Hidden while the member has no view in the sidebar.
+// A view whose stored query cannot run is listed but cannot be opened, as
+// in the items list's menu. Hidden while the member has no view in the
+// sidebar.
 export function SidebarSavedViews({ onNavigate }: SidebarSavedViewsProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
@@ -57,6 +59,25 @@ export function SidebarSavedViews({ onNavigate }: SidebarSavedViewsProps) {
         <SidebarMenu>
           {pinned.map((view) => {
             const count = counts.data?.[view.id]
+            const href = savedViewHref(slug, view)
+            if (!href) {
+              return (
+                <SidebarMenuItem key={view.id}>
+                  <SidebarMenuButton
+                    aria-disabled="true"
+                    data-testid="sidebar-saved-view-unavailable"
+                  >
+                    <SavedViewIcon name={view.icon} className="size-4" />
+                    <span className="truncate">{view.name}</span>
+                    <AlertTriangle
+                      role="img"
+                      className="ml-auto text-status-expiring"
+                      aria-label={t("commodities:savedViews.queryError.short")}
+                    />
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )
+            }
             return (
               <SidebarMenuItem key={view.id}>
                 <SidebarMenuButton
@@ -65,11 +86,7 @@ export function SidebarSavedViews({ onNavigate }: SidebarSavedViewsProps) {
                   isActive={view.id === activeId}
                   className={count !== undefined ? "pr-8" : undefined}
                 >
-                  <Link
-                    to={savedViewHref(slug, view)}
-                    onClick={onNavigate}
-                    data-testid="sidebar-saved-view"
-                  >
+                  <Link to={href} onClick={onNavigate} data-testid="sidebar-saved-view">
                     <SavedViewIcon name={view.icon} className="size-4" />
                     <span>{view.name}</span>
                   </Link>

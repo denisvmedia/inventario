@@ -4,6 +4,7 @@ import { type ReactNode } from "react"
 import { MemoryRouter, Route, Routes } from "react-router-dom"
 import { beforeEach, describe, expect, it } from "vitest"
 
+import { commodityKeys } from "@/features/commodities/keys"
 import { GroupProvider, useCurrentGroup } from "@/features/group/GroupContext"
 import { useDeleteLoan, useReturnLoan, useStartLoan } from "@/features/loans/hooks"
 import { savedViewKeys } from "@/features/saved-views/keys"
@@ -51,8 +52,9 @@ beforeEach(() => {
   )
 })
 
-// The item counts of saved views that filter on lent_out move when a loan
-// starts, ends or is deleted, so each of those mutations marks them stale.
+// Which items the lent_out filter selects changes when a loan starts, ends or
+// is deleted, so each of those mutations marks the saved view counts and the
+// item lists stale: a dashboard card shows both, and they must agree.
 describe("features/loans/hooks", () => {
   it.each([
     {
@@ -74,20 +76,26 @@ describe("features/loans/hooks", () => {
       run: (r: ReturnType<typeof useHooks>) =>
         r.del.mutateAsync({ commodityID: "c1", loanID: "loan-1" }),
     },
-  ])("$name invalidates the saved view counts", async ({ run }) => {
+  ])("$name invalidates the saved view counts and the item lists", async ({ run }) => {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
     })
-    client.setQueryData(savedViewKeys.counts(SLUG), { sv1: 0 })
+    const keys = [
+      savedViewKeys.counts(SLUG),
+      commodityKeys.list(SLUG, { lentOut: true, page: 1, perPage: 5 }),
+      commodityKeys.allList(SLUG, { lentOut: true }),
+      commodityKeys.tagCounts(SLUG, { lentOut: true }),
+    ]
+    for (const key of keys) client.setQueryData(key, {})
     const { result } = renderHook(useHooks, { wrapper: makeWrapper(client) })
     await waitFor(() => expect(result.current.group?.slug).toBe(SLUG))
-    expect(client.getQueryState(savedViewKeys.counts(SLUG))?.isInvalidated).toBe(false)
+    for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(false)
 
     await act(async () => {
       await run(result.current)
     })
 
-    expect(client.getQueryState(savedViewKeys.counts(SLUG))?.isInvalidated).toBe(true)
+    for (const key of keys) expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 })
 

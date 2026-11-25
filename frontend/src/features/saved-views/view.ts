@@ -63,8 +63,14 @@ export function savedViewQuery(view: Pick<SavedView, "query">): CommodityQuery {
 }
 
 // The items list showing view: its query and layout, plus the view's ID so
-// the list knows which view it shows.
-export function savedViewHref(slug: string, view: Pick<SavedView, "id" | "query" | "layout">) {
+// the list knows which view it shows. A view whose stored query cannot run
+// has no link (null): the list would drop the condition it cannot read and
+// show more than the view does.
+export function savedViewHref(
+  slug: string,
+  view: Pick<SavedView, "id" | "query" | "layout" | "queryError">
+): string | null {
+  if (view.queryError) return null
   const params = writeCommodityQuery(new URLSearchParams(), savedViewQuery(view))
   if (view.layout) params.set("view", view.layout)
   params.set(SAVED_VIEW_PARAM, view.id)

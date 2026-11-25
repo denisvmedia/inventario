@@ -1,7 +1,9 @@
 import { useEffect, useState } from "react"
 import { Controller, useForm } from "react-hook-form"
 import { useTranslation } from "react-i18next"
+import { RadioGroup as RadioGroupPrimitive } from "radix-ui"
 
+import { FieldError } from "@/components/FieldError"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import { Checkbox } from "@/components/ui/checkbox"
@@ -55,6 +57,12 @@ function runeLength(value: string): number {
   return Array.from(value).length
 }
 
+// The message of each name rule, as the key FieldError translates.
+const NAME_ERRORS: Record<string, string> = {
+  required: "commodities:savedViews.dialog.nameRequired",
+  maxLength: "commodities:savedViews.dialog.nameTooLong",
+}
+
 // SaveViewDialog names a view and says where it shows. It saves the
 // current filter in create mode; in edit mode it changes everything but
 // the filter, which is saved from the items list.
@@ -95,6 +103,7 @@ export function SaveViewDialog({
   // A shared view stays shared when a member who may not share edits it;
   // the box only shows what it is.
   const shareDisabled = !canShare
+  const nameError = errors.name ? NAME_ERRORS[errors.name.type] : undefined
 
   function handleOpenChange(next: boolean) {
     if (!next) setServerError(null)
@@ -135,7 +144,8 @@ export function SaveViewDialog({
               data-testid="saved-view-name"
               autoComplete="off"
               placeholder={t("commodities:savedViews.dialog.namePlaceholder")}
-              aria-invalid={errors.name ? true : undefined}
+              aria-invalid={nameError ? true : undefined}
+              aria-describedby={nameError ? "saved-view-name-error" : undefined}
               {...register("name", {
                 validate: {
                   required: (v) => v.trim() !== "",
@@ -143,15 +153,12 @@ export function SaveViewDialog({
                 },
               })}
             />
-            {errors.name?.type === "required" ? (
-              <p className="text-xs text-destructive" data-testid="saved-view-name-error">
-                {t("commodities:savedViews.dialog.nameRequired")}
-              </p>
-            ) : errors.name?.type === "maxLength" ? (
-              <p className="text-xs text-destructive" data-testid="saved-view-name-error">
-                {t("commodities:savedViews.dialog.nameTooLong", { max: maxNameLength })}
-              </p>
-            ) : null}
+            <FieldError
+              id="saved-view-name-error"
+              testId="saved-view-name-error"
+              message={nameError}
+              values={{ max: maxNameLength }}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -159,35 +166,31 @@ export function SaveViewDialog({
             <Controller
               control={control}
               name="icon"
+              // A radio group: Tab enters and leaves it on the chosen icon,
+              // the arrow keys move between icons and choose them.
               render={({ field }) => (
-                <div
-                  role="radiogroup"
+                <RadioGroupPrimitive.Root
+                  value={field.value}
+                  onValueChange={field.onChange}
                   aria-labelledby="saved-view-icon-label"
                   className="grid grid-cols-8 gap-1"
                   data-testid="saved-view-icon"
                 >
-                  {SAVED_VIEW_ICON_NAMES.map((name) => {
-                    const selected = field.value === name
-                    return (
-                      <button
-                        key={name}
-                        type="button"
-                        role="radio"
-                        aria-checked={selected}
-                        aria-label={t(`commodities:savedViews.icons.${name}`)}
-                        onClick={() => field.onChange(name)}
-                        className={cn(
-                          "flex size-8 items-center justify-center rounded-md border transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
-                          selected
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-transparent text-muted-foreground hover:bg-muted"
-                        )}
-                      >
-                        <SavedViewIcon name={name} className="size-4" />
-                      </button>
-                    )
-                  })}
-                </div>
+                  {SAVED_VIEW_ICON_NAMES.map((name) => (
+                    <RadioGroupPrimitive.Item
+                      key={name}
+                      value={name}
+                      aria-label={t(`commodities:savedViews.icons.${name}`)}
+                      className={cn(
+                        "flex size-8 items-center justify-center rounded-md border transition-colors outline-none focus-visible:ring-[3px] focus-visible:ring-ring/50",
+                        "border-transparent text-muted-foreground hover:bg-muted",
+                        "data-[state=checked]:border-primary data-[state=checked]:bg-primary data-[state=checked]:text-primary-foreground data-[state=checked]:hover:bg-primary"
+                      )}
+                    >
+                      <SavedViewIcon name={name} className="size-4" />
+                    </RadioGroupPrimitive.Item>
+                  ))}
+                </RadioGroupPrimitive.Root>
               )}
             />
           </div>

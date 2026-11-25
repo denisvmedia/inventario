@@ -81,7 +81,9 @@ export function SavedViewsPage() {
     () => new Map((areas.data ?? []).map((a) => [a.id ?? "", a.name ?? ""])),
     [areas.data]
   )
-  const referencesLoaded = !!areas.data && !tagIndex.isLoading
+  // A tag catalogue that failed to load lists no tags; reading that as
+  // "every tag is deleted" would mark every tag condition.
+  const referencesLoaded = !!areas.data && !tagIndex.isLoading && !tagIndex.isError
   const areaIds = useMemo(() => new Set(areaNames.keys()), [areaNames])
   const tagSlugs = useMemo(() => new Set(tagIndex.tags.map((tag) => tag.slug)), [tagIndex.tags])
   const editable = views.filter((v) => v.canEdit)
@@ -188,6 +190,7 @@ export function SavedViewsPage() {
                   : undefined
                 const editIndex = editable.findIndex((v) => v.id === view.id)
                 const count = counts.data?.[view.id]
+                const href = savedViewHref(slug, view)
                 return (
                   <li key={view.id} data-testid="saved-view-row">
                     {i > 0 ? <Separator /> : null}
@@ -200,16 +203,16 @@ export function SavedViewsPage() {
                       </div>
                       <div className="flex min-w-0 flex-1 flex-col gap-2">
                         <div className="flex flex-wrap items-center gap-2">
-                          {view.queryError ? (
-                            <span className="truncate font-medium">{view.name}</span>
-                          ) : (
+                          {href ? (
                             <Link
-                              to={savedViewHref(slug, view)}
+                              to={href}
                               className="truncate font-medium hover:underline"
                               data-testid="saved-view-open"
                             >
                               {view.name}
                             </Link>
+                          ) : (
+                            <span className="truncate font-medium">{view.name}</span>
                           )}
                           {view.shared ? (
                             <Badge variant="secondary" className="gap-1 font-normal">

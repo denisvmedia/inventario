@@ -51,22 +51,30 @@ export function QueryConditions({ query, areaNames, tagLabel, stale }: QueryCond
     chips.push({ key: `warranty-${w}`, label: t(`commodities:warrantyStatus.${w}`) })
   }
   if (query.lentOut) chips.push({ key: "lent", label: t("commodities:filter.lentOut") })
-  for (const slug of query.tags.include) {
+  // A deleted tag says so in words, not only in color.
+  const tagChip = (key: string, slug: string, condition: string) => {
+    const stale = staleTags.has(slug)
     chips.push({
-      key: `tag-${slug}`,
-      label:
-        query.tags.mode === "any" && query.tags.include.length > 1
-          ? t("commodities:savedViews.conditions.tagAny", { tag: tagLabel(slug) })
-          : t("commodities:savedViews.conditions.tag", { tag: tagLabel(slug) }),
-      stale: staleTags.has(slug),
+      key,
+      label: stale ? t("commodities:savedViews.conditions.deletedTag", { condition }) : condition,
+      stale,
     })
   }
+  for (const slug of query.tags.include) {
+    tagChip(
+      `tag-${slug}`,
+      slug,
+      query.tags.mode === "any" && query.tags.include.length > 1
+        ? t("commodities:savedViews.conditions.tagAny", { tag: tagLabel(slug) })
+        : t("commodities:savedViews.conditions.tag", { tag: tagLabel(slug) })
+    )
+  }
   for (const slug of query.tags.exclude) {
-    chips.push({
-      key: `not-tag-${slug}`,
-      label: t("commodities:savedViews.conditions.notTag", { tag: tagLabel(slug) }),
-      stale: staleTags.has(slug),
-    })
+    tagChip(
+      `not-tag-${slug}`,
+      slug,
+      t("commodities:savedViews.conditions.notTag", { tag: tagLabel(slug) })
+    )
   }
   if (query.tags.untagged) {
     chips.push({ key: "untagged", label: t("commodities:savedViews.conditions.untagged") })

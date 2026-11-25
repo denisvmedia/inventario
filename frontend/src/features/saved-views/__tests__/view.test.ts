@@ -19,7 +19,7 @@ describe("savedViewHref", () => {
       query: "include_inactive=false&sort=-purchase_date&status=sold&tags=red",
       layout: "list",
     })
-    const url = new URL(href, "http://x")
+    const url = new URL(href ?? "", "http://x")
     expect(url.pathname).toBe("/g/home/commodities")
     expect(url.searchParams.get("saved_view")).toBe("sv1")
     expect(url.searchParams.get("view")).toBe("list")
@@ -33,10 +33,22 @@ describe("savedViewHref", () => {
 
   it("leaves the layout to the viewer when the view keeps none", () => {
     const href = savedViewHref("home", { id: "sv1", query: "lent_out=true", layout: "" })
-    const url = new URL(href, "http://x")
+    const url = new URL(href ?? "", "http://x")
     expect(url.searchParams.has("view")).toBe(false)
     // An absent include_inactive is the server default: inactive included.
     expect(url.searchParams.get("inactive")).toBe("1")
+  })
+
+  // The list reads only the parameters it knows: a link would drop the one
+  // the server could not read and open a broader list than the view.
+  it("gives no link to a view whose stored query cannot run", () => {
+    const href = savedViewHref("home", {
+      id: "sv1",
+      query: "type=electronics&warranty_expires_before=2026-12-01",
+      layout: "",
+      queryError: { parameter: "warranty_expires_before", reason: "unknown parameter" },
+    })
+    expect(href).toBeNull()
   })
 })
 

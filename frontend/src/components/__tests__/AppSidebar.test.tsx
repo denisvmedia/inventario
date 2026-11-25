@@ -195,6 +195,34 @@ describe("<AppSidebar /> — saved views", () => {
     )
   })
 
+  // The list would drop the condition it cannot read and show more than the
+  // view, so the entry is not a link.
+  it("lists a view whose stored query cannot run without a link", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...savedViewHandlers.list("household", [
+        {
+          id: "sv3",
+          name: "Old warranties",
+          query: "type=electronics&warranty_expires_before=2026-12-01",
+          show_in_sidebar: true,
+          query_error: { parameter: "warranty_expires_before", reason: "is not available" },
+        },
+      ]),
+      ...savedViewHandlers.counts("household", {})
+    )
+    renderSidebar("/g/household")
+
+    const section = await screen.findByTestId("sidebar-saved-views")
+    const entry = within(section).getByTestId("sidebar-saved-view-unavailable")
+    expect(entry).toHaveTextContent("Old warranties")
+    expect(entry).toHaveAttribute("aria-disabled", "true")
+    expect(entry.closest("a")).toBeNull()
+    expect(within(entry).getByRole("img", { name: "Needs an update" })).toBeInTheDocument()
+    expect(within(section).queryByTestId("sidebar-saved-view")).not.toBeInTheDocument()
+  })
+
   it("leaves the section out while no view is pinned", async () => {
     server.use(...authHandlers.signedIn(), ...groupHandlers.list())
     renderSidebar("/g/household")

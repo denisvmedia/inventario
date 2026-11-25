@@ -12,6 +12,7 @@ import {
   X,
 } from "lucide-react"
 
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
   DropdownMenu,
@@ -55,14 +56,16 @@ export interface SavedViewControlProps {
 // current filter as a view, opens one, and, while a view is open, tells
 // whether the list still shows it and offers to save the change or go back.
 // Everything it needs it reads itself, so the list page mounts it with the
-// query and the layout and nothing else.
+// query and the layout and nothing else. A view whose stored query cannot
+// run is never opened, from the menu or by Revert; while the list names one,
+// the menu says why and offers only to close it.
 export function SavedViewControl({ query, layout }: SavedViewControlProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const navigate = useNavigate()
   const toast = useAppToast()
-  const [searchParams, setSearchParams] = useSearchParams()
+  const [searchParams] = useSearchParams()
   const [dialogOpen, setDialogOpen] = useState(false)
 
   const savedViews = useSavedViews()
@@ -73,17 +76,14 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
 
   const activeId = searchParams.get(SAVED_VIEW_PARAM) ?? ""
   const active = views.find((v) => v.id === activeId)
-  const changed = active ? isSavedViewChanged(active, query, layout) : false
-  const stale = useStaleReferences(active ? query : undefined)
+  const runnable = !!active && !active.queryError
+  const changed = runnable ? isSavedViewChanged(active, query, layout) : false
+  const stale = useStaleReferences(runnable ? query : undefined)
+  const closeView = useCloseSavedView()
 
   function openView(view: SavedView) {
-    navigate(savedViewHref(slug, view))
-  }
-
-  function closeView() {
-    const next = new URLSearchParams(searchParams)
-    next.delete(SAVED_VIEW_PARAM)
-    setSearchParams(next, { replace: true })
+    const href = savedViewHref(slug, view)
+    if (href) navigate(href)
   }
 
   async function saveChanges(view: SavedView) {
@@ -106,7 +106,8 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
     })
     setDialogOpen(false)
     toast.success(t("commodities:savedViews.toast.created", { name: saved.name }))
-    navigate(savedViewHref(slug, saved), { replace: true })
+    const href = savedViewHref(slug, saved)
+    if (href) navigate(href, { replace: true })
   }
 
   const showStale = !!active && !!stale && hasStaleReferences(stale)
@@ -142,6 +143,12 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
                 aria-label={t("commodities:savedViews.stale.title")}
               />
             ) : null}
+            {active?.queryError ? (
+              <AlertTriangle
+                className="size-3.5 shrink-0 text-status-expiring"
+                aria-label={t("commodities:savedViews.queryError.short")}
+              />
+            ) : null}
             <ChevronDown className="size-3.5 shrink-0" aria-hidden="true" />
           </Button>
         </DropdownMenuTrigger>
@@ -150,12 +157,17 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
             <>
               <DropdownMenuLabel className="flex flex-col gap-0.5">
                 <span className="truncate">{active.name}</span>
-                <span className="text-xs font-normal text-muted-foreground">
-                  {changed
-                    ? t("commodities:savedViews.menu.changedHint")
-                    : t("commodities:savedViews.menu.unchangedHint")}
-                </span>
+                {active.queryError ? null : (
+                  <span className="text-xs font-normal text-muted-foreground">
+                    {changed
+                      ? t("commodities:savedViews.menu.changedHint")
+                      : t("commodities:savedViews.menu.unchangedHint")}
+                  </span>
+                )}
               </DropdownMenuLabel>
+              {active.queryError ? (
+                <QueryErrorNotice parameter={active.queryError.parameter} />
+              ) : null}
               {showStale && stale ? <StaleNotice stale={stale} /> : null}
               <DropdownMenuGroup>
                 {changed && active.canEdit ? (
@@ -247,17 +259,90 @@ export function SavedViewControl({ query, layout }: SavedViewControlProps) {
   )
 }
 
+// useCloseSavedView returns a function that takes the saved view out of the
+// items list's URL; the list then shows its filters as an ordinary list.
+function useCloseSavedView() {
+  const [searchParams, setSearchParams] = useSearchParams()
+  return () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete(SAVED_VIEW_PARAM)
+    setSearchParams(next, { replace: true })
+  }
+}
+
+export interface OpenedSavedView {
+  // The saved views are still loading, so the list cannot tell yet whether
+  // the view it was opened from can run.
+  pending: boolean
+  // The view the list was opened from, when its stored query cannot run.
+  broken?: SavedView
+}
+
+// useOpenedSavedView tells the items list about the saved view named in its
+// URL. A link to a view whose query cannot run (an old bookmark, a view that
+// went bad after the link was made) must not run: the URL holds only the
+// part of the query the list can read, so the list would show more than the
+// view.
+export function useOpenedSavedView(): OpenedSavedView {
+  const [searchParams] = useSearchParams()
+  const id = searchParams.get(SAVED_VIEW_PARAM) ?? ""
+  const savedViews = useSavedViews({ enabled: id !== "" })
+  if (!id) return { pending: false }
+  return {
+    pending: savedViews.isLoading,
+    broken: savedViews.data?.views.find((v) => v.id === id && !!v.queryError),
+  }
+}
+
+// Shown by the items list in place of the items of a view whose stored query
+// cannot run.
+export function SavedViewQueryErrorAlert({ view }: { view: SavedView }) {
+  const { t } = useTranslation()
+  const closeView = useCloseSavedView()
+  return (
+    <Alert variant="destructive" data-testid="saved-view-query-error-alert">
+      <AlertTitle>{t("commodities:savedViews.queryError.title")}</AlertTitle>
+      <AlertDescription className="flex flex-col items-start gap-2">
+        <span>
+          {t("commodities:savedViews.queryError.long", {
+            parameter: view.queryError?.parameter || "-",
+          })}
+        </span>
+        <Button variant="outline" size="sm" onClick={closeView}>
+          {t("commodities:savedViews.menu.close")}
+        </Button>
+      </AlertDescription>
+    </Alert>
+  )
+}
+
+function QueryErrorNotice({ parameter }: { parameter: string | undefined }) {
+  const { t } = useTranslation()
+  return (
+    <div
+      className="mx-1 mb-1 flex gap-2 rounded-md bg-status-expiring/10 px-2 py-1.5 text-xs"
+      data-testid="saved-views-query-error"
+    >
+      <AlertTriangle className="mt-0.5 size-3.5 shrink-0 text-status-expiring" aria-hidden="true" />
+      <span>{t("commodities:savedViews.queryError.long", { parameter: parameter || "-" })}</span>
+    </div>
+  )
+}
+
 // What the query names that no longer exists, once areas and tags have
-// loaded; undefined before that or without a query.
+// loaded; undefined before that, when either failed to load, or without a
+// query. A catalogue that failed to load lists no tags, which would mark
+// every tag of the query as deleted.
 export function useStaleReferences(query: CommodityQuery | undefined): StaleReferences | undefined {
   const areas = useAreas({ enabled: !!query })
   const tagIndex = useTagIndex("commodity")
+  const tagsUnknown = tagIndex.isLoading || tagIndex.isError
   return useMemo(() => {
-    if (!query || !areas.data || tagIndex.isLoading) return undefined
+    if (!query || !areas.data || tagsUnknown) return undefined
     const areaIds = new Set(areas.data.map((a) => a.id ?? ""))
     const tagSlugs = new Set(tagIndex.tags.map((tag) => tag.slug))
     return staleReferences(query, areaIds, tagSlugs)
-  }, [query, areas.data, tagIndex.isLoading, tagIndex.tags])
+  }, [query, areas.data, tagsUnknown, tagIndex.tags])
 }
 
 // Names what a view's filter still asks for but no longer exists. The list

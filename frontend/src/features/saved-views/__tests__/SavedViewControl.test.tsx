@@ -115,9 +115,48 @@ describe("<SavedViewControl /> on the items list", () => {
     await user.click(await screen.findByTestId("saved-views-save-new"))
     const dialog = await screen.findByTestId("saved-view-dialog")
     await user.click(within(dialog).getByTestId("saved-view-submit"))
-    expect(await within(dialog).findByTestId("saved-view-name-error")).toHaveTextContent(
-      "Enter a name."
+    const error = await within(dialog).findByTestId("saved-view-name-error")
+    expect(error).toHaveTextContent("Enter a name.")
+    // The input names the message, so a screen reader reads it with the field.
+    expect(within(dialog).getByTestId("saved-view-name")).toHaveAttribute(
+      "aria-describedby",
+      error.id
     )
+  })
+
+  it("chooses the icon with the arrow keys and takes one tab stop for it", async () => {
+    const user = userEvent.setup()
+    let sent: Record<string, unknown> | undefined
+    server.use(
+      ...savedViewHandlers.none(SLUG),
+      ...savedViewHandlers.create(SLUG, "sv9", (attrs) => {
+        sent = attrs
+      })
+    )
+    renderList("")
+
+    await user.click(await screen.findByTestId("saved-views-menu"))
+    await user.click(await screen.findByTestId("saved-views-save-new"))
+    const dialog = await screen.findByTestId("saved-view-dialog")
+    await user.type(within(dialog).getByTestId("saved-view-name"), "Starred")
+    await user.tab()
+    const bookmark = within(dialog).getByRole("radio", { name: "Bookmark" })
+    expect(bookmark).toHaveFocus()
+    // Held down as a real key press is: the radio group moves the focus
+    // after the keydown and checks the radio while the arrow key is down.
+    await user.keyboard("{ArrowRight>}")
+    const star = within(dialog).getByRole("radio", { name: "Star" })
+    await waitFor(() => expect(star).toHaveAttribute("aria-checked", "true"))
+    await user.keyboard("{/ArrowRight}")
+    expect(star).toHaveFocus()
+    expect(bookmark).toHaveAttribute("aria-checked", "false")
+    // Tab leaves the group: the next stop is the first placement box.
+    await user.tab()
+    expect(within(dialog).getByTestId("saved-view-sidebar")).toHaveFocus()
+
+    await user.click(within(dialog).getByTestId("saved-view-submit"))
+    await waitFor(() => expect(sent).toBeDefined())
+    expect(sent).toMatchObject({ name: "Starred", icon: "star" })
   })
 
   it("shows the server's reason when a filter cannot be kept", async () => {
@@ -240,5 +279,89 @@ describe("<SavedViewControl /> on the items list", () => {
     await user.click(await screen.findByTestId("saved-views-menu"))
     const item = await screen.findByTestId("saved-views-item")
     expect(item).toHaveAttribute("aria-disabled", "true")
+  })
+
+  // The URL of a view whose query cannot run holds only the part the list
+  // can read (an old bookmark, a view that went bad later), so running it
+  // would show more items than the view does.
+  it("does not run the list of a view whose stored query cannot run", async () => {
+    const user = userEvent.setup()
+    let listRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        {
+          id: "sv3",
+          name: "Old",
+          query: "type=electronics&warranty_expires_before=2026-12-01",
+          query_error: { parameter: "warranty_expires_before", reason: "is not available" },
+        },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), () => {
+        listRequests++
+        return HttpResponse.json({ data: [] })
+      })
+    )
+    renderList("?type=electronics&status=lost&saved_view=sv3")
+
+    const alert = await screen.findByTestId("saved-view-query-error-alert")
+    expect(alert).toHaveTextContent("This view cannot be opened")
+    expect(alert).toHaveTextContent("warranty_expires_before")
+    expect(listRequests).toBe(0)
+
+    // The menu explains it too and offers neither Revert nor Save changes,
+    // only Close view.
+    await user.click(screen.getByTestId("saved-views-menu"))
+    expect(await screen.findByTestId("saved-views-query-error")).toHaveTextContent(
+      "warranty_expires_before"
+    )
+    expect(screen.queryByTestId("saved-views-revert")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("saved-views-save-changes")).not.toBeInTheDocument()
+    expect(screen.getByTestId("saved-views-close")).toBeInTheDocument()
+    await user.keyboard("{Escape}")
+
+    // Closed, the list shows its own filters as an ordinary list.
+    await user.click(within(alert).getByRole("button", { name: "Close view" }))
+    await waitFor(() =>
+      expect(screen.getByTestId("location-search")).not.toHaveTextContent("saved_view")
+    )
+    await waitFor(() => expect(listRequests).toBeGreaterThan(0))
+    expect(screen.queryByTestId("saved-view-query-error-alert")).not.toBeInTheDocument()
+  })
+
+  it("names no deleted tag while the tag catalogue fails to load", async () => {
+    const user = userEvent.setup()
+    let tagRequests = 0
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv2", name: "Garage", query: "include_inactive=false&sort=name&tags=garage" },
+      ]),
+      msw.get(apiUrl(`/g/${SLUG}/tags`), () => {
+        tagRequests++
+        return HttpResponse.json({ errors: [{ status: "Internal Server Error" }] }, { status: 500 })
+      })
+    )
+    renderList("?tags=garage&saved_view=sv2")
+
+    await waitFor(() =>
+      expect(screen.getByTestId("saved-views-menu-label")).toHaveTextContent("Garage")
+    )
+    await waitFor(() => expect(tagRequests).toBeGreaterThan(0))
+    await user.click(screen.getByTestId("saved-views-menu"))
+    await screen.findByTestId("saved-views-close")
+    expect(screen.queryByTestId("saved-views-stale")).not.toBeInTheDocument()
+  })
+
+  it("shows no change for a view whose tags differ from the list's only in case", async () => {
+    server.use(
+      ...savedViewHandlers.list(SLUG, [
+        { id: "sv4", name: "Garage", query: "include_inactive=false&sort=name&tags=garage" },
+      ])
+    )
+    renderList("?tags=Garage&saved_view=sv4")
+
+    await waitFor(() =>
+      expect(screen.getByTestId("saved-views-menu-label")).toHaveTextContent("Garage")
+    )
+    expect(screen.queryByTestId("saved-views-changed")).not.toBeInTheDocument()
   })
 })

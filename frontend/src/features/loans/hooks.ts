@@ -72,12 +72,17 @@ function useInvalidate() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   return {
-    // A loan that starts, ends or is deleted moves the item counts of the
-    // saved views that filter on lent_out, so those refetch with the loans.
+    // A loan that starts, ends or is deleted changes which items the
+    // lent_out filter selects, so the saved view counts and the item lists
+    // (the items list, the rows of the dashboard's view cards and their tag
+    // counts) refetch with the loans.
     all: () =>
       Promise.all([
         qc.invalidateQueries({ queryKey: loanKeys.group(slug) }),
         qc.invalidateQueries({ queryKey: savedViewKeys.counts(slug) }),
+        ...(["list", "all", "tag-counts"] as const).map((kind) =>
+          qc.invalidateQueries({ queryKey: [...commodityKeys.group(slug), kind] })
+        ),
       ]),
     forCommodity: (commodityID: string) =>
       qc.invalidateQueries({ queryKey: loanKeys.byCommodity(slug, commodityID) }),
