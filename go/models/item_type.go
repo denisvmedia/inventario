@@ -19,6 +19,11 @@ const (
 	MaxItemTypeIconRunes = 40
 )
 
+// MaxItemTypesPerGroup is the most item types a group keeps. Every type
+// goes into the AI scan's prompt and into its response schema's enum, so
+// the list has to stay short enough for both.
+const MaxItemTypesPerGroup = 100
+
 // itemTypeSlugPattern is the shape of an item type slug: runs of Unicode
 // letters, numbers and combining marks separated by single hyphens or
 // underscores. The built-in slugs use underscores ("white_goods"); a slug

@@ -84,9 +84,15 @@ func (r *itemTypeResolver) importArchived(ctx context.Context, archived []types.
 			stats.Errors = append(stats.Errors, fmt.Sprintf("item type %s: %v", a.Slug, err))
 			continue
 		}
-		created, err := r.create(ctx, t)
+		created, full, err := r.create(ctx, t)
 		if err != nil {
 			return err
+		}
+		if full {
+			stats.ErrorCount++
+			stats.Errors = append(stats.Errors, fmt.Sprintf(
+				"item type %s: the group already has %d item types, the most it keeps; its items get the type %s",
+				a.Slug, models.MaxItemTypesPerGroup, created))
 		}
 		r.slugs[slug] = created
 	}
@@ -121,7 +127,7 @@ func (r *itemTypeResolver) resolve(ctx context.Context, slug models.CommodityTyp
 			t.Slug = slug
 		}
 		t.Normalize()
-		if dest, err = r.create(ctx, t); err != nil {
+		if dest, _, err = r.create(ctx, t); err != nil {
 			return "", err
 		}
 	}
@@ -154,10 +160,35 @@ func (r *itemTypeResolver) find(ctx context.Context, slug models.CommodityType, 
 	return "", nil
 }
 
-func (r *itemTypeResolver) create(ctx context.Context, t models.ItemType) (models.CommodityType, error) {
+// create creates t and returns its slug. When the group already has
+// models.MaxItemTypesPerGroup types nothing is created: full is true, and
+// the returned slug is the group's Other type, or its first type when Other
+// was deleted, so the items still get a type the group has.
+func (r *itemTypeResolver) create(ctx context.Context, t models.ItemType) (slug models.CommodityType, full bool, err error) {
 	created, err := r.reg.Create(ctx, t)
-	if err != nil {
-		return "", errxtrace.Wrap("failed to create item type", err, errx.Attrs("item_type", string(t.Slug), "name", t.Name))
+	if errors.Is(err, registry.ErrItemTypeLimit) {
+		fallback, err := r.fallback(ctx)
+		return fallback, true, err
 	}
-	return created.Slug, nil
+	if err != nil {
+		return "", false, errxtrace.Wrap("failed to create item type", err, errx.Attrs("item_type", string(t.Slug), "name", t.Name))
+	}
+	return created.Slug, false, nil
+}
+
+// fallback is the type an item gets when its own cannot be created.
+func (r *itemTypeResolver) fallback(ctx context.Context) (models.CommodityType, error) {
+	if other, err := r.reg.GetBySlug(ctx, models.CommodityTypeOther); err == nil {
+		return other.Slug, nil
+	} else if !errors.Is(err, registry.ErrNotFound) {
+		return "", errxtrace.Wrap("failed to look up item type", err)
+	}
+	list, err := r.reg.List(ctx)
+	if err != nil {
+		return "", errxtrace.Wrap("failed to list item types", err)
+	}
+	if len(list) == 0 {
+		return "", errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "ItemType"))
+	}
+	return list[0].Slug, nil
 }

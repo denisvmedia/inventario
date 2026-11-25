@@ -6294,7 +6294,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.\nThe slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.",
+                "description": "The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.\nThe slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.\nA group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -6331,7 +6331,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "Another item type of the group has this name",
+                        "description": "Another item type of the group has this name, or the group has 100 item types",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

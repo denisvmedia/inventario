@@ -45,7 +45,8 @@ the section matching the tag and publishes it as the GitHub Release body. See
   the group) and one of 38 icons, and counts the items of each type, Trash
   included. Deleting a type that items have moves them to a type the member
   picks, which is also how two types are merged; a group keeps at least one
-  type. The item forms pick from the group's types and create one with "New
+  type and at most 100 (409 `item_type.limit`). A type stays with the group
+  when the member who added it deletes their account. The item forms pick from the group's types and create one with "New
   type". Items keep their type: `commodities.type` stays the type's slug, so
   the `type` filter, saved views, the reports and the icons work as before.
   The API gains `/g/{slug}/item-types` (`DELETE` takes `reassign_to`), and an

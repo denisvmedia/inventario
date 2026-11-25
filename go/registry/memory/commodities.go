@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 	"github.com/shopspring/decimal"
@@ -217,6 +218,26 @@ func (r *CommodityRegistry) lockItemType(ctx context.Context, groupID, tenantID 
 	return r.itemTypes.lockForItemWrite(ctx, tenantID, groupID, r.userID, slug)
 }
 
+// lockItemTypesForUpdate read-locks the item types for an update of
+// commodity and reports whether its type is one of the item's group's
+// types. The group comes from the registry, or for the service registry
+// from the stored row.
+func (r *CommodityRegistry) lockItemTypesForUpdate(ctx context.Context, commodity models.Commodity) (func(), bool) {
+	if r.itemTypes == nil {
+		return func() {}, true
+	}
+	groupID, tenantID := r.groupID, commodity.TenantID
+	if stored, err := r.Registry.Get(ctx, commodity.GetID()); err == nil {
+		groupID, tenantID = stored.GroupID, stored.TenantID
+	}
+	if tenantID == "" {
+		if user := appctx.UserFromContext(ctx); user != nil {
+			tenantID = user.TenantID
+		}
+	}
+	return r.itemTypes.lockForItemUpdate(ctx, tenantID, groupID, r.userID, commodity.Type)
+}
+
 // ListByGroup returns every commodity in (tenantID, groupID), regardless
 // of draft / status. The currency-migration service (#202) needs the full
 // row set so the conversion sees every commodity in the group, not just
@@ -363,6 +384,11 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	r.assetNumbers.Lock()
 	defer r.assetNumbers.Unlock()
 
+	// The item types stay read-locked until the write, so a type delete
+	// cannot move the item in between.
+	unlockTypes, typeKnown := r.lockItemTypesForUpdate(ctx, commodity)
+	defer unlockTypes()
+
 	// Get the existing commodity to check if AreaID changed AND to
 	// preserve the server-managed acquisition columns and asset number
 	// (whatever the caller sent must be ignored).
@@ -372,12 +398,8 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			oldAreaID = *existingCommodity.AreaID
 		}
 		// A changed type must be one of the group's item types.
-		if existingCommodity.Type != commodity.Type {
-			unlockType, err := r.lockItemType(ctx, existingCommodity.GroupID, existingCommodity.TenantID, commodity.Type)
-			if err != nil {
-				return nil, err
-			}
-			defer unlockType()
+		if existingCommodity.Type != commodity.Type && !typeKnown {
+			return nil, errxtrace.Classify(registry.ErrUnknownItemType, errx.Attrs("type", string(commodity.Type)))
 		}
 		commodity.AcquisitionPrice = clonePtrDecimal(existingCommodity.AcquisitionPrice)
 		commodity.AcquisitionCurrency = clonePtrCurrency(existingCommodity.AcquisitionCurrency)

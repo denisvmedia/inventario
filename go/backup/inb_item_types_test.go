@@ -3,6 +3,7 @@
 package backup_test
 
 import (
+	"fmt"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -160,4 +161,30 @@ func TestINBRestore_DryRunCreatesNoItemTypes(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted)
 	c.Check(must.Must(f.types.Count(f.ctx)), qt.Equals, before)
+}
+
+func TestINBRestore_FullGroupGivesItemsTheOtherType(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newItemTypeFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+
+	// The group drops "Vehicle" and fills up with types of its own, so the
+	// restore cannot create "Vehicle" again.
+	other := must.Must(f.types.GetBySlug(f.ctx, models.CommodityTypeOther))
+	must.Must(f.types.DeleteReassigning(f.ctx, f.vehicle.ID, other.ID))
+	for i := must.Must(f.types.Count(f.ctx)); i < models.MaxItemTypesPerGroup; i++ {
+		must.Must(f.types.Create(f.ctx, models.ItemType{Name: fmt.Sprintf("Kind %d", i)}))
+	}
+
+	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Check(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Check(final.ErrorCount, qt.Equals, 1, qt.Commentf("the type that could not be created counts as an error"))
+
+	_, err = f.types.GetBySlug(f.ctx, "vehicle")
+	c.Check(err, qt.ErrorIs, registry.ErrNotFound)
+	c.Check(must.Must(f.types.Count(f.ctx)), qt.Equals, models.MaxItemTypesPerGroup)
+	tv := f.commodityByUUID(c, f.tvUUID)
+	c.Check(tv.Type, qt.Equals, models.CommodityTypeOther)
 }

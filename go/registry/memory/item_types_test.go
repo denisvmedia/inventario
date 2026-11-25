@@ -139,3 +139,47 @@ func TestItemTypes_SeededTypesBelongToGroupCreator_Memory(t *testing.T) {
 }
 
 var _ registry.ItemTypeRegistry = (*memory.ItemTypeRegistry)(nil)
+
+// A member's item types in a shared group do not block the member's account
+// deletion: they stay with the group and go to its owner.
+func TestItemTypes_MemberTypesGoToTheOwner_Memory(t *testing.T) {
+	c := qt.New(t)
+
+	fs := memory.NewFactorySet()
+	g, err := fs.LocationGroupRegistry.Create(t.Context(), models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+		Name:                "Home",
+		Slug:                "home",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "owner",
+		GroupCurrency:       "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	for _, m := range []struct {
+		user string
+		role models.GroupRole
+	}{{"member", models.GroupRoleUser}, {"owner", models.GroupRoleOwner}} {
+		_, err := fs.GroupMembershipRegistry.Create(t.Context(), models.GroupMembership{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+			GroupID:             g.ID,
+			MemberUserID:        m.user,
+			Role:                m.role,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	member := &models.User{TenantAwareEntityID: models.TenantAwareEntityID{EntityID: models.EntityID{ID: "member"}, TenantID: "tenant-1"}}
+	ctx := appctx.WithGroup(appctx.WithUser(t.Context(), member), g)
+	types := fs.ItemTypeRegistryFactory.MustCreateUserRegistry(ctx)
+	vehicle, err := types.Create(ctx, models.ItemType{Name: "Vehicle"})
+	c.Assert(err, qt.IsNil)
+	c.Assert(vehicle.CreatedByUserID, qt.Equals, "member")
+
+	owns, err := fs.UserContentOwnershipChecker.HasRetainedOwnedContent(t.Context(), "tenant-1", "member", nil)
+	c.Assert(err, qt.IsNil)
+	c.Check(owns, qt.IsFalse, qt.Commentf("item types are group configuration"))
+
+	c.Assert(fs.UserPurger.PurgeUserDependents(t.Context(), "tenant-1", "member"), qt.IsNil)
+	got, err := types.Get(ctx, vehicle.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(got.CreatedByUserID, qt.Equals, "owner")
+}

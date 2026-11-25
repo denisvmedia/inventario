@@ -1416,7 +1416,8 @@ func (u ItemTypeUsage) Total() int {
 // key. Create gives the type a slug made from its name, unique in the
 // group and never one of a built-in type, unless the caller sets one (the
 // backup restore keeps the archived slug when it is free). Update keeps the
-// stored slug.
+// stored slug. Create fails with ErrItemTypeLimit when the group already has
+// models.MaxItemTypesPerGroup types.
 //
 // A group with no item types has never been seeded: the user registry's
 // List, Create and the commodity registries' writes of a built-in slug seed

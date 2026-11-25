@@ -177,7 +177,7 @@ func NewFactorySet() *registry.FactorySet {
 	// admin user hard-delete (and, since #2147, the user's group_invites_audit
 	// references). Takes the plain singleton registries that own the shared
 	// in-memory maps; all are set above, so it can be wired here.
-	fs.UserPurger = NewUserPurger(
+	userPurger := NewUserPurger(
 		fs.RefreshTokenRegistry,
 		apiTokenReg,
 		fs.UserMFASecretRegistry,
@@ -192,6 +192,8 @@ func NewFactorySet() *registry.FactorySet {
 		fs.CommodityReminderSendRegistry,
 		savedViewFactory,
 	)
+	userPurger.SetItemTypeFactory(itemTypeFactory)
+	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request
 	// context, with no cheap installation-wide roll-up. Rather than range

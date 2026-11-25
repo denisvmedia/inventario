@@ -44,6 +44,10 @@ var (
 	// one of the group's item types.
 	ErrUnknownItemType = errx.NewSentinel("unknown item type")
 
+	// ErrItemTypeLimit signals a create in a group that already has
+	// models.MaxItemTypesPerGroup item types.
+	ErrItemTypeLimit = errx.NewSentinel("the group has the most item types it can keep")
+
 	// ErrLoanAlreadyOpen signals that a commodity already has an open
 	// (returned_at IS NULL) loan and the service refused to create a
 	// second one. The handler maps it to 409 Conflict so the FE can

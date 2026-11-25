@@ -799,11 +799,19 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 			return err
 		}
 		commodity.AssetNumber = row.AssetNumber
-		// A changed type must be one of the group's item types. The new
-		// type's row is locked after the item's, and a type delete locks
-		// the deleted type before the items it moves; an update never
-		// waits for the type it leaves, so the orders cannot deadlock.
-		if row.Type != stored.Type {
+		// A changed type must be one of the group's item types. "Changed"
+		// compares with the type the row holds under the lock, not with
+		// stored: a type delete may have moved the item to another type
+		// after stored was read, and an update that kept the old type would
+		// then write back a type the group no longer has. The new type's
+		// row is locked after the item's, and a type delete locks the
+		// deleted type before the items it moves; an update never waits for
+		// the type it leaves, so the orders cannot deadlock.
+		current, err := lockedCommodityType(ctx, tx, r.tableNames.Commodities(), stored.ID)
+		if err != nil {
+			return err
+		}
+		if row.Type != current {
 			if err := checkCommodityTypeInTx(ctx, tx, r.tableNames, stored.TenantID, stored.GroupID, row.Type); err != nil {
 				return err
 			}
@@ -828,6 +836,16 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 	}
 
 	return &commodity, nil
+}
+
+// lockedCommodityType returns the type of the commodity id, which the
+// caller's transaction has already locked.
+func lockedCommodityType(ctx context.Context, tx *sqlx.Tx, table store.TableName, id string) (models.CommodityType, error) {
+	var current models.CommodityType
+	if err := tx.GetContext(ctx, &current, fmt.Sprintf(`SELECT type FROM %s WHERE id = $1`, table), id); err != nil {
+		return "", errxtrace.Wrap("failed to read commodity type", err, errx.Attrs("commodity_id", id))
+	}
+	return current, nil
 }
 
 // clonePtrDecimal returns a heap-allocated copy of d (or nil). Used to

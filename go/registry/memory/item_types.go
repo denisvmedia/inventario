@@ -178,6 +178,25 @@ func (f *ItemTypeRegistryFactory) lockForItemWrite(ctx context.Context, tenantID
 	return nil, errxtrace.Classify(registry.ErrUnknownItemType, errx.Attrs("type", string(slug)))
 }
 
+// lockForItemUpdate holds the item types read-locked until the returned
+// function is called, so a type delete cannot move items while an item
+// update reads the item and writes it back. known reports whether slug names
+// a type of groupID; a built-in slug seeds a group that has no types first.
+func (f *ItemTypeRegistryFactory) lockForItemUpdate(ctx context.Context, tenantID, groupID, userID string, slug models.CommodityType) (unlock func(), known bool) {
+	f.mu.RLock()
+	if groupID == "" || slug == "" || f.findType(groupID, slug) != nil {
+		return f.mu.RUnlock, true
+	}
+	f.mu.RUnlock()
+	if slug.IsBuiltin() {
+		f.mu.Lock()
+		f.seedLocked(ctx, tenantID, groupID, userID)
+		f.mu.Unlock()
+	}
+	f.mu.RLock()
+	return f.mu.RUnlock, f.findType(groupID, slug) != nil
+}
+
 // groupFor is the group a write lands in: the registry's, or for the service
 // registry the row's.
 func (r *ItemTypeRegistry) groupFor(t *models.ItemType) string {
@@ -231,6 +250,9 @@ func (r *ItemTypeRegistry) Create(ctx context.Context, itemType models.ItemType)
 
 	groupID := r.groupFor(&itemType)
 	r.factory.seedLocked(ctx, r.tenantFor(ctx, &itemType), groupID, r.userID)
+	if len(r.factory.groupTypes(groupID)) >= models.MaxItemTypesPerGroup {
+		return nil, errxtrace.Classify(registry.ErrItemTypeLimit, errx.Attrs("group_id", groupID, "limit", models.MaxItemTypesPerGroup))
+	}
 	if r.nameTaken(groupID, &itemType) {
 		return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs("name", itemType.Name))
 	}
@@ -317,9 +339,14 @@ func (r *ItemTypeRegistry) DeleteReassigning(ctx context.Context, id, reassignTo
 			base.lock.Unlock()
 			return 0, errxtrace.Classify(registry.ErrItemTypeInUse, errx.Attrs("item_type_id", id, "items", used))
 		}
+		// Each moved item is a changed copy: Registry.Get copies the stored
+		// item after it releases the lock, so the stored one is never
+		// written in place.
 		for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
 			if c := pair.Value; c.GroupID == src.GroupID && c.Type == src.Slug {
-				c.Type = target.Slug
+				cp := *c
+				cp.Type = target.Slug
+				pair.Value = &cp
 				moved++
 			}
 		}
@@ -427,5 +454,42 @@ func (f *ItemTypeRegistryFactory) purgeWhere(match func(*models.ItemType) bool) 
 	}
 	for _, id := range ids {
 		f.base.items.Delete(id)
+	}
+}
+
+// groupsCreatedBy returns the groups of tenantID that have an item type
+// userID created.
+func (f *ItemTypeRegistryFactory) groupsCreatedBy(tenantID, userID string) []string {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		t := pair.Value
+		if t.TenantID == tenantID && t.CreatedByUserID == userID && !seen[t.GroupID] {
+			seen[t.GroupID] = true
+			out = append(out, t.GroupID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the item types userID created in tenantID to
+// heirs[groupID]. A type whose group has no heir keeps its creator. Each
+// changed type is a copy, so a reader holding the stored one sees no change.
+func (f *ItemTypeRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.base.lock.Lock()
+	defer f.base.lock.Unlock()
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		t := pair.Value
+		heir := heirs[t.GroupID]
+		if t.TenantID != tenantID || t.CreatedByUserID != userID || heir == "" {
+			continue
+		}
+		cp := *t
+		cp.CreatedByUserID = heir
+		pair.Value = &cp
 	}
 }

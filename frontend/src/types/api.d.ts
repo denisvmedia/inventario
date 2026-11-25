@@ -7254,6 +7254,7 @@ export type paths = {
          * Create an item type
          * @description The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
          *     The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+         *     A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
          */
         post: {
             parameters: {
@@ -7281,7 +7282,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.ItemTypeResponse"];
                     };
                 };
-                /** @description Another item type of the group has this name */
+                /** @description Another item type of the group has this name, or the group has 100 item types */
                 409: {
                     headers: {
                         [name: string]: unknown;

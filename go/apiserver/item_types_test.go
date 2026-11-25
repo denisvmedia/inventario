@@ -3,6 +3,7 @@ package apiserver_test
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -89,8 +90,7 @@ func TestItemTypes_CreateRenameAndItemWrites(t *testing.T) {
 	// A type the group does not have is refused.
 	rr = env.do(http.MethodPost, "/commodities", commodityBodyWithType("Rocket", "spaceship"))
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
-	c.Check(rr.Body.String(), qt.Contains, "item_type.unknown")
-	c.Check(rr.Body.String(), qt.Contains, `"type":"no item type with this slug in the group"`)
+	assertUnknownItemTypeError(c, rr.Body.Bytes())
 
 	// Renaming keeps the slug, so the item and a type filter keep working.
 	rr = env.do(http.MethodPatch, "/item-types/"+vehicleID, `{"data":{"id":"`+vehicleID+`","type":"item_types","attributes":{"name":"Car"}}}`)
@@ -120,6 +120,29 @@ func TestItemTypes_CreateRenameAndItemWrites(t *testing.T) {
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &reset), qt.IsNil)
 	c.Check(reset.Data.Attributes.Name, qt.Equals, "")
 	c.Check(reset.Data.Attributes.Builtin, qt.IsTrue)
+}
+
+func TestItemTypes_GroupKeepsAtMostTheLimit(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+
+	for i := len(listItemTypes(c, env).Data); i < models.MaxItemTypesPerGroup; i++ {
+		rr := env.do(http.MethodPost, "/item-types", fmt.Sprintf(`{"data":{"type":"item_types","attributes":{"name":"Kind %d"}}}`, i))
+		c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("type %d: body=%s", i, rr.Body.String()))
+	}
+	rr := env.do(http.MethodPost, "/item-types", `{"data":{"type":"item_types","attributes":{"name":"One too many"}}}`)
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf("body=%s", rr.Body.String()))
+	var got struct {
+		Errors []struct {
+			Code string         `json:"code"`
+			Meta map[string]int `json:"meta"`
+		} `json:"errors"`
+	}
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &got), qt.IsNil)
+	c.Assert(got.Errors, qt.HasLen, 1)
+	c.Check(got.Errors[0].Code, qt.Equals, "item_type.limit")
+	c.Check(got.Errors[0].Meta["limit"], qt.Equals, models.MaxItemTypesPerGroup)
+	c.Check(listItemTypes(c, env).Data, qt.HasLen, models.MaxItemTypesPerGroup)
 }
 
 func TestItemTypes_RejectsInvalidInput(t *testing.T) {
@@ -222,6 +245,41 @@ func TestItemTypes_ViewerCanReadButNotWrite(t *testing.T) {
 
 	env.setRole(models.GroupRoleUser)
 	c.Check(env.do(http.MethodPost, "/item-types", `{"data":{"type":"item_types","attributes":{"name":"Boat"}}}`).Code, qt.Equals, http.StatusCreated)
+}
+
+// assertUnknownItemTypeError checks the 422 an item write gets for a type
+// the group lacks: the item_type.unknown code, and the field error under
+// data.attributes.type with its validation code, where the frontend's
+// extractFieldErrors and extractFieldErrorCodes read it.
+func assertUnknownItemTypeError(c *qt.C, body []byte) {
+	c.Helper()
+	var got struct {
+		Errors []struct {
+			Code  string `json:"code"`
+			Error struct {
+				Type  string `json:"type"`
+				Error struct {
+					Data struct {
+						Attributes map[string]string `json:"attributes"`
+					} `json:"data"`
+				} `json:"error"`
+				ErrorCodes struct {
+					Data struct {
+						Attributes map[string]struct {
+							Code string `json:"code"`
+						} `json:"attributes"`
+					} `json:"data"`
+				} `json:"errorCodes"`
+			} `json:"error"`
+		} `json:"errors"`
+	}
+	c.Assert(json.Unmarshal(body, &got), qt.IsNil, qt.Commentf("body=%s", body))
+	c.Assert(got.Errors, qt.HasLen, 1, qt.Commentf("body=%s", body))
+	e := got.Errors[0]
+	c.Check(e.Code, qt.Equals, "item_type.unknown")
+	c.Check(e.Error.Type, qt.Equals, "validation.Errors")
+	c.Check(e.Error.Error.Data.Attributes["type"], qt.Equals, "no item type with this slug in the group")
+	c.Check(e.Error.ErrorCodes.Data.Attributes["type"].Code, qt.Equals, "item_type_unknown")
 }
 
 func commodityBodyWithType(name, slug string) string {

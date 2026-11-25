@@ -3,6 +3,7 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -29,6 +30,12 @@ const (
 	// itemTypeUnknownCode: an item write named a type the group does not
 	// have.
 	itemTypeUnknownCode = "item_type.unknown"
+	// itemTypeLimitCode: a create in a group that already has
+	// models.MaxItemTypesPerGroup types. Meta carries the limit.
+	itemTypeLimitCode = "item_type.limit"
+	// itemTypeUnknownFieldCode is the validation code on the type field of
+	// that 422, which the frontend localizes (errors:validation.*).
+	itemTypeUnknownFieldCode = "item_type_unknown"
 )
 
 func itemTypeFromContext(ctx context.Context) *models.ItemType {
@@ -61,7 +68,8 @@ func itemTypeCtx() func(http.Handler) http.Handler {
 type itemTypesAPI struct{}
 
 // renderItemTypeWriteError maps an item type write failure: field errors to
-// 422, a duplicate name to 409, and the rest through renderEntityError.
+// 422, a duplicate name and a full group to 409, and the rest through
+// renderEntityError.
 func renderItemTypeWriteError(w http.ResponseWriter, r *http.Request, err error) {
 	if _, ok := errors.AsType[validation.Errors](err); ok {
 		unprocessableEntityError(w, r, err)
@@ -71,13 +79,19 @@ func renderItemTypeWriteError(w http.ResponseWriter, r *http.Request, err error)
 		codedConflictError(w, r, errors.New("an item type with this name already exists"), itemTypeNameTakenCode, nil)
 		return
 	}
+	if errors.Is(err, registry.ErrItemTypeLimit) {
+		codedConflictError(w, r, fmt.Errorf("a group keeps at most %d item types", models.MaxItemTypesPerGroup),
+			itemTypeLimitCode, map[string]any{"limit": models.MaxItemTypesPerGroup})
+		return
+	}
 	renderEntityError(w, r, err)
 }
 
 // itemTypeSentinelJSONAPIError maps the item type sentinels that reach
 // renderEntityError from other handlers: an item write that names a type
-// the group does not have is a 422 with a field error on type, so a form
-// marks its type field, and the delete refusals are 409s.
+// the group does not have is a 422 with a field error on type, nested under
+// data.attributes as a binding error is, so a form marks its type field;
+// the delete refusals are 409s.
 func itemTypeSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	var (
 		status int
@@ -85,7 +99,11 @@ func itemTypeSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	)
 	switch {
 	case errors.Is(err, registry.ErrUnknownItemType):
-		jsErr := NewUnprocessableEntityError(validation.Errors{"type": errors.New("no item type with this slug in the group")})
+		jsErr := NewUnprocessableEntityError(validation.Errors{
+			"data": validation.Errors{"attributes": validation.Errors{
+				"type": validation.NewError(itemTypeUnknownFieldCode, "no item type with this slug in the group"),
+			}},
+		})
 		jsErr.Code = itemTypeUnknownCode
 		return jsErr, true
 	case errors.Is(err, registry.ErrItemTypeInUse):
@@ -166,13 +184,14 @@ func (*itemTypesAPI) getItemType(w http.ResponseWriter, r *http.Request) { //rev
 // @Summary Create an item type
 // @Description The name is required and unique in the group, ignoring case and runs of spaces; a built-in type that keeps its default name holds its English name.
 // @Description The slug items store is made from the name and never changes. The icon, when set, is a Lucide icon name in kebab case.
+// @Description A group keeps at most 100 item types; a create beyond that is refused with 409 item_type.limit.
 // @Tags item-types
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param itemType body jsonapi.ItemTypeRequest true "Item type object"
 // @Success 201 {object} jsonapi.ItemTypeResponse "Item type created"
-// @Failure 409 {object} jsonapi.Errors "Another item type of the group has this name"
+// @Failure 409 {object} jsonapi.Errors "Another item type of the group has this name, or the group has 100 item types"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/item-types [post].
 func (*itemTypesAPI) createItemType(w http.ResponseWriter, r *http.Request) {
