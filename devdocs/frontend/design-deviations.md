@@ -593,6 +593,26 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2802 by the 2026-11-24 goal to implement the open enhancements; icon picker, Built-in badge, Trash count and empty-name rule agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
 
+### Custom fields
+
+#### 2026-11-25 — Custom fields page
+
+- **Issue/PR**: #2803 / PR (custom fields, part 2)
+- **Mock**: none. The closest view is [`design-mocks/src/views/TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx): a page header, a search box and a card of rows with a label, a usage line and edit / delete actions on hover.
+- **Reality**: `frontend/src/pages/customFields/CustomFieldsListPage.tsx` at `/g/:slug/custom-fields` follows the Item types page: a `PageHeader` with **New field**, a search box that filters by name on the client (`?q=`), and a card of `CustomFieldRow`s with the field's name, a secondary badge with its type, a usage line ("N options · N items · N in Trash") and edit / delete buttons on hover. `CustomFieldFormDialog` takes a name and a type (a `Select`, disabled with a hint when editing, since the type never changes) and, for a select field, a list of option inputs with **Add option** and a remove button each; an option in use shows its item count, and removing such options shows how many items lose their value on save. `CustomFieldDeleteDialog` confirms the delete of an unused field; for a field items have values for, Trash included, it states the count and enables **Delete field** only after the **Delete the values too** checkbox is ticked. A 409 from values written meanwhile shows the new count and asks again. The sidebar's Group section and the command palette list the page after Item types, with the `ListPlus` icon.
+- **Why**: not present in mock. #2803 asks for group-defined fields with a fixed type and a delete that confirms with the usage count. The option usage counts, the removed-options warning, the checkbox confirmation and the icon are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2803 by the 2026-11-24 goal to implement the open enhancements; option usage counts, removed-options warning, checkbox confirmation and icon agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds a custom fields view.
+
+#### 2026-11-25 — Custom fields in the item forms, on the item page and in the insurance report
+
+- **Issue/PR**: #2803 / PR (custom fields, part 2)
+- **Mock**: `ItemEditForm` in [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has the sections Identity, Location, Purchase, Warranty and Notes & Tags; [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has the fixed Extras step; the item's Details tab and the insurance report's ItemReport list fixed fields. None has custom fields.
+- **Reality**: when the group has custom fields, `CommodityEditForm` adds a **Custom fields** section after Notes & Tags and the step-by-step form adds a bordered **Custom fields** block at the end of its Extras step, both rendering `CustomFieldsEditor`: the fields the item has a value for, one input each (`Input`, `Textarea`, a `Select` for select and yes/no, a date input, an amount with a compact `CurrencyCombobox`, and for a link the `ItemLinkPicker`, a Popover + Command that searches the group's items like `CurrencyCombobox`), each with a ghost **×** that takes the field off the item; an **Add field** dropdown lists the group's other fields with their types, followed by a **Manage custom fields** link to the settings page. Values are checked as the server checks them, and a 422 under `custom_fields.<id>` shows under its field. The Details tab lists the fields the item has a value for as `DetailRow`s with the `ListPlus` icon, after the other fields; a link shows the linked item's name as a link, or its name with an outline "in Trash" badge and no link when it is in the Trash. The single-item insurance report adds the same values to its Item Details grid. The AI scan review lists the custom field values read as review rows named after the field.
+- **Why**: not present in mock. #2803 asks for custom fields in the item form and on the item page, and covers AI scan and reports. Showing only the fields an item has a value for, with an add menu, the manage link, yes/no as a select (so "no" differs from no value), the "in Trash" badge, the insurance report rows and the AI review rows are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2803 by the 2026-11-24 goal to implement the open enhancements; the add menu, manage link, yes/no select, "in Trash" badge, insurance report rows and AI review rows agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds custom fields to the item views.
+
 ### Forms & Validation
 
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions

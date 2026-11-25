@@ -124,6 +124,7 @@ see [Warranties, loans & maintenance](../warranties-loans-maintenance/).
 | **Tags** | Pick from the list or type your own and press Enter or comma. See [Tags](../tags/). |
 | **Extra serial numbers** | For multi-component products that carry several. |
 | **Part numbers** | Manufacturer part numbers, useful when reordering parts. |
+| **Custom fields** | Your group's own fields, when it has any. Pick **Add field** to fill one in. See [Custom fields](../custom-fields/). |
 
 ### Files
 
@@ -276,6 +277,8 @@ grouped into sections:
   Click a tag to add it, click it again to remove it. To add a tag the group
   doesn't have yet, type it in the box under the tags and press Enter or
   **Add**.
+- **Custom fields** — when the group has [custom fields](../custom-fields/),
+  the ones the item has a value for, and **Add field** for the others.
 
 **Save changes** and **Cancel** stay at the bottom of the view while you
 scroll. The arrow at the top also leaves the form. If you have unsaved changes,
