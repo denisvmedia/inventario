@@ -8,7 +8,10 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"ptah.run/core/goschema"
+	"ptah.run/core/schemamodel"
 	"ptah.run/dbschema"
+	"ptah.run/engine"
+	"ptah.run/engine/builtin"
 	"ptah.run/migration/schemadiff"
 
 	"go.5x5.cz/inventario/schema/migrations/migrator"
@@ -30,8 +33,7 @@ func TestSchemaDriftDetection(t *testing.T) {
 	modelsDir, err := filepath.Abs("../../models")
 	c.Assert(err, qt.IsNil)
 
-	goSchema, err := goschema.ParseDir(modelsDir)
-	c.Assert(err, qt.IsNil)
+	goSchema := parseModels(c, modelsDir)
 
 	// Connect to database and read current schema
 	conn, err := dbschema.ConnectToDatabase(t.Context(), dbURL)
@@ -42,7 +44,8 @@ func TestSchemaDriftDetection(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Compare schemas
-	diff := schemadiff.Compare(goSchema, dbSchema)
+	diff, err := schemadiff.Compare(t.Context(), goSchema, dbSchema, bundledRuntime(c))
+	c.Assert(err, qt.IsNil)
 
 	// Test should pass if there are no differences
 	if diff.HasChanges() {
@@ -50,16 +53,12 @@ func TestSchemaDriftDetection(t *testing.T) {
 			"Tables added: %d\n"+
 			"Tables removed: %d\n"+
 			"Tables modified: %d\n"+
-			"Indexes added: %d\n"+
-			"Indexes removed: %d\n"+
 			"Enums added: %d\n"+
 			"Enums removed: %d\n"+
 			"Run 'inventario migrate generate' to create migration files for these changes.",
 			len(diff.TablesAdded),
 			len(diff.TablesRemoved),
 			len(diff.TablesModified),
-			len(diff.IndexesAdded),
-			len(diff.IndexesRemoved),
 			len(diff.EnumsAdded),
 			len(diff.EnumsRemoved))
 	}
@@ -91,8 +90,7 @@ func TestMigrationFilesSyncWithAnnotations(t *testing.T) {
 	modelsDir, err := filepath.Abs("../../models")
 	c.Assert(err, qt.IsNil)
 
-	goSchema, err := goschema.ParseDir(modelsDir)
-	c.Assert(err, qt.IsNil)
+	goSchema := parseModels(c, modelsDir)
 
 	// Read the database schema after migration
 	conn, err := dbschema.ConnectToDatabase(t.Context(), testDBURL)
@@ -103,7 +101,8 @@ func TestMigrationFilesSyncWithAnnotations(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	// Compare schemas - they should match
-	diff := schemadiff.Compare(goSchema, dbSchema)
+	diff, err := schemadiff.Compare(t.Context(), goSchema, dbSchema, bundledRuntime(c))
+	c.Assert(err, qt.IsNil)
 
 	if diff.HasChanges() {
 		t.Errorf("Migration files do not result in schema matching Go annotations!\n"+
@@ -126,8 +125,7 @@ func TestPtahIndexSupport(t *testing.T) {
 	modelsDir, err := filepath.Abs("../../models")
 	c.Assert(err, qt.IsNil)
 
-	goSchema, err := goschema.ParseDir(modelsDir)
-	c.Assert(err, qt.IsNil)
+	goSchema := parseModels(c, modelsDir)
 
 	// Log what indexes Ptah found
 	t.Logf("Ptah detected %d indexes:", len(goSchema.Indexes))
@@ -166,6 +164,23 @@ func TestPtahIndexSupport(t *testing.T) {
 		t.Logf("WARNING: Ptah is not detecting these PostgreSQL-specific indexes: %v", missingIndexes)
 		t.Logf("This indicates limitations in Ptah's index annotation parsing.")
 	}
+}
+
+// bundledRuntime returns the runtime the ptah CLI uses, with every bundled
+// feature service the schema comparison may need.
+func bundledRuntime(c *qt.C) *engine.Runtime {
+	runtime, err := builtin.New()
+	c.Assert(err, qt.IsNil)
+	return runtime
+}
+
+// parseModels parses the Go entities with the bundled annotation owners.
+func parseModels(c *qt.C, modelsDir string) *schemamodel.Database {
+	annotations, err := builtin.Annotations()
+	c.Assert(err, qt.IsNil)
+	goSchema, err := goschema.ParseDir(annotations, modelsDir)
+	c.Assert(err, qt.IsNil)
+	return goSchema
 }
 
 // Helper functions for test database management
