@@ -69,7 +69,7 @@ function setup() {
     () => ({
       group: useCurrentGroup(),
       create: useCreateCommodity(),
-      update: useUpdateCommodity("c1"),
+      update: useUpdateCommodity(),
       remove: useDeleteCommodity(),
       bulkDelete: useBulkDeleteCommodities(),
     }),
@@ -106,7 +106,8 @@ describe("commodity writes refresh the seller counts", () => {
     ],
     [
       "update",
-      (r: ReturnType<typeof setup>["result"]) => r.current.update.mutateAsync({ seller_id: "s2" }),
+      (r: ReturnType<typeof setup>["result"]) =>
+        r.current.update.mutateAsync({ id: "c1", values: { seller_id: "s2" } }),
     ],
     ["delete", (r: ReturnType<typeof setup>["result"]) => r.current.remove.mutateAsync("c1")],
     [

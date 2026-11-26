@@ -54,6 +54,9 @@ type commoditiesAPI struct {
 // @Param tag_mode query string false "How tags combine: all (default) or any" Enums(all,any)
 // @Param tags_exclude query []string false "Only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
 // @Param no_tags query bool false "Only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
+// @Param no_purchase_price query bool false "Only items whose purchase price is unknown; a known zero is a price"
+// @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
 // @Param cf query []string false "Custom field condition as <field id>:<op>[:<value>], op one of set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field the group does not have matches no item" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true; false hides them)"
 // @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.<field id> for a custom field (items without a value last); prefix with '-' for descending"
@@ -169,6 +172,9 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 // @Param tag_mode query string false "Validated as for GET /commodities, then set aside for the counts" Enums(all,any)
 // @Param tags_exclude query []string false "Validated as for GET /commodities, then set aside for the counts" collectionFormat(multi)
 // @Param no_tags query bool false "Validated as for GET /commodities, then set aside for the counts"
+// @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
+// @Param no_purchase_price query bool false "Only items whose purchase price is unknown"
+// @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
 // @Param cf query []string false "Custom field condition, as for GET /commodities" collectionFormat(multi)
 // @Param sort query string false "Accepted and ignored"
 // @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
@@ -583,8 +589,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // for a commodity (issue #1451 option B). The body's `attributes.file_id`
 // is either:
 //
-//   - a non-empty string — must reference a file that is linked to this
-//     commodity and is an image. The handler validates
+//   - a non-empty string — must reference a file that is attached to this
+//     commodity among its photos and is an image. The handler validates
 //     and persists `commodities.cover_file_id`.
 //   - `null` or empty — clears the override. The first-photo path takes
 //     over on the next read.
@@ -595,8 +601,8 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Summary Set or clear the commodity cover photo
 // @Description Sets the explicit cover-photo override (issue #1451 option B)
 // @Description or clears it when `attributes.file_id` is null/empty. The
-// @Description file must already be attached to this commodity and be an
-// @Description image.
+// @Description file must already be attached to this commodity among its
+// @Description photos and be an image.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -694,6 +700,93 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	}
 }
 
+// setCommodityDraftMark sets or clears the draft mark of an item and leaves
+// the rest of it as it is. A full PUT built from an earlier read would write
+// back every other field as that read had it, undoing an edit that landed in
+// between; this write changes the mark alone, under the item's row lock. The
+// item as it will be stored must pass the checks a full save runs, so an
+// item that is not complete enough to be reviewed keeps its mark.
+//
+// @Summary Mark an item as draft or as reviewed
+// @Description Sets (`true`) or clears (`false`) the draft mark of an item
+// @Description and changes no other field. The item with the new mark must
+// @Description pass the validation a full update runs.
+// @Tags commodities
+// @Accept json-api
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Param commodityID path string true "Commodity ID"
+// @Param body body jsonapi.CommodityDraftMarkRequest true "The draft mark"
+// @Success 200 {object} jsonapi.CommodityResponse "OK"
+// @Failure 404 {object} jsonapi.Errors "Commodity not found"
+// @Failure 422 {object} jsonapi.Errors "User-side request problem"
+// @Router /g/{groupSlug}/commodities/{commodityID}/draft [patch].
+func (api *commoditiesAPI) setCommodityDraftMark(w http.ResponseWriter, r *http.Request) {
+	registrySet := RegistrySetFromContext(r.Context())
+	if registrySet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+
+	rWithCurrency, err := requestWithGroupCurrency(r)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	r = rWithCurrency
+
+	commodity := commodityFromContext(r.Context())
+	if commodity == nil {
+		unprocessableEntityError(w, r, errors.New("commodity not found in context"))
+		return
+	}
+
+	var input jsonapi.CommodityDraftMarkRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	ctx := r.Context()
+	check := func(next models.Commodity) error {
+		// Checked as a full save would see it: a legacy zero price that
+		// save echoes back is stored as unknown.
+		stored := next
+		next.UnsetEchoedLegacyZeros(&stored)
+		err := next.ValidateWithContext(ctx)
+		if verrs, ok := errors.AsType[validation.Errors](err); ok {
+			// Nested as the body of a full update nests them, so a client
+			// reads the refused fields the same way from either write.
+			return validation.Errors{"data": validation.Errors{"attributes": verrs}}
+		}
+		return err
+	}
+	// The event compares the item as the write found it under its lock, so
+	// a change that landed after the middleware's read is not recorded as
+	// part of this one.
+	before, updated, err := registrySet.CommodityRegistry.SetDraft(ctx, commodity.ID, *input.Data.Attributes.Draft, check)
+	if err != nil {
+		if _, ok := errors.AsType[validation.Errors](err); ok {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		if _, ok := errors.AsType[validation.Error](err); ok {
+			unprocessableEntityError(w, r, err)
+			return
+		}
+		renderEntityError(w, r, err)
+		return
+	}
+
+	api.eventService.EmitUpdated(ctx, before, updated)
+
+	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
 // validateCoverFile rejects file ids that don't satisfy the cover
 // invariants: must exist, must already belong to this commodity, must
 // be an image. Mirrors the same checks the resolver applies on read so
@@ -710,8 +803,14 @@ func (api *commoditiesAPI) validateCoverFile(ctx context.Context, fileReg regist
 	if file == nil || file.File == nil {
 		return registry.ErrNotFound
 	}
-	if file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
+	link := file.LinkTo(models.FileLinkCommodity, commodityID)
+	if link == nil {
 		return validationError("file_id", "file is not attached to this commodity")
+	}
+	// A cover is one of the item's photos: the attachments in its images
+	// bucket, which the No photo filter counts as well.
+	if link.Meta != models.FileLinkMetaImages {
+		return validationError("file_id", "file is not attached to this commodity as a photo")
 	}
 	// Cover photos live in the `images` bucket only — both `Type=image`
 	// (MIME-derived, drives thumbnailing) and `Category=images` (user-
@@ -772,6 +871,7 @@ func Commodities(params Params) func(r chi.Router) {
 			r.Put("/", api.updateCommodity)                       // PUT /commodities/123
 			r.Delete("/", api.deleteCommodity)                    // DELETE /commodities/123
 			r.Patch("/cover", api.setCommodityCover)              // PATCH /commodities/123/cover
+			r.Patch("/draft", api.setCommodityDraftMark)          // PATCH /commodities/123/draft
 			r.Route("/loans", CommodityLoans(params))             // /commodities/123/loans (#1452)
 			r.Route("/services", CommodityServices(params))       // /commodities/123/services (#1508)
 			r.Route("/supplies", CommoditySupplyLinks(params))    // /commodities/123/supplies (#1369)

@@ -271,6 +271,33 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
   files: [],
 }
 
+// resumeStep is the step a resumed server draft opens on (#2794), so Continue
+// picks up where the draft was left instead of walking every step again: the
+// first step with a field the form refuses (`refused`: the form marks those
+// fields as it opens), else the step after the last one the draft holds
+// values on. The earlier steps stay one click away, on the stepper and with
+// Back.
+function resumeStep(
+  schema: ReturnType<typeof buildCommoditySchema>,
+  values: CommodityFormInput,
+  defaults: CommodityFormInput
+): { step: FormStepKey; refused: boolean } {
+  const parsed = schema.safeParse(values)
+  if (!parsed.success) {
+    const failing = new Set(parsed.error.issues.map((issue) => String(issue.path[0])))
+    const invalid = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
+    if (invalid) return { step: invalid, refused: true }
+  }
+  let lastFilled = -1
+  FORM_STEPS.forEach((s, i) => {
+    const filled = STEP_FIELDS[s].some(
+      (f) => f !== "draft" && JSON.stringify(values[f]) !== JSON.stringify(defaults[f])
+    )
+    if (filled) lastFilled = i
+  })
+  return { step: FORM_STEPS[Math.min(lastFilled + 1, FORM_STEPS.length - 1)], refused: false }
+}
+
 // CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
 // steps mirror the design mock: Basics → Purchase → Warranty → Extras
 // → Files. Files still renders a `ComingSoonBanner` because the unified
@@ -506,7 +533,19 @@ export function CommodityFormDialog({
     if (openDraft && baseRevision && localKey) writeBaseRevision(localKey, baseRevision)
     setDraftSave({ kind: "idle" })
     setRestoredUnsaved(serverMode && unsaved)
-    setStep(initialStep)
+    if (resumeId) {
+      // A resumed draft opens on the step it still needs, with the steps
+      // before it shown as visited. A step it opens on because of a field
+      // the form refuses shows that field marked, as Next would.
+      const resume = openDraft ? resumeStep(schema, starting, defaults) : null
+      const landing = resume ? resume.step : initialStep
+      const reached = FORM_STEPS.indexOf(landing as FormStepKey)
+      setStep(landing)
+      setVisitedSteps(new Set(reached > 0 ? FORM_STEPS.slice(0, reached + 1) : openingVisitedSteps))
+      if (resume?.refused) void trigger(STEP_FIELDS[resume.step])
+    } else {
+      setStep(initialStep)
+    }
     setServerError(null)
     // A seller the scan of a batch read but the group lacks is offered on
     // the Purchase step, as after a scan in this form.
@@ -562,6 +601,9 @@ export function CommodityFormDialog({
     resumeLoading,
     resumed,
     serverMode,
+    schema,
+    openingVisitedSteps,
+    trigger,
   ])
 
   // Mark each form step visited the moment we land on it. The
@@ -581,21 +623,29 @@ export function CommodityFormDialog({
   // explicitly resets to Basics so its visited set should be a fresh
   // singleton; reopening for a new commodity should also start clean.
 
+  // A resumed draft sets its own once it has loaded (the reset effect above).
   useEffect(() => {
-    if (!open) return
+    if (!open || resumeId) return
     setVisitedSteps(new Set(openingVisitedSteps))
-  }, [open, openingVisitedSteps])
+  }, [open, openingVisitedSteps, resumeId])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
-  // of typing doesn't write to storage on every keystroke.
+  // of typing doesn't write to storage on every keystroke. A write still
+  // waiting when the dialog closes is dropped: the save and discard paths
+  // clear the stored draft before closing, and a late write would put the
+  // closed form's values back.
   useEffect(() => {
     if (!open || !persistDrafts || !localKey) return
+    let frame = 0
     const subscription = watch((values) => {
-      const id = window.requestAnimationFrame(() => writeDraft(localKey, values))
-      return () => window.cancelAnimationFrame(id)
+      window.cancelAnimationFrame(frame)
+      frame = window.requestAnimationFrame(() => writeDraft(localKey, values))
     })
-    return () => subscription.unsubscribe()
+    return () => {
+      subscription.unsubscribe()
+      window.cancelAnimationFrame(frame)
+    }
   }, [open, persistDrafts, localKey, watch])
 
   // The short name follows the name until the user types one (#2812), so

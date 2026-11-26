@@ -241,6 +241,22 @@ type CommodityListOptions struct {
 	// sets IncludeInactive with it; without it nothing matches. It is not
 	// part of the item query contract: the inbox reads it (#2794).
 	DraftsOnly bool
+	// NoPhoto keeps the items without a photo: no live file in the item's
+	// images bucket with Type=image and Category=images, the files
+	// FirstPhotos picks a cover from. Postgres applies it as a NOT EXISTS
+	// subquery on the file links; memory reads PhotoCommodityIDs. The files
+	// of an item in Trash are in Trash too, so a caller does not combine it
+	// with Trashed (services/commodityquery refuses the pair).
+	NoPhoto bool
+	// PhotoCommodityIDs is the pre-resolved set of the group's item IDs
+	// that have a photo, for a backend that is not a NativePhotoFilterer.
+	// Callers populate it iff NoPhoto is set; postgres ignores it.
+	PhotoCommodityIDs []string
+	// NoPurchasePrice keeps the items whose purchase price (OriginalPrice)
+	// is unknown. A known zero is a price and does not match (#2813).
+	NoPurchasePrice bool
+	// NoPurchaseDate keeps the items whose purchase date is unknown.
+	NoPurchaseDate bool
 }
 
 // CommodityEventListOptions narrows the result of CommodityEventRegistry.ListByCommodity.
@@ -408,6 +424,17 @@ type CommodityRegistry interface {
 	// the item does not exist or is live.
 	Restore(ctx context.Context, id string) (*models.Commodity, error)
 
+	// SetDraft sets or clears the draft mark of a live item and writes no
+	// other column. It reads and writes the item under the item's row lock,
+	// so it and an Update of the same item run one after the other and
+	// neither undoes the other's change. check, when not nil, receives the
+	// item as it will be stored, under that lock; an error from it is
+	// returned as is and nothing is written. It returns the item as it was
+	// under the lock and as it is stored after the write, so a caller that
+	// records what changed compares the two and not an earlier read.
+	// ErrNotFound when the item does not exist or is in Trash.
+	SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error)
+
 	// PurgeTrashed deletes the row of a trashed item; its loans, service
 	// records, maintenance schedules, supply links and events go with it
 	// through ON DELETE CASCADE. It never deletes a live item, so a purge
@@ -520,6 +547,16 @@ type NativeLentOutFilterer interface {
 	// signal capability by defining the method; callers only ever
 	// check the type assertion, never call the method directly.
 	SupportsNativeLentOutFilter()
+}
+
+// NativePhotoFilterer is the capability marker of a CommodityRegistry that
+// resolves CommodityListOptions.NoPhoto in the database, as postgres does
+// with a NOT EXISTS subquery on the file links. Callers pre-resolve
+// PhotoCommodityIDs from FileRegistry.CommodityIDsWithPhotos only for a
+// backend without it. As with NativeLentOutFilterer, the type assertion is
+// the gate and the method is never called.
+type NativePhotoFilterer interface {
+	SupportsNativePhotoFilter()
 }
 
 type LocationRegistry interface {
@@ -661,6 +698,13 @@ type FileRegistry interface {
 	// Category=images; the oldest by created_at wins, the lowest id on a
 	// tie. Items without a photo are absent from the map.
 	FirstPhotos(ctx context.Context, commodityIDs []string) (map[string]*models.FileEntity, error)
+
+	// CommodityIDsWithPhotos returns the ID of every item of the group that
+	// has a photo in the sense of FirstPhotos, live items and items in
+	// Trash alike, each once and in no particular order. It backs the
+	// NoPhoto filter of a CommodityRegistry that is not a
+	// NativePhotoFilterer.
+	CommodityIDsWithPhotos(ctx context.Context) ([]string, error)
 
 	// AddLink attaches a file to an entity. FileID, EntityType, EntityID and
 	// Meta come from the argument; the registry sets the ids, tenant, group,

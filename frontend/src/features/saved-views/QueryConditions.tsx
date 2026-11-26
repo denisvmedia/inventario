@@ -118,6 +118,21 @@ export function QueryConditions({
   if (query.tags.untagged) {
     chips.push({ key: "untagged", label: t("commodities:savedViews.conditions.untagged") })
   }
+  if (query.noPhoto) {
+    chips.push({ key: "noPhoto", label: t("commodities:filter.missingOptions.noPhoto") })
+  }
+  if (query.noPurchasePrice) {
+    chips.push({
+      key: "noPurchasePrice",
+      label: t("commodities:filter.missingOptions.noPurchasePrice"),
+    })
+  }
+  if (query.noPurchaseDate) {
+    chips.push({
+      key: "noPurchaseDate",
+      label: t("commodities:filter.missingOptions.noPurchaseDate"),
+    })
+  }
   // A condition on a deleted custom field reads "Deleted field".
   for (const raw of query.customFields) {
     const { label, stale } = customFieldConditionLabel(t, raw, customFields)

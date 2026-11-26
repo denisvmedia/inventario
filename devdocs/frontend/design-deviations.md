@@ -419,6 +419,51 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the Missing details section, Undo and the page size agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
 
+#### 2026-11-25 — Missing filter on the items list toolbar
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has no filter for missing details.
+- **Reality**: `MissingFilterMenu` in `frontend/src/pages/commodities/CommoditiesListPage.tsx`, after the **No location** toggle: an outline small `DropdownMenu` button "Missing" with a `ListFilter` icon, a count `Badge` and a chevron, filled while a choice is on, built like the Warranty menu. Its `DropdownMenuCheckboxItem`s are **No photo**, **No purchase price** and **No purchase date**; they combine with AND and are kept in the page URL (`no_photo=1` and so on). Saved views show them as condition chips.
+- **Why**: not present in mock. #2794 asks for missing photo, price and purchase date as optional quality views, separate from the inbox. One menu keeps the toolbar from growing by three toggles.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; grouping the three in one menu agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws these filters.
+
+#### 2026-11-25 — Counts in the inbox's Missing details card
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: none, as for the Inbox page above.
+- **Reality**: The **Missing details** `Card` on the Inbox page lists five links (**Items without a location**, **without a photo**, **without a purchase price**, **without a purchase date**, **without tags**), each with a `Badge` that holds the number of items the link shows (secondary when above zero, outline at zero). The links and counts come from `GET /inbox/checks`; skeleton rows show while it loads and a retry row on failure.
+- **Why**: #2794 asks for missing-data views that stay separate from the inbox count. The counts say which list is worth opening without adding to the inbox. The badges are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the badges agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
+#### 2026-11-25 — Review bar on an item opened from the inbox
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) has no review state and no strip under the header; the mock has no inbox.
+- **Reality**: `frontend/src/components/items/InboxReviewBar.tsx` renders a bordered `bg-card` row on the item page and in the side panel, under the Previous / Next strip, when the item was opened from the inbox (`?from=/g/<slug>/inbox?reason=item_draft`), is marked as draft, and the member may edit: a `ListChecks` icon, "Item 2 of 4 to review" with the inbox's hint for items marked as draft, a ghost small **Skip** (only while a next item exists) and a primary small **Mark as reviewed**. Mark as reviewed clears the draft mark, shows the inbox's toast with Undo and opens the next item from the list as read after the save: the one that followed this one while the list still holds it, else the one now in this one's place, or the inbox when none is left. It stays on the item when a field, a dialog or a confirm was opened on it in the meantime. Both buttons are disabled while the list loads or the item saves, and Mark as reviewed also while a field of the Details tab is open (its tooltip says to save or cancel it). The back link reads "Back to inbox". Previous / Next and Save and next walk the inbox's Items to review list, reusing `useListNavigation`.
+- **Why**: #2794 asks to walk the items to review one after another without going back to the inbox after each one. The bar keeps the review step next to the item's own editing surfaces (#2795). The bar's layout follows the Items page's inbox notice; Skip is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; Skip agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws a review state for the item page.
+
+#### 2026-11-25 — Review one by one on the inbox
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: none, as for the Inbox page above.
+- **Reality**: The Inbox page header carries a primary **Review one by one** button (`ListChecks` icon) while there are items to review and the member may edit. It loads the first page of the Items to review list and opens its first item over the inbox, with the list as the item's `?from=` context. Item rows on every tab carry the same context, on the Items to review page that holds the item; rows of the previous page, kept on screen while the next one loads, open the item without it.
+- **Why**: #2794 asks for a way through the items to review without the list in between. The button is the entry point to the review bar above.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the header button agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
+#### 2026-11-25 — A continued draft opens on the step it still needs
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) always starts on the first step; it has no continued draft.
+- **Reality**: A draft opened with **Continue** opens on the first step that still needs input instead of Basics, as the entry "Server drafts in the Add item dialog" above describes it: the first step with a field the form refuses, with that field marked as Next would mark it, else the step after the last one with values. The steps before it are marked visited on the stepper and stay one click away, and **Back** works as on any step.
+- **Why**: #2794 asks that Continue does not repeat the wizard. The form keeps no record of the step a draft was saved on, so the values decide the step.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the landing rule is asked for by #2794, marking the refused field agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws a continued draft.
+
 #### 2026-11-25 — Inbox notice on the Items page instead of a Drafts filter
 
 - **Issue/PR**: #2794 / PR #2867
@@ -446,6 +491,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reality**: `frontend/src/components/dashboard/NeedsAttentionCard.tsx` renders between the stat cards and the saved views, only while the inbox is not empty: a full-width bordered link row with an `Inbox` icon tile, "Needs attention: N" from the server's inbox count, the summary ("2 drafts to finish · 1 item to review") and "Open inbox" with a chevron. The four stat cards stay as the mock draws them.
 - **Why**: not present in mock. #2794 asks for a "Needs attention: N" card. It is a row rather than a fifth stat card so the mock's four-card grid stays intact. Hiding it while the inbox is empty and the summary line are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the placement, hiding at zero and the summary agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card.
+
+#### 2026-11-25 — Error row on the dashboard's Needs attention card
+
+- **Issue/PR**: #2794 / PR (part 2 of #2794)
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) has no inbox card, so no error state for one.
+- **Reality**: When the inbox count fails to load, the place of the Needs attention card (entry above) holds the same bordered row, not a link and with `role="alert"`: an `AlertCircle` tile in destructive tones, "The inbox count could not be loaded.", an outline small **Retry** and a ghost small **Open inbox** link.
+- **Why**: A hidden card looked the same as an empty inbox. The row is the card's own anatomy with the error copy; Retry and the link are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; Retry and the link agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws the card.
 
 #### 2026-11-25 — Saved view cards and suggested views on the dashboard

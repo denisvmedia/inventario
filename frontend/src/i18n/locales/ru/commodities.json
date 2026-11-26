@@ -369,6 +369,12 @@
     "inactiveHidden": "Скрыть неактивные",
     "inactiveShown": "Показаны неактивные",
     "lentOut": "Выдано",
+    "missing": "Не указано",
+    "missingOptions": {
+      "noPhoto": "Без фото",
+      "noPurchasePrice": "Без цены покупки",
+      "noPurchaseDate": "Без даты покупки"
+    },
     "seller": "Продавец",
     "sellerUnknown": "Удалённый продавец",
     "status": "Статус",

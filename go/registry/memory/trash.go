@@ -175,8 +175,27 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 	if next.AreaID != nil && *next.AreaID != "" {
 		_ = r.areaRegistry.DeleteCommodity(ctx, *next.AreaID, id)
 	}
-	out := next
-	return &out, nil
+	return copyOut(&next), nil
+}
+
+// SetDraft sets or clears the draft mark of a live item. It holds the lock
+// Update takes for its read and write, so the two run one after the other.
+func (r *CommodityRegistry) SetDraft(_ context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	c, ok := r.items.Get(id)
+	if !ok || !r.isItemVisible(c) || c.IsTrashed() {
+		return nil, nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
+	}
+	next := copyOut(c)
+	next.Draft = draft
+	if check != nil {
+		if err := check(*copyOut(next)); err != nil {
+			return nil, nil, err
+		}
+	}
+	r.items.Set(id, next)
+	return copyOut(c), copyOut(next), nil
 }
 
 // Restore makes a trashed item live again. An item whose area was deleted
@@ -217,8 +236,7 @@ func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Com
 	if areaExists {
 		_ = r.areaRegistry.AddCommodity(ctx, areaID, id)
 	}
-	out := next
-	return &out, nil
+	return copyOut(&next), nil
 }
 
 // PurgeTrashed deletes a trashed item's row, and the links other items have

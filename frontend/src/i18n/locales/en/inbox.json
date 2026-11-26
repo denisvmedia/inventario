@@ -1,6 +1,7 @@
 {
   "continueLabel": "Continue: {{title}}",
   "dashboard": {
+    "error": "The inbox count could not be loaded.",
     "title": "Needs attention: {{total}}"
   },
   "empty": {
@@ -15,8 +16,11 @@
   "markReviewed": "Mark as reviewed",
   "markReviewedLabel": "Mark as reviewed: {{title}}",
   "missing": {
-    "description": "Optional checks. An unknown detail does not make an item unfinished, so these lists stay out of the inbox and its count.",
+    "description": "Optional checks. A missing detail does not make an item unfinished, so these lists stay out of the inbox and its count. An unknown price or date counts as missing even after review.",
     "noLocation": "Items without a location",
+    "noPhoto": "Items without a photo",
+    "noPurchaseDate": "Items without a purchase date",
+    "noPurchasePrice": "Items without a purchase price",
     "title": "Missing details",
     "untagged": "Items without tags"
   },
@@ -53,5 +57,14 @@
   },
   "title": "Inbox",
   "undo": "Undo",
-  "undoFailed": "The item could not be marked as draft again."
+  "undoFailed": "The item could not be marked as draft again.",
+  "walk": {
+    "back": "Back to inbox",
+    "failed": "The items to review could not be loaded.",
+    "finishEdit": "Save or cancel the open edit first.",
+    "label": "Review",
+    "position": "Item {{position}} of {{total}} to review",
+    "skip": "Skip",
+    "start": "Review one by one"
+  }
 }

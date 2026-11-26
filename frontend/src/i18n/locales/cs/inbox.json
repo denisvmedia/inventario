@@ -1,6 +1,7 @@
 {
   "continueLabel": "Pokračovat: {{title}}",
   "dashboard": {
+    "error": "Počet položek ve schránce se nepodařilo načíst.",
     "title": "Vyžaduje pozornost: {{total}}"
   },
   "empty": {
@@ -17,8 +18,11 @@
   "markReviewed": "Označit jako zkontrolovanou",
   "markReviewedLabel": "Označit jako zkontrolovanou: {{title}}",
   "missing": {
-    "description": "Volitelné kontroly. Neznámý údaj neznamená, že položka není dokončená, proto tyto seznamy nejsou součástí schránky ani jejího počtu.",
+    "description": "Volitelné kontroly. Chybějící údaj neznamená, že položka není dokončená, proto tyto seznamy nejsou ve schránce ani v jejím počtu. Neznámá cena nebo datum se počítá jako chybějící i po kontrole.",
     "noLocation": "Položky bez umístění",
+    "noPhoto": "Položky bez fotografie",
+    "noPurchaseDate": "Položky bez data nákupu",
+    "noPurchasePrice": "Položky bez kupní ceny",
     "title": "Chybějící údaje",
     "untagged": "Položky bez štítků"
   },
@@ -63,5 +67,14 @@
   },
   "title": "Schránka",
   "undo": "Zpět",
-  "undoFailed": "Položku se nepodařilo znovu označit jako koncept."
+  "undoFailed": "Položku se nepodařilo znovu označit jako koncept.",
+  "walk": {
+    "back": "Zpět do schránky",
+    "failed": "Položky ke kontrole se nepodařilo načíst.",
+    "finishEdit": "Nejdřív uložte nebo zrušte otevřenou úpravu.",
+    "label": "Kontrola",
+    "position": "Položka {{position}} z {{total}} ke kontrole",
+    "skip": "Přeskočit",
+    "start": "Kontrolovat postupně"
+  }
 }

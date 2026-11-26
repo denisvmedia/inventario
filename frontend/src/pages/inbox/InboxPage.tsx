@@ -3,11 +3,15 @@ import { useTranslation } from "react-i18next"
 import { Link, useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import { useQueryClient } from "@tanstack/react-query"
 import {
+  CalendarX,
   ChevronRight,
   CircleCheck,
   CircleAlert,
+  DollarSign,
   FilePen,
+  ImageOff,
   Inbox,
+  ListChecks,
   MapPinOff,
   Package,
   Paperclip,
@@ -29,28 +33,41 @@ import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { commodityKeys } from "@/features/commodities/keys"
-import { commodityListHref, DEFAULT_COMMODITY_QUERY } from "@/features/commodities/query"
+import { commodityHref } from "@/features/commodities/listContext"
+import {
+  commodityListHref,
+  commodityQueryFromApiQuery,
+  unreadApiQueryParam,
+} from "@/features/commodities/query"
 import { useDiscardDraft } from "@/features/drafts/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useMyGroupRole } from "@/features/group/roles"
 import {
   INBOX_REASONS,
+  listInbox,
   setCommodityDraft,
   type InboxCounts,
   type InboxEntry,
   type InboxReason,
 } from "@/features/inbox/api"
-import { useInbox, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
+import { useInbox, useInboxChecks, useInboxCount, useSetItemDraft } from "@/features/inbox/hooks"
+import { inboxKeys } from "@/features/inbox/keys"
+import {
+  INBOX_PAGE_SIZE,
+  inboxReviewContext,
+  inboxReviewOptions,
+  reviewPageForAllOffset,
+} from "@/features/inbox/listContext"
 import { reviewRefusal } from "@/features/inbox/reviewRefusal"
 import { useDeleteIntakeSession } from "@/features/intake/hooks"
 import { useIntakeSummaryText } from "@/features/intake/summary"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatRelative } from "@/lib/intl"
+import type { ListContext } from "@/lib/list-context"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
-
-const PER_PAGE = 50
 
 type ReasonFilter = "all" | InboxReason
 const REASON_FILTERS: readonly ReasonFilter[] = ["all", ...INBOX_REASONS]
@@ -72,9 +89,9 @@ type TFn = ReturnType<typeof useTranslation>["t"]
 // each record once; the tabs filter by reason on the server too, so their
 // counts stay right on every page.
 //
-// Missing details (no location, no tags) are not unfinished work, so they
-// stay out of the list and its count. The section under the list links to
-// the item filters that show them.
+// Missing details (no location, photo, purchase price or date, no tags) are
+// not unfinished work, so they stay out of the list and its count. The
+// section under the list links to the item filters that show them.
 export function InboxPage() {
   const { t } = useTranslation(["inbox", "common"])
   const { currentGroup } = useCurrentGroup()
@@ -85,8 +102,11 @@ export function InboxPage() {
   const inbox = useInbox({
     reason: reason === "all" ? undefined : reason,
     page,
-    perPage: PER_PAGE,
+    perPage: INBOX_PAGE_SIZE,
   })
+  const role = useMyGroupRole()
+  // Members who may edit content; nobody while the role is still loading.
+  const canWrite = role === "user" || role === "admin" || role === "owner"
   // Every page carries the counts of the whole inbox, so the tabs read
   // them from the page on screen. While the page of a newly selected tab
   // loads there is none, so the tabs keep the sidebar's count.
@@ -115,6 +135,11 @@ export function InboxPage() {
         title={t("inbox:title")}
         subtitle={t("inbox:subtitle")}
         subtitleClassName="max-w-prose"
+        actions={
+          canWrite && (counts?.reasons.item_draft ?? 0) > 0 ? (
+            <ReviewWalkButton slug={slug} />
+          ) : null
+        }
       />
 
       <Tabs value={reason} onValueChange={setReason} data-testid="inbox-tabs">
@@ -127,13 +152,58 @@ export function InboxPage() {
         </TabsList>
         {REASON_FILTERS.map((r) => (
           <TabsContent key={r} value={r} className="mt-4">
-            <InboxList slug={slug} reason={r} page={page} onPage={setPage} inbox={inbox} />
+            <InboxList
+              slug={slug}
+              reason={r}
+              page={page}
+              onPage={setPage}
+              inbox={inbox}
+              canWrite={canWrite}
+            />
           </TabsContent>
         ))}
       </Tabs>
 
       <MissingDetails slug={slug} />
     </Page>
+  )
+}
+
+// Opens the first item to review over the inbox. Its page walks the Items to
+// review list: Mark as reviewed or Skip moves to the next item, so the list
+// can be cleared without coming back here after each one.
+function ReviewWalkButton({ slug }: { slug: string }) {
+  const { t } = useTranslation(["inbox"])
+  const navigate = useNavigate()
+  const location = useLocation()
+  const qc = useQueryClient()
+  const toast = useAppToast()
+  const guardLocation = useLocationGuard()
+
+  async function start() {
+    const opts = inboxReviewOptions(1)
+    // Opens nothing when the user left the inbox while the list loaded.
+    const stillHere = guardLocation()
+    try {
+      const first = await qc.fetchQuery({
+        queryKey: inboxKeys.list(slug, opts),
+        queryFn: ({ signal }) => listInbox(opts, signal),
+      })
+      const id = first.entries[0]?.id
+      if (!id || !stillHere()) return
+      navigate(commodityHref(slug, id, inboxReviewContext(slug)), {
+        state: { background: location },
+      })
+    } catch (err) {
+      toast.error(parseServerError(err, t("inbox:walk.failed")))
+    }
+  }
+
+  return (
+    <Button type="button" onClick={() => void start()} data-testid="inbox-review-walk">
+      <ListChecks className="size-4" aria-hidden="true" />
+      {t("inbox:walk.start")}
+    </Button>
   )
 }
 
@@ -161,15 +231,22 @@ interface InboxListProps {
   page: number
   onPage: (page: number) => void
   inbox: ReturnType<typeof useInbox>
+  canWrite: boolean
 }
 
-function InboxList({ slug, reason, page, onPage, inbox }: InboxListProps) {
+function InboxList({ slug, reason, page, onPage, inbox, canWrite }: InboxListProps) {
   const { t } = useTranslation(["inbox"])
-  const role = useMyGroupRole()
-  // Members who may edit content; nobody while the role is still loading.
-  const canWrite = role === "user" || role === "admin" || role === "owner"
   const total = inbox.data?.total ?? 0
-  const totalPages = Math.max(1, Math.ceil(total / PER_PAGE))
+  const totalPages = Math.max(1, Math.ceil(total / INBOX_PAGE_SIZE))
+  // An item opened from a row walks the Items to review list from the page
+  // that holds it (features/inbox/listContext.ts).
+  const reviewPage = (index: number) =>
+    reason === "item_draft"
+      ? page
+      : reviewPageForAllOffset(
+          (page - 1) * INBOX_PAGE_SIZE + index,
+          inbox.data?.counts.reasons ?? {}
+        )
 
   // Clearing the last entries of the last page leaves the page past the
   // end; step back to the page that now ends the list.
@@ -208,7 +285,14 @@ function InboxList({ slug, reason, page, onPage, inbox }: InboxListProps) {
           {entries.map((entry, i) => (
             <li key={`${entry.kind}-${entry.id}`}>
               {i > 0 ? <Separator /> : null}
-              <InboxRow entry={entry} slug={slug} canWrite={canWrite} />
+              <InboxRow
+                entry={entry}
+                slug={slug}
+                canWrite={canWrite}
+                reviewContext={
+                  inbox.isPlaceholderData ? null : inboxReviewContext(slug, reviewPage(i))
+                }
+              />
             </li>
           ))}
         </ul>
@@ -229,6 +313,10 @@ interface RowProps {
   entry: InboxEntry
   slug: string
   canWrite: boolean
+  // The list an item opened from the row walks; null while the rows shown
+  // are the previous page's, kept on screen while the requested one loads,
+  // since the page they would name is not theirs.
+  reviewContext: ListContext | null
 }
 
 function InboxRow(props: RowProps) {
@@ -386,14 +474,14 @@ function DraftRow({ entry, slug, canWrite }: RowProps) {
 // reviewed" clears the mark, which the server accepts only when the item
 // passes those checks. Unknown purchase data passes (#2813), so a reviewed
 // item does not come back for it.
-function ItemRow({ entry, slug, canWrite }: RowProps) {
+function ItemRow({ entry, slug, canWrite, reviewContext }: RowProps) {
   const { t } = useTranslation(["inbox"])
   const location = useLocation()
   const navigate = useNavigate()
   const toast = useAppToast()
   const qc = useQueryClient()
   const setDraft = useSetItemDraft()
-  const href = `/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(entry.id)}`
+  const href = commodityHref(slug, entry.id, reviewContext)
   const title = entry.title
 
   function openItem() {
@@ -546,28 +634,30 @@ function IntakeRow({ entry, slug, canWrite }: RowProps) {
   )
 }
 
-// Optional checks on item details. An unknown location or a missing tag is
-// not unfinished work, so these open the items list with the matching
-// filter instead of adding to the inbox.
+// The checks this client shows, in display order, with their icon and label.
+// A check a newer server added is left out.
+const MISSING_CHECKS: { key: string; icon: LucideIcon; label: (t: TFn) => string }[] = [
+  { key: "no_location", icon: MapPinOff, label: (t) => t("inbox:missing.noLocation") },
+  { key: "no_photo", icon: ImageOff, label: (t) => t("inbox:missing.noPhoto") },
+  {
+    key: "no_purchase_price",
+    icon: DollarSign,
+    label: (t) => t("inbox:missing.noPurchasePrice"),
+  },
+  { key: "no_purchase_date", icon: CalendarX, label: (t) => t("inbox:missing.noPurchaseDate") },
+  { key: "untagged", icon: Tag, label: (t) => t("inbox:missing.untagged") },
+]
+
+// Optional checks on item details. A missing location, photo, price, date
+// or tag is not unfinished work, so these open the items list with the
+// matching filter instead of adding to the inbox. The server sends each
+// check's item query and the total the list reports for it, so the count
+// next to a link is the number of items the link shows.
 function MissingDetails({ slug }: { slug: string }) {
   const { t } = useTranslation(["inbox"])
+  const checks = useInboxChecks()
   if (!slug) return null
-  const links: { key: string; icon: LucideIcon; label: string; href: string }[] = [
-    {
-      key: "no-location",
-      icon: MapPinOff,
-      label: t("inbox:missing.noLocation"),
-      href: commodityListHref(slug, { unassigned: true }),
-    },
-    {
-      key: "untagged",
-      icon: Tag,
-      label: t("inbox:missing.untagged"),
-      href: commodityListHref(slug, {
-        tags: { ...DEFAULT_COMMODITY_QUERY.tags, untagged: true },
-      }),
-    },
-  ]
+  const byKey = new Map((checks.data ?? []).map((c) => [c.key, c]))
   return (
     <Card className="gap-3 py-4" data-testid="inbox-missing">
       <CardHeader className="px-4">
@@ -578,24 +668,46 @@ function MissingDetails({ slug }: { slug: string }) {
         <CardDescription>{t("inbox:missing.description")}</CardDescription>
       </CardHeader>
       <CardContent className="px-4">
-        <ul className="divide-y divide-border">
-          {links.map((l) => {
-            const Icon = l.icon
-            return (
-              <li key={l.key}>
-                <Link
-                  to={l.href}
-                  className="flex items-center gap-3 py-2 text-sm hover:text-primary"
-                  data-testid={`inbox-missing-${l.key}`}
-                >
-                  <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
-                  <span className="flex-1">{l.label}</span>
-                  <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
-                </Link>
-              </li>
-            )
-          })}
-        </ul>
+        {checks.isError ? (
+          <ListLoadError testId="inbox-missing-error" onRetry={() => void checks.refetch()} />
+        ) : (
+          <ul className="divide-y divide-border">
+            {MISSING_CHECKS.map(({ key, icon: Icon, label }) => {
+              const check = byKey.get(key)
+              const testId = `inbox-missing-${key.replaceAll("_", "-")}`
+              if (checks.isPending) {
+                return (
+                  <li key={key} className="py-2">
+                    <Skeleton className="h-5" />
+                  </li>
+                )
+              }
+              // A check the server did not send, or whose query this
+              // client would read differently, gets no link.
+              if (!check || unreadApiQueryParam(check.query) !== undefined) return null
+              return (
+                <li key={key}>
+                  <Link
+                    to={commodityListHref(slug, commodityQueryFromApiQuery(check.query))}
+                    className="flex items-center gap-3 py-2 text-sm hover:text-primary"
+                    data-testid={testId}
+                  >
+                    <Icon className="size-4 text-muted-foreground" aria-hidden="true" />
+                    <span className="flex-1">{label(t)}</span>
+                    <Badge
+                      variant={check.count > 0 ? "secondary" : "outline"}
+                      className="tabular-nums"
+                      data-testid={`${testId}-count`}
+                    >
+                      {check.count}
+                    </Badge>
+                    <ChevronRight className="size-4 text-muted-foreground" aria-hidden="true" />
+                  </Link>
+                </li>
+              )
+            })}
+          </ul>
+        )}
       </CardContent>
     </Card>
   )

@@ -384,6 +384,12 @@
     "inactiveHidden": "Hide inactive",
     "inactiveShown": "Showing inactive",
     "lentOut": "Lent out",
+    "missing": "Missing",
+    "missingOptions": {
+      "noPhoto": "No photo",
+      "noPurchaseDate": "No purchase date",
+      "noPurchasePrice": "No purchase price"
+    },
     "seller": "Seller",
     "sellerUnknown": "Deleted seller",
     "status": "Status",
