@@ -18,6 +18,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useCommodities } from "@/features/commodities/hooks"
 import { commodityQueryToListOptions, sameCommodityQuery } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import type { SavedView } from "@/features/saved-views/api"
 import { useCreateSavedView, useSavedViewCounts, useSavedViews } from "@/features/saved-views/hooks"
 import {
@@ -228,11 +229,19 @@ function SuggestedViews({ slug, views }: SuggestedViewsProps) {
   const [dismissed, setDismissed] = useState(() => readDismissed(slug))
   const [pending, setPending] = useState<string | null>(null)
 
+  // A group that hides warranties or loans (#1607) is offered no view
+  // built on them.
+  const showWarranties = useSectionVisible("warranties")
+  const showLoans = useSectionVisible("loans")
+
   const own = views.filter((v) => v.owned)
   const isSuggestion = (v: SavedView) =>
     SUGGESTED_VIEWS.some((s) => sameCommodityQuery(savedViewQuery(s), savedViewQuery(v)))
   const remaining = SUGGESTED_VIEWS.filter(
-    (s) => !own.some((v) => sameCommodityQuery(savedViewQuery(s), savedViewQuery(v)))
+    (s) =>
+      (showWarranties || s.key !== "expiringWarranties") &&
+      (showLoans || s.key !== "lentOut") &&
+      !own.some((v) => sameCommodityQuery(savedViewQuery(s), savedViewQuery(v)))
   )
   if (dismissed || remaining.length === 0 || own.some((v) => !isSuggestion(v))) return null
 
