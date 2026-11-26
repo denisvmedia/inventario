@@ -25,7 +25,9 @@ import { cn } from "@/lib/utils"
 // (#1389): the feature is frozen and off by default. With it off the card
 // is "Usage" — the three chips without limits, and no plan name, owner
 // line, Upgrade button or subscription banner. The card waits for the
-// feature flags so it does not change shape once they land.
+// feature flags, and its skeleton takes the shape the flag gives it. While
+// the flags are still loading the skeleton assumes plans are off (the
+// default), so only a deployment with plans on sees the card grow.
 interface PlanCardProps {
   groupSlug: string | null
   ownerName: string | null
@@ -55,12 +57,12 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
     )
   }
   if (!planQuery.data || flagsQuery.isPending) {
-    return <PlanCardSkeleton className={className} />
+    return <PlanCardSkeleton withPlan={plansEnabled} className={className} />
   }
 
   const { plan, usage } = planQuery.data
   if (!plan || !usage) {
-    return <PlanCardSkeleton className={className} />
+    return <PlanCardSkeleton withPlan={plansEnabled} className={className} />
   }
 
   if (!plansEnabled) {
@@ -226,28 +228,32 @@ function UsageChip({ icon: Icon, label, value, limit, testId }: UsageChipProps) 
   )
 }
 
-function PlanCardSkeleton({ className }: { className?: string }) {
+// PlanCardSkeleton has the shape of the card it stands in for: with
+// `withPlan` the plan card (owner line, Upgrade button, banner), without it
+// the usage card (title and chips only).
+function PlanCardSkeleton({ withPlan, className }: { withPlan: boolean; className?: string }) {
   return (
     <div
       className={cn("rounded-xl border border-border bg-card p-6 space-y-4", className)}
       data-testid="plan-card-skeleton"
+      data-with-plan={withPlan ? "true" : "false"}
     >
       <div className="flex items-start justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0 flex-1">
           <Skeleton className="size-9 rounded-lg shrink-0" />
           <div className="space-y-2 flex-1">
             <Skeleton className="h-4 w-32" />
-            <Skeleton className="h-3 w-44" />
+            {withPlan ? <Skeleton className="h-3 w-44" /> : null}
           </div>
         </div>
-        <Skeleton className="h-8 w-20" />
+        {withPlan ? <Skeleton className="h-8 w-20" /> : null}
       </div>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
         <Skeleton className="h-14 w-full rounded-lg" />
         <Skeleton className="h-14 w-full rounded-lg" />
         <Skeleton className="h-14 w-full rounded-lg" />
       </div>
-      <Skeleton className="h-12 w-full rounded-lg" />
+      {withPlan ? <Skeleton className="h-12 w-full rounded-lg" /> : null}
     </div>
   )
 }
