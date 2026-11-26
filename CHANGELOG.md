@@ -14,6 +14,25 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The Collection set. A group admin or owner can add it from **Sections** in
+  the group settings: it creates the item types Art, Books, Coins, Stamps,
+  Records, Watches and Cards and the custom fields Condition (Mint, Very
+  good, Good, Fair, Poor), Catalog reference, Edition or variant, Signed,
+  Provenance, Certificate of authenticity, Appraised value and Appraisal
+  date, each offered on every one of those types. The names are English. A
+  type or field the group already has under one of these names, ignoring
+  case, is used instead of a new one and never removed. Adding again creates
+  only what is missing. Removing asks first, listing what is deleted and what
+  stays and why, and deletes only the types and fields the set created that
+  no item uses, Trash included; the group keeps its last type. The create
+  group page asks what the group is for: **Household items**, or
+  **Collection**, which creates the group with the set and with Warranties
+  hidden. `GET`, `POST` and `DELETE /groups/{groupID}/collection-set` read,
+  add and remove the set (adding and removing are admin-only and recorded in
+  the audit log), and `POST /groups` takes `collection_set` and reports the
+  outcome in `meta.collection_set`. Backups record which types and fields the
+  set created, as INB format 3.8; older backups restore as before
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
   language of the document. The scan response gains `files`, one entry per
@@ -622,6 +641,15 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- The upgrade runs one more database migration, which adds a `set_entry`
+  column to `item_types` and `custom_field_definitions`. As with the
+  `hidden_sections` column below, pods that still run the previous version
+  fail reads of item types and custom fields until they are replaced, so
+  item pages, item forms and the item types and custom fields pages served
+  by those pods fail with 500 until the rollout finishes
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
+  of problem tracked in
+  [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
 - The upgrade runs one more database migration, which adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run the previous version fail every read of a group until

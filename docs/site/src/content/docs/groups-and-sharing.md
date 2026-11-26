@@ -23,7 +23,10 @@ You can create as many groups as you need.
    - **Group name** — for example "Main residence".
    - **Icon** — optional; pick something to make the group easier to recognise in the sidebar.
    - **Group currency** — the currency this inventory's prices are tracked in (see [The group currency](#the-group-currency)).
+   - **What is the group for?** — **Household items** (the default) or **Collection**. A **Collection** group starts with the [Collection set](#add-the-collection-set) of item types and custom fields and with the **Warranties** section [hidden](#hide-sections-the-group-doesnt-use). You can change both later in the group settings.
 4. Click **Create group**. The new group opens straight away and becomes your active group. If it is your first group, the [product tour](../getting-started/) starts and shows you around the sidebar.
+
+If the group is created but the Collection set could not be added, a message says so. The group is there; open **Group settings → Sections** and click **Add the set**, or **Add what is missing** if part of it is there, to finish it.
 
 ## The group currency
 
@@ -67,6 +70,44 @@ Members with the **User** or **Viewer** role see the same switches but can't cha
 Hiding a section keeps its data. An item that already has a warranty date, a loan, or a maintenance schedule still shows it on its page, and the item form keeps the **Warranty** step for an item that has a warranty. You can still mark a loan returned or a task done; you can't start a new loan, schedule, or service visit until the section shows again. While a section is hidden, its reminder emails stop and the [weekly digest](../settings-and-account/#weekly-digest) leaves its lines out. When you show it again, reminders pick up from the dates as they are then, as described in [Reminder emails](../warranties-loans-maintenance/#reminder-emails).
 
 A link or a bookmark to a hidden page opens a notice that the section is hidden, with a link to the group settings.
+
+## Add the Collection set
+
+The **Collection set** fits a group that keeps a collection. Adding it creates these [item types](../item-types/):
+
+**Art**, **Books**, **Coins**, **Stamps**, **Records**, **Watches**, and **Cards**
+
+and these [custom fields](../custom-fields/), each offered on every one of those types:
+
+| Field | Type |
+| --- | --- |
+| **Condition** | Select: Mint, Very good, Good, Fair, Poor |
+| **Catalog reference** | Text, for a Krause, Scott, Discogs, or ISBN number and the like |
+| **Edition or variant** | Text |
+| **Signed** | Yes/no |
+| **Provenance** | Long text |
+| **Certificate of authenticity** | Yes/no |
+| **Appraised value** | Money |
+| **Appraisal date** | Date |
+
+The item's own **Serial number** stays as it is. The types and fields are created with English names; rename them, change their icons, or add options like any type or field you made yourself.
+
+To add the set:
+
+1. Open the group selector and choose **Group settings**, then open the **Sections** section.
+2. On the **Collection set** card, click **Add the set**.
+
+If the group already has a type or field with one of these names (upper and lower case don't matter), the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it.
+
+To remove the set, click **Remove the set** on the same card. A confirmation lists what will be deleted and what stays, with the reason:
+
+- a type or field the group had before the set, which the set never deletes;
+- a type that items have, or a field that items have a value of, counting items in the [Trash](../trash/);
+- the group's last item type, as a group always keeps one.
+
+Removing deletes the rest and leaves every item as it is. You can remove the set again later: it then deletes what has stopped being used since.
+
+Only an **Owner** or **Administrator** can add or remove the set. Other members see the card without the buttons. Adding and removing the set are recorded in the audit log.
 
 ## Invite people by email
 

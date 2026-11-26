@@ -14,6 +14,11 @@ who may edit items may add, rename, and delete fields (see
 [Groups & sharing](../groups-and-sharing/)). A field stays with the group when
 the member who added it leaves or deletes their account.
 
+A group admin can add the [Collection set](../groups-and-sharing/#add-the-collection-set),
+which creates fields collectors track, such as **Condition**, **Provenance**,
+and **Appraised value**, and offers them on the set's item types. They are
+ordinary fields you can rename or delete.
+
 ## Open the Custom fields page
 
 Click **Custom fields** in the **Group** section of the sidebar, or search for

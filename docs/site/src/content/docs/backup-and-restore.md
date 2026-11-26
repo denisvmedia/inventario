@@ -140,6 +140,11 @@ extra spaces, and created when no type has that name either. A type that
 already exists keeps its name and icon, whichever strategy you pick, and
 **Full replace** does not remove item types. A dry run creates no item types.
 
+A backup remembers which types and fields the
+[Collection set](../groups-and-sharing/#add-the-collection-set) created, so
+after a restore, removing the set still deletes the ones it created that
+nothing uses.
+
 ### Custom fields
 
 A restore matches each custom field to the group's field it was backed up
