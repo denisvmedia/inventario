@@ -244,6 +244,20 @@ or an operator would notice:
 - anything that changes how the thing is deployed, configured or upgraded;
 - a security fix.
 
+An entry for the people who run the server goes under `### Operators`, the
+last heading of the release, whether it adds, changes or fixes something. It
+belongs there when it is about installing, configuring, upgrading or
+monitoring Inventario and someone using the app sees no difference: a Helm
+chart value, a CLI command or flag, an environment variable, a database
+migration, a Secret, the container image, a port, a probe, a metric or a
+dashboard, or a step of an upgrade or a runbook. An entry about what users
+see stays under the other headings even when it names a flag that tunes the
+feature, such as a worker interval or a retention period, because whoever
+runs the server reads those headings too. A security fix to what the app does
+stays under `Security`; one that only touches the deployment, such as a Secret
+reaching pods that do not need it, is an operator entry. The release body
+carries every heading, `Operators` included.
+
 Skip it for refactors, test-only changes, CI plumbing and dependency bumps —
 they are in the git history, and a changelog nobody can skim is a changelog
 nobody reads. Write for the person who hits the problem, not for the reviewer:
