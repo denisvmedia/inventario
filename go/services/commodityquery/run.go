@@ -11,8 +11,9 @@ import (
 
 // Resolve turns q into the registry options for the group of set: it adds,
 // for every search term, the slugs of the item tags whose label contains the
-// term, and, for a backend that does not join loans itself
-// (registry.NativeLentOutFilterer), the IDs of the items on an open loan.
+// term, and, for a backend that does not join loans or file links itself
+// (registry.NativeLentOutFilterer, registry.NativePhotoFilterer), the IDs of
+// the items on an open loan and of the items with a photo.
 func Resolve(ctx context.Context, set *registry.Set, q Query) (registry.CommodityListOptions, error) {
 	opts := q.ListOptions()
 
@@ -39,6 +40,16 @@ func Resolve(ctx context.Context, set *registry.Set, q Query) (registry.Commodit
 				return registry.CommodityListOptions{}, err
 			}
 			opts.OpenLoanCommodityIDs = ids
+		}
+	}
+
+	if q.NoPhoto && set.FileRegistry != nil {
+		if _, native := set.CommodityRegistry.(registry.NativePhotoFilterer); !native {
+			ids, err := set.FileRegistry.CommodityIDsWithPhotos(ctx)
+			if err != nil {
+				return registry.CommodityListOptions{}, errxtrace.Wrap("failed to resolve items with photos", err)
+			}
+			opts.PhotoCommodityIDs = ids
 		}
 	}
 	return opts, nil

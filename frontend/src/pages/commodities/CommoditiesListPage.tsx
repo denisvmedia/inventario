@@ -438,6 +438,9 @@ export function CommoditiesListPage() {
   function toggleLentOut() {
     updateQuery({ lentOut: !lentOutOnly })
   }
+  function toggleMissing(key: MissingFilter) {
+    updateQuery({ [key]: !query[key] })
+  }
   function toggleUnassigned() {
     updateQuery({ unassigned: !unassignedOnly })
   }
@@ -632,6 +635,8 @@ export function CommoditiesListPage() {
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
           onToggleUnassigned={toggleUnassigned}
+          missing={query}
+          onToggleMissing={toggleMissing}
           tagFilter={query.tags}
           tagOptions={tagIndex.tags}
           tagCounts={tagCounts.data}
@@ -786,6 +791,10 @@ export function CommoditiesListPage() {
 
 // ---- Toolbar -------------------------------------------------------------
 
+// The missing-data filters (#2794), in menu order.
+const MISSING_FILTERS = ["noPhoto", "noPurchasePrice", "noPurchaseDate"] as const
+type MissingFilter = (typeof MISSING_FILTERS)[number]
+
 interface ToolbarProps {
   searchInput: string
   onSearchInput: (v: string) => void
@@ -812,6 +821,8 @@ interface ToolbarProps {
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
   onToggleUnassigned: () => void
+  missing: Record<MissingFilter, boolean>
+  onToggleMissing: (key: MissingFilter) => void
   tagFilter: CommodityTagFilter
   // Tag-filter parameters in the URL whose value cannot be read.
   tagFilterUnreadable: number
@@ -825,6 +836,63 @@ interface ToolbarProps {
   onSetViewMode: (v: ViewMode) => void
   // The saved views control, shown before the layout switch.
   savedViews?: ReactNode
+}
+
+function missingFilterLabel(t: ReturnType<typeof useTranslation>["t"], key: MissingFilter) {
+  switch (key) {
+    case "noPhoto":
+      return t("commodities:filter.missingOptions.noPhoto")
+    case "noPurchasePrice":
+      return t("commodities:filter.missingOptions.noPurchasePrice")
+    case "noPurchaseDate":
+      return t("commodities:filter.missingOptions.noPurchaseDate")
+  }
+}
+
+function MissingFilterMenu({
+  missing,
+  onToggle,
+}: {
+  missing: Record<MissingFilter, boolean>
+  onToggle: (key: MissingFilter) => void
+}) {
+  const { t } = useTranslation()
+  const active = MISSING_FILTERS.filter((key) => missing[key]).length
+  return (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant={active > 0 ? "default" : "outline"}
+          size="sm"
+          className="gap-1.5"
+          data-testid="commodities-filter-missing"
+        >
+          <ListFilter className="size-3.5" aria-hidden="true" />
+          {t("commodities:filter.missing")}
+          {active > 0 ? (
+            <Badge variant="secondary" className="ml-0.5 h-4 px-1 text-xs">
+              {active}
+            </Badge>
+          ) : null}
+          <ChevronDown className="size-3.5" aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="start" className="w-52">
+        <DropdownMenuLabel>{t("commodities:filter.missing")}</DropdownMenuLabel>
+        <DropdownMenuSeparator />
+        {MISSING_FILTERS.map((key) => (
+          <DropdownMenuCheckboxItem
+            key={key}
+            checked={missing[key]}
+            onCheckedChange={() => onToggle(key)}
+            data-testid={`commodities-filter-missing-${key}`}
+          >
+            {missingFilterLabel(t, key)}
+          </DropdownMenuCheckboxItem>
+        ))}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
 }
 
 function Toolbar(props: ToolbarProps) {
@@ -1066,6 +1134,8 @@ function Toolbar(props: ToolbarProps) {
         <MapPinOff className="size-3.5" aria-hidden="true" />
         {t("commodities:filter.unassigned")}
       </Button>
+
+      <MissingFilterMenu missing={props.missing} onToggle={props.onToggleMissing} />
 
       <DropdownMenu>
         <DropdownMenuTrigger asChild>

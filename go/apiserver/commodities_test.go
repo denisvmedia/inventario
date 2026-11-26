@@ -621,6 +621,36 @@ func TestCommodityCoverPatch_RejectsImageInWrongCategory(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
 }
 
+// An image attached to the item outside its photos cannot be its cover: the
+// No photo filter does not count it as a photo either.
+func TestCommodityCoverPatch_RejectsImageOutsidePhotos(t *testing.T) {
+	c := qt.New(t)
+
+	params, testUser, testGroup := newParams()
+	registrySet := getRegistrySetFromParams(params, testUser)
+	commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+
+	filed := must.Must(registrySet.FileRegistry.Create(context.Background(), models.FileEntity{
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		Links:    []models.FileLink{{EntityType: "commodity", EntityID: commodity.ID, Meta: models.FileLinkMetaDocuments}},
+		File: &models.File{
+			Path:         "box-photo",
+			OriginalPath: "box-photo.jpg",
+			Ext:          ".jpg",
+			MIMEType:     "image/jpeg",
+		},
+	}))
+
+	body := `{"data":{"type":"commodity_cover","attributes":{"file_id":"` + filed.ID + `"}}}`
+	req := must.Must(http.NewRequest("PATCH", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID+"/cover", bytes.NewReader([]byte(body))))
+	req.Header.Set("Content-Type", "application/json")
+	addTestUserAuthHeader(req, testUser.ID)
+	rr := httptest.NewRecorder()
+	apiserver.APIServer(params, &mockRestoreWorker{}).ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity)
+}
+
 // commodityUpdateBody builds a minimal-valid PUT body for a commodity,
 // then applies the caller's overrides. The fixture row is the
 // non-draft commodity used elsewhere in this file.

@@ -275,6 +275,47 @@ func (ccr *CommodityCoverRequest) Validate() error {
 	)
 }
 
+// CommodityDraftMarkRequest is the body for `PATCH /commodities/{id}/draft`:
+// it sets or clears the item's draft mark and changes nothing else.
+type CommodityDraftMarkRequest struct {
+	Data *CommodityDraftMarkRequestData `json:"data"`
+}
+
+// CommodityDraftMarkRequestData is the payload of a CommodityDraftMarkRequest.
+type CommodityDraftMarkRequestData struct {
+	Type       string                              `json:"type" example:"commodity_draft_mark" enums:"commodity_draft_mark"`
+	Attributes CommodityDraftMarkRequestAttributes `json:"attributes"`
+}
+
+// CommodityDraftMarkRequestAttributes carries the mark: true marks the item
+// as draft, false marks it as reviewed.
+type CommodityDraftMarkRequestAttributes struct {
+	Draft *bool `json:"draft"`
+}
+
+var _ render.Binder = (*CommodityDraftMarkRequest)(nil)
+
+// Bind validates the request body.
+func (r *CommodityDraftMarkRequest) Bind(_ *http.Request) error {
+	return r.Validate()
+}
+
+// Validate enforces the envelope shape and requires the mark.
+func (r *CommodityDraftMarkRequest) Validate() error {
+	if r.Data == nil {
+		return validation.NewError("data_required", "data is required")
+	}
+	return validation.ValidateStruct(r.Data,
+		validation.Field(&r.Data.Type, validation.Required, validation.In("commodity_draft_mark")),
+		validation.Field(&r.Data.Attributes, validation.By(func(any) error {
+			if r.Data.Attributes.Draft == nil {
+				return validation.NewError("draft_required", "attributes.draft is required")
+			}
+			return nil
+		})),
+	)
+}
+
 // CommodityTagCountsResponse is the payload of GET /commodities/tag-counts:
 // a flat envelope, like GET /tags/stats, holding per tag slug the number of
 // items the query selects.

@@ -35,6 +35,7 @@ func Inbox(params Params, groupService *services.GroupService) func(r chi.Router
 	return func(r chi.Router) {
 		r.Get("/", api.list)
 		r.Get("/count", api.count)
+		r.Get("/checks", api.checks)
 	}
 }
 
@@ -161,6 +162,43 @@ func (api *inboxAPI) count(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if err := render.Render(w, r, jsonapi.NewInboxCountResponse(inboxCounts(counts))); err != nil {
+		internalServerError(w, r, err)
+	}
+}
+
+// checks counts the optional quality checks next to the inbox.
+//
+// @Summary Count the inbox's quality checks
+// @Description The items of the group that lack one piece of information: no location, no
+// @Description photo, an unknown purchase price, an unknown purchase date, no tags. Missing
+// @Description information is not unfinished work, so these items are not in the inbox and
+// @Description its counts do not include them. Each check carries its item query in the
+// @Description parameter names of GET /g/{groupSlug}/commodities and the total that list
+// @Description reports for it. The queries use the list's default view: items in use that
+// @Description are not marked as draft. An unknown value counts as missing whether or not
+// @Description the item was reviewed with it; a known zero price is a price. Every member of
+// @Description the group can read it.
+// @Tags inbox
+// @Produce json-api
+// @Param groupSlug path string true "Group slug"
+// @Success 200 {object} jsonapi.InboxChecksResponse "OK"
+// @Router /g/{groupSlug}/inbox/checks [get].
+func (api *inboxAPI) checks(w http.ResponseWriter, r *http.Request) {
+	regSet := RegistrySetFromContext(r.Context())
+	if regSet == nil {
+		http.Error(w, "Registry set not found in context", http.StatusInternalServerError)
+		return
+	}
+	checks, err := api.service.Checks(r.Context(), regSet)
+	if err != nil {
+		_ = renderEntityError(w, r, err)
+		return
+	}
+	out := make([]jsonapi.InboxCheck, 0, len(checks))
+	for _, c := range checks {
+		out = append(out, jsonapi.InboxCheck{Key: string(c.Key), Query: c.Query.Encode(), Count: c.Count})
+	}
+	if err := render.Render(w, r, jsonapi.NewInboxChecksResponse(out)); err != nil {
 		internalServerError(w, r, err)
 	}
 }

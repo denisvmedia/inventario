@@ -19,6 +19,7 @@ import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
+const REVIEW_FROM = `from=${encodeURIComponent(`/g/${SLUG}/inbox?reason=item_draft`)}`
 const groups: Schema<"models.LocationGroup">[] = [
   { id: "g1", slug: SLUG, name: "Household", group_currency: "USD" },
 ]
@@ -372,8 +373,67 @@ describe("<InboxPage />", () => {
     renderPage()
     await user.click(await screen.findByTestId("inbox-open-c1"))
     const loc = await screen.findByTestId("loc")
-    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
+    // The item walks the items to review from there.
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1?${REVIEW_FROM}`)
     expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("opens the first item to review to walk them one by one", async () => {
+    const fake = inboxHandlers.backend(SLUG, [
+      inboxHandlers.draft("d1", "Cordless drill"),
+      inboxHandlers.itemDraft("c1", "Bike"),
+      inboxHandlers.itemDraft("c2", "Lamp"),
+    ])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-walk"))
+    const loc = await screen.findByTestId("loc")
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1?${REVIEW_FROM}`)
+    expect(loc).toHaveAttribute("data-background", `/g/${SLUG}/inbox`)
+  })
+
+  it("opens nothing when the user leaves the inbox while the walk loads", async () => {
+    seed()
+    let release = () => {}
+    const loaded = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let walkRequested = false
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async ({ request }) => {
+        if (new URL(request.url).searchParams.get("reason") !== "item_draft") return undefined
+        walkRequested = true
+        await loaded
+        return HttpResponse.json({
+          data: [inboxHandlers.itemDraft("c1", "Bike")],
+          meta: { entries: 1, counts: { total: 3, reasons: { draft: 2, item_draft: 1 } } },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByTestId("inbox-review-walk"))
+    await waitFor(() => expect(walkRequested).toBe(true))
+    await user.click(screen.getByTestId("inbox-missing-no-location"))
+    const loc = await screen.findByTestId("loc")
+    const left = loc.textContent
+    expect(left).toContain(`/g/${SLUG}/commodities`)
+    release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("loc")).toHaveTextContent(left ?? "")
+  })
+
+  it("offers no walk without items to review or to a viewer", async () => {
+    seed("viewer")
+    renderPage()
+    await screen.findByTestId("inbox-open-c1")
+    expect(screen.queryByTestId("inbox-review-walk")).not.toBeInTheDocument()
   })
 
   it("offers a viewer no actions", async () => {
@@ -404,23 +464,55 @@ describe("<InboxPage />", () => {
   })
 
   it("says when nothing needs attention and links the missing-detail lists", async () => {
+    const fake = inboxHandlers.backend(SLUG)
+    fake.checks = inboxHandlers
+      .defaultChecks()
+      .map((c) => (c.key === "no_photo" ? { ...c, count: 4 } : c))
     server.use(
       ...authHandlers.signedIn(),
       ...groupHandlers.list(groups),
       members("user"),
-      ...inboxHandlers.empty(SLUG)
+      ...fake.handlers
     )
     renderPage()
     expect(await screen.findByTestId("inbox-empty")).toHaveTextContent("Nothing needs attention")
+    // The checks are not unfinished work: four items without a photo leave
+    // the inbox empty.
     expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (0)")
-    expect(screen.getByTestId("inbox-missing-no-location")).toHaveAttribute(
-      "href",
-      `/g/${SLUG}/commodities?unassigned=1`
+    const links: [string, string][] = [
+      ["no-location", "unassigned=1"],
+      ["no-photo", "no_photo=1"],
+      ["no-purchase-price", "no_purchase_price=1"],
+      ["no-purchase-date", "no_purchase_date=1"],
+      ["untagged", "no_tags=1"],
+    ]
+    for (const [key, qs] of links) {
+      expect(await screen.findByTestId(`inbox-missing-${key}`)).toHaveAttribute(
+        "href",
+        `/g/${SLUG}/commodities?${qs}`
+      )
+    }
+    expect(screen.getByTestId("inbox-missing-no-photo-count")).toHaveTextContent("4")
+    expect(screen.getByTestId("inbox-missing-no-location-count")).toHaveTextContent("0")
+  })
+
+  it("leaves out a check it does not know or would read differently", async () => {
+    const fake = inboxHandlers.backend(SLUG)
+    fake.checks = [
+      { key: "no_photo", query: "include_inactive=false&no_photo=true", count: 1 },
+      { key: "no_serial", query: "include_inactive=false&no_serial=true", count: 2 },
+      { key: "untagged", query: "include_inactive=false&no_tags=true&shape=round", count: 3 },
+    ]
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
     )
-    expect(screen.getByTestId("inbox-missing-untagged")).toHaveAttribute(
-      "href",
-      `/g/${SLUG}/commodities?no_tags=1`
-    )
+    renderPage()
+    expect(await screen.findByTestId("inbox-missing-no-photo")).toBeInTheDocument()
+    const card = screen.getByTestId("inbox-missing")
+    expect(within(card).getAllByRole("link")).toHaveLength(1)
   })
 
   it("pages a long inbox", async () => {
@@ -441,5 +533,41 @@ describe("<InboxPage />", () => {
     await user.click(within(pager).getByRole("button", { name: "2" }))
     expect(await screen.findByTestId("inbox-row-draft-d51")).toBeInTheDocument()
     expect(screen.queryByTestId("inbox-row-draft-d1")).not.toBeInTheDocument()
+  })
+
+  it("opens an item without a walk while its row is the previous page's", async () => {
+    const many = Array.from({ length: 51 }, (_, i) =>
+      inboxHandlers.itemDraft(`c${i + 1}`, `Item ${i + 1}`)
+    )
+    const fake = inboxHandlers.backend(SLUG, many)
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage(`/g/${SLUG}/inbox?reason=item_draft`)
+    expect(await screen.findByTestId("inbox-row-commodity-c1")).toBeInTheDocument()
+    // Page 2 is held, so page 1 stays on screen while it loads.
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async ({ request }) => {
+        if (new URL(request.url).searchParams.get("page") === "2") await held
+        return undefined
+      })
+    )
+    await user.click(
+      within(screen.getByTestId("inbox-pagination")).getByRole("button", { name: "2" })
+    )
+    await user.click(screen.getByTestId("inbox-open-c1"))
+    const loc = await screen.findByTestId("loc")
+    // Page 2 would not hold the item: no list to walk rather than a wrong one.
+    expect(loc).toHaveTextContent(`/g/${SLUG}/commodities/c1`)
+    expect(loc.textContent).not.toContain("from=")
+    release()
   })
 })

@@ -291,7 +291,8 @@ saved and how many files it has. While there are any, a line at the top of
 the **All Items** page says how many and has an **Open inbox** button.
 
 - **Continue** opens the draft in the **Add item** dialog with its values and
-  files. Turn **Save as draft** on and click **Save draft** to save your
+  files, on the first step that still needs input (see
+  [Finish a draft](../inbox/#finish-a-draft)). Turn **Save as draft** on and click **Save draft** to save your
   changes, or finish the item and click **Add item** to create it. The draft's
   files move to the new item, and the draft is gone. Clicking **Add item**
   again after a lost connection does not create a second item.
@@ -484,6 +485,10 @@ If an edit takes an item out of the list, for example because you renamed it so
 it no longer matches the search, the page says so. **Save and next** still opens
 the item that came after it.
 
+An item opened from the [Inbox](../inbox/#review-the-items-one-by-one) walks
+the inbox's items to review the same way, and **Back to inbox** returns to the
+inbox.
+
 ## Asset IDs and QR labels
 
 Every item gets an **asset ID**, a short number such as `A-0042`. Numbers are
@@ -588,6 +593,11 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.
 - **No location** — show only items not placed in any area.
+- **Missing** — show items without a photo, without a purchase price, or
+  without a purchase date. Pick more than one to find items that lack all of
+  them. An unknown price or date counts as missing even after the item was
+  reviewed; a price of 0 is a price. The [inbox](../inbox/#missing-details)
+  links these lists with their counts.
 - **Sort by** — **Name**, **Date added**, **Purchase date**, **Current value**,
   **Original price**, or **Quantity**. Items with an unknown date or price
   come last in either direction.

@@ -41,6 +41,9 @@ type searchAPI struct {
 // @Param tag_mode query string false "Commodities only: how tags combine, all (default) or any" Enums(all,any)
 // @Param tags_exclude query []string false "Commodities only: only items with none of these tag slugs (comma-separated or repeated)" collectionFormat(multi)
 // @Param no_tags query bool false "Commodities only: only items with no tags; cannot be combined with tags or tags_exclude"
+// @Param no_photo query bool false "Commodities only: only items without a photo; cannot be combined with trashed"
+// @Param no_purchase_price query bool false "Commodities only: only items whose purchase price is unknown"
+// @Param no_purchase_date query bool false "Commodities only: only items whose purchase date is unknown"
 // @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Commodities only: filter by exact area ID"
 // @Param unassigned query bool false "Commodities only: only items with no area (ignored when area_id is set)"

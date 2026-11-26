@@ -237,6 +237,28 @@ func TestCommodityCoverService_StaleOverrideFallsBack(t *testing.T) {
 	c.Assert(cov.Source, qt.Equals, services.CoverSourceFirstPhoto)
 }
 
+// An image attached to the item outside its photos is not its cover: the No
+// photo filter does not count it either.
+func TestCommodityCoverService_OverrideOutsidePhotosFallsBack(t *testing.T) {
+	c := qt.New(t)
+	ctx, fileReg := newCoverTestContext(c)
+
+	photo, err := fileReg.Create(ctx, makeImage("photo", "commodity-A", time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)))
+	c.Assert(err, qt.IsNil)
+	filed := makeImage("filed", "commodity-A", time.Date(2025, 1, 1, 0, 0, 0, 0, time.UTC))
+	filed.Links[0].Meta = models.FileLinkMetaDocuments
+	other, err := fileReg.Create(ctx, filed)
+	c.Assert(err, qt.IsNil)
+
+	signing := services.NewFileSigningService(signingKey32, time.Hour)
+	coverSvc := services.NewCommodityCoverService(signing)
+
+	cov, ok := coverSvc.ResolveOne(ctx, fileReg, commodityRefWithCover("commodity-A", other.ID), "user-1", "")
+	c.Assert(ok, qt.IsTrue)
+	c.Assert(cov.FileID, qt.Equals, photo.ID)
+	c.Assert(cov.Source, qt.Equals, services.CoverSourceFirstPhoto)
+}
+
 func TestCommodityCoverService_OverrideFromOtherCommodityRejected(t *testing.T) {
 	c := qt.New(t)
 	ctx, fileReg := newCoverTestContext(c)

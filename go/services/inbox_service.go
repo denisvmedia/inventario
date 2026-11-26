@@ -242,7 +242,8 @@ func (s *InboxService) List(ctx context.Context, regSet *registry.Set, opts Inbo
 	start := min(max(opts.Offset, 0), len(kept))
 	end := len(kept)
 	if opts.Limit > 0 {
-		end = min(start+opts.Limit, len(kept))
+		// Bounded by what is left, so a huge limit cannot overflow the sum.
+		end = start + min(opts.Limit, len(kept)-start)
 	}
 	page.Entries = slices.Clone(kept[start:end])
 
