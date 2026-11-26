@@ -1489,7 +1489,32 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
-_None yet._
+#### 2026-11-26 — Long-form dialogs fill the screen below `sm`
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: Every dialog in the mock is the shadcn centered card at every width: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) keeps a 16px margin on each side below `sm` and opens with a fade and zoom. [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx), [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) have no phone layout of their own.
+- **Reality**: `frontend/src/components/ui/dialog.tsx` adds `variant="fullscreen-mobile"` to `DialogContent`. Below 640px the dialog covers the screen edge to edge (`100dvh`, no border, radius or shadow) and scrolls inside; `DialogHeader` sticks to the top with a bottom border and carries its own close button, the first control, so it takes the focus on open; `DialogFooter` sticks to the bottom with a top border and pads itself by `env(safe-area-inset-bottom)`. The dialog slides up from the bottom on open and down on close (a fade under reduced motion). From 640px up it is the centered card, which with this variant is never taller than the screen minus 2rem and scrolls as a whole (a phone held sideways). The variant is used by the item create/edit dialog (every step, the AI scan step included), location, area, custom field, seller, currency change, add from files, upload files, attach an existing file, restore from export, lend, edit loan, send for service, maintenance schedule, reminder, create API token and feedback dialogs. Confirmations and short dialogs stay centered cards at every width and open above a full-screen dialog. The on-screen keyboard still covers the bottom of the screen, the pinned footer included, while a field has the focus; that is not solved here.
+- **Why**: The owner approved the full-screen layout for every long-form dialog on 2026-11-26 (#1627): on a 375–412px phone the card loses 32px of width to its margins and a tall dialog's top runs off the screen.
+- **Approved by**: user (explicit) — owner decision of 2026-11-26 on #1627.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
+
+#### 2026-11-26 — Full-screen dialog header below `sm`: left-aligned, 44px close button
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogHeader` is `text-center sm:text-left`, so below `sm` the title and description are centered; the only close button is the 16px icon in the corner of the card.
+- **Reality**: In the `fullscreen-mobile` variant the header text is left-aligned at every width, and below `sm` the header holds a 44px square close button at its right edge; the title keeps 56px clear of it.
+- **Why**: A centered title collides with the close button that sits in the same row of the sticky header. 44px is the tap-target minimum of [14-accessibility.md](design/14-accessibility.md).
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-26 — Full-screen dialog footer below `sm`: one row
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogFooter` is `flex-col-reverse sm:flex-row sm:justify-end`, so below `sm` the buttons stack in a column.
+- **Reality**: In the `fullscreen-mobile` variant the footer lays its buttons out in a row at every width, aligned to the end, and wraps to a second row when they do not fit.
+- **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
 ### Backup & Restore
 

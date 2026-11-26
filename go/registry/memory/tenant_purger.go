@@ -242,6 +242,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			return purgeByTenant(ctx, tenantID, fs.RefreshTokenRegistry.List, fs.RefreshTokenRegistry.Delete, tenantAware[models.RefreshToken])
 		}},
 		{"api_tokens", func() error { return r.purgeAPITokens(ctx, tenantID) }},
+		{"personal_data_exports", func() error { return r.purgePersonalDataExports(ctx, tenantID) }},
 		{"email_verifications", func() error {
 			return purgeByTenant(ctx, tenantID, fs.EmailVerificationRegistry.List, fs.EmailVerificationRegistry.Delete, func(e *models.EmailVerification) string {
 				return e.TenantID
@@ -362,6 +363,17 @@ func (r *TenantPurger) purgeCustomFields(tenantID string) error {
 		f.purgeWhere(func(d *models.CustomFieldDefinition) bool { return d.TenantID == tenantID })
 	}
 	return nil
+}
+
+// purgePersonalDataExports deletes the tenant's personal data export rows
+// (#2177). Like the tokens, the registry has no tenant-wide delete in its
+// interface.
+func (r *TenantPurger) purgePersonalDataExports(ctx context.Context, tenantID string) error {
+	exports, ok := r.fs.PersonalDataExportRegistry.(*PersonalDataExportRegistry)
+	if !ok {
+		return nil
+	}
+	return exports.DeleteByTenantID(ctx, tenantID)
 }
 
 func (r *TenantPurger) purgeAPITokens(ctx context.Context, tenantID string) error {

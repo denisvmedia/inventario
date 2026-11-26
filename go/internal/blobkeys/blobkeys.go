@@ -14,6 +14,7 @@
 //	t/<tenant>/thumbnails/<file-id>_<size>.jpg  — derived thumbnail (JPEG)
 //	t/<tenant>/exports/export_<type>_<ts>.xml   — exported XML bundle
 //	t/<tenant>/restores/<blob-id>-<filename>    — uploaded archive for restore
+//	t/<tenant>/personal-exports/<id>.tar.gz     — personal data export
 //	t/<tenant>/seed-<uuid><ext>                 — demo / seed fixtures
 //	t/<tenant>/avatars/<user>/<rev>-<suffix>.jpg — profile photo (JPEG)
 //
@@ -61,6 +62,11 @@ const ExportsSegment = "exports"
 // RestoresSegment is the per-tenant subfolder for uploaded restore XML
 // files.
 const RestoresSegment = "restores"
+
+// PersonalExportsSegment is the per-tenant subfolder for personal data
+// exports (#2177), the archives a user downloads with a copy of their own
+// data.
+const PersonalExportsSegment = "personal-exports"
 
 // AvatarsSegment is the per-tenant subfolder for profile photos.
 const AvatarsSegment = "avatars"
@@ -201,6 +207,15 @@ func BuildBackupBlobKey(tenantID, exportType, exportID string) string {
 		sanitizeSegment(strings.ToLower(exportType)),
 		sanitizeSegment(exportID),
 	)
+}
+
+// BuildPersonalDataExportBlobKey returns the key of a personal data export
+// archive (#2177): `t/<tenant>/personal-exports/<export-id>.tar.gz`. The key
+// is a function of the export row alone, so whoever deletes the row can
+// delete the archive without reading the key off the row first, and a retried
+// build overwrites what a failed one left.
+func BuildPersonalDataExportBlobKey(tenantID, exportID string) string {
+	return fmt.Sprintf("%s%s/%s/%s.tar.gz", Prefix, tenantID, PersonalExportsSegment, sanitizeSegment(exportID))
 }
 
 // SanitizeArchivePath neutralises a tar member name read out of an `.inb`

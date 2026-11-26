@@ -104,6 +104,8 @@ func NewFactorySet() *registry.FactorySet {
 	fs.RefreshTokenRegistry = NewRefreshTokenRegistry()
 	apiTokenReg := NewAPITokenRegistry()
 	fs.APITokenRegistry = apiTokenReg
+	personalDataExportReg := NewPersonalDataExportRegistry()
+	fs.PersonalDataExportRegistry = personalDataExportReg
 	fs.LoginEventRegistry = NewLoginEventRegistry()
 	fs.UserMFASecretRegistry = NewUserMFASecretRegistry()
 	fs.AuditLogRegistry = NewAuditLogRegistry()
@@ -221,6 +223,7 @@ func NewFactorySet() *registry.FactorySet {
 	userPurger.SetItemTypeFactory(itemTypeFactory)
 	userPurger.SetIntakeDocumentFactory(intakeDocumentFactory)
 	userPurger.SetCustomFieldFactory(customFieldFactory)
+	userPurger.SetPersonalDataExportRegistry(personalDataExportReg)
 	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request

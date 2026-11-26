@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/chi/v5"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
@@ -45,6 +46,11 @@ type UsersMeParams struct {
 	// Nil skips that part of the check, which only tests do.
 	UserRegistry     registry.UserRegistry
 	TokenBlacklister services.TokenBlacklister
+	// PersonalDataExports backs /users/me/data-exports (#2177), and
+	// FileSigningService signs their download URLs. Nil leaves those routes
+	// unmounted.
+	PersonalDataExports *export.PersonalDataExportService
+	FileSigningService  *services.FileSigningService
 }
 
 // usersMeAPI is the handler set behind /users/me/{sessions,login-history}.
@@ -116,6 +122,14 @@ func UsersMe(params UsersMeParams) func(r chi.Router) {
 			r.Get("/api-tokens", tokens.listAPITokens)
 			r.Post("/api-tokens", tokens.createAPIToken)
 			r.Delete("/api-tokens/{id}", tokens.revokeAPIToken)
+		}
+		if params.PersonalDataExports != nil && params.FileSigningService != nil {
+			exports := &personalDataExportsAPI{
+				service: params.PersonalDataExports,
+				signer:  params.FileSigningService,
+				audit:   params.AuditService,
+			}
+			exports.routes(r)
 		}
 	}
 }
