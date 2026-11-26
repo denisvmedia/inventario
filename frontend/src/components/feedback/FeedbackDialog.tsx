@@ -200,7 +200,11 @@ export function FeedbackDialog({ open, onOpenChange }: FeedbackDialogProps) {
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-testid="feedback-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="feedback-dialog"
+      >
         <DialogHeader>
           <DialogTitle>{t("feedback:dialog.title")}</DialogTitle>
           <DialogDescription>{t("feedback:dialog.description")}</DialogDescription>

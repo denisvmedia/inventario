@@ -125,6 +125,7 @@ export function LocationFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-lg"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="location-form-dialog"

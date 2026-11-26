@@ -664,6 +664,48 @@ describe("<CommodityFormDialog />", () => {
     expect(screen.queryByTestId("commodity-form-close-confirm")).not.toBeInTheDocument()
   })
 
+  // #1627: below `sm` the wizard fills the screen; the save-as-draft
+  // confirm stays a centered card and shows above it. Escape on the
+  // wizard still asks first.
+  it("fills the screen on a phone and keeps the save-as-draft confirm above it", async () => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    renderWithProviders({
+      children: (
+        <CommodityFormDialog
+          open
+          onOpenChange={onOpenChange}
+          mode="create"
+          areas={areas}
+          locations={locations}
+          defaultCurrency="USD"
+          onSubmit={async () => {}}
+          draftKey="commodity-draft:test:create"
+        />
+      ),
+    })
+    const wizard = await screen.findByTestId("commodity-form-dialog")
+    expect(wizard).toHaveAttribute("data-variant", "fullscreen-mobile")
+    expect(wizard.className).toContain("max-sm:h-dvh")
+    expect(wizard.className).toContain("sm:max-h-[90vh]")
+    await walkPastAi(user)
+    await user.type(await screen.findByLabelText(/^Name$/i), "X")
+
+    await user.keyboard("{Escape}")
+    const confirm = await screen.findByTestId("commodity-form-close-confirm")
+    expect(confirm).toHaveAttribute("data-variant", "default")
+    expect(confirm.className).not.toContain("max-sm:")
+    expect(wizard.compareDocumentPosition(confirm) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(onOpenChange).not.toHaveBeenCalled()
+
+    await user.click(screen.getByTestId("commodity-form-close-confirm-cancel"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodity-form-close-confirm")).not.toBeInTheDocument()
+    )
+    expect(screen.getByTestId("commodity-form-dialog")).toBeInTheDocument()
+    expect(onOpenChange).not.toHaveBeenCalled()
+  })
+
   // Regression: a single dirty input on Basics is enough to make
   // Cancel prompt rather than silently discard. Together with the
   // pristine-Cancel test above and the Files-step variant below this
