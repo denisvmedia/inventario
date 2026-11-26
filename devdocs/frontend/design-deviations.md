@@ -53,6 +53,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
 - **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
 
+#### 2026-11-26 — Donated and Stolen item statuses
+
+- **Issue/PR**: #1607 / #2903
+- **Mock**: [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) has five statuses (`in_use`, `sold`, `lost`, `disposed`, `written_off`) in `CommodityStatus` (L10) and `COMMODITY_STATUS_CONFIG` (L589–L598); the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lists Sold, Lost, Disposed and Written Off (L720).
+- **Reality**: Two more statuses, **Donated** and **Stolen**, follow Written Off everywhere a status is listed: the Change Status row on the item page, the status select of the item form, the Status filter on All Items and on an area's items, and the bulk **Set status** menu. Donated uses the `chart-3` color (blue) and Stolen `chart-4` (orange): as the text color of the Change Status button, and as text, `/30` border and `/10` background of the status pill on cards and rows and of the status card on the item page. They open the same date and note dialog as Lost, with their own description and note placeholder. Like the other statuses, they have no icon.
+- **Why**: Owner decision 5 on #1607 (2026-11-26) makes Donated and Stolen statuses of their own. The mock's status colors (green, amber, red, muted) are all in use, so the two take chart colors that the file category badges already use. In light mode the two colors fall short of the 4.5:1 that [accessibility.md](accessibility.md) asks for text: as pill text `chart-3` measures about 3.2:1 and `chart-4` about 2.2:1 (in dark mode 4.6:1 and 6.1:1), and Stolen's orange sits between Lost's red and Sold's amber. No existing token does better on both counts: blue is the only hue the statuses do not use, and `tag-blue`, the darkest blue, reaches 4.1:1 as pill text. The four existing status colors measure 1.9:1 to 3.2:1 as pill text in light mode too, so 4.5:1 for status pills needs new status tokens, a token change of its own. Appending Donated and Stolen after Written Off keeps the mock's order for the existing statuses. The order and the two colors are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the owner's decisions of 2026-11-26; the order and the colors agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the two statuses; otherwise permanent.
+
 #### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
 
 - **Issue/PR**: #2812 / #2861

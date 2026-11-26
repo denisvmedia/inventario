@@ -3,13 +3,28 @@
 // openapi codegen — see src/types/api.d.ts). Item types belong to each
 // group and live in features/itemTypes.
 
-export const COMMODITY_STATUSES = ["in_use", "sold", "lost", "disposed", "written_off"] as const
+export const COMMODITY_STATUSES = [
+  "in_use",
+  "sold",
+  "lost",
+  "disposed",
+  "written_off",
+  "donated",
+  "stolen",
+] as const
 
 export type CommodityStatusValue = (typeof COMMODITY_STATUSES)[number]
 
 // The statuses an item moves to from in_use. The status transition
 // dialog opens only for these; going back to in_use is a plain confirm.
-export const TERMINAL_COMMODITY_STATUSES = ["sold", "lost", "disposed", "written_off"] as const
+export const TERMINAL_COMMODITY_STATUSES = [
+  "sold",
+  "lost",
+  "disposed",
+  "written_off",
+  "donated",
+  "stolen",
+] as const
 
 export type TerminalCommodityStatusValue = (typeof TERMINAL_COMMODITY_STATUSES)[number]
 
@@ -22,6 +37,8 @@ export const COMMODITY_STATUS_TONES: Record<CommodityStatusValue, string> = {
   lost: "text-status-expired border-status-expired/30 bg-status-expired/10",
   disposed: "text-muted-foreground border-border bg-muted",
   written_off: "text-muted-foreground border-border bg-muted",
+  donated: "text-chart-3 border-chart-3/30 bg-chart-3/10",
+  stolen: "text-chart-4 border-chart-4/30 bg-chart-4/10",
 }
 
 export const COMMODITY_SORT_OPTIONS = [

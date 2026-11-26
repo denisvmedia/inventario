@@ -23,13 +23,19 @@ var (
 
 type CommodityStatus string
 
-// Commodity statuses. Adding a new status? Don't forget to update IsValid() method.
+// Commodity statuses. Every status but in_use means the group no longer has
+// the item. Adding a new status? Don't forget to update IsValid() method.
 const (
 	CommodityStatusInUse      CommodityStatus = "in_use"
 	CommodityStatusSold       CommodityStatus = "sold"
 	CommodityStatusLost       CommodityStatus = "lost"
 	CommodityStatusDisposed   CommodityStatus = "disposed"
 	CommodityStatusWrittenOff CommodityStatus = "written_off"
+	// CommodityStatusDonated is an item given away for nothing in return.
+	CommodityStatusDonated CommodityStatus = "donated"
+	// CommodityStatusStolen is an item taken by someone else; lost is an
+	// item that cannot be found.
+	CommodityStatusStolen CommodityStatus = "stolen"
 )
 
 func (c CommodityStatus) IsValid() bool {
@@ -38,7 +44,9 @@ func (c CommodityStatus) IsValid() bool {
 		CommodityStatusSold,
 		CommodityStatusLost,
 		CommodityStatusDisposed,
-		CommodityStatusWrittenOff:
+		CommodityStatusWrittenOff,
+		CommodityStatusDonated,
+		CommodityStatusStolen:
 		return true
 	}
 	return false
