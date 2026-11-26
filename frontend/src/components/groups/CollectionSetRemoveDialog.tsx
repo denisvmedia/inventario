@@ -14,11 +14,17 @@ import type { ItemSetFieldView, ItemSetItemTypeView, ItemSetView } from "@/featu
 // CollectionSetRemoveDialog confirms removing the Collection set (#1607).
 // It lists the types and fields the removal deletes, and those that stay
 // with the reason: a member made it, items use it, or it is the group's
-// last type. The server decides again on confirm, so a row an item started
-// to use meanwhile stays too.
+// last type. The card checks the status again when the dialog opens, and
+// Confirm waits for that check. Confirming sends the rows listed under
+// Deleted, and the server deletes no other; one an item started to use
+// meanwhile stays too.
 interface CollectionSetRemoveDialogProps {
   open: boolean
   view: ItemSetView
+  // checking is true while the status is fetched again; checkFailed when
+  // that fetch failed. Either keeps Confirm disabled.
+  checking: boolean
+  checkFailed: boolean
   pending: boolean
   onConfirm: () => void
   onClose: () => void
@@ -36,6 +42,8 @@ interface Row {
 export function CollectionSetRemoveDialog({
   open,
   view,
+  checking,
+  checkFailed,
   pending,
   onConfirm,
   onClose,
@@ -44,13 +52,13 @@ export function CollectionSetRemoveDialog({
   const goes: Row[] = []
   const stays: Row[] = []
   for (const row of view.item_types ?? []) {
-    if (row.state === "missing") continue
+    if (!row.item_type_id) continue
     const entry: Row = { id: `type-${row.key}`, name: row.name ?? "", kind: "type" }
     if (row.removable) goes.push(entry)
     else stays.push({ ...entry, reason: typeKeepReason(t, row) })
   }
   for (const row of view.custom_fields ?? []) {
-    if (row.state === "missing") continue
+    if (!row.custom_field_id) continue
     const entry: Row = { id: `field-${row.key}`, name: row.name ?? "", kind: "field" }
     if (row.removable) goes.push(entry)
     else stays.push({ ...entry, reason: fieldKeepReason(t, row) })
@@ -67,6 +75,24 @@ export function CollectionSetRemoveDialog({
               : t("groups:settings.collectionSet.removal.nothing")}
           </DialogDescription>
         </DialogHeader>
+
+        {checking ? (
+          <p
+            className="text-xs text-muted-foreground"
+            role="status"
+            data-testid="collection-set-remove-checking"
+          >
+            {t("groups:settings.collectionSet.removal.checking")}
+          </p>
+        ) : checkFailed ? (
+          <p
+            className="text-xs text-destructive"
+            role="alert"
+            data-testid="collection-set-remove-check-failed"
+          >
+            {t("groups:settings.collectionSet.removal.checkFailed")}
+          </p>
+        ) : null}
 
         <div className="max-h-[50vh] space-y-4 overflow-y-auto">
           {goes.length > 0 ? (
@@ -128,7 +154,7 @@ export function CollectionSetRemoveDialog({
               type="button"
               variant="destructive"
               onClick={onConfirm}
-              disabled={pending}
+              disabled={pending || checking || checkFailed}
               data-testid="collection-set-remove-confirm"
             >
               {pending

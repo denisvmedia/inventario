@@ -22,6 +22,7 @@ import {
   revokeInvite,
   setHiddenSections,
   updateGroup,
+  type CollectionSetRemoval,
   type CollectionSetResult,
   type CreatedGroup,
   type CreateGroupRequest,
@@ -165,10 +166,12 @@ interface CollectionSetVars {
   groupSlug: string
 }
 
-function useCollectionSetMutation(mutate: (groupId: string) => Promise<CollectionSetResult>) {
+function useCollectionSetMutation<V extends CollectionSetVars>(
+  mutate: (vars: V) => Promise<CollectionSetResult>
+) {
   const queryClient = useQueryClient()
-  return useMutation<CollectionSetResult, Error, CollectionSetVars>({
-    mutationFn: ({ groupId }) => mutate(groupId),
+  return useMutation<CollectionSetResult, Error, V>({
+    mutationFn: mutate,
     onSuccess: (result, { groupId }) => {
       queryClient.setQueryData(groupKeys.collectionSet(groupId), result.set)
     },
@@ -186,12 +189,20 @@ function useCollectionSetMutation(mutate: (groupId: string) => Promise<Collectio
 
 // Adds the Collection set to a group: its item types and custom fields.
 export function useAddCollectionSet() {
-  return useCollectionSetMutation(addCollectionSet)
+  return useCollectionSetMutation<CollectionSetVars>(({ groupId }) => addCollectionSet(groupId))
 }
 
-// Removes the Collection set: deletes what it created and nothing uses.
+interface RemoveCollectionSetVars extends CollectionSetVars {
+  // What the confirmation listed as deleted; nothing else is.
+  removal: CollectionSetRemoval
+}
+
+// Removes the Collection set: deletes what the confirmation listed of what
+// it created and nothing uses.
 export function useRemoveCollectionSet() {
-  return useCollectionSetMutation(removeCollectionSet)
+  return useCollectionSetMutation<RemoveCollectionSetVars>(({ groupId, removal }) =>
+    removeCollectionSet(groupId, removal)
+  )
 }
 
 interface DeleteGroupVars extends DeleteGroupRequest {

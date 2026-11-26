@@ -17,7 +17,7 @@ import { __resetHttpForTests } from "@/lib/http"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
-type State = "missing" | "added" | "own"
+type State = "missing" | "added" | "own" | "taken"
 
 interface Row {
   key: string
@@ -26,6 +26,11 @@ interface Row {
   item_count: number
   icon?: string
   field_type?: string
+  taken_by?: string
+}
+
+interface RemoveBody {
+  data: { type: string; attributes: { item_type_ids: string[]; custom_field_ids: string[] } }
 }
 
 const TYPES: Array<[string, string, string]> = [
@@ -70,8 +75,9 @@ function renderSettings() {
 }
 
 // A server holding one group and how it holds the Collection set. POST adds
-// what is missing; DELETE deletes the set's rows no item uses, as the
-// backend does.
+// what is missing; DELETE deletes the listed rows that are the set's and
+// unused and reports the other listed ones as kept, as the backend does. A
+// row the group has is identified as type-<key> or field-<key>.
 function setBackend(
   role: "admin" | "user",
   override: Partial<Record<string, Partial<Row>>> = {},
@@ -93,9 +99,31 @@ function setBackend(
     item_count: 0,
     ...override[key],
   }))
-  const calls = { posts: 0, deletes: 0 }
+  const calls = { posts: 0, deletes: 0, gets: 0, removeBodies: [] as RemoveBody[] }
+  // While held, GET /collection-set waits until release() is called.
+  let held: Promise<void> | null = null
+  const hold = () => {
+    let release = () => {}
+    held = new Promise<void>((resolve) => {
+      release = () => {
+        held = null
+        resolve()
+      }
+    })
+    return release
+  }
+  let failGets = false
+  const has = (r: Row) => r.state === "added" || r.state === "own"
   const keep = (r: Row) =>
     r.state === "own" ? "own" : r.state === "added" && r.item_count > 0 ? "in_use" : undefined
+  const removable = (r: Row) => r.state === "added" && !keep(r)
+  // change changes a row as another member would, between two reads.
+  const change = (key: string, patch: Partial<Row>) => {
+    Object.assign(
+      [...types, ...fields].find((r) => r.key === key)!,
+      patch
+    )
+  }
   const view = () => ({
     complete: [...types, ...fields].every((r) => r.state !== "missing"),
     item_types: types.map((r) => ({
@@ -103,20 +131,24 @@ function setBackend(
       name: r.name,
       icon: r.icon,
       state: r.state,
+      taken_by: r.taken_by,
+      item_type_id: has(r) ? `type-${r.key}` : undefined,
       item_count: r.item_count,
       trashed_item_count: 0,
-      removable: r.state === "added" && !keep(r),
-      keep_reason: r.state === "missing" ? undefined : keep(r),
+      removable: removable(r),
+      keep_reason: has(r) ? keep(r) : undefined,
     })),
     custom_fields: fields.map((r) => ({
       key: r.key,
       name: r.name,
       field_type: r.field_type,
       state: r.state,
+      taken_by: r.taken_by,
+      custom_field_id: has(r) ? `field-${r.key}` : undefined,
       item_count: r.item_count,
       trashed_item_count: 0,
-      removable: r.state === "added" && !keep(r),
-      keep_reason: r.state === "missing" ? undefined : keep(r),
+      removable: removable(r),
+      keep_reason: has(r) ? keep(r) : undefined,
     })),
   })
   const envelope = (meta?: Record<string, unknown>) => ({
@@ -145,7 +177,14 @@ function setBackend(
         ],
       })
     ),
-    msw.get(api("/groups/g1/collection-set"), () => HttpResponse.json(envelope())),
+    msw.get(api("/groups/g1/collection-set"), async () => {
+      calls.gets++
+      if (held) await held
+      if (failGets) {
+        return HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      }
+      return HttpResponse.json(envelope())
+    }),
     msw.post(api("/groups/g1/collection-set"), () => {
       calls.posts++
       if (opts.addError) {
@@ -178,22 +217,34 @@ function setBackend(
         })
       )
     }),
-    msw.delete(api("/groups/g1/collection-set"), () => {
+    msw.delete(api("/groups/g1/collection-set"), async ({ request }) => {
       calls.deletes++
-      const deletedTypes: string[] = []
-      const deletedFields: string[] = []
-      for (const r of types) {
-        if (r.state === "added" && r.item_count === 0) {
-          r.state = "missing"
-          deletedTypes.push(r.name)
+      const body = (await request.json()) as RemoveBody
+      calls.removeBodies.push(body)
+      const removeListed = (rows: Row[], prefix: string, ids: string[]) => {
+        const deleted: string[] = []
+        const kept: string[] = []
+        for (const r of rows) {
+          if (!has(r) || !ids.includes(`${prefix}-${r.key}`)) continue
+          if (removable(r)) {
+            r.state = "missing"
+            deleted.push(r.name)
+          } else {
+            kept.push(r.name)
+          }
         }
+        return [deleted, kept]
       }
-      for (const r of fields) {
-        if (r.state === "added" && r.item_count === 0) {
-          r.state = "missing"
-          deletedFields.push(r.name)
-        }
-      }
+      const [deletedTypes, keptTypes] = removeListed(
+        types,
+        "type",
+        body.data.attributes.item_type_ids
+      )
+      const [deletedFields, keptFields] = removeListed(
+        fields,
+        "field",
+        body.data.attributes.custom_field_ids
+      )
       return HttpResponse.json(
         envelope({
           created_item_types: 0,
@@ -201,6 +252,8 @@ function setBackend(
           added_templates: 0,
           deleted_item_types: deletedTypes,
           deleted_custom_fields: deletedFields,
+          kept_item_types: keptTypes,
+          kept_custom_fields: keptFields,
         })
       )
     }),
@@ -208,7 +261,15 @@ function setBackend(
       HttpResponse.json({ warranty_expiring_alerts: true, weekly_digest: false })
     ),
   ]
-  return { calls, handlers }
+  return {
+    calls,
+    handlers,
+    hold,
+    change,
+    failGets: () => {
+      failGets = true
+    },
+  }
 }
 
 const everythingAdded = Object.fromEntries(
@@ -232,7 +293,9 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(await within(card).findByTestId("collection-set-state")).toHaveTextContent("Not added")
     const types = within(card).getByTestId("collection-set-types")
     for (const [key, name] of TYPES) {
-      expect(within(types).getByTestId(`collection-set-type-${key}`)).toHaveTextContent(name)
+      const badge = within(types).getByTestId(`collection-set-type-${key}`)
+      expect(badge).toHaveTextContent(name)
+      expect(badge).toHaveTextContent("Not in the group")
     }
     expect(within(card).getAllByRole("listitem")).toHaveLength(TYPES.length + FIELDS.length)
     expect(within(card).queryByTestId("collection-set-remove")).not.toBeInTheDocument()
@@ -247,10 +310,17 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     )
     expect(within(card).queryByTestId("collection-set-add")).not.toBeInTheDocument()
     expect(within(card).getByTestId("collection-set-remove")).toBeEnabled()
+    expect(within(card).getByTestId("collection-set-field-signed")).toHaveTextContent(
+      "Added by the set"
+    )
   })
 
   it("offers to add what is missing when the set is partly there", async () => {
-    const backend = setBackend("admin", { coins: { state: "added" }, condition: { state: "own" } })
+    const backend = setBackend("admin", {
+      coins: { state: "added", name: "Stamps" },
+      stamps: { state: "taken", taken_by: "coins" },
+      condition: { state: "own" },
+    })
     server.use(...backend.handlers)
     renderSettings()
 
@@ -266,6 +336,19 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(within(card).getByTestId("collection-set-type-art")).toHaveAttribute(
       "data-state",
       "missing"
+    )
+    // Each state is spelled out, not only shown by color.
+    expect(within(card).getByTestId("collection-set-type-coins")).toHaveTextContent(
+      "Added by the set"
+    )
+    expect(within(card).getByTestId("collection-set-type-art")).toHaveTextContent(
+      "Not in the group"
+    )
+    expect(within(card).getByTestId("collection-set-field-condition")).toHaveTextContent(
+      "The group's own"
+    )
+    expect(within(card).getByTestId("collection-set-type-stamps")).toHaveTextContent(
+      "Not added: another type of the set has this name"
     )
   })
 
@@ -283,6 +366,9 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     const card = await screen.findByTestId("collection-set-card")
     await user.click(await within(card).findByTestId("collection-set-remove"))
     const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeEnabled()
+    )
 
     const goes = within(dialog).getByTestId("collection-set-remove-goes")
     expect(within(goes).getAllByRole("listitem")).toHaveLength(5 + 7)
@@ -308,9 +394,28 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
       expect(screen.queryByTestId("collection-set-remove-dialog")).not.toBeInTheDocument()
     )
     expect(backend.calls.deletes).toBe(1)
+    expect(backend.calls.removeBodies[0]).toEqual({
+      data: {
+        type: "item_sets",
+        attributes: {
+          item_type_ids: ["type-art", "type-stamps", "type-records", "type-watches", "type-cards"],
+          custom_field_ids: [
+            "field-catalog_reference",
+            "field-edition",
+            "field-signed",
+            "field-provenance",
+            "field-certificate",
+            "field-appraised_value",
+            "field-appraisal_date",
+          ],
+        },
+      },
+    })
     expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toBe(
-      "Collection set removed. Deleted item types: 5, deleted custom fields: 7."
+      "Deleted Art, Stamps, Records, Watches, Cards, Catalog reference, Edition or variant, " +
+        "Signed, Provenance, Certificate of authenticity, Appraised value, and Appraisal date."
     )
+    expect(toast.warning).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(within(card).getByTestId("collection-set-state")).toHaveTextContent("Partly added")
     )
@@ -337,6 +442,76 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(within(dialog).queryByTestId("collection-set-remove-goes")).not.toBeInTheDocument()
     expect(within(dialog).queryByTestId("collection-set-remove-confirm")).not.toBeInTheDocument()
     await user.click(within(dialog).getByTestId("collection-set-remove-cancel"))
+    expect(backend.calls.deletes).toBe(0)
+  })
+
+  it("checks the status again when the confirmation opens and waits for it", async () => {
+    const backend = setBackend("admin", everythingAdded)
+    server.use(...backend.handlers)
+    const user = userEvent.setup()
+    renderSettings()
+
+    const card = await screen.findByTestId("collection-set-card")
+    const remove = await within(card).findByTestId("collection-set-remove")
+    // An item gets the Coins type after the card loaded.
+    backend.change("coins", { item_count: 1 })
+    const release = backend.hold()
+    await user.click(remove)
+    const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    expect(within(dialog).getByTestId("collection-set-remove-checking")).toBeInTheDocument()
+    expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeDisabled()
+
+    release()
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeEnabled()
+    )
+    expect(within(dialog).queryByTestId("collection-set-remove-checking")).not.toBeInTheDocument()
+    expect(within(dialog).getByTestId("collection-set-stays-type-coins")).toHaveTextContent(
+      "1 item has this type, Trash included."
+    )
+
+    await user.click(within(dialog).getByTestId("collection-set-remove-confirm"))
+    await waitFor(() => expect(backend.calls.deletes).toBe(1))
+    expect(backend.calls.removeBodies[0]?.data.attributes.item_type_ids).not.toContain("type-coins")
+  })
+
+  it("names what the server kept because it changed after the check", async () => {
+    const backend = setBackend("admin", everythingAdded)
+    server.use(...backend.handlers)
+    const user = userEvent.setup()
+    renderSettings()
+
+    await user.click(await screen.findByTestId("collection-set-remove"))
+    const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeEnabled()
+    )
+    // Listed as deleted, then an item gets the type before the confirm.
+    backend.change("art", { item_count: 1 })
+    await user.click(within(dialog).getByTestId("collection-set-remove-confirm"))
+
+    await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(1))
+    expect(backend.calls.removeBodies[0]?.data.attributes.item_type_ids).toContain("type-art")
+    expect(vi.mocked(toast.warning).mock.calls[0]?.[0]).toBe(
+      "Kept Art: it changed after you opened the confirmation."
+    )
+    expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toMatch(/^Deleted Books, Coins, /)
+  })
+
+  it("keeps Confirm disabled when the check fails", async () => {
+    const backend = setBackend("admin", everythingAdded)
+    server.use(...backend.handlers)
+    const user = userEvent.setup()
+    renderSettings()
+
+    const remove = await screen.findByTestId("collection-set-remove")
+    backend.failGets()
+    await user.click(remove)
+    const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    expect(
+      await within(dialog).findByTestId("collection-set-remove-check-failed")
+    ).toBeInTheDocument()
+    expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeDisabled()
     expect(backend.calls.deletes).toBe(0)
   })
 

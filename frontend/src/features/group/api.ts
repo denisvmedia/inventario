@@ -198,11 +198,45 @@ export async function addCollectionSet(groupId: string): Promise<CollectionSetRe
   return unwrapItemSet(await http.post<ItemSetEnvelope>(collectionSetPath(groupId)))
 }
 
-// DELETE removes the set: it deletes the types and fields the set created
-// that no item uses and reports what stays and why. Safe to repeat. Admin
-// or owner only.
-export async function removeCollectionSet(groupId: string): Promise<CollectionSetResult> {
-  return unwrapItemSet(await http.del<ItemSetEnvelope>(collectionSetPath(groupId)))
+// The rows a remove may delete: those the confirmation listed as deleted.
+export interface CollectionSetRemoval {
+  itemTypeIds: string[]
+  customFieldIds: string[]
+}
+
+// DELETE removes the set: it deletes the listed types and fields that are
+// still the set's and unused when it runs, never one it is not given, and
+// names in meta what it deleted and what it kept of the list. Safe to
+// repeat. Admin or owner only.
+export async function removeCollectionSet(
+  groupId: string,
+  removal: CollectionSetRemoval
+): Promise<CollectionSetResult> {
+  const { data } = await http.request<ItemSetEnvelope>(collectionSetPath(groupId), {
+    method: "DELETE",
+    body: {
+      data: {
+        type: "item_sets",
+        attributes: {
+          item_type_ids: removal.itemTypeIds,
+          custom_field_ids: removal.customFieldIds,
+        },
+      },
+    },
+  })
+  return unwrapItemSet(data)
+}
+
+// removalOf lists what a confirmation built from view shows as deleted.
+export function removalOf(view: ItemSetView): CollectionSetRemoval {
+  return {
+    itemTypeIds: (view.item_types ?? [])
+      .filter((row) => row.removable && row.item_type_id)
+      .map((row) => row.item_type_id!),
+    customFieldIds: (view.custom_fields ?? [])
+      .filter((row) => row.removable && row.custom_field_id)
+      .map((row) => row.custom_field_id!),
+  }
 }
 
 export interface DeleteGroupRequest {

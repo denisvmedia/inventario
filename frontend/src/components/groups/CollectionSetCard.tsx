@@ -5,7 +5,7 @@ import { Library } from "lucide-react"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { CUSTOM_FIELD_LIMIT } from "@/features/customFields/api"
-import type { ItemSetView, LocationGroup } from "@/features/group/api"
+import { removalOf, type ItemSetView, type LocationGroup } from "@/features/group/api"
 import {
   useAddCollectionSet,
   useCollectionSet,
@@ -14,6 +14,7 @@ import {
 import { ITEM_TYPE_LIMIT } from "@/features/itemTypes/api"
 import { ITEM_TYPE_FALLBACK_ICON, ITEM_TYPE_ICON_LOOKUP } from "@/features/itemTypes/icons"
 import { useAppToast } from "@/hooks/useAppToast"
+import { formatList } from "@/lib/intl"
 import { getServerErrorCode } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
@@ -23,7 +24,8 @@ import { CollectionSetRemoveDialog } from "./CollectionSetRemoveDialog"
 // (#1607): item types for collections and the custom fields collectors
 // track, shown on each of those types. Adding again creates only what is
 // missing, so it also finishes an add that failed halfway. Removing asks
-// first and lists what goes and what stays.
+// first and lists what goes and what stays, from a status fetched again
+// when the confirmation opens; the remove deletes only what it listed.
 //
 // Members without the admin role see the same card without the buttons.
 interface CollectionSetCardProps {
@@ -33,6 +35,8 @@ interface CollectionSetCardProps {
 }
 
 type SetState = "none" | "partial" | "complete"
+
+type RowState = "missing" | "added" | "own" | "taken"
 
 function setState(view: ItemSetView): SetState {
   const rows = [...(view.item_types ?? []), ...(view.custom_fields ?? [])]
@@ -49,6 +53,12 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
   const add = useAddCollectionSet()
   const remove = useRemoveCollectionSet()
   const [confirming, setConfirming] = useState(false)
+  // When the confirmation opened: its lists wait for a status newer than
+  // that.
+  const [openedAt, setOpenedAt] = useState(0)
+  // The status the confirmation was confirmed on. The dialog keeps showing
+  // it while it closes, as the answer replaces the cached status first.
+  const [confirmed, setConfirmed] = useState<ItemSetView | null>(null)
 
   const view = query.data
   const state = view ? setState(view) : "none"
@@ -56,6 +66,15 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
   const hasSetRows =
     !!view &&
     [...(view.item_types ?? []), ...(view.custom_fields ?? [])].some((r) => r.state === "added")
+  const checkFailed = query.isError && query.errorUpdatedAt >= openedAt && !query.isFetching
+  const checking = !checkFailed && (query.isFetching || query.dataUpdatedAt < openedAt)
+
+  function openConfirmation() {
+    setConfirmed(null)
+    setOpenedAt(Date.now())
+    setConfirming(true)
+    void query.refetch()
+  }
 
   function onAdd() {
     add.mutate(
@@ -74,19 +93,39 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
   }
 
   function onRemove() {
+    if (!view) return
+    setConfirmed(view)
     remove.mutate(
-      { groupId, groupSlug },
+      { groupId, groupSlug, removal: removalOf(view) },
       {
         onSuccess: ({ meta }) => {
           setConfirming(false)
-          toast.success(
-            t("groups:settings.collectionSet.removed", {
-              types: meta?.deleted_item_types?.length ?? 0,
-              fields: meta?.deleted_custom_fields?.length ?? 0,
-            })
-          )
+          const deleted = [
+            ...(meta?.deleted_item_types ?? []),
+            ...(meta?.deleted_custom_fields ?? []),
+          ]
+          const kept = [...(meta?.kept_item_types ?? []), ...(meta?.kept_custom_fields ?? [])]
+          if (deleted.length > 0) {
+            toast.success(
+              t("groups:settings.collectionSet.removed", { names: formatList(deleted) })
+            )
+          }
+          if (kept.length > 0) {
+            toast.warning(
+              t("groups:settings.collectionSet.removedKept", {
+                names: formatList(kept),
+                count: kept.length,
+              })
+            )
+          }
+          if (deleted.length === 0 && kept.length === 0) {
+            toast.info(t("groups:settings.collectionSet.removedNothing"))
+          }
         },
-        onError: () => toast.error(t("groups:settings.collectionSet.removeError")),
+        onError: () => {
+          setConfirmed(null)
+          toast.error(t("groups:settings.collectionSet.removeError"))
+        },
       }
     )
   }
@@ -115,7 +154,7 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
         <p className="text-sm text-muted-foreground" data-testid="collection-set-loading">
           {t("common:loading")}
         </p>
-      ) : query.isError || !view ? (
+      ) : !view ? (
         <p className="text-sm text-destructive" data-testid="collection-set-load-error">
           {t("groups:settings.collectionSet.loadError")}
         </p>
@@ -131,16 +170,19 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
                   const Icon =
                     (row.icon ? ITEM_TYPE_ICON_LOOKUP[row.icon] : undefined) ??
                     ITEM_TYPE_FALLBACK_ICON
+                  const label = rowStateLabel(t, row.state as RowState, "type")
                   return (
                     <li key={row.key}>
                       <Badge
                         variant="outline"
-                        className={cn("gap-1", row.state === "missing" && "text-muted-foreground")}
+                        className={cn("gap-1", absentRow(row.state) && absentClass)}
                         data-state={row.state}
+                        title={label}
                         data-testid={`collection-set-type-${row.key}`}
                       >
                         <Icon aria-hidden="true" />
                         {row.name}
+                        <span className="sr-only">, {label}</span>
                       </Badge>
                     </li>
                   )
@@ -152,18 +194,23 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
                 {t("groups:settings.collectionSet.customFields")}
               </p>
               <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="collection-set-fields">
-                {(view.custom_fields ?? []).map((row) => (
-                  <li key={row.key}>
-                    <Badge
-                      variant="outline"
-                      className={cn(row.state === "missing" && "text-muted-foreground")}
-                      data-state={row.state}
-                      data-testid={`collection-set-field-${row.key}`}
-                    >
-                      {row.name}
-                    </Badge>
-                  </li>
-                ))}
+                {(view.custom_fields ?? []).map((row) => {
+                  const label = rowStateLabel(t, row.state as RowState, "field")
+                  return (
+                    <li key={row.key}>
+                      <Badge
+                        variant="outline"
+                        className={cn(absentRow(row.state) && absentClass)}
+                        data-state={row.state}
+                        title={label}
+                        data-testid={`collection-set-field-${row.key}`}
+                      >
+                        {row.name}
+                        <span className="sr-only">, {label}</span>
+                      </Badge>
+                    </li>
+                  )
+                })}
               </ul>
             </div>
             <p className="text-xs text-muted-foreground">
@@ -177,7 +224,7 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
                 <Button
                   type="button"
                   variant="outline"
-                  onClick={() => setConfirming(true)}
+                  onClick={openConfirmation}
                   disabled={pending || !groupId}
                   data-testid="collection-set-remove"
                 >
@@ -207,7 +254,9 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
 
           <CollectionSetRemoveDialog
             open={confirming}
-            view={view}
+            view={confirmed ?? view}
+            checking={confirmed ? false : checking}
+            checkFailed={confirmed ? false : checkFailed}
             pending={remove.isPending}
             onConfirm={onRemove}
             onClose={() => setConfirming(false)}
@@ -247,6 +296,31 @@ function StateBadge({ state }: { state: SetState }) {
 }
 
 type TFn = ReturnType<typeof useTranslation>["t"]
+
+// A row the group does not have gets a dashed, muted badge, so the state
+// does not rest on color alone; the state is also spelled out for screen
+// readers and on hover.
+const absentClass = "border-dashed text-muted-foreground"
+
+function absentRow(state: string | undefined): boolean {
+  return state === "missing" || state === "taken"
+}
+
+function rowStateLabel(t: TFn, state: RowState, kind: "type" | "field"): string {
+  switch (state) {
+    case "added":
+      return t("groups:settings.collectionSet.rowState.added")
+    case "own":
+      return t("groups:settings.collectionSet.rowState.own")
+    case "taken":
+      return kind === "type"
+        ? t("groups:settings.collectionSet.rowState.takenType")
+        : t("groups:settings.collectionSet.rowState.takenField")
+    case "missing":
+    default:
+      return t("groups:settings.collectionSet.rowState.missing")
+  }
+}
 
 function addErrorMessage(t: TFn, code: string | null): string {
   switch (code) {
