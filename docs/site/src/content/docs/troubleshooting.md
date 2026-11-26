@@ -54,6 +54,19 @@ declines to store them over what looks like plain HTTP, and the next request
 arrives unauthenticated. Operators: enable the header on your ingress
 controller or reverse proxy.
 
+### I was signed out and sign-in says "Tenant suspended"
+
+The server's operator has suspended the tenant your account belongs to. While
+it is suspended, everyone in it is signed out, and nobody can sign in or use an
+API token. Your items and files are kept. Ask the server's administrator; once
+they reactivate the tenant, sign in again and create new API tokens, because
+the suspension revoked the old ones.
+
+Operators: suspend and reactivate tenants in the back office, on the tenant's
+page; the
+[admin runbook](https://github.com/denisvmedia/inventario/blob/master/devdocs/admin-runbook.md)
+describes the rules.
+
 ### Signing in with Google, GitHub or single sign-on brings me back to the sign-in page
 
 The sign-in page then shows a message that says why:

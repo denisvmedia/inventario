@@ -239,6 +239,29 @@ block transaction committing and the next token check.
 
 ---
 
+## T6a — A suspended tenant keeps working
+
+**Threat.** The users of a tenant a platform admin suspended (#1037) keep
+working with sessions issued before the suspension, or sign in on another
+tenant's host, where the host check passes.
+
+**Mitigations.** The suspension runs the block cascade for every user of
+the tenant: refresh tokens and personal API tokens are revoked, and the
+blacklist stamp refuses access tokens issued before it.
+`PublicTenantMiddleware` refuses every request on the tenant's own host.
+On any other host, the authenticated routes, token refresh, the MFA and
+magic-link sign-ins and impersonation start check the user's own tenant
+and refuse it while it is not active; API tokens authenticate only on
+their own tenant's host. Covered by `tenant_suspension_auth_test.go` and
+`admin_tenant_writes_test.go`.
+
+**Residual risk.** A status change made with `inventario tenants update`
+cannot stamp the running server's blacklist. Its access tokens are refused
+while the tenant is not active, but work again if the tenant is
+reactivated within their 15-minute lifetime.
+
+---
+
 ## T7 — Secret / credential leakage via logs
 
 **Threat.** An admin handler logs the JWT secret, a new admin's

@@ -75,8 +75,8 @@ The system implements enterprise-grade multi-tenancy with:
 - `./inventario tenants create` - Create tenants for initial setup
 - `./inventario tenants list` - List all tenants with filtering
 - `./inventario tenants get <id-or-slug>` - Get detailed tenant information
-- `./inventario tenants update <id-or-slug>` - Update tenant properties
-- `./inventario tenants delete <id-or-slug>` - Delete tenants with confirmation
+- `./inventario tenants update <id-or-slug>` - Update tenant properties; a status change away from active ends the sessions of the tenant's users
+- `./inventario tenants delete <id-or-slug>` - Delete tenants with confirmation (the operator types the slug); the back office's `DELETE /api/v1/admin/tenants/{id}` follows the same rules through `go/services/admin`
 - `./inventario users create` - Create users for initial setup
 - `./inventario users list` - List all users with filtering
 - `./inventario users get <id-or-email>` - Get detailed user information

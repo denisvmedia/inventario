@@ -10,8 +10,9 @@ a user is a system admin iff they have a row there — and gates the
 
 > **Scope.** System admins can list tenants, inspect/block users,
 > oversee groups (including soft-delete), edit group memberships, and
-> impersonate users for support. There is **no tenant CRUD** — tenants
-> are administered out-of-band (see [CLI Commands](../README.md#cli-commands)).
+> impersonate users for support. A back-office `platform_admin` also
+> creates, edits, suspends, reactivates and deletes tenants (§10); the
+> [CLI](../README.md#cli-commands) does the same out-of-band.
 
 ---
 
@@ -144,6 +145,7 @@ Admin actions use the `admin.` action prefix:
 | `admin.list_groups` / `…get_group` / `…delete_group` | group endpoints |
 | `admin.group_member_add` / `…remove` / `…role_change` | membership endpoints |
 | `admin.impersonate_start` / `admin.impersonate_end` | impersonation endpoints |
+| `admin.tenant_create` / `…tenant_update` / `…tenant_suspend` / `…tenant_reactivate` / `…tenant_delete` | tenant write endpoints (§10); the breadcrumb holds the slug, the reason of a suspend or reactivate, and for an update the changed fields and the status change |
 | `admin.worker_pause` | `POST /api/v1/admin/workers/{type}/pause` (actor = back-office operator) or `inventario workers pause` (`paused_by="cli"`); subject = worker type (#1308) |
 | `admin.worker_resume` | `POST /api/v1/admin/workers/{type}/resume` (actor = back-office operator) or `inventario workers resume`; subject = worker type (#1308) |
 
@@ -585,6 +587,80 @@ inventario workers pause --type trash-purge --reason "holding expired entries" \
 
 Entries keep expiring while the worker is paused and are purged on the first
 sweep after it resumes.
+
+---
+
+## 10. Managing tenants (#1037)
+
+A back-office operator with `role=platform_admin` manages tenants in the
+back office: **New tenant** on the Tenants page; **Edit** and **Suspend**
+or **Reactivate** on a tenant's page; **Delete tenant** in the Danger zone
+at the bottom of it. A `support_agent` sees the tenant pages without these
+actions, and the API refuses it with `403` and `admin.role_required`. The
+endpoints and `inventario tenants` share one set of rules, in
+`go/services/admin`.
+
+| Action     | Endpoint                                             | Body or query |
+| ---------- | ---------------------------------------------------- | ------------- |
+| Create     | `POST /api/v1/admin/tenants`                         | `name`, optional `slug`, `domain`, `status` |
+| Edit       | `PATCH /api/v1/admin/tenants/{id}`                   | any of `name`, `slug`, `domain`, `status` |
+| Suspend    | `POST /api/v1/admin/tenants/{id}/suspend`            | `reason` |
+| Reactivate | `POST /api/v1/admin/tenants/{id}/reactivate`         | `reason` |
+| Delete     | `DELETE /api/v1/admin/tenants/{id}?confirm_slug=…`   | the tenant's slug |
+
+Create and edit:
+
+- The name is 1 to 100 characters. An empty slug on create is generated
+  from the name, as `inventario tenants create` does: lowercase, every run
+  of other characters becomes a hyphen, at most 50 characters. A new
+  tenant is active unless `status` says otherwise, and its registration is
+  closed.
+- Slugs and domains are unique: one another tenant has is refused with
+  `409` and `tenant.slug_taken` or `tenant.domain_taken`. A domain is a
+  bare lowercase hostname; an empty `domain` on edit removes it.
+- An edit changes only the fields it sends. A status change away from
+  active ends the tenant's sessions, as a suspension does.
+
+Suspend and reactivate:
+
+- Both take a reason of 1 to 500 characters, which the audit row keeps.
+- A suspension ends every session of every user of the tenant, the same
+  teardown a user block runs: refresh tokens and personal API tokens are
+  revoked, and access tokens issued before the suspension are refused.
+- While a tenant is not active, every request on its host is refused with
+  `403 Tenant suspended`. Its users get no further on another tenant's
+  host: a password or OAuth sign-in finds only users of the host's tenant,
+  an API token authenticates only on its own tenant's host, and the MFA
+  and magic-link sign-ins, token refresh and access tokens check the
+  user's own tenant. Impersonating one of its users is refused with `422`
+  and `tenant.not_active`.
+- Reactivating makes the tenant active again. The sessions the suspension
+  ended stay ended, and the revoked API tokens stay revoked: users sign in
+  again and create new tokens.
+- A status change made with `inventario tenants update` revokes the
+  refresh and API tokens too, but the CLI cannot reach the running
+  server's access-token blacklist. An access token issued before such a
+  change is refused while the tenant is not active, and works again if the
+  tenant is reactivated within the token's 15-minute lifetime.
+
+Delete:
+
+- The operator types the tenant's slug, the confirmation
+  `inventario tenants delete` asks for; the API compares `confirm_slug`
+  with the slug exactly and refuses anything else with `422` and
+  `admin.tenant.confirmation_mismatch`.
+- The rules are the CLI's: the tenant's stored files are removed first,
+  so an unreachable file store stops the deletion before any row goes;
+  then its users, groups, items and every other row. It cannot be undone.
+  The deletion runs within the request, which can take a while for a
+  tenant with many files.
+
+The tenant that serves the request's host cannot be suspended, made
+inactive or deleted over HTTP: the API refuses it with `422` and
+`admin.tenant.serves_this_host`, because doing it would lock the back
+office out. In single-tenant mode every host resolves to the default
+tenant, so the default tenant is changed only with the CLI, which does not
+refuse it.
 
 ---
 

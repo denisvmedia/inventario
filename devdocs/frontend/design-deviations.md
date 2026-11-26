@@ -1522,6 +1522,24 @@ _None yet._
 - **Approved by**: agent-suggested-then-user-confirmed — the issue brief explicitly instructed this deviation and required it logged here.
 - **Reversion plan**: Permanent. The `admin_return_token` approach is incompatible with the shipped backend contract; it would only return if the BE dropped the server-side return slot.
 
+#### 2026-11-26 — Admin Tenants page: New tenant button and create dialog
+
+- **Issue/PR**: #1037
+- **Mock**: [`design-mocks/src/views/admin/TenantsView.tsx`](../../design-mocks/src/views/admin/TenantsView.tsx) is a read-only list: the header has the title and subtitle only (L64–L75), and there is no way to add a tenant.
+- **Reality**: For a `platform_admin`, `frontend/src/pages/admin/AdminTenantsPage.tsx` puts a small primary **New tenant** button (`Plus` icon) at the right of the header, the header-action pattern of [`MembersView.tsx`](../../design-mocks/src/views/MembersView.tsx) (L121–L133). It opens `TenantFormDialog` (`frontend/src/pages/admin/AdminTenantDialogs.tsx`): a `Dialog` with Name, Slug (mono, optional, with a hint that it is generated from the name) and Custom domain fields, field errors under each field, and Cancel / **Create tenant** buttons. The created tenant opens on its detail page. A `support_agent` gets the page without the button.
+- **Why**: not present in mock. The owner decision on #1037 adds tenant create to the back office; the dialog follows the form dialogs of the mock's `MembersView` invite dialog. Hiding the button from a `support_agent`, whom the API refuses, is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1037, 2026-11-26; hiding the actions from a `support_agent` agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws tenant creation; otherwise permanent.
+
+#### 2026-11-26 — Admin tenant detail: Edit, Suspend / Reactivate and a Danger zone with a type-the-slug delete
+
+- **Issue/PR**: #1037
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) shows the tenant header card and the Users / Groups tabs with no actions.
+- **Reality**: For a `platform_admin`, `frontend/src/pages/admin/AdminTenantDetailPage.tsx` ends the header card with a `Separator` and an action row: outline **Edit** (`Pencil`), and outline **Suspend** in the destructive color (`Ban`) for an active tenant or **Reactivate** (`CircleCheck`) for a suspended or inactive one, the identity-card actions of [`admin/UserDetailView.tsx`](../../design-mocks/src/views/admin/UserDetailView.tsx). Edit opens `TenantFormDialog` with the current name, slug and domain (the status is not on the form). Suspend and Reactivate open a dialog with a required reason `Textarea` and a character counter, as Block and Unblock do on the user page. Below the tabs, a Danger zone card, the anatomy of the one in [`admin/GroupDetailView.tsx`](../../design-mocks/src/views/admin/GroupDetailView.tsx) (L258–L285), holds **Delete tenant**; its dialog asks the operator to type the tenant's slug into a mono `Input` and keeps the destructive **Delete tenant** button disabled until the typed value equals the slug. Typed server refusals show as a destructive `Alert` in the dialog. A `support_agent` sees the page read-only, without the action row or the Danger zone.
+- **Why**: not present in mock. The owner decision on #1037 asks for these actions on the tenant pages and for a delete that makes the operator type the slug, the confirmation `inventario tenants delete` asks for. Keeping the status off the edit form, so that it changes only with a reason, and hiding the actions from a `support_agent` are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1037, 2026-11-26; the status-only-through-Suspend/Reactivate split and the role gating agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws tenant actions; otherwise permanent.
+
 ### Reports
 
 #### 2026-05-30 — Insurance report (#1370)

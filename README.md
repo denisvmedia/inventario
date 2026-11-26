@@ -141,13 +141,19 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 # "Hostnames and tenants".
 ./inventario tenants update acme --domain=inventory.acme.com
 
-# Delete tenant with confirmation
+# Delete tenant with confirmation (type the tenant's slug to confirm)
 ./inventario tenants delete acme
 
 # Preview operations without making changes
 ./inventario tenants create --dry-run --name="Test Org"
 ./inventario tenants delete acme --dry-run
 ```
+
+A back-office `platform_admin` can do the same in the browser: create, edit,
+suspend, reactivate and delete tenants. Suspending a tenant signs its users
+out and keeps them out until it is reactivated; a status change made with
+`tenants update` does the same. The rules are in
+[the admin runbook](devdocs/admin-runbook.md#10-managing-tenants-1037).
 
 #### User Management
 ```bash

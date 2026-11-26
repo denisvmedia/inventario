@@ -682,6 +682,31 @@ when to add an entry and where it goes.
   stored under `avatars/` keep working. A bucket lifecycle rule that matches
   `avatars/` needs the new prefix too
   ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- Tenant management in the back office. A `platform_admin` creates a tenant
+  (**New tenant** on the Tenants page), edits its name, slug and custom
+  domain, suspends and reactivates it with a reason, and deletes it after
+  typing its slug. A `support_agent` sees the tenant pages without these
+  actions. The API gains `POST /api/v1/admin/tenants`,
+  `PATCH /api/v1/admin/tenants/{id}`, `POST …/suspend`, `POST …/reactivate`
+  and `DELETE /api/v1/admin/tenants/{id}?confirm_slug=…`; every write leaves
+  an `admin.tenant_*` audit row. Deleting follows the rules of
+  `inventario tenants delete`. The tenant that serves the back office's own
+  host cannot be suspended or deleted over HTTP, so in single-tenant mode the
+  default tenant stays a CLI task. See §10 of `devdocs/admin-runbook.md`
+  ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
+- Suspending a tenant now ends its users' sessions: refresh tokens and
+  personal API tokens are revoked and access tokens issued before the
+  suspension are refused, as when a user is blocked. This also applies to a
+  status change made with `inventario tenants update`, which revokes the
+  refresh and API tokens; its access tokens are refused while the tenant is
+  not active. A user of a suspended tenant was already refused on the
+  tenant's own host; they are now refused on every other host as well, and
+  cannot be impersonated
+  ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
+- Two tenants can no longer share a custom domain: creating or editing a
+  tenant with another tenant's domain is refused. The tenant name limit of
+  100 counts characters instead of bytes
+  ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
 
 ## [0.2.2] - 2026-11-23
 
