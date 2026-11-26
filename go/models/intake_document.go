@@ -64,9 +64,9 @@ const (
 // candidate's client key.
 //
 // PayloadHash fingerprints what was delivered, the values and the file's
-// content. A repeat with the same fingerprint is a replay; a different
-// fingerprint means the document changed, which the endpoint refuses rather
-// than make a second draft.
+// content, and is required. A repeat with the same fingerprint is a replay;
+// a different fingerprint means the document changed, which the endpoint
+// refuses rather than make a second draft.
 //
 //ptah:schema:rls:enable table="intake_documents" comment="Enable RLS for multi-tenant intake document isolation"
 //ptah:schema:rls:policy name="intake_document_isolation" table="intake_documents" for="ALL" to="inventario_app" using="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" with_check="tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''" comment="Ensures intake documents can only be accessed and modified by their tenant and group with required contexts"
@@ -158,15 +158,14 @@ func (*IntakeDocument) Validate() error {
 func (d *IntakeDocument) ValidateWithContext(ctx context.Context) error {
 	if err := validation.ValidateStructWithContext(ctx, d,
 		validation.Field(&d.TenantGroupAwareEntityID),
-		validation.Field(&d.PayloadHash, rules.NotEmpty),
 	); err != nil {
 		return err
 	}
 	return d.ValidateFields(ctx)
 }
 
-// ValidateFields checks the delivered fields only, before the registry fills
-// in the tenant, the group and the author.
+// ValidateFields checks the delivered fields and the fingerprint, before the
+// registry fills in the tenant, the group and the author.
 func (d *IntakeDocument) ValidateFields(ctx context.Context) error {
 	return validation.ValidateStructWithContext(ctx, d,
 		validation.Field(&d.ExternalSystem, rules.NotEmpty, validation.Length(1, IntakeExternalValueMaxLength)),
@@ -174,6 +173,7 @@ func (d *IntakeDocument) ValidateFields(ctx context.Context) error {
 		validation.Field(&d.ExternalDocumentID, rules.NotEmpty, validation.Length(1, IntakeExternalValueMaxLength)),
 		validation.Field(&d.SourceName, validation.RuneLength(0, IntakeSourceNameMaxRunes)),
 		validation.Field(&d.SourceURL, validation.Length(0, IntakeSourceURLMaxLength), IntakeSourceURLRule),
+		validation.Field(&d.PayloadHash, rules.NotEmpty),
 	)
 }
 

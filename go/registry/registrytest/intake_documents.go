@@ -80,6 +80,14 @@ func intakeDocumentContractCreateOrGet(t *testing.T, env IntakeDocumentEnv) {
 	c.Assert(same.ID, qt.Equals, doc.ID)
 	c.Assert(same.PayloadHash, qt.Equals, "hash-7")
 
+	// A document without a fingerprint is refused.
+	unhashed := contractIntakeDocument("8")
+	unhashed.PayloadHash = ""
+	_, _, err = env.Documents.CreateOrGet(env.Ctx, unhashed)
+	c.Assert(err, qt.IsNotNil)
+	_, err = env.Documents.GetByExternalID(env.Ctx, "paperless-ngx", "home", "8")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
 	// Another instance or document id is another document.
 	other := contractIntakeDocument("7")
 	other.ExternalInstance = "office"
