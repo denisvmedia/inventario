@@ -15,6 +15,7 @@ import {
   apiUrl,
   areaHandlers,
   commodityHandlers,
+  draftHandlers,
   groupHandlers,
   locationHandlers,
   savedViewHandlers,
@@ -667,19 +668,21 @@ describe("<CommoditiesListPage />", () => {
     // Replays the regression that motivated #1629: walk past the
     // initial AI placeholder step, fill Basics (Name and Type; the
     // short name follows the name), walk Purchase → Warranty →
-    // Extras → Files, then submit. After 201 the dialog closes and
-    // the page navigates to /commodities/:newId.
+    // Extras → Files, then submit. Add item saves the form as a server
+    // draft and promotes it (#1626); then the dialog closes and the page
+    // navigates to /commodities/:newId.
     const user = userEvent.setup()
     const requests: Record<string, unknown>[] = []
+    const drafts = draftHandlers.backend(SLUG)
     server.use(
+      ...drafts.handlers,
       ...groupHandlers.list(groupFixture),
       ...areaHandlers.list(SLUG, areaFixture),
       ...locationHandlers.list(SLUG, [
         { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
       ]),
       ...commodityHandlers.list(SLUG, []),
-      // Intercept the POST manually so the test can assert the
-      // mapped-value payload Radix Select drives through the form.
+      // An item made without the draft would land here.
       msw.post(apiUrl(`/g/${SLUG}/commodities`), async ({ request }) => {
         requests.push((await request.json()) as Record<string, unknown>)
         return HttpResponse.json(
@@ -747,13 +750,14 @@ describe("<CommoditiesListPage />", () => {
     // Page navigates to the new item's detail route — the sentinel
     // resolves once react-router has replaced the URL.
     expect(await screen.findByTestId("nav-sentinel-path")).toHaveTextContent(
-      `/g/${SLUG}/commodities/new-1`
+      `/g/${SLUG}/commodities/item-from-${drafts.drafts[0]?.id}`
     )
     // The mapped payload landed on the BE — anchor on the schema
     // fields the dialog test pins (#1629 success criterion). The
     // hook wraps the payload in a JSON:API envelope.
-    expect(requests).toHaveLength(1)
-    expect(requests[0]).toMatchObject({
+    expect(requests).toHaveLength(0)
+    expect(drafts.promotions).toHaveLength(1)
+    expect(drafts.promotions[0]?.body).toMatchObject({
       data: {
         type: "commodities",
         attributes: {

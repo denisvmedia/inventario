@@ -6,9 +6,8 @@
 // the draft instead of making a second one. A file whose content is already
 // attached to the draft, or that an earlier attempt uploaded, is not uploaded
 // again.
-import { attachFile, updateFile, uploadFile, type ListedFile } from "@/features/files/api"
-import { categoryFromMime } from "@/features/files/constants"
-import type { PendingFile } from "@/features/commodities/draft"
+import { attachFile, uploadFile, type ListedFile } from "@/features/files/api"
+import { placePendingFile, type PendingFile } from "@/features/commodities/draft"
 import { HttpError } from "@/lib/http"
 
 import {
@@ -43,6 +42,10 @@ const BASE_REVISION_SUFFIX = ":base-revision"
 // retry of a promotion whose response was lost sends the same key and gets
 // the item it made.
 const PROMOTION_KEY_SUFFIX = ":promotion-key"
+// The draft the form made only to add the item (#1626), kept until the user
+// saves it as a draft of their own or the form forgets the slot. Discarding
+// the form discards that draft too.
+const ITEM_DRAFT_SUFFIX = ":item-draft"
 
 // Files larger than this are matched by name and size only: hashing reads
 // the whole file into memory.
@@ -140,11 +143,28 @@ export function forgetBaseRevision(localKey: string): void {
   remove("local", localKey + BASE_REVISION_SUFFIX)
 }
 
-// clearDraftSession forgets the client key, base revision and promotion key
-// of a slot.
+// rememberItemDraft records that the slot's draft was made by Add item, not
+// by a save the user asked for.
+export function rememberItemDraft(localKey: string, draftId: string): void {
+  write("session", localKey + ITEM_DRAFT_SUFFIX, draftId)
+}
+
+// itemDraftOf returns the draft Add item made for the slot, if any.
+export function itemDraftOf(localKey: string): string | null {
+  return read("session", localKey + ITEM_DRAFT_SUFFIX)
+}
+
+// forgetItemDraft keeps the slot's draft as one the user saved.
+export function forgetItemDraft(localKey: string): void {
+  remove("session", localKey + ITEM_DRAFT_SUFFIX)
+}
+
+// clearDraftSession forgets the client key, base revision, promotion key
+// and item draft of a slot.
 export function clearDraftSession(localKey: string): void {
   remove("session", localKey + CLIENT_KEY_SUFFIX)
   remove("session", localKey + PROMOTION_KEY_SUFFIX)
+  remove("session", localKey + ITEM_DRAFT_SUFFIX)
   remove("local", localKey + BASE_REVISION_SUFFIX)
 }
 
@@ -209,6 +229,9 @@ export interface SaveDraftInput {
   // A draft whose saved files the new draft should get too, for "save as a
   // new draft". The files are linked, not copied.
   carryFilesFrom?: string | null
+  // Called for each pending file as its turn comes, before anything is sent
+  // for it.
+  onFileStart?: (entry: PendingFile) => void
   // Called for each pending file once it is uploaded, with the file's id,
   // so a retry attaches that file instead of uploading it again.
   onFileUploaded?: (entry: PendingFile, fileId: string) => void
@@ -311,18 +334,10 @@ function isGone(err: unknown): boolean {
   return err instanceof HttpError && err.status === 404
 }
 
-// placeFile tags an uploaded file and attaches it to the draft. Both steps
-// can be repeated.
-async function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise<void> {
-  if (entry.tags.length > 0) {
-    await updateFile(fileId, { tags: entry.tags })
-  }
-  const category = categoryFromMime(entry.file.type)
-  await attachFile(fileId, {
-    entityType: "draft",
-    entityId: draftId,
-    meta: category === "other" ? undefined : category,
-  })
+// placeFile titles and tags an uploaded file and attaches it to the draft.
+// Both steps can be repeated.
+function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise<void> {
+  return placePendingFile(entry, fileId, { entityType: "draft", entityId: draftId })
 }
 
 // saveDraftWithFiles stores the values, then uploads and attaches the
@@ -350,6 +365,7 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
     // saving it.
   }
   for (const entry of input.pendingFiles) {
+    input.onFileStart?.(entry)
     try {
       const done = entry.uploadedFileId
         ? attached.some((row) => row.file.id === entry.uploadedFileId)

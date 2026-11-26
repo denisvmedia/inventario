@@ -574,8 +574,8 @@ export function CommoditiesListPage() {
     if (slug && created?.id) {
       navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
     }
-    // Return so the dialog can use the new id to upload + link any
-    // attachments collected on the Files step.
+    // The draft brought the Files step's attachments along. The dialog
+    // uses the returned id only when it has no draft (edit mode).
     return created
   }
 

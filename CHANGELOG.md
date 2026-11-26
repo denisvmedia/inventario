@@ -418,6 +418,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Changed
 
+- **Add item** uploads the item's files to its draft before it creates the
+  item, and the dialog stays open until the item exists. Each file shows
+  whether it is uploading, uploaded or failed, and the button counts the
+  uploads. A failed upload creates no item: the dialog names the file and
+  keeps the form, and **Retry** uploads only the files still missing before
+  it creates the item. Each staged file has an editable title, the file name
+  without its extension by default. **Discard** in the Add item dialog, and
+  closing the batch intake dialog before its batch is queued, move the files
+  they uploaded to the Trash instead of leaving them as standalone files
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
   a cover set that way before shows the first photo instead. The No photo
@@ -493,6 +504,11 @@ the section matching the tag and publishes it as the GitHub Release body. See
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 ### Fixed
+
+- A file added with tags in the Add item dialog keeps its title. The dialog
+  set the tags with `PUT /files/{id}`, which replaces the title as well, and
+  sent no title, so the file had none
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - The Helm chart's Grafana dashboard shows its "Scrape target up" panel on
   Kubernetes. The panel asked for `up{job="inventario"}`, a job name only the

@@ -68,6 +68,10 @@ export interface FakeIntakeBackend {
   // When set, the server applies the next create and the client never gets
   // the answer. Cleared once used.
   loseCreate: boolean
+  // When set, creates are refused with this status and nothing is stored.
+  failCreate: number | null
+  // Ids of the files DELETE /files/{id} moved to Trash, in order.
+  trashed: string[]
   // How long each upload and each candidate review takes, in ms.
   uploadDelayMs: number
   reviewDelayMs: number
@@ -169,6 +173,8 @@ export function backend(
     draftRequests: 0,
     events: [],
     loseCreate: false,
+    failCreate: null,
+    trashed: [],
     uploadDelayMs: 0,
     reviewDelayMs: 0,
     refuseRescan: null,
@@ -176,6 +182,20 @@ export function backend(
   }
   const find = (id: string) => state.sessions.find((s) => s.id === id)
   const notFound = () => HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+  // The files uploaded here and not trashed since.
+  const uploaded = new Set<string>()
+  // A file a batch holds is linked to the batch's source.
+  const linksOf = (fileId: string) =>
+    state.sessions.flatMap((s) =>
+      s.sources
+        .filter((src) => src.file_ids.includes(fileId))
+        .map((src) => ({
+          id: `link-${src.id}-${fileId}`,
+          file_id: fileId,
+          entity_type: "intake_source",
+          entity_id: src.id,
+        }))
+    )
 
   state.handlers = [
     http.get(apiUrl(`${base}/intake/limits`), () =>
@@ -196,10 +216,26 @@ export function backend(
       if (state.uploadDelayMs > 0) await delay(state.uploadDelayMs)
       state.uploads++
       const id = `file-${++seq}`
+      uploaded.add(id)
       return HttpResponse.json(
         { id, type: "files", attributes: { id, path: id, ext: ".jpg", links: [] } },
         { status: 201 }
       )
+    }),
+    http.get(apiUrl(`${base}/files/:id`), ({ params }) => {
+      const id = String(params.id)
+      if (!uploaded.has(id)) return notFound()
+      return HttpResponse.json({
+        id,
+        type: "files",
+        attributes: { id, path: id, ext: ".jpg", links: linksOf(id) },
+      })
+    }),
+    http.delete(apiUrl(`${base}/files/:id`), ({ params }) => {
+      const id = String(params.id)
+      if (!uploaded.delete(id)) return notFound()
+      state.trashed.push(id)
+      return new HttpResponse(null, { status: 204 })
     }),
     http.post(apiUrl(`${base}/intake/sessions`), async ({ request }) => {
       const body = (await request.json()) as {
@@ -212,6 +248,9 @@ export function backend(
       }
       const attrs = body.data.attributes
       state.creates.push(attrs)
+      if (state.failCreate) {
+        return HttpResponse.json({ errors: [{ status: "500" }] }, { status: state.failCreate })
+      }
       const existing = state.sessions.find((s) => s.client_key === attrs.client_key)
       if (existing) return detail(existing)
       const id = `session-${state.sessions.length + 1}`

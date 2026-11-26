@@ -385,6 +385,9 @@
     "warranty": "Záruka"
   },
   "form": {
+    "addFailed": "Položku se nepodařilo přidat.",
+    "addFailedTitle": "Položka nebyla přidána",
+    "addRetryHint": "Nic se nepřidá, dokud se nenahrají všechny soubory. Zadané údaje i soubory tu zůstávají a Zkusit znovu pokračuje tam, kde se skončilo.",
     "assignLocationBanner": {
       "cta": "Umístit do umístění",
       "dismiss": "Zavřít",
@@ -405,8 +408,13 @@
     "continue": "Pokračovat",
     "createTitle": "Přidat položku",
     "editTitle": "Upravit položku",
+    "filesNotUploaded": "Nenahráno: {{names}}",
     "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
     "fillManually": "Vyplnit ručně",
+    "leftoverFilesFailed_few": "{{count}} nahrané soubory se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
+    "leftoverFilesFailed_many": "{{count}} nahraného souboru se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
+    "leftoverFilesFailed_one": "{{count}} nahraný soubor se nepodařilo přesunout do koše. Najdete jej na stránce Soubory.",
+    "leftoverFilesFailed_other": "{{count}} nahraných souborů se nepodařilo přesunout do koše. Najdete je na stránce Soubory.",
     "serverError": "Něco se pokazilo. Zkuste to prosím znovu.",
     "step": {
       "ai": {
@@ -504,8 +512,14 @@
         "dropzone": "Sem přetáhněte soubory nebo klikněte pro procházení",
         "hint": "Každý soubor zařadíme do kategorie Fotografie, Dokumenty nebo Ostatní podle jeho typu.",
         "intro": "Připojte cokoli, co se týká této položky — fotografie, účtenky, návody. Soubory jsou nepovinné a lze je přidat později.",
+        "status": {
+          "failed": "Nahrání selhalo",
+          "uploaded": "nahráno",
+          "uploading": "nahrává se"
+        },
         "tagsPlaceholder": "Zadejte štítky oddělené čárkou, např. faktura, záruka, návod…",
-        "title": "Soubory"
+        "title": "Soubory",
+        "titleLabel": "Název souboru {{name}}"
       },
       "purchase": {
         "title": "Nákup"
@@ -518,7 +532,8 @@
     "stepperLabel": "Kroky formuláře",
     "submitCreate": "Přidat položku",
     "submitEdit": "Uložit změny",
-    "submitting": "Ukládání…"
+    "submitting": "Ukládání…",
+    "uploadingFiles": "Nahrávám {{done}} z {{total}}…"
   },
   "labels": {
     "areaQrTitle": "QR kód pro oblast {{name}}",

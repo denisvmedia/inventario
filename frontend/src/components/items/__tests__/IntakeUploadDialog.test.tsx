@@ -1,3 +1,4 @@
+import { useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -164,5 +165,103 @@ describe("<IntakeUploadDialog />", () => {
       "room for 1 more purchase"
     )
     expect(screen.getByTestId("intake-upload-submit")).toBeDisabled()
+  })
+})
+
+// The dialog uploads the files before it queues the batch. Files it uploaded
+// that no batch holds once it closes go to Trash (#1626).
+describe("<IntakeUploadDialog /> uploads left behind", () => {
+  function Closable({ files, l = limits() }: { files: File[]; l?: IntakeLimits }) {
+    const [open, setOpen] = useState(true)
+    return (
+      <IntakeUploadDialog
+        open={open}
+        onOpenChange={setOpen}
+        limits={l}
+        initialFiles={files}
+        onQueued={() => setOpen(false)}
+      />
+    )
+  }
+
+  function renderClosable(files: File[], l?: IntakeLimits) {
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/commodities`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/commodities"
+          element={
+            <AuthProvider>
+              <GroupProvider>
+                <Closable files={files} l={l} />
+              </GroupProvider>
+            </AuthProvider>
+          }
+        />
+      ),
+    })
+  }
+
+  it("moves the uploads to Trash when the dialog is closed after the batch failed", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    fake.failCreate = 500
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderClosable([jpg("a.jpg"), jpg("b.jpg")])
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    expect(await screen.findByTestId("intake-upload-error")).toBeInTheDocument()
+    expect(fake.uploads).toBe(2)
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    await waitFor(() => expect(fake.trashed).toEqual(["file-1", "file-2"]))
+    expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
+  })
+
+  it("keeps the files of a queued batch", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderClosable([jpg("a.jpg"), jpg("b.jpg")])
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
+    )
+    expect(fake.sessions).toHaveLength(1)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(fake.trashed).toEqual([])
+  })
+
+  it("keeps the files of a batch queued although its answer was lost", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    fake.loseCreate = true
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderClosable([jpg("a.jpg")])
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    expect(await screen.findByTestId("intake-upload-error")).toBeInTheDocument()
+    await user.click(screen.getByRole("button", { name: "Cancel" }))
+    await waitFor(() =>
+      expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
+    )
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(fake.trashed).toEqual([])
+  })
+
+  it("moves an upload the batch left out to Trash", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    fake.failCreate = 500
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    // One item takes one file here, so the switch leaves b.jpg out.
+    renderClosable([jpg("a.jpg"), jpg("b.jpg")], limits({ maxFilesPerSource: 1 }))
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    expect(await screen.findByTestId("intake-upload-error")).toBeInTheDocument()
+    fake.failCreate = null
+    await user.click(screen.getByTestId("intake-upload-one-item"))
+    await user.click(screen.getByTestId("intake-upload-submit"))
+    await waitFor(() => expect(fake.sessions).toHaveLength(1))
+    expect(fake.sessions[0]?.sources).toEqual([
+      expect.objectContaining({ file_ids: ["file-1"], one_item: true }),
+    ])
+    await waitFor(() => expect(fake.trashed).toEqual(["file-2"]))
   })
 })

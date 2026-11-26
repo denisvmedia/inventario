@@ -87,6 +87,31 @@ describe("saveDraftWithFiles", () => {
     ])
   })
 
+  it("names each file with its title, or its name without the extension", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...fake.handlers)
+    const started: string[] = []
+    await saveDraftWithFiles({
+      draft: null,
+      clientKey: "form:titles",
+      values: { name: "Drill" },
+      pendingFiles: [
+        { ...pending("front.png"), title: "  Front of the box ", tags: ["box"] },
+        pending("receipt.pdf", "r", "application/pdf"),
+        { ...pending("manual.pdf", "m", "application/pdf"), title: "   " },
+      ],
+      onFileStart: (entry) => started.push(entry.file.name),
+    })
+    expect(started).toEqual(["front.png", "receipt.pdf", "manual.pdf"])
+    // The upload names a file after the time it came; the title replaces
+    // that, and a tags-only update would clear it.
+    expect(fake.files.map((f) => [f.title, f.tags])).toEqual([
+      ["Front of the box", ["box"]],
+      ["receipt", []],
+      ["manual", []],
+    ])
+  })
+
   it("makes one draft when a save is repeated after a lost response", async () => {
     const fake = draftHandlers.backend(SLUG)
     server.use(...fake.handlers)

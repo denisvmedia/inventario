@@ -12,7 +12,7 @@
 // move. The dialog re-imports every symbol below.
 import type { DeepPartial } from "react-hook-form"
 
-import { attachFile, uploadFile, updateFile } from "@/features/files/api"
+import { attachFile, uploadFile, updateFile, type FileLinkEntityType } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { HttpError } from "@/lib/http"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
@@ -35,9 +35,48 @@ export interface PendingFile {
   id: string
   file: File
   tags: string[]
+  // The title the user typed (#1626). Unset while the file keeps its
+  // default title, the file name without the extension; see
+  // pendingFileTitle.
+  title?: string
   // The server file an earlier draft save uploaded for this entry (#2812),
   // so a retry attaches it instead of uploading the bytes again.
   uploadedFileId?: string
+}
+
+// The longest title the server takes for a file.
+export const FILE_TITLE_MAX_LENGTH = 255
+
+// defaultFileTitle is the title a staged file starts with: its name without
+// the extension.
+export function defaultFileTitle(file: File): string {
+  const dot = file.name.lastIndexOf(".")
+  return dot > 0 ? file.name.slice(0, dot) : file.name
+}
+
+// pendingFileTitle is the title a staged file is saved with: the one the
+// user typed, or the default when the field is blank.
+export function pendingFileTitle(entry: PendingFile): string {
+  const title = entry.title?.trim() || defaultFileTitle(entry.file)
+  return title.slice(0, FILE_TITLE_MAX_LENGTH)
+}
+
+// placePendingFile gives an uploaded file the staged title and tags, then
+// attaches it to the entity. Both requests can be repeated. The title is
+// always sent: the upload names the file after the stored blob, and
+// PUT /files/{id} replaces the title, the description and the tags together.
+export async function placePendingFile(
+  entry: PendingFile,
+  fileId: string,
+  target: { entityType: FileLinkEntityType; entityId: string }
+): Promise<void> {
+  await updateFile(fileId, { title: pendingFileTitle(entry), tags: entry.tags })
+  const category = categoryFromMime(entry.file.type)
+  await attachFile(fileId, {
+    ...target,
+    // "other" names no bucket, so the file keeps its category.
+    meta: category === "other" ? undefined : category,
+  })
 }
 
 // newPendingId mints a stable id for a staged file row. Prefers
@@ -64,10 +103,10 @@ export function fileSignature(file: File): string {
 // is nothing new to add so React can bail out of a no-op state update.
 //
 // This is how AI-scan source files (#1983 Part A) join the Files-step queue:
-// the dialog merges the files the user scanned into `pendingFiles`, then the
-// existing post-create `uploadPendingFiles()` attaches them with the new
-// commodity id — images land in the `images` bucket and PDFs in `documents`
-// (the category is derived from MIME by both the FE row and the BE).
+// the dialog merges the files the user scanned into `pendingFiles`, and the
+// save attaches them to the item like any other staged file — images land in
+// the `images` bucket and PDFs in `documents` (the category is derived from
+// MIME by both the FE row and the BE).
 export function mergePendingFiles(existing: PendingFile[], incoming: File[]): PendingFile[] {
   if (incoming.length === 0) return existing
   const seen = new Set(existing.map((entry) => fileSignature(entry.file)))
@@ -234,9 +273,9 @@ export function toRequest(
   }
 }
 
-// uploadPendingFiles uploads each staged file, sets its tags, then attaches
-// it to the freshly-created commodity (POST /uploads/file, PUT /files/:id
-// for the tags, POST /files/:id/links). Per-file failures are reported via
+// uploadPendingFiles uploads each staged file, sets its title and tags, then
+// attaches it to the freshly-created commodity (POST /uploads/file, PUT
+// /files/:id, POST /files/:id/links). Per-file failures are reported via
 // `onError`; the commodity itself is already persisted, so a failed attach
 // is non-fatal (the user can retry from the detail page).
 export async function uploadPendingFiles(
@@ -244,18 +283,8 @@ export async function uploadPendingFiles(
   commodityId: string,
   onError: (entry: PendingFile, err: unknown) => void
 ): Promise<void> {
-  const place = async (entry: PendingFile, fileId: string) => {
-    const category = categoryFromMime(entry.file.type)
-    if (entry.tags.length > 0) {
-      await updateFile(fileId, { tags: entry.tags })
-    }
-    await attachFile(fileId, {
-      entityType: "commodity",
-      entityId: commodityId,
-      // "other" names no bucket, so the file keeps its category.
-      meta: category === "other" ? undefined : category,
-    })
-  }
+  const place = (entry: PendingFile, fileId: string) =>
+    placePendingFile(entry, fileId, { entityType: "commodity", entityId: commodityId })
   const work = pending.map(async (entry) => {
     try {
       // A file a draft save already uploaded is attached as it is, unless

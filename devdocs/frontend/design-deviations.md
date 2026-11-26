@@ -35,6 +35,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
+
+- **Issue/PR**: #1626 / #2904
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) disables Cancel and Back while it saves and turns the primary button into a spinner with "Saving…" (L658, L698–L711). Its file rows in `FileDropZone` (L1454–L1497) show an icon, the name, the size and a remove button, with no upload state; the mock has no failure state for a file.
+- **Reality**: In create mode for a signed-in user, **Add item** saves the form as a server draft, uploads the staged files to it one at a time, and promotes the draft only once all of them are on it. While this runs, each pending-file row shows a status icon before the size, as `IntakeUploadDialog` does: a spinning `Loader2` while uploading, a `CheckCircle2` in `text-status-active` once uploaded, an `AlertCircle` in `text-destructive` and the line "Upload failed" (in place of the category line) when it failed; a screen reader hears the state after the file name. The primary button reads "Uploading 1 of 3…" next to the spinner until the files are up, then "Saving…"; a polite `sr-only` status region repeats the count. When a file fails, nothing is promoted: the destructive `Alert` below the steps reads "Item not added", names the files not uploaded, says that Retry goes on from where it stopped, and its **Retry** runs Add item again without re-picking files. The files that made it move to the "Saved with this draft" list. A promotion that fails shows the existing server-error banner with **Retry**, which only promotes.
+- **Why**: The owner decision on #1626 (2026-11-26) is that files go up with the draft before the item exists, so a failed upload is visible and retryable instead of a toast after the dialog closed. The icons and colors are the ones `IntakeUploadDialog` already uses for the same states. Showing the same count on **Save draft**, and locking the Save as draft switch, the stepper, Continue, the dropzone and the file rows (no edit, no remove) while a save runs are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the count on Save draft and the locked controls agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws upload progress for the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — Add item dialog: an editable title per staged file
+
+- **Issue/PR**: #1626 / #2904
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name as plain text; a file cannot be named in the dialog.
+- **Reality**: Each pending-file row has a compact `Input` (`h-7`, `text-xs`) between the name line and the tags input, filled with the file name without its extension and labeled "Title of {name}" for screen readers. The title is kept with the staged file in IndexedDB and sent with the file's tags in `PUT /files/{id}`; an empty title falls back to the default. While a save runs the input is disabled.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for an editable title per file in the Add item dialog. Without it the server names an upload after the file and the time of the upload (`receipt-1767225600`).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
+- **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
+
 #### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
 
 - **Issue/PR**: #2812 / #2861

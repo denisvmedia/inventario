@@ -4,7 +4,7 @@
 // single endpoint regardless of whether a row originated as an image,
 // invoice, or manual on the legacy split-table side.
 import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
-import { http } from "@/lib/http"
+import { http, HttpError } from "@/lib/http"
 import type { Schema } from "@/types"
 
 export type FileEntity = Schema<"models.FileEntity">
@@ -242,8 +242,31 @@ export async function updateFile(
   return { ...body.attributes, id: body.id ?? id }
 }
 
+// deleteFile moves the file to the group's Trash (#2799).
 export async function deleteFile(id: string): Promise<void> {
   await http.del<void>(`/files/${encodeURIComponent(id)}`)
+}
+
+// trashUnlinkedFile moves a file a form uploaded to Trash when nothing links
+// it (#1626): an upload whose attach failed, left behind when the form is
+// cancelled. A file that something links after all (an attach whose answer
+// was lost) stays, and so does one already gone. filesPath is the group's
+// files path read before the uploads started (see groupScopedPath); without
+// it the request goes to the current group. Resolves whether the file went
+// to Trash.
+export async function trashUnlinkedFile(id: string, filesPath?: string): Promise<boolean> {
+  const path = `${filesPath ?? "/files"}/${encodeURIComponent(id)}`
+  const init = { skipGroupRewrite: !!filesPath }
+  let file: FileDetailEnvelope
+  try {
+    file = await http.get<FileDetailEnvelope>(path, init)
+  } catch (err) {
+    if (err instanceof HttpError && err.status === 404) return false
+    throw err
+  }
+  if (ordinaryLinks(file.attributes ?? {}).length > 0) return false
+  await http.del<void>(path, init)
+  return true
 }
 
 export async function bulkDeleteFiles(ids: string[]): Promise<BulkDeleteResult> {
