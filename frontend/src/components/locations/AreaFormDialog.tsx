@@ -139,6 +139,7 @@ export function AreaFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-md"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="area-form-dialog"

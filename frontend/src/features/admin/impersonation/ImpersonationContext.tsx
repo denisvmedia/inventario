@@ -24,6 +24,11 @@ interface ImpersonationContextValue {
   // True while the boot probe is still resolving the state for the first
   // time. The banner stays hidden during this window.
   isLoading: boolean
+  // True once the probe has answered, so `active: false` is known rather
+  // than assumed. False while it loads, after it failed (a 5xx or a network
+  // error; 401 and 403 count as an answer), and before sign-in. A write that
+  // must not happen during an impersonation waits for this.
+  resolved: boolean
 }
 
 const INACTIVE: ImpersonationContextValue = {
@@ -33,6 +38,7 @@ const INACTIVE: ImpersonationContextValue = {
   startedAt: null,
   expiresAt: null,
   isLoading: false,
+  resolved: false,
 }
 
 const Context = createContext<ImpersonationContextValue | undefined>(undefined)
@@ -49,7 +55,7 @@ function toContextValue(
   isLoading: boolean
 ): ImpersonationContextValue {
   if (!state?.active) {
-    return { ...INACTIVE, isLoading }
+    return { ...INACTIVE, isLoading, resolved: state !== undefined }
   }
   return {
     active: true,
@@ -58,6 +64,7 @@ function toContextValue(
     startedAt: state.started_at ?? null,
     expiresAt: state.expires_at ?? null,
     isLoading,
+    resolved: true,
   }
 }
 

@@ -388,6 +388,23 @@ func TestSettingsRegistry_Patch_ComplexValues_HappyPath(t *testing.T) {
 			},
 		},
 		{
+			// The What's new page's last seen release (#1386).
+			name:         "patch with the last seen release",
+			settingName:  "whats_new.last_seen_version",
+			settingValue: "0.2.2",
+			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
+				c.Assert(settings.WhatsNewLastSeenVersion, qt.DeepEquals, new("0.2.2"))
+			},
+		},
+		{
+			name:         "patch with null forgets the last seen release",
+			settingName:  "whats_new.last_seen_version",
+			settingValue: nil,
+			verifyFunc: func(c *qt.C, settings models.SettingsObject) {
+				c.Assert(settings.WhatsNewLastSeenVersion, qt.IsNil)
+			},
+		},
+		{
 			name:         "patch with special characters",
 			settingName:  "uiconfig.default_date_format",
 			settingValue: "dd/MM/yyyy HH:mm:ss",

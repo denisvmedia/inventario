@@ -490,5 +490,25 @@
     "usagePercent": "{{percent}}% of group quota"
   },
   "subtitle": "Manage your account and preferences.",
-  "title": "Preferences"
+  "title": "Preferences",
+  "whatsNew": {
+    "developmentDescription": "This server runs {{version}}, which is not a release. The list shows the releases it contains.",
+    "developmentTitle": "Development build",
+    "empty": "No release has been published yet.",
+    "noUserChanges": "This release changed only how the server is installed and run.",
+    "operatorsNote": "Shown to system administrators only.",
+    "releaseTitle": "v{{version}}",
+    "sections": {
+      "added": "Added",
+      "changed": "Changed",
+      "deprecated": "Deprecated",
+      "fixed": "Fixed",
+      "operators": "Operators",
+      "removed": "Removed",
+      "security": "Security"
+    },
+    "subtitle": "The changes in each release this server has, newest first.",
+    "title": "What's new",
+    "unread": "new release"
+  }
 }

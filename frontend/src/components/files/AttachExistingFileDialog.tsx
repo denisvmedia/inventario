@@ -85,7 +85,11 @@ export function AttachExistingFileDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] sm:max-w-xl" data-testid="attach-existing-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-h-[80vh] sm:max-w-xl"
+        data-testid="attach-existing-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {entity.name
@@ -123,7 +127,7 @@ export function AttachExistingFileDialog({
           />
         </div>
 
-        <div className="max-h-80 min-h-24 overflow-y-auto rounded-md border">
+        <div className="max-h-80 min-h-24 overflow-y-auto rounded-md border max-sm:max-h-none">
           {query.isLoading ? (
             <div className="flex flex-col gap-2 p-3">
               <Skeleton className="h-8 w-full" />

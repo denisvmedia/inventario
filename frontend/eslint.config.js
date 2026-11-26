@@ -80,6 +80,7 @@ export default [
     files: [
       "vite.config.ts",
       "vitest.config.ts",
+      "vite-plugins/**/*.ts",
       "eslint.config.js",
       "i18next.config.ts",
       "scripts/**/*.{js,mjs,ts}",

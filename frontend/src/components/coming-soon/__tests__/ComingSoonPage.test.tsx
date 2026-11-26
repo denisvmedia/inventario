@@ -14,16 +14,16 @@ describe("<ComingSoonPage />", () => {
   })
 
   it("links to the GitHub tracker issue with target=_blank rel=noopener", () => {
-    render(<ComingSoonPage surface="whatsNew" />)
+    render(<ComingSoonPage surface="plans" />)
     const link = screen.getByRole("link")
-    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1386")
+    expect(link).toHaveAttribute("href", "https://github.com/denisvmedia/inventario/issues/1389")
     expect(link).toHaveAttribute("target", "_blank")
     expect(link.getAttribute("rel")).toContain("noopener")
   })
 
   it("uses the default data-testid based on the surface key", () => {
-    render(<ComingSoonPage surface="whatsNew" />)
-    expect(screen.getByTestId("coming-soon-page-whatsNew")).toBeInTheDocument()
+    render(<ComingSoonPage surface="plans" />)
+    expect(screen.getByTestId("coming-soon-page-plans")).toBeInTheDocument()
   })
 
   it("renders no enabled controls", () => {

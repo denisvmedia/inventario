@@ -641,6 +641,62 @@ definitions:
         description: Value is the setting value to apply and is required when using
           the object envelope.
     type: object
+  apiserver.PersonalDataExportDownloadURLResponse:
+    properties:
+      expires_at:
+        type: string
+      url:
+        description: |-
+          URL is relative to the server root and needs no bearer token. It is
+          bound to the session that asked for it.
+        type: string
+    type: object
+  apiserver.PersonalDataExportView:
+    properties:
+      completed_at:
+        description: CompletedAt is when the archive was finished; absent until then.
+        type: string
+      created_at:
+        description: CreatedAt is when the user requested it.
+        type: string
+      expires_at:
+        description: ExpiresAt is when the archive and this entry are deleted.
+        type: string
+      file_count:
+        type: integer
+      group_count:
+        type: integer
+      id:
+        type: string
+      item_count:
+        type: integer
+      size_bytes:
+        description: SizeBytes is the archive's size, 0 until it is finished.
+        type: integer
+      status:
+        allOf:
+        - $ref: '#/definitions/models.PersonalDataExportStatus'
+        enum:
+        - pending
+        - in_progress
+        - completed
+        - failed
+    type: object
+  apiserver.PersonalDataExportsListResponse:
+    properties:
+      exports:
+        items:
+          $ref: '#/definitions/apiserver.PersonalDataExportView'
+        type: array
+      next_request_at:
+        description: |-
+          NextRequestAt is when the user may request a new export; absent when
+          they may now.
+        type: string
+      retention_days:
+        description: RetentionDays is how long a finished archive is kept.
+        type: integer
+    type: object
   apiserver.RegisterRequest:
     properties:
       email:
@@ -6897,6 +6953,18 @@ definitions:
       uuid:
         type: string
     type: object
+  models.PersonalDataExportStatus:
+    enum:
+    - pending
+    - in_progress
+    - completed
+    - failed
+    type: string
+    x-enum-varnames:
+    - PersonalDataExportStatusPending
+    - PersonalDataExportStatusInProgress
+    - PersonalDataExportStatusCompleted
+    - PersonalDataExportStatusFailed
   models.Plan:
     properties:
       allows_api_access:
@@ -7107,6 +7175,13 @@ definitions:
       showDebugInfo:
         type: boolean
       theme:
+        type: string
+      whatsNewLastSeenVersion:
+        description: |-
+          WhatsNewLastSeenVersion is the newest release the user has seen on the
+          What's new page. The app shows an unread dot while the build carries a
+          newer release, and writes the build's newest release here when the
+          page opens. Kept on the server so it follows the user across devices.
         type: string
     type: object
   models.SupplyLink:
@@ -9458,6 +9533,58 @@ paths:
       summary: Get supported currencies
       tags:
       - currencies
+  /data-exports/{id}:
+    get:
+      description: |-
+        Streams the tar.gz archive a signed URL from POST /users/me/data-exports/{id}/download-url points at. The URL is bound
+        to the session that asked for it and expires; an impersonation session is refused. Every download is recorded in the audit log.
+      parameters:
+      - description: Personal data export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: The user the URL was issued to
+        in: query
+        name: uid
+        required: true
+        type: string
+      - description: Expiry, Unix seconds
+        in: query
+        name: exp
+        required: true
+        type: integer
+      - description: Signature
+        in: query
+        name: sig
+        required: true
+        type: string
+      produces:
+      - application/gzip
+      responses:
+        "200":
+          description: The archive
+          schema:
+            type: file
+        "401":
+          description: Invalid or expired URL
+          schema:
+            type: string
+        "403":
+          description: Impersonation session
+          schema:
+            type: string
+        "404":
+          description: No such export, or it expired
+          schema:
+            type: string
+        "409":
+          description: The export is not finished
+          schema:
+            type: string
+      summary: Download a personal data export
+      tags:
+      - users-me
   /feature-flags:
     get:
       description: Returns the deployment-scoped feature-flag state. Public (no auth)
@@ -15503,7 +15630,9 @@ paths:
     post:
       consumes:
       - multipart/form-data
-      description: Upload a signed `.inb` backup file to be used for a restore operation.
+      description: |-
+        Upload a signed `.inb` backup file to be used for a restore operation.
+        A personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.
       parameters:
       - description: Group slug
         in: path
@@ -16393,6 +16522,94 @@ paths:
           schema:
             type: string
       summary: Revoke a personal API token
+      tags:
+      - users-me
+  /users/me/data-exports:
+    get:
+      description: |-
+        Returns the authenticated user's personal data exports (GDPR Art. 20), newest first, until each expires.
+        `next_request_at` is when a new export may be requested; it is absent when one may be requested now.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportsListResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+      summary: List personal data exports
+      tags:
+      - users-me
+    post:
+      description: |-
+        Starts building a copy of the authenticated user's data: profile, settings, group memberships, and what they created in each group,
+        with the files they uploaded. The archive is a tar.gz with JSON documents; it is not a group backup and cannot be restored.
+        The export runs in the background and an email says when it is ready. One request is allowed per day: an earlier one answers 429
+        data_export.rate_limited with `retry_at` in the error meta and a Retry-After header. An impersonation session answers 403
+        data_export.impersonation_forbidden.
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Requested
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportView'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "429":
+          description: Too Many Requests
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Request a personal data export
+      tags:
+      - users-me
+  /users/me/data-exports/{id}/download-url:
+    post:
+      description: |-
+        Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only
+        for a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one
+        409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works
+        only with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403
+        data_export.session_required.
+      parameters:
+      - description: Personal data export ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.PersonalDataExportDownloadURLResponse'
+        "401":
+          description: Unauthorized
+          schema:
+            type: string
+        "403":
+          description: Forbidden
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a download URL for a personal data export
       tags:
       - users-me
   /users/me/login-history:

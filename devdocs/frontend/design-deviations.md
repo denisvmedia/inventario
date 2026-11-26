@@ -1117,6 +1117,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
+#### 2026-11-26 — Help & Support "What's new" row opens the in-app page and carries an unread dot
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` has a "What's new" row with a `v1.2` badge and no action (L458). Neither the row nor the section nav has an unread marker.
+- **Reality**: The row is a link to `/whats-new` in the same tab. While the build has a release newer than the user's `whats_new.last_seen_version` setting, a `size-2 rounded-full bg-primary` dot follows the version badge (`help-row-whatsNew-unread`) and the **Help & support** entry of the section nav (`settings-nav-help-unread`). Each dot carries sr-only text ", new release".
+- **Why**: The owner's decisions of 2026-11-26 on #1386: the row links to the in-app page, and a dot on the entry is the only notice of a new release. The nav dot marks the menu that leads to the row, so the notice is visible from any section. The dot follows the status dot of [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L188) in the primary color.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the dot on the section nav agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-26 — What's new page
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: No What's new page; the only What's new surface is the Help row in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx).
+- **Reality**: `frontend/src/pages/WhatsNewPage.tsx` at `/whats-new` uses `Page width="narrow"` and `PageHeader`. Each release is a `Card`: the `CardTitle` is an `h2` "v0.2.2", the `CardDescription` the long date, and the `CardContent` lists each section under a small semibold `h3` with a disc list. Inline code uses the muted code chip of the typography showcase, bold stays bold, and links are primary-colored and open in a new tab. The Operators section renders only for system administrators, with a muted note "Shown to system administrators only."; a release with nothing else shows other users "This release changed only how the server is installed and run." A development build shows a default `Alert` with the `Info` icon above the list, and a build without releases shows a dashed empty box.
+- **Why**: not present in mock. The page, its content and the Operators rule are the owner's decisions of 2026-11-26 on #1386. The layout falls back to the `Card`, `Alert` and typography sections of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (inline code at L1339). The development-build alert, the Operators note, the "only how the server is installed" line and the empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the alert, the two notes and the empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the page.
+
 ### Navigation & App shell
 
 #### 2026-11-26 — Sidebar, command palette and routes follow the group's hidden sections
@@ -1262,6 +1280,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Not present in mock. The Upcoming page is the group-wide list the issue asks for; it sits next to the per-kind pages it merges.
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds the entry.
+
+#### 2026-11-26 — Unread dot on the sidebar Help entry
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has no Help entry, so it has no marker on one either. The app's footer Help row links to Settings → Help & support.
+- **Reality**: While the build has a release the user has not seen, the `SidebarMenuBadge` slot of **Help** shows the `size-2 rounded-full bg-primary` dot (`sidebar-help-unread`), and the link carries sr-only ", new release". It is the slot the Inbox count uses.
+- **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
 
 ### i18n & Formatting
 
@@ -1471,7 +1498,32 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
-_None yet._
+#### 2026-11-26 — Long-form dialogs fill the screen below `sm`
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: Every dialog in the mock is the shadcn centered card at every width: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) keeps a 16px margin on each side below `sm` and opens with a fade and zoom. [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx), [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) have no phone layout of their own.
+- **Reality**: `frontend/src/components/ui/dialog.tsx` adds `variant="fullscreen-mobile"` to `DialogContent`. Below 640px the dialog covers the screen edge to edge (`100dvh`, no border, radius or shadow) and scrolls inside; `DialogHeader` sticks to the top with a bottom border and carries its own close button, the first control, so it takes the focus on open; `DialogFooter` sticks to the bottom with a top border and pads itself by `env(safe-area-inset-bottom)`. The dialog slides up from the bottom on open and down on close (a fade under reduced motion). From 640px up it is the centered card, which with this variant is never taller than the screen minus 2rem and scrolls as a whole (a phone held sideways). The variant is used by the item create/edit dialog (every step, the AI scan step included), location, area, custom field, seller, currency change, add from files, upload files, attach an existing file, restore from export, lend, edit loan, send for service, maintenance schedule, reminder, create API token and feedback dialogs. Confirmations and short dialogs stay centered cards at every width and open above a full-screen dialog. The on-screen keyboard still covers the bottom of the screen, the pinned footer included, while a field has the focus; that is not solved here.
+- **Why**: The owner approved the full-screen layout for every long-form dialog on 2026-11-26 (#1627): on a 375–412px phone the card loses 32px of width to its margins and a tall dialog's top runs off the screen.
+- **Approved by**: user (explicit) — owner decision of 2026-11-26 on #1627.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
+
+#### 2026-11-26 — Full-screen dialog header below `sm`: left-aligned, 44px close button
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogHeader` is `text-center sm:text-left`, so below `sm` the title and description are centered; the only close button is the 16px icon in the corner of the card.
+- **Reality**: In the `fullscreen-mobile` variant the header text is left-aligned at every width, and below `sm` the header holds a 44px square close button at its right edge; the title keeps 56px clear of it.
+- **Why**: A centered title collides with the close button that sits in the same row of the sticky header. 44px is the tap-target minimum of [14-accessibility.md](design/14-accessibility.md).
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-26 — Full-screen dialog footer below `sm`: one row
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogFooter` is `flex-col-reverse sm:flex-row sm:justify-end`, so below `sm` the buttons stack in a column.
+- **Reality**: In the `fullscreen-mobile` variant the footer lays its buttons out in a row at every width, aligned to the end, and wraps to a second row when they do not fit.
+- **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
 ### Backup & Restore
 

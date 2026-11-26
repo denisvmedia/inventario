@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="cs">
+<body>
+<p>Dobrý den {{.Name}},</p>
+<p>Kopie vašich dat, o kterou jste požádali, je připravena. Stáhnete ji v nastavení účtu:</p>
+<p><a href="{{.URL}}">{{.URL}}</a></p>
+{{if .ExpiresAt}}<p>Soubor bude smazán {{.ExpiresAt}}. O novou kopii můžete požádat jednou denně.</p>{{end}}
+<p>Pokud jste o kopii svých dat nežádali, změňte si heslo a v nastavení účtu odhlaste ostatní relace.</p>
+</body>
+</html>
