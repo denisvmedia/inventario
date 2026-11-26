@@ -302,20 +302,100 @@ func TestIntakeDeliver_FinishesHalfDoneWork(t *testing.T) {
 	c := qt.New(t)
 	f := newIntakeFixture(c)
 	first := f.deliver(c, paperlessDelivery("117"), nil)
-
-	// Forget the draft as if the call failed before recording it: drop the
-	// record and recreate it with only the session.
-	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
-	c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
-	half := *first.Document
-	half.DraftID = nil
-	stored, _, err := docs.CreateOrGet(f.ctx, half)
-	c.Assert(err, qt.IsNil)
-	c.Assert(stored.DraftID, qt.IsNil)
+	f.forgetDraft(c, first.Document)
 
 	replay := f.deliver(c, paperlessDelivery("117"), nil)
 	c.Assert(replay.Created, qt.IsFalse)
 	c.Assert(replay.State, qt.Equals, models.IntakeDocumentDraft)
 	c.Assert(*replay.Document.DraftID, qt.Equals, *first.Document.DraftID)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+}
+
+// forgetDraft makes the document look as a call that failed after making the
+// draft and before recording it leaves it: the record is made again with the
+// file and the session only.
+func (f *intakeFixture) forgetDraft(c *qt.C, doc *models.IntakeDocument) {
+	c.Helper()
+	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(docs.Delete(f.ctx, doc.ID), qt.IsNil)
+	half := *doc
+	half.DraftID = nil
+	stored, _, err := docs.CreateOrGet(f.ctx, half)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.DraftID, qt.IsNil)
+	c.Assert(stored.SessionID, qt.IsNotNil)
+}
+
+// TestIntakeDeliver_SessionDeletedBeforeTheDraftWasRecorded: the draft was
+// made, the document did not record it, and then the session went. The
+// repeat makes no second draft. Deleting the session records the draft on
+// the document; a session gone some other way leaves the document without
+// a draft it can name.
+func TestIntakeDeliver_SessionDeletedBeforeTheDraftWasRecorded(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+
+	first := f.deliver(c, paperlessDelivery("1"), nil)
+	f.forgetDraft(c, first.Document)
+	c.Assert(f.intake.Delete(f.ctx, *first.Document.SessionID), qt.IsNil)
+	replay := f.deliver(c, paperlessDelivery("1"), nil)
+	c.Assert(replay.Created, qt.IsFalse)
+	c.Assert(replay.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*replay.Document.DraftID, qt.Equals, *first.Document.DraftID)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+
+	second := f.deliver(c, paperlessDelivery("2"), nil)
+	f.forgetDraft(c, second.Document)
+	sessions := must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(sessions.Delete(f.ctx, *second.Document.SessionID), qt.IsNil)
+	for range 2 {
+		replay = f.deliver(c, paperlessDelivery("2"), nil)
+		c.Assert(replay.State, qt.Equals, models.IntakeDocumentRemoved)
+		c.Assert(*replay.Document.DraftID, qt.Equals, "")
+		c.Assert(f.drafts(c), qt.HasLen, 2)
+	}
+}
+
+// TestIntakeDeliver_EarlierSessionWithoutRecord: a session carries the
+// document's identity, but the group lost the record of that delivery. A
+// delivery with the same values and file takes the session and its draft; one
+// with other values or another file is refused and leaves no record, so the
+// first delivery still stands.
+func TestIntakeDeliver_EarlierSessionWithoutRecord(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	blob := func(key, sha string) *services.IntakeDeliveredFile {
+		return &services.IntakeDeliveredFile{BlobKey: key, Name: "invoice.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: sha}
+	}
+	first := f.deliver(c, paperlessDelivery("117"), blob("t/tenant-a/files/first.pdf", "aaaa"))
+	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
+	files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
+
+	changed := paperlessDelivery("117")
+	changed.Title = "Another invoice"
+	for _, tc := range []struct {
+		name string
+		in   services.IntakeDelivery
+		file *services.IntakeDeliveredFile
+	}{
+		{"other values", changed, blob("t/tenant-a/files/second.pdf", "aaaa")},
+		{"another file", paperlessDelivery("117"), blob("t/tenant-a/files/third.pdf", "bbbb")},
+		{"no file", paperlessDelivery("117"), nil},
+	} {
+		result, err := f.intake.Deliver(f.ctx, tc.in, tc.file)
+		c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentChanged, qt.Commentf(tc.name))
+		c.Assert(result.File, qt.IsNil, qt.Commentf(tc.name))
+		c.Assert(must.Must(docs.List(f.ctx)), qt.HasLen, 0, qt.Commentf(tc.name))
+	}
+
+	same := f.deliver(c, paperlessDelivery("117"), blob("t/tenant-a/files/fourth.pdf", "aaaa"))
+	c.Assert(same.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*same.Document.SessionID, qt.Equals, *first.Document.SessionID)
+	c.Assert(*same.Document.DraftID, qt.Equals, *first.Document.DraftID)
+	// The session's file is the document's; the new blob is not used.
+	c.Assert(same.File, qt.IsNil)
+	c.Assert(*same.Document.FileID, qt.Equals, *first.Document.FileID)
+	c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
 	c.Assert(f.drafts(c), qt.HasLen, 1)
 }

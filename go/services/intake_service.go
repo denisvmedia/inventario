@@ -732,7 +732,8 @@ func (s *IntakeService) recordMadeDrafts(ctx context.Context, reg registry.Intak
 	return nil
 }
 
-// Delete deletes the session. Drafts made from it stay. Its files that
+// Delete deletes the session. Drafts made from it stay, and a document
+// another system delivered in it keeps the way to its draft. Its files that
 // nothing else uses go to Trash, where they can be restored until the
 // retention runs out; a file a draft or an item uses only loses the link to
 // the session.
@@ -753,6 +754,9 @@ func (s *IntakeService) Delete(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
+	if err := s.recordDeliveredDrafts(ctx, reg, session.ID, sources); err != nil {
+		return err
+	}
 	files, err := s.files(ctx)
 	if err != nil {
 		return err
@@ -770,4 +774,68 @@ func (s *IntakeService) Delete(ctx context.Context, sessionID string) error {
 		}
 	}
 	return reg.Delete(ctx, session.ID)
+}
+
+// recordDeliveredDrafts records on each document another system delivered in
+// the session (#2809) the draft made for it, before the session and its
+// products go: a delivery that stopped before it recorded its draft could
+// not find it afterwards. A document without a draft gets an empty one, so
+// a repeat of the delivery makes nothing once its session is deleted.
+func (s *IntakeService) recordDeliveredDrafts(ctx context.Context, reg registry.IntakeRegistry, sessionID string, sources []*models.IntakeSource) error {
+	docs, err := s.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create intake document registry", err)
+	}
+	for _, src := range sources {
+		if !src.HasExternalIdentity() {
+			continue
+		}
+		doc, err := docs.GetByExternalID(ctx, src.ExternalSystem, src.ExternalInstance, src.ExternalDocumentID)
+		if errors.Is(err, registry.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return err
+		}
+		if doc.DraftID != nil {
+			continue
+		}
+		draftID, err := s.draftOfSource(ctx, reg, sessionID, src.ID)
+		if err != nil {
+			return err
+		}
+		if _, err := docs.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{DraftID: &draftID}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// draftOfSource returns the draft made for a product of the source, or ""
+// when there is none.
+func (s *IntakeService) draftOfSource(ctx context.Context, reg registry.IntakeRegistry, sessionID, sourceID string) (string, error) {
+	candidates, err := reg.ListCandidates(ctx, sessionID)
+	if err != nil {
+		return "", err
+	}
+	drafts, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return "", errxtrace.Wrap("failed to create draft registry", err)
+	}
+	for _, cand := range candidates {
+		if cand.SourceID != sourceID {
+			continue
+		}
+		if cand.DraftID != nil {
+			return *cand.DraftID, nil
+		}
+		draft, err := drafts.GetByClientKey(ctx, cand.DraftClientKey())
+		switch {
+		case err == nil:
+			return draft.ID, nil
+		case !errors.Is(err, registry.ErrNotFound):
+			return "", err
+		}
+	}
+	return "", nil
 }

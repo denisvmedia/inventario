@@ -54,8 +54,10 @@ const (
 // draft. DraftID is the draft the delivery made; CommodityID is the item that
 // draft became, set by the promotion in the transaction that creates the item.
 // Neither has a foreign key: a draft can be discarded and an item deleted. A
-// DraftID that is set but empty marks a draft the delivery made that a backup
-// restore did not bring back; the document still counts as delivered.
+// DraftID that is set but empty marks a delivery whose draft the document
+// cannot name: a backup restore did not bring the draft back, or the intake
+// session was deleted before the document recorded it. The document still
+// counts as delivered, and a repeat makes nothing.
 //
 // The document's identity is not the identity of the product it describes:
 // the product is a candidate of the intake session, and its draft carries the

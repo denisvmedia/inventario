@@ -1,12 +1,14 @@
 package services
 
 import (
+	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -327,22 +329,23 @@ func (s *IntakeService) recordDeliveredFile(ctx context.Context, set *registry.S
 	return nil
 }
 
-// finishDelivery stores the file, makes the intake session and the draft,
-// whichever the document does not have yet, and records each on it.
+// finishDelivery makes what the document does not have yet, the file of the
+// group, the intake session and the draft, and records each on it.
 func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) error {
 	docs := set.IntakeDocumentRegistry
-	if file != nil && result.Document.FileID == nil {
-		if err := s.recordDeliveredFile(ctx, set, n, file, result); err != nil {
-			return err
-		}
+	session, err := s.deliverySession(ctx, set, n, file, result)
+	if errors.Is(err, errDeliverySessionGone) {
+		// The session was deleted before the document recorded a draft. A
+		// draft made from it stays, and a new session would make a second
+		// one, so the delivery is done without a draft the document names.
+		result.Document, err = docs.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{DraftID: new("")})
+		return err
 	}
-	doc := result.Document
-
-	session, err := s.deliverySession(ctx, set, n, doc)
 	if err != nil {
 		return err
 	}
-	if doc, err = docs.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{SessionID: &session.ID}); err != nil {
+	doc, err := docs.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{SessionID: &session.ID})
+	if err != nil {
 		return err
 	}
 	result.Document = doc
@@ -393,25 +396,49 @@ func (s *IntakeService) storeDeliveredFile(ctx context.Context, set *registry.Se
 	return stored, nil
 }
 
-// deliverySession returns the intake session of the document, making it
-// when there is none. The session has one source that is already scanned:
-// it carries the external identity, the delivered file and the product the
-// delivery describes.
-func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, n normalizedDelivery, doc *models.IntakeDocument) (*models.IntakeSession, error) {
+// errDeliverySessionGone reports that the intake session recorded on a
+// document no longer exists.
+var errDeliverySessionGone = errx.NewSentinel("the intake session of the delivery was deleted")
+
+// deliverySession returns the intake session that carries the delivery: the
+// one recorded on the document, the one a call that stopped before recording
+// it made under the document's key, or the session of an earlier delivery of
+// the document. Without one it stores the file and makes the session, whose
+// one source is already scanned: it carries the external identity, the
+// delivered file and the product the delivery describes.
+func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
 	reg := set.IntakeRegistry
-	clientKey := intakeSessionClientKeyPrefix + doc.ID
-	session, err := reg.GetSessionByClientKey(ctx, clientKey)
-	if err == nil || !errors.Is(err, registry.ErrNotFound) {
+	if id := result.Document.SessionID; id != nil {
+		session, err := reg.Get(ctx, *id)
+		if errors.Is(err, registry.ErrNotFound) {
+			return nil, errDeliverySessionGone
+		}
 		return session, err
+	}
+	clientKey := intakeSessionClientKeyPrefix + result.Document.ID
+	session, err := reg.GetSessionByClientKey(ctx, clientKey)
+	if !errors.Is(err, registry.ErrNotFound) {
+		return session, err
+	}
+	if session, err := s.earlierSession(ctx, set, n, result); session != nil || err != nil {
+		return session, err
+	}
+	if file != nil && result.Document.FileID == nil {
+		if err := s.recordDeliveredFile(ctx, set, n, file, result); err != nil {
+			return nil, err
+		}
 	}
 	cand, err := n.candidate()
 	if err != nil {
 		return nil, err
 	}
+	doc := result.Document
 	var fileIDs []string
 	if doc.FileID != nil {
 		fileIDs = []string{*doc.FileID}
 	}
+	// A source with the identity that appeared since the look-up fails the
+	// call with ErrAlreadyExists; a repeat finds it as the earlier delivery.
 	session, _, err = reg.CreateSession(ctx,
 		models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginExternal},
 		[]registry.IntakeSourceInput{{
@@ -423,17 +450,112 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 			Delivered:          &registry.IntakeScan{Candidates: []models.IntakeCandidate{cand}},
 		}},
 		0)
-	if !errors.Is(err, registry.ErrAlreadyExists) {
-		return session, err
+	return session, err
+}
+
+// earlierSession returns the session of an earlier delivery of the document
+// whose record the group no longer has: a source in it carries the
+// document's identity under another document's key. It is the document's
+// session when it holds the delivered values and file, and the document
+// records its file. With other values or another file the first delivery
+// stands: the delivery is refused as changed, and a record this call made is
+// dropped, so a repeat of the first delivery still finds the session.
+func (s *IntakeService) earlierSession(ctx context.Context, set *registry.Set, n normalizedDelivery, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
+	reg := set.IntakeRegistry
+	doc := result.Document
+	src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+	if errors.Is(err, registry.ErrNotFound) {
+		return nil, nil
 	}
-	// Another session already carries the identity: one a delivery made
-	// before this document record existed, which a restore that kept the
-	// sessions but not the documents leaves. It is the document's session.
-	src, srcErr := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
-	if srcErr != nil {
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to look up the earlier delivery of the document", err)
+	}
+	fileID, same, err := sourceHolds(ctx, set, src, n)
+	if err != nil {
 		return nil, err
 	}
+	if !same {
+		if result.Created {
+			if err := set.IntakeDocumentRegistry.Delete(ctx, doc.ID); err != nil {
+				return nil, errxtrace.Wrap("failed to drop the record of a changed delivery", err)
+			}
+			result.Document = nil
+		}
+		return nil, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
+	}
+	if fileID != "" {
+		if result.Document, err = set.IntakeDocumentRegistry.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{FileID: &fileID}); err != nil {
+			return nil, err
+		}
+	}
 	return reg.Get(ctx, src.SessionID)
+}
+
+// sourceHolds reports whether a delivered source holds the values and the
+// file of the delivery n, and returns the id of its file.
+func sourceHolds(ctx context.Context, set *registry.Set, src *models.IntakeSource, n normalizedDelivery) (fileID string, same bool, err error) {
+	files, err := set.FileRegistry.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID)
+	if err != nil {
+		return "", false, err
+	}
+	want := []string{}
+	if n.FileSHA256 != "" {
+		want = append(want, n.FileSHA256)
+	}
+	held := []string{}
+	for _, f := range files {
+		if f.File != nil {
+			held = append(held, f.File.SHA256)
+			fileID = f.ID
+		}
+	}
+	if !slices.Equal(held, want) {
+		return "", false, nil
+	}
+	candidates, err := set.IntakeRegistry.ListCandidates(ctx, src.SessionID)
+	if err != nil {
+		return "", false, err
+	}
+	delivered, err := n.candidate()
+	if err != nil {
+		return "", false, err
+	}
+	var fields []models.IntakeFields
+	for _, cand := range candidates {
+		if cand.SourceID == src.ID {
+			fields = append(fields, cand.Fields)
+		}
+	}
+	if len(fields) != 1 {
+		return "", false, nil
+	}
+	same, err = sameJSON(fields[0], delivered.Fields)
+	return fileID, same, err
+}
+
+// sameJSON reports whether a and b encode to the same JSON once decoded, so
+// values that took a trip through the database compare equal to fresh ones.
+func sameJSON(a, b any) (bool, error) {
+	canonical := func(v any) ([]byte, error) {
+		raw, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		var decoded any
+		if err := json.Unmarshal(raw, &decoded); err != nil {
+			return nil, err
+		}
+		return json.Marshal(decoded)
+	}
+	ca, err := canonical(a)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to encode the held values", err)
+	}
+	cb, err := canonical(b)
+	if err != nil {
+		return false, errxtrace.Wrap("failed to encode the delivered values", err)
+	}
+	return bytes.Equal(ca, cb), nil
 }
 
 // deliveredDraftID returns the draft CreateDrafts made for the delivered

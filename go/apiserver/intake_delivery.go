@@ -380,14 +380,18 @@ func renderIntakeDeliveryReadError(w http.ResponseWriter, r *http.Request, err e
 }
 
 func renderIntakeDeliveryError(w http.ResponseWriter, r *http.Request, result *services.IntakeDeliveryResult, err error) {
-	if errors.Is(err, services.ErrIntakeDocumentChanged) && result != nil && result.Document != nil {
-		doc := result.Document
-		meta := map[string]any{"document_id": doc.ID}
-		if doc.DraftID != nil {
-			meta["draft_id"] = *doc.DraftID
-		}
-		if doc.CommodityID != nil {
-			meta["commodity_id"] = *doc.CommodityID
+	if errors.Is(err, services.ErrIntakeDocumentChanged) {
+		// The group may have no record of the first delivery to name.
+		var meta map[string]any
+		if result != nil && result.Document != nil {
+			doc := result.Document
+			meta = map[string]any{"document_id": doc.ID}
+			if doc.DraftID != nil {
+				meta["draft_id"] = *doc.DraftID
+			}
+			if doc.CommodityID != nil {
+				meta["commodity_id"] = *doc.CommodityID
+			}
 		}
 		_ = codedConflictError(w, r, err, IntakeDocumentChangedCode, meta)
 		return

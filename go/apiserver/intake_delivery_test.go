@@ -407,3 +407,32 @@ func TestIntakeDelivery_WhoMayDeliver(t *testing.T) {
 	rr = env.raw(unrestricted.Secret, env.groupPath(other, "/intake"), formType, form)
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 }
+
+// TestIntakeDelivery_ChangedWithoutRecord: the group lost the record of the
+// first delivery, but its session still carries the document. A change is
+// refused with the same code and no document to name; the first values are
+// taken.
+func TestIntakeDelivery_ChangedWithoutRecord(t *testing.T) {
+	c := qt.New(t)
+	env, token := newIntakeDeliveryEnv(c)
+	path := env.groupPath(env.group, "/intake")
+	form := paperlessForm("117")
+
+	rr := env.raw(token, path, "application/x-www-form-urlencoded", []byte(form.Encode()))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	first := decodeIntakeDocument(c, rr)
+	c.Assert(env.groupRegistries().IntakeDocumentRegistry.Delete(env.groupCtx(), first.ID), qt.IsNil)
+
+	changed := paperlessForm("117")
+	changed.Set("title", "Another invoice")
+	rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(changed.Encode()))
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf(rr.Body.String()))
+	c.Assert(errorCode(c, rr), qt.Equals, apiserver.IntakeDocumentChangedCode)
+	c.Assert(rr.Body.String(), qt.Not(qt.Contains), "document_id")
+
+	rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(form.Encode()))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	again := decodeIntakeDocument(c, rr)
+	c.Assert(*again.Attributes.DraftID, qt.Equals, *first.Attributes.DraftID)
+	c.Assert(env.openDrafts(), qt.HasLen, 1)
+}
