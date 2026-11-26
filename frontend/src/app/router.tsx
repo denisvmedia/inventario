@@ -161,6 +161,11 @@ const SellersListPage = lazy(() =>
 const ItemTypesListPage = lazy(() =>
   import("@/pages/itemTypes/ItemTypesListPage").then((m) => ({ default: m.ItemTypesListPage }))
 )
+const CustomFieldsListPage = lazy(() =>
+  import("@/pages/customFields/CustomFieldsListPage").then((m) => ({
+    default: m.CustomFieldsListPage,
+  }))
+)
 const TrashPage = lazy(() =>
   import("@/pages/trash/TrashPage").then((m) => ({ default: m.TrashPage }))
 )
@@ -427,6 +432,7 @@ export function AppRoutes() {
               <Route path="views" element={<SavedViewsPage />} />
               <Route path="sellers" element={<SellersListPage />} />
               <Route path="item-types" element={<ItemTypesListPage />} />
+              <Route path="custom-fields" element={<CustomFieldsListPage />} />
               <Route path="lent" element={<LoansListPage />} />
               <Route path="trash" element={<TrashPage />} />
               <Route path="in-service" element={<ServicesListPage />} />

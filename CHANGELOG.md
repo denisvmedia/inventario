@@ -12,30 +12,36 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Added
 
-- Custom fields, on the API so far. A group keeps up to 200 fields of its
-  own, each with a name (unique in the group, ignoring case) and a type that
-  never changes: text, long text, number, money, date, yes/no, select, URL
-  or a link to another item of the group. Items store a value per field;
+- Custom fields. A group keeps up to 200 fields of its own, each with a name
+  (unique in the group, ignoring case) and a type that never changes: text,
+  long text, number, money, date, yes/no, select, URL or a link to another
+  item of the group. The new **Custom fields** page in the sidebar adds,
+  renames and deletes them; the item forms fill them in (an **Add field**
+  menu offers the group's fields), the item page and the single-item
+  insurance report list an item's values, and a link shows the linked item
+  by name, marked when it is in the Trash. Items store a value per field;
   zero, `false` and empty text are values, distinct from no value. A number
   is returned as a decimal string, so no digit is lost; a write takes a
-  string or a JSON number.
-  Renaming a field or a select option keeps its values, and deleting a field
-  that items have values for needs `delete_values=true` (409
-  `custom_field.in_use` otherwise, with the item counts), and with
-  `expected_values` the delete is refused when another number of items has
-  a value. An item type's template names the fields its items are offered,
-  with an optional default. The API gains `/g/{slug}/custom-fields`; item
-  writes take `custom_fields` and refuse a value its field cannot hold with
-  422 `custom_field.invalid_value`, the reasons under
+  string or a JSON number. Renaming a field or a select option keeps its
+  values, and deleting a field that items have values for asks to confirm
+  with the number of items that lose a value, and asks again when that
+  number changed meanwhile (the API needs `delete_values=true`, 409
+  `custom_field.in_use` otherwise, with the item counts, and refuses a
+  delete whose `expected_values` is not the current count). An item type's
+  template names the fields its items are offered, with an optional default.
+  The API gains `/g/{slug}/custom-fields`; item writes take `custom_fields`
+  and refuse a value its field cannot hold with 422
+  `custom_field.invalid_value`, the reasons under
   `data.attributes.custom_fields.<field id>`; the items list filters
   with `cf=<field id>:<op>[:<value>]` and sorts with `sort=cf.<field id>`,
   saved views keep both, and search reads text fields and option labels. AI
-  scan fills the group's fields except money and links, and promoting a
-  draft checks and writes them with the new item. Backups carry the fields,
-  templates and values, also those of drafts (format 3.6), and a restore
-  matches a field by the field it was backed up from, then by name and
-  type, and an option by the option, then by label, creating the missing
-  ones
+  scan fills the group's fields except money and links, after the member
+  reviews them. A draft of a new item keeps the values typed in the Add item
+  dialog, and promoting it checks and writes them with the new item. Backups
+  carry the fields, templates and values, also those of drafts (format
+  3.6), and a restore matches a field by the field it was backed up from,
+  then by name and type, and an option by the option, then by label,
+  creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
 
 - Add items from files: drop receipts, invoices and product photos on the

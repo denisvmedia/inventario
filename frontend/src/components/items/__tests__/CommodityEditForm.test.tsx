@@ -11,6 +11,7 @@ import {
   type Commodity,
   type UpdateCommodityRequest,
 } from "@/features/commodities/api"
+import { CUSTOM_FIELD_INVALID_VALUE } from "@/features/customFields/api"
 import { GroupProvider } from "@/features/group/GroupContext"
 import type { ListNavigation } from "@/hooks/useListNavigation"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -18,10 +19,12 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { HttpError, __resetHttpForTests } from "@/lib/http"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
+import { pickRadixSelect } from "@/test/radix"
 import {
   apiUrl,
   authHandlers,
   commodityHandlers,
+  customFieldHandlers,
   groupHandlers,
   itemTypeHandlers,
   memberHandlers,
@@ -126,6 +129,24 @@ function validationError(attributes: Record<string, string>) {
       {
         status: "Unprocessable Entity",
         error: { type: "validation.Errors", error: { data: { attributes } } },
+      },
+    ],
+  })
+}
+
+// customFieldValueError is the 422 the server sends for a refused custom
+// field value: the reason and its code nested under the field id.
+function customFieldValueError(fieldId: string, message: string, code: string) {
+  return new HttpError("invalid", 422, "/commodities/c1", {
+    errors: [
+      {
+        status: "Unprocessable Entity",
+        code: CUSTOM_FIELD_INVALID_VALUE,
+        error: {
+          type: "validation.Errors",
+          error: { data: { attributes: { custom_fields: { [fieldId]: message } } } },
+          errorCodes: { data: { attributes: { custom_fields: { [fieldId]: { code } } } } },
+        },
       },
     ],
   })
@@ -341,5 +362,145 @@ describe("<CommodityEditForm />", () => {
     const { container } = renderForm()
     await screen.findByLabelText(/^name/i)
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<CommodityEditForm /> custom fields", () => {
+  const fields = [
+    customFieldHandlers.field({
+      id: "cf-fuel",
+      name: "Fuel",
+      type: "select",
+      options: [
+        { id: "opt-petrol", label: "Petrol" },
+        { id: "opt-diesel", label: "Diesel" },
+      ],
+    }),
+    customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+    customFieldHandlers.field({ id: "cf-weight", name: "Weight", type: "number" }),
+  ]
+  const stored = {
+    "cf-plate": "AB 123",
+    "cf-weight": "12.5",
+    // A field this client does not know yet.
+    "cf-new": "kept",
+  } as unknown as Commodity["custom_fields"]
+
+  it("edits, adds and clears values and sends only the fields it knows", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ custom_fields: stored })
+    const plate = await screen.findByLabelText("Plate")
+    expect(plate).toHaveValue("AB 123")
+    expect(screen.getByLabelText("Weight")).toHaveValue("12.5")
+    expect(screen.queryByLabelText("Fuel")).not.toBeInTheDocument()
+
+    await user.clear(plate)
+    await user.type(plate, "XY 9")
+    await user.click(screen.getByTestId("custom-field-cf-weight-remove"))
+    await user.click(screen.getByTestId("custom-field-add"))
+    await user.click(await screen.findByTestId("custom-field-add-cf-fuel"))
+    await pickRadixSelect(user, /^Fuel$/, { optionLabel: /^Diesel$/ })
+    await user.click(screen.getByTestId("commodity-edit-save"))
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
+    expect(req.custom_fields).toEqual({
+      "cf-plate": "XY 9",
+      "cf-weight": null,
+      "cf-fuel": "opt-diesel",
+    })
+  })
+
+  it("leaves the values out of a save that does not touch them", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm()
+    await screen.findByTestId("custom-field-add")
+    await user.type(screen.getByLabelText(/^name/i), "!")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
+    expect(req.custom_fields).toBeUndefined()
+  })
+
+  it("refuses a value its field would refuse before saving", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ custom_fields: stored })
+    const weight = await screen.findByLabelText("Weight")
+    await user.clear(weight)
+    await user.type(weight, "heavy")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    expect(await screen.findByTestId("custom-field-cf-weight-error")).toHaveTextContent(
+      "Enter a number."
+    )
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("shows a value the server refused under its field", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    renderForm(
+      { custom_fields: stored },
+      {
+        onSubmit: async () => {
+          throw customFieldValueError(
+            "cf-plate",
+            "must be at most 200 characters",
+            "custom_field_too_long"
+          )
+        },
+      }
+    )
+    const plate = await screen.findByLabelText("Plate")
+    await user.type(plate, "!")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    expect(await screen.findByTestId("custom-field-cf-plate-error")).toHaveTextContent(
+      "must be at most 200 characters"
+    )
+  })
+
+  it("names the currency picker of a money field and flags it with the amount", async () => {
+    const insured = customFieldHandlers.field({
+      id: "cf-insured",
+      name: "Insured value",
+      type: "money",
+    })
+    server.use(...customFieldHandlers.list(SLUG, [insured]))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({
+      custom_fields: {
+        "cf-insured": { amount: 12, currency: "EUR" },
+      } as unknown as Commodity["custom_fields"],
+    })
+    const picker = await screen.findByRole("combobox", { name: "Currency of Insured value" })
+    expect(picker).toHaveTextContent("EUR")
+    expect(picker).not.toHaveAttribute("aria-invalid")
+    const amount = screen.getByLabelText("Insured value")
+    await user.clear(amount)
+    await user.type(amount, "a lot")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    expect(await screen.findByTestId("custom-field-cf-insured-error")).toBeVisible()
+    expect(picker).toHaveAttribute("aria-invalid", "true")
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  // The API sends a number as a decimal string, and the form sends it back
+  // with every digit.
+  it("keeps every digit of a number", async () => {
+    server.use(...customFieldHandlers.list(SLUG, fields))
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({
+      custom_fields: { "cf-weight": "0.0000005" } as unknown as Commodity["custom_fields"],
+    })
+    const weight = await screen.findByLabelText("Weight")
+    expect(weight).toHaveValue("0.0000005")
+    await user.clear(weight)
+    await user.type(weight, "1234567890.1234567891")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
+    expect(req.custom_fields).toEqual({ "cf-weight": "1234567890.1234567891" })
   })
 })

@@ -5,6 +5,8 @@ import { useTranslation } from "react-i18next"
 import { ArrowLeft, ChevronRight, ListChecks } from "lucide-react"
 
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
+import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
+import { useCustomFieldsBinding } from "@/components/customFields/useCustomFieldsBinding"
 import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { SellerField } from "@/components/sellers/SellerField"
 import { ListPager } from "@/components/ListPager"
@@ -25,6 +27,10 @@ import { Textarea } from "@/components/ui/textarea"
 import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
 import { buildDefaults, toRequest } from "@/features/commodities/draft"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
+import type { CustomField, CustomFieldValues } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { customFieldsRequest } from "@/features/customFields/values"
+import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import type { ListNavigation, ListNeighbor } from "@/hooks/useListNavigation"
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard"
@@ -32,6 +38,8 @@ import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
+
+const NO_FIELDS: readonly CustomField[] = []
 
 // The fields this form shows. The rest of the record (links, extra serial
 // numbers, part numbers, status, draft) is edited in the step-by-step dialog
@@ -55,6 +63,7 @@ const FORM_FIELDS = [
   "warranty_notes",
   "comments",
   "tags",
+  "custom_fields",
 ] as const satisfies readonly (keyof CommodityFormInput)[]
 
 export interface CommodityEditFormProps {
@@ -74,6 +83,8 @@ export interface CommodityEditFormProps {
   onGoTo: (target: ListNeighbor) => void
   /** Opens the step-by-step dialog with the values entered so far. */
   onAllFields: (draft: Commodity) => void
+  /** Names of the items the item's link fields point at (meta.linked_items). */
+  linkedItems?: Record<string, { name?: string; trashed?: boolean }>
   className?: string
   /** Extra classes for the sticky header, e.g. room for a sheet's close button. */
   headerClassName?: string
@@ -81,8 +92,9 @@ export interface CommodityEditFormProps {
 
 // The item's edit form, in place of the read view: the mock's ItemEditForm
 // (design-mocks ItemDetail.tsx) with its editing header. Sections Identity,
-// Location, Purchase, Warranty, Notes & Tags; Cancel and Save Changes stay at
-// the bottom of the view while it scrolls.
+// Location, Purchase, Warranty, Notes & Tags, and the group's custom fields
+// (#2803) when it has any; Cancel and Save Changes stay at the bottom of the
+// view while it scrolls.
 //
 // Opened from a list, the header also holds Previous / Next and the footer
 // "Save and next", which follow the list's filters and order
@@ -99,6 +111,7 @@ export function CommodityEditForm({
   onExit,
   onGoTo,
   onAllFields,
+  linkedItems,
   className,
   headerClassName,
 }: CommodityEditFormProps) {
@@ -112,7 +125,13 @@ export function CommodityEditForm({
     () => buildDefaults(commodity, groupCurrency),
     [commodity, groupCurrency]
   )
-  const schema = useMemo(() => buildCommoditySchema(groupCurrency), [groupCurrency])
+  const customFieldsQuery = useCustomFields()
+  const customFields = customFieldsQuery.data ?? NO_FIELDS
+  const groupSlug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+  const schema = useMemo(
+    () => buildCommoditySchema(groupCurrency, customFields),
+    [groupCurrency, customFields]
+  )
   const form = useForm<CommodityFormInput>({
     resolver: zodResolver(schema),
     defaultValues: defaults,
@@ -136,7 +155,11 @@ export function CommodityEditForm({
     try {
       // Spread over the record so what the form does not cover (status
       // metadata, cover) goes back unchanged.
-      await onSubmit({ ...commodity, ...toRequest(values, groupCurrency) })
+      await onSubmit({
+        ...commodity,
+        ...toRequest(values, groupCurrency),
+        custom_fields: customFieldsPayload(values),
+      })
       form.reset(values)
       toast.success(t("commodities:toast.updated"))
       return true
@@ -182,10 +205,29 @@ export function CommodityEditForm({
     onGoTo(target)
   }
 
+  // The values to send: those of the fields this client knows, and a clear
+  // for a field the item had a value for and the form no longer has.
+  function customFieldsPayload(values: CommodityFormInput) {
+    return customFieldsRequest(
+      customFields,
+      commodity.custom_fields as CustomFieldValues | undefined,
+      values.custom_fields
+    ) as Commodity["custom_fields"]
+  }
+
   function openAllFields() {
     setHiddenFieldError(false)
-    onAllFields({ ...commodity, ...toRequest(getValues(), groupCurrency) })
+    const values = getValues()
+    // The dialog starts from these values; a cleared field is handed over
+    // as null so the dialog clears it too.
+    onAllFields({
+      ...commodity,
+      ...toRequest(values, groupCurrency),
+      custom_fields: customFieldsPayload(values),
+    })
   }
+
+  const customFieldsBinding = useCustomFieldsBinding(form, customFields)
 
   const count = Number(watch("count"))
   const isBundle = Number.isFinite(count) && count > 1
@@ -513,6 +555,28 @@ export function CommodityEditForm({
               />
             </div>
           </div>
+
+          {customFields.length > 0 ? (
+            <>
+              <Separator />
+              <div className="space-y-3" data-testid="commodity-edit-custom-fields">
+                <SectionLabel>{t("customFields:section.title")}</SectionLabel>
+                <CustomFieldsEditor
+                  fields={customFields}
+                  values={customFieldsBinding.values}
+                  onChange={customFieldsBinding.onChange}
+                  errors={customFieldsBinding.errors}
+                  linkedItems={linkedItems}
+                  selfId={commodity.id}
+                  groupCurrency={groupCurrency}
+                  manageHref={
+                    groupSlug ? `/g/${encodeURIComponent(groupSlug)}/custom-fields` : undefined
+                  }
+                  disabled={saving}
+                />
+              </div>
+            </>
+          ) : null}
 
           {hiddenFieldError ? (
             <Alert variant="destructive" data-testid="commodity-edit-hidden-error">

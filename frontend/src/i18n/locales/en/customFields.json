@@ -1,0 +1,121 @@
+{
+  "create": "New field",
+  "delete": {
+    "changed": "The field's values changed meanwhile. Check the new count and confirm again.",
+    "confirm": "Delete field",
+    "confirmLabel": "Delete the values too",
+    "deleting": "Deleting…",
+    "description": "No item has a value for this field.",
+    "error": "Could not delete the field.",
+    "inUse_one": "{{count}} item has a value for this field. Deleting the field deletes that value.",
+    "inUse_other": "{{count}} items have a value for this field. Deleting the field deletes their values.",
+    "title": "Delete {{name}}?",
+    "trashed_one": "This includes {{count}} item in Trash.",
+    "trashed_other": "This includes {{count}} items in Trash."
+  },
+  "description": "Fields the group adds to its items, such as a license plate or a lens mount. A field's type never changes; its name and options can.",
+  "detail": {
+    "no": "No",
+    "trashed": "in Trash",
+    "unknownItem": "Linked item",
+    "unknownOption": "A removed option",
+    "yes": "Yes"
+  },
+  "dialog": {
+    "addOption": "Add option",
+    "createSubmit": "Create field",
+    "createTitle": "New custom field",
+    "description": "A name and a type. Each name is used once in the group, and the type cannot change later.",
+    "editSubmit": "Save changes",
+    "editTitle": "Edit custom field",
+    "errorGeneric": "Could not save the field.",
+    "limit": "A group keeps at most {{max}} custom fields. Delete a field before you add another.",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. License plate",
+    "optionPlaceholder": "Option {{index}}",
+    "optionsLabel": "Options",
+    "optionUsage_one": "{{count}} item",
+    "optionUsage_other": "{{count}} items",
+    "removedOptions_one": "Saving clears the removed options on {{count}} item.",
+    "removedOptions_other": "Saving clears the removed options on {{count}} items.",
+    "removeOption": "Remove option {{index}}",
+    "submitting": "Saving…",
+    "typeLabel": "Type",
+    "typeLocked": "A field's type cannot change."
+  },
+  "errors": {
+    "currency": "Enter a three-letter currency code.",
+    "date": "Enter a date.",
+    "number": "Enter a number.",
+    "numberTooLong": "The number has too many digits.",
+    "tooLong": "The value is too long.",
+    "url": "Enter a web address starting with http:// or https://."
+  },
+  "list": {
+    "delete": "Delete {{name}}",
+    "edit": "Edit {{name}}",
+    "empty": "No custom fields yet.",
+    "emptyFiltered": "No fields match “{{query}}”.",
+    "loadError": "Could not load the custom fields.",
+    "options_one": "{{count}} option",
+    "options_other": "{{count}} options",
+    "results_one": "{{count}} result",
+    "results_other": "{{count}} results",
+    "total_one": "{{count}} field",
+    "total_other": "{{count}} fields",
+    "usageItems_one": "{{count}} item",
+    "usageItems_other": "{{count}} items",
+    "usageNone": "No values yet",
+    "usageTrashed_one": "{{count}} in Trash",
+    "usageTrashed_other": "{{count}} in Trash"
+  },
+  "search": {
+    "clear": "Clear search",
+    "label": "Search custom fields",
+    "placeholder": "Search fields…"
+  },
+  "section": {
+    "add": "Add field",
+    "addLabel": "Add a custom field",
+    "currencyLabel": "Currency of {{name}}",
+    "itemNone": "No items found.",
+    "itemPlaceholder": "Pick an item",
+    "itemSearch": "Search items…",
+    "itemTrashed": "{{name}} (in Trash)",
+    "itemUnknown": "Linked item",
+    "manage": "Manage custom fields",
+    "no": "No",
+    "noneLeft": "Every custom field is already on this item.",
+    "remove": "Clear {{name}}",
+    "selectPlaceholder": "Pick an option",
+    "title": "Custom fields",
+    "yes": "Yes"
+  },
+  "title": "Custom fields",
+  "toast": {
+    "created": "Field created",
+    "deleted": "Field deleted",
+    "updated": "Field saved"
+  },
+  "types": {
+    "boolean": "Yes/no",
+    "date": "Date",
+    "item_link": "Link to an item",
+    "long_text": "Long text",
+    "money": "Money",
+    "number": "Number",
+    "select": "Select",
+    "text": "Text",
+    "url": "Web address"
+  },
+  "validation": {
+    "nameRequired": "Enter a name.",
+    "nameTaken": "Another field of the group has this name.",
+    "nameTooLong": "Use at most {{max}} characters.",
+    "optionDuplicate": "Each option needs its own label.",
+    "optionRequired": "Enter a label or remove the option.",
+    "optionsRequired": "Add at least one option.",
+    "optionsTooMany": "A field has at most {{max}} options.",
+    "optionTooLong": "Use at most {{max}} characters."
+  }
+}

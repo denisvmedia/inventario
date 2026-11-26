@@ -1,7 +1,9 @@
+import type { ReactNode } from "react"
 import {
   Calendar,
   DollarSign,
   Hash,
+  ListPlus,
   MapPin,
   Package,
   Store,
@@ -10,12 +12,16 @@ import {
 } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
+import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
 import { Separator } from "@/components/ui/separator"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type { Commodity } from "@/features/commodities/api"
+import type { Commodity, LinkedItemSummary } from "@/features/commodities/api"
 import { brandedName } from "@/features/commodities/brand"
 import { warrantyStatus } from "@/features/commodities/constants"
 import { commodityValue, formatPrice } from "@/features/commodities/price"
+import type { CustomFieldValues } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { hasValue } from "@/features/customFields/values"
 import type { ListedFile } from "@/features/files/api"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -47,6 +53,8 @@ interface ItemReportProps {
   // Purchase currency — `original_price` lives here.
   purchaseCurrency: string
   generatedDate: string
+  // Names of the items the item's link fields point at (meta.linked_items).
+  linkedItems?: Record<string, LinkedItemSummary>
 }
 
 export function ItemReport({
@@ -58,6 +66,7 @@ export function ItemReport({
   groupCurrency,
   purchaseCurrency,
   generatedDate,
+  linkedItems,
 }: ItemReportProps) {
   const { t } = useTranslation()
   const noValue = t("reports:insurance.noValue")
@@ -84,7 +93,10 @@ export function ItemReport({
     formatCurrency
   )
 
-  const details: { icon: LucideIcon; label: string; value: string; note?: string }[] = [
+  const customFields = useCustomFields().data ?? []
+  const customValues = commodity.custom_fields as CustomFieldValues | undefined
+
+  const details: { icon: LucideIcon; label: string; value: ReactNode; note?: string }[] = [
     {
       icon: Tag,
       label: t("reports:insurance.fields.type"),
@@ -119,6 +131,21 @@ export function ItemReport({
       label: t("reports:insurance.fields.location"),
       value: areaLabel || noValue,
     },
+    // The custom fields the item has a value for (#2803), in the group's
+    // order. The mock has no custom fields; they take the rows' shape.
+    ...customFields
+      .filter((field) => hasValue(customValues, field.id))
+      .map((field) => ({
+        icon: ListPlus,
+        label: field.name,
+        value: (
+          <CustomFieldValue
+            field={field}
+            raw={customValues?.[field.id]}
+            linkedItems={linkedItems}
+          />
+        ),
+      })),
   ]
 
   return (
@@ -183,8 +210,8 @@ export function ItemReport({
           {t("reports:insurance.sections.itemDetails")}
         </h2>
         <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-          {details.map(({ icon: Icon, label, value, note }) => (
-            <div key={label} className="flex items-start gap-3">
+          {details.map(({ icon: Icon, label, value, note }, i) => (
+            <div key={i} className="flex items-start gap-3">
               <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted">
                 <Icon className="size-3.5 text-muted-foreground" aria-hidden="true" />
               </div>

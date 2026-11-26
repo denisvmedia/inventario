@@ -42,6 +42,53 @@ describe("parseDraftValues", () => {
     })
   })
 
+  it("keeps the custom field values the form saved", () => {
+    expect(
+      parseDraftValues({
+        custom_fields: {
+          "cf-plate": { value: "AB 123", currency: "" },
+          "cf-price": { value: "12.50", currency: "EUR" },
+          "cf-added": { value: "", currency: "" },
+        },
+      })
+    ).toEqual({
+      custom_fields: {
+        "cf-plate": { value: "AB 123", currency: "" },
+        "cf-price": { value: "12.50", currency: "EUR" },
+        "cf-added": { value: "", currency: "" },
+      },
+    })
+  })
+
+  it("reads custom field values stored as an item stores them", () => {
+    expect(
+      parseDraftValues({
+        custom_fields: {
+          "cf-plate": "AB 123",
+          "cf-odo": 1200,
+          "cf-4wd": false,
+          "cf-price": { amount: 12.5, currency: "EUR" },
+          "cf-null": null,
+          "cf-list": ["a"],
+          "cf-nested": { value: { deep: true } },
+        },
+      })
+    ).toEqual({
+      custom_fields: {
+        "cf-plate": { value: "AB 123", currency: "" },
+        "cf-odo": { value: "1200", currency: "" },
+        "cf-4wd": { value: "false", currency: "" },
+        "cf-price": { value: "12.5", currency: "EUR" },
+      },
+    })
+  })
+
+  it("drops custom fields that are not an object", () => {
+    expect(parseDraftValues({ name: "Drill", custom_fields: ["cf-plate"] })).toEqual({
+      name: "Drill",
+    })
+  })
+
   it("gives nothing for values that are not an object", () => {
     expect(parseDraftValues(null)).toEqual({})
     expect(parseDraftValues("Drill")).toEqual({})

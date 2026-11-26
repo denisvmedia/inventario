@@ -25,6 +25,7 @@
   "loading": "Loading…",
   "nav": {
     "backup": "Backup",
+    "customFields": "Custom fields",
     "dashboard": "Dashboard",
     "files": "Files",
     "groupInventory": "Inventory",

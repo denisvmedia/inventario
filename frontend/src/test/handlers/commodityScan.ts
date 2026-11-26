@@ -18,6 +18,8 @@ type Field =
 
 interface OkAttributes {
   fields: Partial<Record<string, Field>>
+  // Custom field values read (#2803), by field id; omitted when none.
+  custom_fields?: Record<string, { value: unknown; confidence: number }>
   // Multi-product scans (#1983): one entry per candidate. Omitted/empty for
   // the common single-item case.
   items?: Array<{ fields: Partial<Record<string, Field>> }>
@@ -32,6 +34,7 @@ export function ok(slug: string, attrs: OkAttributes) {
           type: "commodity_scan",
           attributes: {
             fields: attrs.fields,
+            ...(attrs.custom_fields ? { custom_fields: attrs.custom_fields } : {}),
             // Omit items for the single-item case, mirroring the BE's
             // `omitempty` (and the slow() helper).
             ...(attrs.items ? { items: attrs.items } : {}),

@@ -101,6 +101,7 @@ export default defineConfig({
             { slug: 'tags' },
             { slug: 'sellers' },
             { slug: 'item-types' },
+            { slug: 'custom-fields' },
             { slug: 'files-and-photos' },
             { slug: 'warranties-loans-maintenance' },
             { slug: 'reports' },

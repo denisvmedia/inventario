@@ -30,6 +30,7 @@ import {
   type CommodityMeta,
   type CommoditySelection,
   type CreateCommodityRequest,
+  type LinkedItemSummary,
   type ListCommoditiesOptions,
   type UpdateCommodityRequest,
 } from "./api"
@@ -233,7 +234,11 @@ export function useCommodityEvents(
 export function useCommodity(id: string | undefined, { enabled = true }: QueryOptions = {}) {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  return useQuery<{ commodity: Commodity; meta: CommodityMeta }>({
+  return useQuery<{
+    commodity: Commodity
+    meta: CommodityMeta
+    linkedItems?: Record<string, LinkedItemSummary>
+  }>({
     queryKey: commodityKeys.detail(slug, id ?? ""),
     queryFn: ({ signal }) => {
       if (!id) throw new Error("useCommodity called without an id")
@@ -314,10 +319,15 @@ export function useUpdateCommodity() {
       // there since the update endpoint's response doesn't repopulate
       // it.
       const detailKey = commodityKeys.detail(slug, id)
-      const cached = qc.getQueryData<{ commodity: Commodity; meta: CommodityMeta }>(detailKey)
+      const cached = qc.getQueryData<{
+        commodity: Commodity
+        meta: CommodityMeta
+        linkedItems?: Record<string, LinkedItemSummary>
+      }>(detailKey)
       qc.setQueryData(detailKey, {
         commodity: { ...commodity, id },
         meta: cached?.meta ?? {},
+        linkedItems: cached?.linkedItems,
       })
       qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
       invalidateTags()
@@ -359,7 +369,13 @@ export function useSetCommodityCover() {
   >({
     mutationFn: ({ id, fileId }) => setCommodityCover(id, fileId),
     onSuccess: ({ commodity, meta }, { id }) => {
-      qc.setQueryData(commodityKeys.detail(slug, id), { commodity: { ...commodity, id }, meta })
+      const detailKey = commodityKeys.detail(slug, id)
+      const cached = qc.getQueryData<{ linkedItems?: Record<string, LinkedItemSummary> }>(detailKey)
+      qc.setQueryData(detailKey, {
+        commodity: { ...commodity, id },
+        meta,
+        linkedItems: cached?.linkedItems,
+      })
       qc.invalidateQueries({ queryKey: commodityKeys.group(slug) })
     },
   })

@@ -59,8 +59,12 @@ interface CommodityResponseEnvelope {
     attributes?: Schema<"models.Commodity">
     meta?: CommodityMeta
   }
-  meta?: { cover?: CoverPayload }
+  meta?: { cover?: CoverPayload; linked_items?: Record<string, LinkedItemSummary> }
 }
+
+// The name of an item a "link to another item" custom field points at
+// (#2803), and whether it is in Trash.
+export type LinkedItemSummary = Schema<"jsonapi.LinkedItemSummary">
 
 // Sub-resources returned alongside a single-commodity GET. Today's BE
 // surfaces images / manuals / invoices via the legacy commodity-scoped
@@ -292,7 +296,12 @@ function normalizeCover(payload?: CoverPayload): CommodityCover | undefined {
 export async function getCommodity(
   id: string,
   signal?: AbortSignal
-): Promise<{ commodity: Commodity; meta: CommodityMeta }> {
+): Promise<{
+  commodity: Commodity
+  meta: CommodityMeta
+  // By item id, the items the commodity's link fields point at.
+  linkedItems?: Record<string, LinkedItemSummary>
+}> {
   const body = await http.get<CommodityResponseEnvelope>(`/commodities/${encodeURIComponent(id)}`, {
     signal,
   })
@@ -306,6 +315,7 @@ export async function getCommodity(
       cover: normalizeCover(body.meta?.cover),
     },
     meta: body.data.meta ?? {},
+    linkedItems: body.meta?.linked_items ?? {},
   }
 }
 
