@@ -11401,7 +11401,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "The group has 100 item types (item_type.limit)",
+                        "description": "The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11415,7 +11415,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Deletes the item types and custom fields the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.\nTypes and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.\nmeta names what the request deleted; the attributes show what stays and why. Requires group admin role.",
+                "description": "Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.\nA listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.\nTypes and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.\nmeta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11433,6 +11433,15 @@ const docTemplate = `{
                         "name": "groupID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "The item types and custom fields to delete, by ID",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetRemoveRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -11455,7 +11464,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "The group is being deleted (group.not_active)",
+                        "description": "The body is missing or invalid, or the group is being deleted (group.not_active)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -18117,7 +18126,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "custom_field_id": {
-                    "description": "CustomFieldID is the ID of the group's field; absent while missing.",
+                    "description": "CustomFieldID is the ID of the group's field; absent while missing or\ntaken.",
                     "type": "string",
                     "example": "5d2e..."
                 },
@@ -18157,14 +18166,20 @@ const docTemplate = `{
                     "example": true
                 },
                 "state": {
-                    "description": "State is missing, added or own, as for an item type.",
+                    "description": "State is missing, added, own or taken, as for an item type.",
                     "type": "string",
                     "enum": [
                         "missing",
                         "added",
-                        "own"
+                        "own",
+                        "taken"
                     ],
                     "example": "added"
+                },
+                "taken_by": {
+                    "description": "TakenBy is the key of the set's field that has this field's name, for\na taken field.",
+                    "type": "string",
+                    "example": "signed"
                 },
                 "trashed_item_count": {
                     "type": "integer",
@@ -18186,7 +18201,7 @@ const docTemplate = `{
                     "example": 0
                 },
                 "item_type_id": {
-                    "description": "ItemTypeID is the ID of the group's type; absent while missing.",
+                    "description": "ItemTypeID is the ID of the group's type; absent while missing or\ntaken.",
                     "type": "string",
                     "example": "8f1c..."
                 },
@@ -18216,14 +18231,20 @@ const docTemplate = `{
                     "example": true
                 },
                 "state": {
-                    "description": "State is missing when the group has no such type and adding the set\ncreates it, added when the set created the type, and own when it is\na member's type of the same name, which the set uses and never\ndeletes.",
+                    "description": "State is missing when the group has no such type and adding the set\ncreates it, added when the set created the type, own when it is a\nmember's type of the same name, which the set uses and never deletes,\nand taken when another type of the set was renamed to its name, so\nadding cannot create it.",
                     "type": "string",
                     "enum": [
                         "missing",
                         "added",
-                        "own"
+                        "own",
+                        "taken"
                     ],
                     "example": "added"
+                },
+                "taken_by": {
+                    "description": "TakenBy is the key of the set's type that has this type's name, for a\ntaken type.",
+                    "type": "string",
+                    "example": "coins"
                 },
                 "trashed_item_count": {
                     "type": "integer",
@@ -18263,6 +18284,60 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                },
+                "kept_custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "kept_item_types": {
+                    "description": "KeptItemTypes and KeptCustomFields name what the remove request\nlisted but kept: an item started to use it since the confirmation,\nor it became the group's last type.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveAttributes": {
+            "type": "object",
+            "properties": {
+                "custom_field_ids": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "item_type_ids": {
+                    "description": "ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,\nby ID. It deletes those that are removable when it runs; one that\nstopped being removable stays and is listed in meta, and an ID that\nnames no type or field of the set is ignored. Either list may be\nempty.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemSetRemoveAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_sets"
+                    ],
+                    "example": "item_sets"
+                }
+            }
+        },
+        "jsonapi.ItemSetRemoveRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemSetRemoveData"
                 }
             }
         },
@@ -18300,7 +18375,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "complete": {
-                    "description": "Complete is true when the group has every type and field of the set.",
+                    "description": "Complete is true when adding the set has nothing left to create: the\ngroup has every type and field of the set but those taken.",
                     "type": "boolean",
                     "example": true
                 },

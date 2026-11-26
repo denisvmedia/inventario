@@ -92,8 +92,8 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 	}
 	for _, t := range st.ItemTypes {
 		row := ItemSetItemTypeView{
-			Key:   t.Entry.Key,
-			Name:  t.Entry.Name,
+			Key:     t.Entry.Key,
+			Name:    t.Entry.Name,
 			Icon:    t.Entry.Icon,
 			State:   string(t.State),
 			TakenBy: t.TakenBy,

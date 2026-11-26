@@ -69,6 +69,8 @@
       "loadError": "Couldn't load the Collection set.",
       "note": "Serial number stays a field of its own. A type or field the group already has under the same name is used instead of a new one. The names are in English; rename them like any other type or field.",
       "removal": {
+        "checkFailed": "Could not check what items use. Close this and try again.",
+        "checking": "Checking what items use…",
         "confirm": "Remove the set",
         "description": "The types and fields the set created that nothing uses are deleted. The rest stays.",
         "goes": "Deleted ({{total}})",
@@ -87,8 +89,18 @@
         "title": "Remove the Collection set?"
       },
       "remove": "Remove the set",
-      "removed": "Collection set removed. Deleted item types: {{types}}, deleted custom fields: {{fields}}.",
+      "removed": "Deleted {{names}}.",
+      "removedKept_one": "Kept {{names}}: it changed after you opened the confirmation.",
+      "removedKept_other": "Kept {{names}}: they changed after you opened the confirmation.",
+      "removedNothing": "Nothing was deleted.",
       "removeError": "Couldn't remove the set. Try again.",
+      "rowState": {
+        "added": "Added by the set",
+        "missing": "Not in the group",
+        "own": "The group's own",
+        "takenField": "Not added: another field of the set has this name",
+        "takenType": "Not added: another type of the set has this name"
+      },
       "state": {
         "complete": "Added",
         "none": "Not added",

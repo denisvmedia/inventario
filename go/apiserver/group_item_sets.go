@@ -257,7 +257,7 @@ func (api *groupsAPI) addCollectionSetToNewGroup(r *http.Request, group *models.
 	base := context.WithoutCancel(r.Context())
 	svc, ctx, err := api.collectionSetService(base, group)
 	if err != nil {
-		slog.Error("Collection set: cannot scope registries to the new group", "group_id", group.ID, "error", err)
+		slog.ErrorContext(base, "Failed to scope registries to the new group for the Collection set", "group_id", group.ID, "error", err)
 		api.logCollectionSet(base, r, auditActionCollectionSetAdd, group, nil, err)
 		return outcome
 	}
@@ -268,7 +268,7 @@ func (api *groupsAPI) addCollectionSetToNewGroup(r *http.Request, group *models.
 		outcome.CreatedCustomFields = res.CreatedFields
 	}
 	if err != nil {
-		slog.Error("Collection set: adding it to the new group failed", "group_id", group.ID, "error", err)
+		slog.ErrorContext(base, "Failed to add the Collection set to the new group", "group_id", group.ID, "error", err)
 		return outcome
 	}
 	outcome.Added = true

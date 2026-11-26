@@ -21,18 +21,7 @@ import (
 func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
 	t.Helper()
 	def := models.CollectionSet
-	newService := func(env CustomFieldEnv) *services.ItemSetService {
-		return services.NewItemSetService(def, env.TypesA, env.FieldsA)
-	}
-	// removeConfirmed removes what a confirmation shown now would list.
-	removeConfirmed := func(c *qt.C, env CustomFieldEnv, svc *services.ItemSetService) *services.ItemSetRemoveResult {
-		c.Helper()
-		st, err := svc.Status(env.CtxA)
-		c.Assert(err, qt.IsNil)
-		res, err := svc.Remove(env.CtxA, st.Removal())
-		c.Assert(err, qt.IsNil)
-		return res
-	}
+	newService := newCollectionSetService
 
 	t.Run("item set: adding creates the types and fields once, with every field on every type", func(t *testing.T) {
 		c := qt.New(t)
@@ -252,6 +241,34 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Assert(types, qt.HasLen, 1)
 		c.Check(types[0].Name, qt.Equals, "Cards")
 	})
+
+	runItemSetChangeContract(t, newEnv)
+}
+
+// newCollectionSetService returns the Collection set service of env's
+// group A.
+func newCollectionSetService(env CustomFieldEnv) *services.ItemSetService {
+	return services.NewItemSetService(models.CollectionSet, env.TypesA, env.FieldsA)
+}
+
+// removeConfirmed removes from env's group A what a confirmation shown now
+// would list.
+func removeConfirmed(c *qt.C, env CustomFieldEnv, svc *services.ItemSetService) *services.ItemSetRemoveResult {
+	c.Helper()
+	st, err := svc.Status(env.CtxA)
+	c.Assert(err, qt.IsNil)
+	res, err := svc.Remove(env.CtxA, st.Removal())
+	c.Assert(err, qt.IsNil)
+	return res
+}
+
+// runItemSetChangeContract checks the set against changes made between a
+// status and the next step: a row coming into use after a confirmation,
+// and a set row renamed to another entry's name.
+func runItemSetChangeContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
+	t.Helper()
+	def := models.CollectionSet
+	newService := newCollectionSetService
 
 	t.Run("item set: removing deletes only the rows it is given and keeps one that came into use", func(t *testing.T) {
 		c := qt.New(t)

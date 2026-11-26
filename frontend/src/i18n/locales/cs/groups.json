@@ -216,7 +216,7 @@
       "note": "Sériové číslo zůstává samostatným polem. Typ nebo pole se stejným názvem, které skupina už má, se použije místo nového. Názvy jsou anglicky; přejmenujte je jako jakýkoli jiný typ nebo pole.",
       "remove": "Odebrat sadu",
       "removeError": "Sadu se nepodařilo odebrat. Zkuste to znovu.",
-      "removed": "Sada Sbírka odebrána. Smazané typy položek: {{types}}, smazaná vlastní pole: {{fields}}.",
+      "removed": "Smazáno: {{names}}.",
       "removal": {
         "confirm": "Odebrat sadu",
         "description": "Typy a pole, které sada vytvořila a nic je nepoužívá, se smažou. Ostatní zůstanou.",
@@ -237,7 +237,9 @@
         "nothing": "Nic nelze smazat: všechny typy a pole sady, které skupina má, zůstanou z níže uvedených důvodů.",
         "removing": "Odebírám…",
         "stays": "Zůstane ({{total}})",
-        "title": "Odebrat sadu Sbírka?"
+        "title": "Odebrat sadu Sbírka?",
+        "checking": "Ověřuji, co položky používají…",
+        "checkFailed": "Nepodařilo se ověřit, co položky používají. Zavřete okno a zkuste to znovu."
       },
       "state": {
         "complete": "Přidáno",
@@ -245,7 +247,19 @@
         "partial": "Přidáno zčásti"
       },
       "subtitle": "Typy položek a vlastní pole pro sbírky: umění, knihy, mince, známky, desky, hodinky a karty. Každé pole sady se zobrazuje u každého z těchto typů.",
-      "title": "Sada Sbírka"
+      "title": "Sada Sbírka",
+      "removedNothing": "Nic nebylo smazáno.",
+      "rowState": {
+        "missing": "Ve skupině chybí",
+        "added": "Přidáno sadou",
+        "own": "Vlastní ve skupině",
+        "takenType": "Nepřidáno: tento název má jiný typ sady",
+        "takenField": "Nepřidáno: tento název má jiné pole sady"
+      },
+      "removedKept_one": "Ponecháno: {{names}}. Od otevření potvrzení se změnilo.",
+      "removedKept_few": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "removedKept_many": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "removedKept_other": "Ponecháno: {{names}}. Od otevření potvrzení se změnily."
     }
   },
   "validation": {

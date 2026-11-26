@@ -12908,7 +12908,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description The group has 100 item types (item_type.limit) */
+                /** @description The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed) */
                 409: {
                     headers: {
                         [name: string]: unknown;
@@ -12930,9 +12930,10 @@ export type paths = {
         };
         /**
          * Remove the Collection set from the group
-         * @description Deletes the item types and custom fields the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+         * @description Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+         *     A listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.
          *     Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
-         *     meta names what the request deleted; the attributes show what stays and why. Requires group admin role.
+         *     meta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.
          */
         delete: {
             parameters: {
@@ -12944,7 +12945,12 @@ export type paths = {
                 };
                 cookie?: never;
             };
-            requestBody?: never;
+            /** @description The item types and custom fields to delete, by ID */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetRemoveRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -12973,7 +12979,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description The group is being deleted (group.not_active) */
+                /** @description The body is missing or invalid, or the group is being deleted (group.not_active) */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -17209,7 +17215,8 @@ export type components = {
         };
         "jsonapi.ItemSetFieldView": {
             /**
-             * @description CustomFieldID is the ID of the group's field; absent while missing.
+             * @description CustomFieldID is the ID of the group's field; absent while missing or
+             *     taken.
              * @example 5d2e...
              */
             custom_field_id?: string;
@@ -17251,11 +17258,17 @@ export type components = {
              */
             removable?: boolean;
             /**
-             * @description State is missing, added or own, as for an item type.
+             * @description State is missing, added, own or taken, as for an item type.
              * @example added
              * @enum {string}
              */
-            state?: "missing" | "added" | "own";
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's field that has this field's name, for
+             *     a taken field.
+             * @example signed
+             */
+            taken_by?: string;
             /**
              * Format: int64
              * @example 0
@@ -17271,7 +17284,8 @@ export type components = {
              */
             item_count?: number;
             /**
-             * @description ItemTypeID is the ID of the group's type; absent while missing.
+             * @description ItemTypeID is the ID of the group's type; absent while missing or
+             *     taken.
              * @example 8f1c...
              */
             item_type_id?: string;
@@ -17302,13 +17316,20 @@ export type components = {
             removable?: boolean;
             /**
              * @description State is missing when the group has no such type and adding the set
-             *     creates it, added when the set created the type, and own when it is
-             *     a member's type of the same name, which the set uses and never
-             *     deletes.
+             *     creates it, added when the set created the type, own when it is a
+             *     member's type of the same name, which the set uses and never deletes,
+             *     and taken when another type of the set was renamed to its name, so
+             *     adding cannot create it.
              * @example added
              * @enum {string}
              */
-            state?: "missing" | "added" | "own";
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's type that has this type's name, for a
+             *     taken type.
+             * @example coins
+             */
+            taken_by?: string;
             /**
              * Format: int64
              * @example 0
@@ -17336,6 +17357,35 @@ export type components = {
             deleted_custom_fields?: string[];
             /** @description DeletedItemTypes and DeletedCustomFields name what a remove deleted. */
             deleted_item_types?: string[];
+            kept_custom_fields?: string[];
+            /**
+             * @description KeptItemTypes and KeptCustomFields name what the remove request
+             *     listed but kept: an item started to use it since the confirmation,
+             *     or it became the group's last type.
+             */
+            kept_item_types?: string[];
+        };
+        "jsonapi.ItemSetRemoveAttributes": {
+            custom_field_ids?: string[];
+            /**
+             * @description ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,
+             *     by ID. It deletes those that are removable when it runs; one that
+             *     stopped being removable stays and is listed in meta, and an ID that
+             *     names no type or field of the set is ignored. Either list may be
+             *     empty.
+             */
+            item_type_ids?: string[];
+        };
+        "jsonapi.ItemSetRemoveData": {
+            attributes?: components["schemas"]["jsonapi.ItemSetRemoveAttributes"];
+            /**
+             * @example item_sets
+             * @enum {string}
+             */
+            type?: "item_sets";
+        };
+        "jsonapi.ItemSetRemoveRequest": {
+            data?: components["schemas"]["jsonapi.ItemSetRemoveData"];
         };
         "jsonapi.ItemSetResponse": {
             data?: components["schemas"]["jsonapi.ItemSetResponseData"];
@@ -17353,7 +17403,8 @@ export type components = {
         };
         "jsonapi.ItemSetView": {
             /**
-             * @description Complete is true when the group has every type and field of the set.
+             * @description Complete is true when adding the set has nothing left to create: the
+             *     group has every type and field of the set but those taken.
              * @example true
              */
             complete?: boolean;

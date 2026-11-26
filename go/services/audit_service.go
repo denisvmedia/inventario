@@ -148,7 +148,9 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 		entry.RequestID = requestIDFromRequest(ev.Request)
 	}
 
-	if breadcrumb := auditBreadcrumb(ev.Action, ev.Extra, "", false, entry.UserAgent); breadcrumb != "" {
+	// An auth event carries no reason and is never forced: only its Extra
+	// goes into the breadcrumb.
+	if breadcrumb := auditBreadcrumb(AdminEvent{Action: ev.Action, Extra: ev.Extra}, entry.UserAgent); breadcrumb != "" {
 		entry.UserAgent = breadcrumb
 	}
 
@@ -200,7 +202,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 	// JSON blob in user_agent and tuck the real UA under "ua" so the
 	// row carries the full context — see AdminEvent doc-comment for
 	// the rationale.
-	if breadcrumb := auditBreadcrumb(ev.Action, ev.Extra, ev.Reason, ev.Forced, entry.UserAgent); breadcrumb != "" {
+	if breadcrumb := auditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
 		entry.UserAgent = breadcrumb
 	}
 
@@ -227,16 +229,16 @@ const adminBreadcrumbTruncateMarker = "…"
 // caller should keep the existing user_agent value (raw UA string).
 // Keeping the fall-through path explicit avoids retroactively rewriting
 // every existing audit row to a noisy {"ua":"..."} blob.
-func auditBreadcrumb(action string, extra map[string]any, reason string, forced bool, rawUA string) string {
-	if reason == "" && !forced && len(extra) == 0 {
+func auditBreadcrumb(ev AdminEvent, rawUA string) string {
+	if ev.Reason == "" && !ev.Forced && len(ev.Extra) == 0 {
 		return ""
 	}
-	payload := make(map[string]any, len(extra)+3)
-	maps.Copy(payload, extra)
-	if reason != "" {
-		payload["reason"] = truncateReason(reason)
+	payload := make(map[string]any, len(ev.Extra)+3)
+	maps.Copy(payload, ev.Extra)
+	if ev.Reason != "" {
+		payload["reason"] = truncateReason(ev.Reason)
 	}
-	if forced {
+	if ev.Forced {
 		payload["forced"] = true
 	}
 	if rawUA != "" {
@@ -248,7 +250,7 @@ func auditBreadcrumb(action string, extra map[string]any, reason string, forced 
 		// breadcrumb payload contains an unsupported type — the
 		// alternative would silently drop the audit row, which is
 		// strictly worse than losing the breadcrumb context.
-		slog.Error("Failed to marshal audit breadcrumb", "action", action, "error", err)
+		slog.Error("Failed to marshal audit breadcrumb", "action", ev.Action, "error", err)
 		return ""
 	}
 	return string(encoded)
