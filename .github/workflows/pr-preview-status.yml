@@ -35,7 +35,9 @@
 # Whether the preview actually came up is not known here: GitHub Actions has
 # no route to the cluster. The in-cluster preview-health-check CronJob
 # (infra/vm/cluster-extras/preview-health-check.yaml, #1946) posts a separate
-# comment when a preview is still not up 15 minutes in, with the cause.
+# comment when a preview is still not up 15 minutes in, with the cause. It
+# posts only once its GitHub App is set up on the cluster (infra/SECRETS.md
+# §2b) and `make bootstrap` has run; merging this repository does not start it.
 #
 # Tailnet device cleanup is handled IN-CLUSTER by the hourly CronJob in
 # infra/vm/cluster-extras/ts-orphan-cleanup.yaml — runs on the same
@@ -120,7 +122,7 @@ jobs:
 
           The hostname is shown as plain text on purpose: the Tailscale-issued TLS cert only covers the FQDN, and a short-hostname HTTP redirect ends up cert-mismatched. Tailnet members know how to combine \`<hostname>\` + their tailnet's MagicDNS suffix to reach the working HTTPS URL.
 
-          Status reflects what ArgoCD has been asked to deploy, not whether the sync has completed yet. Allow ~3-5 minutes after a push for the docker build + ArgoCD sync to finish. If the preview is still not up about 15 minutes later, the preview cluster posts a separate comment that says why, for example when the VM has no free memory or CPU for it.
+          Status reflects what ArgoCD has been asked to deploy, not whether the sync has completed yet. Allow ~3-5 minutes after a push for the docker build + ArgoCD sync to finish. If the preview is still not up about 15 minutes later, a separate comment says why, for example when the VM has no free memory or CPU for it. That comment comes from a health check on the preview cluster, which posts only once the maintainer has set up its GitHub App there ([infra/SECRETS.md §2b](https://github.com/${{ github.repository }}/blob/master/infra/SECRETS.md#2b-optional-create-the-preview-health-github-app)).
 
           ---
           <sub>Updated automatically by [pr-preview-status.yml](https://github.com/${{ github.repository }}/blob/master/.github/workflows/pr-preview-status.yml) on each PR event.</sub>

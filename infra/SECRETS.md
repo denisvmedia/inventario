@@ -16,7 +16,8 @@ encrypted bundle is committed to the repo. `bootstrap.sh` decrypts it locally
 on the laptop, ships the plaintext to the VM tmpfs, and `apply-secrets.sh`
 turns the JSON into the admin / repo-creds / OAuth Kubernetes Secrets
 (`inv-vcl01-master` + `inv-vcl01-longevity` `inventario-admin`,
-`argocd/github-app-creds`, `tailscale/operator-oauth`). The `inventario-admin`
+`argocd/github-app-creds`, `argocd/preview-health-github-app`,
+`tailscale/operator-oauth`). The `inventario-admin`
 Secret carries the admin seed password and, when the optional `jwt.secret` /
 `file_signing.key` / `oauth_state.key` fields are set, the matching stable
 signing keys so sessions, back-office MFA, signed file URLs, and in-flight
@@ -90,10 +91,8 @@ a second one and re-encrypt — also covered in "Adding teammates".
 
 ArgoCD's `repo-server` (for `git clone` of the inventario repo) and the
 ApplicationSet PR generator (for listing PRs and reading labels) consume
-a GitHub App credential — no PAT, no custom bot component. ArgoCD only
-reads. The one write is the `preview-health-check` CronJob, which uses the
-same App to comment on a PR whose preview did not come up (#1946); that is
-why **Pull requests** is Read and write.
+a GitHub App credential — no PAT, no custom bot component. Permissions are
+read-only; ArgoCD never writes to GitHub.
 
 1. Open <https://github.com/settings/apps/new>
 2. Fill in:
@@ -104,7 +103,7 @@ why **Pull requests** is Read and write.
    - **Repository permissions**:
      - **Contents**: Read-only
      - **Metadata**: Read-only (always required by GitHub)
-     - **Pull requests**: Read and write
+     - **Pull requests**: Read-only
      - (everything else stays "No access")
    - **Subscribe to events**: none (we poll)
    - **Where can this GitHub App be installed?**: **Only on this account**
@@ -122,12 +121,40 @@ why **Pull requests** is Read and write.
 Stash these three values (App ID, Installation ID, private key PEM) for
 the "Filling the bundle" step below.
 
-If your App has **Pull requests: Read-only**, raise it on the App's page
-(**Permissions & events** → **Pull requests** → **Read and write** → **Save
-changes**), then accept the change on the installation
-(<https://github.com/settings/installations> → **Configure** → **Review
-request** → **Accept new permissions**). The private key and the sops bundle
-stay as they are. Until then `preview-health-check` Jobs fail with HTTP 403.
+### 2b. Optional: Create the preview health GitHub App
+
+The `preview-health-check` CronJob (#1946) comments on a PR whose preview did
+not come up. Writing comments needs **Pull requests: Read and write**, so the
+job has a GitHub App of its own. Do not raise the permission on the App from
+step 2 instead: every token ArgoCD mints with it, including in the
+`repo-server` that renders charts from pull requests, could then add the
+`preview` label and deploy a PR. Without this App, previews work as before;
+the CronJob's Jobs fail only when there is something to post.
+
+1. Open <https://github.com/settings/apps/new>
+2. Fill in:
+   - **GitHub App name**: `inventario-preview-health` (suffix with your handle
+     if taken)
+   - **Homepage URL**: `https://github.com/denisvmedia/inventario`
+   - **Webhook** → **Active**: uncheck
+   - **Repository permissions**:
+     - **Metadata**: Read-only (always required by GitHub)
+     - **Pull requests**: Read and write
+     - (everything else stays "No access")
+   - **Subscribe to events**: none
+   - **Where can this GitHub App be installed?**: **Only on this account**
+3. Click **Create GitHub App**, record the **App ID**, and click **Generate a
+   private key**.
+4. **Install App** → **Install** → **Only select repositories** → pick only
+   `denisvmedia/inventario` → **Install**. Record the Installation ID from
+   the URL, as in step 2.
+5. Put the three values into the `preview_health` block of the bundle
+   ("Filling the bundle" below). `apply-secrets.sh` turns them into the
+   Secret `argocd/preview-health-github-app`, which only the CronJob mounts,
+   on the next `make -C infra bootstrap VM=...`.
+
+Each run asks GitHub for a token limited to `denisvmedia/inventario` and to
+pull requests, whatever else the App is granted.
 
 ### 3. Create the Tailscale OAuth client
 
@@ -413,6 +440,8 @@ chmod 600 infra/vm/secrets/secrets.local.yaml
 #    master + longevity, optional),
 #    tailscale.{auth_key, oauth_client_id, oauth_client_secret, tailnet_name},
 #    github.{app_id, app_installation_id, app_private_key, url}.
+#    Fill preview_health.{app_id, app_installation_id, app_private_key}
+#    (step 2b) ONLY to get a PR comment when a preview does not come up.
 #    Fill backoffice.password (step 4 above) ONLY for the demo/preview
 #    /backoffice/login operator on master + longevity (8+ chars + upper +
 #    lower + digit); leave it empty to skip the back-office operator there
@@ -578,6 +607,10 @@ GH Apps allow multiple active private keys. Painless flow:
 3. `make -C infra upgrade VM=...` → applies new Secret to argocd namespace,
    rolling-restarts `argocd-repo-server` + `argocd-applicationset-controller`.
 4. Wait 24h (sanity buffer) → App settings → delete old key.
+
+The preview health App from step 2b rotates the same way, with
+`preview_health.app_private_key`. Its Secret is mounted by each new Job, so
+the next CronJob run uses the new key without a restart.
 
 ### Rotating the AI-vision provider API key (`anthropic.api_key` / `openai.api_key`)
 

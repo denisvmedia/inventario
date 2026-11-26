@@ -57,7 +57,7 @@ Three ancillary loops keep the system healthy:
 
 4. **PR comment loop** — `.github/workflows/pr-preview-status.yml`: on each PR event (`labeled` / `synchronize` / `unlabeled` / `closed`) updates a sticky comment with the deployed hostname.
 5. **Tailnet-device GC loop** — `infra/vm/cluster-extras/ts-orphan-cleanup.yaml`: hourly CronJob inside the cluster that lists tailnet devices, finds orphan records matching the PR-preview naming convention that have been offline > 1 hour, and `DELETE`s them via the TS API. Without this, every closed PR (or snapshot-rolled-back cluster) would leave a stale device record holding the original hostname slot, and the next deploy of the same PR number would get a `-1`/`-2` suffix.
-6. **Preview health loop** — `infra/vm/cluster-extras/preview-health-check.yaml` ([#1946](https://github.com/denisvmedia/inventario/issues/1946)): CronJob every 5 minutes that finds PR previews still not healthy 15 minutes after it first saw them unhealthy at the head commit, reads their pods and events, and comments on the PR with the cause, most importantly pods the scheduler cannot place for lack of memory or CPU. There is no cap on the number of previews; the scheduler decides what fits. It runs in the cluster because GitHub Actions has no route to it, and it reads Pods and Events because ArgoCD Notifications only sees the Application.
+6. **Preview health loop** — `infra/vm/cluster-extras/preview-health-check.yaml` ([#1946](https://github.com/denisvmedia/inventario/issues/1946)): CronJob every 5 minutes that finds PR previews still not healthy 15 minutes after it first saw them unhealthy at the head commit, reads their pods and events, and comments on the PR with the cause, most importantly pods the scheduler cannot place for lack of memory or CPU. There is no cap on the number of previews; the scheduler decides what fits. It runs in the cluster because GitHub Actions has no route to it, and it reads Pods and Events because ArgoCD Notifications only sees the Application. It comments through a GitHub App of its own (`argocd/preview-health-github-app`), so ArgoCD's App keeps no write access.
 
 ---
 
@@ -227,6 +227,7 @@ github:
 |---|---|---|
 | `inv-system/inventario-admin` | `inv-system` | Shared admin credentials (not yet wired into chart; #1883) |
 | `argocd/github-app-creds` | `argocd` | ArgoCD repo-creds + ApplicationSet PR generator (`appSecretName`) |
+| `argocd/preview-health-github-app` | `argocd` | `preview-health-check` CronJob only: a separate GitHub App with Pull requests write, so ArgoCD's App stays read-only (#1946). Optional. |
 | `tailscale/operator-oauth` | `tailscale` | TS Operator (mint proxy auth keys) AND `ts-orphan-cleanup` CronJob (LIST + DELETE device records). The single OAuth client carries both `auth_keys` and `devices:core` scopes on `tag:k8s`. |
 
 The **same** OAuth client serves the operator and the cleanup CronJob — verified empirically (the `devices:core` scope name is mandatory; bare `devices` is rejected by the TS token endpoint).

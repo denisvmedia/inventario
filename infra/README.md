@@ -229,11 +229,16 @@ Both ArgoCD ApplicationSets use a GitHub App to talk to the GitHub API:
   used because `denisvmedia` is a user, not an org).
 
 Both reuse the same `github-app-creds` Secret (repo-creds format created
-by `apply-secrets.sh` from the sops bundle). The `preview-health-check`
-CronJob uses it too, to comment on a PR whose preview did not come up, so
-the App needs **Pull requests: Read and write** (#1946).
+by `apply-secrets.sh` from the sops bundle). That App only reads.
 
 Walkthrough: [SECRETS.md §2 "Create the GitHub App"](./SECRETS.md#2-create-the-github-app).
+
+Optionally, create a second App for the `preview-health-check` CronJob,
+which comments on a PR whose preview did not come up (#1946). It needs
+**Pull requests: Read and write**, which ArgoCD's App must not have, so it
+gets its own App, installed only on `denisvmedia/inventario`, and its own
+Secret `argocd/preview-health-github-app`. Walkthrough:
+[SECRETS.md §2b](./SECRETS.md#2b-optional-create-the-preview-health-github-app).
 
 At the end you should have three values to keep:
 
@@ -445,19 +450,23 @@ dev login). The hostname is shown as plain text on purpose — see
 There is no limit on how many previews run at once: the Kubernetes scheduler
 decides what fits on the VM, within each preview namespace's own
 `ResourceQuota`. A preview it has no room for waits with its pods `Pending`
-until capacity frees up, for example when another preview is removed. When a
-preview is still not healthy 15 minutes after the cluster first saw it
-unhealthy at the PR's head commit, the in-cluster
+until capacity frees up, for example when another preview is removed. Once
+the [preview health GitHub App](./SECRETS.md#2b-optional-create-the-preview-health-github-app)
+is set up, the in-cluster
 [`preview-health-check`](./vm/cluster-extras/preview-health-check.yaml)
-CronJob posts a second comment, "Inventario preview env: not up", with the
+CronJob looks at every PR preview every 5 minutes. When one is still not
+healthy 15 minutes after the job first saw it unhealthy at the PR's head
+commit, it posts a second comment, "Inventario preview env: not up", with the
 cause when the pods or events show it. "Waiting for capacity" means pods
 cannot be scheduled for lack of memory or CPU: the PR is fine, and the preview
-starts on its own once there is room. The other causes it names are pods that
-cannot be scheduled for another reason, a quota that rejects pods, an image
-that cannot be pulled, a container that keeps restarting, and an ArgoCD sync
-error. The comment is edited when the cause changes, when the preview comes
-up, and when the preview is removed first; a preview that comes up in time
-gets only the link comment.
+starts on its own once there is room. The other causes it names are a chart
+ArgoCD cannot render, pods that cannot be scheduled for another reason, a
+quota that rejects pods, an image that cannot be pulled, a container that
+keeps restarting (with OOM kills named), and an ArgoCD sync error. The comment
+is edited when the cause changes, when the preview comes up, and when the
+preview is removed first. A later failure, after the comment says "up" or
+"removed", gets a new comment. A preview that comes up in time gets only the
+link comment.
 
 ### Tear down a preview
 
@@ -803,13 +812,27 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get jobs \
 KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd logs job/<name-from-above>
 ```
 
-- `HTTP 403 ... Resource not accessible by integration` → the GitHub App
-  lacks **Pull requests: Read and write**; see
-  [SECRETS.md §2](./SECRETS.md#2-create-the-github-app).
-- `argocd/github-app-creds is missing or incomplete` → the sops bundle has
-  no `github.app_*` keys, so nothing can be posted.
+- `Secret argocd/preview-health-github-app is missing or incomplete` → the
+  sops bundle has no `preview_health.*` keys, so nothing can be posted; see
+  [SECRETS.md §2b](./SECRETS.md#2b-optional-create-the-preview-health-github-app).
+- `could not get a GitHub App installation token` → with HTTP 422 the App is
+  not installed on `denisvmedia/inventario` or lacks **Pull requests: Read
+  and write**; with 401 the App ID or private key is wrong; with 404 the
+  Installation ID is.
+- `HTTP 403 ... Resource not accessible by integration` when commenting →
+  the installation has not accepted the **Pull requests** permission
+  (<https://github.com/settings/installations> → **Configure**).
 - `failed to read ConfigMap argocd/preview-health-state` → re-run
   `make bootstrap`, which applies the manifest that creates it.
+- `DeadlineExceeded` on the Job → a run took over 240 s; each GitHub and
+  Kubernetes call gives up after 30 s, so look for a call that kept timing
+  out.
+
+To run the check by hand, `kubectl -n argocd create job
+--from=cronjob/preview-health-check hc-now`. `concurrencyPolicy: Forbid` does
+not cover such a Job, so it can run at the same time as a scheduled one and
+post the same comment twice; start it right after a scheduled run has
+finished.
 
 ### Stale Tailscale device records accumulating
 
