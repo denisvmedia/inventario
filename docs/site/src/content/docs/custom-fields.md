@@ -17,7 +17,10 @@ the member who added it leaves or deletes their account.
 A group admin can add the [Collection set](../groups-and-sharing/#add-the-collection-set),
 which creates fields collectors track, such as **Condition**, **Provenance**,
 and **Appraised value**, and offers them on the set's item types. They are
-ordinary fields you can rename or delete.
+ordinary fields you can rename or delete. When the group already has a field or
+type of the same name, the set offers that field on its types, or its fields on
+that type. Removing the set keeps those links; change them under
+[Offer a field on item types](#offer-a-field-on-item-types).
 
 ## Open the Custom fields page
 

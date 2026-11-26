@@ -22,16 +22,24 @@ when to add an entry and where it goes.
   date, each offered on every one of those types. The names are English. A
   type or field the group already has under one of these names, ignoring
   case, is used instead of a new one and never removed. Adding again creates
-  only what is missing. Removing asks first, listing what is deleted and what
-  stays and why, and deletes only the types and fields the set created that
-  no item uses, Trash included; the group keeps its last type. The create
-  group page asks what the group is for: **Household items**, or
+  only what is missing; a set entry whose name another set row was renamed
+  to is shown as taken and not created again. Removing asks first, from a
+  status checked again when the confirmation opens, listing what is deleted
+  and what stays and why. It deletes only the types and fields the
+  confirmation listed that the set created and no item uses, Trash included,
+  names any it kept because they changed in between, and keeps the group's
+  last type. Links the set made to the group's own types and fields stay. The
+  create group page asks what the group is for: **Household items**, or
   **Collection**, which creates the group with the set and with Warranties
   hidden. `GET`, `POST` and `DELETE /groups/{groupID}/collection-set` read,
-  add and remove the set (adding and removing are admin-only and recorded in
-  the audit log), and `POST /groups` takes `collection_set` and reports the
-  outcome in `meta.collection_set`. Backups record which types and fields the
-  set created, as INB format 3.8; older backups restore as before
+  add and remove the set. `DELETE` takes the `item_type_ids` and
+  `custom_field_ids` to delete and reports `kept_item_types` and
+  `kept_custom_fields` in its meta, and `POST` answers 409 `item_set.changed`
+  when rows change under it twice. Adding and removing are admin-only and
+  recorded in the audit log with what they created or deleted; personal API
+  tokens may read the set. `POST /groups` takes `collection_set` and reports
+  the outcome in `meta.collection_set`. Backups record which types and fields
+  the set created, as INB format 3.8; older backups restore as before
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
