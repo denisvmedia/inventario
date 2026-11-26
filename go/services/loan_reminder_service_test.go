@@ -83,6 +83,10 @@ func (*recordingLoanEmailService) SendItemReminderEmail(_ context.Context, _, _,
 	return nil
 }
 
+func (*recordingLoanEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (r *recordingLoanEmailService) SendLoanReminderEmail(_ context.Context, to, name, commodityName, borrowerName, lentAt, dueBackAt, commodityURL, kind string, daysDelta int) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
@@ -151,6 +155,10 @@ func (failingLoanEmailService) SendMaintenanceReminderEmail(_ context.Context, _
 }
 
 func (failingLoanEmailService) SendItemReminderEmail(_ context.Context, _, _, _, _, _, _ string, _ int) error {
+	return nil
+}
+
+func (failingLoanEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
 	return nil
 }
 func (failingLoanEmailService) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {

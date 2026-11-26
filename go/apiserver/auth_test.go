@@ -239,6 +239,10 @@ func (*mockEmailServiceForAuth) SendItemReminderEmail(_ context.Context, _, _, _
 	return nil
 }
 
+func (*mockEmailServiceForAuth) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 func (m *mockEmailServiceForAuth) SendFeedbackEmail(_ context.Context, _, _, _, _, _, _, _ string, _ []string) error {
 	return nil
 }

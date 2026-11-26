@@ -116,6 +116,9 @@ var userDeleteByUserID = []func(t store.TableNames) string{
 	// Where the member shows saved views, their own and the shared views of
 	// others.
 	func(t store.TableNames) string { return string(t.SavedViewPlacements()) },
+
+	// Personal data exports (#2177). The archives are deleted by the caller.
+	func(t store.TableNames) string { return string(t.PersonalDataExports()) },
 }
 
 // PurgeUserDependents clears every user-scoped auth/identity row (and nulls the

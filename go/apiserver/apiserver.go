@@ -25,6 +25,7 @@ import (
 	_ "gocloud.dev/blob/s3blob"  // register s3blob driver
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/csrf"
 	"go.5x5.cz/inventario/debug"
 	_ "go.5x5.cz/inventario/docs" // register swagger docs
@@ -143,8 +144,11 @@ func newUsersMeParams(
 	audit services.AuditLogger,
 	mfa *services.MFAService,
 	blacklist services.TokenBlacklister,
+	personalExports *export.PersonalDataExportService,
 ) UsersMeParams {
 	return UsersMeParams{
+		PersonalDataExports:  personalExports,
+		FileSigningService:   services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 		RefreshTokenRegistry: params.FactorySet.RefreshTokenRegistry,
 		LoginEventRegistry:   params.FactorySet.LoginEventRegistry,
 		APITokenService:      apiTokens,
@@ -281,9 +285,13 @@ type Params struct {
 	// at startup when it is set.
 	TestTenantHeaderEnabled bool
 	EmailService            services.EmailService // Transactional email service (queue + providers)
-	PublicURL               string                // Public base URL used in transactional links
-	SupportEmail            string                // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
-	RedisPinger             RedisPinger           // Optional Redis dependency check for /readyz
+	// PersonalDataExports requests, lists and serves personal data exports
+	// (#2177). The run command passes the service the export worker builds
+	// them with; nil gets one without the ready email.
+	PersonalDataExports *export.PersonalDataExportService
+	PublicURL           string      // Public base URL used in transactional links
+	SupportEmail        string      // Destination for /api/v1/feedback submissions (issue #1387). Empty leaves the route mounted but it returns 503.
+	RedisPinger         RedisPinger // Optional Redis dependency check for /readyz
 
 	// MetricsToken is the optional shared-secret bearer token for GET
 	// /metrics (issue #2102). When non-empty, /metrics requires the header
@@ -628,6 +636,14 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 
 	emailSvc := emailServiceOrStub(params.EmailService)
 
+	// Personal data exports (#2177): requested and listed under /users/me,
+	// downloaded from signed URLs. The server's own wiring passes the service
+	// the export worker uses; a test harness gets one without a notifier.
+	personalExports := params.PersonalDataExports
+	if personalExports == nil {
+		personalExports = export.NewPersonalDataExportService(params.FactorySet, params.UploadLocation)
+	}
+
 	// Resolve tenant resolver: default to single-tenant mode if not provided.
 	tenantResolver := params.TenantResolver
 	if tenantResolver == nil {
@@ -864,7 +880,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		// Per-user account surfaces (#1644): active sessions + login history.
 		// These don't fit under /auth (which is unauth-tolerant on purpose)
 		// nor under /g/{slug}/* (they're tenant-scoped, not group-scoped).
-		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc, blacklist)))
+		r.With(userMiddlewares...).Route("/users/me", UsersMe(newUsersMeParams(params, apiTokenSvc, auditSvc, mfaSvc, blacklist, personalExports)))
 		// In-app feedback / contact support (#1387). Auth-required and
 		// per-user rate-limited (5/hour). The handler returns a typed 503
 		// (feedback.not_configured) when SupportEmail is empty, so it stays
@@ -929,6 +945,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 		)
 		r.With(signedURLMiddleware, RLSContextMiddleware(params.FactorySet), RegistrySetMiddleware(params.FactorySet)).Route("/files/download", SignedFiles(params))
 		r.Route("/avatars", SignedAvatars(params))
+		r.Route("/data-exports", SignedPersonalDataExports(params, personalExports, auditSvc))
 	})
 
 	// use Frontend as a root directory

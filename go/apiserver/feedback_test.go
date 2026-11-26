@@ -91,6 +91,10 @@ func (*capturingFeedbackEmailService) SendItemReminderEmail(_ context.Context, _
 	return nil
 }
 
+func (*capturingFeedbackEmailService) SendPersonalDataExportReadyEmail(_ context.Context, _, _, _ string, _ time.Time) error {
+	return nil
+}
+
 // newFeedbackTestRouter mounts the Feedback route group with a stubbed
 // user-context middleware so the test exercises the same handler tree
 // production uses — only the auth middleware is swapped out.

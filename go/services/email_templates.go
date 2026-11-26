@@ -21,19 +21,20 @@ var emailTemplatesFS embed.FS
 type emailTemplateType string
 
 const (
-	emailTemplateVerification        emailTemplateType = "verification"
-	emailTemplatePasswordReset       emailTemplateType = "password_reset"
-	emailTemplateMagicLink           emailTemplateType = "magic_link"
-	emailTemplatePasswordChange      emailTemplateType = "password_changed"
-	emailTemplateWelcome             emailTemplateType = "welcome"
-	emailTemplateWarrantyReminder    emailTemplateType = "warranty_reminder"
-	emailTemplateGroupInvite         emailTemplateType = "group_invite"
-	emailTemplateStorageQuotaWarning emailTemplateType = "storage_quota_warning"
-	emailTemplateLoanReminder        emailTemplateType = "loan_reminder"
-	emailTemplateMaintenanceReminder emailTemplateType = "maintenance_reminder"
-	emailTemplateItemReminder        emailTemplateType = "item_reminder"
-	emailTemplateFeedback            emailTemplateType = "feedback"
-	emailTemplateWeeklyDigest        emailTemplateType = "weekly_digest"
+	emailTemplateVerification            emailTemplateType = "verification"
+	emailTemplatePasswordReset           emailTemplateType = "password_reset"
+	emailTemplateMagicLink               emailTemplateType = "magic_link"
+	emailTemplatePasswordChange          emailTemplateType = "password_changed"
+	emailTemplateWelcome                 emailTemplateType = "welcome"
+	emailTemplateWarrantyReminder        emailTemplateType = "warranty_reminder"
+	emailTemplateGroupInvite             emailTemplateType = "group_invite"
+	emailTemplateStorageQuotaWarning     emailTemplateType = "storage_quota_warning"
+	emailTemplateLoanReminder            emailTemplateType = "loan_reminder"
+	emailTemplateMaintenanceReminder     emailTemplateType = "maintenance_reminder"
+	emailTemplateItemReminder            emailTemplateType = "item_reminder"
+	emailTemplatePersonalDataExportReady emailTemplateType = "personal_data_export_ready"
+	emailTemplateFeedback                emailTemplateType = "feedback"
+	emailTemplateWeeklyDigest            emailTemplateType = "weekly_digest"
 )
 
 type renderedEmail struct {
@@ -143,19 +144,20 @@ var emailTemplateLanguages = []string{"en", "cs", "ru"}
 // (shared across languages); the ".html.tmpl"/".txt.tmpl" suffix is
 // appended by the loader.
 var emailTemplateBasenames = map[emailTemplateType]string{
-	emailTemplateVerification:        "verification",
-	emailTemplatePasswordReset:       "password_reset",
-	emailTemplateMagicLink:           "magic_link",
-	emailTemplatePasswordChange:      "password_changed",
-	emailTemplateWelcome:             "welcome",
-	emailTemplateWarrantyReminder:    "warranty_reminder",
-	emailTemplateGroupInvite:         "group_invite",
-	emailTemplateStorageQuotaWarning: "storage_quota_warning",
-	emailTemplateWeeklyDigest:        "weekly_digest",
-	emailTemplateLoanReminder:        "loan_reminder",
-	emailTemplateMaintenanceReminder: "maintenance_reminder",
-	emailTemplateItemReminder:        "item_reminder",
-	emailTemplateFeedback:            "feedback",
+	emailTemplateVerification:            "verification",
+	emailTemplatePasswordReset:           "password_reset",
+	emailTemplateMagicLink:               "magic_link",
+	emailTemplatePasswordChange:          "password_changed",
+	emailTemplateWelcome:                 "welcome",
+	emailTemplateWarrantyReminder:        "warranty_reminder",
+	emailTemplateGroupInvite:             "group_invite",
+	emailTemplateStorageQuotaWarning:     "storage_quota_warning",
+	emailTemplateWeeklyDigest:            "weekly_digest",
+	emailTemplateLoanReminder:            "loan_reminder",
+	emailTemplateMaintenanceReminder:     "maintenance_reminder",
+	emailTemplateItemReminder:            "item_reminder",
+	emailTemplatePersonalDataExportReady: "personal_data_export_ready",
+	emailTemplateFeedback:                "feedback",
 }
 
 // emailTemplatePath resolves the embedded path for (lang, basename, suffix).
@@ -346,47 +348,50 @@ func normalizeEmailLang(lang string) string {
 // falls back to en for any missing (lang, type). #2090
 var emailSubjects = map[string]map[emailTemplateType]string{
 	"en": { // #nosec G101 -- email subject lines, not credentials
-		emailTemplateVerification:        "Verify your Inventario account",
-		emailTemplatePasswordReset:       "Reset your Inventario password",
-		emailTemplateMagicLink:           "Sign in to Inventario",
-		emailTemplatePasswordChange:      "Your Inventario password was changed",
-		emailTemplateWelcome:             "Welcome to Inventario",
-		emailTemplateWarrantyReminder:    "Inventario warranty reminder",
-		emailTemplateGroupInvite:         "You're invited to a group on Inventario",
-		emailTemplateStorageQuotaWarning: "Your group is approaching its storage quota",
-		emailTemplateWeeklyDigest:        "Your inventory this week",
-		emailTemplateLoanReminder:        "Inventario loan reminder",
-		emailTemplateMaintenanceReminder: "Inventario maintenance reminder",
-		emailTemplateItemReminder:        "Inventario reminder",
-		emailTemplateFeedback:            "Inventario feedback",
+		emailTemplateVerification:            "Verify your Inventario account",
+		emailTemplatePasswordReset:           "Reset your Inventario password",
+		emailTemplateMagicLink:               "Sign in to Inventario",
+		emailTemplatePasswordChange:          "Your Inventario password was changed",
+		emailTemplateWelcome:                 "Welcome to Inventario",
+		emailTemplateWarrantyReminder:        "Inventario warranty reminder",
+		emailTemplateGroupInvite:             "You're invited to a group on Inventario",
+		emailTemplateStorageQuotaWarning:     "Your group is approaching its storage quota",
+		emailTemplateWeeklyDigest:            "Your inventory this week",
+		emailTemplateLoanReminder:            "Inventario loan reminder",
+		emailTemplateMaintenanceReminder:     "Inventario maintenance reminder",
+		emailTemplateItemReminder:            "Inventario reminder",
+		emailTemplatePersonalDataExportReady: "Your Inventario data is ready to download",
+		emailTemplateFeedback:                "Inventario feedback",
 	},
 	"cs": { // #nosec G101 -- email subject lines, not credentials
-		emailTemplateVerification:        "Ověřte svůj účet Inventario",
-		emailTemplatePasswordReset:       "Obnovení hesla pro Inventario",
-		emailTemplateMagicLink:           "Přihlášení do Inventaria",
-		emailTemplatePasswordChange:      "Vaše heslo k Inventario bylo změněno",
-		emailTemplateWelcome:             "Vítejte v Inventario",
-		emailTemplateWarrantyReminder:    "Připomenutí záruky Inventario",
-		emailTemplateGroupInvite:         "Máte pozvánku do skupiny v Inventariu",
-		emailTemplateStorageQuotaWarning: "Vaše skupina se blíží svému úložnému limitu",
-		emailTemplateWeeklyDigest:        "Váš inventář tento týden",
-		emailTemplateLoanReminder:        "Připomenutí zápůjčky Inventario",
-		emailTemplateMaintenanceReminder: "Připomenutí údržby v Inventariu",
-		emailTemplateItemReminder:        "Připomínka z Inventaria",
+		emailTemplateVerification:            "Ověřte svůj účet Inventario",
+		emailTemplatePasswordReset:           "Obnovení hesla pro Inventario",
+		emailTemplateMagicLink:               "Přihlášení do Inventaria",
+		emailTemplatePasswordChange:          "Vaše heslo k Inventario bylo změněno",
+		emailTemplateWelcome:                 "Vítejte v Inventario",
+		emailTemplateWarrantyReminder:        "Připomenutí záruky Inventario",
+		emailTemplateGroupInvite:             "Máte pozvánku do skupiny v Inventariu",
+		emailTemplateStorageQuotaWarning:     "Vaše skupina se blíží svému úložnému limitu",
+		emailTemplateWeeklyDigest:            "Váš inventář tento týden",
+		emailTemplateLoanReminder:            "Připomenutí zápůjčky Inventario",
+		emailTemplateMaintenanceReminder:     "Připomenutí údržby v Inventariu",
+		emailTemplateItemReminder:            "Připomínka z Inventaria",
+		emailTemplatePersonalDataExportReady: "Vaše data z Inventaria jsou připravena ke stažení",
 	},
 	"ru": { // #nosec G101 -- email subject lines, not credentials
-		emailTemplateVerification:        "Подтвердите свою учётную запись Inventario",
-		emailTemplatePasswordReset:       "Сброс пароля в Inventario",
-		emailTemplateMagicLink:           "Вход в Inventario",
-		emailTemplatePasswordChange:      "Ваш пароль Inventario был изменён",
-		emailTemplateWelcome:             "Добро пожаловать в Inventario",
-		emailTemplateWarrantyReminder:    "Напоминание о гарантии Inventario",
-		emailTemplateGroupInvite:         "Вас пригласили в группу в Inventario",
-		emailTemplateStorageQuotaWarning: "Ваша группа приближается к лимиту квоты хранилища",
-		emailTemplateWeeklyDigest:        "Ваш инвентарь на этой неделе",
-		emailTemplateLoanReminder:        "Напоминание о займе Inventario",
-		emailTemplateMaintenanceReminder: "Напоминание об обслуживании в Inventario",
-		emailTemplateItemReminder:        "Напоминание от Inventario",
+		emailTemplateVerification:            "Подтвердите свою учётную запись Inventario",
+		emailTemplatePasswordReset:           "Сброс пароля в Inventario",
+		emailTemplateMagicLink:               "Вход в Inventario",
+		emailTemplatePasswordChange:          "Ваш пароль Inventario был изменён",
+		emailTemplateWelcome:                 "Добро пожаловать в Inventario",
+		emailTemplateWarrantyReminder:        "Напоминание о гарантии Inventario",
+		emailTemplateGroupInvite:             "Вас пригласили в группу в Inventario",
+		emailTemplateStorageQuotaWarning:     "Ваша группа приближается к лимиту квоты хранилища",
+		emailTemplateWeeklyDigest:            "Ваш инвентарь на этой неделе",
+		emailTemplateLoanReminder:            "Напоминание о займе Inventario",
+		emailTemplateMaintenanceReminder:     "Напоминание об обслуживании в Inventario",
+		emailTemplateItemReminder:            "Напоминание от Inventario",
+		emailTemplatePersonalDataExportReady: "Ваши данные из Inventario готовы к скачиванию",
 	},
 }
 

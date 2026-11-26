@@ -17,7 +17,6 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
-	"github.com/shopspring/decimal"
 	"gocloud.dev/blob"
 	"gocloud.dev/gcerrors"
 
@@ -1719,16 +1718,6 @@ func incBucketStat(stats *types.ExportStats, bucket string, tags []string) {
 	}
 }
 
-// fileMemberName returns the basename to use for a file inside the archive:
-// its Path (user-facing name without extension) plus its extension.
-func fileMemberName(file *models.FileEntity) string {
-	name := file.Path
-	if name == "" {
-		name = file.UUID
-	}
-	return name + file.Ext
-}
-
 // fileSizeHint returns the size to declare in the file member's tar header. The
 // tar header needs an exact size, so we trust the recorded SizeBytes; rows with
 // a zero/unknown size fall back to a probe via the bucket attributes.
@@ -1737,31 +1726,4 @@ func fileSizeHint(file *models.FileEntity) int64 {
 		return file.SizeBytes
 	}
 	return 0
-}
-
-// ptrDecimalString renders a nullable decimal (the three prices, SalePrice,
-// AcquisitionPrice). It preserves a legitimate zero value: the meaningful
-// distinction for these columns is nil (unknown) vs set, so a non-nil pointer
-// holding 0 is emitted as "0" and only a nil pointer yields "" (the omitempty
-// JSON field then disappears). The restore side mirrors this: empty → nil, any
-// non-empty value → a set pointer.
-func ptrDecimalString(d *decimal.Decimal) string {
-	if d == nil {
-		return ""
-	}
-	return d.String()
-}
-
-// urlStrings flattens a slice of *URL to their string forms.
-func urlStrings(urls models.ValuerSlice[*models.URL]) []string {
-	if len(urls) == 0 {
-		return nil
-	}
-	out := make([]string, 0, len(urls))
-	for _, u := range urls {
-		if u != nil {
-			out = append(out, u.String())
-		}
-	}
-	return out
 }
