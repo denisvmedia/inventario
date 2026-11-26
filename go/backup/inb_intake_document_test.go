@@ -267,3 +267,55 @@ func TestINBRestore_FullReplaceFromAnArchiveWithoutIntakeDocuments(t *testing.T)
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
 	c.Check(f.documents(c), qt.HasLen, 0)
 }
+
+// TestINBRestore_MergeNamesTheKeptDraft: the group lost its record of two
+// documents but kept their drafts, which a merge keeps instead of the
+// archived copies. Each restored record names the group's draft: the open
+// one, and the one that became an item with its item.
+func TestINBRestore_MergeNamesTheKeptDraft(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDeliveredFixture(c)
+	promoted := must.Must(f.intake.Deliver(f.ctx, delivery("4"), nil)).Document
+	blobKey, _ := f.runExport(c, signer)
+
+	drafts := services.NewCommodityDraftService(f.fs)
+	draftReg := must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx))
+	draft := must.Must(draftReg.Get(f.ctx, *promoted.DraftID))
+	item, _, err := drafts.Promote(f.ctx, draft.ID, draft.Revision, "promotion-4", models.Commodity{
+		Name: "Invoice 4", ShortName: "invoice", Type: models.CommodityTypeOther, Count: 1,
+		Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
+	})
+	c.Assert(err, qt.IsNil)
+	reg := must.Must(f.fs.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	for _, doc := range []*models.IntakeDocument{f.open, promoted} {
+		c.Assert(reg.Delete(f.ctx, doc.ID), qt.IsNil)
+	}
+
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Assert(final.ErrorCount, qt.Equals, 0)
+
+	docs := f.documents(c)
+	c.Assert(docs["1"].DraftID, qt.IsNotNil)
+	c.Check(*docs["1"].DraftID, qt.Equals, *f.open.DraftID)
+	c.Assert(docs["4"].DraftID, qt.IsNotNil)
+	c.Check(*docs["4"].DraftID, qt.Equals, *promoted.DraftID)
+	c.Assert(docs["4"].CommodityID, qt.IsNotNil)
+	c.Check(*docs["4"].CommodityID, qt.Equals, item.ID)
+	states, err := f.intake.DocumentStates(f.ctx, []*models.IntakeDocument{docs["1"], docs["4"]})
+	c.Assert(err, qt.IsNil)
+	c.Check(states, qt.DeepEquals, map[string]models.IntakeDocumentState{
+		docs["1"].ID: models.IntakeDocumentDraft,
+		docs["4"].ID: models.IntakeDocumentItem,
+	})
+	// No archived draft came back next to the kept ones.
+	open := 0
+	for _, d := range must.Must(draftReg.List(f.ctx)) {
+		if d.Status == models.CommodityDraftOpen {
+			open++
+		}
+	}
+	c.Check(open, qt.Equals, 1)
+}

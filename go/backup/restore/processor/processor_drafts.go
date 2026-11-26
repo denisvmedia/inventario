@@ -110,6 +110,7 @@ func (w *inbWalker) applyDraft(a *types.INBDraft) (created bool, err error) {
 // keepDraft reports in the restore log an archived draft the restore leaves
 // out because the group's draft existing has its client key.
 func (w *inbWalker) keepDraft(a *types.INBDraft, existing *models.CommodityDraft) {
+	w.keptDrafts[a.ID] = existing
 	w.stats.SkippedCount++
 	name := a.Values.Title()
 	if name == "" {

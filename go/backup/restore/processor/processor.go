@@ -257,7 +257,8 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		delivered: map[string]string{},
 		parked:    map[string]bool{},
 
-		draftIDs: map[string]string{},
+		draftIDs:   map[string]string{},
+		keptDrafts: map[string]*models.CommodityDraft{},
 
 		priceReading: types.PricesOmitZero,
 	}
@@ -456,6 +457,11 @@ type inbWalker struct {
 	// one that failed to restore, one the archive does not carry) is left
 	// out without an error.
 	draftIDs map[string]string
+
+	// keptDrafts maps an archived draft's UUID to the group's draft with the
+	// same client key that a merge kept instead. Only the delivered documents
+	// read it; file links to a kept draft stay out as above.
+	keptDrafts map[string]*models.CommodityDraft
 }
 
 // handleMember dispatches a tar member: the manifest is read for nothing

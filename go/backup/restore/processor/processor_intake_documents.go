@@ -38,10 +38,10 @@ func (w *inbWalker) handleIntakeDocumentsMember(hdr *tar.Header, r io.Reader) er
 
 // applyIntakeDocument recreates the record of one delivered document, or
 // keeps the group's record with the same identity (created=false). The draft
-// and the item are mapped to the ones the restore made. A document whose
-// draft was made but which the restore brings back neither as a draft nor as
-// an item gets an empty draft id: the delivery made its draft, and a repeat
-// of it must not make another.
+// and the item are mapped to the ones the restore made or kept. A document
+// whose draft was made but which the restore brings back neither as a draft
+// nor as an item gets an empty draft id: the delivery made its draft, and a
+// repeat of it must not make another.
 func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error) {
 	createdAt, updatedAt, err := a.Timestamps()
 	if err != nil {
@@ -63,15 +63,7 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 	if doc.PayloadHash == "" {
 		return false, fmt.Errorf("delivered document %s has no payload hash", a.ID)
 	}
-	if id := w.draftIDs[a.DraftID]; a.DraftID != "" && id != "" {
-		doc.DraftID = new(id)
-	}
-	if id := w.idMapping.Commodities[a.CommodityID]; a.CommodityID != "" && id != "" {
-		doc.CommodityID = new(id)
-	}
-	if a.DraftMade && doc.DraftID == nil {
-		doc.DraftID = new("")
-	}
+	w.mapIntakeDocumentWork(a, &doc)
 
 	reg, err := w.proc.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(w.ctx)
 	if err != nil {
@@ -104,4 +96,29 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 	w.proc.trackCreatedEntity(stored.ID)
 	w.stats.CreatedCount++
 	return true, nil
+}
+
+// mapIntakeDocumentWork points the document at the draft and the item the
+// restore made from the ones the archive names. When a merge kept the
+// group's own draft with the archived draft's client key, the document names
+// that draft whatever its state: an open draft waits in the inbox, a
+// promoted one also gives the item it became unless the archive maps one,
+// and one being discarded leaves the document removed.
+func (w *inbWalker) mapIntakeDocumentWork(a *types.INBIntakeDocument, doc *models.IntakeDocument) {
+	var kept *models.CommodityDraft
+	if a.DraftID != "" {
+		if id := w.draftIDs[a.DraftID]; id != "" {
+			doc.DraftID = new(id)
+		} else if kept = w.keptDrafts[a.DraftID]; kept != nil {
+			doc.DraftID = new(kept.ID)
+		}
+	}
+	if id := w.idMapping.Commodities[a.CommodityID]; a.CommodityID != "" && id != "" {
+		doc.CommodityID = new(id)
+	} else if kept != nil && kept.PromotedCommodityID != nil {
+		doc.CommodityID = new(*kept.PromotedCommodityID)
+	}
+	if a.DraftMade && doc.DraftID == nil {
+		doc.DraftID = new("")
+	}
 }
