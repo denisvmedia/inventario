@@ -53,6 +53,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
 - **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
 
+#### 2026-11-26 — Add item dialog: the scan's tag and title on each file
+
+- **Issue/PR**: #1626 / PR for the scan suggestions in the Add item dialog
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name, the size and a remove button. The mock has no per-file tags, and its AI review (L761–L786) lists item fields only; nothing the scan reads is shown on a file.
+- **Reality**: After **Use these values**, each scanned file the scan classified gets the matching tag (**Invoice** for an invoice or a receipt, **Manual**, **Warranty**, **Photo**) in its tags input. The chip is a `Badge variant="outline"` with a dashed `border-amber-500/60` border, a `Sparkles` icon in `text-amber-500` (the AI accent the mock uses on the Fill with AI title and dropzone, L514 and L845), and the pill color of that tag from `FILE_TAG_PILLS`; it reads "suggested by the AI scan" on hover and to screen readers, and is removed with its X like any chip. A suggested title fills the title input and gets a `Sparkles` icon before it, with the same note for screen readers; typing over it clears the marker. The review gets one muted line with a `Sparkles` icon saying how many files got a suggestion. The suggestion applies only while the file has its default title and none of those four tags, and a tag the user removed is not suggested again on the next scan.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the suggested tag as a removable chip on each file, using the existing file tag UI, and the suggested title only while the title is the default. The sparkle marker, the review line and remembering a removed tag across scans were agent-suggested; they follow those decisions (design deviations for #1626 pre-approved).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the marker, the review line and the removed-tag memory are agent-suggested.
+- **Reversion plan**: Follow the mock if `inventario-design` draws per-file tags or AI suggestions in the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — AI scan review: the user's value next to the scan's
+
+- **Issue/PR**: #1626 / PR for the scan suggestions in the Add item dialog
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) review phase (L761–L786) shows a two-column grid of read-only cards, one value each, and no way to keep a value the form already holds.
+- **Reality**: The review keeps the row per field, with a checkbox and a confidence badge, that it already had. A row for a field that already holds a value the user entered shows two lines in a small `auto / 1fr` grid: "Yours" with the form's value, then "Scan" with the scan's value in `font-medium`, labels in `text-[11px] text-muted-foreground`. Such a row starts unticked whatever its confidence. The tags row adds "Ticked, these tags are added to yours." below, and ticked scanned tags merge into the form's tags (case-insensitive) instead of replacing them. The same holds for custom fields and for a second scan.
+- **Why**: Decision 3 of the owner's #1626 comment (2026-11-26): a scan never overwrites user input; a field with a user value shows both values and is unticked by default, and scanned tags merge. What counts as entered was decided by the agent: a value that differs from what a new, empty form holds, so the group currency a new form starts with, the short name the form derives from the name, and a custom field value equal to its item type's default do not count, while values typed, accepted from an earlier scan, brought by a resumed draft, or an existing item's saved values do.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the "entered" rule and the merge hint line are agent-suggested.
+- **Reversion plan**: Permanent unless the mock draws its own conflict state for the AI review.
+
+#### 2026-11-26 — Add item dialog: title and tags on the files saved with a draft
+
+- **Issue/PR**: #1626 / PR for the scan suggestions in the Add item dialog
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has no drafts and no files already on the server; its `FileDropZone` rows (L1483–L1493) show a name, a size and a remove button.
+- **Reality**: Each row under "Saved with this draft" keeps its name, size and remove button, and gains the same compact title `Input` and tags input the pending-file rows have (#2905). A tag change is saved at once and a title when the field loses focus or on Enter, with `PUT /files/{id}`, which also sends the file's description back since the PUT replaces it; an empty title saves the file name. While Add item runs, the row's fields are disabled; a failed save shows an error toast and the row shows the file's saved title and tags again.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the saved-file rows of a resumed draft to show title and tags and let the user edit both, saved through the files API, so the tags and titles batch intake set can be checked before the item is added. Saving on blur instead of with the form was agent-suggested: the files already exist on the server, and the form's Save draft does not write files.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; saving on blur is agent-suggested.
+- **Reversion plan**: Permanent unless the mock adds drafts with their own file rows.
+
 #### 2026-11-26 — Donated and Stolen item statuses
 
 - **Issue/PR**: #1607 / #2903

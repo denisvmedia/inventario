@@ -14,6 +14,18 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The **Add item** dialog uses what the AI scan suggests for each file:
+  on the **Files** step a scanned file gets its **Invoice**, **Manual**,
+  **Warranty** or **Photo** tag as a chip marked with a sparkle, and its
+  suggested title replaces the file name. A title the user typed, one of
+  those tags the user set, and a suggested tag the user removed stay as
+  they are, also when the file is scanned again. A scan no longer
+  overwrites what the form holds: the review shows the user's value next to
+  the scan's and leaves that field unticked, and ticked scanned tags are
+  added to the form's tags. The files saved with a draft show their title
+  and tags on the **Files** step and can be changed there, and a batch of
+  files is read again once its scans finish, so the tags and titles the
+  scan gave its files show without a reload (#1626).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
   language of the document. The scan response gains `files`, one entry per

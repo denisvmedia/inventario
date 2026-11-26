@@ -47,7 +47,9 @@ newest first. A long inbox is split into pages of 50 rows.
   else the step after the last one the draft has values on. The steps before it are one click away on
   the step bar or with **Back**. Add the item to finish it; the draft leaves
   the inbox. Close the dialog to come back to the inbox with the draft
-  unchanged.
+  unchanged. The draft's files are on the **Files** step, where you can
+  change their titles and tags, such as the ones a scan gave them (see
+  [Files](../items/#files)).
 - **Discard** deletes the draft after you confirm. Its files that nothing else
   uses go to the [Trash](../trash/).
 
