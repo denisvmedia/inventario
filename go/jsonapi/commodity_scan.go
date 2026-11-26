@@ -17,10 +17,19 @@ type CommodityScanResource struct {
 // CommodityScanAttributes is the result body. fields is keyed by
 // canonical field name (name, short_name, type, original_price,
 // original_price_currency, serial_number, urls, purchase_date,
-// warranty_expires_at, comments, tags); items carries one such field set
-// per product on a multi-product scan; warnings is the optional non-fatal
-// note list.
+// warranty_expires_at, comments, tags, document_type); items carries one
+// such field set per product on a multi-product scan; files carries the
+// suggestion for each input file; warnings is the optional non-fatal note
+// list.
+//
+// fields.document_type classifies the scan as a whole (invoice, manual,
+// receipt, warranty or other). files is the per-file source: when the model
+// gives no scan-level value it is the document type of the first document
+// among the files, or other when they are all photos or other files.
 type CommodityScanAttributes struct {
+	// Fields are the values read, keyed by field name. Its document_type
+	// classifies the scan as a whole; files is the per-file source, and
+	// document_type is derived from it when the model gives none.
 	Fields map[string]CommodityScanFieldGuess `json:"fields"`
 	// CustomFields are the values read for the group's custom fields
 	// (#2803), keyed by field ID, in the form an item write takes them: a
@@ -30,10 +39,14 @@ type CommodityScanAttributes struct {
 	// Items is present only when the source described more than one
 	// distinct product; one entry per product, most prominent first. The
 	// FE renders a chooser. Empty/absent for a single product.
-	Items      []CommodityScanItem    `json:"items,omitempty"`
-	Warnings   []CommodityScanWarning `json:"warnings,omitempty"`
-	UsedTokens int                    `json:"used_tokens,omitempty"`
-	LatencyMS  int64                  `json:"latency_ms,omitempty"`
+	Items []CommodityScanItem `json:"items,omitempty"`
+	// Files holds one suggestion per input file the model said something
+	// usable about, ordered by index; a file without one has no entry.
+	// Absent when there are none.
+	Files      []CommodityScanFileGuess `json:"files,omitempty"`
+	Warnings   []CommodityScanWarning   `json:"warnings,omitempty"`
+	UsedTokens int                      `json:"used_tokens,omitempty"`
+	LatencyMS  int64                    `json:"latency_ms,omitempty"`
 }
 
 // CommodityScanItem is one candidate product in a multi-product scan; its
@@ -63,6 +76,29 @@ type CommodityScanFieldGuess struct {
 	// Value is polymorphic — see the type-level doc comment.
 	Value      any     `json:"value" swaggertype:"object"`
 	Confidence float64 `json:"confidence"`
+}
+
+// CommodityScanFileGuess is the suggestion for one input file of a scan.
+// Each part is absent when the model gave nothing usable for it.
+type CommodityScanFileGuess struct {
+	// Index is the file's position in the request, counted from 0.
+	Index        int                             `json:"index" example:"0"`
+	DocumentType *CommodityScanDocumentTypeGuess `json:"document_type,omitempty"`
+	Title        *CommodityScanTitleGuess        `json:"title,omitempty"`
+}
+
+// CommodityScanDocumentTypeGuess is what a file is: a document of one of
+// the kinds, or a photo of the product itself.
+type CommodityScanDocumentTypeGuess struct {
+	Value      string  `json:"value" example:"invoice" enums:"invoice,receipt,manual,warranty,photo,other"`
+	Confidence float64 `json:"confidence" example:"0.9"`
+}
+
+// CommodityScanTitleGuess is a short readable title for a file, in the
+// language of the document and at most 120 characters.
+type CommodityScanTitleGuess struct {
+	Value      string  `json:"value" example:"Bosch invoice, March 2024" maxLength:"120"`
+	Confidence float64 `json:"confidence" example:"0.8"`
 }
 
 // CommodityScanWarning is a non-fatal note attached to a scan

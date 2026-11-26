@@ -36,6 +36,9 @@ func init() {
 type Provider struct {
 	defaultResult aivision.ScanResult
 	defaultErr    error
+	// customDefault is set by WithDefaultResult: that result is returned as
+	// given, without the per-file suggestions the canned results get.
+	customDefault bool
 }
 
 // New creates a Provider with the default canned ScanResult. Callers
@@ -55,9 +58,13 @@ func New(opts ...Option) *Provider {
 type Option func(*Provider)
 
 // WithDefaultResult overrides the canned result returned when the
-// context carries no per-call override.
+// context carries no per-call override. The result is returned as given:
+// Scan adds no file suggestions to it.
 func WithDefaultResult(r aivision.ScanResult) Option {
-	return func(p *Provider) { p.defaultResult = r }
+	return func(p *Provider) {
+		p.defaultResult = r
+		p.customDefault = true
+	}
 }
 
 // WithDefaultError makes every Scan return the given error (unless the
@@ -100,13 +107,76 @@ func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivisio
 	// mock provider (preview stacks / e2e) without a real vendor. We key off
 	// the FILENAME, not the MIME type: an invoice may be a PDF, a scan, an
 	// export, or a photo (jpg/png/heic). Anything else returns the
-	// single-item default.
+	// single-item default. The canned results suggest a type and a title
+	// for every file of the request (see FileGuessesFor).
 	if looksLikeInvoice(req.Photos) {
 		result := cloneScanResult(MultiItemResult())
+		result.Files = FileGuessesFor(req.Photos)
 		return &result, nil
 	}
 	result := cloneScanResult(p.defaultResult)
+	if !p.customDefault {
+		result.Files = FileGuessesFor(req.Photos)
+	}
 	return &result, nil
+}
+
+// fileKinds are the filename keywords the mock reads a file's document type
+// from, checked in this order. Real providers decide from the content.
+var fileKinds = []struct {
+	docType  string
+	keywords []string
+}{
+	{aivision.DocumentTypeReceipt, []string{"receipt", "paragon", "uctenka", "účtenka"}},
+	{aivision.DocumentTypeInvoice, []string{"invoice", "bill", "faktura"}},
+	{aivision.DocumentTypeManual, []string{"manual", "guide", "navod", "návod"}},
+	{aivision.DocumentTypeWarranty, []string{"warranty", "guarantee", "zaruka", "záruka"}},
+}
+
+// fileTitles are the titles the mock suggests for each document type.
+var fileTitles = map[string]string{
+	aivision.DocumentTypeInvoice:  "Sample Store invoice, March 2024",
+	aivision.DocumentTypeReceipt:  "Sample Store receipt, March 2024",
+	aivision.DocumentTypeManual:   "Sample user manual",
+	aivision.DocumentTypeWarranty: "Sample warranty card",
+	aivision.DocumentTypePhoto:    "Sample product photo",
+	aivision.DocumentTypeOther:    "Sample document",
+}
+
+// FileGuessesFor is the mock's suggestion for every file of a request, in
+// request order. The document type comes from a keyword in the filename
+// (receipt, invoice, manual, warranty and their Czech and Polish names);
+// without one, an image is a photo and a PDF is "other". The title is fixed
+// per document type, so screenshots and e2e runs stay deterministic.
+func FileGuessesFor(photos []aivision.PhotoInput) []aivision.FileGuess {
+	if len(photos) == 0 {
+		return nil
+	}
+	out := make([]aivision.FileGuess, 0, len(photos))
+	for i, ph := range photos {
+		docType, confidence := mockDocumentType(ph)
+		out = append(out, aivision.FileGuess{
+			Index:        i,
+			DocumentType: &aivision.FieldGuess{Value: docType, Confidence: confidence},
+			Title:        &aivision.FieldGuess{Value: fileTitles[docType], Confidence: 0.8},
+		})
+	}
+	return out
+}
+
+func mockDocumentType(ph aivision.PhotoInput) (string, float64) {
+	name := strings.ToLower(ph.Filename)
+	for _, kind := range fileKinds {
+		for _, kw := range kind.keywords {
+			if strings.Contains(name, kw) {
+				return kind.docType, 0.9
+			}
+		}
+	}
+	if ph.IsPDF() {
+		return aivision.DocumentTypeOther, 0.5
+	}
+	return aivision.DocumentTypePhoto, 0.85
 }
 
 // looksLikeInvoice is the mock's filename heuristic for "this is a multi-line
@@ -144,11 +214,24 @@ func cloneScanResult(src aivision.ScanResult) aivision.ScanResult {
 			dst.Items[i] = aivision.ScanItem{Fields: cloneFieldMap(it.Fields), CustomFields: cloneFieldMap(it.CustomFields)}
 		}
 	}
+	if src.Files != nil {
+		dst.Files = make([]aivision.FileGuess, len(src.Files))
+		for i, f := range src.Files {
+			dst.Files[i] = aivision.FileGuess{Index: f.Index, DocumentType: cloneGuess(f.DocumentType), Title: cloneGuess(f.Title)}
+		}
+	}
 	if src.Warnings != nil {
 		dst.Warnings = make([]aivision.Warning, len(src.Warnings))
 		copy(dst.Warnings, src.Warnings)
 	}
 	return dst
+}
+
+func cloneGuess(g *aivision.FieldGuess) *aivision.FieldGuess {
+	if g == nil {
+		return nil
+	}
+	return &aivision.FieldGuess{Value: cloneFieldValue(g.Value), Confidence: g.Confidence}
 }
 
 // cloneFieldMap deep-copies a canonical field map (nil stays nil). Shared

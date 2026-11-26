@@ -2166,7 +2166,19 @@ definitions:
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        description: |-
+          Fields are the values read, keyed by field name. Its document_type
+          classifies the scan as a whole; files is the per-file source, and
+          document_type is derived from it when the model gives none.
         type: object
+      files:
+        description: |-
+          Files holds one suggestion per input file the model said something
+          usable about, ordered by index; a file without one has no entry.
+          Absent when there are none.
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanFileGuess'
+        type: array
       items:
         description: |-
           Items is present only when the source described more than one
@@ -2184,6 +2196,22 @@ definitions:
           $ref: '#/definitions/jsonapi.CommodityScanWarning'
         type: array
     type: object
+  jsonapi.CommodityScanDocumentTypeGuess:
+    properties:
+      confidence:
+        example: 0.9
+        type: number
+      value:
+        enum:
+        - invoice
+        - receipt
+        - manual
+        - warranty
+        - photo
+        - other
+        example: invoice
+        type: string
+    type: object
   jsonapi.CommodityScanFieldGuess:
     properties:
       confidence:
@@ -2191,6 +2219,17 @@ definitions:
       value:
         description: Value is polymorphic — see the type-level doc comment.
         type: object
+    type: object
+  jsonapi.CommodityScanFileGuess:
+    properties:
+      document_type:
+        $ref: '#/definitions/jsonapi.CommodityScanDocumentTypeGuess'
+      index:
+        description: Index is the file's position in the request, counted from 0.
+        example: 0
+        type: integer
+      title:
+        $ref: '#/definitions/jsonapi.CommodityScanTitleGuess'
     type: object
   jsonapi.CommodityScanItem:
     properties:
@@ -2217,6 +2256,16 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityScanResource'
+    type: object
+  jsonapi.CommodityScanTitleGuess:
+    properties:
+      confidence:
+        example: 0.8
+        type: number
+      value:
+        example: Bosch invoice, March 2024
+        maxLength: 120
+        type: string
     type: object
   jsonapi.CommodityScanWarning:
     properties:

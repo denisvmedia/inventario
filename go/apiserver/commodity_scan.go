@@ -561,9 +561,12 @@ type commodityScanResultDT struct {
 	// form an item write takes (#2803).
 	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
 	Items        []commodityScanItemDT           `json:"items,omitempty"`
-	Warnings     []aivision.Warning              `json:"warnings,omitempty"`
-	UsedTokens   int                             `json:"used_tokens,omitempty"`
-	LatencyMS    int64                           `json:"latency_ms,omitempty"`
+	// Files is the suggestion for each input file (#1626); the values are
+	// strings, so the provider's shape goes on the wire as it is.
+	Files      []aivision.FileGuess `json:"files,omitempty"`
+	Warnings   []aivision.Warning   `json:"warnings,omitempty"`
+	UsedTokens int                  `json:"used_tokens,omitempty"`
+	LatencyMS  int64                `json:"latency_ms,omitempty"`
 }
 
 // commodityScanItemDT is one candidate product in a multi-product scan.
@@ -605,6 +608,7 @@ func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
 	dt := commodityScanResultDT{
 		Fields:       marshalScanFields(r.Fields),
 		CustomFields: marshalCustomFieldGuesses(r.CustomFields),
+		Files:        r.Files,
 		Warnings:     r.Warnings,
 		UsedTokens:   r.UsedTokens,
 		LatencyMS:    r.LatencyMS,

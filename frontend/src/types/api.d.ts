@@ -15692,9 +15692,20 @@ export type components = {
             custom_fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Fields are the values read, keyed by field name. Its document_type
+             *     classifies the scan as a whole; files is the per-file source, and
+             *     document_type is derived from it when the model gives none.
+             */
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Files holds one suggestion per input file the model said something
+             *     usable about, ordered by index; a file without one has no entry.
+             *     Absent when there are none.
+             */
+            files?: components["schemas"]["jsonapi.CommodityScanFileGuess"][];
             /**
              * @description Items is present only when the source described more than one
              *     distinct product; one entry per product, most prominent first. The
@@ -15705,10 +15716,28 @@ export type components = {
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
         };
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            /** @example 0.9 */
+            confidence?: number;
+            /**
+             * @example invoice
+             * @enum {string}
+             */
+            value?: "invoice" | "receipt" | "manual" | "warranty" | "photo" | "other";
+        };
         "jsonapi.CommodityScanFieldGuess": {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanFileGuess": {
+            document_type?: components["schemas"]["jsonapi.CommodityScanDocumentTypeGuess"];
+            /**
+             * @description Index is the file's position in the request, counted from 0.
+             * @example 0
+             */
+            index?: number;
+            title?: components["schemas"]["jsonapi.CommodityScanTitleGuess"];
         };
         "jsonapi.CommodityScanItem": {
             custom_fields?: {
@@ -15728,6 +15757,12 @@ export type components = {
         };
         "jsonapi.CommodityScanResponse": {
             data?: components["schemas"]["jsonapi.CommodityScanResource"];
+        };
+        "jsonapi.CommodityScanTitleGuess": {
+            /** @example 0.8 */
+            confidence?: number;
+            /** @example Bosch invoice, March 2024 */
+            value?: string;
         };
         "jsonapi.CommodityScanWarning": {
             /**
