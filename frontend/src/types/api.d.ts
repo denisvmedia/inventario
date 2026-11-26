@@ -19845,6 +19845,13 @@ export type components = {
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
+            /**
+             * @description WhatsNewLastSeenVersion is the newest release the user has seen on the
+             *     What's new page. The app shows an unread dot while the build carries a
+             *     newer release, and writes the build's newest release here when the
+             *     page opens. Kept on the server so it follows the user across devices.
+             */
+            whatsNewLastSeenVersion?: string;
         };
         "models.SupplyLink": {
             /**

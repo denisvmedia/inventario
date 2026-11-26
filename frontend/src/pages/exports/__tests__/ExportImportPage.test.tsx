@@ -109,6 +109,45 @@ describe("<ExportImportPage />", () => {
     expect(uploadHits).toBe(0)
   })
 
+  it("says a personal data export cannot be restored", async () => {
+    const user = userEvent.setup({ applyAccept: false })
+    renderPage()
+    const fileInput = await screen.findByTestId("import-file-input")
+    const personal = new File(["gz"], "inventario-personal-data-2026-11-26.tar.gz", {
+      type: "application/gzip",
+    })
+    await user.upload(fileInput, personal)
+
+    expect(await screen.findByTestId("import-file-error")).toHaveTextContent("personal data export")
+    expect(screen.getByTestId("import-submit")).toBeDisabled()
+  })
+
+  it("says so when the server finds a personal data export renamed to .inb", async () => {
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/restores`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Unprocessable Entity",
+                code: "restore.personal_data_export",
+                detail: "This file is a personal data export.",
+              },
+            ],
+          },
+          { status: 422 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+    const fileInput = await screen.findByTestId("import-file-input")
+    await user.upload(fileInput, new File(["gz"], "renamed.inb", { type: "application/gzip" }))
+    await user.click(screen.getByTestId("import-submit"))
+
+    expect(await screen.findByTestId("import-error")).toHaveTextContent("personal data export")
+  })
+
   it("is axe-clean", async () => {
     const { baseElement } = renderPage()
     await screen.findByTestId("page-export-import")

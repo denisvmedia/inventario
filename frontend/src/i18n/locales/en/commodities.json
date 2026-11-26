@@ -300,7 +300,8 @@
     "saveFailed": "The draft could not be saved.",
     "saveFailedTitle": "Draft not saved to the server",
     "saving": "Saving…",
-    "untitled": "Untitled draft"
+    "untitled": "Untitled draft",
+    "updateFileFailed": "The file's title and tags could not be saved."
   },
   "editForm": {
     "allFields": "All fields",
@@ -497,8 +498,12 @@
           "currencyInferred": "Currency wasn't on the server's supported list — it won't be pre-filled.",
           "filesAttached_one": "The file you scanned will be attached to this item — manage it on the Files step.",
           "filesAttached_other": "The {{count}} files you scanned will be attached to this item — manage them on the Files step.",
+          "fileSuggestions_one": "The scan suggests a tag or a title for {{count}} file. You can change them on the Files step.",
+          "fileSuggestions_other": "The scan suggests a tag or a title for {{count}} files. You can change them on the Files step.",
           "retake": "Start over",
+          "scanned": "Scan",
           "subtitle": "Untick anything that looks wrong before we prefill the form.",
+          "tagsMerge": "Ticked, these tags are added to yours.",
           "title": "Review extracted details",
           "useValues": "Use these values",
           "warning": {
@@ -507,7 +512,8 @@
             "lowConfidence": "Low confidence",
             "multipleItems": "This looks like more than one item — we pre-filled the most prominent one. Add the others separately after saving.",
             "unreadableSerial": "Serial number was hard to read"
-          }
+          },
+          "yours": "Yours"
         },
         "scanning": {
           "cancel": "Cancel",
@@ -535,6 +541,8 @@
           "uploaded": "uploaded",
           "uploading": "uploading"
         },
+        "suggestedTag": "suggested by the AI scan",
+        "suggestedTitle": "Title suggested by the AI scan",
         "tagsPlaceholder": "Enter comma-separated tags, e.g. invoice, warranty, manual…",
         "title": "Files",
         "titleLabel": "Title of {{name}}"

@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { http, HttpResponse } from "msw"
+import { delay, http, HttpResponse } from "msw"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
@@ -1495,5 +1495,158 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
     const title = within(pendingRows()[0]).getByLabelText("Title of receipt.pdf")
     fireEvent.change(title, { target: { value: "📦".repeat(300) } })
     expect(title).toHaveValue("📦".repeat(255))
+  })
+
+  // savedLamp is a file batch intake saved with draft d1, titled and tagged
+  // by the scan (#1626).
+  function savedLamp(
+    fake: ReturnType<typeof draftHandlers.backend>,
+    extra: { description?: string; tags?: string[] } = {}
+  ) {
+    fake.files.push({
+      id: "file-lamp",
+      title: "Lamp invoice",
+      path: "IMG_0042",
+      ext: ".jpg",
+      size_bytes: 10,
+      category: "images",
+      tags: extra.tags ?? ["invoice"],
+      ...(extra.description !== undefined ? { description: extra.description } : {}),
+      links: [
+        {
+          id: "link-1",
+          file_id: "file-lamp",
+          entity_type: "draft",
+          entity_id: "d1",
+          meta: "images",
+        },
+      ],
+    })
+  }
+
+  it("shows the title and tags of a file saved with the draft and saves a change to them", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    expect(title).toHaveValue("Lamp invoice")
+    const tags = screen.getByTestId("draft-saved-file-tags-file-lamp")
+    expect(within(tags).getByTestId("draft-saved-file-tags-file-lamp-chip")).toHaveTextContent(
+      /invoice/i
+    )
+
+    await user.clear(title)
+    await user.type(title, "Desk lamp receipt")
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+    expect(fake.files[0].tags).toEqual(["invoice"])
+
+    await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+    await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+    expect(fake.files[0].title).toBe("Desk lamp receipt")
+    await waitFor(() =>
+      expect(screen.getByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Desk lamp receipt"
+      )
+    )
+  })
+
+  it("keeps a saved file's description when its title changes", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake, { description: "Bought at the fair" })
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.type(title, "Desk lamp receipt")
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+    expect(fake.files[0].description).toBe("Bought at the fair")
+
+    // The second save sends the description the first one returned.
+    await user.click(
+      within(screen.getByTestId("draft-saved-file-tags-file-lamp")).getByRole("button", {
+        name: /^remove invoice/i,
+      })
+    )
+    await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+    expect(fake.files[0].description).toBe("Bought at the fair")
+  })
+
+  it("saves two quick changes to a saved file in the order they were made", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake, { tags: ["invoice", "warranty"] })
+    let puts = 0
+    let answered = 0
+    const onResponse = ({ request }: { request: Request }) => {
+      if (request.method === "PUT" && request.url.includes("/files/")) answered++
+    }
+    server.events.on("response:mocked", onResponse)
+    server.use(
+      ...groupHandlers.list(groups),
+      // The first save is slow: sent at once, the second would land first
+      // and the first, landing last, would undo it.
+      http.put(apiUrl(`/g/${SLUG}/files/:id`), async () => {
+        puts++
+        if (puts === 1) await delay(150)
+        return undefined
+      }),
+      ...fake.handlers
+    )
+    try {
+      const user = userEvent.setup()
+      await openResumedOn("d1", "commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      const tags = await screen.findByTestId("draft-saved-file-tags-file-lamp")
+      await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+      await user.click(within(tags).getByRole("button", { name: /^remove warranty/i }))
+
+      await waitFor(() => expect(answered).toBe(2))
+      expect(fake.files[0].tags).toEqual([])
+      expect(within(tags).queryAllByTestId("draft-saved-file-tags-file-lamp-chip")).toHaveLength(0)
+    } finally {
+      server.events.removeListener("response:mocked", onResponse)
+    }
+  })
+
+  it("gives a saved file its name back when its title is cleared", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.tab()
+    await waitFor(() => expect(fake.files[0].title).toBe("IMG_0042"))
+  })
+
+  it("shows the file's title again when saving it fails", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    savedLamp(fake)
+    server.use(
+      ...groupHandlers.list(groups),
+      http.put(apiUrl(`/g/${SLUG}/files/:id`), () =>
+        HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      ),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    await openResumedOn("d1", "commodity-form-purchase-step")
+    await walkToFiles(user, ["warranty", "tags", "files"])
+    const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+    await user.clear(title)
+    await user.type(title, "Mine")
+    await user.tab()
+    await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
+    await waitFor(() => expect(title).toHaveValue("Lamp invoice"))
+    expect(fake.files[0].title).toBe("Lamp invoice")
   })
 })

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -26,6 +26,10 @@ import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
 import { LeadTimeField } from "@/components/settings/LeadTimeField"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
+import {
+  PERSONAL_DATA_EXPORT_ANCHOR,
+  PersonalDataExportCard,
+} from "@/components/settings/PersonalDataExportCard"
 import { useAPITokensList } from "@/features/api-tokens/hooks"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -89,6 +93,8 @@ import {
 } from "@/features/settings/api"
 import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
 import { useSystemInfo } from "@/features/system/hooks"
+import { useWhatsNewUnread } from "@/features/whats-new/hooks"
+import { WhatsNewDot } from "@/features/whats-new/WhatsNewDot"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
@@ -112,11 +118,6 @@ type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 // Documentation row (no longer the coming-soon /help stub, #2104).
 // Update this if the docs move to a custom domain.
 const DOCS_URL = "https://denisvmedia.github.io/inventario/"
-
-// GitHub Releases page. Opened in a new tab from the Help section's
-// "What's new" row, which no longer points at the coming-soon /whats-new
-// stub — the /whats-new route itself still exists.
-const RELEASES_URL = "https://github.com/denisvmedia/inventario/releases"
 
 interface SectionMeta {
   id: SectionId
@@ -203,6 +204,9 @@ function SettingsNav({
   const { t } = useTranslation()
   const logoutMutation = useLogout()
   const navigate = useNavigate()
+  // The Help tab holds the What's new row, so it carries the row's unread
+  // dot too (#1386).
+  const whatsNewUnread = useWhatsNewUnread()
 
   async function handleSignOut() {
     try {
@@ -232,6 +236,9 @@ function SettingsNav({
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             {t(`settings:sections.${id}`)}
+            {id === "help" && whatsNewUnread ? (
+              <WhatsNewDot testId="settings-nav-help-unread" />
+            ) : null}
             {active === id ? (
               <ChevronRight className="ml-auto size-3.5" aria-hidden="true" />
             ) : null}
@@ -364,6 +371,8 @@ function AccountSection() {
         </SettingRow>
       </div>
 
+      <PersonalDataExportCard />
+
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
         <p className="text-sm font-semibold text-destructive">
           {t("settings:account.dangerZone.title")}
@@ -447,6 +456,26 @@ function DeleteAccountDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on open changes; form is a stable RHF handle
   }, [open])
 
+  // goToDataExport closes the dialog and brings the "Download my data"
+  // section above it into view, with focus on its first control, so the
+  // user can take a copy before erasing the account (#2177). The jump runs
+  // when the dialog would hand focus back to its trigger.
+  const jumpToDataExport = useRef(false)
+  function goToDataExport() {
+    jumpToDataExport.current = true
+    onOpenChange(false)
+  }
+  function onCloseAutoFocus(event: Event) {
+    if (!jumpToDataExport.current) return
+    jumpToDataExport.current = false
+    const section = document.getElementById(PERSONAL_DATA_EXPORT_ANCHOR)
+    if (!section) return
+    event.preventDefault()
+    section.scrollIntoView({ behavior: "smooth", block: "start" })
+    const target = section.querySelector<HTMLElement>("button:not([disabled])") ?? section
+    target.focus({ preventScroll: true })
+  }
+
   async function onSubmit(values: DeleteAccountInput) {
     setServerError(null)
     // Client-side guard: the typed email must match the signed-in user's
@@ -495,13 +524,25 @@ function DeleteAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="delete-account-dialog">
+      <DialogContent data-testid="delete-account-dialog" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t("settings:account.dangerZone.deleteDialog.title")}</DialogTitle>
           <DialogDescription>
             {t("settings:account.dangerZone.deleteDialog.body")}
           </DialogDescription>
         </DialogHeader>
+        <p className="text-sm text-muted-foreground" data-testid="delete-export-first">
+          {t("settings:account.dangerZone.deleteDialog.exportFirst")}{" "}
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-sm"
+            onClick={goToDataExport}
+            data-testid="delete-export-first-link"
+          >
+            {t("settings:account.dangerZone.deleteDialog.exportFirstLink")}
+          </Button>
+        </p>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="delete-account-email">
@@ -1305,16 +1346,18 @@ function HelpSection() {
   const shortcutsDialog = useKeyboardShortcutsDialog()
   const tourControls = useOnboardingTourControls()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const { currentGroup } = useCurrentGroup()
+  const whatsNewUnread = useWhatsNewUnread()
 
   // Five rows: docs (#2104 — opens the end-user "Getting started" guide in
   // a new tab; the row no longer points at the coming-soon /help stub, though
   // the /help route still exists), the product tour (#2787 — restarts the
   // OnboardingTour overlay, the same action as the user-menu entry; disabled
   // with the reason while the tour cannot start), shortcuts (#1385 — opens
-  // the cheat-sheet modal in-place), what's new (#1386 — opens the GitHub
-  // Releases page in a new tab instead of the coming-soon /whats-new stub,
-  // which still exists; carries a marketing v{Major.Minor} badge per
-  // design-audit #1536), and "Contact support / share feedback" (#1387 —
+  // the cheat-sheet modal in-place), what's new (#1386 — opens the in-app
+  // /whats-new page; carries a marketing v{Major.Minor} badge per
+  // design-audit #1536 and a dot while a release is unread), and
+  // "Contact support / share feedback" (#1387 —
   // opens the FeedbackDialog in-place). The dialog's "Question" type doubles
   // as the contact-support channel, so the former static mailto row was
   // folded into this single entry point.
@@ -1329,7 +1372,7 @@ function HelpSection() {
     { key: "documentation", href: DOCS_URL },
     { key: "tour", href: "modal:tour" },
     { key: "shortcuts", href: "modal:shortcuts" },
-    { key: "whatsNew", href: RELEASES_URL },
+    { key: "whatsNew", href: withGroupQuery("/whats-new", currentGroup?.slug) },
     { key: "feedback", href: "modal:feedback" },
   ]
   // Why the tour row is disabled, shown in place of its description.
@@ -1366,6 +1409,9 @@ function HelpSection() {
                   <Badge variant="secondary" data-testid="help-row-whatsNew-badge">
                     {t("settings:help.rows.whatsNewBadge", { version: versionShort })}
                   </Badge>
+                ) : null}
+                {labelKey === "whatsNew" && whatsNewUnread ? (
+                  <WhatsNewDot testId="help-row-whatsNew-unread" />
                 ) : null}
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">

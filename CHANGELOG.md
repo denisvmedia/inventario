@@ -45,6 +45,19 @@ when to add an entry and where it goes.
   `missing_templates`, the set's types that do not offer it yet. Backups record which types and fields
   the set created, as INB format 3.8; older backups restore as before
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
+- The **Add item** dialog uses what the AI scan suggests for each file:
+  on the **Files** step a scanned file gets its **Invoice**, **Manual**,
+  **Warranty** or **Photo** tag as a chip marked with a sparkle, and its
+  suggested title replaces the file name. A title the user typed or a
+  suggested title the user changed, one of those tags the user set, and
+  every suggested tag the user removed stay as they are, also when the file
+  is scanned again. A scan no longer
+  overwrites what the form holds: the review shows the user's value next to
+  the scan's and leaves that field unticked, and ticked scanned tags are
+  added to the form's tags. The files saved with a draft show their title
+  and tags on the **Files** step and can be changed there, and a batch of
+  files is read again once its scans finish, so the tags and titles the
+  scan gave its files show without a reload (#1626).
 - Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
@@ -66,7 +79,12 @@ when to add an entry and where it goes.
   `GET /users/me/data-exports` lists the exports and when the next request is
   allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
   download link that works only in the browser session that asked for it
-  (403 `data_export.session_required` without the session cookie)
+  (403 `data_export.session_required` without the session cookie). In the
+  app, **Download my data** in Preferences → Account requests a copy, lists
+  the copies with their status, size and deletion date, and downloads a
+  finished one; the button stays disabled until the next request is allowed.
+  The delete-account dialog links to it, and the restore upload names a
+  personal data export when one is chosen
   ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
@@ -77,8 +95,8 @@ when to add an entry and where it goes.
   suggestions on the files once they are scanned: the **Invoice** tag for an
   invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
   others, and the title. Only a file that still has the title and the tags
-  of its upload changes, so a file you renamed or tagged keeps what you
-  gave it and a rescan does not change it again (#1626).
+  of its upload changes, so a file you renamed or gave one of those tags
+  keeps what you gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date
@@ -143,6 +161,16 @@ when to add an entry and where it goes.
   then by name and type, and an option by the option, then by label,
   creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+- A **What's new** page at `/whats-new` lists the releases the running server
+  contains, newest first, each with its changes as this file has them. The
+  **What's new** row in **Settings → Help & support** opens it instead of the
+  GitHub Releases page. A dot on that row, on the **Help & support** tab and
+  on **Help** in the sidebar marks a release the user has not seen, and
+  opening the page clears it. The newest release a user has seen is a setting
+  on the server (`whats_new.last_seen_version`), so the dot follows the user
+  across devices. System administrators also see the **Operators** section of
+  each release; for other users, a release with nothing else brings no dot
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 - Documents from other systems: `POST /g/{groupSlug}/intake` turns a document
   that another system such as Paperless-ngx sends into a draft in the inbox,
   with the document attached when it is sent, its address among the draft's
@@ -789,6 +817,12 @@ when to add an entry and where it goes.
   header to the frontend. The conventions behind the field are in the new
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+
+- Building the frontend now reads `CHANGELOG.md` from the repository root, for
+  the What's new page, and fails without it. The project's Dockerfile copies
+  the file; a custom image build that copies only `frontend/` has to copy
+  `CHANGELOG.md` next to it
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 
 ## [0.2.2] - 2026-11-23
 

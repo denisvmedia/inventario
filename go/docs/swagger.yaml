@@ -7415,6 +7415,13 @@ definitions:
         type: boolean
       theme:
         type: string
+      whatsNewLastSeenVersion:
+        description: |-
+          WhatsNewLastSeenVersion is the newest release the user has seen on the
+          What's new page. The app shows an unread dot while the build carries a
+          newer release, and writes the build's newest release here when the
+          page opens. Kept on the server so it follows the user across devices.
+        type: string
     type: object
   models.SupplyLink:
     properties:

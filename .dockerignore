@@ -5,6 +5,8 @@
 # Documentation
 README.md
 *.md
+# ...except the release notes the What's new page is built from.
+!CHANGELOG.md
 
 # IDE and editor files
 .idea/

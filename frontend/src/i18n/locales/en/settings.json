@@ -5,12 +5,14 @@
     "dangerZone": {
       "deleteAccount": "Delete account",
       "deleteDialog": {
-        "body": "This permanently erases your account and the inventory you own. Export or back up anything you want to keep first — this can't be undone. Type your email and password to confirm.",
+        "body": "This permanently erases your account and the inventory you own. This can't be undone. Type your email and password to confirm.",
         "cancel": "Cancel",
         "confirm": "Delete my account",
         "confirmEmailLabel": "Confirm your email",
         "deleting": "Deleting…",
         "errorGeneric": "Couldn't delete your account. Please try again.",
+        "exportFirst": "Want to keep a copy of your data?",
+        "exportFirstLink": "Download my data first",
         "lastOwner": "You're the only owner of a shared group that still has other members. Transfer ownership to someone else, then try again.",
         "noPasswordNote": "Your account signs in with a social login, so no password is needed to confirm.",
         "ownsContent": "You still own content shared with other people. Hand it over or remove it from the shared group first, then try again.",
@@ -20,6 +22,36 @@
       },
       "description": "Once your account is deleted, all data is permanently removed.",
       "title": "Danger zone"
+    },
+    "dataExport": {
+      "announceFailed": "Your copy requested {{date}} could not be prepared.",
+      "announceReady": "Your copy requested {{date}} is ready to download.",
+      "description_one": "A copy of your profile, your settings and what you created in each group, with the files you uploaded, as a .tar.gz archive of JSON files. You can request one copy a day, and each copy is kept for {{count}} day. It is not a backup and cannot be restored into a group.",
+      "description_other": "A copy of your profile, your settings and what you created in each group, with the files you uploaded, as a .tar.gz archive of JSON files. You can request one copy a day, and each copy is kept for {{count}} days. It is not a backup and cannot be restored into a group.",
+      "download": "Download",
+      "downloadFailed": "Couldn't start the download. Please try again.",
+      "downloadGone": "This copy is no longer available. The list now shows what is left.",
+      "downloadLabel": "Download the copy requested {{date}}",
+      "downloadNotReady": "This copy is not ready yet. The list now shows its status.",
+      "failed": "The copy could not be prepared. Request a new one when the daily limit allows.",
+      "impersonation": "A copy of a user's data cannot be requested or downloaded while you impersonate them.",
+      "loadFailed": "Couldn't load your copies. Reload the page to try again.",
+      "nextRequestAt": "You can request the next copy on {{date}}.",
+      "preparing": "Being prepared. This list updates when it is ready.",
+      "rateLimited": "You can request one copy a day. The next one is possible on {{date}}.",
+      "ready": "{{size}} · deleted on {{date}}",
+      "request": "Request a copy",
+      "requested": "Your copy is being prepared. You get an email when it is ready.",
+      "requestedAt": "Requested {{date}}",
+      "requestFailed": "Couldn't request a copy. Please try again.",
+      "requesting": "Requesting…",
+      "status": {
+        "completed": "Ready",
+        "failed": "Failed",
+        "in_progress": "Preparing",
+        "pending": "Waiting"
+      },
+      "title": "Download my data"
     },
     "displayName": "Display name",
     "editProfile": "Edit profile",
@@ -490,5 +522,25 @@
     "usagePercent": "{{percent}}% of group quota"
   },
   "subtitle": "Manage your account and preferences.",
-  "title": "Preferences"
+  "title": "Preferences",
+  "whatsNew": {
+    "developmentDescription": "This server runs {{version}}, which is not a release. The list shows the releases it contains.",
+    "developmentTitle": "Development build",
+    "empty": "No release has been published yet.",
+    "noUserChanges": "This release changed only how the server is installed and run.",
+    "operatorsNote": "Shown to system administrators only.",
+    "releaseTitle": "v{{version}}",
+    "sections": {
+      "added": "Added",
+      "changed": "Changed",
+      "deprecated": "Deprecated",
+      "fixed": "Fixed",
+      "operators": "Operators",
+      "removed": "Removed",
+      "security": "Security"
+    },
+    "subtitle": "The changes in each release this server has, newest first.",
+    "title": "What's new",
+    "unread": "new release"
+  }
 }

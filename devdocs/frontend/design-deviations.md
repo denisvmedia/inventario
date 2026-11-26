@@ -53,6 +53,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
 - **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
 
+#### 2026-11-26 — Add item dialog: the scan's tag and title on each file
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name, the size and a remove button. The mock has no per-file tags, and its AI review (L761–L786) lists item fields only; nothing the scan reads is shown on a file.
+- **Reality**: After **Use these values**, each scanned file the scan classified gets the matching tag (**Invoice** for an invoice or a receipt, **Manual**, **Warranty**, **Photo**) in its tags input. The chip is a `Badge variant="outline"` with a dashed `border-amber-500/60` border, a `Sparkles` icon in `text-amber-500` (the AI accent the mock uses on the Fill with AI title and dropzone, L514 and L845), and the pill color of that tag from `FILE_TAG_PILLS`; it reads "suggested by the AI scan" on hover and to screen readers, and is removed with its X like any chip. A suggested title fills the title input and gets a `Sparkles` icon before it, with the same note for screen readers; typing over it clears the marker. The review gets one muted line with a `Sparkles` icon saying how many files got a suggestion. The suggestion applies only while the file has its default title and none of those four tags, and a tag the user removed is not suggested again on the next scan.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the suggested tag as a removable chip on each file, using the existing file tag UI, and the suggested title only while the title is the default. The sparkle marker, the review line and remembering a removed tag across scans were agent-suggested; they follow those decisions (design deviations for #1626 pre-approved).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the marker, the review line and the removed-tag memory are agent-suggested.
+- **Reversion plan**: Follow the mock if `inventario-design` draws per-file tags or AI suggestions in the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — AI scan review: the user's value next to the scan's
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) review phase (L761–L786) shows a two-column grid of read-only cards, one value each, and no way to keep a value the form already holds.
+- **Reality**: The review keeps the row per field, with a checkbox and a confidence badge, that it already had. A row for a field that already holds a value the user entered shows two lines in a small `auto / 1fr` grid: "Yours" with the form's value, then "Scan" with the scan's value in `font-medium`, labels in `text-[11px] text-muted-foreground`. Such a row starts unticked whatever its confidence. The tags row adds "Ticked, these tags are added to yours." below, and ticked scanned tags merge into the form's tags (case-insensitive) instead of replacing them. The same holds for custom fields and for a second scan.
+- **Why**: Decision 3 of the owner's #1626 comment (2026-11-26): a scan never overwrites user input; a field with a user value shows both values and is unticked by default, and scanned tags merge. What counts as entered was decided by the agent: a value that differs from what a new, empty form holds, so the group currency a new form starts with, the short name the form derives from the name, and a custom field value equal to its item type's default do not count, while values typed, accepted from an earlier scan, brought by a resumed draft, or an existing item's saved values do.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the "entered" rule and the merge hint line are agent-suggested.
+- **Reversion plan**: Permanent unless the mock draws its own conflict state for the AI review.
+
+#### 2026-11-26 — Add item dialog: title and tags on the files saved with a draft
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has no drafts and no files already on the server; its `FileDropZone` rows (L1483–L1493) show a name, a size and a remove button.
+- **Reality**: Each row under "Saved with this draft" keeps its name, size and remove button, and gains the same compact title `Input` and tags input the pending-file rows have (#2905). A tag change is saved at once and a title when the field loses focus or on Enter, with `PUT /files/{id}`, which also sends the file's description back since the PUT replaces it; an empty title saves the file name. While Add item runs, the row's fields are disabled; a failed save shows an error toast and the row shows the file's saved title and tags again.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the saved-file rows of a resumed draft to show title and tags and let the user edit both, saved through the files API, so the tags and titles batch intake set can be checked before the item is added. Saving on blur instead of with the form was agent-suggested: the files already exist on the server, and the form's Save draft does not write files.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; saving on blur is agent-suggested.
+- **Reversion plan**: Permanent unless the mock adds drafts with their own file rows.
+
 #### 2026-11-26 — Donated and Stolen item statuses
 
 - **Issue/PR**: #1607 / #2903
@@ -982,6 +1009,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-26 — Account: "Download my data" card and the delete dialog's link to it
+
+- **Issue/PR**: #2177 / PR #2925 (backend), UI PR stacked on it
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `AccountSection` (L125–L160) has the profile card and the name, email and member-since rows only. The closest surface is `DataSection` (L403–L452): a `rounded-xl border` card, a `divide-y` list card, and outline small buttons with a `Download` icon, "Export data (JSON)" and "Export data (CSV)". The mock's danger zone (L388–L397, in `PrivacySection`) is a sentence and a button; it has no delete-account dialog.
+- **Reality**: `frontend/src/components/settings/PersonalDataExportCard.tsx` renders a `rounded-xl border p-4` card in Account settings between the account rows and the danger zone, with the `DataSection` anatomy: title "Download my data", a description that states the content, the `.tar.gz` format, the once-a-day limit, the retention in days and that it cannot be restored, and an outline small **Request a copy** button with the `Download` icon. While the daily limit holds the button is disabled and a muted line gives the date and time of the next allowed request. Below, a `divide-y` list card has one row per copy: "Requested {date}", a status `Badge` (outline with a spinner for waiting and preparing, secondary for ready, destructive for failed) and a muted line with the size and deletion date, the preparing note or the failure note; a ready row has an outline small **Download** button. The list polls every 5 seconds while a copy requested in the last two hours is being prepared, and a visually hidden polite live region announces a copy that becomes ready or fails. When the next allowed time comes, the button is enabled again and the list reloads. A download refused because the copy expired (404) or is not finished (409) reloads the list and says which in a toast. In the delete-account dialog the body no longer says "Export or back up anything first"; a line under the header asks "Want to keep a copy of your data?" with a link-variant button **Download my data first**, which closes the dialog, scrolls to the card and focuses its button.
+- **Why**: not present in mock. The issue asks for a start button with the daily limit explained, a list of finished exports with size, expiry and download link, in-progress and failed states, and a delete-account dialog that points to the button. The card reuses the `DataSection` export button and list card rather than inventing a new pattern. Agent-suggested: placing the card in Account rather than Privacy & security, the 5-second polling and its two-hour cutoff, announcing a failed copy as well as a ready one, disabling the button with the next allowed time instead of answering the click with 429, and the scroll-and-focus behavior of the dialog link.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the agent-suggested parts are listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a personal data export surface; otherwise permanent.
+
 #### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
 
 - **Issue/PR**: #1389 / #2923
@@ -1144,6 +1180,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
+#### 2026-11-26 — Help & Support "What's new" row opens the in-app page and carries an unread dot
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` has a "What's new" row with a `v1.2` badge and no action (L458). Neither the row nor the section nav has an unread marker.
+- **Reality**: The row is a link to `/whats-new` in the same tab. While the build has a release newer than the user's `whats_new.last_seen_version` setting, a `size-2 rounded-full bg-primary` dot follows the version badge (`help-row-whatsNew-unread`) and the **Help & support** entry of the section nav (`settings-nav-help-unread`). Each dot carries sr-only text ", new release".
+- **Why**: The owner's decisions of 2026-11-26 on #1386: the row links to the in-app page, and a dot on the entry is the only notice of a new release. The nav dot marks the menu that leads to the row, so the notice is visible from any section. The dot follows the status dot of [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L188) in the primary color.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the dot on the section nav agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-26 — What's new page
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: No What's new page; the only What's new surface is the Help row in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx).
+- **Reality**: `frontend/src/pages/WhatsNewPage.tsx` at `/whats-new` uses `Page width="narrow"` and `PageHeader`. Each release is a `Card`: the `CardTitle` is an `h2` "v0.2.2", the `CardDescription` the long date, and the `CardContent` lists each section under a small semibold `h3` with a disc list. Inline code uses the muted code chip of the typography showcase, bold stays bold, and links are primary-colored and open in a new tab. The Operators section renders only for system administrators, with a muted note "Shown to system administrators only."; a release with nothing else shows other users "This release changed only how the server is installed and run." A development build shows a default `Alert` with the `Info` icon above the list, and a build without releases shows a dashed empty box.
+- **Why**: not present in mock. The page, its content and the Operators rule are the owner's decisions of 2026-11-26 on #1386. The layout falls back to the `Card`, `Alert` and typography sections of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (inline code at L1339). The development-build alert, the Operators note, the "only how the server is installed" line and the empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the alert, the two notes and the empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the page.
+
 ### Navigation & App shell
 
 #### 2026-11-26 — Sidebar, command palette and routes follow the group's hidden sections
@@ -1289,6 +1343,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Not present in mock. The Upcoming page is the group-wide list the issue asks for; it sits next to the per-kind pages it merges.
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds the entry.
+
+#### 2026-11-26 — Unread dot on the sidebar Help entry
+
+- **Issue/PR**: #1386 / PR #2917
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has no Help entry, so it has no marker on one either. The app's footer Help row links to Settings → Help & support.
+- **Reality**: While the build has a release the user has not seen, the `SidebarMenuBadge` slot of **Help** shows the `size-2 rounded-full bg-primary` dot (`sidebar-help-unread`), and the link carries sr-only ", new release". It is the slot the Inbox count uses.
+- **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
 
 ### i18n & Formatting
 
@@ -1526,6 +1589,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
 ### Backup & Restore
+
+#### 2026-11-26 — Restore upload names a personal data export
+
+- **Issue/PR**: #2177 / UI PR stacked on PR #2925
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) has no file validation messages on the restore upload.
+- **Reality**: `frontend/src/pages/exports/ExportImportPage.tsx` refuses a file named `inventario-personal-data-*.tar.gz` before uploading, with the inline error "This is a personal data export, a copy of one person's data. It cannot be restored. Choose a group backup (.inb) file.", and shows the same text when the server answers 422 `restore.personal_data_export` for one renamed to `.inb`. The error uses the existing inline file-error line and the existing error `Alert`.
+- **Why**: The issue asks the restore path to refuse a personal data export clearly. A user who downloaded one from Account settings may well take it for a backup. Agent-suggested: the client-side check by file name.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the file-name check is agent-suggested and listed in the PR.
+- **Reversion plan**: Permanent.
 
 #### 2026-05-12 — Standalone `/exports/:id/restore` page preserved alongside the in-context Restore dialog
 

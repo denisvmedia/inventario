@@ -30,6 +30,7 @@ export interface FakeDraft {
 export interface FakeFile {
   id: string
   title: string
+  description?: string
   path: string
   ext: string
   size_bytes: number
@@ -275,11 +276,14 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       const f = state.files.find((x) => x.id === String(params.id))
       if (!f) return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
       const body = (await request.json()) as {
-        data?: { attributes?: { title?: string; tags?: string[] } }
+        data?: { attributes?: { title?: string; description?: string; tags?: string[] } }
       }
-      // The PUT replaces the metadata: a title left out is cleared.
-      f.title = body.data?.attributes?.title ?? ""
-      f.tags = body.data?.attributes?.tags ?? f.tags
+      // The PUT replaces the metadata, as the server does: a title, a
+      // description or tags left out are cleared. The path stays.
+      const attrs = body.data?.attributes ?? {}
+      f.title = attrs.title ?? ""
+      f.description = attrs.description ?? ""
+      f.tags = attrs.tags ?? []
       return HttpResponse.json({ id: f.id, type: "files", attributes: f })
     }),
     http.get(apiUrl(`${base}/files/:id`), ({ params }) => {

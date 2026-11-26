@@ -114,6 +114,29 @@ describe("pending-files-store", () => {
     ])
   })
 
+  it("keeps what an AI scan suggested for a file", async () => {
+    await writeRaw("draft:suggestion", [
+      { ...entry("a.png", "x", ["invoice"]), suggestion: { tag: "invoice", title: "Receipt" } },
+      { ...entry("b.png"), suggestion: { tag: 7, title: "Manual" } },
+      { ...entry("c.png"), suggestion: "invoice" },
+      {
+        ...entry("d.png"),
+        suggestion: { rejectedTags: ["photo", 3, "invoice"], rejectedTitle: "Receipt" },
+      },
+      { ...entry("e.png"), suggestion: { rejectedTags: "photo", rejectedTitle: 1 } },
+    ])
+
+    const loaded = await loadPendingFiles("draft:suggestion")
+    // A malformed part of a suggestion is dropped; the file stays.
+    expect(loaded.map((e) => [e.file.name, e.suggestion])).toEqual([
+      ["a.png", { tag: "invoice", title: "Receipt" }],
+      ["b.png", { title: "Manual" }],
+      ["c.png", undefined],
+      ["d.png", { rejectedTags: ["photo", "invoice"], rejectedTitle: "Receipt" }],
+      ["e.png", undefined],
+    ])
+  })
+
   it("returns nothing for a key that was never written", async () => {
     expect(await loadPendingFiles("draft:never-written")).toEqual([])
   })

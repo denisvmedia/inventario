@@ -19,7 +19,6 @@ import {
   Monitor,
   ScrollText,
   ShieldCheck,
-  Sparkles,
   Wrench,
 } from "lucide-react"
 
@@ -41,7 +40,6 @@ export interface StubSurface {
 export const SURFACES = {
   // Page-level stubs (full routes).
   plans: { icon: CreditCard, tracker: 1389, kind: "page" },
-  whatsNew: { icon: Sparkles, tracker: 1386, kind: "page" },
 
   // Inline-only stubs (used inside other pages once those pages land).
   oauth: { icon: Database, tracker: 1394, kind: "inline" },
