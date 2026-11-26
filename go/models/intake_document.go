@@ -59,9 +59,13 @@ const (
 // session was deleted before the document recorded it. The document still
 // counts as delivered, and a repeat makes nothing.
 //
-// The document's identity is not the identity of the product it describes:
-// the product is a candidate of the intake session, and its draft carries the
-// candidate's client key.
+// The document's identity, the other system, its instance and the document
+// id there, is not the identity of the product it describes: the product is
+// a candidate of the intake session, with an id of its own. The draft the
+// delivery makes carries a client key derived from the document's identity
+// (DraftClientKey), not from the candidate. The candidate goes when the
+// member deletes the session, and a delivery that stopped before it recorded
+// its draft still finds that draft by the key.
 //
 // PayloadHash fingerprints what was delivered, the values and the file's
 // content, and is required. A repeat with the same fingerprint is a replay;
