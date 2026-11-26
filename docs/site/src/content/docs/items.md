@@ -158,8 +158,9 @@ decision or for their draft, or a file that could not be read.
 
 A file you dropped is an ordinary file of the group: you find it on the
 [Files](../files-and-photos/) page, where its detail says it was **Added from
-files**. A file uploaded before the batch was queued (if you closed the dialog
-after an upload failed, for example) stays there as a standalone file.
+files**. If you close the dialog before the batch is queued (after an upload
+failed, for example), the files it already uploaded go to the
+[Trash](../trash/).
 
 ## All the fields
 
@@ -222,6 +223,28 @@ the dropzone or click to browse. Inventario sorts each file into **Photos**,
 **Documents**, or **Other** based on its type; you can change a file's category
 later from its detail page. Files are always optional and can be added at any
 time. More in [Files & photos](../files-and-photos/).
+
+Each file has a title and tags. The title starts as the file name without its
+extension (`receipt` for `receipt.pdf`); type over it to name the file
+differently. The title is kept with the rest of the form, so a reload does not
+lose it.
+
+When you click **Add item**, the files are uploaded first, one at a time, and
+the item is created only once all of them are uploaded. The dialog stays open
+while this runs: the button counts the uploads (**Uploading 1 of 3…**), and
+each file shows whether it is uploading, uploaded, or failed. Until it ends you
+cannot change the form or close the dialog.
+
+- If a file fails to upload, no item is created. The dialog names the file,
+  marks it **Upload failed**, and keeps everything you entered. The files that
+  made it move to the **Saved with this draft** list. **Retry** goes on from
+  there: it uploads only the files still missing, then creates the item. You
+  do not pick the files again, and nothing is uploaded twice.
+- If the files are uploaded but the item cannot be created, the dialog says
+  so and **Retry** creates it with the files already uploaded.
+- If you close the dialog with **Discard** instead, the files it uploaded go
+  to the [Trash](../trash/), and so does a file you remove from the list after
+  it was uploaded.
 
 ## Quantity and bundles
 
@@ -355,6 +378,8 @@ copy stays on this device only; to continue on another device, save a draft.
 - If a draft cannot be saved, for example while you are offline, the dialog
   says so and keeps your input on this device. Click **Retry** when you are
   back online. A file that was already uploaded is not uploaded again.
+- **Add item** saves the item's values and files the same way before it
+  creates the item, so a failed upload keeps them on this device too.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
 
@@ -362,7 +387,9 @@ copy stays on this device only; to continue on another device, save a draft.
 If you try to close the dialog with unsaved changes, Inventario asks whether to
 **Save as draft**, **Discard**, or **Keep editing**. **Save as draft** saves a
 draft as described above. When you continue a draft, **Discard changes**
-drops only what you changed since it was last saved.
+drops only what you changed since it was last saved. **Discard** also moves
+the files the dialog uploaded for an item it did not create to the
+[Trash](../trash/).
 :::
 
 ## The item detail page
