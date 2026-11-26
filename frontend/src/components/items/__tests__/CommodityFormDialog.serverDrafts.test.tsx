@@ -653,6 +653,43 @@ describe("<CommodityFormDialog /> server drafts", () => {
     expect(screen.getByLabelText(/^Short name$/i)).toHaveValue("")
   })
 
+  // The form's schema follows the group's custom fields. Their arrival must
+  // not send the form back to its first step and drop what was typed.
+  it("keeps the input when the group's custom fields arrive", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let served = false
+    server.use(
+      ...groupHandlers.list(groups),
+      ...fake.handlers,
+      http.get(apiUrl(`/g/${SLUG}/custom-fields`), async () => {
+        await held
+        served = true
+        return HttpResponse.json({
+          data: [
+            {
+              id: "cf-plate",
+              type: "custom_fields",
+              attributes: customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+            },
+          ],
+          meta: { custom_fields: 1, limit: 200 },
+        })
+      })
+    )
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(await fillManually(user), "Kettle")
+    release()
+    await waitFor(() => expect(served).toBe(true))
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.queryByTestId("commodity-form-ai-step")).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/^Name$/i)).toHaveValue("Kettle")
+  })
+
   it("runs one save when Enter and Save draft come together", async () => {
     const fake = draftHandlers.backend(SLUG)
     server.use(...groupHandlers.list(groups), ...fake.handlers)
