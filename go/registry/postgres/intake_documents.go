@@ -260,13 +260,20 @@ func (r *IntakeDocumentRegistry) RecordProgress(ctx context.Context, id string, 
 				return errxtrace.Wrap("failed to lock the recorded draft", err)
 			}
 		}
+		// A value that is already recorded stays, so a repeat changes
+		// nothing, the update time included.
 		query := fmt.Sprintf(`
 			UPDATE %s SET
 				file_id = COALESCE(file_id, $1),
 				session_id = COALESCE(session_id, $2),
 				draft_id = COALESCE(draft_id, $3),
 				commodity_id = COALESCE(commodity_id, $4, CASE WHEN draft_id IS NULL THEN $5::text END),
-				updated_at = $6
+				updated_at = CASE
+					WHEN (file_id IS NULL AND $1::text IS NOT NULL)
+						OR (session_id IS NULL AND $2::text IS NOT NULL)
+						OR (draft_id IS NULL AND $3::text IS NOT NULL)
+						OR (commodity_id IS NULL AND $4::text IS NOT NULL)
+					THEN $6 ELSE updated_at END
 			WHERE id = $7 AND group_id = $8
 			RETURNING *`, r.tableNames.IntakeDocuments())
 		err := tx.QueryRowxContext(ctx, query,

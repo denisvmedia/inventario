@@ -150,9 +150,12 @@ func intakeDocumentContractProgress(t *testing.T, env IntakeDocumentEnv) {
 	c.Assert(*got.DraftID, qt.Equals, "draft-1")
 	c.Assert(*got.FileID, qt.Equals, "file-1")
 
+	recorded := got.UpdatedAt
 	got, err = env.Documents.RecordProgress(env.Ctx, doc.ID, registry.IntakeDocumentProgress{DraftID: new("draft-2")})
 	c.Assert(err, qt.IsNil)
 	c.Assert(*got.DraftID, qt.Equals, "draft-1")
+	// A repeat that changes nothing leaves the update time.
+	c.Assert(got.UpdatedAt.Equal(recorded), qt.IsTrue, qt.Commentf("updated_at %v, recorded %v", got.UpdatedAt, recorded))
 
 	_, err = env.Documents.RecordProgress(env.Ctx, "missing", registry.IntakeDocumentProgress{DraftID: new("draft-1")})
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
