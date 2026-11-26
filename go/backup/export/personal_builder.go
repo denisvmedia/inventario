@@ -260,6 +260,8 @@ type groupLookups struct {
 	locations  map[string]*models.Location
 	areas      map[string]*models.Area
 	sellerName map[string]string
+	typeName   map[models.CommodityType]string
+	tagLabel   map[models.TagKind]map[string]string
 	fields     map[string]*models.CustomFieldDefinition
 	items      map[string]*models.Commodity
 	drafts     map[string]*models.CommodityDraft
@@ -368,7 +370,7 @@ func (l *groupLookups) personalItem(com *models.Commodity) PersonalItem {
 		ShortName:              com.ShortName,
 		Brand:                  com.Brand,
 		Model:                  com.Model,
-		Type:                   string(com.Type),
+		Type:                   l.typeOf(com.Type),
 		Location:               location,
 		Area:                   area,
 		Count:                  com.Count,
@@ -382,7 +384,7 @@ func (l *groupLookups) personalItem(com *models.Commodity) PersonalItem {
 		SerialNumber:           com.SerialNumber,
 		ExtraSerialNumbers:     []string(com.ExtraSerialNumbers),
 		PartNumbers:            []string(com.PartNumbers),
-		Tags:                   []string(com.Tags),
+		Tags:                   l.tagsOf(models.TagKindCommodity, com.Tags),
 		PurchaseDate:           dateString(com.PurchaseDate),
 		RegisteredDate:         dateString(com.RegisteredDate),
 		LastModifiedDate:       dateString(com.LastModifiedDate),
@@ -456,6 +458,8 @@ func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, 
 		locations:  map[string]*models.Location{},
 		areas:      map[string]*models.Area{},
 		sellerName: map[string]string{},
+		typeName:   map[models.CommodityType]string{},
+		tagLabel:   map[models.TagKind]map[string]string{},
 		fields:     map[string]*models.CustomFieldDefinition{},
 		items:      map[string]*models.Commodity{},
 		drafts:     map[string]*models.CommodityDraft{},
@@ -488,6 +492,9 @@ func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, 
 	sortItems(items)
 	sortItems(trashed)
 	lookups.live, lookups.trashed = items, trashed
+	if err := b.loadTypeNames(ctx, lookups); err != nil {
+		return nil, err
+	}
 
 	if b.fs.CommodityDraftRegistryFactory != nil {
 		reg, err := b.fs.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
@@ -505,7 +512,68 @@ func (b *personalBuilder) loadGroupLookups(ctx context.Context) (*groupLookups, 
 	return lookups, nil
 }
 
-// loadStructure loads the group's locations, areas, sellers and custom
+// loadTypeNames resolves the names of the item types the group's items have.
+// It reads the types one by one, since listing them seeds the built-in ones
+// into a group that has none.
+func (b *personalBuilder) loadTypeNames(ctx context.Context, lookups *groupLookups) error {
+	if b.fs.ItemTypeRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.fs.ItemTypeRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create item type registry", err)
+	}
+	for _, item := range lookups.items {
+		if item.Type == "" {
+			continue
+		}
+		if _, done := lookups.typeName[item.Type]; done {
+			continue
+		}
+		t, err := reg.GetBySlug(ctx, item.Type)
+		switch {
+		case err == nil:
+			lookups.typeName[item.Type] = t.DisplayName()
+		case errors.Is(err, registry.ErrNotFound):
+			// A group whose types were never seeded still has the built-in
+			// ones under their default names.
+			lookups.typeName[item.Type] = (&models.ItemType{Slug: item.Type}).DisplayName()
+		default:
+			return errxtrace.Wrap("failed to get item type", err)
+		}
+	}
+	return nil
+}
+
+// typeOf returns the item type slug as the archive holds it.
+func (l *groupLookups) typeOf(slug models.CommodityType) *PersonalName {
+	if slug == "" {
+		return nil
+	}
+	name := l.typeName[slug]
+	if name == "" {
+		name = string(slug)
+	}
+	return &PersonalName{Name: name, Slug: string(slug)}
+}
+
+// tagsOf returns tag slugs of kind as the archive holds them.
+func (l *groupLookups) tagsOf(kind models.TagKind, slugs []string) []PersonalName {
+	if len(slugs) == 0 {
+		return nil
+	}
+	out := make([]PersonalName, 0, len(slugs))
+	for _, slug := range slugs {
+		name := l.tagLabel[kind][slug]
+		if name == "" {
+			name = slug
+		}
+		out = append(out, PersonalName{Name: name, Slug: slug})
+	}
+	return out
+}
+
+// loadStructure loads the group's locations, areas, sellers, tags and custom
 // fields, which the archive gives by name.
 func (b *personalBuilder) loadStructure(ctx context.Context, lookups *groupLookups) error {
 	locReg, err := b.fs.LocationRegistryFactory.CreateUserRegistry(ctx)
@@ -543,6 +611,23 @@ func (b *personalBuilder) loadStructure(ctx context.Context, lookups *groupLooku
 		}
 		for _, s := range sellers {
 			lookups.sellerName[s.ID] = s.Name
+		}
+	}
+
+	if b.fs.TagRegistryFactory != nil {
+		reg, err := b.fs.TagRegistryFactory.CreateUserRegistry(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to create tag registry", err)
+		}
+		tags, err := reg.List(ctx)
+		if err != nil {
+			return errxtrace.Wrap("failed to list tags", err)
+		}
+		for _, t := range tags {
+			if lookups.tagLabel[t.Kind] == nil {
+				lookups.tagLabel[t.Kind] = map[string]string{}
+			}
+			lookups.tagLabel[t.Kind][t.Slug] = t.Label
 		}
 	}
 
@@ -620,7 +705,7 @@ func (b *personalBuilder) planFiles(ctx context.Context, l *groupLookups, planne
 			Description: file.Description,
 			Type:        string(file.Type),
 			Category:    string(file.Category),
-			Tags:        []string(file.Tags),
+			Tags:        l.tagsOf(models.TagKindFile, file.Tags),
 			CreatedAt:   formatTime(file.CreatedAt),
 			UpdatedAt:   formatTime(file.UpdatedAt),
 			InTrash:     inTrash[file.ID],

@@ -151,14 +151,15 @@ type PersonalGroup struct {
 }
 
 // PersonalItem is an item the user created, also one in the group's Trash.
-// Its location, area and seller are given by name.
+// Its location, area and seller are given by name, its type and tags by name
+// and slug.
 type PersonalItem struct {
 	ID                     string                `json:"id"`
 	Name                   string                `json:"name"`
 	ShortName              string                `json:"shortName,omitempty"`
 	Brand                  string                `json:"brand,omitempty"`
 	Model                  string                `json:"model,omitempty"`
-	Type                   string                `json:"type,omitempty"`
+	Type                   *PersonalName         `json:"type,omitempty"`
 	Location               string                `json:"location,omitempty"`
 	Area                   string                `json:"area,omitempty"`
 	Count                  int                   `json:"count"`
@@ -174,7 +175,7 @@ type PersonalItem struct {
 	SerialNumber           string                `json:"serialNumber,omitempty"`
 	ExtraSerialNumbers     []string              `json:"extraSerialNumbers,omitempty"`
 	PartNumbers            []string              `json:"partNumbers,omitempty"`
-	Tags                   []string              `json:"tags,omitempty"`
+	Tags                   []PersonalName        `json:"tags,omitempty"`
 	PurchaseDate           string                `json:"purchaseDate,omitempty"`
 	RegisteredDate         string                `json:"registeredDate,omitempty"`
 	LastModifiedDate       string                `json:"lastModifiedDate,omitempty"`
@@ -189,6 +190,14 @@ type PersonalItem struct {
 	CustomFields           []PersonalCustomValue `json:"customFields,omitempty"`
 	// InTrash marks an item in the group's Trash.
 	InTrash bool `json:"inTrash,omitempty"`
+}
+
+// PersonalName is one of the group's item types or tags: the name members see
+// and the slug the group stores. A tag the group has no entry for goes by its
+// slug.
+type PersonalName struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
 // PersonalCustomValue is the value of a custom field, by the field's name.
@@ -212,7 +221,7 @@ type PersonalFile struct {
 	MimeType    string             `json:"mimeType,omitempty"`
 	Type        string             `json:"type,omitempty"`
 	Category    string             `json:"category,omitempty"`
-	Tags        []string           `json:"tags,omitempty"`
+	Tags        []PersonalName     `json:"tags,omitempty"`
 	SizeBytes   int64              `json:"sizeBytes"`
 	Path        string             `json:"path,omitempty"`
 	Missing     bool               `json:"missing,omitempty"`

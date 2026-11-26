@@ -104,7 +104,12 @@ func newPersonalFixture(c *qt.C) *personalFixture {
 	area, err := areaReg.Create(aliceCtx, models.Area{Name: "Kitchen", LocationID: loc.ID})
 	c.Assert(err, qt.IsNil)
 
-	f.aliceItem = f.createItem(c, aliceCtx, "Alice's kettle", area.ID)
+	tagReg, err := f.fs.TagRegistryFactory.CreateUserRegistry(aliceCtx)
+	c.Assert(err, qt.IsNil)
+	_, err = tagReg.Create(aliceCtx, models.Tag{Kind: models.TagKindCommodity, Slug: "kitchen-gear", Label: "Kitchen gear", Color: models.TagColorBlue})
+	c.Assert(err, qt.IsNil)
+
+	f.aliceItem = f.createItem(c, aliceCtx, "Alice's kettle", area.ID, "kitchen-gear", "no-entry")
 	f.bobItem = f.createItem(c, bobCtx, "Bob's toaster", area.ID)
 	f.aliceFile = f.createFile(c, aliceCtx, f.alice, "manual", "alice-bytes", f.aliceItem.ID)
 	f.bobFile = f.createFile(c, bobCtx, f.bob, "receipt", "bob-bytes", f.bobItem.ID)
@@ -121,7 +126,7 @@ func newPersonalFixture(c *qt.C) *personalFixture {
 	return f
 }
 
-func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID string) *models.Commodity {
+func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID string, tags ...string) *models.Commodity {
 	c.Helper()
 	reg, err := f.fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
@@ -132,6 +137,7 @@ func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID 
 		Count:     1,
 		Status:    models.CommodityStatusInUse,
 		Type:      "electronics",
+		Tags:      tags,
 	})
 	c.Assert(err, qt.IsNil)
 	return item
@@ -265,6 +271,12 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 	c.Assert(doc.Items[0].Name, qt.Equals, "Alice's kettle")
 	c.Assert(doc.Items[0].Location, qt.Equals, "Main house")
 	c.Assert(doc.Items[0].Area, qt.Equals, "Kitchen")
+	// Type and tags by the names members see; a tag with no entry by its slug.
+	c.Assert(doc.Items[0].Type, qt.DeepEquals, &export.PersonalName{Name: "Electronics", Slug: "electronics"})
+	c.Assert(doc.Items[0].Tags, qt.DeepEquals, []export.PersonalName{
+		{Name: "Kitchen gear", Slug: "kitchen-gear"},
+		{Name: "no-entry", Slug: "no-entry"},
+	})
 
 	c.Assert(doc.Files, qt.HasLen, 1)
 	c.Assert(doc.Files[0].ID, qt.Equals, f.aliceFile.UUID)
