@@ -452,7 +452,9 @@ func (fe *FileEntity) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 
 	fields = append(fields,
-		validation.Field(&fe.Title, validation.Length(0, 255)), // Title is now optional
+		// Title is optional. Its limit counts characters, not UTF-8 bytes
+		// (the column is TEXT).
+		validation.Field(&fe.Title, validation.RuneLength(0, 255)),
 		validation.Field(&fe.Description, validation.Length(0, 1000)),
 		validation.Field(&fe.Type, validation.Required, validation.In(
 			FileTypeImage, FileTypeDocument, FileTypeVideo,

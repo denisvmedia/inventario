@@ -406,7 +406,7 @@
   "form": {
     "addFailed": "The item could not be added.",
     "addFailedTitle": "Item not added",
-    "addRetryHint": "Nothing is added until every file is uploaded. What you entered and the files stay here, and Retry goes on from where it stopped.",
+    "addRetryHint": "Nothing is added until every file is uploaded. The uploaded files stay under Saved with this draft, where you can remove them, and Retry goes on from where it stopped.",
     "assignLocationBanner": {
       "cta": "Place in location",
       "dismiss": "Dismiss",
@@ -426,12 +426,13 @@
     },
     "continue": "Continue",
     "createTitle": "Add item",
+    "discardAlreadyAdded": "The item was already added to your inventory.",
     "editTitle": "Edit item",
     "filesNotUploaded": "Not uploaded: {{names}}",
     "fileUploadFailed": "Couldn't upload {{name}}. You can attach it later from the item's detail page.",
     "fillManually": "Fill manually",
-    "leftoverFilesFailed_one": "{{count}} uploaded file could not be moved to the trash. You find it on the Files page.",
-    "leftoverFilesFailed_other": "{{count}} uploaded files could not be moved to the trash. You find them on the Files page.",
+    "leftoverFilesFailed_one": "{{count}} uploaded file could not be moved to the trash. You can find it on the Files page.",
+    "leftoverFilesFailed_other": "{{count}} uploaded files could not be moved to the trash. You can find them on the Files page.",
     "serverError": "Something went wrong. Please try again.",
     "step": {
       "ai": {

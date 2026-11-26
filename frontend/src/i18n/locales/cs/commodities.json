@@ -387,7 +387,7 @@
   "form": {
     "addFailed": "Položku se nepodařilo přidat.",
     "addFailedTitle": "Položka nebyla přidána",
-    "addRetryHint": "Nic se nepřidá, dokud se nenahrají všechny soubory. Zadané údaje i soubory tu zůstávají a Zkusit znovu pokračuje tam, kde se skončilo.",
+    "addRetryHint": "Nic se nepřidá, dokud se nenahrají všechny soubory. Nahrané soubory zůstávají v seznamu Uloženo s konceptem, kde je můžete odebrat, a Zkusit znovu pokračuje tam, kde se skončilo.",
     "assignLocationBanner": {
       "cta": "Umístit do umístění",
       "dismiss": "Zavřít",
@@ -407,6 +407,7 @@
     },
     "continue": "Pokračovat",
     "createTitle": "Přidat položku",
+    "discardAlreadyAdded": "Položka už byla přidána do inventáře.",
     "editTitle": "Upravit položku",
     "filesNotUploaded": "Nenahráno: {{names}}",
     "fileUploadFailed": "Soubor {{name}} se nepodařilo nahrát. Můžete jej připojit později ze stránky s podrobnostmi položky.",
