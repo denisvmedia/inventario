@@ -226,7 +226,9 @@ func (api *intakeDeliveryAPI) readMultipart(r *http.Request, tenantID string) (s
 	budget := int64(intakeDeliveryMaxFieldBytes)
 	for parts := 0; ; parts++ {
 		part, err := reader.NextPart()
-		if errors.Is(err, io.EOF) {
+		// The end of the parts is io.EOF itself. A body that stops before
+		// the closing delimiter gives an error that wraps io.EOF.
+		if err == io.EOF {
 			return fields.delivery, file, fields.err()
 		}
 		if err != nil {

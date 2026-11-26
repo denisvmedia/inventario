@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"mime/multipart"
 	"net/http"
 	"net/http/httptest"
@@ -289,9 +290,10 @@ func blobCount(c *qt.C, bucket *blob.Bucket) int {
 	iter := bucket.List(nil)
 	for {
 		obj, err := iter.Next(context.Background())
-		if err != nil {
+		if err == io.EOF {
 			break
 		}
+		c.Assert(err, qt.IsNil)
 		if !obj.IsDir && !strings.Contains(obj.Key, "thumbnails") {
 			n++
 		}
@@ -380,6 +382,26 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 	rr = env.raw(token, path, "application/json", []byte(`{"title":"Invoice","source_system":"paperless-ngx","document_id":300}`))
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 	c.Assert(decodeIntakeDocument(c, rr).Attributes.ExternalDocumentID, qt.Equals, "300")
+}
+
+// TestIntakeDelivery_TruncatedMultipart: a multipart body that stops before
+// its closing delimiter is refused and stores nothing; one that ends with
+// the delimiter is read, with or without a line break after it.
+func TestIntakeDelivery_TruncatedMultipart(t *testing.T) {
+	c := qt.New(t)
+	env, token := newIntakeDeliveryEnv(c)
+	path := env.groupPath(env.group, "/intake")
+
+	contentType, body := multipartDelivery(c, paperlessForm("117"), "", "", nil)
+	c.Assert(bytes.HasSuffix(body, []byte("--\r\n")), qt.IsTrue)
+	rr := env.raw(token, path, contentType, body[:len(body)-len("--\r\n")])
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf(rr.Body.String()))
+	c.Assert(must.Must(env.groupRegistries().IntakeDocumentRegistry.List(env.groupCtx())), qt.HasLen, 0)
+
+	rr = env.raw(token, path, contentType, body[:len(body)-len("\r\n")])
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	rr = env.raw(token, path, contentType, body)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
 }
 
 // TestIntakeDelivery_FieldRefusedBeforeTheFile: a field the delivery refuses
