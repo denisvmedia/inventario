@@ -314,7 +314,8 @@ func (s *IntakeService) recordDeliveredFile(ctx context.Context, set *registry.S
 	}
 	doc, err := set.IntakeDocumentRegistry.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{FileID: &stored.ID})
 	if err != nil {
-		return err
+		// Unrecorded, the file would be made again by the repeat.
+		return errors.Join(err, dropDeliveredFile(ctx, set, stored, result))
 	}
 	result.Document = doc
 	if *doc.FileID == stored.ID {
@@ -323,7 +324,15 @@ func (s *IntakeService) recordDeliveredFile(ctx context.Context, set *registry.S
 	}
 	// A concurrent delivery of the document recorded its file first; this
 	// one is not needed.
-	if err := set.FileRegistry.Delete(ctx, stored.ID); err != nil {
+	return dropDeliveredFile(ctx, set, stored, result)
+}
+
+// dropDeliveredFile deletes a file entity the delivery made and does not
+// use. When that fails the file stays, so result keeps it and the caller
+// keeps its blob.
+func dropDeliveredFile(ctx context.Context, set *registry.Set, stored *models.FileEntity, result *IntakeDeliveryResult) error {
+	if err := set.FileRegistry.Delete(context.WithoutCancel(ctx), stored.ID); err != nil {
+		result.File = stored
 		return errxtrace.Wrap("failed to delete the unused delivered file", err)
 	}
 	return nil

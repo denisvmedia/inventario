@@ -1,12 +1,15 @@
 package services_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -396,6 +399,50 @@ func TestIntakeDeliver_EarlierSessionWithoutRecord(t *testing.T) {
 	// The session's file is the document's; the new blob is not used.
 	c.Assert(same.File, qt.IsNil)
 	c.Assert(*same.Document.FileID, qt.Equals, *first.Document.FileID)
+	c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+}
+
+// lostFileWrites is a document registry whose record of a file fails, as a
+// write lost to the database would.
+type lostFileWrites struct {
+	registry.IntakeDocumentRegistryFactory
+}
+
+func (f lostFileWrites) CreateUserRegistry(ctx context.Context) (registry.IntakeDocumentRegistry, error) {
+	reg, err := f.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
+	return lostFileWriteRegistry{reg}, err
+}
+
+type lostFileWriteRegistry struct {
+	registry.IntakeDocumentRegistry
+}
+
+func (r lostFileWriteRegistry) RecordProgress(ctx context.Context, id string, progress registry.IntakeDocumentProgress) (*models.IntakeDocument, error) {
+	if progress.FileID != nil {
+		return nil, errors.New("the write was lost")
+	}
+	return r.IntakeDocumentRegistry.RecordProgress(ctx, id, progress)
+}
+
+// TestIntakeDeliver_FileNotRecorded: a file the document could not record is
+// deleted again, so its blob can go and the repeat stores the file once.
+func TestIntakeDeliver_FileNotRecorded(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+	files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
+
+	docs := f.factorySet.IntakeDocumentRegistryFactory
+	f.factorySet.IntakeDocumentRegistryFactory = lostFileWrites{docs}
+	result, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
+	f.factorySet.IntakeDocumentRegistryFactory = docs
+	c.Assert(err, qt.ErrorMatches, ".*the write was lost.*")
+	c.Assert(result.File, qt.IsNil)
+	c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 0)
+
+	replay := f.deliver(c, paperlessDelivery("117"), blob)
+	c.Assert(replay.File, qt.IsNotNil)
 	c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
 	c.Assert(f.drafts(c), qt.HasLen, 1)
 }
