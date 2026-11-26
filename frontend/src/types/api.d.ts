@@ -17553,6 +17553,14 @@ export type components = {
              */
             key?: string;
             /**
+             * Format: int64
+             * @description MissingTemplates counts the set's types in the group that do not offer
+             *     the field. Adding the set offers it on them; until then the set is
+             *     not complete.
+             * @example 0
+             */
+            missing_templates?: number;
+            /**
              * @description Name is the name of the group's field, which a member may have
              *     changed, or the set's name for a field the group does not have.
              * @example Condition
@@ -17709,8 +17717,9 @@ export type components = {
         };
         "jsonapi.ItemSetView": {
             /**
-             * @description Complete is true when adding the set has nothing left to create: the
-             *     group has every type and field of the set but those taken.
+             * @description Complete is true when adding the set has nothing left to do: the group
+             *     has every type and field of the set but those taken, and each of those
+             *     fields is offered on each of those types.
              * @example true
              */
             complete?: boolean;
@@ -17855,7 +17864,8 @@ export type components = {
              * @description CollectionSet, on create, adds the Collection set to the new group
              *     (#1607): its item types and custom fields, as POST
              *     /groups/{groupID}/collection-set does. It is not stored; the response
-             *     meta says whether the set was added. Create only.
+             *     meta says whether the set was added. Create only: an update with the
+             *     attribute, true or false, is refused.
              */
             collection_set?: boolean;
             /**

@@ -66,6 +66,7 @@
       "adminOnly": "Only admins and owners can add or remove the set.",
       "customFields": "Custom fields",
       "itemTypes": "Item types",
+      "linksMissing": "Some of the set's fields are not offered on all of its types yet.",
       "loadError": "Couldn't load the Collection set.",
       "note": "Serial number stays a field of its own. A type or field the group already has under the same name is used instead of a new one. The names are in English; rename them like any other type or field.",
       "removal": {
@@ -97,6 +98,8 @@
       "rowState": {
         "added": "Added by the set",
         "missing": "Not in the group",
+        "notOnTypes_one": "not offered on {{count}} of the set's types",
+        "notOnTypes_other": "not offered on {{count}} of the set's types",
         "own": "The group's own",
         "takenField": "Not added: another field of the set has this name",
         "takenType": "Not added: another type of the set has this name"

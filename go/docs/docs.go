@@ -18421,6 +18421,12 @@ const docTemplate = `{
                     "type": "string",
                     "example": "condition"
                 },
+                "missing_templates": {
+                    "description": "MissingTemplates counts the set's types in the group that do not offer\nthe field. Adding the set offers it on them; until then the set is\nnot complete.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
                 "name": {
                     "description": "Name is the name of the group's field, which a member may have\nchanged, or the set's name for a field the group does not have.",
                     "type": "string",
@@ -18641,7 +18647,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "complete": {
-                    "description": "Complete is true when adding the set has nothing left to create: the\ngroup has every type and field of the set but those taken.",
+                    "description": "Complete is true when adding the set has nothing left to do: the group\nhas every type and field of the set but those taken, and each of those\nfields is offered on each of those types.",
                     "type": "boolean",
                     "example": true
                 },
@@ -18922,7 +18928,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "collection_set": {
-                    "description": "CollectionSet, on create, adds the Collection set to the new group\n(#1607): its item types and custom fields, as POST\n/groups/{groupID}/collection-set does. It is not stored; the response\nmeta says whether the set was added. Create only.",
+                    "description": "CollectionSet, on create, adds the Collection set to the new group\n(#1607): its item types and custom fields, as POST\n/groups/{groupID}/collection-set does. It is not stored; the response\nmeta says whether the set was added. Create only: an update with the\nattribute, true or false, is refused.",
                     "type": "boolean"
                 },
                 "description": {

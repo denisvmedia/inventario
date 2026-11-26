@@ -59,6 +59,10 @@ type ItemSetFieldView struct {
 	// TakenBy is the key of the set's field that has this field's name, for
 	// a taken field.
 	TakenBy string `json:"taken_by,omitempty" example:"signed"`
+	// MissingTemplates counts the set's types in the group that do not offer
+	// the field. Adding the set offers it on them; until then the set is
+	// not complete.
+	MissingTemplates int `json:"missing_templates" example:"0" format:"int64"`
 	// CustomFieldID is the ID of the group's field; absent while missing or
 	// taken.
 	CustomFieldID string `json:"custom_field_id,omitempty" example:"5d2e..."`
@@ -76,8 +80,9 @@ type ItemSetFieldView struct {
 
 // ItemSetView is an item set as the group holds it.
 type ItemSetView struct {
-	// Complete is true when adding the set has nothing left to create: the
-	// group has every type and field of the set but those taken.
+	// Complete is true when adding the set has nothing left to do: the group
+	// has every type and field of the set but those taken, and each of those
+	// fields is offered on each of those types.
 	Complete bool `json:"complete" example:"true"`
 	// ItemTypes and CustomFields list the set's entries in the set's order.
 	ItemTypes    []ItemSetItemTypeView `json:"item_types"`
@@ -121,6 +126,7 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 			row.Name = f.Field.Name
 			row.FieldType = string(f.Field.Type)
 			row.CustomFieldID = f.Field.ID
+			row.MissingTemplates = f.MissingTemplates
 			row.ItemCount = f.Usage.Live
 			row.TrashedItemCount = f.Usage.Trashed
 			row.Removable = f.Removable()

@@ -4030,6 +4030,14 @@ definitions:
         description: Key identifies the field within the set.
         example: condition
         type: string
+      missing_templates:
+        description: |-
+          MissingTemplates counts the set's types in the group that do not offer
+          the field. Adding the set offers it on them; until then the set is
+          not complete.
+        example: 0
+        format: int64
+        type: integer
       name:
         description: |-
           Name is the name of the group's field, which a member may have
@@ -4221,8 +4229,9 @@ definitions:
     properties:
       complete:
         description: |-
-          Complete is true when adding the set has nothing left to create: the
-          group has every type and field of the set but those taken.
+          Complete is true when adding the set has nothing left to do: the group
+          has every type and field of the set but those taken, and each of those
+          fields is offered on each of those types.
         example: true
         type: boolean
       custom_fields:
@@ -4427,7 +4436,8 @@ definitions:
           CollectionSet, on create, adds the Collection set to the new group
           (#1607): its item types and custom fields, as POST
           /groups/{groupID}/collection-set does. It is not stored; the response
-          meta says whether the set was added. Create only.
+          meta says whether the set was added. Create only: an update with the
+          attribute, true or false, is refused.
         type: boolean
       description:
         description: |-

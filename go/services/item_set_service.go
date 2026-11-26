@@ -86,7 +86,10 @@ type ItemSetFieldStatus struct {
 	// TakenBy is the key of the entry whose field has this entry's name,
 	// for a taken entry.
 	TakenBy string
-	Usage   registry.CustomFieldUsage
+	// MissingTemplates counts the group's types of the set that do not
+	// offer the field: adding the set puts it on their templates.
+	MissingTemplates int
+	Usage            registry.CustomFieldUsage
 	// KeepReason is why removing the set keeps the field, for a field the
 	// group has.
 	KeepReason ItemSetKeepReason
@@ -105,9 +108,10 @@ type ItemSetStatus struct {
 	Fields    []ItemSetFieldStatus
 }
 
-// Complete reports whether adding the set has nothing left to create: the
-// group has every type and field of the set, its own or the set's, but for
-// those whose name another entry's row holds.
+// Complete reports whether adding the set has nothing left to do: the group
+// has every type and field of the set, its own or the set's, but for those
+// whose name another entry's row holds, and every such field is offered on
+// every such type.
 func (s *ItemSetStatus) Complete() bool {
 	for _, t := range s.ItemTypes {
 		if t.State == ItemSetEntryMissing {
@@ -115,11 +119,23 @@ func (s *ItemSetStatus) Complete() bool {
 		}
 	}
 	for _, f := range s.Fields {
-		if f.State == ItemSetEntryMissing {
+		if f.State == ItemSetEntryMissing || f.MissingTemplates > 0 {
 			return false
 		}
 	}
 	return true
+}
+
+// typeIDs returns the IDs of the group's types that stand for the set's
+// entries, each once.
+func (s *ItemSetStatus) typeIDs() []string {
+	ids := make([]string, 0, len(s.ItemTypes))
+	for _, t := range s.ItemTypes {
+		if t.ItemType != nil && !slices.Contains(ids, t.ItemType.ID) {
+			ids = append(ids, t.ItemType.ID)
+		}
+	}
+	return ids
 }
 
 // Removal returns what a confirmation built from s lists as deleted: the
@@ -186,9 +202,9 @@ type ItemSetRemoveResult struct {
 //
 // Removing deletes only the types and fields the set created that no item
 // uses: no item, in Trash or not, of the type, and no item with a value of
-// the field. It deletes no more than the caller names, so what a
-// confirmation listed bounds it. It is safe to repeat; a later run deletes
-// what has become unused since.
+// the field, and never the group's last type. It deletes no more than the
+// caller names, so what a confirmation listed bounds it. It is safe to
+// repeat; a later run deletes what has become unused since.
 type ItemSetService struct {
 	def       models.ItemSetDefinition
 	itemTypes registry.ItemTypeRegistry
@@ -253,7 +269,25 @@ func (s *ItemSetService) Status(ctx context.Context) (*ItemSetStatus, error) {
 		}
 		st.Fields = append(st.Fields, fs)
 	}
+
+	setTypes := st.typeIDs()
+	for i := range st.Fields {
+		if f := st.Fields[i].Field; f != nil {
+			st.Fields[i].MissingTemplates = missingTemplates(f.Templates, setTypes)
+		}
+	}
 	return st, nil
+}
+
+// missingTemplates counts the types of typeIDs that templates do not name.
+func missingTemplates(templates []models.CustomFieldTemplate, typeIDs []string) int {
+	missing := 0
+	for _, id := range typeIDs {
+		if !slices.ContainsFunc(templates, func(t models.CustomFieldTemplate) bool { return t.ItemTypeID == id }) {
+			missing++
+		}
+	}
+	return missing
 }
 
 // keepLastType keeps one type when removing the set would delete every type
@@ -451,9 +485,13 @@ func (s *ItemSetService) createItemType(ctx context.Context, e models.ItemSetIte
 		return t, true, nil
 	}
 	if errors.Is(err, registry.ErrAlreadyExists) {
-		if existing, gerr := s.itemTypes.GetByName(ctx, e.Name); gerr == nil {
-			return existing, false, nil
+		// A lookup that finds nothing means the type went away again: its
+		// ErrNotFound makes Add run once more.
+		existing, gerr := s.itemTypes.GetByName(ctx, e.Name)
+		if gerr != nil {
+			return nil, false, errxtrace.Wrap("failed to get the item type of the set's name", gerr, errx.Attrs("name", e.Name))
 		}
+		return existing, false, nil
 	}
 	return nil, false, errxtrace.Wrap("failed to create the set's item type", err, errx.Attrs("name", e.Name))
 }
@@ -478,9 +516,13 @@ func (s *ItemSetService) createField(ctx context.Context, e models.ItemSetField,
 		return f, true, nil
 	}
 	if errors.Is(err, registry.ErrAlreadyExists) {
-		if existing, gerr := s.fields.GetByName(ctx, e.Name); gerr == nil {
-			return existing, false, nil
+		// As for a type: a field that went away again makes Add run once
+		// more.
+		existing, gerr := s.fields.GetByName(ctx, e.Name)
+		if gerr != nil {
+			return nil, false, errxtrace.Wrap("failed to get the custom field of the set's name", gerr, errx.Attrs("name", e.Name))
 		}
+		return existing, false, nil
 	}
 	return nil, false, errxtrace.Wrap("failed to create the set's custom field", err, errx.Attrs("name", e.Name))
 }
@@ -521,7 +563,10 @@ func (s *ItemSetService) Remove(ctx context.Context, sel ItemSetRemoval) (*ItemS
 		if ts.ItemType == nil || !slices.Contains(sel.ItemTypeIDs, ts.ItemType.ID) {
 			continue
 		}
-		if !ts.Removable() {
+		// The status keeps a last type counting every removable type, not
+		// the selected ones; the registry refuses the delete that would
+		// leave the group without a type, so that check is left to it.
+		if !ts.Removable() && ts.KeepReason != ItemSetKeepLastType {
 			res.KeptItemTypes = append(res.KeptItemTypes, ts.ItemType.DisplayName())
 			continue
 		}

@@ -254,12 +254,17 @@
         "added": "Přidáno sadou",
         "own": "Vlastní ve skupině",
         "takenType": "Nepřidáno: tento název má jiný typ sady",
-        "takenField": "Nepřidáno: tento název má jiné pole sady"
+        "takenField": "Nepřidáno: tento název má jiné pole sady",
+        "notOnTypes_one": "nenabízí se u {{count}} typu sady",
+        "notOnTypes_few": "nenabízí se u {{count}} typů sady",
+        "notOnTypes_many": "nenabízí se u {{count}} typu sady",
+        "notOnTypes_other": "nenabízí se u {{count}} typů sady"
       },
       "removedKept_one": "Ponecháno: {{names}}. Od otevření potvrzení se změnilo.",
       "removedKept_few": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
       "removedKept_many": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
-      "removedKept_other": "Ponecháno: {{names}}. Od otevření potvrzení se změnily."
+      "removedKept_other": "Ponecháno: {{names}}. Od otevření potvrzení se změnily.",
+      "linksMissing": "Některá pole sady se zatím nenabízejí u všech jejích typů."
     }
   },
   "validation": {

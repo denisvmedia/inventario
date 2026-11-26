@@ -243,6 +243,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 	})
 
 	runItemSetChangeContract(t, newEnv)
+	runItemSetCompletenessContract(t, newEnv)
 }
 
 // newCollectionSetService returns the Collection set service of env's
@@ -368,6 +369,96 @@ func runItemSetChangeContract(t *testing.T, newEnv func(t *testing.T) CustomFiel
 		removed := removeConfirmed(c, env, svc)
 		c.Check(removed.DeletedItemTypes, qt.HasLen, len(def.ItemTypes)-1)
 		c.Check(removed.DeletedItemTypes, qt.Contains, "stamps")
+	})
+}
+
+// runItemSetCompletenessContract checks what makes the set complete and
+// which type a removal keeps as the group's last.
+func runItemSetCompletenessContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
+	t.Helper()
+	def := models.CollectionSet
+	newService := newCollectionSetService
+
+	t.Run("item set: the group's own types and fields are complete once the set's fields are on its types", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		svc := newService(env)
+		for _, e := range def.ItemTypes {
+			_, err := env.TypesA.Create(env.CtxA, models.ItemType{Name: e.Name, Icon: e.Icon})
+			c.Assert(err, qt.IsNil)
+		}
+		for _, e := range def.Fields {
+			_, err := env.FieldsA.Create(env.CtxA, models.CustomFieldDefinition{
+				Name: e.Name, Type: e.Type, Options: slices.Clone(models.ValuerSlice[models.CustomFieldOption](e.Options)),
+			})
+			c.Assert(err, qt.IsNil)
+		}
+
+		st, err := svc.Status(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		for _, fs := range st.Fields {
+			c.Check(fs.State, qt.Equals, services.ItemSetEntryOwn, qt.Commentf("field %s", fs.Entry.Key))
+			c.Check(fs.MissingTemplates, qt.Equals, len(def.ItemTypes), qt.Commentf("field %s", fs.Entry.Key))
+		}
+		c.Check(st.Complete(), qt.IsFalse, qt.Commentf("every row is there, but no field is offered on the types"))
+
+		res, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(res.CreatedItemTypes, qt.Equals, 0)
+		c.Check(res.CreatedFields, qt.Equals, 0)
+		c.Check(res.AddedTemplates, qt.Equals, len(def.Fields)*len(def.ItemTypes))
+		c.Check(res.Status.Complete(), qt.IsTrue)
+
+		// A member takes a field off one of the set's types; adding puts it
+		// back.
+		signed := *res.Status.Fields[3].Field
+		signed.Templates = signed.Templates[1:]
+		_, err = env.FieldsA.Update(env.CtxA, signed)
+		c.Assert(err, qt.IsNil)
+		st, err = svc.Status(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(st.Fields[3].MissingTemplates, qt.Equals, 1)
+		c.Check(st.Complete(), qt.IsFalse)
+		again, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(again.AddedTemplates, qt.Equals, 1)
+		c.Check(again.Status.Complete(), qt.IsTrue)
+	})
+
+	t.Run("item set: a removal keeps a last type only when it would leave the group none", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		svc := newService(env)
+		res, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		for _, b := range models.BuiltinItemTypes {
+			builtin := mustTypeBySlug(c, env.TypesA, env.CtxA, b.Slug)
+			c.Assert(env.TypesA.Delete(env.CtxA, builtin.ID), qt.IsNil)
+		}
+
+		// The status keeps Cards as the last type, yet removing Cards alone
+		// leaves the six other types of the set.
+		cards := res.Status.ItemTypes[6].ItemType
+		only, err := svc.Remove(env.CtxA, services.ItemSetRemoval{ItemTypeIDs: []string{cards.ID}})
+		c.Assert(err, qt.IsNil)
+		c.Check(only.DeletedItemTypes, qt.DeepEquals, []string{"Cards"})
+		c.Check(only.KeptItemTypes, qt.HasLen, 0)
+
+		// Listing every type left keeps one of them.
+		var left []string
+		for _, ts := range only.Status.ItemTypes {
+			if ts.ItemType != nil {
+				left = append(left, ts.ItemType.ID)
+			}
+		}
+		c.Assert(left, qt.HasLen, len(def.ItemTypes)-1)
+		rest, err := svc.Remove(env.CtxA, services.ItemSetRemoval{ItemTypeIDs: left})
+		c.Assert(err, qt.IsNil)
+		c.Check(rest.DeletedItemTypes, qt.HasLen, len(def.ItemTypes)-2)
+		c.Check(rest.KeptItemTypes, qt.DeepEquals, []string{"Watches"})
+		types, err := env.TypesA.List(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(types, qt.HasLen, 1)
 	})
 }
 

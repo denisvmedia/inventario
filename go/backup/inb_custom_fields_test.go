@@ -571,7 +571,9 @@ func TestINBRestore_38ArchiveMarksOnlyTheRowsItCreates(t *testing.T) {
 	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
 
 	st := must.Must(dstSet.Status(dst.ctx))
-	c.Check(st.Complete(), qt.IsTrue)
+	// The restore leaves the group's own Condition as it was, on none of
+	// the set's types, so the set is not complete until it is added again.
+	c.Check(st.Complete(), qt.IsFalse)
 	for _, ts := range st.ItemTypes {
 		want := services.ItemSetEntryAdded
 		if ts.Entry.Key == "coins" {
@@ -587,7 +589,16 @@ func TestINBRestore_38ArchiveMarksOnlyTheRowsItCreates(t *testing.T) {
 			c.Check(fs.Field.ID, qt.Equals, condition.ID)
 		}
 		c.Check(fs.State, qt.Equals, want, qt.Commentf("field %s", fs.Entry.Key))
+		wantMissing := 0
+		if fs.Entry.Key == "condition" {
+			wantMissing = len(models.CollectionSet.ItemTypes)
+		}
+		c.Check(fs.MissingTemplates, qt.Equals, wantMissing, qt.Commentf("field %s", fs.Entry.Key))
 	}
+	added := must.Must(dstSet.Add(dst.ctx))
+	c.Check(added.AddedTemplates, qt.Equals, len(models.CollectionSet.ItemTypes))
+	c.Check(added.Status.Complete(), qt.IsTrue)
+	st = added.Status
 
 	removed := must.Must(dstSet.Remove(dst.ctx, st.Removal()))
 	c.Check(removed.DeletedItemTypes, qt.HasLen, len(models.CollectionSet.ItemTypes)-1)
