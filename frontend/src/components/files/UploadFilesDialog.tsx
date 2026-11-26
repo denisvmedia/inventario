@@ -563,7 +563,7 @@ function SelectStep({
       </div>
       {items.length > 0 ? (
         <ul
-          className="max-h-64 divide-y overflow-y-auto rounded-md border"
+          className="max-h-64 divide-y overflow-y-auto rounded-md border max-sm:max-h-none"
           data-testid="files-upload-list"
         >
           {items.map((it) => (
@@ -620,7 +620,7 @@ function MetadataStep({
   return (
     <div className="flex flex-col gap-3">
       <ul
-        className="max-h-[60vh] divide-y overflow-y-auto rounded-md border"
+        className="max-h-[60vh] divide-y overflow-y-auto rounded-md border max-sm:max-h-none"
         data-testid="files-upload-metadata-list"
       >
         {items.map((it) => (
@@ -762,7 +762,7 @@ function ProgressStep({ items, totalDone, linked, onUseExisting, onKeepBoth }: P
           defaultValue: "{{count}} of {{total}} uploaded",
         })}
       </p>
-      <ul className="max-h-64 divide-y overflow-y-auto rounded-md border">
+      <ul className="max-h-64 divide-y overflow-y-auto rounded-md border max-sm:max-h-none">
         {items.map((it) => (
           <li
             key={it.id}

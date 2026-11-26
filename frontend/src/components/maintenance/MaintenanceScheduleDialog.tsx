@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
 import type { MaintenanceScheduleEntity } from "@/features/maintenance/api"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 import {
   maintenanceFormSchema,
@@ -47,11 +48,13 @@ interface MaintenanceScheduleDialogProps {
 // MaintenanceScheduleDialog is the create/edit form for a maintenance
 // schedule (#1368). Backed by react-hook-form + zodResolver per the
 // project standard (mirrors LendDialog / SendForServiceDialog /
-// TagFormDialog). The form lives in a child keyed on (open,
-// initial?.id) so each open cycle / create→edit switch gets a fresh
+// TagFormDialog). The form lives in the dialog content, which mounts on
+// open and unmounts once the close animation ends, and is keyed on
+// initial?.id, so each open cycle / create→edit switch gets a fresh
 // useForm pass with the right defaultValues — that avoids the
 // cascading-setState-in-useEffect anti-pattern flagged by the
-// react-hooks/set-state-in-effect lint rule.
+// react-hooks/set-state-in-effect lint rule. While the dialog closes it
+// keeps the schedule it showed: the parent clears `initial` on close.
 export function MaintenanceScheduleDialog({
   open,
   onOpenChange,
@@ -59,18 +62,17 @@ export function MaintenanceScheduleDialog({
   onSubmit,
   submitting,
 }: MaintenanceScheduleDialogProps) {
+  const shown = useValueWhileOpen(open, initial)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent variant="fullscreen-mobile">
-        {open ? (
-          <MaintenanceScheduleForm
-            key={initial?.id ?? "create"}
-            initial={initial}
-            onOpenChange={onOpenChange}
-            onSubmit={onSubmit}
-            submitting={submitting}
-          />
-        ) : null}
+        <MaintenanceScheduleForm
+          key={shown?.id ?? "create"}
+          initial={shown}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+        />
       </DialogContent>
     </Dialog>
   )

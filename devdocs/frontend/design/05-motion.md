@@ -96,6 +96,15 @@ Inside it, a wizard swaps steps without the container-resize animation
 below: the dialog's height is the screen's, so there is no box to
 resize, and `StepResizeWrapper` applies its pixel height from `sm` up.
 
+The close animation needs something to animate. Keep the body mounted
+until Radix finishes the exit: render the form inside `DialogContent`
+without an `open ? … : null` guard (the content unmounts it after the
+exit, so the next open still starts fresh), and keep `DialogContent`
+itself out of such a guard. When the parent clears the record the dialog
+shows in the same update that closes it, read it through
+`useValueWhileOpen` so the dialog does not turn into an empty create form
+while it slides away.
+
 ## Smoothness — no abrupt jerks
 
 Layout changes in place — wizard step swaps, content reveals
@@ -224,9 +233,11 @@ churn; a row's reveal-on-click affordance → toggle reveal pattern.
 
 ## Reduced motion
 
-`prefers-reduced-motion: reduce` disables `tw-animate-css` utilities
-automatically (they're gated on
-`@media (prefers-reduced-motion: no-preference)`).
+`tw-animate-css` (1.4.0) has no reduced-motion rule of its own:
+`animate-in`, `animate-out` and the fade, zoom and slide utilities run the
+same under `prefers-reduced-motion: reduce`. Gate them yourself with
+`motion-safe:` or `motion-reduce:`. The full-screen dialog does this: its
+slide is under `motion-safe:`, so with reduced motion it only fades.
 
 For your own transitions, gate explicitly with the `motion-reduce:`
 prefix:

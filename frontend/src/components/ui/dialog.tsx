@@ -24,15 +24,20 @@ const DialogLayoutContext = React.createContext<{
 const closeButtonClassName =
   "opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
 
-// Below `sm` the content box is the scroll container. Every direct child
-// keeps its height (`*:shrink-0`) so an inner list with its own max height
-// does not collapse. A direct child that wraps the footer (usually the
-// form) grows to fill the screen and drops its bottom padding, so the
-// footer (`mt-auto`) sits on the bottom edge even when the content is
-// short. Under reduced motion the slide becomes the default fade.
+// Below `sm` the content box is the scroll container. Its scroll padding
+// keeps a field the browser scrolls to on focus clear of the sticky header
+// (up to three lines of title and description) and footer (up to two rows of
+// buttons). Every direct child keeps its height (`*:shrink-0`) so an inner
+// list with its own max height does not collapse. A direct child that wraps
+// the footer (usually the form) grows to fill the screen and drops its bottom
+// padding, so the footer (`mt-auto`) sits on the bottom edge even when the
+// content is short. Under reduced motion the slide becomes the default fade.
+// From `sm` up the card is never taller than the screen (a phone held
+// sideways) and scrolls as a whole.
 const fullscreenMobileContentClassName = cn(
   "max-sm:top-0 max-sm:left-0 max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:translate-none max-sm:flex-col",
-  "max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-0 max-sm:shadow-none",
+  "max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:scroll-pt-36 max-sm:scroll-pb-28 max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-0 max-sm:shadow-none",
+  "sm:max-h-[calc(100dvh-2rem)] sm:overflow-y-auto",
   "max-sm:*:shrink-0",
   "max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-1 max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-col max-sm:[&>*:has(>[data-slot=dialog-footer])]:pb-0",
   "max-sm:duration-300 max-sm:data-[state=closed]:ease-in max-sm:data-[state=open]:ease-out",
@@ -42,10 +47,11 @@ const fullscreenMobileContentClassName = cn(
 )
 
 // The header sticks to the top of the scrolling content and spans it edge to
-// edge (`-mx-4` cancels the content's side padding). `pr-12` keeps the title
-// clear of the close button.
+// edge (`-mx-4` cancels the content's side padding). Its text is left-aligned
+// at every width, next to the close button. `pr-14` keeps the title clear of
+// that button.
 const fullscreenMobileHeaderClassName =
-  "text-left max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:bg-background max-sm:px-4 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top))] max-sm:pb-3 max-sm:pr-12"
+  "text-left max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:bg-background max-sm:px-4 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top))] max-sm:pb-3 max-sm:pr-14"
 
 // The footer sticks to the bottom, lays its buttons out in a row (wrapping
 // when they do not fit) and pads itself above the home indicator.
@@ -150,13 +156,13 @@ function DialogHeader({ className, children, ...props }: React.ComponentProps<"d
         // Below `sm` the close button stays with the sticky header. It is the
         // first control in the dialog there, so it takes the focus on open
         // and the on-screen keyboard stays closed until a field is tapped.
-        // The ring shows for keyboard focus only. From `sm` up it is hidden
-        // and the content's own close button (last in the dialog) is used,
-        // as in "default".
+        // It is 44px square, a full touch target. The ring shows for keyboard
+        // focus only. From `sm` up it is hidden and the content's own close
+        // button (last in the dialog) is used, as in "default".
         <DialogPrimitive.Close
           data-slot="dialog-close"
           className={cn(
-            "absolute top-1 right-1 mt-[env(safe-area-inset-top)] inline-flex size-10 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:hidden",
+            "absolute top-1 right-1 mt-[env(safe-area-inset-top)] inline-flex size-11 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:hidden",
             closeButtonClassName
           )}
         >
@@ -176,6 +182,7 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const { t } = useTranslation()
   const { variant } = React.useContext(DialogLayoutContext)
   return (
     <div
@@ -190,7 +197,7 @@ function DialogFooter({
       {children}
       {showCloseButton && (
         <DialogPrimitive.Close asChild>
-          <Button variant="outline">Close</Button>
+          <Button variant="outline">{t("common:actions.close")}</Button>
         </DialogPrimitive.Close>
       )}
     </div>

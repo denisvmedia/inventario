@@ -140,6 +140,8 @@ export function MigrateCurrencyDialog({
   // on every reopen — that's how we keep wizard state (step, picked
   // currency, rate input, preview) clean without an `open`-watching
   // effect that would trip the react-hooks/set-state-in-effect lint.
+  // The body lives in the dialog content, which also unmounts it once the
+  // close animation ends.
   const [openCount, setOpenCount] = useState(0)
   const handleOpenChange = (next: boolean) => {
     if (next) setOpenCount((n) => n + 1)
@@ -147,7 +149,11 @@ export function MigrateCurrencyDialog({
   }
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
-      {open ? (
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-2xl"
+        data-testid="migrate-currency-dialog"
+      >
         <MigrateCurrencyDialogBody
           key={openCount}
           groupName={groupName}
@@ -155,7 +161,7 @@ export function MigrateCurrencyDialog({
           groupSlug={groupSlug}
           onClose={() => onOpenChange(false)}
         />
-      ) : null}
+      </DialogContent>
     </Dialog>
   )
 }
@@ -328,12 +334,7 @@ function MigrateCurrencyDialogBody({
   }
 
   return (
-    <DialogContent
-      variant="fullscreen-mobile"
-      className="sm:max-w-2xl"
-      data-testid="migrate-currency-dialog"
-      data-step={step}
-    >
+    <>
       <DialogHeader>
         <DialogTitle>{t("groups:settings.dialog.title")}</DialogTitle>
         <DialogDescription>{t("groups:settings.migrateCurrencyHelp")}</DialogDescription>
@@ -466,7 +467,7 @@ function MigrateCurrencyDialogBody({
           )}
         </div>
       </DialogFooter>
-    </DialogContent>
+    </>
   )
 }
 
@@ -482,6 +483,7 @@ function WizardSteps({ step }: { step: Step }) {
     <ol
       className="flex flex-wrap items-center gap-2 text-xs"
       data-testid="wizard-steps"
+      data-step={step}
       aria-label="wizard"
     >
       {items.map((item, idx) => {

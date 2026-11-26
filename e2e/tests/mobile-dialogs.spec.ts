@@ -1,10 +1,11 @@
 /**
  * Long-form dialogs on a phone (#1627).
  *
- * Below 640px the Add item and location dialogs fill the screen: the
- * header with the title and close button sticks to the top, the footer
- * with the actions sticks to the bottom, and the form scrolls between
- * them. From 640px up they stay the centered card.
+ * Below 640px the Add item, location and API token dialogs fill the
+ * screen: the header with the title and close button sticks to the top
+ * and takes the focus on open, the footer with the actions sticks to the
+ * bottom, and the form scrolls between them. From 640px up they stay the
+ * centered card. Each width shows exactly one close button.
  */
 import { test } from '../fixtures/app-fixture.js';
 import { expect, type Locator, type Page } from '@playwright/test';
@@ -41,8 +42,21 @@ async function expectPinned(dialog: Locator, size: Size) {
   await expect(footer.getByRole('button').last()).toBeInViewport();
 }
 
-async function expectFullScreen(page: Page, dialog: Locator) {
+function closeButtons(dialog: Locator) {
+  return dialog.getByRole('button', { name: 'Close', exact: true });
+}
+
+// `justOpened`: the dialog has just opened, so the focus is where Radix put it.
+async function expectFullScreen(page: Page, dialog: Locator, { justOpened = false } = {}) {
   await expect(dialog).toHaveAttribute('data-state', 'open');
+  const headerClose = dialog.locator('[data-slot="dialog-header"]').getByRole('button', {
+    name: 'Close',
+    exact: true,
+  });
+  // The header's close button is the only one on a phone, and the first
+  // control, so it takes the focus on open and no field opens the keyboard.
+  await expect(closeButtons(dialog)).toHaveCount(1);
+  if (justOpened) await expect(headerClose).toBeFocused();
   // Poll until the slide-up has finished.
   await expect.poll(async () => rounded(await box(dialog))).toEqual([0, 0, PHONE.width, PHONE.height]);
   expect(await dialog.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).toBe('0px');
@@ -61,7 +75,7 @@ async function expectFullScreen(page: Page, dialog: Locator) {
   }
   await dialog.evaluate((el) => el.scrollTo(0, 0));
   await page.setViewportSize(PHONE);
-  return dialog.locator('[data-slot="dialog-header"]').getByRole('button', { name: 'Close' });
+  return headerClose;
 }
 
 async function expectCenteredCard(dialog: Locator, maxWidth: number) {
@@ -76,7 +90,8 @@ async function expectCenteredCard(dialog: Locator, maxWidth: number) {
   await expect(
     dialog.locator('[data-slot="dialog-header"]').getByRole('button', { name: 'Close' }),
   ).toBeHidden();
-  await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible();
+  await expect(closeButtons(dialog)).toHaveCount(1);
+  await expect(closeButtons(dialog)).toBeVisible();
 }
 
 test.describe('Long-form dialogs on a phone (#1627)', () => {
@@ -90,7 +105,7 @@ test.describe('Long-form dialogs on a phone (#1627)', () => {
     await page.getByTestId('commodities-add-button').click();
     const dialog = page.getByTestId('commodity-form-dialog');
     await expect(dialog.getByTestId('commodity-form-ai-step')).toBeVisible();
-    await expectFullScreen(page, dialog);
+    await expectFullScreen(page, dialog, { justOpened: true });
 
     // Basics has more fields than the scan step.
     await dialog.getByTestId('commodity-form-ai-fill-manually').click();
@@ -108,6 +123,38 @@ test.describe('Long-form dialogs on a phone (#1627)', () => {
     await expect(dialog).toBeHidden();
   });
 
+  test('Add item asks to save the progress before closing on a phone', async ({ page, recorder }) => {
+    await navigateWithAuth(page, '/commodities', recorder);
+    await page.setViewportSize(PHONE);
+
+    await page.getByTestId('commodities-add-button').click();
+    const dialog = page.getByTestId('commodity-form-dialog');
+    await dialog.getByTestId('commodity-form-ai-fill-manually').click();
+    const name = dialog.getByLabel(/^Name$/i);
+    await name.fill('Phone dialog test item');
+    const close = await expectFullScreen(page, dialog);
+    await close.click();
+
+    // The confirmation is a card above the full-screen dialog.
+    const confirm = page.getByTestId('commodity-form-close-confirm');
+    await expect(confirm).toBeVisible();
+    await expect(confirm.getByRole('heading', { name: 'Save your progress?' })).toBeVisible();
+    await expect.poll(async () => Math.round((await box(confirm)).width)).toBeLessThan(PHONE.width);
+    expect(await confirm.evaluate((el) => getComputedStyle(el).borderTopLeftRadius)).not.toBe('0px');
+    await recorder.takeScreenshot('mobile-dialogs-05-close-confirm-phone');
+
+    await confirm.getByTestId('commodity-form-close-confirm-cancel').click();
+    await expect(confirm).toBeHidden();
+    await expect(dialog).toBeVisible();
+    await expect(name).toHaveValue('Phone dialog test item');
+
+    await close.click();
+    await expect(confirm).toBeVisible();
+    await confirm.getByTestId('commodity-form-close-confirm-discard').click();
+    await expect(confirm).toBeHidden();
+    await expect(dialog).toBeHidden();
+  });
+
   test('New location fills a phone screen and is a centered card on a desktop', async ({
     page,
     recorder,
@@ -117,7 +164,7 @@ test.describe('Long-form dialogs on a phone (#1627)', () => {
 
     await page.getByTestId('locations-add-button').click();
     const dialog = page.getByTestId('location-form-dialog');
-    const close = await expectFullScreen(page, dialog);
+    const close = await expectFullScreen(page, dialog, { justOpened: true });
     await recorder.takeScreenshot('mobile-dialogs-03-location-phone');
     await close.click();
     await expect(dialog).toBeHidden();
@@ -126,6 +173,31 @@ test.describe('Long-form dialogs on a phone (#1627)', () => {
     await page.getByTestId('locations-add-button').click();
     await expectCenteredCard(dialog, 512);
     await recorder.takeScreenshot('mobile-dialogs-04-location-desktop');
+    await page.keyboard.press('Escape');
+    await expect(dialog).toBeHidden();
+  });
+
+  // Here the header and the footer sit inside the form, not directly in the
+  // dialog.
+  test('Create API token fills a phone screen and is a centered card on a desktop', async ({
+    page,
+    recorder,
+  }) => {
+    await navigateWithAuth(page, '/profile/api-tokens', recorder);
+    await expect(page.getByTestId('api-tokens-page')).toBeVisible();
+    await page.setViewportSize(PHONE);
+
+    await page.getByTestId('api-tokens-create-btn').click();
+    const dialog = page.getByTestId('api-token-create-dialog');
+    await expect(dialog.locator('form [data-slot="dialog-header"]')).toBeAttached();
+    const close = await expectFullScreen(page, dialog, { justOpened: true });
+    await recorder.takeScreenshot('mobile-dialogs-06-api-token-phone');
+    await close.click();
+    await expect(dialog).toBeHidden();
+
+    await page.setViewportSize(DESKTOP);
+    await page.getByTestId('api-tokens-create-btn').click();
+    await expectCenteredCard(dialog, 448);
     await page.keyboard.press('Escape');
     await expect(dialog).toBeHidden();
   });

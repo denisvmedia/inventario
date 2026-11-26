@@ -24,14 +24,21 @@ function FormDialog({
   variant,
   onOpenChange = () => {},
   footerClassName,
+  showCloseButton,
 }: {
   variant?: DialogContentVariant
   onOpenChange?: (open: boolean) => void
   footerClassName?: string
+  showCloseButton?: boolean
 }) {
   return (
     <Dialog open onOpenChange={onOpenChange}>
-      <DialogContent variant={variant} className="sm:max-w-lg" data-testid="content">
+      <DialogContent
+        variant={variant}
+        showCloseButton={showCloseButton}
+        className="sm:max-w-lg"
+        data-testid="content"
+      >
         <DialogHeader data-testid="header">
           <DialogTitle>New location</DialogTitle>
           <DialogDescription>Where your things live.</DialogDescription>
@@ -87,6 +94,9 @@ describe("<DialogContent variant>", () => {
         "max-sm:border-0",
         "max-sm:shadow-none",
         "max-sm:overflow-y-auto",
+        // A focused field stays clear of the sticky header and footer.
+        "max-sm:scroll-pt-36",
+        "max-sm:scroll-pb-28",
         // Slides up and down, and only fades under reduced motion.
         "max-sm:motion-safe:data-[state=open]:slide-in-from-bottom",
         "max-sm:motion-safe:data-[state=closed]:slide-out-to-bottom",
@@ -100,6 +110,9 @@ describe("<DialogContent variant>", () => {
         "border",
         "sm:max-w-lg",
         "data-[state=open]:zoom-in-95",
+        // A card on a phone held sideways is never taller than the screen.
+        "sm:max-h-[calc(100dvh-2rem)]",
+        "sm:overflow-y-auto",
       ])
     )
     expect(classesOf("header")).toEqual(
@@ -109,9 +122,11 @@ describe("<DialogContent variant>", () => {
         "max-sm:border-b",
         "max-sm:bg-background",
         "max-sm:pt-[calc(0.75rem+env(safe-area-inset-top))]",
-        "sm:text-left",
+        "max-sm:pr-14",
+        "text-left",
       ])
     )
+    expect(classesOf("header")).not.toContain("text-center")
     expect(classesOf("footer")).toEqual(
       expect.arrayContaining([
         "max-sm:sticky",
@@ -130,9 +145,48 @@ describe("<DialogContent variant>", () => {
     render(<FormDialog variant="fullscreen-mobile" />)
     const [first, last] = screen.getAllByRole("button", { name: "Close" })
     expect(within(screen.getByTestId("header")).getByRole("button", { name: "Close" })).toBe(first)
-    expect(first.className).toContain("sm:hidden")
+    expect(first.className.split(/\s+/)).toEqual(expect.arrayContaining(["sm:hidden", "size-11"]))
     expect(last.className).toContain("max-sm:hidden")
     expect(screen.getByTestId("header")).not.toContainElement(last)
+  })
+
+  it("renders no close button at all with showCloseButton={false}", () => {
+    render(<FormDialog variant="fullscreen-mobile" showCloseButton={false} />)
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument()
+    // The header keeps the full-screen layout.
+    expect(classesOf("header")).toEqual(expect.arrayContaining(["max-sm:sticky", "max-sm:top-0"]))
+  })
+
+  it("lays out a dialog nested inside a full-screen one as a card", () => {
+    render(
+      <Dialog open>
+        <DialogContent variant="fullscreen-mobile" data-testid="outer">
+          <DialogHeader data-testid="outer-header">
+            <DialogTitle>Add item</DialogTitle>
+            <DialogDescription>Step 1 of 5</DialogDescription>
+          </DialogHeader>
+          <Dialog open>
+            <DialogContent data-testid="inner">
+              <DialogHeader data-testid="inner-header">
+                <DialogTitle>Pick a location</DialogTitle>
+                <DialogDescription>Where it lives.</DialogDescription>
+              </DialogHeader>
+              <DialogFooter data-testid="inner-footer" showCloseButton />
+            </DialogContent>
+          </Dialog>
+        </DialogContent>
+      </Dialog>
+    )
+    expect(classesOf("outer-header")).toContain("max-sm:sticky")
+    const inner = screen.getByTestId("inner")
+    expect(inner).toHaveAttribute("data-variant", "default")
+    expect(inner.className).not.toContain("max-sm:")
+    expect(screen.getByTestId("inner-header").className).not.toContain("max-sm:")
+    expect(screen.getByTestId("inner-footer").className).not.toContain("max-sm:")
+    // The inner header has no close button of its own; the inner card has its
+    // corner one and the footer's.
+    expect(within(screen.getByTestId("inner-header")).queryByRole("button")).toBeNull()
+    expect(within(inner).getAllByRole("button", { name: "Close" })).toHaveLength(2)
   })
 
   it("lets the call site override the footer alignment", () => {

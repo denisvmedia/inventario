@@ -35,6 +35,7 @@ import {
   type ReminderFormInput,
   type ReminderFormOutput,
 } from "@/features/reminders/schemas"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { applyServerFieldErrors } from "@/lib/form-errors"
 
 interface ReminderDialogProps {
@@ -46,8 +47,10 @@ interface ReminderDialogProps {
 }
 
 // ReminderDialog creates or edits an item reminder (#2805). The form lives
-// in a child keyed on the reminder id so every open starts from fresh
-// defaults, as in MaintenanceScheduleDialog.
+// in the dialog content, which mounts on open and unmounts once the close
+// animation ends, so every open starts from fresh defaults; the key starts
+// a new form when the reminder changes. While the dialog closes it keeps the
+// reminder it showed, as in MaintenanceScheduleDialog.
 export function ReminderDialog({
   open,
   onOpenChange,
@@ -55,18 +58,17 @@ export function ReminderDialog({
   onSubmit,
   submitting,
 }: ReminderDialogProps) {
+  const shown = useValueWhileOpen(open, initial)
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent variant="fullscreen-mobile">
-        {open ? (
-          <ReminderForm
-            key={initial?.id ?? "create"}
-            initial={initial}
-            onOpenChange={onOpenChange}
-            onSubmit={onSubmit}
-            submitting={submitting}
-          />
-        ) : null}
+        <ReminderForm
+          key={shown?.id ?? "create"}
+          initial={shown}
+          onOpenChange={onOpenChange}
+          onSubmit={onSubmit}
+          submitting={submitting}
+        />
       </DialogContent>
     </Dialog>
   )

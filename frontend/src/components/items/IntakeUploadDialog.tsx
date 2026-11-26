@@ -102,10 +102,19 @@ export interface IntakeUploadDialogProps {
 // IntakeUploadDialog sends dropped files to batch intake (#2810): it uploads
 // each file, then queues the batch for the background scan. Each file is a
 // purchase of its own unless the member says that all files show one item.
+// The form lives in the dialog content, which mounts on open and unmounts
+// once the close animation ends, so every open starts with the files just
+// dropped.
 export function IntakeUploadDialog(props: IntakeUploadDialogProps) {
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open ? <IntakeUploadForm {...props} /> : null}
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="intake-upload-dialog"
+      >
+        <IntakeUploadForm {...props} />
+      </DialogContent>
     </Dialog>
   )
 }
@@ -246,11 +255,7 @@ function IntakeUploadForm({
   }
 
   return (
-    <DialogContent
-      variant="fullscreen-mobile"
-      className="sm:max-w-lg"
-      data-testid="intake-upload-dialog"
-    >
+    <>
       <DialogHeader>
         <DialogTitle>{t("commodities:intake.upload.title")}</DialogTitle>
         <DialogDescription>{t("commodities:intake.upload.description")}</DialogDescription>
@@ -266,7 +271,7 @@ function IntakeUploadForm({
 
       {files.length > 0 ? (
         <ul
-          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border"
+          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border max-sm:max-h-none"
           data-testid="intake-upload-files"
         >
           {files.map((f) => {
@@ -413,7 +418,7 @@ function IntakeUploadForm({
               : t("commodities:intake.upload.submit", { count: sendable.length })}
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </>
   )
 }
 

@@ -63,8 +63,9 @@ interface Props {
 
 // CreateAPITokenDialog collects the token settings, re-authenticates the
 // user, and then shows the new token exactly once. The secret lives only in
-// this component's state: closing the dialog unmounts it and the value is
-// gone. It is never written to the query cache.
+// CreateFlow's state, inside the dialog content: the content unmounts once
+// the close animation ends and the value is gone. It is never written to
+// the query cache.
 export function CreateAPITokenDialog({ open, onOpenChange }: Props) {
   // While the token is on screen a stray click outside the dialog must not
   // dismiss it: the value cannot be shown again. Escape and the buttons
@@ -84,12 +85,7 @@ export function CreateAPITokenDialog({ open, onOpenChange }: Props) {
           if (revealing) e.preventDefault()
         }}
       >
-        {open ? (
-          <CreateFlow
-            onRevealed={() => setRevealing(true)}
-            onClose={() => handleOpenChange(false)}
-          />
-        ) : null}
+        <CreateFlow onRevealed={() => setRevealing(true)} onClose={() => handleOpenChange(false)} />
       </DialogContent>
     </Dialog>
   )
