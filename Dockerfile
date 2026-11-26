@@ -21,6 +21,10 @@ RUN --mount=type=cache,target=/root/.npm \
 # Copy frontend source
 COPY frontend/ ./
 
+# The What's new page is built from the release notes (#1386); the Vite
+# plugin reads ../CHANGELOG.md and fails the build without it.
+COPY CHANGELOG.md /app/CHANGELOG.md
+
 # The version the UI shows, the same VERSION build arg the backend stage puts
 # into the binary. Declared after `npm ci` so a new version does not
 # invalidate the dependency layer.

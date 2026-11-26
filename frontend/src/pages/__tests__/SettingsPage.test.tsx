@@ -4,6 +4,7 @@ import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
+import whatsNewMeta from "virtual:whats-new/meta"
 
 import { SettingsPage } from "@/pages/SettingsPage"
 import { pickRadixSelect } from "@/test/radix"
@@ -770,6 +771,48 @@ describe("<SettingsPage />", () => {
     await user.click(await screen.findByTestId("settings-nav-help"))
     expect(screen.getByTestId("help-row-whatsNew")).toBeInTheDocument()
     expect(screen.queryByTestId("help-row-whatsNew-badge")).not.toBeInTheDocument()
+  })
+
+  // #1386 — the row opens the in-app page instead of GitHub Releases.
+  it("What's new row opens the in-app page", async () => {
+    server.use(...withGroupHandlers({}))
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    const row = screen.getByTestId("help-row-whatsNew")
+    expect(row).toHaveAttribute("href", "/whats-new?g=household")
+    expect(row).not.toHaveAttribute("target")
+    await user.click(row)
+    expect(await screen.findByTestId("loc")).toHaveAttribute("data-pathname", "/whats-new")
+  })
+
+  it("marks the What's new row and the Help tab while a release is unread", async () => {
+    server.use(...withGroupHandlers({ whatsNewLastSeenVersion: "0.0.1" }))
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    expect(await screen.findByTestId("settings-nav-help-unread")).toBeInTheDocument()
+    expect(screen.getByTestId("settings-nav-help")).toHaveTextContent("new release")
+    await user.click(screen.getByTestId("settings-nav-help"))
+    expect(await screen.findByTestId("help-row-whatsNew-unread")).toBeInTheDocument()
+  })
+
+  it("shows no unread dot once the newest release was seen", async () => {
+    let served = false
+    // Listed first so it answers before the default settings handler.
+    server.use(
+      msw.get(api("/g/household/settings"), () => {
+        served = true
+        return HttpResponse.json({ whatsNewLastSeenVersion: whatsNewMeta.latestVersion })
+      }),
+      ...withGroupHandlers({})
+    )
+    const user = userEvent.setup()
+    renderSettings("/settings?g=household")
+    await user.click(await screen.findByTestId("settings-nav-help"))
+    await waitFor(() => expect(served).toBe(true))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("help-row-whatsNew-unread")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("settings-nav-help-unread")).not.toBeInTheDocument()
   })
 
   it("merged support/feedback row opens the FeedbackDialog in place (#1387)", async () => {

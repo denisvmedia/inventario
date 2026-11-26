@@ -267,6 +267,16 @@ they are in the git history, and a changelog nobody can skim is a changelog
 nobody reads. Write for the person who hits the problem, not for the reviewer:
 say what was wrong, not which function changed. Link the issue.
 
+The entries also render in the app, on the What's new page, which reads the
+file when the frontend is built. The heading must be spelled exactly
+`### Operators`, because that spelling decides that only system administrators
+see the section. The page renders inline code, bold, `[text](url)` links and
+list items that start with `-`, with indented continuation lines. Code fences,
+tables, nested lists, italics and reference-style links show as plain text. Relative links
+resolve against the repository's `blob/master`. A test in
+`frontend/src/lib/__tests__/changelog.test.ts` fails on a release heading or a
+section heading the page cannot read.
+
 ### Cutting a release
 
 1. Rename `## [Unreleased]` to `## [X.Y.Z] - YYYY-MM-DD` and open a fresh
