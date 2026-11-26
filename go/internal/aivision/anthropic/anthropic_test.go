@@ -220,3 +220,81 @@ func TestAnthropicProvider_PDFDocumentBlock(t *testing.T) {
 	c.Assert(string(body), qt.Contains, `"media_type":"application/pdf"`)
 	c.Assert(string(body), qt.Not(qt.Contains), `"type":"image"`)
 }
+
+// TestAnthropicProvider_LabelsEachFile: every file is preceded by its
+// "File N" label, so the model can name the file a suggestion is about.
+func TestAnthropicProvider_LabelsEachFile(t *testing.T) {
+	c := qt.New(t)
+
+	provider, err := anthropic.New(anthropic.Config{APIKey: "sk-test"})
+	c.Assert(err, qt.IsNil)
+
+	body, err := provider.MarshalTestPayload(aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "kettle.jpg", ContentType: "image/jpeg", Data: []byte("jpeg")},
+			{Filename: "invoice.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	var payload struct {
+		Messages []struct {
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	c.Assert(json.Unmarshal(body, &payload), qt.IsNil)
+	c.Assert(payload.Messages, qt.HasLen, 1)
+	blocks := payload.Messages[0].Content
+	c.Assert(blocks, qt.HasLen, 5)
+	c.Check(blocks[0].Text, qt.Equals, "File 0")
+	c.Check(blocks[1].Type, qt.Equals, "image")
+	c.Check(blocks[2].Text, qt.Equals, "File 1")
+	c.Check(blocks[3].Type, qt.Equals, "document")
+	c.Check(blocks[4].Text, qt.Contains, "labeled File 0 to File 1")
+}
+
+// TestAnthropicProvider_ParsesFileSuggestions: the per-file suggestions of
+// the tool call reach the result, checked against the files of the request.
+func TestAnthropicProvider_ParsesFileSuggestions(t *testing.T) {
+	c := qt.New(t)
+
+	response := map[string]any{
+		"content": []map[string]any{{
+			"type": "tool_use",
+			"name": "record_product_extraction",
+			"input": map[string]any{
+				"items": []any{map[string]any{"name": map[string]any{"value": "Kettle", "confidence": 0.9}}},
+				"files": []any{
+					map[string]any{
+						"index":         0,
+						"document_type": map[string]any{"value": "invoice", "confidence": 0.9},
+						"title":         map[string]any{"value": "Bosch invoice, March 2024", "confidence": 0.8},
+					},
+					map[string]any{"index": 3, "title": map[string]any{"value": "No such file", "confidence": 0.8}},
+				},
+			},
+		}},
+	}
+	raw, err := json.Marshal(response)
+	c.Assert(err, qt.IsNil)
+	client, _ := newFakeClient(func(_ *http.Request) (*http.Response, error) {
+		return mustResponse(200, string(raw)), nil
+	})
+	provider, err := anthropic.New(anthropic.Config{APIKey: "sk-test", HTTPClient: client})
+	c.Assert(err, qt.IsNil)
+
+	result, err := provider.Scan(context.Background(), aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{{Filename: "invoice.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7")}},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Files, qt.DeepEquals, []aivision.FileGuess{{
+		Index:        0,
+		DocumentType: &aivision.FieldGuess{Value: "invoice", Confidence: 0.9},
+		Title:        &aivision.FieldGuess{Value: "Bosch invoice, March 2024", Confidence: 0.8},
+	}})
+	c.Assert(result.Warnings, qt.HasLen, 1)
+	c.Check(result.Warnings[0].Field, qt.Equals, aivision.FieldNameFiles)
+}

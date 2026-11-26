@@ -14,6 +14,17 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The AI scan suggests a type (invoice, receipt, manual, warranty, product
+  photo or other) and a short readable title for each file it reads, in the
+  language of the document. The scan response gains `files`, one entry per
+  file with its `index`, `document_type` and `title`, each with a
+  confidence; the scan-level `document_type` stays and is derived from the
+  files when the model gives none. **Add items from files** sets the
+  suggestions on the files once they are scanned: the **Invoice** tag for an
+  invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
+  others, and the title. Only a file that still has the title and the tags
+  of its upload changes, so a file you renamed or tagged keeps what you
+  gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date

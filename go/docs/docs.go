@@ -15482,9 +15482,17 @@ const docTemplate = `{
                     }
                 },
                 "fields": {
+                    "description": "Fields are the values read, keyed by field name. Its document_type\nclassifies the scan as a whole; files is the per-file source, and\ndocument_type is derived from it when the model gives none.",
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
+                "files": {
+                    "description": "Files holds one suggestion per input file the model said something\nusable about, ordered by index; a file without one has no entry.\nAbsent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFileGuess"
                     }
                 },
                 "items": {
@@ -15508,6 +15516,27 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.9
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "invoice",
+                        "receipt",
+                        "manual",
+                        "warranty",
+                        "photo",
+                        "other"
+                    ],
+                    "example": "invoice"
+                }
+            }
+        },
         "jsonapi.CommodityScanFieldGuess": {
             "type": "object",
             "properties": {
@@ -15517,6 +15546,25 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanFileGuess": {
+            "type": "object",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "document_type": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanDocumentTypeGuess"
+                },
+                "index": {
+                    "description": "Index is the file's position among the photos parts of the request,\ncounted from 0. An empty part the server skipped still counts.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "title": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanTitleGuess"
                 }
             }
         },
@@ -15557,6 +15605,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityScanResource"
+                }
+            }
+        },
+        "jsonapi.CommodityScanTitleGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.8
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "example": "Bosch invoice, March 2024"
                 }
             }
         },

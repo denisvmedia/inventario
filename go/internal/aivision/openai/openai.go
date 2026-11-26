@@ -155,7 +155,7 @@ func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivisio
 		return nil, errxtrace.Classify(aivision.ErrProviderUnavailable)
 	}
 
-	result, err := parseResponse(respBody)
+	result, err := parseResponse(respBody, len(req.Photos))
 	if err != nil {
 		return nil, err
 	}
@@ -229,12 +229,15 @@ type openaiUsage struct {
 }
 
 func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
-	content := make([]contentBlock, 0, len(req.Photos)+2)
+	content := make([]contentBlock, 0, 2*len(req.Photos)+1)
 	content = append(content, contentBlock{
 		Type: "text",
 		Text: aivision.UserPromptHeader(req),
 	})
-	for _, photo := range req.Photos {
+	for i, photo := range req.Photos {
+		// The label before each file names the file the per-file
+		// suggestion refers to.
+		content = append(content, contentBlock{Type: "text", Text: aivision.FileLabel(i)})
 		// A PDF rides in a "file" content part (inline base64 data URL);
 		// an image rides in an "image_url" part. Both encode the bytes as
 		// the same data: URL — only the wrapping part differs.
@@ -289,8 +292,9 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *openaiRequest {
 }
 
 // parseResponse extracts the single JSON message and converts it to the
-// shared ScanResult shape.
-func parseResponse(body []byte) (*aivision.ScanResult, error) {
+// shared ScanResult shape. fileCount is the number of files the request
+// carried.
+func parseResponse(body []byte, fileCount int) (*aivision.ScanResult, error) {
 	var resp openaiResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
@@ -302,7 +306,7 @@ func parseResponse(body []byte) (*aivision.ScanResult, error) {
 	if content == "" {
 		return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
 	}
-	result, err := aivision.ToScanResult([]byte(content))
+	result, err := aivision.ToScanResult([]byte(content), fileCount)
 	if err != nil {
 		return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
 	}

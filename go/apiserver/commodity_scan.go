@@ -142,7 +142,7 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	in, err := api.readPhotos(r, int64(api.maxPhotoBytes))
+	in, positions, err := api.readPhotos(r, int64(api.maxPhotoBytes))
 	if err != nil {
 		if errors.As(err, new(errBodyTooLarge)) || errors.As(err, new(errOversizedPart)) {
 			_ = render.Render(w, r, jsonapi.NewErrors(scanError(
@@ -171,7 +171,7 @@ func (api *commodityScanAPI) handlePublicScan(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	resp := newCommodityScanResponse(result)
+	resp := newCommodityScanResponse(result, positions)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -226,7 +226,7 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	in, err := api.readPhotos(r, int64(api.maxPhotoBytes))
+	in, positions, err := api.readPhotos(r, int64(api.maxPhotoBytes))
 	if err != nil {
 		// Body-cap or per-part-cap overflows are routed through the
 		// service so the audit row is written and the FE banner sees a
@@ -265,7 +265,7 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 		return
 	}
 
-	resp := newCommodityScanResponse(result)
+	resp := newCommodityScanResponse(result, positions)
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return
@@ -276,25 +276,28 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 // "photos" into a ScanInput. The hint (if present) is read from the
 // "hint" form field. Empty parts and unrelated fields are ignored so
 // the FE doesn't need to be strict about which extra fields it appends.
+// positions holds, for each photo kept, its position among the "photos"
+// parts of the request, counted from 0; it differs from the photo's index
+// in the ScanInput once an empty part was skipped.
 //
 // `perPartCap` bounds a single part so a hostile caller can't allocate
 // more than the per-photo cap before the service-layer validator
 // rejects it. Zero disables the per-part cap (the body-level
 // MaxBytesReader is still in effect).
-func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (services.ScanInput, error) {
+func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (in services.ScanInput, positions []int, err error) {
 	reader, err := r.MultipartReader()
 	if err != nil {
-		return services.ScanInput{}, classifyMultipartReadErr(err)
+		return services.ScanInput{}, nil, classifyMultipartReadErr(err)
 	}
 
-	var in services.ScanInput
+	photoParts := 0
 	for {
 		part, err := reader.NextPart()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return services.ScanInput{}, classifyMultipartReadErr(err)
+			return services.ScanInput{}, nil, classifyMultipartReadErr(err)
 		}
 
 		switch part.FormName() {
@@ -302,11 +305,14 @@ func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (serv
 			data, err := readPartBounded(part, perPartCap)
 			_ = part.Close()
 			if err != nil {
-				return services.ScanInput{}, classifyMultipartReadErr(err)
+				return services.ScanInput{}, nil, classifyMultipartReadErr(err)
 			}
+			position := photoParts
+			photoParts++
 			if len(data) == 0 {
 				continue
 			}
+			positions = append(positions, position)
 			ct := part.Header.Get("Content-Type")
 			if ct == "" {
 				ct = http.DetectContentType(data)
@@ -326,7 +332,7 @@ func (api *commodityScanAPI) readPhotos(r *http.Request, perPartCap int64) (serv
 			_ = part.Close()
 		}
 	}
-	return in, nil
+	return in, positions, nil
 }
 
 func (api *commodityScanAPI) bufferBody(r *http.Request) error {
@@ -561,9 +567,12 @@ type commodityScanResultDT struct {
 	// form an item write takes (#2803).
 	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
 	Items        []commodityScanItemDT           `json:"items,omitempty"`
-	Warnings     []aivision.Warning              `json:"warnings,omitempty"`
-	UsedTokens   int                             `json:"used_tokens,omitempty"`
-	LatencyMS    int64                           `json:"latency_ms,omitempty"`
+	// Files is the suggestion for each input file (#1626); the values are
+	// strings, so the provider's shape goes on the wire as it is.
+	Files      []aivision.FileGuess `json:"files,omitempty"`
+	Warnings   []aivision.Warning   `json:"warnings,omitempty"`
+	UsedTokens int                  `json:"used_tokens,omitempty"`
+	LatencyMS  int64                `json:"latency_ms,omitempty"`
 }
 
 // commodityScanItemDT is one candidate product in a multi-product scan.
@@ -601,10 +610,14 @@ func marshalCustomFieldGuesses(fields map[string]aivision.FieldGuess) map[string
 	return marshalScanFields(fields)
 }
 
-func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
+// newCommodityScanResponse builds the response to a scan. positions maps a
+// photo's index in the scan to its position among the parts of the request
+// (see readPhotos), so a file suggestion names the part the client sent.
+func newCommodityScanResponse(r *aivision.ScanResult, positions []int) *commodityScanResponse {
 	dt := commodityScanResultDT{
 		Fields:       marshalScanFields(r.Fields),
 		CustomFields: marshalCustomFieldGuesses(r.CustomFields),
+		Files:        filesAtRequestPositions(r.Files, positions),
 		Warnings:     r.Warnings,
 		UsedTokens:   r.UsedTokens,
 		LatencyMS:    r.LatencyMS,
@@ -619,6 +632,24 @@ func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
 		Data:       commodityScanResource{Type: "commodity_scan", Attributes: dt},
 		httpStatus: http.StatusOK,
 	}
+}
+
+// filesAtRequestPositions returns files with each index replaced by the
+// position of its photo in the request. A suggestion for a photo positions
+// does not know is dropped; the provider has checked the indexes already.
+func filesAtRequestPositions(files []aivision.FileGuess, positions []int) []aivision.FileGuess {
+	if len(files) == 0 {
+		return nil
+	}
+	out := make([]aivision.FileGuess, 0, len(files))
+	for _, f := range files {
+		if f.Index < 0 || f.Index >= len(positions) {
+			continue
+		}
+		f.Index = positions[f.Index]
+		out = append(out, f)
+	}
+	return out
 }
 
 // Render implements render.Renderer.
