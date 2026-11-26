@@ -881,6 +881,54 @@ describe("<CommodityDetailPage />", () => {
     expect(screen.queryByTestId("commodity-detail-change-status")).toBeNull()
   })
 
+  it("offers Donated and Stolen among the status changes of an item in use", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    const bar = await screen.findByTestId("commodity-detail-change-status")
+    expect(
+      within(bar)
+        .getAllByRole("button")
+        .map((b) => b.textContent)
+    ).toEqual(["Sold", "Lost", "Disposed", "Written Off", "Donated", "Stolen"])
+    expect(within(bar).getByTestId("commodity-detail-transition-donated")).toHaveClass(
+      "text-chart-3"
+    )
+    expect(within(bar).getByTestId("commodity-detail-transition-stolen")).toHaveClass(
+      "text-chart-4"
+    )
+  })
+
+  it.each([
+    ["donated", "Donated", "text-chart-3"],
+    ["stolen", "Stolen", "text-chart-4"],
+  ])("shows a %s item's status card in its own tone", async (status, label, tone) => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: {
+          ...commodityFixture.attributes,
+          status,
+          status_date: "2026-11-26",
+          status_note: "A note",
+        },
+      })
+    )
+    renderDetail()
+    const card = await screen.findByTestId("commodity-detail-terminal-status")
+    expect(within(card).getByTestId("commodity-detail-terminal-status-label")).toHaveTextContent(
+      label
+    )
+    expect(card).toHaveClass(tone)
+    expect(screen.queryByTestId("commodity-detail-terminal-status-sale-price")).toBeNull()
+    expect(screen.getByTestId("commodity-detail-revert-status")).toBeInTheDocument()
+  })
+
   it("hides the terminal-status info card while the commodity is in_use", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
