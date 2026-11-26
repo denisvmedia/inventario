@@ -4066,7 +4066,7 @@ export type paths = {
                     per_page?: number;
                     /** @description Filter by commodity type; repeat to OR */
                     type?: string[];
-                    /** @description Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Filter by exact area ID */
                     area_id?: string;
@@ -10596,7 +10596,7 @@ export type paths = {
                     no_purchase_date?: boolean;
                     /** @description Commodities only: custom field condition, as for GET /commodities */
                     cf?: string[];
-                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Commodities only: filter by exact area ID */
                     area_id?: string;
@@ -15193,7 +15193,7 @@ export type components = {
              * @example disposed
              * @enum {string}
              */
-            value?: "in_use" | "lost" | "disposed" | "written_off";
+            value?: "in_use" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         };
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
@@ -18320,7 +18320,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
+        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         "models.CurrencyMigration": {
             /** @description CommodityCount is the number of rows actually mutated by the worker. */
             commodity_count?: number;

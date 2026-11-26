@@ -115,6 +115,8 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
   lost: "text-status-expiring",
   disposed: "text-muted-foreground",
   written_off: "text-status-expired",
+  donated: "text-chart-3",
+  stolen: "text-chart-4",
 }
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"

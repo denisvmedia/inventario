@@ -203,8 +203,10 @@
       "dateLabel": "Date",
       "description": {
         "disposed": "Permanently remove this item from your inventory.",
+        "donated": "Record that you gave this item away.",
         "lost": "Mark this item as lost. You can still revert later.",
         "sold": "Record the sale of this item, including the proceeds.",
+        "stolen": "Record the theft of this item, for example for a police report or an insurance claim.",
         "written_off": "Write off this item — usually for insurance or accounting."
       },
       "errors": {
@@ -217,8 +219,10 @@
       "noteLabel": "Notes (optional)",
       "notePlaceholder": {
         "disposed": "Details…",
+        "donated": "Given to…",
         "lost": "Last seen at…",
         "sold": "Sold to…",
+        "stolen": "Taken from…",
         "written_off": "Details…"
       },
       "salePriceLabel": "Sale Price",
@@ -235,7 +239,7 @@
     },
     "terminalStatus": {
       "revert": "Revert to In Use",
-      "revertConfirmDescription": "This puts the item back into active use. You can mark it as sold, lost, disposed, or written off again later.",
+      "revertConfirmDescription": "This puts the item back into active use. You can change its status again later.",
       "revertConfirmTitle": "Revert to In Use?",
       "salePrice": "Sale price: {{value}}",
       "statusDate": "Date: {{date}}"
@@ -942,9 +946,11 @@
   },
   "status": {
     "disposed": "Disposed",
+    "donated": "Donated",
     "in_use": "In Use",
     "lost": "Lost",
     "sold": "Sold",
+    "stolen": "Stolen",
     "written_off": "Written Off"
   },
   "toast": {
