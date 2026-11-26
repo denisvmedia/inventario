@@ -97,7 +97,7 @@ To add the set:
 1. Open the group selector and choose **Group settings**, then open the **Sections** section.
 2. On the **Collection set** card, click **Add the set**.
 
-If the group already has a type or field with one of these names (upper and lower case don't matter), the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it. The card also shows **Partly added** while one of the set's fields is not offered on every one of its types, for example when the group already had all of them under these names; **Add what is missing** then offers each field on each type.
+If the group already has a type or field with one of these names, in any mix of upper- and lowercase, the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it. While the group is still at that limit, **Add what is missing** cannot create what is missing either: delete types or fields the group no longer needs to make room first. The card also shows **Partly added** while one of the set's fields is not offered on every one of its types, for example when the group already had all of them under these names; **Add what is missing** then offers each field on each type.
 
 The card names the state of each type and field: added by the set, the group's own, or not in the group. If you renamed one of the set's types or fields to the name of another one, for example **Coins** to **Stamps** after deleting **Stamps**, the card shows that name as not added: the renamed type or field stands for it, and adding the set does not create a second one of that name.
 
@@ -106,6 +106,8 @@ To remove the set, click **Remove the set** on the same card. The confirmation c
 - a type or field the group had before the set, which the set never deletes;
 - a type that items have, or a field that items have a value of, counting items in the [Trash](../trash/);
 - the group's last item type, as a group always keeps one.
+
+The check counts saved items only, not [drafts](../items/#save-as-draft): a type or field that only a draft uses is listed for deletion, and the draft still refers to it after the removal ([#2939](https://github.com/denisvmedia/inventario/issues/2939)). Finish or check such drafts before you remove the set.
 
 Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
 

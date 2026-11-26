@@ -42,7 +42,8 @@ when to add an entry and where it goes.
   tokens may read the set. `POST /groups` takes `collection_set` and reports
   the outcome in `meta.collection_set`; an update with `collection_set`, true
   or false, is refused. Each field of `GET /collection-set` reports
-  `missing_templates`, the set's types that do not offer it yet. Backups record which types and fields
+  `missing_templates`, the number of the set's types that do not offer it
+  yet; it is a count and names none of them. Backups record which types and fields
   the set created, as INB format 3.8; older backups restore as before
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - The **Add item** dialog uses what the AI scan suggests for each file:
