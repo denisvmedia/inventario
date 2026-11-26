@@ -389,6 +389,14 @@ type Params struct {
 	// localhost server the Helm init-data Job boots to curl /seed.
 	SeedEndpointEnabled bool
 
+	// PlansEnabled gates the subscription-plan surfaces (#1389). Default
+	// FALSE: the feature is frozen. When false the plans feature flag reads
+	// false so the FE hides every plan surface, and GET /g/{slug}/plan
+	// reports models.PlanUnlimited whatever the tenant's plan_id is, so no
+	// plan caps reach a client. Nothing on the server enforces plan caps
+	// today; storage quotas are configured outside plans and are unaffected.
+	PlansEnabled bool
+
 	// OAuthRegistry holds the third-party sign-in providers enabled in
 	// this deployment (#1394). Empty means OAuth is unconfigured — the
 	// /auth/oauth/providers endpoint surfaces an empty list and start /
@@ -488,7 +496,7 @@ func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
 			// explicit length guard is only to keep the comparison's timing
 			// independent of where the first differing byte falls.
 			if len(got) != len(expected) || subtle.ConstantTimeCompare(got, expected) != 1 {
-				slog.Warn("Unauthorized /metrics access attempt",
+				slog.WarnContext(r.Context(), "Unauthorized /metrics access attempt",
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent(),
 					"path", r.URL.Path,
@@ -522,6 +530,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	r := chi.NewRouter()
+	// First, so that every line logged below it carries request_id and every
+	// response carries X-Request-ID, including a CORS preflight, a request
+	// the tenant-header guards refuse and a failed authentication.
+	r.Use(RequestIDMiddleware())
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
@@ -536,12 +548,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
-	r.Use(middleware.RequestID)
-	// Copies the router's correlation id into appctx so code below the HTTP
-	// layer can read it without importing a router. The audit service uses it to
-	// stamp request_id on its rows, which is what makes a log line and an audit
-	// row provably the same request rather than merely adjacent (#2479).
-	r.Use(RequestIDContextMiddleware())
 	r.Use(middleware.Logger)
 	// RED metrics (#843): registered BEFORE Recoverer so it WRAPS it — the
 	// deferred status read then observes the 500 that Recoverer writes for a
@@ -989,7 +995,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// #1307: the group's failed background jobs, group admins only.
 		r.Route("/failed-jobs", GroupFailedJobs(params, groupService, auditSvc))
 		r.Route("/storage-usage", StorageUsage())
-		r.Route("/plan", GroupPlan())
+		r.Route("/plan", GroupPlan(params.PlansEnabled))
 		r.Route("/notifications", GroupNotifications(params.FactorySet))
 		// Saved views carry no write gate: viewers keep personal views too;
 		// the service checks who may share and edit.
@@ -1009,7 +1015,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			// Get user from context (set by JWTMiddleware)
 			user := appctx.UserFromContext(r.Context())
 			if user == nil {
-				slog.Error("RLS Security Violation: No user context found",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: No user context found",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"remote_addr", r.RemoteAddr,
@@ -1020,7 +1026,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user has required fields for RLS
 			if user.ID == "" {
-				slog.Error("RLS Security Violation: User ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: User ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_email", user.Email,
@@ -1030,7 +1036,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			}
 
 			if user.TenantID == "" {
-				slog.Error("RLS Security Violation: Tenant ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Tenant ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
@@ -1042,7 +1048,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user is active
 			if !user.IsActive {
-				slog.Error("RLS Security Violation: Inactive user attempted access",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Inactive user attempted access",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
@@ -1053,7 +1059,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			}
 
 			// Log successful security validation for monitoring
-			slog.Debug("RLS Security: User context validated",
+			slog.DebugContext(r.Context(), "RLS Security: User context validated",
 				"user_id", user.ID,
 				"tenant_id", user.TenantID,
 				"user_email", user.Email,
@@ -1074,7 +1080,7 @@ func RegistrySetMiddleware(factorySet *registry.FactorySet) func(http.Handler) h
 			// Create user-aware registry set from factory set
 			registrySet, err := factorySet.CreateUserRegistrySet(r.Context())
 			if err != nil {
-				slog.Error("Failed to create user registry set", "error", err)
+				slog.ErrorContext(r.Context(), "Failed to create user registry set", "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}

@@ -628,7 +628,7 @@ func (l *RestoreOperationProcessor) validateCommodityOwnershipInDB(
 			stats.ErrorCount++
 			msg := fmt.Sprintf("Failed to list commodities for ownership validation of %s: %v", originalXMLID, err)
 			stats.Errors = append(stats.Errors, msg)
-			slog.Error("commodity ownership validation list failed",
+			slog.ErrorContext(ctx, "commodity ownership validation list failed",
 				"restore_operation_id", l.restoreOperationID,
 				"original_xml_id", originalXMLID,
 				"error", err,
@@ -708,7 +708,7 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 
 	stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
 	if _, err := stepReg.Create(ctx, step); err != nil {
-		slog.Error("Failed to create restore step", "error", err)
+		slog.ErrorContext(ctx, "Failed to create restore step", "error", err)
 	}
 }
 
@@ -725,7 +725,7 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 			step.Result = result
 			step.Reason = reason
 			if _, uerr := stepReg.Update(ctx, *step); uerr != nil {
-				slog.Error("Failed to update restore step", "error", uerr)
+				slog.ErrorContext(ctx, "Failed to update restore step", "error", uerr)
 			}
 			return
 		}

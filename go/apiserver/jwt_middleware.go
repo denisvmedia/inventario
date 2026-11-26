@@ -127,7 +127,7 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 		blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
 		if err != nil {
 			// Fail-open: log the error but allow the request through.
-			slog.Error("Failed to check token blacklist", "error", err)
+			slog.ErrorContext(ctx, "Failed to check token blacklist", "error", err)
 		} else if blacklisted {
 			return fmt.Errorf("token has been revoked")
 		}
@@ -137,7 +137,7 @@ func checkTokenBlacklist(ctx context.Context, claims jwt.MapClaims, blacklist se
 		since, blacklisted, err := blacklist.UserBlacklistedSince(ctx, userID)
 		if err != nil {
 			// Fail-open: log the error but allow the request through.
-			slog.Error("Failed to check user blacklist", "error", err)
+			slog.ErrorContext(ctx, "Failed to check user blacklist", "error", err)
 		} else if blacklisted {
 			return checkUserBlacklistIat(claims, since)
 		}

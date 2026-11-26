@@ -189,7 +189,7 @@ func (w *ThumbnailGenerationWorker) Start(ctx context.Context) {
 		w.runCleanup(ctx)
 	}()
 
-	slog.Info("Thumbnail generation worker started")
+	slog.InfoContext(ctx, "Thumbnail generation worker started")
 }
 
 // Stop stops the thumbnail generation worker
@@ -266,7 +266,7 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 
 	jobs, err := w.thumbnailService.GetPendingJobs(ctx, w.jobBatchSize)
 	if err != nil {
-		slog.Error("Failed to get pending thumbnail jobs", "error", err)
+		slog.ErrorContext(ctx, "Failed to get pending thumbnail jobs", "error", err)
 		return
 	}
 
@@ -274,7 +274,7 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 		return // No jobs to process
 	}
 
-	slog.Debug("Processing thumbnail generation jobs", "count", len(jobs))
+	slog.DebugContext(ctx, "Processing thumbnail generation jobs", "count", len(jobs))
 
 	// Process jobs concurrently, but let the concurrency service handle the limits
 	var wg sync.WaitGroup
@@ -287,7 +287,7 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 
 			err := w.thumbnailService.ProcessThumbnailGeneration(jobCtx, jobID)
 			if err != nil {
-				slog.Error("Failed to process thumbnail generation job", "job_id", jobID, "error", err)
+				slog.ErrorContext(jobCtx, "Failed to process thumbnail generation job", "job_id", jobID, "error", err)
 			}
 		}(job.ID, jobCtx, cancel)
 	}
@@ -304,10 +304,10 @@ func (w *ThumbnailGenerationWorker) processPendingJobs(ctx context.Context) {
 		// All jobs completed
 	case <-ctx.Done():
 		// Context cancelled, but let jobs continue in background
-		slog.Info("Context cancelled during job processing, jobs will continue in background")
+		slog.InfoContext(ctx, "Context cancelled during job processing, jobs will continue in background")
 	case <-time.After(w.jobBatchTimeout):
 		// Timeout, but let jobs continue in background
-		slog.Warn("Job processing batch timed out, jobs will continue in background")
+		slog.WarnContext(ctx, "Job processing batch timed out, jobs will continue in background")
 	}
 }
 
@@ -323,12 +323,12 @@ func (w *ThumbnailGenerationWorker) performCleanup(ctx context.Context) {
 	// Cleanup expired concurrency slots first to free the FK referencing
 	// completed jobs.
 	if err := w.thumbnailService.CleanupExpiredSlots(ctx); err != nil {
-		slog.Error("Failed to cleanup expired concurrency slots", "error", err)
+		slog.ErrorContext(ctx, "Failed to cleanup expired concurrency slots", "error", err)
 	}
 
 	// Cleanup completed jobs now that no expired slot references them.
 	if err := w.thumbnailService.CleanupCompletedJobs(ctx, w.retentionPeriod); err != nil {
-		slog.Error("Failed to cleanup completed thumbnail jobs", "error", err)
+		slog.ErrorContext(ctx, "Failed to cleanup completed thumbnail jobs", "error", err)
 	}
 }
 
@@ -359,7 +359,7 @@ func (w *ThumbnailGenerationWorker) GetStats(ctx context.Context) (map[string]an
 	// Get active slots count
 	slots, err := slotRegistry.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get slots for stats", "error", err)
+		slog.ErrorContext(ctx, "Failed to get slots for stats", "error", err)
 	} else {
 		stats["active_slots"] = len(slots)
 	}

@@ -19,8 +19,8 @@ func New() *Sender {
 }
 
 // Send logs recipient/subject metadata and returns success without network I/O.
-func (Sender) Send(_ context.Context, message sender.Message) error {
-	slog.Info("STUB email sender: queued email sent",
+func (Sender) Send(ctx context.Context, message sender.Message) error {
+	slog.InfoContext(ctx, "STUB email sender: queued email sent",
 		"to", message.To,
 		"subject", message.Subject,
 	)

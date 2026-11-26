@@ -26,7 +26,7 @@ func TestServePlaceholderImageImplementation(t *testing.T) {
 		filename := "generating_" + size + ".gif"
 		data, err := assets.GetPlaceholderFile(filename)
 		if err != nil {
-			slog.Error("Failed to load placeholder image", "filename", filename, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to load placeholder image", "filename", filename, "error", err)
 			http.Error(w, "Placeholder not found", http.StatusNotFound)
 			return
 		}
@@ -36,7 +36,7 @@ func TestServePlaceholderImageImplementation(t *testing.T) {
 
 		// Write the image data
 		if _, err := w.Write(data); err != nil {
-			slog.Error("Failed to write placeholder image", "filename", filename, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to write placeholder image", "filename", filename, "error", err)
 		}
 	}
 

@@ -1,7 +1,6 @@
 package migrator
 
 import (
-	"io"
 	"log/slog"
 	"net/url"
 	"testing"
@@ -35,7 +34,7 @@ func TestNew_StripsPGXPoolParamsFromStoredDSN(t *testing.T) {
 // after a successful MigrateUp the DB version should match the binary's
 // embedded max version. Behind → fatal (the bug). Equal → pass. Ahead → warn.
 func TestCompareSchemaVersion(t *testing.T) {
-	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	logger := slog.New(slog.DiscardHandler)
 
 	tests := []struct {
 		name      string

@@ -197,11 +197,11 @@ func renderFailedJobActionError(w http.ResponseWriter, r *http.Request, err erro
 	}
 }
 
-func writeFailedJobEnvelope(w http.ResponseWriter, v any) error {
+func writeFailedJobEnvelope(w http.ResponseWriter, r *http.Request, v any) error {
 	w.Header().Set("Content-Type", "application/vnd.api+json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(v); err != nil {
-		slog.Error("failed jobs: failed to encode response", "error", err)
+		slog.ErrorContext(r.Context(), "failed jobs: failed to encode response", "error", err)
 		return err
 	}
 	return nil
@@ -271,7 +271,7 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 	}
 
 	setPaginationHeaders(w, page, perPage, result.Total)
-	writeErr := writeFailedJobEnvelope(w, AdminFailedJobListEnvelope{
+	writeErr := writeFailedJobEnvelope(w, r, AdminFailedJobListEnvelope{
 		Data: data,
 		Meta: failedJobListMeta(page, perPage, result.Total),
 	})
@@ -416,7 +416,7 @@ func (n *adminFailedJobNames) tenant(r *http.Request, id string) string {
 	if t, err := n.factorySet.TenantRegistry.Get(r.Context(), id); err == nil {
 		name = t.Name
 	} else {
-		slog.Warn("admin failed jobs: failed to read tenant", "tenant_id", id, "error", err)
+		slog.WarnContext(r.Context(), "admin failed jobs: failed to read tenant", "tenant_id", id, "error", err)
 	}
 	n.tenants[id] = name
 	return name
@@ -433,7 +433,7 @@ func (n *adminFailedJobNames) group(r *http.Request, id string) *models.Location
 	if item, err := n.factorySet.LocationGroupRegistry.GetAdmin(r.Context(), id); err == nil && item != nil {
 		group = item.Group
 	} else if err != nil {
-		slog.Warn("admin failed jobs: failed to read group", "group_id", id, "error", err)
+		slog.WarnContext(r.Context(), "admin failed jobs: failed to read group", "group_id", id, "error", err)
 	}
 	n.groups[id] = group
 	return group
@@ -515,7 +515,7 @@ func (api *groupFailedJobsAPI) list(w http.ResponseWriter, r *http.Request) {
 		data = append(data, FailedJobResource{Type: failedJobResourceType, ID: job.ID, Attributes: failedJobView(job)})
 	}
 	setPaginationHeaders(w, page, perPage, result.Total)
-	_ = writeFailedJobEnvelope(w, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(page, perPage, result.Total)})
+	_ = writeFailedJobEnvelope(w, r, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(page, perPage, result.Total)})
 }
 
 // retry puts one of the group's failed jobs back in its queue.

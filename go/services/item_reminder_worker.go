@@ -97,13 +97,13 @@ func NewItemReminderWorker(service *ItemReminderService, opts ...ItemReminderOpt
 // Start launches the goroutine. No-op if no service is configured.
 func (w *ItemReminderWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("ItemReminderWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "ItemReminderWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Item reminder worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Item reminder worker started", "interval", w.interval)
 }
 
 // Stop signals the worker and waits for the goroutine to exit.
@@ -141,7 +141,7 @@ func (w *ItemReminderWorker) tick(ctx context.Context) {
 
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
-		slog.Error("Item reminder sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Item reminder sweep failed", "error", err)
 		return
 	}
 	if stats.Failed > 0 {
@@ -149,8 +149,8 @@ func (w *ItemReminderWorker) tick(ctx context.Context) {
 	}
 	if stats.Sent > 0 {
 		itemRemindersSentTotal.Add(float64(stats.Sent))
-		slog.Info("Item reminder sweep completed", "reminders_sent", stats.Sent, "failed", stats.Failed)
+		slog.InfoContext(ctx, "Item reminder sweep completed", "reminders_sent", stats.Sent, "failed", stats.Failed)
 		return
 	}
-	slog.Debug("Item reminder sweep completed", "reminders_sent", 0, "failed", stats.Failed)
+	slog.DebugContext(ctx, "Item reminder sweep completed", "reminders_sent", 0, "failed", stats.Failed)
 }

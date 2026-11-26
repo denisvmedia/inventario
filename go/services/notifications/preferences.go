@@ -176,7 +176,7 @@ func (s *Service) fetchGroupOverride(ctx context.Context, user *models.User, ten
 	}
 	prefs, err := s.groupPrefs.ListByUserGroup(ctx, tenantID, groupID, user.ID)
 	if err != nil {
-		slog.Warn(
+		slog.WarnContext(ctx,
 			"notifications: per-group prefs lookup failed, falling back to user-global",
 			"tenant_id", tenantID,
 			"group_id", groupID,
@@ -463,7 +463,7 @@ func (c *Cache) lookupGroupOverride(ctx context.Context, user *models.User, tena
 			entry.byCategory[Category(p.Category)] = p.Enabled
 		}
 	} else {
-		slog.Warn(
+		slog.WarnContext(ctx,
 			"notifications: per-group prefs cache lookup failed, falling back to user-global",
 			"tenant_id", tenantID,
 			"group_id", groupID,

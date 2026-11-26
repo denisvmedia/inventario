@@ -205,6 +205,10 @@
       "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
       "notRetryable": "Tento druh úlohy nelze opakovat.",
       "retryError": "Úlohu se nepodařilo zopakovat. Zkuste to později."
+    },
+    "usage": {
+      "errorGeneric": "Využití se nepodařilo načíst.",
+      "title": "Využití"
     }
   },
   "validation": {

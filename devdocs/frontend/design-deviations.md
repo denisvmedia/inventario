@@ -906,6 +906,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Auth & Profile
 
+#### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L93–L97) shows an outline "Free plan" badge and an outline **Upgrade** button beside the avatar; the button opens [`PlansView.tsx`](../../design-mocks/src/views/PlansView.tsx).
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/ProfilePage.tsx` renders neither the badge nor the Upgrade link; the avatar row keeps only the avatar. `/plans` (`components/routing/PlansRoute.tsx`) redirects to the group home (`/g/<slug>` for the group in `?g=`, otherwise `/`) instead of showing its coming-soon page. With the flag on, the profile matches the mock and `/plans` is the coming-soon page as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. The redirect goes to the group home rather than the previous page: nothing links to `/plans` with the flag off, so a visit comes from an old link and usually has no previous page in the app.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the redirect target was agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
+
 #### 2026-11-24 — A third sign-in button for the operator's OpenID Connect provider
 
 - **Issue/PR**: #2786 / PR (pending)
@@ -963,6 +972,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. The owner decision on #1307 gives group admins their group's failed jobs with a Retry button in the group settings; the card follows the Sections card anatomy and the empty-state block of the admin lists. The 50-row cap with the count note and leaving the card out (rather than disabling it) for other roles are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26; the row cap and leaving the card out for other roles agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws the card; otherwise permanent.
+
+#### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) (L31–L79) shows the Plan card: a `Zap` tile, "Pro Plan" with an **Active** badge, "Owner: …", an outline **Upgrade** button, three chips in the "9 / 500" form, and an info banner about the owner's subscription. [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (L138) puts a secondary "Free plan" badge under the name on the account card.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/components/groups/PlanCard.tsx` renders the same card anatomy with a `Gauge` tile, the title "Usage" and the three chips showing only the current count or size (no "/ limit"); the plan name, Active badge, owner line, Upgrade button and banner are not rendered. The card shows its skeleton until the feature flags have loaded, and the skeleton has the shape of the card the flag gives: without the owner line, Upgrade button and banner when plans are off. While the flags are still loading the skeleton assumes plans are off, so only a deployment with plans on sees the card grow when it loads. The account card on Preferences (`SettingsPage.tsx`) leaves out the "Free plan" badge. With the flag on, both match the mock as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. Storage usage is not a plan feature and stays visible. The title is "Usage" because the card also counts items and locations, so "Storage" would not fit; the tile icon is `Gauge`; the owner line goes with the plan.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the title, the icon and dropping the owner line were agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-26 — Sections card in the group settings
 
@@ -1275,6 +1293,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: not present in mock. The owner decision on #1307 gives system admins a Failed jobs page in the back office with type and tenant filters; the page reuses the admin list anatomy so it reads like its siblings. The discard confirmation, the job id in the row (the CLI takes it) and the filtered empty state are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
+
+#### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) (L87) has a Plan stat among four tiles.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders three tiles (Users, Groups, Created) in a `sm:grid-cols-3` grid; with the flag on it renders the Plan tile with the raw `plan_id` as before (see "Tenant detail header has no Plan-name lookup"). The tenant list already has no Plan column ("Admin Tenants list drops the mock's `Plan` column").
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it, the admin pages included.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default.
+- **Reversion plan**: Back to the four tiles when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-25 — Trash page (`/g/:slug/trash`)
 

@@ -294,7 +294,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 			// The membership points at a group this lookup did not return —
 			// deleted, or in another tenant. Rendering blank slug and name
 			// makes an orphan look like an unnamed group (#2131).
-			slog.Warn("admin getUser: membership references an unresolved group",
+			slog.WarnContext(r.Context(), "admin getUser: membership references an unresolved group",
 				"user_id", user.ID, "group_id", m.GroupID)
 		}
 		mems = append(mems, row)
@@ -322,7 +322,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 	if api.factorySet.SystemAdminGrantRegistry != nil {
 		ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), user.ID)
 		if err != nil {
-			slog.Warn("admin getUser: grant lookup failed",
+			slog.WarnContext(r.Context(), "admin getUser: grant lookup failed",
 				"user_id", user.ID, "error", err)
 		} else {
 			isAdmin = ok
@@ -396,7 +396,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 			_ = renderEntityError(w, r, err)
 			return
 		}
-		slog.Error("admin block: failed to load user", "user_id", userID, "error", err)
+		slog.ErrorContext(r.Context(), "admin block: failed to load user", "user_id", userID, "error", err)
 		api.logBlockOutcome(r, actor.ID, userID, "", req, false, err.Error(), false)
 		_ = internalServerError(w, r, err)
 		return
@@ -438,7 +438,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	// column on the users row.
 	targetIsAdmin, grantErr := api.factorySet.SystemAdminGrantRegistry.Exists(r.Context(), target.ID)
 	if grantErr != nil {
-		slog.Error("admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
+		slog.ErrorContext(r.Context(), "admin block: grant lookup failed", "user_id", target.ID, "error", grantErr)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, grantErr.Error(), false)
 		_ = internalServerError(w, r, grantErr)
 		return
@@ -460,7 +460,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = false
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.Error("admin block: failed to deactivate user", "user_id", target.ID, "error", err)
+		slog.ErrorContext(r.Context(), "admin block: failed to deactivate user", "user_id", target.ID, "error", err)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error(), forced)
 		_ = renderEntityError(w, r, err)
 		return
@@ -528,7 +528,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 			_ = renderEntityError(w, r, err)
 			return
 		}
-		slog.Error("admin unblock: failed to load user", "user_id", userID, "error", err)
+		slog.ErrorContext(r.Context(), "admin unblock: failed to load user", "user_id", userID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, userID, "", req, false, err.Error())
 		_ = internalServerError(w, r, err)
 		return
@@ -547,7 +547,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	updated.IsActive = true
 	saved, err := api.factorySet.UserRegistry.Update(r.Context(), updated)
 	if err != nil {
-		slog.Error("admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
+		slog.ErrorContext(r.Context(), "admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error())
 		_ = renderEntityError(w, r, err)
 		return
@@ -654,7 +654,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 	var msgs []string
 	if api.factorySet != nil && api.factorySet.RefreshTokenRegistry != nil {
 		if err := api.factorySet.RefreshTokenRegistry.RevokeByUserID(r.Context(), userID); err != nil {
-			slog.Warn("admin block: failed to revoke refresh tokens", "user_id", userID, "error", err)
+			slog.WarnContext(r.Context(), "admin block: failed to revoke refresh tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "revoke_refresh_tokens: "+err.Error())
 		}
 	}
@@ -676,7 +676,7 @@ func (api *adminUsersAPI) revokeLiveSessions(r *http.Request, target *models.Use
 		// invalidation of unrelated tokens; the one-second window is
 		// short enough that an operator can re-block to close it.
 		if err := api.blacklist.BlacklistUserTokens(r.Context(), userID, 2*accessTokenExpiration); err != nil {
-			slog.Warn("admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
+			slog.WarnContext(r.Context(), "admin block: failed to blacklist user tokens", "user_id", userID, "error", err)
 			msgs = append(msgs, "blacklist_user_tokens: "+err.Error())
 		}
 	}
@@ -786,7 +786,7 @@ func (api *adminUsersAPI) lookupIsSystemAdmin(ctx context.Context, userID string
 	}
 	ok, err := api.factorySet.SystemAdminGrantRegistry.Exists(ctx, userID)
 	if err != nil {
-		slog.Warn("admin user envelope: grant lookup failed",
+		slog.WarnContext(ctx, "admin user envelope: grant lookup failed",
 			"user_id", userID, "error", err)
 		return false
 	}
@@ -818,7 +818,7 @@ func (api *adminUsersAPI) writeUserEnvelopeKnownAdmin(w http.ResponseWriter, r *
 		// cannot recover the response, but logging the encode failure
 		// keeps the operator-side trail honest instead of silently
 		// dropping it.
-		slog.Error("admin user envelope: failed to encode response", "user_id", u.ID, "error", err)
+		slog.ErrorContext(r.Context(), "admin user envelope: failed to encode response", "user_id", u.ID, "error", err)
 	}
 }
 

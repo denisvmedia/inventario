@@ -403,7 +403,7 @@ func scanItemTypesFromContext(ctx context.Context) []services.ScanItemType {
 	}
 	types, err := regSet.ItemTypeRegistry.List(ctx)
 	if err != nil {
-		slog.Warn("commodity scan: item types unavailable, offering the built-in ones", "error", err.Error())
+		slog.WarnContext(ctx, "commodity scan: item types unavailable, offering the built-in ones", "error", err.Error())
 		return nil
 	}
 	return services.ScanItemTypes(types)
@@ -419,7 +419,7 @@ func scanCustomFieldsFromContext(ctx context.Context) []services.ScanCustomField
 	}
 	defs, err := regSet.CustomFieldRegistry.List(ctx)
 	if err != nil {
-		slog.Warn("commodity scan: custom fields unavailable, scanning without them", "error", err.Error())
+		slog.WarnContext(ctx, "commodity scan: custom fields unavailable, scanning without them", "error", err.Error())
 		return nil
 	}
 	out := make([]services.ScanCustomField, 0, len(defs))

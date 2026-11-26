@@ -122,6 +122,6 @@ func (s *Service) logFailedJobAction(ctx context.Context, action, jobType, id st
 		entry.ErrorMessage = new(opErr.Error())
 	}
 	if _, err := s.factorySet.AuditLogRegistry.Create(ctx, entry); err != nil {
-		slog.Error("Failed to write failed-job audit log entry", "action", action, "job_type", jobType, "error", err)
+		slog.ErrorContext(ctx, "Failed to write failed-job audit log entry", "action", action, "job_type", jobType, "error", err)
 	}
 }

@@ -78,7 +78,7 @@ func NewJobDepthCollector(source JobDepthFunc, interval time.Duration) *JobDepth
 // called. No-op without a source.
 func (c *JobDepthCollector) Start(ctx context.Context) {
 	if c.source == nil {
-		c.logger.Warn("JobDepthCollector: no source configured, skipping startup")
+		c.logger.WarnContext(ctx, "JobDepthCollector: no source configured, skipping startup")
 		return
 	}
 	c.wg.Go(func() {
@@ -96,7 +96,7 @@ func (c *JobDepthCollector) Start(ctx context.Context) {
 			}
 		}
 	})
-	c.logger.Info("Failed-job depth collector started", "interval", c.interval)
+	c.logger.InfoContext(ctx, "Failed-job depth collector started", "interval", c.interval)
 }
 
 // Stop signals the goroutine and waits for it to exit. Safe to call more
@@ -114,7 +114,7 @@ func (c *JobDepthCollector) CollectOnce(ctx context.Context) {
 	depths, err := c.source(ctx)
 	if err != nil {
 		jobsDeadLetterCollectErrorsTotal.Inc()
-		c.logger.Warn("Failed-job depth collection failed", "error", err)
+		c.logger.WarnContext(ctx, "Failed-job depth collection failed", "error", err)
 		return
 	}
 	for jobType, n := range depths {

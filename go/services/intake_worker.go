@@ -157,13 +157,13 @@ func NewIntakeWorker(factorySet *registry.FactorySet, scan *CommodityScanService
 // then either.
 func (w *IntakeWorker) Start(ctx context.Context) {
 	if !w.scan.Enabled() {
-		slog.Info("Intake worker not started: no AI scan provider is configured")
+		slog.InfoContext(ctx, "Intake worker not started: no AI scan provider is configured")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Intake worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Intake worker started", "interval", w.interval)
 }
 
 // Stop signals the worker to stop and waits for the scan in progress.
@@ -206,9 +206,9 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 	reg := w.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
 	now := w.clock()
 	if sweep, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
-		slog.Error("Intake worker: failed to sweep stuck sources", "error", err)
+		slog.ErrorContext(ctx, "Intake worker: failed to sweep stuck sources", "error", err)
 	} else if sweep.Changed > 0 {
-		slog.Warn("Intake worker: requeued stuck sources", "count", sweep.Changed, "failed", sweep.Failed)
+		slog.WarnContext(ctx, "Intake worker: requeued stuck sources", "count", sweep.Changed, "failed", sweep.Failed)
 		for range sweep.Failed {
 			metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
 		}
@@ -220,7 +220,7 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 			break
 		}
 		if err != nil {
-			slog.Error("Intake worker: failed to claim a source", "error", err)
+			slog.ErrorContext(ctx, "Intake worker: failed to claim a source", "error", err)
 			break
 		}
 		processed++
@@ -241,7 +241,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 
 	author, err := w.authorContext(ctx, src)
 	if err != nil {
-		log.Warn("Intake worker: the session's author cannot scan in the group", "error", err)
+		log.WarnContext(ctx, "Intake worker: the session's author cannot scan in the group", "error", err)
 		w.fail(ctx, reg, src, IntakeErrorAuthorUnavailable, log)
 		return
 	}
@@ -253,7 +253,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 
 	files, code, err := w.readFiles(workCtx, src)
 	if err != nil {
-		log.Error("Intake worker: failed to read the source files", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to read the source files", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorFileUnreadable, log)
 		return
 	}
@@ -292,11 +292,11 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	err = reg.StoreScan(ctx, src.ID, src.Attempts, registry.IntakeScan{Candidates: candidates, Warnings: warnings}, w.clock())
 	switch {
 	case errors.Is(err, registry.ErrIntakeSourceChanged):
-		log.Info("Intake worker: the source changed during the scan; result dropped")
+		log.InfoContext(ctx, "Intake worker: the source changed during the scan; result dropped")
 	case err != nil:
-		log.Error("Intake worker: failed to store the scan", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to store the scan", "error", err)
 	default:
-		log.Info("Intake worker: source scanned", "candidates", len(candidates))
+		log.InfoContext(ctx, "Intake worker: source scanned", "candidates", len(candidates))
 		// The suggestions follow the stored scan only: a result dropped
 		// above leaves the files as they are. A file delivered from another
 		// system is never scanned, so it keeps the title it came with.
@@ -352,7 +352,7 @@ func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanIt
 			return ScanItemTypes(types)
 		}
 	}
-	log.Warn("Intake worker: item types unavailable, offering the built-in ones", "error", err)
+	log.WarnContext(ctx, "Intake worker: item types unavailable, offering the built-in ones", "error", err)
 	return nil
 }
 
@@ -461,7 +461,7 @@ func (w *IntakeWorker) handleScanError(ctx context.Context, reg registry.IntakeR
 	case errors.Is(err, ErrScanNoPhotos):
 		w.fail(ctx, reg, src, IntakeErrorNoFiles, log)
 	default:
-		log.Error("Intake worker: scan failed", "error", err)
+		log.ErrorContext(ctx, "Intake worker: scan failed", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorProviderError, log)
 	}
 }
@@ -479,17 +479,17 @@ func (w *IntakeWorker) retryOrFail(ctx context.Context, reg registry.IntakeRegis
 
 func (w *IntakeWorker) requeue(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, next time.Time, reason string, log *slog.Logger) {
 	if err := reg.RequeueSource(ctx, src.ID, src.Attempts, next, reason); err != nil && !errors.Is(err, registry.ErrIntakeSourceChanged) {
-		log.Error("Intake worker: failed to requeue the source", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to requeue the source", "error", err)
 	}
 }
 
 func (w *IntakeWorker) fail(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, code string, log *slog.Logger) {
-	log.Info("Intake worker: source failed", "code", code)
+	log.InfoContext(ctx, "Intake worker: source failed", "code", code)
 	err := reg.FailSource(ctx, src.ID, src.Attempts, code)
 	switch {
 	case err == nil:
 		metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
 	case !errors.Is(err, registry.ErrIntakeSourceChanged):
-		log.Error("Intake worker: failed to mark the source failed", "error", err)
+		log.ErrorContext(ctx, "Intake worker: failed to mark the source failed", "error", err)
 	}
 }

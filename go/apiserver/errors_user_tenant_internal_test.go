@@ -6,6 +6,7 @@ package apiserver
 // starts returning the refusal gets the documented wire shape.
 
 import (
+	"context"
 	"net/http"
 	"testing"
 
@@ -25,7 +26,7 @@ func TestToJSONAPIError_UserTenantMoveBlocked(t *testing.T) {
 		}),
 	})
 
-	jsErr := toJSONAPIError(err)
+	jsErr := toJSONAPIError(context.Background(), err)
 	c.Assert(jsErr.HTTPStatusCode, qt.Equals, http.StatusConflict)
 	c.Assert(jsErr.Code, qt.Equals, "user.tenant_move_blocked")
 	c.Assert(jsErr.Meta, qt.DeepEquals, map[string]any{
@@ -48,7 +49,7 @@ func TestToJSONAPIError_UserTenantGuards(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.code, func(t *testing.T) {
 			c := qt.New(t)
-			jsErr := toJSONAPIError(errxtrace.Classify(tt.err))
+			jsErr := toJSONAPIError(context.Background(), errxtrace.Classify(tt.err))
 			c.Assert(jsErr.HTTPStatusCode, qt.Equals, tt.status)
 			c.Assert(jsErr.Code, qt.Equals, tt.code)
 		})

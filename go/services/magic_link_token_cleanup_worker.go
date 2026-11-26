@@ -81,13 +81,13 @@ func NewMagicLinkTokenCleanupWorker(r registry.MagicLinkTokenRegistry, opts ...M
 // Start launches the background cleanup goroutine. It is a no-op if the registry is nil.
 func (w *MagicLinkTokenCleanupWorker) Start(ctx context.Context) {
 	if w.registry == nil {
-		slog.Warn("MagicLinkTokenCleanupWorker: no registry configured, skipping startup")
+		slog.WarnContext(ctx, "MagicLinkTokenCleanupWorker: no registry configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.runCleanup(ctx)
 	})
-	slog.Info("Magic-link token cleanup worker started", "interval", w.cleanupInterval)
+	slog.InfoContext(ctx, "Magic-link token cleanup worker started", "interval", w.cleanupInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -124,8 +124,8 @@ func (w *MagicLinkTokenCleanupWorker) cleanupOnce(ctx context.Context) {
 	}
 
 	if err := w.registry.DeleteExpired(ctx); err != nil {
-		slog.Error("Failed to delete expired magic-link tokens", "error", err)
+		slog.ErrorContext(ctx, "Failed to delete expired magic-link tokens", "error", err)
 	} else {
-		slog.Debug("Expired magic-link tokens cleaned up")
+		slog.DebugContext(ctx, "Expired magic-link tokens cleaned up")
 	}
 }
