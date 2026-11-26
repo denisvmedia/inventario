@@ -259,6 +259,37 @@ describe("<CustomFieldsListPage />", () => {
     ])
   })
 
+  it("gives a default ticked before the type became money the group's currency", async () => {
+    const body = capture<{ data: { attributes: Record<string, unknown> } }>()
+    seed()
+    server.use(
+      ...customFieldHandlers.create(
+        SLUG,
+        customFieldHandlers.field({ id: "cf-paid", name: "Paid", type: "money" }),
+        body
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+    await screen.findByTestId("custom-field-row-cf-plate")
+    await user.click(screen.getByTestId("custom-fields-create-button"))
+    const dialog = await screen.findByTestId("custom-field-form-dialog")
+    await user.type(within(dialog).getByTestId("custom-field-name-input"), "Paid")
+    await user.click(within(dialog).getByTestId("custom-field-template-other"))
+    await pickRadixSelect(user, /^Type$/, { optionLabel: /^Money$/ })
+    await user.type(
+      within(dialog).getByTestId("custom-field-template-default-type-other-input"),
+      "12"
+    )
+    await user.click(within(dialog).getByTestId("custom-field-form-submit"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("custom-field-form-dialog")).not.toBeInTheDocument()
+    )
+    expect(body.value?.data.attributes.templates).toEqual([
+      { item_type_id: "type-other", default_value: { amount: 12, currency: "USD" } },
+    ])
+  })
+
   it("deletes a field in use only once the member confirms its values go too", async () => {
     const calls: string[] = []
     seed()

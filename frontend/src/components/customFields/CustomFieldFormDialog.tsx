@@ -237,7 +237,22 @@ export function CustomFieldFormDialog({
               render={({ field: typeField }) => (
                 <Select
                   value={typeField.value}
-                  onValueChange={typeField.onChange}
+                  onValueChange={(next) => {
+                    typeField.onChange(next)
+                    // A default ticked while the field had another type has
+                    // no currency yet; the money input shows the group's,
+                    // so the default takes it. A currency picked stays.
+                    if (next === "money") {
+                      setTemplates((prev) =>
+                        Object.fromEntries(
+                          Object.entries(prev).map(([id, v]) => [
+                            id,
+                            v.currency ? v : { ...v, currency: groupCurrency },
+                          ])
+                        )
+                      )
+                    }
+                  }}
                   disabled={isPending || isEdit}
                 >
                   <SelectTrigger
