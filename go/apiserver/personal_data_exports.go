@@ -299,7 +299,7 @@ func SignedPersonalDataExports(params Params, svc *export.PersonalDataExportServ
 func (api *signedPersonalDataExportsAPI) downloadPersonalDataExport(w http.ResponseWriter, r *http.Request) {
 	claims, err := api.signer.ValidatePersonalDataExportURL(r.URL.Path, r.URL.Query(), services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.Warn("Invalid signed personal data export URL", "error", err.Error(), "remote_addr", r.RemoteAddr)
+		slog.WarnContext(r.Context(), "Invalid signed personal data export URL", "error", err.Error(), "ip", clientIPTruncated(r))
 		http.Error(w, "Invalid or expired download URL", http.StatusUnauthorized)
 		return
 	}
@@ -340,6 +340,6 @@ func (api *signedPersonalDataExportsAPI) downloadPersonalDataExport(w http.Respo
 	}
 	w.WriteHeader(http.StatusOK)
 	if _, err := io.Copy(w, reader); err != nil {
-		slog.Warn("Personal data export download interrupted", "export_id", e.ID, "error", err)
+		slog.WarnContext(r.Context(), "Personal data export download interrupted", "export_id", e.ID, "error", err)
 	}
 }
