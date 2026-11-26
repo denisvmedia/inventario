@@ -178,9 +178,16 @@ func intakeDocumentContractProgress(t *testing.T, env IntakeDocumentEnv) {
 
 func intakeDocumentContractLists(t *testing.T, env IntakeDocumentEnv) {
 	c := qt.New(t)
-	first, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("1"))
+	// The newer document is stored first, so the order comes from the
+	// creation times and not from the order of the writes.
+	at := time.Date(2026, 3, 14, 12, 0, 0, 0, time.UTC)
+	newer := contractIntakeDocument("2")
+	newer.CreatedAt = at.Add(time.Hour)
+	second, _, err := env.Documents.CreateOrGet(env.Ctx, newer)
 	c.Assert(err, qt.IsNil)
-	second, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("2"))
+	older := contractIntakeDocument("1")
+	older.CreatedAt = at
+	first, _, err := env.Documents.CreateOrGet(env.Ctx, older)
 	c.Assert(err, qt.IsNil)
 	_, err = env.Documents.RecordProgress(env.Ctx, first.ID, registry.IntakeDocumentProgress{DraftID: new("draft-a")})
 	c.Assert(err, qt.IsNil)
