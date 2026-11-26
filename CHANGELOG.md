@@ -70,7 +70,7 @@ when to add an entry and where it goes.
   opening the page clears it. The newest release a user has seen is a setting
   on the server (`whats_new.last_seen_version`), so the dot follows the user
   across devices. System administrators also see the **Operators** section of
-  each release
+  each release; for other users, a release with nothing else brings no dot
   ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 - Documents from other systems: `POST /g/{groupSlug}/intake` turns a document
   that another system such as Paperless-ngx sends into a draft in the inbox,
@@ -608,6 +608,12 @@ when to add an entry and where it goes.
   they printed `setupJob.initData.adminEmail`, which that Secret's email
   overrides, and pointed to `setupJob.initData.adminPassword`, which an
   existing Secret does not use.
+
+- Building the frontend now reads `CHANGELOG.md` from the repository root, for
+  the What's new page, and fails without it. The project's Dockerfile copies
+  the file; a custom image build that copies only `frontend/` has to copy
+  `CHANGELOG.md` next to it
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 
 ## [0.2.2] - 2026-11-23
 

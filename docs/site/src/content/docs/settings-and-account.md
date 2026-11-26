@@ -369,7 +369,8 @@ When your server has a release you haven't read about, a dot appears next to
 **What's new**, on the **Help & support** tab, and on **Help** in the sidebar.
 Opening the page clears it. Inventario remembers the newest release you have
 seen on your account, so the dot stays away on your other devices too. If you
-have never opened the page, the dot shows once.
+have never opened the page, the dot shows once. The dot needs a group: until
+you create or join one, it doesn't appear, though the page itself opens.
 
 If your server runs a development build rather than a release, the page says so
 and lists the releases the build contains.
@@ -377,7 +378,9 @@ and lists the releases the build contains.
 System administrators also see an **Operators** section at the end of a
 release: changes to the Helm chart, command-line flags, environment variables
 and other things that matter to whoever runs the server. Other users don't see
-it. A release that changed only those things tells them so.
+it, and a release that changed only those things brings them no dot. If they
+open the page anyway, such a release tells them it changed only how the server
+is installed and run.
 
 ---
 
