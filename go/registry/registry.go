@@ -1603,6 +1603,11 @@ type IntakeSourceInput struct {
 	ExternalSystem     string
 	ExternalInstance   string
 	ExternalDocumentID string
+	// Delivered, when set, holds the products another system delivered for
+	// the source in place of a scan (#2809). The source is stored scanned
+	// with these candidates, so the worker never takes it and it does not
+	// count against the queue limit.
+	Delivered *IntakeScan
 }
 
 // CheckIntakeSourceInputs checks what both backends require of the sources
@@ -1615,6 +1620,18 @@ func CheckIntakeSourceInputs(sources []IntakeSourceInput) error {
 		}
 	}
 	return nil
+}
+
+// QueuedIntakeSources counts the sources of a new session that go to the scan
+// queue: all but the delivered ones.
+func QueuedIntakeSources(sources []IntakeSourceInput) int {
+	n := 0
+	for _, src := range sources {
+		if src.Delivered == nil {
+			n++
+		}
+	}
+	return n
 }
 
 // IntakeScan is what the scan of one source produced.
@@ -1686,7 +1703,9 @@ type IntakeRegistry interface {
 	GetSource(ctx context.Context, id string) (*models.IntakeSource, error)
 
 	// GetSourceByExternalID returns the group's source with the external
-	// identity; ErrNotFound when there is none.
+	// identity; ErrNotFound when there is none. It needs a group: the
+	// service registry gets ErrFieldRequired, since the identity is unique
+	// per group only.
 	GetSourceByExternalID(ctx context.Context, system, instance, documentID string) (*models.IntakeSource, error)
 
 	// ListCandidates returns the candidates of the given sessions, ordered
@@ -1768,6 +1787,57 @@ type IntakeRegistry interface {
 	// returned; so is one canceled during the scan, which only loses the
 	// claim.
 	FailSource(ctx context.Context, sourceID string, attempt int, errorCode string) error
+}
+
+// IntakeDocumentProgress is what a delivery records on its document as it
+// goes. A nil field is left as it is.
+type IntakeDocumentProgress struct {
+	FileID    *string
+	SessionID *string
+	DraftID   *string
+	// CommodityID is the item the draft became, for a document that missed
+	// the promotion.
+	CommodityID *string
+}
+
+// IntakeDocumentRegistry is the group-scoped registry of the documents other
+// systems delivered (#2809). The embedded Registry serves the backup, the
+// restore and the purges. Every other method needs a group: the service
+// registry gets ErrFieldRequired, since an external identity is unique per
+// group only.
+//
+// CommodityDraftRegistry.Promote sets CommodityID on the document whose
+// draft it promotes, in its own transaction.
+type IntakeDocumentRegistry interface {
+	Registry[models.IntakeDocument]
+
+	// CreateOrGet stores a new document unless the group already has one
+	// with the same external identity, which is returned unchanged with
+	// created=false. The registry sets the ids, tenant, group and author;
+	// the timestamps are now unless the caller set them, as a restore does.
+	CreateOrGet(ctx context.Context, doc models.IntakeDocument) (stored *models.IntakeDocument, created bool, err error)
+
+	// GetByExternalID returns the group's document with the identity;
+	// ErrNotFound when there is none.
+	GetByExternalID(ctx context.Context, system, instance, documentID string) (*models.IntakeDocument, error)
+
+	// RecordProgress fills in the fields of progress that are still empty
+	// and returns the document. A field that is already set keeps its value,
+	// so of two deliveries racing on one document the first to record a
+	// file, a session or a draft wins, and the other finds it in the result.
+	// Recording a draft that is already promoted records its item too, so a
+	// promotion that ran before the draft was recorded is not lost; the
+	// draft is locked as a promotion locks it, so one of the two always
+	// sees the other.
+	RecordProgress(ctx context.Context, id string, progress IntakeDocumentProgress) (*models.IntakeDocument, error)
+
+	// ListByDrafts returns the group's documents whose DraftID is one of
+	// draftIDs, oldest first.
+	ListByDrafts(ctx context.Context, draftIDs ...string) ([]*models.IntakeDocument, error)
+
+	// ListByCommodities returns the group's documents whose CommodityID is
+	// one of commodityIDs, oldest first.
+	ListByCommodities(ctx context.Context, commodityIDs ...string) ([]*models.IntakeDocument, error)
 }
 
 // DraftPromotion is the result of CommodityDraftRegistry.Promote.
@@ -3425,6 +3495,7 @@ type Set struct {
 	CommodityReminderRegistry      CommodityReminderRegistry
 	CommodityDraftRegistry         CommodityDraftRegistry
 	IntakeRegistry                 IntakeRegistry
+	IntakeDocumentRegistry         IntakeDocumentRegistry
 	SellerRegistry                 SellerRegistry
 	ItemTypeRegistry               ItemTypeRegistry
 	CustomFieldRegistry            CustomFieldRegistry
@@ -3524,6 +3595,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.CommodityReminderRegistry, validation.Required),
 		validation.Field(&s.CommodityDraftRegistry, validation.Required),
 		validation.Field(&s.IntakeRegistry, validation.Required),
+		validation.Field(&s.IntakeDocumentRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
 		validation.Field(&s.ItemTypeRegistry, validation.Required),
 		validation.Field(&s.CustomFieldRegistry, validation.Required),

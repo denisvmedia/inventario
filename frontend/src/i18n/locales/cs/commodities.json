@@ -140,7 +140,8 @@
       "serialNumber": "Sériové číslo",
       "status": "Stav",
       "tags": "Štítky",
-      "urls": "Odkazy"
+      "urls": "Odkazy",
+      "source": "Zdroj"
     },
     "filesTab": {
       "browse": "procházet",
@@ -1127,5 +1128,9 @@
       "fileUploading": "nahrává se",
       "fileUploaded": "nahráno"
     }
+  },
+  "delivered": {
+    "from": "Z {{name}}",
+    "newTab": "otevře se na nové kartě"
   }
 }

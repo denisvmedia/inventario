@@ -46,6 +46,9 @@ the parts a token is meant for, and the ones least likely to move:
 - The group data under `/api/v1/g/{groupSlug}/`: `locations`, `areas`,
   `commodities` (items), `files`, `tags`, `loans`, `services`, `maintenance`,
   `search` and `exports`, plus `uploads` for adding files.
+- `POST /api/v1/g/{groupSlug}/intake`, which turns a document from another
+  system into a draft in the inbox and accepts only a token. See
+  [Documents from other systems](../documents-from-other-systems/).
 - File downloads: a file's response carries short-lived signed URLs. Fetch
   those without the `Authorization` header.
 

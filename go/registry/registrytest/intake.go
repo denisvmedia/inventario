@@ -45,6 +45,7 @@ func RunIntakeContract(t *testing.T, newEnv func(t *testing.T) IntakeEnv) {
 		{"create is idempotent and links the files", intakeContractCreate},
 		{"create keeps the queue within its limit", intakeContractQueueLimit},
 		{"external identity is unique in the group", intakeContractExternalIdentity},
+		{"a delivered source is stored scanned and skips the queue", intakeContractDelivered},
 		{"the worker claims, stores and finishes scans", intakeContractWorkerLifecycle},
 		{"two workers never claim the same source", intakeContractConcurrentClaim},
 		{"the sweep requeues a stuck scan and drops its late result", intakeContractStuckSweep},
@@ -186,6 +187,63 @@ func intakeContractExternalIdentity(t *testing.T, env IntakeEnv) {
 		[]registry.IntakeSourceInput{{ExternalDocumentID: "43"}}, 0)
 	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
 	_, err = env.Intake.GetSessionByClientKey(env.Ctx, "doc-no-system")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// The identity is unique per group only, so the service registry, which
+	// sees every group, cannot look it up.
+	_, err = env.Service.GetSourceByExternalID(env.Ctx, "paperless-ngx", "https://docs.example", "42")
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+}
+
+func intakeContractDelivered(t *testing.T, env IntakeEnv) {
+	c := qt.New(t)
+	receipt := intakeFile(c, env, "invoice.pdf", models.FileCategoryDocuments)
+	delivered := registry.IntakeSourceInput{
+		FileIDs:            []string{receipt.ID},
+		OneItem:            true,
+		ExternalSystem:     "paperless-ngx",
+		ExternalDocumentID: "117",
+		Delivered: &registry.IntakeScan{Candidates: []models.IntakeCandidate{{
+			Fields:         models.IntakeFields{"name": {Value: "Invoice 117", Confidence: 1}},
+			Selected:       true,
+			AcceptedFields: []string{"name"},
+			Quantity:       1,
+		}}},
+	}
+	// A queue limit of one, filled by an upload, still takes the delivery.
+	_, _, err := env.Intake.CreateSession(env.Ctx, models.IntakeSession{ClientKey: "upload"}, []registry.IntakeSourceInput{{}}, 1)
+	c.Assert(err, qt.IsNil)
+	session, created, err := env.Intake.CreateSession(env.Ctx,
+		models.IntakeSession{ClientKey: "external:117", Origin: models.IntakeOriginExternal},
+		[]registry.IntakeSourceInput{delivered}, 1)
+	c.Assert(err, qt.IsNil)
+	c.Assert(created, qt.IsTrue)
+
+	sources, err := env.Intake.ListSources(env.Ctx, session.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sources, qt.HasLen, 1)
+	c.Assert(sources[0].Status, qt.Equals, models.IntakeSourceScanned)
+	c.Assert(sources[0].ScannedAt, qt.IsNotNil)
+	c.Assert(sources[0].ExternalDocumentID, qt.Equals, "117")
+	linked, err := env.Files.ListByLinkedEntity(env.Ctx, models.FileLinkIntake, sources[0].ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(linked, qt.HasLen, 1)
+
+	candidates, err := env.Intake.ListCandidates(env.Ctx, session.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(candidates, qt.HasLen, 1)
+	c.Assert(candidates[0].Fields["name"].Value, qt.Equals, "Invoice 117")
+	c.Assert(candidates[0].Outcome, qt.Equals, models.IntakeCandidatePending)
+	c.Assert(candidates[0].SourceID, qt.Equals, sources[0].ID)
+
+	queued, err := env.Intake.CountQueued(env.Ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(queued, qt.Equals, 1)
+	// The worker takes the upload, never the delivery.
+	claimed, err := env.Service.ClaimNextSource(env.Ctx, time.Now().Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed.SessionID, qt.Not(qt.Equals), session.ID)
+	_, err = env.Service.ClaimNextSource(env.Ctx, time.Now().Add(time.Second))
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 

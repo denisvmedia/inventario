@@ -16,6 +16,7 @@ import {
   CircleDot,
   DollarSign,
   ExternalLink,
+  FileInput,
   FileText,
   Hash,
   ListPlus,
@@ -54,6 +55,7 @@ import { AssignLocationBanner } from "@/components/items/AssignLocationBanner"
 import { CommodityCoverPanel } from "@/components/items/CommodityCoverPanel"
 import { CommodityEditForm } from "@/components/items/CommodityEditForm"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import { DocumentSource } from "@/components/items/DocumentSource"
 import { ListPager } from "@/components/ListPager"
 import {
   LocationAreaFields,
@@ -147,6 +149,7 @@ import {
   commoditySellerHref,
   commodityTagHref,
 } from "@/features/commodities/query"
+import { useItemSource } from "@/features/intake/hooks"
 import { useSellers } from "@/features/sellers/hooks"
 import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
@@ -1598,6 +1601,8 @@ function DetailsTab({
   const shownCustomFields = (customFields ?? []).filter((f) => hasValue(customValues, f.id))
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellers()
+  // The other system the item's document came from (#2809), if any.
+  const source = useItemSource(commodity.id).data ?? null
   const noValue = t("commodities:detail.noValue")
   const seller = commodity.seller_id
     ? sellers.data?.find((s) => s.id === commodity.seller_id)
@@ -1683,6 +1688,16 @@ function DetailsTab({
         noValue
       ),
     },
+    ...(source
+      ? [
+          {
+            icon: FileInput,
+            label: t("commodities:detail.fields.source"),
+            testId: "commodity-detail-source",
+            value: <DocumentSource source={source} variant="value" />,
+          },
+        ]
+      : []),
     {
       icon: DollarSign,
       label: t("commodities:detail.fields.originalPrice"),

@@ -14,6 +14,10 @@ var (
 	// export fails before anything is written, so it never publishes a
 	// backup that cannot be restored.
 	ErrDraftsTooLarge = errx.NewSentinel("the group's open drafts are too large for a backup; discard the drafts you no longer need and export again")
+	// ErrIntakeDocumentsTooLarge is returned when the record of the
+	// documents other systems delivered takes more than one archive member
+	// may hold.
+	ErrIntakeDocumentsTooLarge = errx.NewSentinel("the record of delivered documents is too large for a backup")
 )
 
 // defaultMaxJSONDocBytes is the largest JSON document a restore accepts

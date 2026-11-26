@@ -42,6 +42,11 @@ const INBFilesMember = "files/_index.json"
 // `files/` prefix too, so the walker matches it before the file-bytes case.
 const INBDraftsMember = "files/_drafts.json"
 
+// INBIntakeDocumentsMember is the inner-tar member name of the delivered
+// documents (format 3.7). Kept in sync with
+// backup/export.INBIntakeDocumentsName; also under `files/`.
+const INBIntakeDocumentsMember = "files/_intake_documents.json"
+
 // INBPricesKeepZero is the first format version (MAJOR, MINOR) whose archives
 // write a known zero price as "0" and leave an unknown price out. Kept in sync
 // with backup/export.INBFormatVersion.
@@ -101,6 +106,9 @@ type INBManifest struct {
 	// DraftsFile names the drafts member (format 3.5). Informational, like
 	// FilesFile.
 	DraftsFile string `json:"draftsFile,omitempty"`
+	// IntakeDocumentsFile names the delivered documents member (format
+	// 3.7). Informational, like FilesFile.
+	IntakeDocumentsFile string `json:"intakeDocumentsFile,omitempty"`
 	// Sellers are the archived sellers (format 3.3), absent from older
 	// archives. Restore finds or creates each one before the first item.
 	Sellers []INBSeller `json:"sellers,omitempty"`
@@ -331,6 +339,44 @@ func (d *INBDraft) Timestamps() (createdAt, updatedAt time.Time, err error) {
 	updatedAt, err = parseInbTimestamp(d.UpdatedAt)
 	if err != nil {
 		return time.Time{}, time.Time{}, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("draft_id", d.ID))
+	}
+	return createdAt, updatedAt, nil
+}
+
+// INBIntakeDocumentsDoc is the delivered documents document (format 3.7).
+// Mirrors backup/export.INBIntakeDocumentsDoc.
+type INBIntakeDocumentsDoc struct {
+	Documents []INBIntakeDocument `json:"documents"`
+}
+
+// INBIntakeDocument is an archived document another system delivered. DraftID
+// and CommodityID are archive UUIDs of the draft and the item it made, when
+// the archive carries them. Mirrors backup/export.INBIntakeDocument.
+type INBIntakeDocument struct {
+	ID                 string `json:"id"`
+	ExternalSystem     string `json:"externalSystem"`
+	ExternalInstance   string `json:"externalInstance,omitempty"`
+	ExternalDocumentID string `json:"externalDocumentId"`
+	SourceName         string `json:"sourceName,omitempty"`
+	SourceURL          string `json:"sourceUrl,omitempty"`
+	PayloadHash        string `json:"payloadHash"`
+	DraftMade          bool   `json:"draftMade,omitempty"`
+	DraftID            string `json:"draftId,omitempty"`
+	CommodityID        string `json:"commodityId,omitempty"`
+	CreatedAt          string `json:"createdAt,omitempty"`
+	UpdatedAt          string `json:"updatedAt,omitempty"`
+}
+
+// Timestamps returns the archived creation and update times. A malformed
+// timestamp is an error; an absent one is zero, for the registry to fill.
+func (d *INBIntakeDocument) Timestamps() (createdAt, updatedAt time.Time, err error) {
+	createdAt, err = parseInbTimestamp(d.CreatedAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, errxtrace.Wrap("invalid createdAt", err, errx.Attrs("intake_document_id", d.ID))
+	}
+	updatedAt, err = parseInbTimestamp(d.UpdatedAt)
+	if err != nil {
+		return time.Time{}, time.Time{}, errxtrace.Wrap("invalid updatedAt", err, errx.Attrs("intake_document_id", d.ID))
 	}
 	return createdAt, updatedAt, nil
 }

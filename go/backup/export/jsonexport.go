@@ -178,6 +178,12 @@ func (s *ExportService) writePayload(
 		return nil, nil, err
 	}
 
+	// Then the documents other systems delivered (format 3.7), after the
+	// items and the drafts they name.
+	if err := builder.writeIntakeDocuments(plan.intakeDocs); err != nil {
+		return nil, nil, err
+	}
+
 	// Finally the non-commodity files member (issue #2235). It MUST come after
 	// every location member: restore resolves each ref's location/area link
 	// through the ID mapping, which is only populated as the location documents
@@ -292,12 +298,15 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 // non-commodity files member (issue #2235) only when the plan writes them, so
 // a backup without them stays byte-stable.
 func (b *inbBuilder) writeManifest(plan *inbPlan) error {
-	var unassignedMember, draftsMember, filesMember string
+	var unassignedMember, draftsMember, intakeDocsMember, filesMember string
 	if plan.unassigned.present {
 		unassignedMember = INBUnassignedName
 	}
 	if plan.drafts.present {
 		draftsMember = INBDraftsName
+	}
+	if plan.intakeDocs.present {
+		intakeDocsMember = INBIntakeDocumentsName
 	}
 	if plan.files.present {
 		filesMember = INBFilesName
@@ -313,13 +322,14 @@ func (b *inbBuilder) writeManifest(plan *inbPlan) error {
 			PublicKey:   b.svc.signer.PublicKeyBase64(),
 			Fingerprint: b.svc.signer.Fingerprint(),
 		},
-		Locations:      plan.manifestLocs,
-		UnassignedFile: unassignedMember,
-		DraftsFile:     draftsMember,
-		FilesFile:      filesMember,
-		Sellers:        plan.sellers,
-		ItemTypes:      plan.itemTypes,
-		CustomFields:   plan.customFields,
+		Locations:           plan.manifestLocs,
+		UnassignedFile:      unassignedMember,
+		DraftsFile:          draftsMember,
+		IntakeDocumentsFile: intakeDocsMember,
+		FilesFile:           filesMember,
+		Sellers:             plan.sellers,
+		ItemTypes:           plan.itemTypes,
+		CustomFields:        plan.customFields,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

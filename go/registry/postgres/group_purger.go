@@ -105,6 +105,11 @@ var purgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.IntakeSources()) },
 	func(t store.TableNames) string { return string(t.IntakeSessions()) },
 
+	// Documents other systems delivered (#2809). group_id -> location_groups
+	// and created_by_user_id -> users are NO ACTION; nothing references
+	// them.
+	func(t store.TableNames) string { return string(t.IntakeDocuments()) },
+
 	// Currency-migration audit rows (#2095). Their FK to currency_migrations
 	// is ON DELETE CASCADE, but group_id -> location_groups is NO ACTION, so
 	// the purge must clear them explicitly. Dropped BEFORE currency_migrations

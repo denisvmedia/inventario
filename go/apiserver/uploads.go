@@ -493,8 +493,8 @@ func (api *uploadsAPI) saveFile(ctx context.Context, filename string, src io.Rea
 	return savedBlob{mimeType: wrappedSrc.MIMEType(), size: written, sha256: hex.EncodeToString(hasher.Sum(nil))}, nil
 }
 
-func Uploads(params Params) func(r chi.Router) {
-	api := &uploadsAPI{
+func newUploadsAPI(params Params) *uploadsAPI {
+	return &uploadsAPI{
 		uploadLocation:     params.UploadLocation,
 		fileService:        services.NewFileService(params.FactorySet, params.UploadLocation),
 		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
@@ -502,6 +502,10 @@ func Uploads(params Params) func(r chi.Router) {
 		thumbnailConfig:    params.ThumbnailConfig,
 		maxUploadBytes:     params.MaxUploadBytes,
 	}
+}
+
+func Uploads(params Params) func(r chi.Router) {
+	api := newUploadsAPI(params)
 
 	// Create concurrent upload service for upload limiting
 	config := services.LoadConcurrentUploadConfig()

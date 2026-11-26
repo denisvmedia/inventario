@@ -51,6 +51,24 @@ the section matching the tag and publishes it as the GitHub Release body. See
   then by name and type, and an option by the option, then by label,
   creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+- Documents from other systems: `POST /g/{groupSlug}/intake` turns a document
+  that another system such as Paperless-ngx sends into a draft in the inbox,
+  with the document attached when it is sent, its address among the draft's
+  links, and the title, seller, purchase date and amount it names. A value it
+  does not send stays unknown, and no AI scan runs. The endpoint takes a
+  form, a multipart form with the document in `file`, or a flat JSON object,
+  and accepts only an API token that may write, for a member who is not a
+  viewer. The source system, its instance and the document id identify a
+  document in the group: sending it again with the same values answers 200
+  and makes nothing, and with other values answers 409
+  `intake.document_changed` and changes nothing, also after the draft was
+  discarded or became an item. The address is stored and shown, never
+  fetched. A draft's inbox row says **From Paperless-ngx** and links to the
+  document there, and the item made from it shows the same in a **Source**
+  row; `GET /intake/documents` lists the delivered documents by draft or
+  item. Full database backups carry the record (format 3.7; an older reader
+  restores without it). The user guide has a Paperless-ngx recipe
+  ([#2809](https://github.com/denisvmedia/inventario/issues/2809)).
 
 - Add items from files: drop receipts, invoices and product photos on the
   Items page, or pick them with **Add from files**, and the AI scan reads them

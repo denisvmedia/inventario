@@ -6598,7 +6598,8 @@ export type paths = {
          *     are not validated as an item. client_key is the client's identity for the draft:
          *     a create with a key the group already has returns that draft with 200 instead of
          *     making another one, so a retry after a lost response is safe. A key whose draft
-         *     is being discarded answers 409 draft.discarded. Known fields of the item form
+         *     is being discarded answers 409 draft.discarded. A key starting with "intake:" or
+         *     "intake-doc:" is kept for the drafts intake makes (422 on client_key). Known fields of the item form
          *     must have the type the form uses (text, a number or numeric text, a list of
          *     text, true or false); a field of another type is refused with 422 on
          *     values.<field>. A type in values.type must be one of the group's item types
@@ -8319,6 +8320,199 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/intake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Deliver a document from another system
+         * @description Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.
+         *     The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document.
+         *     Swagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.
+         *     No AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.
+         *     source_system, source_instance and document_id identify the document in the group.
+         *     Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
+         *     Delivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.
+         *     A delivery is refused with 409 intake.document_conflict when an intake session or a draft of the group carries the document but the group has no record of the delivery that made it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            /** @description The delivered document */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["jsonapi.IntakeDeliveryRequest"];
+                    "application/x-www-form-urlencoded": components["schemas"]["jsonapi.IntakeDeliveryRequest"];
+                    "multipart/form-data": components["schemas"]["jsonapi.IntakeDeliveryRequest"];
+                };
+            };
+            responses: {
+                /** @description The document was delivered before; nothing was made */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeDocumentResponse"];
+                    };
+                };
+                /** @description The document was delivered and its draft made */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeDocumentResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description No API token, a read-only token, a token for another group, or a role that cannot edit items */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session or a draft carries the document without a record of its delivery */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The file or the fields are too large */
+                413: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unsupported Media Type */
+                415: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description A field is missing, unknown or malformed */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description A currency migration is running in the group */
+                423: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/intake/documents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List delivered documents
+         * @description Lists the documents other systems delivered (#2809) whose draft is one of draft_id or whose item is one of commodity_id. Both take a comma-separated list of ids; at least one is required.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Draft ids, comma-separated */
+                    draft_id?: string;
+                    /** @description Item ids, comma-separated */
+                    commodity_id?: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.IntakeDocumentsResponse"];
+                    };
+                };
+                /** @description Neither draft_id nor commodity_id is given */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/intake/limits": {
         parameters: {
             query?: never;
@@ -8412,7 +8606,8 @@ export type paths = {
          *     is the client's identity for the batch: a key the group already has returns that
          *     session with 200, so a retry after a lost response does not queue the files
          *     twice. The replay does not compare the sources, so a client takes a new key for
-         *     every batch. Without an AI scan provider the request answers 503
+         *     every batch. A key starting with "external:" is kept for the batches documents
+         *     from other systems make (422 on client_key). Without an AI scan provider the request answers 503
          *     commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
          */
         post: {
@@ -16288,6 +16483,11 @@ export type components = {
              *     ]
              */
             reasons?: ("draft" | "item_draft" | "intake")[];
+            /**
+             * @description Source is the other system a draft came from (#2809); absent for a
+             *     draft made in the app and for other kinds.
+             */
+            source?: components["schemas"]["jsonapi.InboxSource"];
             /** @example Cordless drill */
             title?: string;
             /**
@@ -16312,6 +16512,18 @@ export type components = {
         "jsonapi.InboxResponse": {
             data?: components["schemas"]["jsonapi.InboxEntry"][];
             meta?: components["schemas"]["jsonapi.InboxMeta"];
+        };
+        "jsonapi.InboxSource": {
+            /**
+             * @description Name is how the system is shown, e.g. "Paperless-ngx".
+             * @example Paperless-ngx
+             */
+            name?: string;
+            /**
+             * @description URL links to the document in that system; empty when it sent none.
+             * @example https://paperless.example.com/documents/117/
+             */
+            url?: string;
         };
         "jsonapi.IntakeCandidateResponse": {
             data?: components["schemas"]["jsonapi.IntakeCandidateResponseData"];
@@ -16342,6 +16554,106 @@ export type components = {
              * @enum {string}
              */
             type?: "intake_candidates";
+        };
+        "jsonapi.IntakeDeliveryRequest": {
+            /** @example 129.90 */
+            amount?: string;
+            /** @example EUR */
+            currency?: string;
+            /**
+             * @description DocumentID is the document's id in the other system.
+             * @example 117
+             */
+            document_id: string;
+            /** @example 2024-03-14 */
+            purchase_date?: string;
+            /**
+             * @description Seller, PurchaseDate (YYYY-MM-DD), Amount and Currency are the
+             *     purchase data the other system knows. Each is optional; what is left
+             *     out stays unknown. Amount may start with a currency code ("EUR12.30").
+             * @example Hardware Store
+             */
+            seller?: string;
+            /**
+             * @description SourceInstance tells installations of one system apart. Optional.
+             * @example home
+             */
+            source_instance?: string;
+            /**
+             * @description SourceName is how the other system is shown. Optional.
+             * @example Paperless-ngx
+             */
+            source_name?: string;
+            /**
+             * @description SourceSystem names the other system; with SourceInstance and
+             *     DocumentID it identifies the document in the group.
+             * @example paperless-ngx
+             */
+            source_system: string;
+            /**
+             * @description SourceURL links to the document there: absolute http or https. It is
+             *     stored and shown, never fetched.
+             * @example https://paperless.example.com/documents/117/
+             */
+            source_url?: string;
+            /**
+             * @description Title becomes the draft's name.
+             * @example Invoice 2024-117
+             */
+            title: string;
+        };
+        "jsonapi.IntakeDocumentResponse": {
+            data?: components["schemas"]["jsonapi.IntakeDocumentResponseData"];
+        };
+        "jsonapi.IntakeDocumentResponseData": {
+            attributes?: components["schemas"]["jsonapi.IntakeDocumentView"];
+            id?: string;
+            /**
+             * @example intake_documents
+             * @enum {string}
+             */
+            type?: "intake_documents";
+        };
+        "jsonapi.IntakeDocumentView": {
+            commodity_id?: string | null;
+            created_at?: string;
+            draft_id?: string | null;
+            external_document_id?: string;
+            external_instance?: string;
+            external_system?: string;
+            /** @description FileID is the delivered file, stored as a file of the group. */
+            file_id?: string | null;
+            id?: string;
+            /**
+             * @description SessionID is the intake session that carried the delivery. The
+             *     session can be deleted, so there is no foreign key.
+             */
+            session_id?: string | null;
+            /** @description SourceName is how the other system is shown, e.g. "Paperless-ngx". */
+            source_name?: string;
+            /**
+             * @description SourceURL links to the document in the other system. It is stored and
+             *     shown, never fetched.
+             */
+            source_url?: string;
+            /**
+             * @example draft
+             * @enum {unknown}
+             */
+            state?: "pending" | "draft" | "item" | "removed";
+            updated_at?: string;
+            uuid?: string;
+        };
+        "jsonapi.IntakeDocumentsMeta": {
+            /**
+             * Format: int64
+             * @example 1
+             */
+            documents?: number;
+        };
+        "jsonapi.IntakeDocumentsResponse": {
+            data?: components["schemas"]["jsonapi.IntakeDocumentResponseData"][];
+            meta?: components["schemas"]["jsonapi.IntakeDocumentsMeta"];
         };
         "jsonapi.IntakeDraftsMeta": {
             /** @example 2 */
@@ -18324,6 +18636,8 @@ export type components = {
         };
         /** @enum {string} */
         "models.IntakeCandidateOutcome": "pending" | "created" | "skipped" | "failed";
+        /** @enum {string} */
+        "models.IntakeDocumentState": "pending" | "draft" | "item" | "removed";
         "models.IntakeFieldGuess": {
             confidence?: number;
             value?: unknown;

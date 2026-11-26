@@ -482,6 +482,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2810 and #2794 by the 2026-11-24 goal to implement the open enhancements; the order, polling, remove button and Items page line agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
 
+#### 2026-11-26 — "From Paperless-ngx" on delivered drafts in the inbox
+
+- **Issue/PR**: #2809 / PR pending
+- **Mock**: none. `design-mocks/src/views/` has no inbox and no documents sent by another system.
+- **Reality**: `frontend/src/components/items/DocumentSource.tsx` adds "From {system}" with a `FileInput` icon at the start of a draft row's meta text in `frontend/src/pages/inbox/InboxPage.tsx`, before "Saved {relative time}", when another system sent the document the draft was made from. The text links to the document in that system when its address is http or https, opening in a new tab with `rel="noreferrer noopener"` and an "opens in a new tab" note for screen readers; otherwise it is plain text. The name is the system's display name, or its id when it sent none.
+- **Why**: not present in mock. #2809 asks that a delivered draft carries a "from {source}" marker and that the source reference can be found. The marker reuses the muted meta line of the inbox row (the row anatomy logged under "Batches of files in the inbox"). The icon and the link are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the icon and the link agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws delivered documents; otherwise permanent.
+
+#### 2026-11-26 — Source row on the item detail page
+
+- **Issue/PR**: #2809 / PR pending
+- **Mock**: [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) Details rows (L785–L820: Location, Quantity, Purchase Date, Purchase Price, Current Value, Serial Number) have no row for where the item came from.
+- **Reality**: `frontend/src/pages/commodities/CommodityDetailPage.tsx` adds a **Source** row with a `FileInput` icon after the seller row, only for an item made from a document another system sent. The value is the system's name, linked to the document there in the primary color when its address is http or https and opening in a new tab. The row is read from `GET /intake/documents?commodity_id=…`; an item made in the app makes the same request and shows no row.
+- **Why**: not present in mock. #2809 asks that the source reference stays discoverable from the item after the draft is finished. The row uses the existing `DetailRow` anatomy. Its place after the seller and the link are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2809 by the 2026-11-24 goal to implement the open enhancements; the row's place and the link agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an item's source; otherwise permanent.
+
 ### Dashboard / Overview
 
 #### 2026-11-25 — Needs attention card on the dashboard

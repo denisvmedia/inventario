@@ -29,6 +29,11 @@ const (
 // the registry's sentinel, which checks the limit atomically.
 var ErrIntakeQueueFull = registry.ErrIntakeQueueFull
 
+// ErrIntakeSourceDelivered is returned when a rescan reaches a source another
+// system delivered (#2809): it carries the values that system sent, and no
+// scan runs for it.
+var ErrIntakeSourceDelivered = errx.NewSentinel("the intake source was delivered by another system")
+
 // IntakeConfig carries the limits of batch intake. The per-purchase file
 // count, the file size and the accepted types come from the scan service,
 // since every source is one scan.
@@ -190,7 +195,8 @@ func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sou
 		return nil, false, err
 	}
 	session := models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginUpload}
-	if err := validation.Validate(clientKey, validation.Required, validation.Length(1, models.IntakeClientKeyMaxLength)); err != nil {
+	if err := validation.Validate(clientKey, validation.Required, validation.Length(1, models.IntakeClientKeyMaxLength),
+		models.MemberSessionClientKeyRule); err != nil {
 		return nil, false, validation.Errors{"client_key": err}
 	}
 	if existing, err := reg.GetSessionByClientKey(ctx, clientKey); err == nil {
@@ -427,11 +433,13 @@ func (s *IntakeService) ReviewCandidate(ctx context.Context, sessionID, candidat
 // from it.
 //
 // Every step can be repeated: the draft of a product is found by the client
-// key "intake:<candidate id>", a link that exists is kept, and a product that
-// has its draft is not touched again. A second call, from another device or
-// after a lost response, therefore makes nothing twice, and a call after a
-// partial failure finishes only what is left. A product whose draft cannot
-// be made is marked failed with a code and the others go on.
+// key "intake:<candidate id>", or for a delivered document by the key
+// IntakeSource.DraftClientKey gives it, a link that exists is kept, and a
+// product that has its draft is not touched again. A second call, from
+// another device or after a lost response, therefore makes nothing twice,
+// and a call after a partial failure finishes only what is left. A product
+// whose draft cannot be made is marked failed with a code and the others go
+// on.
 func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*IntakeDraftsResult, error) {
 	reg, err := s.intake(ctx)
 	if err != nil {
@@ -454,10 +462,12 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 		return nil, errxtrace.Wrap("failed to create registry set", err)
 	}
 	sourceFiles := map[string][]*models.FileEntity{}
+	scanned := map[string]*models.IntakeSource{}
 	for _, src := range sources {
 		if src.Status != models.IntakeSourceScanned {
 			continue
 		}
+		scanned[src.ID] = src
 		if sourceFiles[src.ID], err = set.FileRegistry.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID); err != nil {
 			return nil, err
 		}
@@ -466,11 +476,11 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 
 	result := &IntakeDraftsResult{}
 	for _, cand := range candidates {
-		files, scanned := sourceFiles[cand.SourceID]
-		if !scanned {
+		src := scanned[cand.SourceID]
+		if src == nil {
 			continue
 		}
-		if err := s.finishCandidate(ctx, reg, set, input, cand, files, result); err != nil {
+		if err := s.finishCandidate(ctx, reg, set, input, src, cand, sourceFiles[src.ID], result); err != nil {
 			return nil, err
 		}
 	}
@@ -490,7 +500,7 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 // made for it is discarded: the new scan offers the product again, and
 // keeping the draft would give it a second one.
 func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.IntakeRegistry, set *registry.Set, input intakeDraftInput,
-	cand *models.IntakeCandidate, files []*models.FileEntity, result *IntakeDraftsResult,
+	src *models.IntakeSource, cand *models.IntakeCandidate, files []*models.FileEntity, result *IntakeDraftsResult,
 ) error {
 	if !cand.Selected && cand.Outcome != models.IntakeCandidateCreated {
 		if cand.Outcome != models.IntakeCandidateSkipped {
@@ -504,7 +514,7 @@ func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.Intake
 	if !cand.IsUnfinished() {
 		return nil
 	}
-	made, err := s.createDraft(ctx, set, input, cand, files)
+	made, err := s.createDraft(ctx, set, input, src.DraftClientKey(cand), cand, files)
 	if err != nil {
 		return err
 	}
@@ -564,12 +574,12 @@ type madeDraft struct {
 // createDraft makes or finds the draft of a candidate and links the source
 // files to it. It returns a failure code for a problem with this candidate
 // only, and an error for one that stops the whole call.
-func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, cand *models.IntakeCandidate, files []*models.FileEntity) (madeDraft, error) {
+func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, key string, cand *models.IntakeCandidate, files []*models.FileEntity) (madeDraft, error) {
 	values, err := intakeDraftValues(ctx, input, cand)
 	if err != nil {
 		return madeDraft{}, err
 	}
-	draft, created, err := s.drafts.Create(ctx, cand.DraftClientKey(), values)
+	draft, created, err := s.drafts.Create(ctx, key, values)
 	switch {
 	case errors.Is(err, registry.ErrDraftDiscarded):
 		return madeDraft{failure: IntakeDraftDiscarded}, nil
@@ -679,6 +689,11 @@ func (s *IntakeService) Rescan(ctx context.Context, sessionID, sourceID string) 
 	}
 	if src.SessionID != session.ID {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "intake_source", "entity_id", sourceID))
+	}
+	if session.Origin == models.IntakeOriginExternal {
+		// Another system delivered the product with its values; there is
+		// nothing to scan.
+		return nil, errxtrace.Classify(ErrIntakeSourceDelivered, errx.Attrs("entity_id", sourceID))
 	}
 	if err := s.recordMadeDrafts(ctx, reg, session.ID, src.ID); err != nil {
 		return nil, err

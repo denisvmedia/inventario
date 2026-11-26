@@ -18,6 +18,7 @@ export interface FakeInboxEntry {
   updated_at?: string | null
   file_count?: number
   intake?: { state: string; summary: Record<string, number> }
+  source?: { name: string; url?: string }
 }
 
 export interface FakeInboxCheck {

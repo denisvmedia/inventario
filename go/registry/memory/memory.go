@@ -31,6 +31,8 @@ func NewFactorySet() *registry.FactorySet {
 	commodityReminderFactory := NewCommodityReminderRegistryFactory()
 	commodityDraftFactory := NewCommodityDraftRegistryFactory(commodityFactory, fileFactory)
 	intakeFactory := NewIntakeRegistryFactory(fileFactory, commodityDraftFactory)
+	intakeDocumentFactory := NewIntakeDocumentRegistryFactory()
+	commodityDraftFactory.SetIntakeDocumentFactory(intakeDocumentFactory)
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
@@ -76,6 +78,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CommodityReminderRegistryFactory = commodityReminderFactory
 	fs.CommodityDraftRegistryFactory = commodityDraftFactory
 	fs.IntakeRegistryFactory = intakeFactory
+	fs.IntakeDocumentRegistryFactory = intakeDocumentFactory
 	fs.SellerRegistryFactory = sellerFactory
 	fs.ItemTypeRegistryFactory = itemTypeFactory
 	fs.CustomFieldRegistryFactory = customFieldFactory
@@ -180,6 +183,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupMembershipRegistry,
 	)
 	groupPurger.SetItemTypeFactory(itemTypeFactory)
+	groupPurger.SetIntakeDocumentFactory(intakeDocumentFactory)
 	groupPurger.SetCustomFieldFactory(customFieldFactory)
 	fs.GroupPurger = groupPurger
 	// UserPurger (#2116): clears a single user's auth/identity rows during the
@@ -205,6 +209,7 @@ func NewFactorySet() *registry.FactorySet {
 		savedViewFactory,
 	)
 	userPurger.SetItemTypeFactory(itemTypeFactory)
+	userPurger.SetIntakeDocumentFactory(intakeDocumentFactory)
 	userPurger.SetCustomFieldFactory(customFieldFactory)
 	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its

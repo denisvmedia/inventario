@@ -25,6 +25,7 @@ import {
   type IntakeSessionDetail,
   type IntakeSessionsPage,
 } from "./api"
+import { listIntakeDocuments, type DocumentSource } from "./documents"
 import { intakeKeys } from "./keys"
 
 // Every intake action shows its own error toast, which names the action, so
@@ -71,6 +72,24 @@ export function useIntakeSession(id: string | null | undefined) {
     enabled: !!slug && !!id,
     retry: false,
     refetchInterval: (query) => (query.state.data?.state === "processing" ? INTAKE_POLL_MS : false),
+  })
+}
+
+// useItemSource returns the other system an item's document came from
+// (#2809), or null for an item made in the app. A failed read shows no
+// source rather than an error: the item page works without it.
+export function useItemSource(commodityId: string | null | undefined) {
+  const slug = useSlug()
+  return useQuery<DocumentSource | null>({
+    queryKey: intakeKeys.itemDocuments(slug, commodityId ?? ""),
+    queryFn: async ({ signal }) => {
+      const docs = await listIntakeDocuments({ commodityIds: [commodityId ?? ""] }, signal)
+      return docs.find((d) => d.commodityId === commodityId)?.source ?? null
+    },
+    enabled: !!slug && !!commodityId,
+    staleTime: 5 * 60_000,
+    retry: false,
+    meta: QUIET,
   })
 }
 

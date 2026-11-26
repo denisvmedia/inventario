@@ -22,6 +22,7 @@ import {
 } from "lucide-react"
 
 import { ListLoadError } from "@/components/common/ListLoadError"
+import { DocumentSource } from "@/components/items/DocumentSource"
 import { StateBadge } from "@/components/items/IntakeCard"
 import { Pagination } from "@/components/common/Pagination"
 import { RouteTitle } from "@/components/routing/RouteTitle"
@@ -428,6 +429,9 @@ function DraftRow({ entry, slug, canWrite }: RowProps) {
       reasons={entry.reasons}
       meta={
         <>
+          {entry.source ? (
+            <DocumentSource source={entry.source} testId={`inbox-source-${entry.id}`} />
+          ) : null}
           {saved ? <span>{t("commodities:drafts.savedAgo", { when: saved })}</span> : null}
           {entry.fileCount > 0 ? (
             <span className="inline-flex items-center gap-1">

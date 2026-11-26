@@ -214,7 +214,8 @@ func (api *commodityDraftsAPI) get(w http.ResponseWriter, r *http.Request) {
 // @Description are not validated as an item. client_key is the client's identity for the draft:
 // @Description a create with a key the group already has returns that draft with 200 instead of
 // @Description making another one, so a retry after a lost response is safe. A key whose draft
-// @Description is being discarded answers 409 draft.discarded. Known fields of the item form
+// @Description is being discarded answers 409 draft.discarded. A key starting with "intake:" or
+// @Description "intake-doc:" is kept for the drafts intake makes (422 on client_key). Known fields of the item form
 // @Description must have the type the form uses (text, a number or numeric text, a list of
 // @Description text, true or false); a field of another type is refused with 422 on
 // @Description values.<field>. A type in values.type must be one of the group's item types

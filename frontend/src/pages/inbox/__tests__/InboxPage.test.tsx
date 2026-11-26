@@ -173,6 +173,39 @@ describe("<InboxPage />", () => {
     expect(await screen.findByTestId("loc")).toHaveTextContent(`/g/${SLUG}/intake/s2`)
   })
 
+  it("says which other system a delivered draft came from", async () => {
+    const fake = inboxHandlers.backend(SLUG, [
+      inboxHandlers.draft("d1", "Invoice 117", {
+        source: { name: "Paperless-ngx", url: "https://paperless.example/documents/117/" },
+      }),
+      inboxHandlers.draft("d2", "Manual", { source: { name: "paperless-ngx" } }),
+      // An address that is not http or https is never a link.
+      inboxHandlers.draft("d3", "Odd", { source: { name: "Other", url: "javascript:alert(1)" } }),
+      inboxHandlers.draft("d4", "Drill"),
+    ])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const { container } = renderPage()
+    const linked = await screen.findByTestId("inbox-source-d1")
+    expect(linked).toHaveTextContent("From Paperless-ngx")
+    const link = within(linked).getByRole("link", { name: /From Paperless-ngx/ })
+    expect(link).toHaveAttribute("href", "https://paperless.example/documents/117/")
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link).toHaveAttribute("rel", "noreferrer noopener")
+    expect(link).toHaveAccessibleName("From Paperless-ngx (opens in a new tab)")
+
+    const plain = screen.getByTestId("inbox-source-d2")
+    expect(plain).toHaveTextContent("From paperless-ngx")
+    expect(within(plain).queryByRole("link")).toBeNull()
+    expect(within(screen.getByTestId("inbox-source-d3")).queryByRole("link")).toBeNull()
+    expect(screen.queryByTestId("inbox-source-d4")).toBeNull()
+    expect(await axe(container)).toHaveNoViolations()
+  })
+
   it("has no axe violations", async () => {
     seed()
     const { container } = renderPage()

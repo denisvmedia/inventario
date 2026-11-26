@@ -240,7 +240,7 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 			return errxtrace.Wrap("failed to insert intake session", err)
 		}
 		created = true
-		if err := r.checkQueueRoom(ctx, tx, len(sources), maxQueued); err != nil {
+		if err := r.checkQueueRoom(ctx, tx, registry.QueuedIntakeSources(sources), maxQueued); err != nil {
 			return err
 		}
 
@@ -366,7 +366,12 @@ func (r *IntakeRegistry) GetSource(ctx context.Context, id string) (*models.Inta
 	return r.getSource(ctx, "id", id)
 }
 
+// GetSourceByExternalID names the group in the query rather than leaving the
+// scope to RLS alone: the identity is unique per group only.
 func (r *IntakeRegistry) GetSourceByExternalID(ctx context.Context, system, instance, documentID string) (*models.IntakeSource, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, err
+	}
 	if documentID == "" {
 		return nil, intakeNotFound("intake_source", documentID)
 	}
@@ -374,8 +379,8 @@ func (r *IntakeRegistry) GetSourceByExternalID(ctx context.Context, system, inst
 	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`
 			SELECT * FROM %s
-			WHERE external_system = $1 AND external_instance = $2 AND external_document_id = $3`, r.tableNames.IntakeSources())
-		err := tx.QueryRowxContext(ctx, query, system, instance, documentID).StructScan(&source)
+			WHERE group_id = $1 AND external_system = $2 AND external_instance = $3 AND external_document_id = $4`, r.tableNames.IntakeSources())
+		err := tx.QueryRowxContext(ctx, query, r.groupID, system, instance, documentID).StructScan(&source)
 		if errors.Is(err, sql.ErrNoRows) {
 			return intakeNotFound("intake_source", documentID)
 		}
@@ -762,34 +767,8 @@ func (r *IntakeRegistry) StoreScan(ctx context.Context, sourceID string, attempt
 		if _, err := tx.ExecContext(ctx, del, sourceID); err != nil {
 			return errxtrace.Wrap("failed to delete intake candidates", err)
 		}
-		insert := store.NewTxRegistry[models.IntakeCandidate](tx, r.tableNames.IntakeCandidates())
-		for i, candidate := range scan.Candidates {
-			candidate.TenantGroupAwareEntityID = models.TenantGroupAwareEntityID{
-				EntityID:        models.EntityID{ID: generateID(), UUID: generateID()},
-				TenantID:        source.TenantID,
-				GroupID:         source.GroupID,
-				CreatedByUserID: source.CreatedByUserID,
-			}
-			candidate.SessionID = source.SessionID
-			candidate.SourceID = source.ID
-			candidate.SortOrder = i
-			if candidate.Fields == nil {
-				candidate.Fields = models.IntakeFields{}
-			}
-			if candidate.AcceptedFields == nil {
-				candidate.AcceptedFields = models.ValuerSlice[string]{}
-			}
-			if candidate.Quantity < 1 {
-				candidate.Quantity = 1
-			}
-			candidate.Outcome = models.IntakeCandidatePending
-			candidate.DraftID = nil
-			candidate.ErrorCode = ""
-			candidate.CreatedAt = now
-			candidate.UpdatedAt = now
-			if err := insert.Insert(ctx, candidate); err != nil {
-				return errxtrace.Wrap("failed to insert intake candidate", err)
-			}
+		if err := r.insertCandidates(ctx, tx, source, scan.Candidates, now); err != nil {
+			return err
 		}
 		warnings := models.ValuerSlice[models.IntakeWarning](scan.Warnings)
 		if warnings == nil {
@@ -843,6 +822,44 @@ func (r *IntakeRegistry) FailSource(ctx context.Context, sourceID string, attemp
 // insertSource inserts one source of a new session and links its files to
 // it. A file in Trash counts as not found; a source whose external identity
 // the group already has is ErrAlreadyExists.
+// insertCandidates stores the products found in source, pending and in the
+// given order.
+func (r *IntakeRegistry) insertCandidates(ctx context.Context, tx *sqlx.Tx, source *models.IntakeSource, candidates []models.IntakeCandidate, now time.Time) error {
+	insert := store.NewTxRegistry[models.IntakeCandidate](tx, r.tableNames.IntakeCandidates())
+	for i, candidate := range candidates {
+		candidate.TenantGroupAwareEntityID = models.TenantGroupAwareEntityID{
+			EntityID:        models.EntityID{ID: generateID(), UUID: generateID()},
+			TenantID:        source.TenantID,
+			GroupID:         source.GroupID,
+			CreatedByUserID: source.CreatedByUserID,
+		}
+		candidate.SessionID = source.SessionID
+		candidate.SourceID = source.ID
+		candidate.SortOrder = i
+		if candidate.Fields == nil {
+			candidate.Fields = models.IntakeFields{}
+		}
+		if candidate.AcceptedFields == nil {
+			candidate.AcceptedFields = models.ValuerSlice[string]{}
+		}
+		if candidate.Quantity < 1 {
+			candidate.Quantity = 1
+		}
+		candidate.Outcome = models.IntakeCandidatePending
+		candidate.DraftID = nil
+		candidate.ErrorCode = ""
+		candidate.CreatedAt = now
+		candidate.UpdatedAt = now
+		if err := insert.Insert(ctx, candidate); err != nil {
+			return errxtrace.Wrap("failed to insert intake candidate", err)
+		}
+	}
+	return nil
+}
+
+// insertSource stores a source of a new session with its file links. A
+// delivered source is stored scanned with its candidates; any other source
+// waits in the queue.
 func (r *IntakeRegistry) insertSource(ctx context.Context, tx *sqlx.Tx, files *FileRegistry, sessionID string, sortOrder int, input registry.IntakeSourceInput, now time.Time) error {
 	source := models.IntakeSource{
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{
@@ -863,6 +880,13 @@ func (r *IntakeRegistry) insertSource(ctx context.Context, tx *sqlx.Tx, files *F
 		CreatedAt:          now,
 		UpdatedAt:          now,
 	}
+	if input.Delivered != nil {
+		source.Status = models.IntakeSourceScanned
+		source.ScannedAt = new(now)
+		if input.Delivered.Warnings != nil {
+			source.Warnings = models.ValuerSlice[models.IntakeWarning](input.Delivered.Warnings)
+		}
+	}
 	if err := store.NewTxRegistry[models.IntakeSource](tx, r.tableNames.IntakeSources()).Insert(ctx, source); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgUniqueViolationCode {
@@ -870,6 +894,11 @@ func (r *IntakeRegistry) insertSource(ctx context.Context, tx *sqlx.Tx, files *F
 				errx.Attrs("entity_type", "intake_source", "external_document_id", input.ExternalDocumentID))
 		}
 		return errxtrace.Wrap("failed to insert intake source", err)
+	}
+	if input.Delivered != nil {
+		if err := r.insertCandidates(ctx, tx, &source, input.Delivered.Candidates, now); err != nil {
+			return err
+		}
 	}
 	for _, fileID := range input.FileIDs {
 		file, err := files.lockFileForShare(ctx, tx, fileID)

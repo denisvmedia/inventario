@@ -162,6 +162,10 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			reg := fs.IntakeRegistryFactory.CreateServiceRegistry()
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.IntakeSession])
 		}},
+		{"intake_documents", func() error {
+			reg := fs.IntakeDocumentRegistryFactory.CreateServiceRegistry()
+			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.IntakeDocument])
+		}},
 		// Commodity sub-resources before commodities.
 		{"commodity_supply_links", func() error {
 			reg := fs.SupplyLinkRegistryFactory.CreateServiceRegistry()

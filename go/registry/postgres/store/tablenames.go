@@ -53,6 +53,7 @@ type TableNames struct {
 	IntakeSessions           func() TableName
 	IntakeSources            func() TableName
 	IntakeCandidates         func() TableName
+	IntakeDocuments          func() TableName
 	CurrencyMigrations       func() TableName
 	CurrencyMigrationAudit   func() TableName
 	CommodityScanAudits      func() TableName
@@ -115,6 +116,7 @@ var DefaultTableNames = TableNames{
 	IntakeSessions:           func() TableName { return "intake_sessions" },
 	IntakeSources:            func() TableName { return "intake_sources" },
 	IntakeCandidates:         func() TableName { return "intake_candidates" },
+	IntakeDocuments:          func() TableName { return "intake_documents" },
 	CurrencyMigrations:       func() TableName { return "currency_migrations" },
 	CurrencyMigrationAudit:   func() TableName { return "currency_migration_audit_rows" },
 	CommodityScanAudits:      func() TableName { return "commodity_scan_audits" },

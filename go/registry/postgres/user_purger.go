@@ -173,6 +173,12 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 				return err
 			}
 		}
+		// The documents other systems delivered through the user's API
+		// tokens are group content too: the record keeps a replay from
+		// making a second draft of an item the group has.
+		if err := r.reattributeIntakeDocuments(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
 
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
@@ -233,8 +239,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		}
 
 		// Intake sessions (#2810) the user created, after the links to their
-		// sources. created_by_user_id is a NOT NULL FK -> users(id) with NO
-		// ACTION on the sessions, sources and candidates.
+		// sources, and the delivered documents (#2809) the user's API tokens
+		// created. created_by_user_id is a NOT NULL FK -> users(id) with NO
+		// ACTION on all four tables.
 		if err := r.purgeIntakeSessions(ctx, tx, tenantID, userID); err != nil {
 			return err
 		}
@@ -298,8 +305,8 @@ func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tx *sqlx.Tx, tena
 
 // purgeIntakeSessions deletes the intake sessions the user created, with
 // their sources, candidates and the file links of the sources. The files and
-// the drafts made from the sessions stay; the drafts are the user's drafts and
-// go with purgeCommodityDrafts.
+// the drafts made from the sessions stay; the drafts are the user's drafts
+// and go with purgeCommodityDrafts.
 func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
 	sources := string(r.tableNames.IntakeSources())
 	links := fmt.Sprintf(`
@@ -422,6 +429,26 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 	return nil
 }
 
+// reattributeIntakeDocuments gives each document delivered through the
+// user's API tokens (#2809) to the member reattributeGroupConfiguration
+// picks. A document whose group has no other member is deleted: its group is
+// private and leaves with the user. The drafts the documents made go to the
+// same member, so a replay finds the draft the record names; the ones whose
+// group has no heir are purged with the user's other drafts.
+func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	docs := r.tableNames.IntakeDocuments()
+	if err := r.reattributeGroupConfiguration(ctx, tx, docs, tenantID, userID); err != nil {
+		return err
+	}
+	rest := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", docs)
+	if _, err := tx.ExecContext(ctx, rest, tenantID, userID); err != nil {
+		return errxtrace.Wrap("failed to purge the user's delivered documents", err,
+			errx.Attrs("table", string(docs), "tenant_id", tenantID, "user_id", userID))
+	}
+	return r.reattributeRows(ctx, tx, r.tableNames.CommodityDrafts(), "t.client_key LIKE $3",
+		tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%")
+}
+
 // groupConfigurationTables lists the group-scoped tables whose rows are
 // group configuration: the user purge hands the rows a user created to
 // another member of the group instead of counting them as the user's content.
@@ -438,6 +465,16 @@ var groupConfigurationTables = []func(t store.TableNames) store.TableName{
 // other member keeps its creator; such a group is private and is purged
 // before the user is.
 func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx.Tx, table store.TableName, tenantID, userID string) error {
+	return r.reattributeRows(ctx, tx, table, "", tenantID, userID)
+}
+
+// reattributeRows hands over the rows of table the user created as
+// reattributeGroupConfiguration does. A filter that is not empty further
+// limits the rows of t; its parameters start at $3.
+func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, table store.TableName, filter, tenantID, userID string, filterArgs ...any) error {
+	if filter != "" {
+		filter = " AND " + filter
+	}
 	memberships := string(r.tableNames.GroupMemberships())
 	query := fmt.Sprintf(`
 		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
@@ -449,9 +486,9 @@ func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx
 				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 				joined_at, member_user_id
 		) heir
-		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id`,
-		string(table), memberships)
-	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id%[3]s`,
+		string(table), memberships, filter)
+	if _, err := tx.ExecContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...); err != nil {
 		return errxtrace.Wrap(
 			"failed to hand over the user's group configuration",
 			err,

@@ -56,6 +56,15 @@ type UserPurger struct {
 	savedViews    registry.SavedViewRegistryFactory
 	itemTypes     *ItemTypeRegistryFactory
 	customFields  *CustomFieldRegistryFactory
+	// intakeDocuments is set by SetIntakeDocumentFactory.
+	intakeDocuments *IntakeDocumentRegistryFactory
+}
+
+// SetIntakeDocumentFactory wires the delivered documents (#2809); the ones
+// the user's API tokens created go to another member of their group, as on
+// postgres.
+func (r *UserPurger) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactory) {
+	r.intakeDocuments = docs
 }
 
 // groupConfiguration is a store of group configuration, whose rows a purged
@@ -158,6 +167,21 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 				return nil
 			}
 			return r.reattributeGroupConfiguration(ctx, r.customFields, tenantID, userID)
+		}},
+		{"intake_documents", func() error {
+			if r.intakeDocuments == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.intakeDocuments, tenantID, userID)
+		}},
+		// The drafts those documents made go with them, so a replay finds
+		// the draft the record names.
+		{"delivered_drafts", func() error {
+			drafts, ok := r.drafts.(*CommodityDraftRegistryFactory)
+			if !ok {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, deliveredDrafts{drafts}, tenantID, userID)
 		}},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK

@@ -110,6 +110,13 @@ type IntakeRegistryFactory interface {
 	ServiceRegistryFactory[models.IntakeSession, IntakeRegistry]
 }
 
+// IntakeDocumentRegistryFactory creates IntakeDocumentRegistry instances
+// with proper context (#2809).
+type IntakeDocumentRegistryFactory interface {
+	UserRegistryFactory[models.IntakeDocument, IntakeDocumentRegistry]
+	ServiceRegistryFactory[models.IntakeDocument, IntakeDocumentRegistry]
+}
+
 // SellerRegistryFactory creates SellerRegistry instances with proper
 // context (#2804).
 type SellerRegistryFactory interface {
@@ -227,6 +234,7 @@ type FactorySet struct {
 	CommodityReminderRegistryFactory      CommodityReminderRegistryFactory
 	CommodityDraftRegistryFactory         CommodityDraftRegistryFactory
 	IntakeRegistryFactory                 IntakeRegistryFactory
+	IntakeDocumentRegistryFactory         IntakeDocumentRegistryFactory
 	SellerRegistryFactory                 SellerRegistryFactory
 	ItemTypeRegistryFactory               ItemTypeRegistryFactory
 	CustomFieldRegistryFactory            CustomFieldRegistryFactory
@@ -466,7 +474,10 @@ func (fs *FactorySet) addUserContentRegistries(ctx context.Context, set *Set) er
 	if set.CommodityDraftRegistry, err = fs.CommodityDraftRegistryFactory.CreateUserRegistry(ctx); err != nil {
 		return err
 	}
-	set.IntakeRegistry, err = fs.IntakeRegistryFactory.CreateUserRegistry(ctx)
+	if set.IntakeRegistry, err = fs.IntakeRegistryFactory.CreateUserRegistry(ctx); err != nil {
+		return err
+	}
+	set.IntakeDocumentRegistry, err = fs.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
 	return err
 }
 
@@ -490,6 +501,7 @@ func (fs *FactorySet) CreateServiceRegistrySet() *Set {
 		CommodityReminderRegistry:      fs.CommodityReminderRegistryFactory.CreateServiceRegistry(),
 		CommodityDraftRegistry:         fs.CommodityDraftRegistryFactory.CreateServiceRegistry(),
 		IntakeRegistry:                 fs.IntakeRegistryFactory.CreateServiceRegistry(),
+		IntakeDocumentRegistry:         fs.IntakeDocumentRegistryFactory.CreateServiceRegistry(),
 		SellerRegistry:                 fs.SellerRegistryFactory.CreateServiceRegistry(),
 		ItemTypeRegistry:               fs.ItemTypeRegistryFactory.CreateServiceRegistry(),
 		CustomFieldRegistry:            fs.CustomFieldRegistryFactory.CreateServiceRegistry(),

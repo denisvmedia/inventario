@@ -143,6 +143,10 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.IntakeSources()) },
 	func(t store.TableNames) string { return string(t.IntakeSessions()) },
 
+	// Documents other systems delivered (#2809). group_id and
+	// created_by_user_id are NO ACTION; nothing references them.
+	func(t store.TableNames) string { return string(t.IntakeDocuments()) },
+
 	// Currency-migration audit rows (#2095). migration_id ->
 	// currency_migrations CASCADE, commodity_id -> commodities SET NULL.
 	// Dropped before both currency_migrations and commodities.

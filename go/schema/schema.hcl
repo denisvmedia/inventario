@@ -2660,6 +2660,108 @@ table "intake_candidates" {
   }
 }
 
+table "intake_documents" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant intake document isolation"
+  }
+  column "external_system" {
+    type = TEXT
+  }
+  column "external_instance" {
+    type = TEXT
+    default = ""
+  }
+  column "external_document_id" {
+    type = TEXT
+  }
+  column "source_name" {
+    type = TEXT
+    default = ""
+  }
+  column "source_url" {
+    type = TEXT
+    default = ""
+  }
+  column "payload_hash" {
+    type = TEXT
+  }
+  column "file_id" {
+    type = TEXT
+    null = true
+  }
+  column "session_id" {
+    type = TEXT
+    null = true
+  }
+  column "draft_id" {
+    type = TEXT
+    null = true
+  }
+  column "commodity_id" {
+    type = TEXT
+    null = true
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_intake_documents_external" {
+    unique = true
+    columns = [column.group_id, column.external_system, column.external_instance, column.external_document_id]
+  }
+  index "idx_intake_documents_group_commodity" {
+    where = "commodity_id IS NOT NULL"
+    columns = [column.group_id, column.commodity_id]
+  }
+  index "idx_intake_documents_group_draft" {
+    where = "draft_id IS NOT NULL"
+    columns = [column.group_id, column.draft_id]
+  }
+  index "idx_intake_documents_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_intake_documents_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "intake_sessions" {
   row_security {
     enabled = true
@@ -5425,6 +5527,24 @@ policy "intake_candidate_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures intake candidates can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "intake_document_background_worker_access" {
+  on = table.intake_documents
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to read and purge intake documents across all groups"
+}
+
+policy "intake_document_isolation" {
+  on = table.intake_documents
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures intake documents can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "intake_session_background_worker_access" {

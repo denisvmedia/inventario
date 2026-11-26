@@ -382,7 +382,9 @@ its type icon instead.
 - **Details** — name, status, type, location/area, prices, seller, serial
   numbers, part numbers, links, tags, notes, and dates, followed by the item's
   **Reminders** (see [Item reminders](../warranties-loans-maintenance/#item-reminders))
-  and its history. Click a tag, the seller, the area, or the type (under the
+  and its history. An item made from a
+  [document another system sent](../documents-from-other-systems/) also has a
+  **Source** row that names the system and links to the document there. Click a tag, the seller, the area, or the type (under the
   name) to open **All Items** filtered by it alone, with **Show inactive** on.
 - **Warranty** — expiry, notes, and a reminder of how long is left. See
   [Warranties, loans & maintenance](../warranties-loans-maintenance/).

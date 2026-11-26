@@ -2,10 +2,13 @@ package models
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -461,10 +464,65 @@ func (c *IntakeCandidate) DraftClientKey() string {
 	return IntakeDraftClientKey(c.ID)
 }
 
+// The client keys of the drafts intake makes start with one of these
+// prefixes.
+const (
+	// IntakeDraftKeyPrefix starts the key of a draft made for a product an
+	// intake session found.
+	IntakeDraftKeyPrefix = "intake:"
+	// IntakeDeliveredDraftKeyPrefix starts the key of a draft made for a
+	// document another system delivered.
+	IntakeDeliveredDraftKeyPrefix = "intake-doc:"
+	// IntakeDeliverySessionKeyPrefix starts the key of the session a
+	// delivery makes; the id of the document's record follows.
+	IntakeDeliverySessionKeyPrefix = "external:"
+)
+
+// MemberDraftClientKeyRule refuses a client key with the prefix of a draft
+// intake makes, so a draft made through the drafts API cannot take the key a
+// delivery or a batch uses for its draft.
+var MemberDraftClientKeyRule = reservedKeyPrefixRule(IntakeDraftKeyPrefix, IntakeDeliveredDraftKeyPrefix)
+
+// MemberSessionClientKeyRule refuses a client key with the prefix of the
+// session a delivery makes.
+var MemberSessionClientKeyRule = reservedKeyPrefixRule(IntakeDeliverySessionKeyPrefix)
+
+func reservedKeyPrefixRule(prefixes ...string) validation.Rule {
+	return validation.By(func(value any) error {
+		key, _ := value.(string)
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(key, prefix) {
+				return validation.NewError("validation_client_key_reserved",
+					fmt.Sprintf("a client key cannot start with %q", prefix))
+			}
+		}
+		return nil
+	})
+}
+
 // IntakeDraftClientKey is the client key of the draft made for the candidate
 // with the given id.
 func IntakeDraftClientKey(candidateID string) string {
-	return "intake:" + candidateID
+	return IntakeDraftKeyPrefix + candidateID
+}
+
+// IntakeDeliveredDraftClientKey is the client key of the draft made for a
+// document another system delivered (#2809), from the document's identity.
+// The product of a delivery is the only one of its source, and the key does
+// not change when the session is deleted and made again, so a repeat of the
+// delivery finds the draft without the session.
+func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
+	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
+	return IntakeDeliveredDraftKeyPrefix + hex.EncodeToString(sum[:])
+}
+
+// DraftClientKey is the client key of the draft made for a product of the
+// source: one key per delivered document, one per product otherwise.
+func (s *IntakeSource) DraftClientKey(cand *IntakeCandidate) string {
+	if s.HasExternalIdentity() {
+		return IntakeDeliveredDraftClientKey(s.ExternalSystem, s.ExternalInstance, s.ExternalDocumentID)
+	}
+	return cand.DraftClientKey()
 }
 
 // IsUnfinished reports whether creating the drafts would still act on the

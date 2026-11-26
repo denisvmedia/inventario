@@ -28,6 +28,17 @@ type InboxEntry struct {
 	// Intake is the progress of a batch of files, the same as on
 	// /intake/sessions; absent for other kinds.
 	Intake *InboxIntake `json:"intake,omitempty"`
+	// Source is the other system a draft came from (#2809); absent for a
+	// draft made in the app and for other kinds.
+	Source *InboxSource `json:"source,omitempty"`
+}
+
+// InboxSource names the other system a draft came from.
+type InboxSource struct {
+	// Name is how the system is shown, e.g. "Paperless-ngx".
+	Name string `json:"name" example:"Paperless-ngx"`
+	// URL links to the document in that system; empty when it sent none.
+	URL string `json:"url" example:"https://paperless.example.com/documents/117/"`
 }
 
 // InboxIntake is the progress of a batch of files in the inbox.

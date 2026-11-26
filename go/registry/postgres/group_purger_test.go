@@ -322,6 +322,12 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 		[]registry.IntakeSourceInput{{FileIDs: []string{intakeFileID}}}, 0)
 	c.Assert(err, qt.IsNil)
 
+	// Delivered document (#2809). Its group_id FK is NO ACTION.
+	delivered, _, err := set.IntakeDocumentRegistry.CreateOrGet(ctx, models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: "purge", PayloadHash: "h",
+	})
+	c.Assert(err, qt.IsNil)
+
 	// Currency migration + audit row (#2095). The audit row's group_id FK is
 	// NO ACTION, so it must be cleared explicitly before currency_migrations.
 	migration, err := set.CurrencyMigrationRegistry.Create(ctx, models.CurrencyMigration{
@@ -417,6 +423,8 @@ func TestGroupPurger_Postgres_PurgesAllGroupDependents(t *testing.T) {
 	_, err = fs.CommodityDraftRegistryFactory.CreateServiceRegistry().Get(context.Background(), draft.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = fs.IntakeRegistryFactory.CreateServiceRegistry().Get(context.Background(), intake.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	_, err = fs.IntakeDocumentRegistryFactory.CreateServiceRegistry().Get(context.Background(), delivered.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	_, err = set.FileRegistry.Get(ctx, intakeFileID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)

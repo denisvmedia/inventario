@@ -205,7 +205,7 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 	}
 	if maxQueued > 0 {
 		queued := r.countQueued()
-		if queued+len(sources) > maxQueued {
+		if queued+registry.QueuedIntakeSources(sources) > maxQueued {
 			return nil, false, errxtrace.Classify(registry.ErrIntakeQueueFull, errx.Attrs("queued", queued, "limit", maxQueued))
 		}
 	}
@@ -249,6 +249,14 @@ func (r *IntakeRegistry) CreateSession(ctx context.Context, session models.Intak
 			ExternalDocumentID: src.ExternalDocumentID,
 			CreatedAt:          now,
 			UpdatedAt:          now,
+		}
+		if src.Delivered != nil {
+			source.Status = models.IntakeSourceScanned
+			source.ScannedAt = new(now)
+			source.Warnings = slices.Clone(src.Delivered.Warnings)
+			if err := st.storeCandidates(source, src.Delivered.Candidates, now); err != nil {
+				return nil, false, err
+			}
 		}
 		st.sources[source.ID] = source
 		for _, fileID := range src.FileIDs {
@@ -398,6 +406,9 @@ func (r *IntakeRegistry) GetSource(_ context.Context, id string) (*models.Intake
 }
 
 func (r *IntakeRegistry) GetSourceByExternalID(_ context.Context, system, instance, documentID string) (*models.IntakeSource, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, err
+	}
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
@@ -701,7 +712,22 @@ func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt i
 			delete(st.candidates, cid)
 		}
 	}
-	for i, cand := range scan.Candidates {
+	if err := st.storeCandidates(src, scan.Candidates, now); err != nil {
+		return err
+	}
+	src.Status = models.IntakeSourceScanned
+	src.Warnings = slices.Clone(scan.Warnings)
+	src.ScannedAt = new(now)
+	src.WaitReason = ""
+	src.ErrorCode = ""
+	src.UpdatedAt = now
+	return nil
+}
+
+// storeCandidates stores the products found in src, pending and in the given
+// order. The caller holds st.mu.
+func (st *intakeState) storeCandidates(src *models.IntakeSource, candidates []models.IntakeCandidate, now time.Time) error {
+	for i, cand := range candidates {
 		fields, err := cloneIntakeFields(cand.Fields)
 		if err != nil {
 			return errxtrace.Wrap("failed to copy candidate fields", err)
@@ -727,12 +753,6 @@ func (r *IntakeRegistry) StoreScan(_ context.Context, sourceID string, attempt i
 		cand.UpdatedAt = now
 		st.candidates[cand.ID] = new(cand)
 	}
-	src.Status = models.IntakeSourceScanned
-	src.Warnings = slices.Clone(scan.Warnings)
-	src.ScannedAt = new(now)
-	src.WaitReason = ""
-	src.ErrorCode = ""
-	src.UpdatedAt = now
 	return nil
 }
 

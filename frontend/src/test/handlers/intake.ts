@@ -370,3 +370,51 @@ export function receiptSession(id = "session-r"): FakeIntakeSession {
     ],
   }
 }
+
+// FakeIntakeDocument is a document another system delivered to the intake
+// endpoint (#2809).
+export interface FakeIntakeDocument {
+  id: string
+  external_system: string
+  external_document_id: string
+  source_name?: string
+  source_url?: string
+  draft_id?: string | null
+  commodity_id?: string | null
+  state: "pending" | "draft" | "item" | "removed"
+}
+
+function documentsResponse(docs: FakeIntakeDocument[]) {
+  return HttpResponse.json({
+    data: docs.map((d) => ({ id: d.id, type: "intake_documents", attributes: d })),
+    meta: { documents: docs.length },
+  })
+}
+
+// documentDefaults answers GET /intake/documents for any group with no
+// document. src/test/server.ts installs it for every test, because the item
+// page asks for the document every item came from; a test that cares
+// overrides it with `documents`.
+export function documentDefaults() {
+  return [http.get(apiUrl("/g/:groupSlug/intake/documents"), () => documentsResponse([]))]
+}
+
+// documents backs GET /intake/documents for one group, keeping the documents
+// whose draft or item the query names, as the server does.
+export function documents(slug: string, docs: FakeIntakeDocument[]) {
+  return [
+    http.get(apiUrl(`/g/${slug}/intake/documents`), ({ request }) => {
+      const url = new URL(request.url)
+      const ids = (name: string) => (url.searchParams.get(name) ?? "").split(",").filter(Boolean)
+      const drafts = ids("draft_id")
+      const items = ids("commodity_id")
+      return documentsResponse(
+        docs.filter(
+          (d) =>
+            (d.draft_id && drafts.includes(d.draft_id)) ||
+            (d.commodity_id && items.includes(d.commodity_id))
+        )
+      )
+    }),
+  ]
+}

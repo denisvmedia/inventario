@@ -22,6 +22,7 @@ import {
   fileHandlers,
   groupHandlers,
   inboxHandlers,
+  intakeHandlers,
   locationHandlers,
   tagHandlers,
 } from "@/test/handlers"
@@ -235,6 +236,43 @@ describe("<CommodityDetailPage />", () => {
     // No acquisition-frozen line on a fresh commodity (the live
     // OriginalPrice already represents the purchase amount).
     expect(screen.queryByTestId("commodity-detail-acquisition")).toBeNull()
+  })
+
+  it("names the other system the item's document came from (#2809)", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...intakeHandlers.documents(SLUG, [
+        {
+          id: "doc-1",
+          external_system: "paperless-ngx",
+          external_document_id: "117",
+          source_name: "Paperless-ngx",
+          source_url: "https://paperless.example/documents/117/",
+          draft_id: "d1",
+          commodity_id: ID,
+          state: "item",
+        },
+      ])
+    )
+    renderDetail()
+    const row = await screen.findByTestId("commodity-detail-source")
+    expect(row).toHaveTextContent("Source")
+    const link = within(row).getByRole("link", { name: /Paperless-ngx/ })
+    expect(link).toHaveAttribute("href", "https://paperless.example/documents/117/")
+    expect(link).toHaveAttribute("target", "_blank")
+  })
+
+  it("has no source row for an item made in the app", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture)
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-seller")
+    expect(screen.queryByTestId("commodity-detail-source")).toBeNull()
   })
 
   it("shows brand · model under the name (#2804)", async () => {
