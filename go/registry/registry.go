@@ -3501,6 +3501,11 @@ type TenantPurger interface {
 	// tenant after a partial failure must succeed and leave the database in
 	// the same state.
 	PurgeTenantDependents(ctx context.Context, tenantID string) error
+	// CheckTenantPurge reports whether PurgeTenantDependents and the deletion
+	// of the tenants row would succeed now, without changing anything. A
+	// tenant deletion runs it before removing the tenant's stored files, which
+	// cannot be restored when the row purge then fails.
+	CheckTenantPurge(ctx context.Context, tenantID string) error
 }
 
 // FailedJobScope narrows a failed-jobs query to one tenant, or to one group

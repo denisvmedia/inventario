@@ -824,6 +824,68 @@ const docTemplate = `{
                         }
                     }
                 }
+            },
+            "post": {
+                "description": "Creates a tenant with the same rules as ` + "`" + `inventario tenants create` + "`" + `: an empty slug is generated from the name, the status defaults to active and registration to closed.\nA slug another tenant has is refused with 409 ` + "`" + `tenant.slug_taken` + "`" + `, a domain another tenant has with 409 ` + "`" + `tenant.domain_taken` + "`" + `, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 ` + "`" + `tenant.domain_reserved` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Create a tenant (admin)",
+                "parameters": [
+                    {
+                        "description": "Tenant",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantCreateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the slug or the domain is taken",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid fields, or a reserved domain",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
             }
         },
         "/admin/tenants/{tenantID}": {
@@ -866,6 +928,281 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.\nIt then deletes the tenant, its users, groups, items and files in the background with the rules of ` + "`" + `inventario tenants delete` + "`" + `.\nThe stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.\nA failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.\n` + "`" + `confirm_slug` + "`" + ` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 ` + "`" + `admin.tenant.confirmation_mismatch` + "`" + `.\nDeleting the tenant that serves this request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `.\nRequires the platform_admin role.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Delete a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "The tenant's slug, typed to confirm",
+                        "name": "confirm_slug",
+                        "in": "query",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "202": {
+                        "description": "Accepted - the tenant is suspended and its deletion is running",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - the confirmation does not match, or the tenant serves this host",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Changes the fields the body sets to a value other than the stored one, with the same rules as ` + "`" + `inventario tenants update` + "`" + `. An empty ` + "`" + `domain` + "`" + ` removes the custom domain. A body that changes nothing writes nothing.\nA status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.\nA change that takes the tenant serving this request off the request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `: a status away from active and,\nwith a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.\nA slug another tenant has is refused with 409 ` + "`" + `tenant.slug_taken` + "`" + `, a domain another tenant has with 409 ` + "`" + `tenant.domain_taken` + "`" + `, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 ` + "`" + `tenant.domain_reserved` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Update a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Fields to change",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the slug or the domain is taken",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid fields, a reserved domain, or the tenant serves this host",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/tenants/{tenantID}/reactivate": {
+            "post": {
+                "description": "Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.\nA missing or blank reason is 422 ` + "`" + `admin.tenant.reason_required` + "`" + `, one over 500 characters ` + "`" + `admin.tenant.reason_too_long` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Reactivate a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid reason",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/tenants/{tenantID}/suspend": {
+            "post": {
+                "description": "Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.\nWhile suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.\nSuspending the tenant that serves this request's host is refused with 422 ` + "`" + `admin.tenant.serves_this_host` + "`" + `.\nA missing or blank reason is 422 ` + "`" + `admin.tenant.reason_required` + "`" + `, one over 500 characters ` + "`" + `admin.tenant.reason_too_long` + "`" + `.\nRequires the platform_admin role.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Suspend a tenant (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Reason",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminTenantStatusRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - invalid body",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - the operator is not a platform admin (admin.role_required)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Tenant not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Unprocessable Entity - invalid reason, or the tenant serves this host",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -1082,7 +1419,7 @@ const docTemplate = `{
         },
         "/admin/users/{userID}/impersonate": {
             "post": {
-                "description": "Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.\nThe token carries ` + "`" + `imp=true` + "`" + `, ` + "`" + `impersonator_id=\u003cbackoffice user id\u003e` + "`" + `, ` + "`" + `impersonator_type=backoffice_user` + "`" + `, and\n` + "`" + `is_system_admin=false` + "`" + `; it cannot be refreshed and cannot start a nested impersonation. The operator's own\n` + "`" + `backoffice_refresh_token` + "`" + ` cookie is captured server-side at start and restored by POST /admin/impersonation/end.\nReturns 422 with ` + "`" + `admin.impersonate.target_is_admin` + "`" + ` when the target is a system admin,\n` + "`" + `admin.impersonate.target_blocked` + "`" + ` when the target account is blocked, and ` + "`" + `admin.impersonate.nested` + "`" + `\nwhen the caller is already impersonating. Returns 429 with ` + "`" + `admin.impersonate.rate_limited` + "`" + ` when the\nper-operator start rate limit (10/hour) is exceeded.",
+                "description": "Issues a short-lived impersonation access token for the target tenant user on behalf of the calling back-office operator.\nThe token carries ` + "`" + `imp=true` + "`" + `, ` + "`" + `impersonator_id=\u003cbackoffice user id\u003e` + "`" + `, ` + "`" + `impersonator_type=backoffice_user` + "`" + `, and\n` + "`" + `is_system_admin=false` + "`" + `; it cannot be refreshed and cannot start a nested impersonation. The operator's own\n` + "`" + `backoffice_refresh_token` + "`" + ` cookie is captured server-side at start and restored by POST /admin/impersonation/end.\nReturns 422 with ` + "`" + `admin.impersonate.target_is_admin` + "`" + ` when the target is a system admin,\n` + "`" + `admin.impersonate.target_blocked` + "`" + ` when the target account is blocked, ` + "`" + `tenant.not_active` + "`" + ` when the target's\ntenant is suspended or inactive, and ` + "`" + `admin.impersonate.nested` + "`" + `\nwhen the caller is already impersonating. Returns 429 with ` + "`" + `admin.impersonate.rate_limited` + "`" + ` when the\nper-operator start rate limit (10/hour) is exceeded.",
                 "consumes": [
                     "application/json"
                 ],
@@ -1142,7 +1479,7 @@ const docTemplate = `{
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long",
+                        "description": "Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -2798,7 +3135,7 @@ const docTemplate = `{
                         }
                     },
                     "403": {
-                        "description": "Impersonation session",
+                        "description": "Impersonation session, or the user's tenant is not active",
                         "schema": {
                             "type": "string"
                         }
@@ -13410,6 +13747,73 @@ const docTemplate = `{
                     "description": "Reason is the free-form justification for ending the sessions\n(max 500 chars).",
                     "type": "string",
                     "maxLength": 500
+                }
+            }
+        },
+        "apiserver.AdminTenantCreateRequest": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "description": "Domain is an optional custom domain the tenant is reached on.",
+                    "type": "string"
+                },
+                "name": {
+                    "description": "Name is the tenant's display name (1 to 100 characters).",
+                    "type": "string"
+                },
+                "slug": {
+                    "description": "Slug is generated from the name when empty: lowercase letters, digits\nand hyphens, at most 50 characters.",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status defaults to active.",
+                    "enum": [
+                        "active",
+                        "suspended",
+                        "inactive"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TenantStatus"
+                        }
+                    ]
+                }
+            }
+        },
+        "apiserver.AdminTenantStatusRequest": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "description": "Reason is the operator's justification (1 to 500 characters).",
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.AdminTenantUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "domain": {
+                    "description": "Domain set to an empty string removes the custom domain.",
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "slug": {
+                    "type": "string"
+                },
+                "status": {
+                    "description": "Status away from active ends the sessions of the tenant's users, as\nPOST /admin/tenants/{tenantID}/suspend does.",
+                    "enum": [
+                        "active",
+                        "suspended",
+                        "inactive"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.TenantStatus"
+                        }
+                    ]
                 }
             }
         },

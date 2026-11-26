@@ -707,6 +707,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			GroupMembershipRegistry:  params.FactorySet.GroupMembershipRegistry,
 			LoginEventRegistry:       params.FactorySet.LoginEventRegistry,
 			MFARegistry:              params.FactorySet.UserMFASecretRegistry,
+			TenantRegistry:           params.FactorySet.TenantRegistry,
 			SystemAdminGrantRegistry: params.FactorySet.SystemAdminGrantRegistry,
 			BlacklistService:         blacklist,
 			RateLimiter:              rateLimiter,
@@ -871,6 +872,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			// #2113 L-4: GET /admin/debug now lives on the back-office plane.
 			DebugInfo:       params.DebugInfo,
 			APITokenService: apiTokenSvc, // block and revoke-sessions end tokens too
+			UploadLocation:  params.UploadLocation,
+			// The custom domains the back office accepts must stay clear of
+			// the hosts the resolver maps to tenant slugs.
+			TenantBaseDomain: tenantBaseDomain(tenantResolver),
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives
@@ -1072,6 +1077,16 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 					"user_email", user.Email,
 					"remote_addr", r.RemoteAddr)
 				http.Error(w, "User account disabled", http.StatusForbidden)
+				return
+			}
+
+			// A suspended tenant's users are refused like a blocked user,
+			// whichever host the session is used on (#1037).
+			var tenants registry.TenantRegistry
+			if factorySet != nil {
+				tenants = factorySet.TenantRegistry
+			}
+			if refuseInactiveUserTenant(w, r, tenants, user) {
 				return
 			}
 

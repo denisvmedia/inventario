@@ -26,7 +26,7 @@ import { peekPendingFirstItem } from "@/features/auth/firstItemHandoff"
 import { loginSchema, type LoginInput } from "@/features/auth/schemas"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { sanitizeRedirectPath } from "@/lib/safe-redirect"
-import { parseServerError } from "@/lib/server-error"
+import { isTenantSuspendedError, parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
 const SESSION_REASON_KEY: Record<string, string> = {
@@ -209,7 +209,11 @@ export function LoginPage() {
         return
       }
     } catch (err) {
-      setServerError(parseServerError(err, t("auth:login.errorGeneric")))
+      setServerError(
+        isTenantSuspendedError(err)
+          ? t("auth:login.errorTenantSuspended")
+          : parseServerError(err, t("auth:login.errorGeneric"))
+      )
       return
     }
     await finalizeLogin()
@@ -230,7 +234,11 @@ export function LoginPage() {
       await requestMagicLinkMutation.mutateAsync(email)
       setMagicLinkSent(true)
     } catch (err) {
-      setServerError(parseServerError(err, t("auth:magicLink.errorGeneric")))
+      setServerError(
+        isTenantSuspendedError(err)
+          ? t("auth:login.errorTenantSuspended")
+          : parseServerError(err, t("auth:magicLink.errorGeneric"))
+      )
     }
   }
 

@@ -14,6 +14,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -176,7 +177,8 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Description `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
 // @Description `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
 // @Description Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-// @Description `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+// @Description `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+// @Description tenant is suspended or inactive, and `admin.impersonate.nested`
 // @Description when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
 // @Description per-operator start rate limit (10/hour) is exceeded.
 // @Tags admin
@@ -189,7 +191,7 @@ func clampImpersonationTTL(ttl time.Duration) time.Duration {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "Forbidden - platform_admin role required"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown tenant user"
-// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long"
+// @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long"
 // @Failure 429 {object} jsonapi.Errors "Too Many Requests - per-operator rate limit"
 // @Router /admin/users/{userID}/impersonate [post]
 func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *http.Request) {
@@ -235,7 +237,7 @@ func (api *adminImpersonationAPI) startImpersonation(w http.ResponseWriter, r *h
 		return
 	}
 
-	if guardErr := impersonationTargetGuard(r.Context(), api.factorySet.SystemAdminGrantRegistry, target); guardErr != nil {
+	if guardErr := impersonationTargetGuard(r.Context(), api.factorySet.SystemAdminGrantRegistry, api.factorySet.TenantRegistry, target); guardErr != nil {
 		api.auditStart(r, operator.ID, "", target.ID, target.TenantID, false, guardErr.Error())
 		_ = renderEntityError(w, r, guardErr)
 		return
@@ -832,12 +834,13 @@ func (api *adminImpersonationAPI) auditEnd(r *http.Request, slot services.Impers
 }
 
 // impersonationTargetGuard rejects targets that may not be impersonated:
-// a system admin (privilege-escalation footgun) or a blocked account
-// (resurrecting a torn-down session). Returns nil when the target is a
-// valid impersonation subject. System-admin status is resolved via the
-// dedicated grants registry (#1784) — the legacy IsSystemAdmin column
-// on users is gone.
-func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGrantRegistry, target *models.User) error {
+// a system admin (privilege-escalation footgun), a blocked account
+// (resurrecting a torn-down session) or a user of a tenant that is not
+// active (the session would be refused on its first request, #1037).
+// Returns nil when the target is a valid impersonation subject.
+// System-admin status is resolved via the dedicated grants registry
+// (#1784) — the legacy IsSystemAdmin column on users is gone.
+func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGrantRegistry, tenants registry.TenantRegistry, target *models.User) error {
 	if grants != nil {
 		ok, err := grants.Exists(ctx, target.ID)
 		if err != nil {
@@ -849,6 +852,13 @@ func impersonationTargetGuard(ctx context.Context, grants registry.SystemAdminGr
 	}
 	if !target.IsActive {
 		return ErrTargetBlocked
+	}
+	active, err := userTenantIsActive(ctx, tenants, target)
+	if err != nil {
+		return errxtrace.Wrap("impersonation guard: tenant lookup failed", err)
+	}
+	if !active {
+		return errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", target.TenantID))
 	}
 	return nil
 }

@@ -262,6 +262,7 @@ type signedPersonalDataExportsAPI struct {
 	service *export.PersonalDataExportService
 	signer  *services.FileSigningService
 	users   registry.UserRegistry
+	tenants registry.TenantRegistry
 	audit   services.AuditLogger
 }
 
@@ -273,6 +274,7 @@ func SignedPersonalDataExports(params Params, svc *export.PersonalDataExportServ
 		service: svc,
 		signer:  services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 		users:   params.FactorySet.UserRegistry,
+		tenants: params.FactorySet.TenantRegistry,
 		audit:   audit,
 	}
 	return func(r chi.Router) {
@@ -292,7 +294,7 @@ func SignedPersonalDataExports(params Params, svc *export.PersonalDataExportServ
 // @Param sig query string true "Signature"
 // @Success 200 {file} file "The archive"
 // @Failure 401 {string} string "Invalid or expired URL"
-// @Failure 403 {string} string "Impersonation session"
+// @Failure 403 {string} string "Impersonation session, or the user's tenant is not active"
 // @Failure 404 {string} string "No such export, or it expired"
 // @Failure 409 {string} string "The export is not finished"
 // @Router /data-exports/{id} [get]
@@ -310,6 +312,12 @@ func (api *signedPersonalDataExportsAPI) downloadPersonalDataExport(w http.Respo
 	user, err := api.users.Get(r.Context(), claims.UserID)
 	if err != nil || !user.IsActive {
 		http.Error(w, "Invalid or expired download URL", http.StatusUnauthorized)
+		return
+	}
+	// The signature outlives a suspension of the user's tenant, and the URL
+	// can be opened on another tenant's host, so the tenant is checked here
+	// (#1037).
+	if refuseInactiveUserTenant(w, r, api.tenants, user) {
 		return
 	}
 

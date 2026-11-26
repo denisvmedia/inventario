@@ -12,6 +12,7 @@ import (
 	"go.5x5.cz/inventario/debug"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
+	adminservice "go.5x5.cz/inventario/services/admin"
 )
 
 // defaultAdminImpersonationStore lets Admin() fall back to an in-memory
@@ -125,6 +126,16 @@ type AdminParams struct {
 	// plane, gated by RequireBackofficeAuth like every other admin route.
 	// May be nil; the handler then reports zero-valued debug info.
 	DebugInfo *debug.Info
+
+	// TenantBaseDomain is the domain under which <slug>.<base> names a
+	// tenant, or "" in single-tenant mode. The tenant writes refuse a custom
+	// domain at or under it.
+	TenantBaseDomain string
+
+	// UploadLocation is the file store a tenant deletion removes the
+	// tenant's files from before its rows (#1037), the same location the
+	// rest of the apiserver uploads to.
+	UploadLocation string
 }
 
 // Admin returns the router configurator for /api/v1/admin/*. Mounted
@@ -178,9 +189,16 @@ func Admin(params AdminParams) func(r chi.Router) {
 		panic("apiserver.Admin requires non-nil AdminParams.BackofficeUserRegistry")
 	}
 
+	tenantService := adminservice.NewServiceWithFactorySet(params.FactorySet)
+	// Deleting a tenant removes its stored files first, as the CLI does.
+	tenantService.SetFileService(services.NewFileService(params.FactorySet, params.UploadLocation))
+	// The stamp outlasts an access token, the same TTL the user block uses.
+	tenantService.SetTokenBlacklist(params.Blacklist, 2*accessTokenExpiration)
 	tenantsAPI := &adminTenantsAPI{
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
+		service:      tenantService,
+		baseDomain:   normalizeHost(params.TenantBaseDomain),
 	}
 	usersAPI := &adminUsersAPI{
 		factorySet:   params.FactorySet,
@@ -333,6 +351,18 @@ func adminBackofficeRoutes(
 	r.Get("/tenants", tenantsAPI.listTenants)
 	r.Get("/tenants/{tenantID}", tenantsAPI.getTenant)
 	r.Get("/tenants/{tenantID}/users", usersAPI.listTenantUsers)
+
+	// #1037: tenant writes. They change who can sign in to a whole tenant
+	// or delete it outright, so they are closed to support_agent, as
+	// impersonation is.
+	r.Group(func(r chi.Router) {
+		r.Use(RequirePlatformAdmin)
+		r.Post("/tenants", tenantsAPI.createTenant)
+		r.Patch("/tenants/{tenantID}", tenantsAPI.updateTenant)
+		r.Delete("/tenants/{tenantID}", tenantsAPI.deleteTenant)
+		r.Post("/tenants/{tenantID}/suspend", tenantsAPI.suspendTenant)
+		r.Post("/tenants/{tenantID}/reactivate", tenantsAPI.reactivateTenant)
+	})
 	r.Get("/users/{userID}", usersAPI.getUser)
 
 	// #1747: user block/unblock endpoints. Each transition cascades

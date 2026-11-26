@@ -461,6 +461,16 @@ export default defineConfig({
       //   `generic` catch-all. Dynamic key; the extractor sees only the
       //   template literal.
       "admin:groupDetail.members.errors.*",
+      // admin:tenantActions.errors.* — AdminTenantDialogs.tsx resolves the
+      //   inline error of the tenant create / edit / suspend / reactivate /
+      //   delete dialogs via `t(\`tenantActions.errors.${key}\`)`, where
+      //   `key` is a flat segment mapped from the BE's dotted codes
+      //   (TENANT_ERROR_KEY) plus a `generic` catch-all.
+      // admin:tenantForm.validation.* — zod messages in
+      //   features/admin/schemas.ts, resolved with t() at render time. Same
+      //   pattern as auth:validation.*.
+      "admin:tenantActions.errors.*",
+      "admin:tenantForm.validation.*",
     ],
   },
 })

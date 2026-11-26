@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	"github.com/go-extras/errx"
@@ -206,10 +207,6 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// incoming FK — unconstrained.
 	func(t store.TableNames) string { return string(t.Settings()) },
 
-	// Audit logs (nullable tenant_id, no FK to tenants). Tenant-scoped data
-	// that should not outlive the tenant. No children.
-	func(t store.TableNames) string { return string(t.AuditLogs()) },
-
 	// Auth/session tables (all FK user_id -> users NO ACTION, so they must
 	// drop before users; none FK each other). login_events, refresh_tokens,
 	// the token tables, MFA + OAuth identities, operation slots.
@@ -223,6 +220,9 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.UserMFASecrets()) },
 	func(t store.TableNames) string { return string(t.UserOAuthIdentities()) },
 	func(t store.TableNames) string { return string(t.OperationSlots()) },
+	// Weekly digest send records (#1586). user_id -> users and tenant_id ->
+	// tenants are both NO ACTION.
+	func(t store.TableNames) string { return string(t.WeeklyDigestSends()) },
 
 	// Membership + invite rows. group_id -> location_groups NO ACTION and
 	// created_by/used_by/member_user_id -> users NO ACTION, so they drop before
@@ -231,6 +231,17 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	func(t store.TableNames) string { return string(t.GroupInvites()) },
 	func(t store.TableNames) string { return string(t.GroupInvitesAudit()) },
 }
+
+// keptAuditLogs is the part of a tenant's audit trail the purge leaves in
+// place: what operators did to the tenant from the back office (every
+// "admin.*" action, the tenant deletion included) and everything done inside
+// an impersonation session. audit_logs has no foreign key to tenants or users,
+// so the rows outlive both, and the record of who deleted a tenant, or acted
+// as its users, survives the deletion.
+const keptAuditLogs = "action LIKE 'admin.%' OR impersonated_by IS NOT NULL"
+
+// errTenantPurgeDryRun rolls back the transaction CheckTenantPurge runs.
+var errTenantPurgeDryRun = errors.New("tenant purge dry run")
 
 // PurgeTenantDependents issues a DELETE ... WHERE tenant_id = $1 against each
 // dependent table in FK-safe order, inside a single background-worker
@@ -252,32 +263,66 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 	}
 
 	return store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
-		// Data + auth tables first, in FK-safe order.
-		for _, nameFn := range tenantPurgeOrder {
-			if err := r.purgeTable(ctx, tx, nameFn(r.tableNames), tenantID); err != nil {
-				return err
-			}
-		}
-
-		// location_groups next: now that every group-scoped row and
-		// currency_migrations is gone, the only remaining inbound FKs are
-		// users.default_group_id (SET NULL) — harmless — so the parent rows
-		// can be removed. location_groups.created_by -> users is NO ACTION, so
-		// this must precede the users DELETE below.
-		if err := r.purgeTable(ctx, tx, string(r.tableNames.LocationGroups()), tenantID); err != nil {
-			return err
-		}
-
-		// users last: almost every tenant-scoped table FKs user_id/created_by
-		// -> users NO ACTION, so the rows referencing them must all be gone by
-		// now. users.default_group_id was cleared (SET NULL) by the
-		// location_groups DELETE above.
-		if err := r.purgeTable(ctx, tx, string(r.tableNames.Users()), tenantID); err != nil {
-			return err
-		}
-
-		return nil
+		return r.purge(ctx, tx, tenantID)
 	})
+}
+
+// CheckTenantPurge reports whether PurgeTenantDependents, followed by the
+// DELETE of the tenants row, would succeed now. It runs both inside a
+// transaction that it always rolls back, so a foreign key the purge order
+// misses is found before the caller removes anything it cannot restore, such
+// as the tenant's stored files.
+func (r *TenantPurger) CheckTenantPurge(ctx context.Context, tenantID string) error {
+	if tenantID == "" {
+		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+
+	err := store.DoAsBackgroundWorker(ctx, r.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := r.purge(ctx, tx, tenantID); err != nil {
+			return err
+		}
+		query := fmt.Sprintf("DELETE FROM %s WHERE id = $1", r.tableNames.Tenants())
+		if _, err := tx.ExecContext(ctx, query, tenantID); err != nil {
+			return errxtrace.Wrap("failed to delete the tenant row", err, errx.Attrs("tenant_id", tenantID))
+		}
+		return errTenantPurgeDryRun
+	})
+	if errors.Is(err, errTenantPurgeDryRun) {
+		return nil
+	}
+	return err
+}
+
+// purge runs every DELETE of the tenant purge inside tx.
+func (r *TenantPurger) purge(ctx context.Context, tx *sqlx.Tx, tenantID string) error {
+	// Data + auth tables first, in FK-safe order.
+	for _, nameFn := range tenantPurgeOrder {
+		if err := r.purgeTable(ctx, tx, nameFn(r.tableNames), tenantID); err != nil {
+			return err
+		}
+	}
+
+	// Audit logs, except the rows keptAuditLogs names. No children.
+	query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND NOT (%s)", r.tableNames.AuditLogs(), keptAuditLogs)
+	if _, err := tx.ExecContext(ctx, query, tenantID); err != nil {
+		return errxtrace.Wrap("failed to purge tenant dependents", err,
+			errx.Attrs("table", string(r.tableNames.AuditLogs()), "tenant_id", tenantID))
+	}
+
+	// location_groups next: now that every group-scoped row and
+	// currency_migrations is gone, the only remaining inbound FKs are
+	// users.default_group_id (SET NULL) — harmless — so the parent rows
+	// can be removed. location_groups.created_by -> users is NO ACTION, so
+	// this must precede the users DELETE below.
+	if err := r.purgeTable(ctx, tx, string(r.tableNames.LocationGroups()), tenantID); err != nil {
+		return err
+	}
+
+	// users last: almost every tenant-scoped table FKs user_id/created_by
+	// -> users NO ACTION, so the rows referencing them must all be gone by
+	// now. users.default_group_id was cleared (SET NULL) by the
+	// location_groups DELETE above.
+	return r.purgeTable(ctx, tx, string(r.tableNames.Users()), tenantID)
 }
 
 // purgeTable runs a single `DELETE FROM <table> WHERE tenant_id = $1` and wraps

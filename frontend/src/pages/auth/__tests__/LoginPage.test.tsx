@@ -191,6 +191,22 @@ describe("<LoginPage />", () => {
     expect(screen.getByTestId("login-page")).toBeInTheDocument()
   })
 
+  it("shows its own copy for a suspended site instead of the BE's English body", async () => {
+    // The BE answers a suspended tenant's sign-in with a plain-text 403 in
+    // English; the page shows a translated message instead.
+    server.use(
+      msw.post(api("/auth/login"), () => new HttpResponse("Tenant suspended\n", { status: 403 }))
+    )
+    const user = userEvent.setup()
+    renderLogin()
+    await user.type(screen.getByTestId("email"), "alex@example.com")
+    await user.type(screen.getByTestId("password"), "secret-pw")
+    await user.click(screen.getByTestId("login-button"))
+    const banner = await screen.findByTestId("server-error")
+    expect(banner).toHaveTextContent(/is suspended, so you cannot sign in/)
+    expect(banner).not.toHaveTextContent("Tenant suspended")
+  })
+
   it("falls back to generic copy when a 5xx returns an opaque body", async () => {
     // 500 (not 503 — a 503 bounces the shell to /maintenance) with no useful
     // body: parseServerError can extract nothing, so the page shows the

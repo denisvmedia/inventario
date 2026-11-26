@@ -168,6 +168,54 @@ definitions:
     required:
     - reason
     type: object
+  apiserver.AdminTenantCreateRequest:
+    properties:
+      domain:
+        description: Domain is an optional custom domain the tenant is reached on.
+        type: string
+      name:
+        description: Name is the tenant's display name (1 to 100 characters).
+        type: string
+      slug:
+        description: |-
+          Slug is generated from the name when empty: lowercase letters, digits
+          and hyphens, at most 50 characters.
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TenantStatus'
+        description: Status defaults to active.
+        enum:
+        - active
+        - suspended
+        - inactive
+    type: object
+  apiserver.AdminTenantStatusRequest:
+    properties:
+      reason:
+        description: Reason is the operator's justification (1 to 500 characters).
+        type: string
+    type: object
+  apiserver.AdminTenantUpdateRequest:
+    properties:
+      domain:
+        description: Domain set to an empty string removes the custom domain.
+        type: string
+      name:
+        type: string
+      slug:
+        type: string
+      status:
+        allOf:
+        - $ref: '#/definitions/models.TenantStatus'
+        description: |-
+          Status away from active ends the sessions of the tenant's users, as
+          POST /admin/tenants/{tenantID}/suspend does.
+        enum:
+        - active
+        - suspended
+        - inactive
+    type: object
   apiserver.AdminUnblockRequest:
     properties:
       reason:
@@ -8447,7 +8495,99 @@ paths:
       summary: List tenants (admin)
       tags:
       - admin
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.
+        A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+        A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantCreateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the slug or the domain is taken
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid fields, or a reserved domain
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a tenant (admin)
+      tags:
+      - admin
   /admin/tenants/{tenantID}:
+    delete:
+      description: |-
+        Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.
+        It then deletes the tenant, its users, groups, items and files in the background with the rules of `inventario tenants delete`.
+        The stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.
+        A failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.
+        `confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.
+        Deleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: The tenant's slug, typed to confirm
+        in: query
+        name: confirm_slug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "202":
+          description: Accepted - the tenant is suspended and its deletion is running
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - the confirmation does not match, or
+            the tenant serves this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a tenant (admin)
+      tags:
+      - admin
     get:
       description: Returns the tenant row with computed user_count and group_count.
         No nested users or groups list — those live behind GET /admin/tenants/{tenantID}/users
@@ -8478,6 +8618,167 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Get tenant (admin)
+      tags:
+      - admin
+    patch:
+      consumes:
+      - application/json
+      description: |-
+        Changes the fields the body sets to a value other than the stored one, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain. A body that changes nothing writes nothing.
+        A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.
+        A change that takes the tenant serving this request off the request's host is refused with 422 `admin.tenant.serves_this_host`: a status away from active and,
+        with a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.
+        A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+        A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Fields to change
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the slug or the domain is taken
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid fields, a reserved domain, or
+            the tenant serves this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a tenant (admin)
+      tags:
+      - admin
+  /admin/tenants/{tenantID}/reactivate:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.
+        A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Reason
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantStatusRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid reason
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Reactivate a tenant (admin)
+      tags:
+      - admin
+  /admin/tenants/{tenantID}/suspend:
+    post:
+      consumes:
+      - application/json
+      description: |-
+        Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.
+        While suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.
+        Suspending the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+        A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+        Requires the platform_admin role.
+      parameters:
+      - description: Tenant ID
+        in: path
+        name: tenantID
+        required: true
+        type: string
+      - description: Reason
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/apiserver.AdminTenantStatusRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.AdminTenantResponse'
+        "400":
+          description: Bad Request - invalid body
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - the operator is not a platform admin (admin.role_required)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Tenant not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Unprocessable Entity - invalid reason, or the tenant serves
+            this host
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Suspend a tenant (admin)
       tags:
       - admin
   /admin/tenants/{tenantID}/users:
@@ -8637,7 +8938,8 @@ paths:
         `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
         `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
         Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-        `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+        `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+        tenant is suspended or inactive, and `admin.impersonate.nested`
         when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
         per-operator start rate limit (10/hour) is exceeded.
       parameters:
@@ -8675,8 +8977,8 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
-          description: Unprocessable Entity - target is admin / blocked / nested impersonation
-            / reason too long
+          description: Unprocessable Entity - target is admin / blocked / in a tenant
+            that is not active / nested impersonation / reason too long
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "429":
@@ -9839,7 +10141,7 @@ paths:
           schema:
             type: string
         "403":
-          description: Impersonation session
+          description: Impersonation session, or the user's tenant is not active
           schema:
             type: string
         "404":

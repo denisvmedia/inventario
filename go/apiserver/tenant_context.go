@@ -248,6 +248,22 @@ func normalizeHost(host string) string {
 	return strings.ToLower(strings.TrimSuffix(host, "."))
 }
 
+// tenantBaseDomain returns the base domain under which the resolver maps
+// <slug>.<base> to a tenant, or "" when it maps no host to a slug. A test
+// header resolver reports the base domain of the resolver it wraps.
+func tenantBaseDomain(resolver TenantResolver) string {
+	switch res := resolver.(type) {
+	case *HostTenantResolver:
+		return normalizeHost(res.BaseDomain)
+	case *SubdomainTenantResolver:
+		return normalizeHost(res.BaseDomain)
+	case *TestHeaderTenantResolver:
+		return tenantBaseDomain(res.Inner)
+	default:
+		return ""
+	}
+}
+
 // PublicTenantMiddleware resolves the tenant from the request and stores it in
 // the context so that both public and authenticated handlers can call TenantIDFromContext.
 // It does not require a JWT and is safe to place before auth middleware.

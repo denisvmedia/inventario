@@ -60,6 +60,8 @@ const ACTION_ERROR_KEY: Record<string, string> = {
   "admin.impersonate.target_blocked": "targetBlocked",
   "admin.impersonate.nested": "nested",
   "admin.impersonate.rate_limited": "rateLimited",
+  // The user's tenant is suspended or inactive (#1037).
+  "tenant.not_active": "tenantNotActive",
 }
 
 // AdminUserDetailPage is /admin/users/:userId — a per-user admin surface

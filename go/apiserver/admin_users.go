@@ -561,31 +561,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 // the right error response and returns ok=false on failure so the
 // caller can early-return without sprinkling decode-error noise.
 func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Request) (AdminBlockRequest, bool) {
-	var req AdminBlockRequest
-	if r.Body == nil {
-		_ = badRequest(w, r, errors.New("missing request body"))
-		return req, false
-	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		_ = badRequest(w, r, err)
-		return req, false
-	}
-	if !decoderAtEOF(dec) {
-		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
-		return req, false
-	}
-	req.Reason = strings.TrimSpace(req.Reason)
-	if req.Reason == "" {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
-		return req, false
-	}
-	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
-		return req, false
-	}
-	return req, true
+	return decodeReasonBody(w, r, blockReasonCodes, func(req *AdminBlockRequest) *string { return &req.Reason })
 }
 
 // decodeUnblockRequest mirrors decodeBlockRequest for the unblock
@@ -593,34 +569,65 @@ func (api *adminUsersAPI) decodeBlockRequest(w http.ResponseWriter, r *http.Requ
 // (no `force` field on unblock) and so a future expansion of either
 // body type doesn't entangle the two.
 func (api *adminUsersAPI) decodeUnblockRequest(w http.ResponseWriter, r *http.Request) (AdminUnblockRequest, bool) {
-	var req AdminUnblockRequest
-	if r.Body == nil {
-		_ = badRequest(w, r, errors.New("missing request body"))
+	// Unblock answers with the admin.block.reason_* codes: the reason means
+	// the same in both, and a parallel admin.unblock.* family would only
+	// duplicate the FE branch.
+	return decodeReasonBody(w, r, blockReasonCodes, func(req *AdminUnblockRequest) *string { return &req.Reason })
+}
+
+// reasonCodes are the error codes of a missing and of an overlong reason.
+type reasonCodes struct {
+	required, tooLong string
+}
+
+var blockReasonCodes = reasonCodes{required: AdminBlockReasonRequiredCode, tooLong: AdminBlockReasonTooLongCode}
+
+// decodeReasonBody decodes a back-office body that carries a required
+// reason: block, unblock, and the tenant suspend and reactivate. It trims
+// the reason in place and refuses a blank one, or one over 500 characters,
+// with the given codes. On a failure it writes the response and returns
+// false.
+func decodeReasonBody[T any](w http.ResponseWriter, r *http.Request, codes reasonCodes, reasonOf func(*T) *string) (T, bool) {
+	var req T
+	if !decodeAdminBody(w, r, &req) {
 		return req, false
 	}
-	dec := json.NewDecoder(r.Body)
-	dec.DisallowUnknownFields()
-	if err := dec.Decode(&req); err != nil {
-		_ = badRequest(w, r, err)
+	reason := reasonOf(&req)
+	*reason = strings.TrimSpace(*reason)
+	if *reason == "" {
+		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), codes.required)
 		return req, false
 	}
-	if !decoderAtEOF(dec) {
-		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
-		return req, false
-	}
-	req.Reason = strings.TrimSpace(req.Reason)
-	if req.Reason == "" {
-		// Reuses the admin.block.reason_required code because both DTOs
-		// share the same reason field semantics — having a parallel
-		// admin.unblock.* family would just duplicate the FE branch.
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is required"), AdminBlockReasonRequiredCode)
-		return req, false
-	}
-	if utf8.RuneCountInString(req.Reason) > adminBlockReasonMaxLen {
-		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), AdminBlockReasonTooLongCode)
+	if utf8.RuneCountInString(*reason) > adminBlockReasonMaxLen {
+		_ = codedUnprocessableEntityError(w, r, errors.New("reason is too long"), codes.tooLong)
 		return req, false
 	}
 	return req, true
+}
+
+// adminBodyMaxBytes caps a back-office JSON body. The largest is a reason of
+// 500 characters; the cap leaves room for that with any encoding.
+const adminBodyMaxBytes int64 = 16 * 1024
+
+// decodeAdminBody decodes a JSON body of at most adminBodyMaxBytes into dst,
+// refusing unknown fields and trailing data. It writes a 400 and returns
+// false when the body is not acceptable.
+func decodeAdminBody(w http.ResponseWriter, r *http.Request, dst any) bool {
+	if r.Body == nil {
+		_ = badRequest(w, r, errors.New("missing request body"))
+		return false
+	}
+	dec := json.NewDecoder(http.MaxBytesReader(w, r.Body, adminBodyMaxBytes))
+	dec.DisallowUnknownFields()
+	if err := dec.Decode(dst); err != nil {
+		_ = badRequest(w, r, err)
+		return false
+	}
+	if !decoderAtEOF(dec) {
+		_ = badRequest(w, r, errors.New("invalid JSON body — trailing tokens"))
+		return false
+	}
+	return true
 }
 
 // decoderAtEOF reports whether the decoder has consumed all of its

@@ -1,10 +1,25 @@
 import { useEffect, useState } from "react"
-import { ArrowLeft, Building2, Globe, Hash, Layers, Search, Users, X } from "lucide-react"
+import {
+  ArrowLeft,
+  Ban,
+  Building2,
+  CircleCheck,
+  Globe,
+  Hash,
+  Layers,
+  Pencil,
+  Search,
+  Trash2,
+  TriangleAlert,
+  Users,
+  X,
+} from "lucide-react"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { useTranslation } from "react-i18next"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { Separator } from "@/components/ui/separator"
 import {
   Select,
   SelectContent,
@@ -22,7 +37,13 @@ import {
   TableRow,
 } from "@/components/ui/table"
 import { RouteTitle } from "@/components/routing/RouteTitle"
-import { useAdminGroups, useAdminTenant, useAdminTenantUsers } from "@/features/admin/hooks"
+import type { AdminTenant } from "@/features/admin/api"
+import {
+  useAdminGroups,
+  useAdminTenant,
+  useAdminTenantUsers,
+  useIsPlatformAdmin,
+} from "@/features/admin/hooks"
 import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { HttpError } from "@/lib/http"
@@ -30,6 +51,7 @@ import { formatDate, formatDateTime } from "@/lib/intl"
 import { cn } from "@/lib/utils"
 
 import { AccountStateBadge, GroupStatusBadge, TenantStatusBadge } from "./admin-shared"
+import { DeleteTenantDialog, TenantFormDialog, TenantStatusDialog } from "./AdminTenantDialogs"
 import { AdminPagination } from "./AdminPagination"
 
 const SEARCH_DEBOUNCE_MS = 250
@@ -49,11 +71,15 @@ function parsePage(raw: string | null): number {
   return Number.isInteger(n) && n >= 1 ? n : 1
 }
 
-// AdminTenantDetailPage is /admin/tenants/:tenantId — a read-only tenant
-// header (name, slug, domain, status, plan when plans are on, user/group
-// counts) plus a Users tab and a Groups tab. Tab selection, per-tab search / filter and
-// pagination all round-trip through the URL query string so a copied
+// AdminTenantDetailPage is /admin/tenants/:tenantId — a tenant header
+// (name, slug, domain, status, plan when plans are on, user/group counts)
+// plus a Users tab and a Groups tab. Tab selection, per-tab search / filter
+// and pagination all round-trip through the URL query string so a copied
 // link reproduces the exact view.
+//
+// A platform admin also gets the tenant actions: Edit, Suspend or
+// Reactivate in the header card, and Delete in a Danger zone below the
+// tabs. A support agent sees the page read-only.
 //
 // Naming: the issue text proposed `TenantDetailPage.tsx`, but the #1752
 // foundation established the `Admin*Page` convention for this surface
@@ -97,6 +123,7 @@ export function AdminTenantDetailPage() {
   }
 
   const tenantName = tenant.data?.name ?? t("tenantDetail.fallbackName")
+  const canManage = useIsPlatformAdmin()
 
   return (
     <>
@@ -132,7 +159,7 @@ export function AdminTenantDetailPage() {
           </div>
         ) : (
           <>
-            <TenantHeaderCard tenant={tenant.data} />
+            <TenantHeaderCard tenant={tenant.data} canManage={canManage} />
 
             <Tabs value={tab} onValueChange={setTab}>
               <TabsList>
@@ -165,6 +192,13 @@ export function AdminTenantDetailPage() {
                 />
               </TabsContent>
             </Tabs>
+
+            {canManage ? (
+              <TenantDangerZone
+                tenant={tenant.data}
+                onDeleted={() => navigate("/admin/tenants", { replace: true })}
+              />
+            ) : null}
           </>
         )}
       </div>
@@ -172,13 +206,11 @@ export function AdminTenantDetailPage() {
   )
 }
 
-// Read-only identity + metrics card for the tenant.
-function TenantHeaderCard({
-  tenant,
-}: {
-  tenant: NonNullable<ReturnType<typeof useAdminTenant>["data"]>
-}) {
+// Identity + metrics card for the tenant, with the Edit and Suspend /
+// Reactivate actions for a platform admin.
+function TenantHeaderCard({ tenant, canManage }: { tenant: AdminTenant; canManage: boolean }) {
   const { t } = useTranslation("admin")
+  const [dialog, setDialog] = useState<"edit" | "suspend" | "reactivate" | null>(null)
   // The Plan tile shows only when the deployment has plans on (#1389).
   const plansEnabled = useFeatureFlag("plans") === true
   const stats = [
@@ -234,6 +266,108 @@ function TenantHeaderCard({
           </div>
         ))}
       </div>
+
+      {canManage ? (
+        <>
+          <Separator className="my-5" />
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              className="gap-1.5"
+              onClick={() => setDialog("edit")}
+              data-testid="admin-tenant-edit"
+            >
+              <Pencil className="size-3.5" />
+              {t("tenantActions.edit.action")}
+            </Button>
+            {/* An active tenant can be suspended; a suspended or inactive
+                one can be made active again. */}
+            {tenant.status === "active" ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => setDialog("suspend")}
+                data-testid="admin-tenant-suspend"
+              >
+                <Ban className="size-3.5" />
+                {t("tenantActions.suspend.action")}
+              </Button>
+            ) : tenant.status ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="gap-1.5"
+                onClick={() => setDialog("reactivate")}
+                data-testid="admin-tenant-reactivate"
+              >
+                <CircleCheck className="size-3.5" />
+                {t("tenantActions.reactivate.action")}
+              </Button>
+            ) : null}
+          </div>
+
+          <TenantFormDialog
+            mode="edit"
+            tenant={tenant}
+            open={dialog === "edit"}
+            onOpenChange={(open) => setDialog(open ? "edit" : null)}
+          />
+          <TenantStatusDialog
+            action={dialog === "reactivate" ? "reactivate" : "suspend"}
+            tenant={tenant}
+            open={dialog === "suspend" || dialog === "reactivate"}
+            onOpenChange={(open) => {
+              if (!open) setDialog(null)
+            }}
+          />
+        </>
+      ) : null}
+    </div>
+  )
+}
+
+// Danger zone — the destructive-tinted card from the admin group detail
+// page, holding the tenant delete. The dialog asks for the tenant's slug.
+function TenantDangerZone({ tenant, onDeleted }: { tenant: AdminTenant; onDeleted: () => void }) {
+  const { t } = useTranslation("admin")
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div
+      className="rounded-xl border border-destructive/30 bg-destructive/5 p-5"
+      data-testid="admin-tenant-danger-zone"
+    >
+      <div className="flex items-start gap-3">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-destructive/10 shrink-0">
+          <TriangleAlert className="size-4 text-destructive" />
+        </div>
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold">{t("tenantActions.danger.title")}</h3>
+          <p className="mt-0.5 text-sm text-muted-foreground">
+            {t("tenantActions.danger.description")}
+          </p>
+        </div>
+      </div>
+      <div className="mt-4">
+        <Button
+          size="sm"
+          variant="destructive"
+          className="gap-1.5"
+          onClick={() => setOpen(true)}
+          data-testid="admin-tenant-delete"
+        >
+          <Trash2 className="size-3.5" />
+          {t("tenantActions.danger.button")}
+        </Button>
+      </div>
+      <DeleteTenantDialog
+        tenant={tenant}
+        open={open}
+        onOpenChange={setOpen}
+        onDeleted={onDeleted}
+      />
     </div>
   )
 }

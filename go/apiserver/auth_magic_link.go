@@ -184,6 +184,11 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
 	}
+	// The link names the tenant it was issued in; the user may have moved
+	// since, so their own tenant is checked as well.
+	if refuseInactiveUserTenant(w, r, api.tenantRegistry, user) {
+		return
+	}
 
 	// Account-lockout enforced at verify (requesting a link while locked is
 	// still allowed — refusing would leak lockout state).

@@ -196,7 +196,7 @@ func (c *Command) confirmDeletion(tenant *models.Tenant) bool {
 		var confirmation string
 		fmt.Scanln(&confirmation)
 
-		return confirmation == tenant.Slug
+		return admin.ConfirmTenantDeletion(tenant, confirmation) == nil
 	}
 
 	return false
