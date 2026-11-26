@@ -99,8 +99,8 @@ import {
 
 // CHANGE-STATUS bar: terminal status transitions surfaced as quick
 // buttons on the detail surface (mock: "Change Status" section).
-// Mirror the mock's set sans `in_use`, since `in_use` is what we're
-// transitioning *from*. Order matches the mock's row.
+// Every status but `in_use`, which is what the item transitions *from*.
+// The mock's row stops at Written Off; Donated and Stolen follow it.
 const TERMINAL_STATUSES = TERMINAL_COMMODITY_STATUSES
 
 // Mock parity colour-only mapping for the CHANGE STATUS quick
@@ -659,7 +659,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   // CHANGE STATUS quick action: drives the row's status transitions.
-  // Forward transitions (in_use → sold/lost/disposed/written_off) open
+  // Forward transitions (in_use → any terminal status) open
   // the StatusTransitionDialog (#1611) so the user can record the
   // status_date / status_note / sale_price triple the BE persists.
   // Revert (terminal → in_use) keeps the lighter useConfirm path and

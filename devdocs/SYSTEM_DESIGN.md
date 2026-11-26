@@ -65,13 +65,11 @@ Locations (Top-level containers)
 
 ### Business Rules
 
-#### Status Hierarchy
-The system implements a visual status hierarchy for commodities:
-1. **Draft** (highest priority) - Items being prepared
-2. **Sold** - Grayscale with diagonal stamp
-3. **Lost** - Yellow overlay
-4. **Disposed** - Semi-transparent
-5. **Written Off** - Faded appearance
+#### Status Display
+Item cards and the item page show an item's state:
+- **Draft** items, still being prepared, carry a Draft badge and show faded with a dashed border on the list cards.
+- Every status shows as a colored pill: In Use green, Sold amber, Lost red, Disposed and Written Off muted, Donated blue, Stolen orange.
+- Every status but In Use means the group no longer has the item. The default items list, the totals and the location insurance report leave such items out.
 
 #### Value Calculations
 - Ignores draft items in calculations
