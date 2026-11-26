@@ -545,6 +545,14 @@ features:
   # the surface dark.
   # Env: INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION
   currencyMigration: true
+  # Subscription plans (#1389). The plans feature is frozen, so the UI
+  # hides every plan surface: the plan badge and Upgrade links, the
+  # /plans page, the plan part of the group settings card and the plan in
+  # the admin tenant pages. GET /g/{slug}/plan reports the unlimited plan.
+  # Nothing enforces plan limits either way; storage quotas do not come
+  # from plans. Default false.
+  # Env: INVENTARIO_RUN_ENABLE_PLANS
+  plans: false
 
 # ============================================================
 # Email — non-sensitive settings (go into ConfigMap)

@@ -35,6 +35,8 @@ data:
   # cmd/inventario/run/bootstrap/config.go resolves at runtime to
   # INVENTARIO_RUN_FEATURE_*. See values.yaml `features:` block.
   INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: {{ .Values.features.currencyMigration | quote }}
+  # Subscription plans (#1389), off by default: the feature is frozen.
+  INVENTARIO_RUN_ENABLE_PLANS: {{ .Values.features.plans | default false | quote }}
   {{- if .Values.demo.mailpit.enabled }}
   # Demo mail-trap (templates/demo/mailpit-*.yaml): route ALL transactional
   # email to the in-cluster Mailpit sidecar — unauthenticated SMTP on :1025,

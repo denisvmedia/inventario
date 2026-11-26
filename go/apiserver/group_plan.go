@@ -24,15 +24,25 @@ import (
 // tenant.PlanID is empty or unknown (PlanByID falls back); this keeps
 // the card renderable even when the tenant row was created before this
 // migration ran.
-func GroupPlan() func(r chi.Router) {
+//
+// plansEnabled mirrors Params.PlansEnabled. When false the plans feature
+// is off for the deployment and the handler reports the `unlimited` plan
+// whatever tenant.PlanID says, so no plan caps reach a client. The usage
+// part stays: the group settings page shows it without the plan.
+func GroupPlan(plansEnabled bool) func(r chi.Router) {
+	h := &groupPlanHandler{plansEnabled: plansEnabled}
 	return func(r chi.Router) {
-		r.Get("/", handleGroupPlan)
+		r.Get("/", h.handleGroupPlan)
 	}
+}
+
+type groupPlanHandler struct {
+	plansEnabled bool
 }
 
 // handleGroupPlan returns the active plan + per-group usage.
 // @Summary Get the active plan + per-group usage
-// @Description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).
+// @Description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids give unlimited, as does any id while the plans feature flag is off (#1389).
 // @Tags groups
 // @Produce json
 // @Param groupSlug path string true "Group slug"
@@ -40,7 +50,7 @@ func GroupPlan() func(r chi.Router) {
 // @Failure 401 {string} string "Unauthorized"
 // @Failure 500 {string} string "Internal Server Error"
 // @Router /g/{groupSlug}/plan [get].
-func handleGroupPlan(w http.ResponseWriter, r *http.Request) {
+func (h *groupPlanHandler) handleGroupPlan(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
 	registrySet := RegistrySetFromContext(ctx)
@@ -60,13 +70,15 @@ func handleGroupPlan(w http.ResponseWriter, r *http.Request) {
 	// to read its own tenant row to establish context, and an RLS-filtered
 	// TenantRegistry would chicken-and-egg). Reading by the request user's
 	// TenantID gives us exactly the row we want regardless.
-	tenant, err := registrySet.TenantRegistry.Get(ctx, user.TenantID)
-	if err != nil {
-		internalServerError(w, r, err)
-		return
+	plan := models.PlanUnlimited
+	if h.plansEnabled {
+		tenant, err := registrySet.TenantRegistry.Get(ctx, user.TenantID)
+		if err != nil {
+			internalServerError(w, r, err)
+			return
+		}
+		plan = models.PlanByID(tenant.PlanID)
 	}
-
-	plan := models.PlanByID(tenant.PlanID)
 
 	usage, err := computeGroupUsage(ctx, registrySet)
 	if err != nil {
