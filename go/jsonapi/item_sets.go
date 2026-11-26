@@ -1,10 +1,13 @@
 package jsonapi
 
 import (
+	"context"
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/jellydator/validation"
 
+	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -18,11 +21,16 @@ type ItemSetItemTypeView struct {
 	Name string `json:"name" example:"Coins"`
 	Icon string `json:"icon" example:"coins"`
 	// State is missing when the group has no such type and adding the set
-	// creates it, added when the set created the type, and own when it is
-	// a member's type of the same name, which the set uses and never
-	// deletes.
-	State string `json:"state" example:"added" enums:"missing,added,own"`
-	// ItemTypeID is the ID of the group's type; absent while missing.
+	// creates it, added when the set created the type, own when it is a
+	// member's type of the same name, which the set uses and never deletes,
+	// and taken when another type of the set was renamed to its name, so
+	// adding cannot create it.
+	State string `json:"state" example:"added" enums:"missing,added,own,taken"`
+	// TakenBy is the key of the set's type that has this type's name, for a
+	// taken type.
+	TakenBy string `json:"taken_by,omitempty" example:"coins"`
+	// ItemTypeID is the ID of the group's type; absent while missing or
+	// taken.
 	ItemTypeID       string `json:"item_type_id,omitempty" example:"8f1c..."`
 	ItemCount        int    `json:"item_count" example:"0" format:"int64"`
 	TrashedItemCount int    `json:"trashed_item_count" example:"0" format:"int64"`
@@ -46,9 +54,13 @@ type ItemSetFieldView struct {
 	// FieldType is the type of the group's field, or the set's type for a
 	// missing one.
 	FieldType string `json:"field_type" example:"select"`
-	// State is missing, added or own, as for an item type.
-	State string `json:"state" example:"added" enums:"missing,added,own"`
-	// CustomFieldID is the ID of the group's field; absent while missing.
+	// State is missing, added, own or taken, as for an item type.
+	State string `json:"state" example:"added" enums:"missing,added,own,taken"`
+	// TakenBy is the key of the set's field that has this field's name, for
+	// a taken field.
+	TakenBy string `json:"taken_by,omitempty" example:"signed"`
+	// CustomFieldID is the ID of the group's field; absent while missing or
+	// taken.
 	CustomFieldID string `json:"custom_field_id,omitempty" example:"5d2e..."`
 	// ItemCount and TrashedItemCount count the items with a value of the
 	// field, outside Trash and in it.
@@ -64,7 +76,8 @@ type ItemSetFieldView struct {
 
 // ItemSetView is an item set as the group holds it.
 type ItemSetView struct {
-	// Complete is true when the group has every type and field of the set.
+	// Complete is true when adding the set has nothing left to create: the
+	// group has every type and field of the set but those taken.
 	Complete bool `json:"complete" example:"true"`
 	// ItemTypes and CustomFields list the set's entries in the set's order.
 	ItemTypes    []ItemSetItemTypeView `json:"item_types"`
@@ -81,8 +94,9 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 		row := ItemSetItemTypeView{
 			Key:   t.Entry.Key,
 			Name:  t.Entry.Name,
-			Icon:  t.Entry.Icon,
-			State: string(t.State),
+			Icon:    t.Entry.Icon,
+			State:   string(t.State),
+			TakenBy: t.TakenBy,
 		}
 		if t.ItemType != nil {
 			row.Name = t.ItemType.DisplayName()
@@ -101,6 +115,7 @@ func newItemSetView(st *services.ItemSetStatus) ItemSetView {
 			Name:      f.Entry.Name,
 			FieldType: string(f.Entry.Type),
 			State:     string(f.State),
+			TakenBy:   f.TakenBy,
 		}
 		if f.Field != nil {
 			row.Name = f.Field.Name
@@ -125,7 +140,7 @@ type ItemSetResponseData struct {
 }
 
 // ItemSetMeta reports what an add or a remove did. An add fills the created
-// and added counts, a remove the deleted names.
+// and added counts, a remove the deleted and kept names.
 type ItemSetMeta struct {
 	CreatedItemTypes    int `json:"created_item_types" example:"7" format:"int64"`
 	CreatedCustomFields int `json:"created_custom_fields" example:"8" format:"int64"`
@@ -135,6 +150,11 @@ type ItemSetMeta struct {
 	// DeletedItemTypes and DeletedCustomFields name what a remove deleted.
 	DeletedItemTypes    []string `json:"deleted_item_types"`
 	DeletedCustomFields []string `json:"deleted_custom_fields"`
+	// KeptItemTypes and KeptCustomFields name what the remove request
+	// listed but kept: an item started to use it since the confirmation,
+	// or it became the group's last type.
+	KeptItemTypes    []string `json:"kept_item_types"`
+	KeptCustomFields []string `json:"kept_custom_fields"`
 }
 
 // ItemSetResponse is the JSON:API envelope of an item set.
@@ -162,23 +182,79 @@ func NewItemSetAddResponse(res *services.ItemSetAddResult) *ItemSetResponse {
 		AddedTemplates:      res.AddedTemplates,
 		DeletedItemTypes:    []string{},
 		DeletedCustomFields: []string{},
+		KeptItemTypes:       []string{},
+		KeptCustomFields:    []string{},
 	}
 	return resp
 }
 
 // NewItemSetRemoveResponse wraps the status after a remove with what it
-// deleted.
+// deleted and what it kept of what the request listed.
 func NewItemSetRemoveResponse(res *services.ItemSetRemoveResult) *ItemSetResponse {
 	resp := NewItemSetResponse(res.Status)
-	meta := &ItemSetMeta{DeletedItemTypes: res.DeletedItemTypes, DeletedCustomFields: res.DeletedFields}
-	if meta.DeletedItemTypes == nil {
-		meta.DeletedItemTypes = []string{}
+	resp.Meta = &ItemSetMeta{
+		DeletedItemTypes:    nonNil(res.DeletedItemTypes),
+		DeletedCustomFields: nonNil(res.DeletedFields),
+		KeptItemTypes:       nonNil(res.KeptItemTypes),
+		KeptCustomFields:    nonNil(res.KeptFields),
 	}
-	if meta.DeletedCustomFields == nil {
-		meta.DeletedCustomFields = []string{}
-	}
-	resp.Meta = meta
 	return resp
+}
+
+// nonNil returns names, or an empty list for nil, so the meta lists are
+// arrays in JSON.
+func nonNil(names []string) []string {
+	if names == nil {
+		return []string{}
+	}
+	return names
+}
+
+var _ render.Binder = (*ItemSetRemoveRequest)(nil)
+
+// ItemSetRemoveRequest is the body of DELETE /groups/{groupID}/collection-set:
+// the item types and custom fields the confirmation listed as deleted.
+type ItemSetRemoveRequest struct {
+	Data *ItemSetRemoveData `json:"data"`
+}
+
+type ItemSetRemoveData struct {
+	Type       string                   `json:"type" example:"item_sets" enums:"item_sets"`
+	Attributes *ItemSetRemoveAttributes `json:"attributes"`
+}
+
+type ItemSetRemoveAttributes struct {
+	// ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,
+	// by ID. It deletes those that are removable when it runs; one that
+	// stopped being removable stays and is listed in meta, and an ID that
+	// names no type or field of the set is ignored. Either list may be
+	// empty.
+	ItemTypeIDs    []string `json:"item_type_ids"`
+	CustomFieldIDs []string `json:"custom_field_ids"`
+}
+
+func (d *ItemSetRemoveData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, d,
+		validation.Field(&d.Type, validation.Required, validation.In("item_sets")),
+		validation.Field(&d.Attributes, validation.Required),
+	)
+}
+
+func (a *ItemSetRemoveAttributes) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, a,
+		validation.Field(&a.ItemTypeIDs, validation.NotNil, validation.Length(0, models.MaxItemTypesPerGroup), validation.Each(validation.Required)),
+		validation.Field(&a.CustomFieldIDs, validation.NotNil, validation.Length(0, models.MaxCustomFieldsPerGroup), validation.Each(validation.Required)),
+	)
+}
+
+func (rr *ItemSetRemoveRequest) Bind(r *http.Request) error {
+	if rr.Data == nil {
+		return validation.NewError("validation_required", "data is required")
+	}
+	if err := rr.Data.ValidateWithContext(r.Context()); err != nil {
+		return err
+	}
+	return rr.Data.Attributes.ValidateWithContext(r.Context())
 }
 
 func (rd *ItemSetResponse) Render(_ http.ResponseWriter, r *http.Request) error {

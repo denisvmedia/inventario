@@ -41,10 +41,18 @@ func (api *groupsAPI) collectionSetService(ctx context.Context, group *models.Lo
 	return services.NewItemSetService(models.CollectionSet, itemTypes, fields), ctx, nil
 }
 
-// renderItemSetError maps a failed add or remove: a group mid-deletion and
-// a full group are user errors; the rest goes through renderEntityError.
+// itemSetChangedCode is the error code of an add that found the group's
+// types or fields changing under it twice in a row.
+const itemSetChangedCode = "item_set.changed"
+
+// renderItemSetError maps a failed add or remove: a group mid-deletion, a
+// full group and rows changing under the add are user errors; the rest goes
+// through renderEntityError.
 func renderItemSetError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
+	case errors.Is(err, services.ErrItemSetChanged):
+		codedConflictError(w, r, errors.New("the group's item types or custom fields changed while the set was being added; add it again"),
+			itemSetChangedCode, nil)
 	case errors.Is(err, registry.ErrItemTypeLimit):
 		codedConflictError(w, r, fmt.Errorf("a group keeps at most %d item types", models.MaxItemTypesPerGroup),
 			itemTypeLimitCode, map[string]any{"limit": models.MaxItemTypesPerGroup})
@@ -59,8 +67,9 @@ func renderItemSetError(w http.ResponseWriter, r *http.Request, err error) {
 }
 
 // logCollectionSet writes the audit row of an add or a remove of the
-// Collection set. Nil-safe, like the other group audit helpers.
-func (api *groupsAPI) logCollectionSet(r *http.Request, action string, group *models.LocationGroup, err error) {
+// Collection set, with what it did in extra. Nil-safe, like the other group
+// audit helpers.
+func (api *groupsAPI) logCollectionSet(ctx context.Context, r *http.Request, action string, group *models.LocationGroup, extra map[string]any, err error) {
 	if api.auditService == nil {
 		return
 	}
@@ -73,17 +82,43 @@ func (api *groupsAPI) logCollectionSet(r *http.Request, action string, group *mo
 		msg := err.Error()
 		errMsg = &msg
 	}
-	entityType := "location_group"
-	api.auditService.LogAuth(r.Context(), services.AuthEvent{
+	api.auditService.LogAuth(ctx, services.AuthEvent{
 		Action:     action,
 		UserID:     new(user.ID),
 		TenantID:   new(user.TenantID),
 		Success:    err == nil,
 		Request:    r,
 		ErrMsg:     errMsg,
-		EntityType: &entityType,
+		EntityType: new("location_group"),
 		EntityID:   new(group.ID),
+		Extra:      extra,
 	})
+}
+
+// addAuditExtra is what an add records: what it created.
+func addAuditExtra(res *services.ItemSetAddResult) map[string]any {
+	if res == nil {
+		return nil
+	}
+	return map[string]any{
+		"created_item_types":    res.CreatedItemTypes,
+		"created_custom_fields": res.CreatedFields,
+		"added_templates":       res.AddedTemplates,
+	}
+}
+
+// removeAuditExtra is what a remove records: the rows it deleted and those
+// the request listed that stayed, by name.
+func removeAuditExtra(res *services.ItemSetRemoveResult) map[string]any {
+	if res == nil {
+		return nil
+	}
+	return map[string]any{
+		"deleted_item_types":    res.DeletedItemTypes,
+		"deleted_custom_fields": res.DeletedFields,
+		"kept_item_types":       res.KeptItemTypes,
+		"kept_custom_fields":    res.KeptFields,
+	}
 }
 
 // getCollectionSet shows how the group holds the Collection set.
@@ -133,7 +168,7 @@ func (api *groupsAPI) getCollectionSet(w http.ResponseWriter, r *http.Request) {
 // @Success 200 {object} jsonapi.ItemSetResponse "OK"
 // @Failure 403 {string} string "Forbidden - not a group admin"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
-// @Failure 409 {object} jsonapi.Errors "The group has 100 item types (item_type.limit)"
+// @Failure 409 {object} jsonapi.Errors "The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed)"
 // @Failure 422 {object} jsonapi.Errors "The group is being deleted (group.not_active), or has 200 custom fields (custom_field.limit_reached)"
 // @Router /groups/{groupID}/collection-set [post].
 func (api *groupsAPI) addCollectionSet(w http.ResponseWriter, r *http.Request) {
@@ -152,7 +187,7 @@ func (api *groupsAPI) addCollectionSet(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	res, err := svc.Add(ctx)
-	api.logCollectionSet(r, auditActionCollectionSetAdd, group, err)
+	api.logCollectionSet(r.Context(), r, auditActionCollectionSetAdd, group, addAuditExtra(res), err)
 	if err != nil {
 		renderItemSetError(w, r, err)
 		return
@@ -164,22 +199,29 @@ func (api *groupsAPI) addCollectionSet(w http.ResponseWriter, r *http.Request) {
 
 // removeCollectionSet removes the Collection set from the group.
 // @Summary Remove the Collection set from the group
-// @Description Deletes the item types and custom fields the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+// @Description Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+// @Description A listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.
 // @Description Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
-// @Description meta names what the request deleted; the attributes show what stays and why. Requires group admin role.
+// @Description meta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
 // @Param groupID path string true "Group ID"
+// @Param data body jsonapi.ItemSetRemoveRequest true "The item types and custom fields to delete, by ID"
 // @Success 200 {object} jsonapi.ItemSetResponse "OK"
 // @Failure 403 {string} string "Forbidden - not a group admin"
 // @Failure 404 {object} jsonapi.Errors "Group not found"
-// @Failure 422 {object} jsonapi.Errors "The group is being deleted (group.not_active)"
+// @Failure 422 {object} jsonapi.Errors "The body is missing or invalid, or the group is being deleted (group.not_active)"
 // @Router /groups/{groupID}/collection-set [delete].
 func (api *groupsAPI) removeCollectionSet(w http.ResponseWriter, r *http.Request) {
 	group := groupFromContext(r.Context())
 	if group == nil {
 		unprocessableEntityError(w, r, nil)
+		return
+	}
+	var input jsonapi.ItemSetRemoveRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
 		return
 	}
 	if !group.IsActive() {
@@ -191,8 +233,11 @@ func (api *groupsAPI) removeCollectionSet(w http.ResponseWriter, r *http.Request
 		internalServerError(w, r, err)
 		return
 	}
-	res, err := svc.Remove(ctx)
-	api.logCollectionSet(r, auditActionCollectionSetRemove, group, err)
+	res, err := svc.Remove(ctx, services.ItemSetRemoval{
+		ItemTypeIDs: input.Data.Attributes.ItemTypeIDs,
+		FieldIDs:    input.Data.Attributes.CustomFieldIDs,
+	})
+	api.logCollectionSet(r.Context(), r, auditActionCollectionSetRemove, group, removeAuditExtra(res), err)
 	if err != nil {
 		renderItemSetError(w, r, err)
 		return
@@ -205,17 +250,19 @@ func (api *groupsAPI) removeCollectionSet(w http.ResponseWriter, r *http.Request
 // addCollectionSetToNewGroup adds the Collection set to a group the request
 // has just created and reports how it went. The group exists either way: a
 // failure is logged, audited and reported in the response meta, and adding
-// the set from the group settings finishes it.
+// the set from the group settings finishes it. The group is committed, so
+// the add runs to its end even when the client goes away meanwhile.
 func (api *groupsAPI) addCollectionSetToNewGroup(r *http.Request, group *models.LocationGroup) *jsonapi.GroupCreateItemSetOutcome {
 	outcome := &jsonapi.GroupCreateItemSetOutcome{}
-	svc, ctx, err := api.collectionSetService(r.Context(), group)
+	base := context.WithoutCancel(r.Context())
+	svc, ctx, err := api.collectionSetService(base, group)
 	if err != nil {
 		slog.Error("Collection set: cannot scope registries to the new group", "group_id", group.ID, "error", err)
-		api.logCollectionSet(r, auditActionCollectionSetAdd, group, err)
+		api.logCollectionSet(base, r, auditActionCollectionSetAdd, group, nil, err)
 		return outcome
 	}
 	res, err := svc.Add(ctx)
-	api.logCollectionSet(r, auditActionCollectionSetAdd, group, err)
+	api.logCollectionSet(base, r, auditActionCollectionSetAdd, group, addAuditExtra(res), err)
 	if res != nil {
 		outcome.CreatedItemTypes = res.CreatedItemTypes
 		outcome.CreatedCustomFields = res.CreatedFields

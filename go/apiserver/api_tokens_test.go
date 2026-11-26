@@ -584,10 +584,11 @@ func TestAPITokens_RefusedOnAccountSecurityAndAdminEndpoints(t *testing.T) {
 		}
 	}
 
-	// Under /groups a token may read the group list, one group, its members
-	// and their photos, whatever its scope. Everything else there is refused,
-	// reads included: the admin routes hand out invite links. The token is
-	// authenticated first there, so only a valid one gets this far.
+	// Under /groups a token may read the group list, one group, its members,
+	// their photos and the Collection set, whatever its scope. Everything
+	// else there is refused, reads included: the admin routes hand out
+	// invite links. The token is authenticated first there, so only a valid
+	// one gets this far.
 	groupPath := "/api/v1/groups/" + env.group.ID
 	for _, route := range []struct{ method, path string }{
 		{http.MethodPost, "/api/v1/groups"},
@@ -601,6 +602,8 @@ func TestAPITokens_RefusedOnAccountSecurityAndAdminEndpoints(t *testing.T) {
 		{http.MethodPatch, groupPath + "/members/" + env.user.ID},
 		{http.MethodDelete, groupPath + "/members/" + env.user.ID},
 		{http.MethodPost, groupPath + "/leave"},
+		{http.MethodPost, groupPath + "/collection-set"},
+		{http.MethodDelete, groupPath + "/collection-set"},
 		{http.MethodGet, groupPath + "/no-such-route"},
 	} {
 		rr := env.withToken(valid, route.method, route.path, map[string]any{"name": "x"})
@@ -609,7 +612,7 @@ func TestAPITokens_RefusedOnAccountSecurityAndAdminEndpoints(t *testing.T) {
 	}
 
 	// The allowlisted reads are open to the token.
-	for _, path := range []string{"/api/v1/groups", groupPath, groupPath + "/members"} {
+	for _, path := range []string{"/api/v1/groups", groupPath, groupPath + "/members", groupPath + "/collection-set"} {
 		rr := env.withToken(valid, http.MethodGet, path, nil)
 		c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("GET %s: %s", path, rr.Body.String()))
 	}

@@ -26,7 +26,17 @@ const (
 	// ItemSetEntryOwn: a member's own row with the name of the set's entry.
 	// The set uses it and never deletes it.
 	ItemSetEntryOwn ItemSetEntryState = "own"
+	// ItemSetEntryTaken: the group has no row for the entry, and the row
+	// that stands for another entry of the set has the entry's name, as a
+	// member renamed it. Adding cannot create the entry under that name and
+	// leaves it out.
+	ItemSetEntryTaken ItemSetEntryState = "taken"
 )
+
+// ErrItemSetChanged reports an add that found the group's item types or
+// custom fields changed under it twice, as a remove or a member deleted
+// one of the rows it was working with. Adding again starts afresh.
+var ErrItemSetChanged = errx.NewSentinel("the group's item types or custom fields changed while the set was being added")
 
 // ItemSetKeepReason says why removing the set keeps a row the group has.
 type ItemSetKeepReason string
@@ -49,10 +59,13 @@ type ItemSetItemTypeStatus struct {
 	Entry models.ItemSetItemType
 	State ItemSetEntryState
 	// ItemType is the group's type that stands for the entry, nil while
-	// the entry is missing. It may carry another name: a member may have
-	// renamed it.
+	// the entry is missing or taken. It may carry another name: a member
+	// may have renamed it.
 	ItemType *models.ItemType
-	Usage    registry.ItemTypeUsage
+	// TakenBy is the key of the entry whose type has this entry's name, for
+	// a taken entry.
+	TakenBy string
+	Usage   registry.ItemTypeUsage
 	// KeepReason is why removing the set keeps the type, for a type the
 	// group has.
 	KeepReason ItemSetKeepReason
@@ -68,9 +81,12 @@ type ItemSetFieldStatus struct {
 	Entry models.ItemSetField
 	State ItemSetEntryState
 	// Field is the group's field that stands for the entry, nil while the
-	// entry is missing.
+	// entry is missing or taken.
 	Field *models.CustomFieldDefinition
-	Usage registry.CustomFieldUsage
+	// TakenBy is the key of the entry whose field has this entry's name,
+	// for a taken entry.
+	TakenBy string
+	Usage   registry.CustomFieldUsage
 	// KeepReason is why removing the set keeps the field, for a field the
 	// group has.
 	KeepReason ItemSetKeepReason
@@ -89,8 +105,9 @@ type ItemSetStatus struct {
 	Fields    []ItemSetFieldStatus
 }
 
-// Complete reports whether the group has every type and field of the set,
-// its own or the set's.
+// Complete reports whether adding the set has nothing left to create: the
+// group has every type and field of the set, its own or the set's, but for
+// those whose name another entry's row holds.
 func (s *ItemSetStatus) Complete() bool {
 	for _, t := range s.ItemTypes {
 		if t.State == ItemSetEntryMissing {
@@ -105,6 +122,23 @@ func (s *ItemSetStatus) Complete() bool {
 	return true
 }
 
+// Removal returns what a confirmation built from s lists as deleted: the
+// types and fields removing the set deletes.
+func (s *ItemSetStatus) Removal() ItemSetRemoval {
+	sel := ItemSetRemoval{ItemTypeIDs: []string{}, FieldIDs: []string{}}
+	for _, t := range s.ItemTypes {
+		if t.Removable() {
+			sel.ItemTypeIDs = append(sel.ItemTypeIDs, t.ItemType.ID)
+		}
+	}
+	for _, f := range s.Fields {
+		if f.Removable() {
+			sel.FieldIDs = append(sel.FieldIDs, f.Field.ID)
+		}
+	}
+	return sel
+}
+
 // ItemSetAddResult is what adding a set did.
 type ItemSetAddResult struct {
 	CreatedItemTypes int
@@ -116,12 +150,25 @@ type ItemSetAddResult struct {
 	Status *ItemSetStatus
 }
 
+// ItemSetRemoval names the rows a remove may delete, by ID: those the
+// confirmation listed as deleted. The remove deletes those among them that
+// are removable when it runs, and no other row.
+type ItemSetRemoval struct {
+	ItemTypeIDs []string
+	FieldIDs    []string
+}
+
 // ItemSetRemoveResult is what removing a set did.
 type ItemSetRemoveResult struct {
 	// DeletedItemTypes and DeletedFields name the rows removed, by the
 	// names they had.
 	DeletedItemTypes []string
 	DeletedFields    []string
+	// KeptItemTypes and KeptFields name the rows the removal listed that
+	// stayed: an item started to use one since the confirmation, or it
+	// became the group's last type.
+	KeptItemTypes []string
+	KeptFields    []string
 	// Status is the set as the group holds it afterwards: what is left of
 	// it is kept, each with its reason.
 	Status *ItemSetStatus
@@ -139,8 +186,9 @@ type ItemSetRemoveResult struct {
 //
 // Removing deletes only the types and fields the set created that no item
 // uses: no item, in Trash or not, of the type, and no item with a value of
-// the field. It is safe to repeat; a later run deletes what has become
-// unused since.
+// the field. It deletes no more than the caller names, so what a
+// confirmation listed bounds it. It is safe to repeat; a later run deletes
+// what has become unused since.
 type ItemSetService struct {
 	def       models.ItemSetDefinition
 	itemTypes registry.ItemTypeRegistry
@@ -173,27 +221,35 @@ func (s *ItemSetService) Status(ctx context.Context) (*ItemSetStatus, error) {
 	}
 
 	st := &ItemSetStatus{Set: s.def.Set}
-	typeRows := s.matchItemTypes(types)
+	typeRows, typesTakenBy := s.matchItemTypes(types)
 	for i, e := range s.def.ItemTypes {
 		ts := ItemSetItemTypeStatus{Entry: e, State: ItemSetEntryMissing}
-		if row := typeRows[i]; row != nil {
+		switch row := typeRows[i]; {
+		case row != nil:
 			ts.ItemType = row
 			ts.Usage = counts[row.Slug]
 			ts.State = s.stateOf(row.SetEntry)
 			ts.KeepReason = keepReason(ts.State, ts.Usage.Total())
+		case typesTakenBy[i] >= 0:
+			ts.State = ItemSetEntryTaken
+			ts.TakenBy = s.def.ItemTypes[typesTakenBy[i]].Key
 		}
 		st.ItemTypes = append(st.ItemTypes, ts)
 	}
 	s.keepLastType(st, len(types))
 
-	fieldRows := s.matchFields(fields)
+	fieldRows, fieldsTakenBy := s.matchFields(fields)
 	for i, e := range s.def.Fields {
 		fs := ItemSetFieldStatus{Entry: e, State: ItemSetEntryMissing}
-		if row := fieldRows[i]; row != nil {
+		switch row := fieldRows[i]; {
+		case row != nil:
 			fs.Field = row
 			fs.Usage = usage[row.ID]
 			fs.State = s.stateOf(row.SetEntry)
 			fs.KeepReason = keepReason(fs.State, fs.Usage.Total())
+		case fieldsTakenBy[i] >= 0:
+			fs.State = ItemSetEntryTaken
+			fs.TakenBy = s.def.Fields[fieldsTakenBy[i]].Key
 		}
 		st.Fields = append(st.Fields, fs)
 	}
@@ -235,8 +291,9 @@ func keepReason(state ItemSetEntryState, used int) ItemSetKeepReason {
 }
 
 // matchItemTypes returns, per item type of the set, the group's type that
-// stands for it, or nil.
-func (s *ItemSetService) matchItemTypes(types []*models.ItemType) []*models.ItemType {
+// stands for it, or nil, and the index of the entry whose type holds its
+// name, or -1.
+func (s *ItemSetService) matchItemTypes(types []*models.ItemType) ([]*models.ItemType, []int) {
 	return matchSetRows(s.def.ItemTypes, types,
 		func(e models.ItemSetItemType) (models.ItemSetEntry, string) {
 			return s.def.Entry(e.Key), models.ItemTypeNameKey(e.Name)
@@ -245,8 +302,9 @@ func (s *ItemSetService) matchItemTypes(types []*models.ItemType) []*models.Item
 }
 
 // matchFields returns, per custom field of the set, the group's field that
-// stands for it, or nil.
-func (s *ItemSetService) matchFields(fields []*models.CustomFieldDefinition) []*models.CustomFieldDefinition {
+// stands for it, or nil, and the index of the entry whose field holds its
+// name, or -1.
+func (s *ItemSetService) matchFields(fields []*models.CustomFieldDefinition) ([]*models.CustomFieldDefinition, []int) {
 	return matchSetRows(s.def.Fields, fields,
 		func(e models.ItemSetField) (models.ItemSetEntry, string) {
 			return s.def.Entry(e.Key), models.CustomFieldNameKey(e.Name)
@@ -255,21 +313,28 @@ func (s *ItemSetService) matchFields(fields []*models.CustomFieldDefinition) []*
 }
 
 // matchSetRows returns, per entry of a set, the row that stands for it, or
-// the zero R. entryKey and rowKey give the set entry and the name key of an
-// entry and of a row. The row the entry created wins, whatever it is called
-// now, so a renamed type is still the set's. Otherwise a row with the
-// entry's name key that no entry took by its set entry stands for it: a
-// member's own row, or one a later version of the set created under a key
-// this one lacks.
-func matchSetRows[E, R any](entries []E, rows []R, entryKey func(E) (models.ItemSetEntry, string), rowKey func(R) (models.ItemSetEntry, string)) []R {
+// the zero R, and the index of the entry whose row holds its name, or -1.
+// entryKey and rowKey give the set entry and the name key of an entry and
+// of a row. The row the entry created wins, whatever it is called now, so a
+// renamed type is still the set's. Otherwise a row with the entry's name key
+// that no entry took by its set entry stands for it: a member's own row, or
+// one a later version of the set created under a key this one lacks. A row
+// stands for one entry at most; when the row with an entry's name stands
+// for another entry, a member renamed that one, and the entry is taken.
+func matchSetRows[E, R any](entries []E, rows []R, entryKey func(E) (models.ItemSetEntry, string), rowKey func(R) (models.ItemSetEntry, string)) ([]R, []int) {
 	out := make([]R, len(entries))
+	takenBy := make([]int, len(entries))
 	matched := make([]bool, len(entries))
-	taken := make([]bool, len(rows))
+	owner := make([]int, len(rows))
+	for j := range owner {
+		owner[j] = -1
+	}
 	for i, e := range entries {
+		takenBy[i] = -1
 		entry, _ := entryKey(e)
 		for j, r := range rows {
-			if rowEntry, _ := rowKey(r); !taken[j] && rowEntry == entry {
-				out[i], matched[i], taken[j] = r, true, true
+			if rowEntry, _ := rowKey(r); owner[j] < 0 && rowEntry == entry {
+				out[i], matched[i], owner[j] = r, true, i
 				break
 			}
 		}
@@ -280,45 +345,89 @@ func matchSetRows[E, R any](entries []E, rows []R, entryKey func(E) (models.Item
 		}
 		_, name := entryKey(e)
 		for j, r := range rows {
-			if _, rowName := rowKey(r); !taken[j] && rowName == name {
-				out[i], matched[i], taken[j] = r, true, true
-				break
+			if _, rowName := rowKey(r); rowName != name {
+				continue
 			}
+			if owner[j] < 0 {
+				out[i], matched[i], owner[j] = r, true, i
+			} else {
+				takenBy[i] = owner[j]
+			}
+			break
 		}
 	}
-	return out
+	return out, takenBy
 }
 
 // Add adds the set to the group. On an error, the result counts what was
 // created before it.
+//
+// A type or field the add works with can go away under it, as a remove or
+// a member deletes it. The registries then report it gone, or refuse a
+// template that names it; the add runs once more from a fresh status, and
+// fails with ErrItemSetChanged when that happens again.
 func (s *ItemSetService) Add(ctx context.Context) (*ItemSetAddResult, error) {
 	res := &ItemSetAddResult{}
-	st, err := s.Status(ctx)
+	err := s.add(ctx, res)
+	if changedUnder(err) {
+		err = s.add(ctx, res)
+		if changedUnder(err) {
+			err = errxtrace.Classify(err, ErrItemSetChanged)
+		}
+	}
 	if err != nil {
 		return res, err
 	}
+	if res.Status, err = s.Status(ctx); err != nil {
+		return res, err
+	}
+	return res, nil
+}
 
+// changedUnder reports whether err is a registry refusing a row that went
+// away during an add.
+func changedUnder(err error) bool {
+	return errors.Is(err, registry.ErrNotFound) || errors.Is(err, registry.ErrInvalidInput)
+}
+
+// add runs one pass of Add, counting into res.
+func (s *ItemSetService) add(ctx context.Context, res *ItemSetAddResult) error {
+	st, err := s.Status(ctx)
+	if err != nil {
+		return err
+	}
+
+	// typeIDs lists each type once: the name a missing entry is created
+	// under can turn out to belong to a row another entry stands for.
 	typeIDs := make([]string, 0, len(st.ItemTypes))
 	for _, ts := range st.ItemTypes {
 		t := ts.ItemType
-		if t == nil {
+		switch ts.State {
+		case ItemSetEntryTaken:
+			continue
+		case ItemSetEntryMissing:
 			var created bool
 			if t, created, err = s.createItemType(ctx, ts.Entry); err != nil {
-				return res, err
+				return err
 			}
 			if created {
 				res.CreatedItemTypes++
 			}
 		}
-		typeIDs = append(typeIDs, t.ID)
+		if !slices.Contains(typeIDs, t.ID) {
+			typeIDs = append(typeIDs, t.ID)
+		}
 	}
 
 	for _, fs := range st.Fields {
 		f := fs.Field
-		if f == nil {
+		switch fs.State {
+		case ItemSetEntryTaken:
+			continue
+		case ItemSetEntryMissing:
 			var created bool
 			if f, created, err = s.createField(ctx, fs.Entry, typeIDs); err != nil {
-				return res, err
+				return err
 			}
 			if created {
 				res.CreatedFields++
@@ -327,15 +436,11 @@ func (s *ItemSetService) Add(ctx context.Context) (*ItemSetAddResult, error) {
 		}
 		added, err := s.fields.AddTemplates(ctx, f.ID, typeIDs)
 		if err != nil {
-			return res, errxtrace.Wrap("failed to add the field to the set's types", err, errx.Attrs("custom_field_id", f.ID))
+			return errxtrace.Wrap("failed to add the field to the set's types", err, errx.Attrs("custom_field_id", f.ID))
 		}
 		res.AddedTemplates += added
 	}
-
-	if res.Status, err = s.Status(ctx); err != nil {
-		return res, err
-	}
-	return res, nil
+	return nil
 }
 
 // createItemType creates the type of entry e. When a type of that name
@@ -380,10 +485,12 @@ func (s *ItemSetService) createField(ctx context.Context, e models.ItemSetField,
 	return nil, false, errxtrace.Wrap("failed to create the set's custom field", err, errx.Attrs("name", e.Name))
 }
 
-// Remove deletes the types and fields the set created that nothing uses. A
-// row an item started to use meanwhile is kept, as the registries refuse to
-// delete it. On an error, the result names what was deleted before it.
-func (s *ItemSetService) Remove(ctx context.Context) (*ItemSetRemoveResult, error) {
+// Remove deletes the types and fields named in sel that the set created and
+// nothing uses. A named row that is not removable when it runs stays and is
+// reported as kept, and a row an item started to use meanwhile stays too, as
+// the registries refuse to delete it. An ID that names no row of the set is
+// ignored. On an error, the result names what was deleted before it.
+func (s *ItemSetService) Remove(ctx context.Context, sel ItemSetRemoval) (*ItemSetRemoveResult, error) {
 	res := &ItemSetRemoveResult{}
 	st, err := s.Status(ctx)
 	if err != nil {
@@ -391,28 +498,40 @@ func (s *ItemSetService) Remove(ctx context.Context) (*ItemSetRemoveResult, erro
 	}
 
 	for _, fs := range st.Fields {
+		if fs.Field == nil || !slices.Contains(sel.FieldIDs, fs.Field.ID) {
+			continue
+		}
 		if !fs.Removable() {
+			res.KeptFields = append(res.KeptFields, fs.Field.Name)
 			continue
 		}
 		err := s.fields.Delete(ctx, fs.Field.ID)
 		switch {
 		case err == nil:
 			res.DeletedFields = append(res.DeletedFields, fs.Field.Name)
-		case errors.Is(err, registry.ErrCustomFieldInUse), errors.Is(err, registry.ErrNotFound):
+		case errors.Is(err, registry.ErrCustomFieldInUse):
+			res.KeptFields = append(res.KeptFields, fs.Field.Name)
+		case errors.Is(err, registry.ErrNotFound):
 		default:
 			return res, errxtrace.Wrap("failed to delete the set's custom field", err, errx.Attrs("custom_field_id", fs.Field.ID))
 		}
 	}
 
 	for _, ts := range st.ItemTypes {
+		if ts.ItemType == nil || !slices.Contains(sel.ItemTypeIDs, ts.ItemType.ID) {
+			continue
+		}
 		if !ts.Removable() {
+			res.KeptItemTypes = append(res.KeptItemTypes, ts.ItemType.DisplayName())
 			continue
 		}
 		_, err := s.itemTypes.DeleteReassigning(ctx, ts.ItemType.ID, "")
 		switch {
 		case err == nil:
 			res.DeletedItemTypes = append(res.DeletedItemTypes, ts.ItemType.DisplayName())
-		case errors.Is(err, registry.ErrItemTypeInUse), errors.Is(err, registry.ErrLastItemType), errors.Is(err, registry.ErrNotFound):
+		case errors.Is(err, registry.ErrItemTypeInUse), errors.Is(err, registry.ErrLastItemType):
+			res.KeptItemTypes = append(res.KeptItemTypes, ts.ItemType.DisplayName())
+		case errors.Is(err, registry.ErrNotFound):
 		default:
 			return res, errxtrace.Wrap("failed to delete the set's item type", err, errx.Attrs("item_type_id", ts.ItemType.ID))
 		}

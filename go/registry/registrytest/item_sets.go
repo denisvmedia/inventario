@@ -24,6 +24,15 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 	newService := func(env CustomFieldEnv) *services.ItemSetService {
 		return services.NewItemSetService(def, env.TypesA, env.FieldsA)
 	}
+	// removeConfirmed removes what a confirmation shown now would list.
+	removeConfirmed := func(c *qt.C, env CustomFieldEnv, svc *services.ItemSetService) *services.ItemSetRemoveResult {
+		c.Helper()
+		st, err := svc.Status(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		res, err := svc.Remove(env.CtxA, st.Removal())
+		c.Assert(err, qt.IsNil)
+		return res
+	}
 
 	t.Run("item set: adding creates the types and fields once, with every field on every type", func(t *testing.T) {
 		c := qt.New(t)
@@ -112,8 +121,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Check(templatesByType(res.Status.Fields[1].Field.Templates)[books.ID], qt.Equals, "",
 			qt.Commentf("a field of the set goes on the own type's template"))
 
-		removed, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		removed := removeConfirmed(c, env, svc)
 		c.Check(removed.DeletedItemTypes, qt.HasLen, len(def.ItemTypes)-1)
 		c.Check(removed.DeletedFields, qt.HasLen, len(def.Fields)-1)
 		gotBooks, err := env.TypesA.Get(env.CtxA, books.ID)
@@ -156,8 +164,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Check(st.Fields[7].KeepReason, qt.Equals, services.ItemSetKeepInUse, qt.Commentf("an item in Trash counts"))
 		c.Check(st.Fields[7].Usage.Trashed, qt.Equals, 1)
 
-		removed, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		removed := removeConfirmed(c, env, svc)
 		c.Check(removed.DeletedItemTypes, qt.DeepEquals, []string{"Art", "Books", "Stamps", "Records", "Watches", "Cards"})
 		c.Check(removed.DeletedFields, qt.DeepEquals, []string{
 			"Catalog reference", "Edition or variant", "Signed", "Provenance", "Certificate of authenticity", "Appraised value",
@@ -169,8 +176,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Check(item.Type, qt.Equals, coins.Slug)
 		c.Check(string(item.CustomFields[condition.ID]), qt.Equals, `"mint"`)
 
-		again, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		again := removeConfirmed(c, env, svc)
 		c.Check(again.DeletedItemTypes, qt.HasLen, 0)
 		c.Check(again.DeletedFields, qt.HasLen, 0)
 
@@ -180,8 +186,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		update.CustomFields = models.CustomFieldValues{condition.ID: json.RawMessage(`null`)}
 		_, err = env.CommoditiesA.Update(env.CtxA, update)
 		c.Assert(err, qt.IsNil)
-		later, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		later := removeConfirmed(c, env, svc)
 		c.Check(later.DeletedItemTypes, qt.DeepEquals, []string{"Coins"})
 		c.Check(later.DeletedFields, qt.DeepEquals, []string{"Condition"})
 
@@ -219,8 +224,7 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Check(again.Status.ItemTypes[6].State, qt.Equals, services.ItemSetEntryAdded)
 		c.Check(again.Status.Fields[3].Field.Name, qt.Equals, "Autographed")
 
-		removed, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		removed := removeConfirmed(c, env, svc)
 		c.Check(removed.DeletedItemTypes, qt.Contains, "Trading cards")
 		c.Check(removed.DeletedFields, qt.Contains, "Autographed")
 	})
@@ -241,13 +245,112 @@ func runItemSetContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) 
 		c.Assert(err, qt.IsNil)
 		c.Check(st.ItemTypes[6].KeepReason, qt.Equals, services.ItemSetKeepLastType)
 
-		removed, err := svc.Remove(env.CtxA)
-		c.Assert(err, qt.IsNil)
+		removed := removeConfirmed(c, env, svc)
 		c.Check(removed.DeletedItemTypes, qt.HasLen, len(def.ItemTypes)-1)
 		types, err := env.TypesA.List(env.CtxA)
 		c.Assert(err, qt.IsNil)
 		c.Assert(types, qt.HasLen, 1)
 		c.Check(types[0].Name, qt.Equals, "Cards")
+	})
+
+	t.Run("item set: removing deletes only the rows it is given and keeps one that came into use", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		svc := newService(env)
+
+		res, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		art := res.Status.ItemTypes[0].ItemType
+		coins := res.Status.ItemTypes[2].ItemType
+		provenance := res.Status.Fields[4].Field
+		sel := services.ItemSetRemoval{ItemTypeIDs: []string{art.ID, coins.ID}, FieldIDs: []string{provenance.ID}}
+
+		// The confirmation listed Coins; an item gets the type before the
+		// remove runs.
+		coin := customFieldItem("Thaler", env.AreaA, nil)
+		coin.Type = coins.Slug
+		_, err = env.CommoditiesA.Create(env.CtxA, coin)
+		c.Assert(err, qt.IsNil)
+
+		removed, err := svc.Remove(env.CtxA, sel)
+		c.Assert(err, qt.IsNil)
+		c.Check(removed.DeletedItemTypes, qt.DeepEquals, []string{"Art"})
+		c.Check(removed.DeletedFields, qt.DeepEquals, []string{"Provenance"})
+		c.Check(removed.KeptItemTypes, qt.DeepEquals, []string{"Coins"})
+		c.Check(removed.KeptFields, qt.HasLen, 0)
+		types, err := env.TypesA.List(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(types, qt.HasLen, len(models.BuiltinItemTypes)+len(def.ItemTypes)-1)
+		fields, err := env.FieldsA.List(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(fields, qt.HasLen, len(def.Fields)-1)
+
+		// A built-in type's ID is not the set's and is never deleted.
+		other := mustTypeBySlug(c, env.TypesA, env.CtxA, models.CommodityTypeOther)
+		none, err := svc.Remove(env.CtxA, services.ItemSetRemoval{ItemTypeIDs: []string{other.ID}})
+		c.Assert(err, qt.IsNil)
+		c.Check(none.DeletedItemTypes, qt.HasLen, 0)
+		c.Check(none.KeptItemTypes, qt.HasLen, 0)
+		_, err = env.TypesA.Get(env.CtxA, other.ID)
+		c.Check(err, qt.IsNil)
+	})
+
+	t.Run("item set: a set row renamed to another entry's name takes that entry", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		svc := newService(env)
+
+		res, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		// Stamps goes, Coins is renamed "Stamps"; Condition goes, Signed is
+		// renamed "Condition"; Provenance goes, so adding has a field to
+		// create on the set's types.
+		c.Assert(env.TypesA.Delete(env.CtxA, res.Status.ItemTypes[3].ItemType.ID), qt.IsNil)
+		coins := *res.Status.ItemTypes[2].ItemType
+		coins.Name = "stamps"
+		_, err = env.TypesA.Update(env.CtxA, coins)
+		c.Assert(err, qt.IsNil)
+		_, err = env.FieldsA.DeleteWithValues(env.CtxA, res.Status.Fields[0].Field.ID, 0)
+		c.Assert(err, qt.IsNil)
+		signed := *res.Status.Fields[3].Field
+		signed.Name = "Condition"
+		signed.Templates = nil
+		_, err = env.FieldsA.Update(env.CtxA, signed)
+		c.Assert(err, qt.IsNil)
+		_, err = env.FieldsA.DeleteWithValues(env.CtxA, res.Status.Fields[4].Field.ID, 0)
+		c.Assert(err, qt.IsNil)
+
+		st, err := svc.Status(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(st.ItemTypes[3].State, qt.Equals, services.ItemSetEntryTaken)
+		c.Check(st.ItemTypes[3].TakenBy, qt.Equals, "coins")
+		c.Check(st.ItemTypes[3].ItemType, qt.IsNil)
+		c.Check(st.ItemTypes[2].ItemType.ID, qt.Equals, coins.ID)
+		c.Check(st.Fields[0].State, qt.Equals, services.ItemSetEntryTaken)
+		c.Check(st.Fields[0].TakenBy, qt.Equals, "signed")
+		c.Check(st.Fields[4].State, qt.Equals, services.ItemSetEntryMissing)
+		c.Check(st.Complete(), qt.IsFalse)
+
+		again, err := svc.Add(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(again.CreatedItemTypes, qt.Equals, 0)
+		c.Check(again.CreatedFields, qt.Equals, 1, qt.Commentf("Provenance"))
+		c.Check(again.Status.Complete(), qt.IsTrue)
+		c.Check(again.Status.ItemTypes[3].State, qt.Equals, services.ItemSetEntryTaken)
+		provenance := again.Status.Fields[4].Field
+		c.Check(provenance.Templates, qt.HasLen, len(def.ItemTypes)-1, qt.Commentf("each type once"))
+		c.Check(templateTypeIDs(again.Status.Fields[3].Field.Templates), qt.DeepEquals, templateTypeIDs(provenance.Templates),
+			qt.Commentf("the renamed Signed is on each of the set's types once"))
+
+		types, err := env.TypesA.List(env.CtxA)
+		c.Assert(err, qt.IsNil)
+		c.Check(types, qt.HasLen, len(models.BuiltinItemTypes)+len(def.ItemTypes)-1)
+
+		// The taken entry has no row of its own, so removing deletes the
+		// renamed row once.
+		removed := removeConfirmed(c, env, svc)
+		c.Check(removed.DeletedItemTypes, qt.HasLen, len(def.ItemTypes)-1)
+		c.Check(removed.DeletedItemTypes, qt.Contains, "stamps")
 	})
 }
 

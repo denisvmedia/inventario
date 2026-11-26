@@ -371,10 +371,11 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 }
 
 // groupsAPITokenRoutes lists the /groups routes a personal API token may use:
-// the group list, one group, its members and a member's photo, all GET. The
-// rest of /groups refuses tokens, the admin subtree in particular, because it
-// returns invite links that any account in the tenant can redeem. The
-// handlers here are never called; only the patterns are matched.
+// the group list, one group, its members, a member's photo and the group's
+// Collection set, all GET. The rest of /groups refuses tokens, the admin
+// subtree in particular, because it returns invite links that any account in
+// the tenant can redeem. The handlers here are never called; only the
+// patterns are matched.
 func groupsAPITokenRoutes() chi.Routes {
 	allowed := chi.NewRouter()
 	never := func(http.ResponseWriter, *http.Request) {}
@@ -382,6 +383,7 @@ func groupsAPITokenRoutes() chi.Routes {
 	allowed.Get("/{groupID}", never)
 	allowed.Get("/{groupID}/members", never)
 	allowed.Get("/{groupID}/members/{memberUserID}/avatar", never)
+	allowed.Get("/{groupID}/collection-set", never)
 	return allowed
 }
 
