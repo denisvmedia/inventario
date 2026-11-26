@@ -3066,7 +3066,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "description": "Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR",
                         "name": "status",
                         "in": "query"
                     },
@@ -9328,7 +9328,7 @@ const docTemplate = `{
                             "type": "string"
                         },
                         "collectionFormat": "multi",
-                        "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
+                        "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR",
                         "name": "status",
                         "in": "query"
                     },
@@ -14386,7 +14386,9 @@ const docTemplate = `{
                         "in_use",
                         "lost",
                         "disposed",
-                        "written_off"
+                        "written_off",
+                        "donated",
+                        "stolen"
                     ],
                     "example": "disposed"
                 }
@@ -20443,14 +20445,18 @@ const docTemplate = `{
                 "sold",
                 "lost",
                 "disposed",
-                "written_off"
+                "written_off",
+                "donated",
+                "stolen"
             ],
             "x-enum-varnames": [
                 "CommodityStatusInUse",
                 "CommodityStatusSold",
                 "CommodityStatusLost",
                 "CommodityStatusDisposed",
-                "CommodityStatusWrittenOff"
+                "CommodityStatusWrittenOff",
+                "CommodityStatusDonated",
+                "CommodityStatusStolen"
             ]
         },
         "models.CurrencyMigration": {

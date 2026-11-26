@@ -354,6 +354,31 @@ describe("<CommoditiesListPage /> bulk actions", () => {
     })
   })
 
+  it.each([
+    ["donated", "Donated"],
+    ["stolen", "Stolen"],
+  ])("marks the selection %s with a date", async (status, label) => {
+    const user = userEvent.setup()
+    const requests: Record<string, unknown>[] = []
+    server.use(
+      ...commodityHandlers.list(SLUG, ROWS),
+      ...commodityHandlers.bulkUpdate(SLUG, { onRequest: (a) => requests.push(a) })
+    )
+    renderList()
+    await selectBoth(user)
+    await openEditMenuItem(user, `commodities-bulk-status-${status}`)
+
+    const dialog = await screen.findByTestId("status-transition-dialog")
+    expect(within(dialog).getByText(`Mark 2 items as ${label}`)).toBeInTheDocument()
+    const date = within(dialog).getByTestId("status-transition-date")
+    await user.clear(date)
+    await user.type(date, "2026-11-26")
+    await user.click(within(dialog).getByTestId("status-transition-confirm"))
+
+    await waitFor(() => expect(requests).toHaveLength(1))
+    expect(requests[0].patch).toEqual({ status: { value: status, date: "2026-11-26" } })
+  })
+
   it("confirms a change back to in use", async () => {
     const user = userEvent.setup()
     const requests: Record<string, unknown>[] = []

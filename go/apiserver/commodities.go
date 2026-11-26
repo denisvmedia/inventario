@@ -45,7 +45,7 @@ type commoditiesAPI struct {
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
 // @Param type query []string false "Filter by commodity type; repeat to OR" collectionFormat(multi)
-// @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
+// @Param status query []string false "Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Filter by exact area ID"
 // @Param unassigned query bool false "Only commodities with no area (ignored when area_id is set)"
 // @Param seller_id query []string false "Filter by seller ID; repeat for several (OR)" collectionFormat(multi)
