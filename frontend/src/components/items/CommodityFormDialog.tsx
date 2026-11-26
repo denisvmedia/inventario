@@ -438,9 +438,11 @@ export function CommodityFormDialog({
   const addingRef = useRef(false)
   // Discard is moving this form's uploads to Trash.
   const [discarding, setDiscarding] = useState(false)
-  // The dialog is open and mounted. Add item stops when it closes: browser
-  // Back can close the dialog or leave the page while the save runs.
-  const liveRef = useRef(false)
+  // Counts the openings of the dialog: it moves on every open, close and
+  // unmount. Add item remembers the opening it started in and stops once
+  // that opening is over, even when the dialog is open again by then.
+  // Browser Back can close the dialog or leave the page while it runs.
+  const openingRef = useRef(0)
   // A seller name the AI scan read that matches none of the group's sellers
   // (#2804). The Purchase step offers to create it; nothing is created
   // before the user agrees.
@@ -673,9 +675,10 @@ export function CommodityFormDialog({
   ])
 
   useEffect(() => {
-    liveRef.current = open
+    const opening = openingRef.current + 1
+    openingRef.current = opening
     return () => {
-      liveRef.current = false
+      openingRef.current = opening + 1
     }
   }, [open])
 
@@ -949,8 +952,13 @@ export function CommodityFormDialog({
     // status; the ones it attaches leave the list when it ends.
     const staged = pendingFiles
     const savedEntries: string[] = []
-    const mark = (id: string, status: FileUploadStatus) =>
-      setFileStatus((prev) => ({ ...prev, [id]: status }))
+    // Add item ends with the opening it started in; the form shown after
+    // that belongs to the next opening, which this save leaves alone.
+    const opening = openingRef.current
+    const over = () => !!opts.forItem && openingRef.current !== opening
+    const mark = (id: string, status: FileUploadStatus) => {
+      if (!over()) setFileStatus((prev) => ({ ...prev, [id]: status }))
+    }
     setFileStatus({})
     try {
       const result = await saveDraftWithFiles({
@@ -970,7 +978,7 @@ export function CommodityFormDialog({
           writeBaseRevision(localKey, draft.revision)
           if (opts.forItem && firstSave) rememberItemDraft(localKey, draft.id)
         },
-        shouldStop: opts.forItem ? () => !liveRef.current : undefined,
+        shouldStop: over,
         onFileStart: (entry) => mark(entry.id, "uploading"),
         onFileUploaded: (entry, fileId) =>
           setPendingFiles((prev) =>
@@ -983,6 +991,14 @@ export function CommodityFormDialog({
           mark(entry.id, "uploaded")
         },
       })
+      void invalidateDrafts()
+      if (result.stopped || over()) {
+        // The dialog closed while Add item ran, after its last file too: no
+        // item is made. The draft keeps the files that reached it, the local
+        // recovery keeps the form, and the next opening adds the item from
+        // there.
+        return null
+      }
       const saved: SavedDraft = {
         id: result.draft.id,
         revision: result.draft.revision,
@@ -990,16 +1006,7 @@ export function CommodityFormDialog({
       }
       setServerDraft({ id: saved.id, revision: saved.revision })
       if (!opts.forItem) forgetItemDraft(localKey)
-      void invalidateDrafts()
       if (result.failedCarried.length === 0) carryFromRef.current = null
-      if (opts.forItem && (result.stopped || !liveRef.current)) {
-        // The dialog closed while Add item ran: no item is made. The draft
-        // keeps the files that reached it, the local recovery keeps the
-        // form, and the next opening adds the item from there.
-        setFileStatus({})
-        setDraftSave({ kind: "idle" })
-        return null
-      }
       const failedNames = [
         ...result.failedCarried,
         ...result.failedFiles.map((f) => f.entry.file.name),
@@ -1032,6 +1039,7 @@ export function CommodityFormDialog({
       toast.success(t("commodities:drafts.saved"))
       return saved
     } catch (err) {
+      if (over()) return null
       // The save stopped before it could finish the files: they stay staged
       // for the next attempt, which reuses what this one uploaded.
       setFileStatus({})
@@ -1167,6 +1175,7 @@ export function CommodityFormDialog({
 
   const submit = async (values: CommodityFormInput) => {
     if (addingRef.current) return
+    const opening = openingRef.current
     addingRef.current = true
     setAdding(true)
     setServerError(null)
@@ -1179,7 +1188,8 @@ export function CommodityFormDialog({
         // that fails stops here with nothing created: the alert names it,
         // and Retry runs this again from where it stopped.
         saved = await saveToServer({ forItem: true })
-        if (!saved || !liveRef.current) return
+        // The promotion is not sent once the opening is over.
+        if (!saved || openingRef.current !== opening) return
       }
       const target = saved ?? serverDraft
       // A promotion carries the slot's promotion key, the same for every
