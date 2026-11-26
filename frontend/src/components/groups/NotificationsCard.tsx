@@ -23,10 +23,17 @@ import { cn } from "@/lib/utils"
 // the user-global pref on subsequent reads.
 interface NotificationsCardProps {
   groupSlug: string | null
+  // True while the group hides warranties (#1607). Warranty reminders stop
+  // for the whole group then, so the per-member switch for them goes.
+  hideWarrantyAlerts?: boolean
   className?: string
 }
 
-export function NotificationsCard({ groupSlug, className }: NotificationsCardProps) {
+export function NotificationsCard({
+  groupSlug,
+  hideWarrantyAlerts = false,
+  className,
+}: NotificationsCardProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
   const query = useGroupNotifications(groupSlug)
@@ -71,16 +78,18 @@ export function NotificationsCard({ groupSlug, className }: NotificationsCardPro
       </div>
 
       <div className="divide-y divide-border">
-        <ToggleRow
-          label={t("groups:settings.notifications.toggles.warrantyExpiringAlerts.label")}
-          description={t(
-            "groups:settings.notifications.toggles.warrantyExpiringAlerts.description"
-          )}
-          checked={!!data.warranty_expiring_alerts}
-          disabled={mutation.isPending}
-          onChange={(v) => onToggle("warranty_expiring_alerts", v)}
-          testId="notifications-toggle-warranty"
-        />
+        {hideWarrantyAlerts ? null : (
+          <ToggleRow
+            label={t("groups:settings.notifications.toggles.warrantyExpiringAlerts.label")}
+            description={t(
+              "groups:settings.notifications.toggles.warrantyExpiringAlerts.description"
+            )}
+            checked={!!data.warranty_expiring_alerts}
+            disabled={mutation.isPending}
+            onChange={(v) => onToggle("warranty_expiring_alerts", v)}
+            testId="notifications-toggle-warranty"
+          />
+        )}
         <ToggleRow
           label={t("groups:settings.notifications.toggles.weeklyDigest.label")}
           description={t("groups:settings.notifications.toggles.weeklyDigest.description")}

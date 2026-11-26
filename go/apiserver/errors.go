@@ -459,11 +459,30 @@ func groupStateSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	}, true
 }
 
+// groupSettingsSentinelJSONAPIError maps a refused group setting to 422.
+// The request binders already refuse an unknown section, so this is the
+// answer for a service caller that passes one.
+func groupSettingsSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	if !errors.Is(err, services.ErrInvalidGroupSection) {
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusUnprocessableEntity,
+		StatusText:     "Unprocessable Entity",
+		Code:           "group.invalid_section",
+	}, true
+}
+
 func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := adminSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
 	if jsErr, ok := groupStateSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
+	if jsErr, ok := groupSettingsSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
 	if jsErr, ok := accountDeletionSentinelJSONAPIError(err); ok {

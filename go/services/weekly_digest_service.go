@@ -249,10 +249,27 @@ func (d *digestDraft) add(group *models.LocationGroup, a groupActivity) {
 	// The group name is stamped here rather than while collecting, because the
 	// activity is shared by every member of the group and the name is what the
 	// "coming up" line ends with. Left unset it renders as an empty pair of
-	// brackets.
+	// brackets. An entry of a section the group hides is left out, as the
+	// reminders of that section are.
 	for _, u := range a.upcoming {
+		if section, ok := u.Kind.section(); ok && group.HidesSection(section) {
+			continue
+		}
 		u.GroupName = group.Name
 		d.upcoming = append(d.upcoming, u)
+	}
+}
+
+// section returns the group section an upcoming entry belongs to, and false
+// for a kind that belongs to none.
+func (k WeeklyDigestUpcomingKind) section() (models.GroupSection, bool) {
+	switch k {
+	case WeeklyDigestUpcomingWarranty:
+		return models.GroupSectionWarranties, true
+	case WeeklyDigestUpcomingMaintenance:
+		return models.GroupSectionMaintenance, true
+	default:
+		return "", false
 	}
 }
 

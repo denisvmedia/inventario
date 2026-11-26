@@ -117,6 +117,12 @@ type LocationGroupAttributes struct {
 	// when nil. On update the handler rejects a change with 422 — a
 	// reprice-aware currency migration is tracked under #202.
 	GroupCurrency *models.Currency `json:"group_currency,omitempty"`
+	// HiddenSections lists the sections the group hides for all its
+	// members: warranties, maintenance, loans, upcoming. Optional. On
+	// create, absent means the group hides nothing; on update, absent
+	// leaves the list as it is and a list replaces it. Unknown sections
+	// are refused and duplicates dropped.
+	HiddenSections *models.GroupSections `json:"hidden_sections,omitempty"`
 }
 
 type LocationGroupData struct {
@@ -149,6 +155,7 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
 		validation.Field(&la.Icon, validation.By(validateGroupIcon)),
 		validation.Field(&la.Description, validation.Length(0, 200)),
+		validation.Field(&la.HiddenSections),
 	)
 }
 
@@ -189,6 +196,52 @@ func (lr *LocationGroupRequest) ValidateWithContext(ctx context.Context) error {
 	fields := make([]*validation.FieldRules, 0)
 	fields = append(fields, validation.Field(&lr.Data, validation.Required))
 	return validation.ValidateStructWithContext(ctx, lr, fields...)
+}
+
+// --- Hidden sections request ---
+
+var _ render.Binder = (*GroupHiddenSectionsRequest)(nil)
+
+// GroupHiddenSectionsRequest replaces the sections a group hides, leaving
+// the rest of the group as it is. It is the body of
+// PUT /groups/{groupID}/hidden-sections.
+type GroupHiddenSectionsRequest struct {
+	Data *GroupHiddenSectionsData `json:"data"`
+}
+
+type GroupHiddenSectionsData struct {
+	Type       string                         `json:"type" example:"groups" enums:"groups"`
+	Attributes *GroupHiddenSectionsAttributes `json:"attributes"`
+}
+
+type GroupHiddenSectionsAttributes struct {
+	// HiddenSections is the full list of sections to hide: warranties,
+	// maintenance, loans, upcoming. An empty list shows every section.
+	// Unknown sections are refused and duplicates dropped.
+	HiddenSections models.GroupSections `json:"hidden_sections"`
+}
+
+func (d *GroupHiddenSectionsData) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, d,
+		validation.Field(&d.Type, validation.Required, validation.In("groups")),
+		validation.Field(&d.Attributes, validation.Required),
+	)
+}
+
+func (a *GroupHiddenSectionsAttributes) ValidateWithContext(ctx context.Context) error {
+	return validation.ValidateStructWithContext(ctx, a,
+		validation.Field(&a.HiddenSections, validation.NotNil),
+	)
+}
+
+func (hr *GroupHiddenSectionsRequest) Bind(r *http.Request) error {
+	if hr.Data == nil {
+		return validation.NewError("validation_required", "data is required")
+	}
+	if err := hr.Data.ValidateWithContext(r.Context()); err != nil {
+		return err
+	}
+	return hr.Data.Attributes.ValidateWithContext(r.Context())
 }
 
 // --- GroupMembership responses ---

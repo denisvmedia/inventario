@@ -316,3 +316,30 @@ func (r *LocationGroupRegistry) applyPendingDeletion(groupID string) (*models.Lo
 	post := updated
 	return &post, false, nil
 }
+
+// SetHiddenSections writes the hidden sections and updated_at of an active
+// group under the registry lock, keeping every other field as stored (see
+// registry.LocationGroupRegistry.SetHiddenSections).
+func (r *LocationGroupRegistry) SetHiddenSections(_ context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, registry.ErrFieldRequired
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	group, ok := r.items.Get(groupID)
+	if !ok {
+		return nil, false, registry.ErrNotFound
+	}
+	if group.Status != models.LocationGroupStatusActive {
+		current := *group
+		return &current, false, nil
+	}
+	updated := *group
+	updated.HiddenSections = sections.Normalize()
+	updated.UpdatedAt = updatedAt
+	r.items.Set(groupID, &updated)
+	stored := updated
+	return &stored, true, nil
+}
