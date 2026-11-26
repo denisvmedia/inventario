@@ -10,6 +10,7 @@ import {
   getCategoryCounts,
   getFile,
   listFiles,
+  trashUnlinkedFile,
   updateFile,
   uploadFile,
 } from "@/features/files/api"
@@ -135,6 +136,34 @@ describe("features/files/api", () => {
   it("deleteFile resolves on 204", async () => {
     server.use(http.delete(apiUrl("/g/g1/files/f1"), () => new HttpResponse(null, { status: 204 })))
     await expect(deleteFile("f1")).resolves.toBeUndefined()
+  })
+
+  it("trashUnlinkedFile trashes only a file nothing links, and keeps one it cannot read", async () => {
+    const deleted: string[] = []
+    const attributes: Record<string, unknown> = {
+      f1: { id: "f1", links: [] },
+      f2: {
+        id: "f2",
+        links: [{ id: "l1", file_id: "f2", entity_type: "commodity", entity_id: "c1" }],
+      },
+    }
+    server.use(
+      http.get(apiUrl("/g/g1/files/:id"), ({ params }) => {
+        const id = String(params.id)
+        if (id === "gone") return HttpResponse.json({ errors: [] }, { status: 404 })
+        // f3 answers without attributes, so its links are unknown.
+        return HttpResponse.json({ id, type: "files", attributes: attributes[id] })
+      }),
+      http.delete(apiUrl("/g/g1/files/:id"), ({ params }) => {
+        deleted.push(String(params.id))
+        return new HttpResponse(null, { status: 204 })
+      })
+    )
+    await expect(trashUnlinkedFile("f1")).resolves.toBe(true)
+    await expect(trashUnlinkedFile("f2")).resolves.toBe(false)
+    await expect(trashUnlinkedFile("gone")).resolves.toBe(false)
+    await expect(trashUnlinkedFile("f3")).rejects.toThrow(/missing attributes/)
+    expect(deleted).toEqual(["f1"])
   })
 
   it("bulkDeleteFiles aggregates succeeded + failed", async () => {
