@@ -30,10 +30,10 @@ import (
 // second draft is made.
 var ErrIntakeDocumentChanged = errx.NewSentinel("the document was delivered before with different values")
 
-// ErrIntakeDocumentConflict is returned when an intake session the group's
-// record of the document did not make carries the document: the record of
-// the delivery that made it is gone. Nothing is made.
-var ErrIntakeDocumentConflict = errx.NewSentinel("another intake session carries the document")
+// ErrIntakeDocumentConflict is returned when an intake session or a draft
+// the group's record of the document did not make carries the document: the
+// record of the delivery that made it is gone. Nothing is made.
+var ErrIntakeDocumentConflict = errx.NewSentinel("another intake session or draft carries the document")
 
 // intakeDocumentTitleMaxRunes is the draft's limit on a title.
 const intakeDocumentTitleMaxRunes = 255

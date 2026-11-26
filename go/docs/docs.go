@@ -7203,7 +7203,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/intake": {
             "post": {
-                "description": "Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.\nThe fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part \"file\" carries the document.\nSwagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.\nNo AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.\nsource_system, source_instance and document_id identify the document in the group.\nDelivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.\nDelivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.\nA delivery is refused with 409 intake.document_conflict when an intake session of the group carries the document but the group has no record of the delivery that made it.",
+                "description": "Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.\nThe fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part \"file\" carries the document.\nSwagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.\nNo AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.\nsource_system, source_instance and document_id identify the document in the group.\nDelivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.\nDelivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.\nA delivery is refused with 409 intake.document_conflict when an intake session or a draft of the group carries the document but the group has no record of the delivery that made it.",
                 "consumes": [
                     "application/json",
                     "application/x-www-form-urlencoded",
@@ -7260,7 +7260,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session carries the document without a record of its delivery",
+                        "description": "intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session or a draft carries the document without a record of its delivery",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

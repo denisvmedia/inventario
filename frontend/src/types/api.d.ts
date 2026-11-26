@@ -8338,7 +8338,7 @@ export type paths = {
          *     source_system, source_instance and document_id identify the document in the group.
          *     Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
          *     Delivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.
-         *     A delivery is refused with 409 intake.document_conflict when an intake session of the group carries the document but the group has no record of the delivery that made it.
+         *     A delivery is refused with 409 intake.document_conflict when an intake session or a draft of the group carries the document but the group has no record of the delivery that made it.
          */
         post: {
             parameters: {
@@ -8395,7 +8395,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session carries the document without a record of its delivery */
+                /** @description intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session or a draft carries the document without a record of its delivery */
                 409: {
                     headers: {
                         [name: string]: unknown;

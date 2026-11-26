@@ -101,7 +101,7 @@ func newIntakeDeliveryAPI(params Params) *intakeDeliveryAPI {
 // @Description source_system, source_instance and document_id identify the document in the group.
 // @Description Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
 // @Description Delivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.
-// @Description A delivery is refused with 409 intake.document_conflict when an intake session of the group carries the document but the group has no record of the delivery that made it.
+// @Description A delivery is refused with 409 intake.document_conflict when an intake session or a draft of the group carries the document but the group has no record of the delivery that made it.
 // @Tags intake
 // @Accept json
 // @Accept x-www-form-urlencoded
@@ -113,7 +113,7 @@ func newIntakeDeliveryAPI(params Params) *intakeDeliveryAPI {
 // @Success 200 {object} jsonapi.IntakeDocumentResponse "The document was delivered before; nothing was made"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "No API token, a read-only token, a token for another group, or a role that cannot edit items"
-// @Failure 409 {object} jsonapi.Errors "intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session carries the document without a record of its delivery"
+// @Failure 409 {object} jsonapi.Errors "intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session or a draft carries the document without a record of its delivery"
 // @Failure 413 {object} jsonapi.Errors "The file or the fields are too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported Media Type"
 // @Failure 422 {object} jsonapi.Errors "A field is missing, unknown or malformed"
