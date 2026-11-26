@@ -70,7 +70,9 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
   // offer: the set is partly added although every row is there.
   const linksMissing = (view?.custom_fields ?? []).some((r) => (r.missing_templates ?? 0) > 0)
   const checkFailed = query.isError && query.errorUpdatedAt >= openedAt && !query.isFetching
-  const checking = !checkFailed && (query.isFetching || query.dataUpdatedAt < openedAt)
+  // A check paused while offline is still a check: Confirm waits for it.
+  const checking =
+    !checkFailed && (query.isFetching || query.isPaused || query.dataUpdatedAt < openedAt)
 
   function openConfirmation() {
     setConfirmed(null)

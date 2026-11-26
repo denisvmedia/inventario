@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { http as msw, HttpResponse } from "msw"
-import { Route } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { Route, useNavigate } from "react-router-dom"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { toast } from "sonner"
 
@@ -55,10 +55,30 @@ const FIELDS: Array<[string, string, string]> = [
   ["appraisal_date", "Appraisal date", "date"],
 ]
 
-function renderSettings() {
+// SwitchGroup moves the settings to group g1 or g2, as the group selector
+// or the browser's Back button would.
+function SwitchGroup() {
+  const navigate = useNavigate()
+  return (
+    <>
+      {["g1", "g2"].map((id) => (
+        <button
+          key={id}
+          type="button"
+          data-testid={`switch-to-${id}`}
+          onClick={() => navigate(`/groups/${id}/settings?section=sections`)}
+        >
+          {id}
+        </button>
+      ))}
+    </>
+  )
+}
+
+function renderSettings(groupId = "g1") {
   setAccessToken("good-token")
   return renderWithProviders({
-    initialPath: "/groups/g1/settings?section=sections",
+    initialPath: `/groups/${groupId}/settings?section=sections`,
     routes: (
       <Route
         path="/groups/:groupId/settings"
@@ -66,6 +86,7 @@ function renderSettings() {
           <AuthProvider>
             <GroupProvider>
               <ConfirmProvider>
+                <SwitchGroup />
                 <GroupSettingsPage />
               </ConfirmProvider>
             </GroupProvider>
@@ -76,6 +97,14 @@ function renderSettings() {
   })
 }
 
+interface GroupRef {
+  id: string
+  slug: string
+  name: string
+}
+
+const HOUSEHOLD: GroupRef = { id: "g1", slug: "household", name: "Household" }
+
 // A server holding one group and how it holds the Collection set. POST adds
 // what is missing; DELETE deletes the listed rows that are the set's and
 // unused and reports the other listed ones as kept, as the backend does. A
@@ -83,8 +112,15 @@ function renderSettings() {
 function setBackend(
   role: "admin" | "user",
   override: Partial<Record<string, Partial<Row>>> = {},
-  opts: { addError?: { status: number; code: string } } = {}
+  opts: {
+    addError?: { status: number; code: string }
+    // The group this backend holds, g1 unless given, and the other groups
+    // GET /groups lists with it.
+    group?: GroupRef
+    alsoListed?: GroupRef[]
+  } = {}
 ) {
+  const g = opts.group ?? HOUSEHOLD
   const types: Row[] = TYPES.map(([key, name, icon]) => ({
     key,
     name,
@@ -160,29 +196,36 @@ function setBackend(
     data: { id: "collection", type: "item_sets", attributes: view() },
     ...(meta ? { meta } : {}),
   })
-  const attrs = { id: "g1", slug: "household", name: "Household", group_currency: "USD" }
+  const groupAttrs = (ref: GroupRef) => ({ ...ref, group_currency: "USD" })
+  const attrs = groupAttrs(g)
   const handlers = [
     msw.get(api("/auth/me"), () =>
       HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex" })
     ),
     msw.get(api("/groups"), () =>
-      HttpResponse.json({ data: [{ id: "g1", type: "groups", attributes: attrs }] })
+      HttpResponse.json({
+        data: [g, ...(opts.alsoListed ?? [])].map((ref) => ({
+          id: ref.id,
+          type: "groups",
+          attributes: groupAttrs(ref),
+        })),
+      })
     ),
-    msw.get(api("/groups/g1"), () =>
-      HttpResponse.json({ data: { id: "g1", type: "groups", attributes: attrs } })
+    msw.get(api(`/groups/${g.id}`), () =>
+      HttpResponse.json({ data: { id: g.id, type: "groups", attributes: attrs } })
     ),
-    msw.get(api("/groups/g1/members"), () =>
+    msw.get(api(`/groups/${g.id}/members`), () =>
       HttpResponse.json({
         data: [
           {
             id: "m1",
             type: "memberships",
-            attributes: { id: "m1", group_id: "g1", member_user_id: "u1", role },
+            attributes: { id: "m1", group_id: g.id, member_user_id: "u1", role },
           },
         ],
       })
     ),
-    msw.get(api("/groups/g1/collection-set"), async () => {
+    msw.get(api(`/groups/${g.id}/collection-set`), async () => {
       calls.gets++
       if (held) await held
       if (failGets) {
@@ -190,7 +233,7 @@ function setBackend(
       }
       return HttpResponse.json(envelope())
     }),
-    msw.post(api("/groups/g1/collection-set"), () => {
+    msw.post(api(`/groups/${g.id}/collection-set`), () => {
       calls.posts++
       if (opts.addError) {
         return HttpResponse.json(
@@ -223,7 +266,7 @@ function setBackend(
         })
       )
     }),
-    msw.delete(api("/groups/g1/collection-set"), async ({ request }) => {
+    msw.delete(api(`/groups/${g.id}/collection-set`), async ({ request }) => {
       calls.deletes++
       const body = (await request.json()) as RemoveBody
       calls.removeBodies.push(body)
@@ -263,7 +306,7 @@ function setBackend(
         })
       )
     }),
-    msw.get(api("/g/household/notifications"), () =>
+    msw.get(api(`/g/${g.slug}/notifications`), () =>
       HttpResponse.json({ warranty_expiring_alerts: true, weekly_digest: false })
     ),
   ]
@@ -306,7 +349,7 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(within(card).getAllByRole("listitem")).toHaveLength(TYPES.length + FIELDS.length)
     expect(within(card).queryByTestId("collection-set-remove")).not.toBeInTheDocument()
 
-    await user.click(within(card).getByTestId("collection-set-add"))
+    await user.click(await within(card).findByTestId("collection-set-add"))
     await waitFor(() =>
       expect(within(card).getByTestId("collection-set-state")).toHaveTextContent("Added")
     )
@@ -334,7 +377,9 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(await within(card).findByTestId("collection-set-state")).toHaveTextContent(
       "Partly added"
     )
-    expect(within(card).getByTestId("collection-set-add")).toHaveTextContent("Add what is missing")
+    expect(await within(card).findByTestId("collection-set-add")).toHaveTextContent(
+      "Add what is missing"
+    )
     expect(within(card).getByTestId("collection-set-type-coins")).toHaveAttribute(
       "data-state",
       "added"
@@ -385,7 +430,7 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
       "not offered"
     )
 
-    await user.click(within(card).getByTestId("collection-set-add"))
+    await user.click(await within(card).findByTestId("collection-set-add"))
     await waitFor(() =>
       expect(within(card).getByTestId("collection-set-state")).toHaveTextContent("Added")
     )
@@ -512,7 +557,7 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     )
 
     await user.click(within(dialog).getByTestId("collection-set-remove-confirm"))
-    await waitFor(() => expect(backend.calls.deletes).toBe(1))
+    await waitFor(() => expect(backend.calls.removeBodies).toHaveLength(1))
     expect(backend.calls.removeBodies[0]?.data.attributes.item_type_ids).not.toContain("type-coins")
   })
 
@@ -532,11 +577,41 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     await user.click(within(dialog).getByTestId("collection-set-remove-confirm"))
 
     await waitFor(() => expect(toast.warning).toHaveBeenCalledTimes(1))
+    expect(backend.calls.removeBodies).toHaveLength(1)
     expect(backend.calls.removeBodies[0]?.data.attributes.item_type_ids).toContain("type-art")
     expect(vi.mocked(toast.warning).mock.calls[0]?.[0]).toBe(
       "Kept Art: it changed after you opened the confirmation."
     )
     expect(vi.mocked(toast.success).mock.calls[0]?.[0]).toMatch(/^Deleted Books, Coins, /)
+  })
+
+  it("drops an open confirmation when the settings move to another group", async () => {
+    const collection: GroupRef = { id: "g2", slug: "collection", name: "Collection" }
+    const other = setBackend("admin", everythingAdded, { group: collection })
+    const backend = setBackend("admin", everythingAdded, { alsoListed: [collection] })
+    server.use(...other.handlers, ...backend.handlers)
+    const user = userEvent.setup()
+    // Start on g2 so its group, members and set are cached, as after a visit.
+    renderSettings("g2")
+    await screen.findByTestId("collection-set-remove")
+    await user.click(screen.getByTestId("switch-to-g1"))
+    await waitFor(() => expect(backend.calls.gets).toBeGreaterThan(0))
+
+    await user.click(await screen.findByTestId("collection-set-remove"))
+    const dialog = await screen.findByTestId("collection-set-remove-dialog")
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("collection-set-remove-confirm")).toBeEnabled()
+    )
+
+    // Back to the cached g2. The open modal blocks pointer events on the
+    // page, as the browser's Back button is not blocked, so the move is
+    // fired directly.
+    fireEvent.click(screen.getByTestId("switch-to-g2"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("collection-set-remove-dialog")).not.toBeInTheDocument()
+    )
+    expect(await screen.findByTestId("collection-set-remove")).toBeEnabled()
+    expect(backend.calls.deletes + other.calls.deletes).toBe(0)
   })
 
   it("keeps Confirm disabled when the check fails", async () => {

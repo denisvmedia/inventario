@@ -202,7 +202,9 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             {active === "sections" ? (
               <div className="space-y-6" data-testid="group-section-sections">
                 <SectionsCard group={group} isAdmin={isAdmin} />
-                <CollectionSetCard group={group} isAdmin={isAdmin} />
+                {/* Keyed by the route's group, so moving to another group's
+                    settings drops an open removal confirmation. */}
+                <CollectionSetCard key={groupId} group={group} isAdmin={isAdmin} />
               </div>
             ) : null}
             {active === "members" ? (
