@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/render"
 
@@ -44,6 +45,10 @@ func (api *groupsAPI) collectionSetService(ctx context.Context, group *models.Lo
 // itemSetChangedCode is the error code of an add that found the group's
 // types or fields changing under it twice in a row.
 const itemSetChangedCode = "item_set.changed"
+
+// collectionSetSetupTimeout bounds adding the Collection set to a group
+// POST /groups has just created. Tests shorten it.
+var collectionSetSetupTimeout = 30 * time.Second
 
 // renderItemSetError maps a failed add or remove: a group mid-deletion, a
 // full group and rows changing under the add are user errors; the rest goes
@@ -255,7 +260,12 @@ func (api *groupsAPI) removeCollectionSet(w http.ResponseWriter, r *http.Request
 func (api *groupsAPI) addCollectionSetToNewGroup(r *http.Request, group *models.LocationGroup) *jsonapi.GroupCreateItemSetOutcome {
 	outcome := &jsonapi.GroupCreateItemSetOutcome{}
 	base := context.WithoutCancel(r.Context())
-	svc, ctx, err := api.collectionSetService(base, group)
+	// The group is already created and the set is extra, so it gets a
+	// deadline of its own: a stalled read ends in added false, not in a
+	// create that never answers. The audit row is written with base.
+	setCtx, cancel := context.WithTimeout(base, collectionSetSetupTimeout)
+	defer cancel()
+	svc, ctx, err := api.collectionSetService(setCtx, group)
 	if err != nil {
 		slog.ErrorContext(base, "Failed to scope registries to the new group for the Collection set", "group_id", group.ID, "error", err)
 		api.logCollectionSet(base, r, auditActionCollectionSetAdd, group, nil, err)

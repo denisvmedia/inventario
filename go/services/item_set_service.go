@@ -38,6 +38,11 @@ const (
 // one of the rows it was working with. Adding again starts afresh.
 var ErrItemSetChanged = errx.NewSentinel("the group's item types or custom fields changed while the set was being added")
 
+// errItemSetIncomplete reports an add pass whose own work is done while the
+// status read after it still lacks a row or a link, as a member deleted one
+// the pass had just written.
+var errItemSetIncomplete = errx.NewSentinel("the set is not complete after adding it")
+
 // ItemSetKeepReason says why removing the set keeps a row the group has.
 type ItemSetKeepReason string
 
@@ -393,35 +398,49 @@ func matchSetRows[E, R any](entries []E, rows []R, entryKey func(E) (models.Item
 	return out, takenBy
 }
 
-// Add adds the set to the group. On an error, the result counts what was
-// created before it.
+// Add adds the set to the group. It succeeds only when the status read
+// after it is complete. On an error, the result counts what was created
+// before it.
 //
 // A type or field the add works with can go away under it, as a remove or
 // a member deletes it. The registries then report it gone, or refuse a
-// template that names it; the add runs once more from a fresh status, and
-// fails with ErrItemSetChanged when that happens again.
+// template that names it, or the status read afterwards lacks it; the add
+// runs once more from a fresh status, keeping its counts, and fails with
+// ErrItemSetChanged when that happens again.
 func (s *ItemSetService) Add(ctx context.Context) (*ItemSetAddResult, error) {
 	res := &ItemSetAddResult{}
-	err := s.add(ctx, res)
+	err := s.addAndCheck(ctx, res)
 	if changedUnder(err) {
-		err = s.add(ctx, res)
+		err = s.addAndCheck(ctx, res)
 		if changedUnder(err) {
 			err = errxtrace.Classify(err, ErrItemSetChanged)
 		}
 	}
+	return res, err
+}
+
+// addAndCheck runs one pass of Add and reads the status it leaves into res,
+// failing with errItemSetIncomplete when that status is not complete.
+func (s *ItemSetService) addAndCheck(ctx context.Context, res *ItemSetAddResult) error {
+	if err := s.add(ctx, res); err != nil {
+		return err
+	}
+	st, err := s.Status(ctx)
 	if err != nil {
-		return res, err
+		return err
 	}
-	if res.Status, err = s.Status(ctx); err != nil {
-		return res, err
+	res.Status = st
+	if !st.Complete() {
+		return errxtrace.Wrap("failed to complete the set", errItemSetIncomplete)
 	}
-	return res, nil
+	return nil
 }
 
 // changedUnder reports whether err is a registry refusing a row that went
-// away during an add.
+// away during an add, or a status that lost one after it.
 func changedUnder(err error) bool {
-	return errors.Is(err, registry.ErrNotFound) || errors.Is(err, registry.ErrInvalidInput)
+	return errors.Is(err, registry.ErrNotFound) || errors.Is(err, registry.ErrInvalidInput) ||
+		errors.Is(err, errItemSetIncomplete)
 }
 
 // add runs one pass of Add, counting into res.

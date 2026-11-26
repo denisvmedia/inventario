@@ -8,11 +8,13 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/go-extras/go-kit/must"
 
+	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
@@ -63,12 +65,18 @@ func removableIDs(view jsonapi.ItemSetView) (typeIDs, fieldIDs []string) {
 // ErrAlreadyExists and nothing created while existsLeft lasts, as when a
 // field of the name is created and deleted again by someone else, and
 // AddTemplates with ErrNotFound while notFoundLeft lasts, as when a remove
-// deletes the field under an add.
+// deletes the field under an add. List counts its calls in lists; when
+// deleteOnList says so for a call, Condition is deleted just before that
+// read, as a member deleting it would. With blockLists, List waits for its
+// context to end.
 type flakyFieldFactory struct {
 	registry.CustomFieldRegistryFactory
 	createsLeft  int
 	existsLeft   int
 	notFoundLeft int
+	lists        int
+	deleteOnList func(n int) bool
+	blockLists   bool
 }
 
 func (f *flakyFieldFactory) CreateUserRegistry(ctx context.Context) (registry.CustomFieldRegistry, error) {
@@ -96,6 +104,22 @@ func (r *flakyFields) Create(ctx context.Context, def models.CustomFieldDefiniti
 		r.f.createsLeft--
 	}
 	return r.CustomFieldRegistry.Create(ctx, def)
+}
+
+func (r *flakyFields) List(ctx context.Context) ([]*models.CustomFieldDefinition, error) {
+	r.f.lists++
+	if r.f.blockLists {
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+	if r.f.deleteOnList != nil && r.f.deleteOnList(r.f.lists) {
+		if condition, err := r.CustomFieldRegistry.GetByName(ctx, "Condition"); err == nil {
+			if err := r.CustomFieldRegistry.Delete(ctx, condition.ID); err != nil {
+				return nil, err
+			}
+		}
+	}
+	return r.CustomFieldRegistry.List(ctx)
 }
 
 func (r *flakyFields) AddTemplates(ctx context.Context, id string, itemTypeIDs []string) (int, error) {
@@ -304,6 +328,34 @@ func TestGroupsAPI_CollectionSet_AddRetriesWhenRowsChangeUnderIt(t *testing.T) {
 	c.Check(w.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "item_set.changed")
 }
 
+// An add whose own work is done succeeds only when the status read after
+// it is complete: a field deleted just before that read makes the add run
+// once more, and a second time answers 409.
+func TestGroupsAPI_CollectionSet_AddChecksTheSetIsCompleteAfterIt(t *testing.T) {
+	c := qt.New(t)
+	env := newGroupTestEnv(t, models.Currency("USD"))
+	w := collectionSetRequest(env, http.MethodPost)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+	f := flaky(env)
+
+	// Reads 1 and 2 are the first pass and its check, 3 and 4 the second.
+	f.deleteOnList = func(n int) bool { return n == 2 }
+	w = collectionSetRequest(env, http.MethodPost)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+	resp := decodeItemSet(c, w)
+	c.Check(resp.Data.Attributes.Complete, qt.IsTrue)
+	c.Check(resp.Meta.CreatedCustomFields, qt.Equals, 1, qt.Commentf("Condition again"))
+
+	f.lists = 0
+	f.deleteOnList = func(n int) bool { return n == 2 || n == 4 }
+	w = collectionSetRequest(env, http.MethodPost)
+	c.Check(w.Code, qt.Equals, http.StatusConflict, qt.Commentf("body: %s", w.Body.String()))
+	c.Check(w.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "item_set.changed")
+	events := env.audit.snapshotEvents()
+	c.Assert(events, qt.Not(qt.HasLen), 0)
+	c.Check(events[len(events)-1].Success, qt.IsFalse)
+}
+
 // A field the add finds taken by name, but gone when it looks it up, makes
 // the add run once more instead of failing.
 func TestGroupsAPI_CollectionSet_AddRetriesWhenATakenNameIsGone(t *testing.T) {
@@ -425,6 +477,48 @@ func TestGroupsAPI_CreateGroup_WithCollectionSetThatFails(t *testing.T) {
 	c.Check(group.IsActive(), qt.IsTrue)
 	set, ctx := groupRegistries(env, group)
 	c.Check(must.Must(set.CustomFieldRegistry.List(ctx)), qt.HasLen, 2)
+	events := env.audit.snapshotEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Check(events[0].Success, qt.IsFalse)
+}
+
+// A new group whose set stays incomplete after both passes is created with
+// added false and the counts of both passes, and the audit row records the
+// failure.
+func TestGroupsAPI_CreateGroup_WithCollectionSetThatStaysIncomplete(t *testing.T) {
+	c := qt.New(t)
+	env := newGroupTestEnv(t, models.Currency("USD"))
+	flaky(env).deleteOnList = func(n int) bool { return n == 2 || n == 4 }
+
+	w := postGroup(t, env, map[string]any{"name": "Coins", "group_currency": "EUR", "collection_set": true})
+	c.Assert(w.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", w.Body.String()))
+	var resp jsonapi.LocationGroupResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.Meta, qt.IsNotNil)
+	c.Check(resp.Meta.CollectionSet, qt.DeepEquals, &jsonapi.GroupCreateItemSetOutcome{
+		Added: false, CreatedItemTypes: 7, CreatedCustomFields: 9,
+	})
+	events := env.audit.snapshotEvents()
+	c.Assert(events, qt.HasLen, 1)
+	c.Check(events[0].Success, qt.IsFalse)
+}
+
+// Adding the set to a new group has a deadline of its own: a read that
+// stalls ends in added false, and the group is still created.
+func TestGroupsAPI_CreateGroup_CollectionSetSetupHasItsOwnDeadline(t *testing.T) {
+	c := qt.New(t)
+	env := newGroupTestEnv(t, models.Currency("USD"))
+	apiserver.SetCollectionSetSetupTimeoutForTest(t, 50*time.Millisecond)
+	flaky(env).blockLists = true
+
+	start := time.Now()
+	w := postGroup(t, env, map[string]any{"name": "Coins", "group_currency": "EUR", "collection_set": true})
+	c.Check(time.Since(start) < 5*time.Second, qt.IsTrue)
+	c.Assert(w.Code, qt.Equals, http.StatusCreated, qt.Commentf("body: %s", w.Body.String()))
+	var resp jsonapi.LocationGroupResponse
+	c.Assert(json.Unmarshal(w.Body.Bytes(), &resp), qt.IsNil)
+	c.Assert(resp.Meta, qt.IsNotNil)
+	c.Check(resp.Meta.CollectionSet.Added, qt.IsFalse)
 	events := env.audit.snapshotEvents()
 	c.Assert(events, qt.HasLen, 1)
 	c.Check(events[0].Success, qt.IsFalse)
