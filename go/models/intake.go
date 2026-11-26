@@ -588,8 +588,10 @@ func (s IntakeSessionSummary) State() IntakeSessionState {
 	}
 }
 
-// NeedsAttention reports whether a member has something to do in the
-// session: products to review, or sources or drafts that failed.
-func (s IntakeSessionSummary) NeedsAttention() bool {
-	return s.Undecided+s.Unfinished > 0 || s.Failed > 0
+// Open reports whether the session is unfinished work, which the inbox
+// lists: a file waits for its scan or is being scanned, a product waits for
+// a decision or for its draft, or a file could not be scanned. A session
+// whose files all failed stays open until a member retries or removes it.
+func (s IntakeSessionSummary) Open() bool {
+	return s.State() != IntakeSessionDone || s.Failed > 0
 }

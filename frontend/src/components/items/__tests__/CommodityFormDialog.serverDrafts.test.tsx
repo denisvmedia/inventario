@@ -181,6 +181,31 @@ describe("<CommodityFormDialog /> server drafts", () => {
     })
   })
 
+  it("offers to create the seller a batch intake draft names", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        values: {
+          name: "Espresso Machine",
+          short_name: "Espresso",
+          type: "equipment",
+          seller_name: "Sample Store",
+        },
+      },
+    ])
+    server.use(
+      ...groupHandlers.list(groups),
+      ...sellerHandlers.list(SLUG, [{ id: "s1", name: "Hardware store", item_count: 0 }]),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    await openResumed("d1", "Espresso Machine")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    expect(await screen.findByTestId("commodity-seller-suggestion")).toHaveTextContent(
+      "Sample Store"
+    )
+  })
+
   it("shows a seller deleted while the draft was open on the Seller field", async () => {
     const fake = draftHandlers.backend(SLUG, [
       {

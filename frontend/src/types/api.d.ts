@@ -7811,11 +7811,14 @@ export type paths = {
          * List the inbox
          * @description The records of the group that still need attention, one entry per record with
          *     every reason it is there for. The default inbox holds unfinished work only: open
-         *     drafts of new items (reason draft, kind draft) and items marked as draft, whose
-         *     review is not complete (reason item_draft, kind commodity). Missing information
-         *     such as no location, no photo or an unknown price does not put an item here.
-         *     Entries are ordered by their first reason in the order draft, item_draft; drafts
-         *     most recently saved first, items most recently added first. meta.entries counts
+         *     drafts of new items (reason draft, kind draft), items marked as draft, whose
+         *     review is not complete (reason item_draft, kind commodity), and batches of files
+         *     that are not finished (reason intake, kind intake_session): a file waits for its
+         *     scan or could not be scanned, or a product waits for a decision or for its draft.
+         *     A batch carries its progress in intake. Missing information such as no location,
+         *     no photo or an unknown price does not put an item here. Entries are ordered by
+         *     their first reason in the order draft, item_draft, intake; drafts most recently
+         *     saved first, items most recently added first, batches newest first. meta.entries counts
          *     the entries the reason filter keeps; meta.counts describes the whole inbox and
          *     counts each record once in total, whatever its number of reasons. Every member of
          *     the group can read it. When a member who can edit items reads it, the draft
@@ -7826,7 +7829,7 @@ export type paths = {
             parameters: {
                 query?: {
                     /** @description Keep the entries with this reason */
-                    reason?: "draft" | "item_draft";
+                    reason?: "draft" | "item_draft" | "intake";
                     /** @description Page number */
                     page?: number;
                     /** @description Entries per page (at most 100) */
@@ -15682,32 +15685,45 @@ export type components = {
         };
         "jsonapi.InboxEntry": {
             /**
-             * @description FileCount is the number of live files attached to a draft; 0 for an
-             *     item.
+             * @description FileCount is the number of live files attached to a draft or dropped
+             *     in a batch; 0 for an item.
              * @example 1
              */
             file_count?: number;
             /** @example 5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11 */
             id?: string;
             /**
+             * @description Intake is the progress of a batch of files, the same as on
+             *     /intake/sessions; absent for other kinds.
+             */
+            intake?: components["schemas"]["jsonapi.InboxIntake"];
+            /**
              * @example draft
              * @enum {string}
              */
-            kind?: "draft" | "commodity";
+            kind?: "draft" | "commodity" | "intake_session";
             /**
              * @description Reasons holds at least one reason, each once, in display order.
              * @example [
              *       "draft"
              *     ]
              */
-            reasons?: ("draft" | "item_draft")[];
+            reasons?: ("draft" | "item_draft" | "intake")[];
             /** @example Cordless drill */
             title?: string;
             /**
              * @description UpdatedAt is when the record was last saved; drafts carry it, items
-             *     do not.
+             *     do not. A batch of files carries when it was added.
              */
             updated_at?: string | null;
+        };
+        "jsonapi.InboxIntake": {
+            /**
+             * @example review
+             * @enum {unknown}
+             */
+            state?: "processing" | "review" | "done";
+            summary?: components["schemas"]["models.IntakeSessionSummary"];
         };
         "jsonapi.InboxMeta": {
             counts?: components["schemas"]["jsonapi.InboxCounts"];
