@@ -21,12 +21,13 @@ owner="${1:?owner required}"
 repo="${2:?repo required}"
 branch="${3:?branch required}"
 
-# Active rules for the branch, from every ruleset that targets it.
+# Active rules for the branch, from every ruleset that targets it. The
+# endpoint is paginated, so every page is read and the counts are summed.
 ruleset_count="$(
-  gh api "repos/${owner}/${repo}/rules/branches/${branch}" \
-    --jq '[.[] | select(.type == "required_status_checks")
-              | .parameters.required_status_checks[]] | length' \
-    2>/dev/null
+  gh api --paginate "repos/${owner}/${repo}/rules/branches/${branch}" \
+    --jq '.[] | select(.type == "required_status_checks")
+              | .parameters.required_status_checks | length' \
+    2>/dev/null | awk '{ n += $1 } END { print n + 0 }'
 )" || ruleset_count=""
 
 protection_count="$(

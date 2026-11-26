@@ -5,7 +5,8 @@
 #   ./scripts/set-branch-protection.sh            # apply
 #   ./scripts/set-branch-protection.sh --show     # print the checks master requires
 #
-# Prerequisites: gh, authenticated with admin on the repository.
+# Prerequisites: gh, authenticated with admin on the repository; apply also
+# needs jq.
 #
 # master is guarded by a repository ruleset, not by classic branch protection.
 # The ruleset also requires squash merges, linear history and resolved review
@@ -60,10 +61,10 @@ CONTEXTS=(
 
 show() {
   # The branch rules endpoint returns every active rule, whichever ruleset it
-  # comes from.
-  gh api "repos/${REPO}/rules/branches/${BRANCH}" \
-    --jq '[.[] | select(.type == "required_status_checks")
-              | .parameters.required_status_checks[].context]'
+  # comes from. It is paginated, so read every page.
+  gh api --paginate "repos/${REPO}/rules/branches/${BRANCH}" \
+    --jq '.[] | select(.type == "required_status_checks")
+              | .parameters.required_status_checks[].context'
 }
 
 case "${1:-apply}" in
@@ -71,8 +72,13 @@ case "${1:-apply}" in
     show
     ;;
   apply)
-    ruleset_id=$(gh api "repos/${REPO}/rules/branches/${BRANCH}" \
-      --jq '[.[] | select(.ruleset_source_type == "Repository") | .ruleset_id] | unique | .[]')
+    if ! command -v jq > /dev/null; then
+      echo "apply needs jq; install it and run again." >&2
+      exit 1
+    fi
+    ruleset_id=$(gh api --paginate "repos/${REPO}/rules/branches/${BRANCH}" \
+      --jq '.[] | select(.ruleset_source_type == "Repository") | .ruleset_id' \
+      | sort -u)
     if [ -z "$ruleset_id" ]; then
       echo "No repository ruleset applies to ${REPO}@${BRANCH}; create one first." >&2
       exit 1
