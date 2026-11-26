@@ -264,6 +264,68 @@ describe("<WhatsNewPage />", () => {
     expect(fake.patches).toEqual([])
   })
 
+  // A failed probe says nothing about whether an impersonation is running.
+  it("stores nothing while the impersonation probe has failed", async () => {
+    const fake = settingsHandlers.backend("household")
+    let impersonationReads = 0
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...fake.handlers,
+      http.get(apiUrl("/admin/impersonation/current"), () => {
+        impersonationReads++
+        return HttpResponse.json({ errors: [] }, { status: 500 })
+      })
+    )
+    renderPage({ impersonation: true })
+    await screen.findByTestId("whats-new-page")
+    await waitFor(() => {
+      expect(fake.reads).toBeGreaterThan(0)
+      expect(impersonationReads).toBeGreaterThan(0)
+    })
+    await settle()
+    expect(fake.patches).toEqual([])
+  })
+
+  it("tries a failed write once more, then stops", async () => {
+    const fake = settingsHandlers.backend("household")
+    let attempts = 0
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      http.patch(apiUrl("/g/household/settings/:field"), () => {
+        attempts++
+        return HttpResponse.json({ errors: [] }, { status: 500 })
+      }),
+      ...fake.handlers
+    )
+    renderPage()
+    await waitFor(() => expect(attempts).toBe(2))
+    await settle()
+    expect(attempts).toBe(2)
+    expect(fake.state.whatsNewLastSeenVersion).toBeUndefined()
+  })
+
+  it("stores the release on the retry after a failed write", async () => {
+    const fake = settingsHandlers.backend("household")
+    let failuresLeft = 1
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      // Fails the first PATCH and lets the next one through to the fake.
+      http.patch(apiUrl("/g/household/settings/:field"), () => {
+        if (failuresLeft === 0) return undefined
+        failuresLeft--
+        return HttpResponse.json({ errors: [] }, { status: 500 })
+      }),
+      ...fake.handlers
+    )
+    renderPage()
+    await waitFor(() => expect(fake.state.whatsNewLastSeenVersion).toBe(whatsNewMeta.latestVersion))
+    await settle()
+    expect(fake.patches).toHaveLength(1)
+  })
+
   it("stores the release once the session turns out not to be an impersonation", async () => {
     const fake = settingsHandlers.backend("household")
     server.use(
