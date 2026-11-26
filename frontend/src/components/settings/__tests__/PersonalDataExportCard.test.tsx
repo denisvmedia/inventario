@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
+import { toast } from "sonner"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -11,18 +12,6 @@ import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-
-const toastMocks = vi.hoisted(() => ({ success: vi.fn(), error: vi.fn() }))
-vi.mock("@/hooks/useAppToast", () => ({
-  useAppToast: () => ({
-    success: toastMocks.success,
-    error: toastMocks.error,
-    info: vi.fn(),
-    warning: vi.fn(),
-    promise: vi.fn(),
-    dismiss: vi.fn(),
-  }),
-}))
 
 function renderCard() {
   return renderWithProviders({
@@ -48,8 +37,10 @@ beforeEach(() => {
   __resetGroupContextForTests()
   __resetHttpForTests()
   setAccessToken("good-token")
-  toastMocks.success.mockReset()
-  toastMocks.error.mockReset()
+  // sonner is mocked for the whole suite in src/test/setup.ts; the card's
+  // toasts land on those spies.
+  vi.mocked(toast.success).mockClear()
+  vi.mocked(toast.error).mockClear()
 })
 
 afterEach(() => {
@@ -84,7 +75,9 @@ describe("<PersonalDataExportCard />", () => {
     await user.click(button)
 
     await waitFor(() => expect(requested).toHaveBeenCalledTimes(1))
-    expect(toastMocks.success).toHaveBeenCalledWith(expect.stringContaining("email"))
+    await waitFor(() =>
+      expect(toast.success).toHaveBeenCalledWith(expect.stringContaining("email"), undefined)
+    )
   })
 
   it("lists a finished copy with its size and deletion date, and downloads it", async () => {
@@ -166,7 +159,7 @@ describe("<PersonalDataExportCard />", () => {
     await user.click(button)
 
     await waitFor(() =>
-      expect(toastMocks.error).toHaveBeenCalledWith(expect.stringContaining("one copy a day"))
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("one copy a day"), undefined)
     )
   })
 
