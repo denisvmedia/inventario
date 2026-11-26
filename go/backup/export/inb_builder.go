@@ -82,6 +82,9 @@ type inbBuilder struct {
 	// first, and draftUUIDByDBID resolves a file link to one of them.
 	drafts          []*models.CommodityDraft
 	draftUUIDByDBID map[string]string
+	// promotedItemByDraft maps a promoted draft's DB id to the item it
+	// became, for a delivered document read before the promotion.
+	promotedItemByDraft map[string]string
 	// intakeDocuments are the documents other systems delivered, in a
 	// whole-group export; commodityUUIDByDBID resolves the items they name.
 	intakeDocuments []*models.IntakeDocument
@@ -395,6 +398,7 @@ func (b *inbBuilder) loadSellers() error {
 // is exported.
 func (b *inbBuilder) loadDrafts(scope *inbScope) error {
 	b.draftUUIDByDBID = map[string]string{}
+	b.promotedItemByDraft = map[string]string{}
 	if !scope.wholeClass || b.svc.factorySet.CommodityDraftRegistryFactory == nil {
 		return nil
 	}
@@ -407,6 +411,9 @@ func (b *inbBuilder) loadDrafts(scope *inbScope) error {
 		return errxtrace.Wrap("failed to list drafts", err)
 	}
 	for _, d := range drafts {
+		if d != nil && d.PromotedCommodityID != nil {
+			b.promotedItemByDraft[d.ID] = *d.PromotedCommodityID
+		}
 		if d == nil || !d.IsOpen() {
 			continue
 		}
@@ -482,7 +489,8 @@ func (b *inbBuilder) loadIntakeDocuments(scope *inbScope) error {
 
 // planIntakeDocuments builds the delivered documents member. The draft and
 // the item a document names are written as their UUIDs, and left out when
-// the archive does not carry them.
+// the archive does not carry them. A document read before its draft was
+// promoted names the item the drafts read found.
 func (b *inbBuilder) planIntakeDocuments() (plannedIntakeDocuments, error) {
 	if len(b.intakeDocuments) == 0 {
 		return plannedIntakeDocuments{}, nil
@@ -504,8 +512,14 @@ func (b *inbBuilder) planIntakeDocuments() (plannedIntakeDocuments, error) {
 		if d.DraftID != nil {
 			entry.DraftID = b.draftUUIDByDBID[*d.DraftID]
 		}
-		if d.CommodityID != nil {
-			entry.CommodityID = b.commodityUUIDByDBID[*d.CommodityID]
+		commodityID := d.CommodityID
+		if commodityID == nil && d.DraftID != nil {
+			if item, ok := b.promotedItemByDraft[*d.DraftID]; ok {
+				commodityID = &item
+			}
+		}
+		if commodityID != nil {
+			entry.CommodityID = b.commodityUUIDByDBID[*commodityID]
 		}
 		doc.Documents = append(doc.Documents, entry)
 	}
