@@ -16,6 +16,7 @@
     "src/**/*.spec.ts",
     "src/**/*.spec.tsx",
     "src/test",
+    "src/types/whats-new.d.ts",
     "vitest.config.ts"
   ],
   "references": []

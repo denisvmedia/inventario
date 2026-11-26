@@ -13,7 +13,6 @@ import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { SectionRoute } from "@/components/routing/SectionRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { PlansRoute } from "@/components/routing/PlansRoute"
-import { ComingSoonPage } from "@/components/coming-soon"
 import { AdminShell } from "@/app/AdminShell"
 import { Shell } from "@/app/Shell"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -194,6 +193,9 @@ const WarrantiesListPage = lazy(() =>
 const UpcomingPage = lazy(() =>
   import("@/pages/upcoming/UpcomingPage").then((m) => ({ default: m.UpcomingPage }))
 )
+const WhatsNewPage = lazy(() =>
+  import("@/pages/WhatsNewPage").then((m) => ({ default: m.WhatsNewPage }))
+)
 const InboxPage = lazy(() =>
   import("@/pages/inbox/InboxPage").then((m) => ({ default: m.InboxPage }))
 )
@@ -269,8 +271,8 @@ const BackofficeMePage = lazy(() =>
 //     use useCurrentGroup and the http client picks up the URL slug:
 //     - group-exempt onboarding-friendly routes (mirrors the legacy
 //       GROUP_EXEMPT_ROUTE_NAMES list): no-group, profile, groups/new,
-//       groups/:id/settings, plus the mock-only "coming soon" stubs that
-//       don't need a group (plans, help, whats-new).
+//       groups/:id/settings, what's new, plus the mock-only "coming soon"
+//       stubs and redirects that don't need a group (plans, help).
 //     - group-required routes: / (redirects to /g/<first-slug> or /no-group)
 //       and the entire /g/:groupSlug/* subtree.
 //   - catch-all: NotFoundPage.
@@ -371,7 +373,10 @@ export function AppRoutes() {
               page — Settings → Help → Keyboard shortcuts opens it
               directly, and the global `?` keybinding works everywhere
               the Shell is mounted. */}
-          <Route path="/whats-new" element={<ComingSoonPage surface="whatsNew" />} />
+          {/* What's new (#1386) — the release notes this build contains,
+              read from CHANGELOG.md at build time. Group-exempt; reached
+              from Settings → Help and by URL. */}
+          <Route path="/whats-new" element={<WhatsNewPage />} />
           {/* UI Showcase — dev-only design-system reference (#1542). The
               chunk only ships in dev builds; in prod the route is
               omitted entirely. */}

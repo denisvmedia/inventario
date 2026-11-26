@@ -3529,6 +3529,92 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/data-exports/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Download a personal data export
+         * @description Streams the tar.gz archive a signed URL from POST /users/me/data-exports/{id}/download-url points at. The URL is bound
+         *     to the session that asked for it and expires; an impersonation session is refused. Every download is recorded in the audit log.
+         */
+        get: {
+            parameters: {
+                query: {
+                    /** @description The user the URL was issued to */
+                    uid: string;
+                    /** @description Expiry, Unix seconds */
+                    exp: number;
+                    /** @description Signature */
+                    sig: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Personal data export ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The archive */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description Invalid or expired URL */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description Impersonation session */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description No such export, or it expired */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+                /** @description The export is not finished */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/gzip": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/feature-flags": {
         parameters: {
             query?: never;
@@ -12480,6 +12566,7 @@ export type paths = {
         /**
          * Upload restore file
          * @description Upload a signed `.inb` backup file to be used for a restore operation.
+         *     A personal data export (see POST /users/me/data-exports) answers 422 restore.personal_data_export: it cannot be restored.
          */
         post: {
             parameters: {
@@ -14098,6 +14185,191 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/users/me/data-exports": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List personal data exports
+         * @description Returns the authenticated user's personal data exports (GDPR Art. 20), newest first, until each expires.
+         *     `next_request_at` is when a new export may be requested; it is absent when one may be requested now.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportsListResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Request a personal data export
+         * @description Starts building a copy of the authenticated user's data: profile, settings, group memberships, and what they created in each group,
+         *     with the files they uploaded. The archive is a tar.gz with JSON documents; it is not a group backup and cannot be restored.
+         *     The export runs in the background and an email says when it is ready. One request is allowed per day: an earlier one answers 429
+         *     data_export.rate_limited with `retry_at` in the error meta and a Retry-After header. An impersonation session answers 403
+         *     data_export.impersonation_forbidden.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Requested */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportView"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Too Many Requests */
+                429: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/users/me/data-exports/{id}/download-url": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Get a download URL for a personal data export
+         * @description Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only
+         *     for a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one
+         *     409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works
+         *     only with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403
+         *     data_export.session_required.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Personal data export ID */
+                    id: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["apiserver.PersonalDataExportDownloadURLResponse"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": string;
+                    };
+                };
+                /** @description Forbidden */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/users/me/login-history": {
         parameters: {
             query?: never;
@@ -14755,6 +15027,40 @@ export type components = {
         "apiserver.PatchSettingRequest": {
             /** @description Value is the setting value to apply and is required when using the object envelope. */
             value?: unknown;
+        };
+        "apiserver.PersonalDataExportDownloadURLResponse": {
+            expires_at?: string;
+            /**
+             * @description URL is relative to the server root and needs no bearer token. It is
+             *     bound to the session that asked for it.
+             */
+            url?: string;
+        };
+        "apiserver.PersonalDataExportView": {
+            /** @description CompletedAt is when the archive was finished; absent until then. */
+            completed_at?: string;
+            /** @description CreatedAt is when the user requested it. */
+            created_at?: string;
+            /** @description ExpiresAt is when the archive and this entry are deleted. */
+            expires_at?: string;
+            file_count?: number;
+            group_count?: number;
+            id?: string;
+            item_count?: number;
+            /** @description SizeBytes is the archive's size, 0 until it is finished. */
+            size_bytes?: number;
+            /** @enum {unknown} */
+            status?: "pending" | "in_progress" | "completed" | "failed";
+        };
+        "apiserver.PersonalDataExportsListResponse": {
+            exports?: components["schemas"]["apiserver.PersonalDataExportView"][];
+            /**
+             * @description NextRequestAt is when the user may request a new export; absent when
+             *     they may now.
+             */
+            next_request_at?: string;
+            /** @description RetentionDays is how long a finished archive is kept. */
+            retention_days?: number;
         };
         "apiserver.RegisterRequest": {
             email?: string;
@@ -19000,6 +19306,8 @@ export type components = {
             updated_at?: string;
             uuid?: string;
         };
+        /** @enum {string} */
+        "models.PersonalDataExportStatus": "pending" | "in_progress" | "completed" | "failed";
         "models.Plan": {
             allows_api_access?: boolean;
             allows_restore?: boolean;
@@ -19106,6 +19414,13 @@ export type components = {
             notificationsWeeklyDigest?: boolean;
             showDebugInfo?: boolean;
             theme?: string;
+            /**
+             * @description WhatsNewLastSeenVersion is the newest release the user has seen on the
+             *     What's new page. The app shows an unread dot while the build carries a
+             *     newer release, and writes the build's newest release here when the
+             *     page opens. Kept on the server so it follows the user across devices.
+             */
+            whatsNewLastSeenVersion?: string;
         };
         "models.SupplyLink": {
             /**

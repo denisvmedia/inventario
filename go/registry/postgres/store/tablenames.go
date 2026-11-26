@@ -20,6 +20,7 @@ type TableNames struct {
 	OperationSlots           func() TableName
 	RefreshTokens            func() TableName
 	APITokens                func() TableName
+	PersonalDataExports      func() TableName
 	LoginEvents              func() TableName
 	AuditLogs                func() TableName
 	EmailVerifications       func() TableName
@@ -83,6 +84,7 @@ var DefaultTableNames = TableNames{
 	OperationSlots:           func() TableName { return "operation_slots" },
 	RefreshTokens:            func() TableName { return "refresh_tokens" },
 	APITokens:                func() TableName { return "api_tokens" },
+	PersonalDataExports:      func() TableName { return "personal_data_exports" },
 	LoginEvents:              func() TableName { return "login_events" },
 	AuditLogs:                func() TableName { return "audit_logs" },
 	EmailVerifications:       func() TableName { return "email_verifications" },

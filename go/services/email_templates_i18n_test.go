@@ -73,6 +73,7 @@ func TestEmailTemplateRenderer_AllTypesAllLangsRender(t *testing.T) {
 		emailTemplateGroupInvite, emailTemplateStorageQuotaWarning, emailTemplateLoanReminder,
 		emailTemplateMaintenanceReminder, emailTemplateFeedback,
 		emailTemplateWeeklyDigest, emailTemplateItemReminder,
+		emailTemplatePersonalDataExportReady,
 	}
 	for _, lang := range []string{"en", "cs", "ru"} {
 		for _, tt := range types {
@@ -244,6 +245,44 @@ func TestEmailTemplateRenderer_ItemReminder(t *testing.T) {
 			c.Assert(rendered.Text, qt.Contains, tc.wantText)
 			c.Assert(rendered.Text, qt.Contains, "2026-12-01")
 			c.Assert(rendered.Text, qt.Not(qt.Contains), "http")
+		})
+	}
+}
+
+// TestEmailTemplateRenderer_PersonalDataExportReady pins the export-ready
+// email (#2177): it links Account settings and says when the file goes, in
+// every language.
+func TestEmailTemplateRenderer_PersonalDataExportReady(t *testing.T) {
+	renderer, err := newEmailTemplateRenderer()
+	qt.Assert(t, err, qt.IsNil)
+	expires := time.Date(2026, 12, 3, 10, 0, 0, 0, time.UTC)
+
+	cases := []struct {
+		lang        string
+		wantSubject string
+		wantText    string
+	}{
+		{"en", "Your Inventario data is ready to download", "The file is deleted on"},
+		{"cs", "Vaše data z Inventaria jsou připravena ke stažení", "Soubor bude smazán"},
+		{"ru", "Ваши данные из Inventario готовы к скачиванию", "Файл будет удалён"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.lang, func(t *testing.T) {
+			c := qt.New(t)
+			rendered, err := renderer.render(emailJob{
+				TemplateType: emailTemplatePersonalDataExportReady,
+				To:           "user@example.com",
+				Name:         "Alex",
+				Language:     tc.lang,
+				URL:          "https://app.example.com/profile",
+				ExpiresAt:    new(expires),
+			})
+			c.Assert(err, qt.IsNil)
+			c.Assert(rendered.Subject, qt.Equals, tc.wantSubject)
+			c.Assert(rendered.Text, qt.Contains, tc.wantText)
+			c.Assert(rendered.Text, qt.Contains, "https://app.example.com/profile")
+			c.Assert(rendered.HTML, qt.Contains, `href="https://app.example.com/profile"`)
+			c.Assert(rendered.Text, qt.Contains, "03 Dec 2026")
 		})
 	}
 }

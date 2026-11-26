@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import { http } from "msw"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
+import whatsNewMeta from "virtual:whats-new/meta"
 
 import { AppSidebar } from "@/components/AppSidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
@@ -13,6 +14,7 @@ import {
   groupHandlers,
   inboxHandlers,
   savedViewHandlers,
+  settingsHandlers,
 } from "@/test/handlers"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
@@ -54,12 +56,16 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  // The sidebar lists the group's saved views and counts its inbox.
+  // The sidebar lists the group's saved views, counts its inbox, and reads
+  // the user's settings for the What's new dot.
+  const seen = { whatsNewLastSeenVersion: whatsNewMeta.latestVersion ?? undefined }
   server.use(
     ...savedViewHandlers.none("household"),
     ...savedViewHandlers.none("office"),
     ...inboxHandlers.empty("household"),
-    ...inboxHandlers.empty("office")
+    ...inboxHandlers.empty("office"),
+    ...settingsHandlers.backend("household", seen).handlers,
+    ...settingsHandlers.backend("office", seen).handlers
   )
 })
 
@@ -270,6 +276,73 @@ describe("<AppSidebar /> — inbox (#2794)", () => {
     const inventory = await screen.findByTestId("sidebar-inventory-group")
     expect(await within(inventory).findByRole("link", { name: "Inbox" })).toBeInTheDocument()
     expect(within(inventory).queryByTestId("sidebar-inbox-count")).not.toBeInTheDocument()
+  })
+})
+
+describe("<AppSidebar /> — What's new dot (#1386)", () => {
+  it("marks Help while the build has a release the user has not seen", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...settingsHandlers.backend("household", { whatsNewLastSeenVersion: "0.0.1" }).handlers
+    )
+    renderSidebar("/g/household")
+    expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+    expect(screen.getByTestId("sidebar-help")).toHaveAccessibleName("Help, new release")
+  })
+
+  it("marks Help for a user who never opened the page", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...settingsHandlers.backend("household").handlers
+    )
+    renderSidebar("/g/household")
+    expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+  })
+
+  // CHANGELOG.md decides whether the newest release has anything besides
+  // Operators entries; the two tests below hold either way.
+  it("leaves out a newer release with only Operators entries for a user", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+  })
+
+  it("counts every newer release for a system administrator", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(
+      ...authHandlers.signedIn({ user: { is_system_admin: true } }),
+      ...groupHandlers.list(),
+      ...fake.handlers
+    )
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    if (whatsNewMeta.latestVersion !== whatsNewMeta.latestUserVersion) {
+      expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+    } else {
+      await new Promise((r) => setTimeout(r, 50))
+      expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+    }
+  })
+
+  it("shows no dot once the newest release was seen", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+    expect(screen.getByTestId("sidebar-help")).toHaveAccessibleName("Help")
   })
 })
 

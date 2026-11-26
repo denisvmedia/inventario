@@ -59,6 +59,7 @@ matters more than wall-time.
 | `go_swagger`       | Any path under `go/**` or `Makefile`. Intentionally as broad as `go` plus `Makefile` — `swag init` walks transitively imported packages, so narrowing risks silently missing drift cases. |
 | `go_schema_plan`   | `go/models/**`, `go/schema/**`, `go/go.mod`, `ptah.yaml` — the inputs to the migration plan Ptah builds and the state it is compared against. Gates `migration-plan.yml` |
 | `frontend`         | Any `frontend/**`, `Makefile`                                                                                                                            |
+| `changelog`        | `CHANGELOG.md` alone. Gates the `changelog` job of `frontend-test.yml`, which runs the CHANGELOG.md guard of the What's new page when no other frontend input changed. The file is in neither `frontend` nor `image_inputs`: nearly every PR adds an entry, and an Unreleased entry never reaches the bundle |
 | `frontend_codegen` | The codegen script, `frontend/package*.json`, `frontend/src/types/api.d.ts`, plus any Go file or `Makefile` (Go drives `swagger.json`, the codegen input) |
 | `frontend_i18n`    | `frontend/src/**`, `frontend/i18next.config.ts`, `frontend/scripts/i18n-check.mjs`, `frontend/package*.json`                                            |
 | `e2e`              | `e2e/**` or `docker-compose.e2e.yaml`                                                                                                                    |
@@ -78,6 +79,7 @@ under `dorny/paths-filter`'s default semantics.
 
 | PR diff                              | Jobs that run                                                                                                                                                                              |
 | ------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `CHANGELOG.md` only                  | `markdown-lint` and the `changelog` job of `frontend-test` (the CHANGELOG.md guard alone) |
 | Root markdown only (`README.md`)     | `markdown-lint` only. The 13 ecosystem-gated workflows skip; the narrowly-filtered ones (helm-lint, cli-integration-test, smoke tests, release dry-run, renovate-config) also skip          |
 | Backend only (`go/**`)               | `go-test`, `go-test-postgres`, `go-lint`, `go-swagger-docs`, `frontend-codegen` (Go drives swagger.json), `frontend-embed-smoke-test`, `docker.yml`, `e2e-tests-linux[chromium]`; Firefox + macOS-webkit + the other frontend-* workflows skip |
 | Model annotations or the migration chain (`go/models/**`, `go/schema/**`) | `migration-plan` on top of the backend set — it posts the schema delta against a base-state database and fails on a destructive one unless the PR carries the `allow-destructive` label |

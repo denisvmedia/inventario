@@ -6,7 +6,6 @@ import (
 	"archive/tar"
 	"compress/gzip"
 	"context"
-	"encoding/json"
 	"io"
 	"os"
 	"time"
@@ -22,12 +21,6 @@ import (
 	"go.5x5.cz/inventario/internal/inb"
 	"go.5x5.cz/inventario/models"
 )
-
-// gzipLevel is the compression level for the inner payload.tar.gz. Level 3
-// trades a little ratio for much faster compression, which matters because the
-// archive is built synchronously in a worker and streamed straight to blob
-// storage (#534).
-const gzipLevel = 3
 
 // exportFileMeta returns the FileEntity stamping for a signed `.inb` export
 // artifact: `.inb` / application/x-inventario-backup / "inb-2.0" (#534).
@@ -239,57 +232,15 @@ func (b *inbBuilder) writeJSONMember(name string, v any) error {
 	return b.writeMember(name, data)
 }
 
-// encodeJSONMember encodes v as a JSON member is written.
-func encodeJSONMember(name string, v any) ([]byte, error) {
-	data, err := json.MarshalIndent(v, "", "  ")
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to marshal JSON member", err, errx.Attrs("member", name))
-	}
-	return data, nil
-}
-
 // writeMember writes data as the inner-tar member name.
 func (b *inbBuilder) writeMember(name string, data []byte) error {
-	hdr := &tar.Header{
-		Name:     name,
-		Mode:     0o600,
-		Size:     int64(len(data)),
-		Typeflag: tar.TypeReg,
-		ModTime:  time.Now(),
-	}
-	if err := b.tw.WriteHeader(hdr); err != nil {
-		return errxtrace.Wrap("failed to write tar header", err, errx.Attrs("member", name))
-	}
-	if _, err := b.tw.Write(data); err != nil {
-		return errxtrace.Wrap("failed to write tar member", err, errx.Attrs("member", name))
-	}
-	return nil
+	return writeTarMember(b.tw, name, data)
 }
 
 // writeFileMember streams a single commodity file's bytes from blob storage into
 // the tar at archivePath, without buffering. Returns the byte count written.
 func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (int64, error) {
-	reader, err := b.bucket.NewReader(b.ctx, blobKey, nil)
-	if err != nil {
-		return 0, errxtrace.Wrap("failed to open blob reader for file member", err, errx.Attrs("blob_key", blobKey))
-	}
-	defer reader.Close()
-
-	hdr := &tar.Header{
-		Name:     archivePath,
-		Mode:     0o600,
-		Size:     size,
-		Typeflag: tar.TypeReg,
-		ModTime:  time.Now(),
-	}
-	if err := b.tw.WriteHeader(hdr); err != nil {
-		return 0, errxtrace.Wrap("failed to write file member header", err, errx.Attrs("member", archivePath))
-	}
-	n, err := io.Copy(b.tw, reader)
-	if err != nil {
-		return 0, errxtrace.Wrap("failed to stream file member", err, errx.Attrs("member", archivePath))
-	}
-	return n, nil
+	return streamTarMember(b.ctx, b.tw, b.bucket, archivePath, blobKey, size)
 }
 
 // writeManifest emits the manifest.json member from the accumulated stats and

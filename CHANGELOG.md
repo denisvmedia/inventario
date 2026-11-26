@@ -27,6 +27,29 @@ when to add an entry and where it goes.
   and tags on the **Files** step and can be changed there, and a batch of
   files is read again once its scans finish, so the tags and titles the
   scan gave its files show without a reload (#1626).
+- Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
+  a copy of the caller's own data: their profile, settings and group
+  memberships, and in each group the items, files with their bytes, loans,
+  maintenance schedules, service records, reminders, supply links, open
+  drafts, saved views and history entries they created. A history entry
+  holds only the fields it changed, with the values it set. An item's
+  location, area, seller, type and tags are given by name; other members
+  appear only as ids, never by name or email. A file whose bytes are no
+  longer in storage is listed as missing. The archive is a plain `tar.gz` of
+  JSON documents and files whose manifest has kind `personal_data_export`; it
+  is not a group backup, and the restore upload refuses one with 422
+  `restore.personal_data_export`. The export worker builds it in the
+  background and emails the user when it is ready; a build cut short by a
+  restart is queued again and built once more. One request is allowed per
+  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  archive is deleted after 7 days or with the account, only its owner can
+  list and download it, an impersonation session can neither request nor
+  download one, and each request and download is recorded in the audit log.
+  `GET /users/me/data-exports` lists the exports and when the next request is
+  allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
+  download link that works only in the browser session that asked for it
+  (403 `data_export.session_required` without the session cookie)
+  ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
   language of the document. The scan response gains `files`, one entry per
@@ -102,6 +125,16 @@ when to add an entry and where it goes.
   then by name and type, and an option by the option, then by label,
   creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+- A **What's new** page at `/whats-new` lists the releases the running server
+  contains, newest first, each with its changes as this file has them. The
+  **What's new** row in **Settings → Help & support** opens it instead of the
+  GitHub Releases page. A dot on that row, on the **Help & support** tab and
+  on **Help** in the sidebar marks a release the user has not seen, and
+  opening the page clears it. The newest release a user has seen is a setting
+  on the server (`whats_new.last_seen_version`), so the dot follows the user
+  across devices. System administrators also see the **Operators** section of
+  each release; for other users, a release with nothing else brings no dot
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 - Documents from other systems: `POST /g/{groupSlug}/intake` turns a document
   that another system such as Paperless-ngx sends into a draft in the inbox,
   with the document attached when it is sent, its address among the draft's
@@ -662,7 +695,7 @@ when to add an entry and where it goes.
   `GET /feature-flags` reports it as `plans`. With it on,
   `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
-- The upgrade runs one more database migration, which adds the
+- The upgrade runs two more database migrations. One adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run the previous version fail every read of a group until
   they are replaced, because they read all columns of the table and do not
@@ -671,6 +704,10 @@ when to add an entry and where it goes.
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
   of problem tracked in
   [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
+  The other adds the `personal_data_exports` table for personal data exports.
+  The archives are stored with the uploads under `t/<tenant>/personal-exports/`;
+  the export worker deletes each one 7 days after it is finished
+  ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
@@ -735,6 +772,12 @@ when to add an entry and where it goes.
   header to the frontend. The conventions behind the field are in the new
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
   ([#521](https://github.com/denisvmedia/inventario/issues/521)).
+
+- Building the frontend now reads `CHANGELOG.md` from the repository root, for
+  the What's new page, and fails without it. The project's Dockerfile copies
+  the file; a custom image build that copies only `frontend/` has to copy
+  `CHANGELOG.md` next to it
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 
 ## [0.2.2] - 2026-11-23
 
