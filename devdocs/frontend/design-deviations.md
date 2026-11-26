@@ -828,6 +828,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Item types
 
+#### 2026-11-26 — Four more item type icons for the Collection set
+
+- **Issue/PR**: #1607
+- **Mock**: none; see the Item types page entry below.
+- **Reality**: `frontend/src/features/itemTypes/icons.ts` gains `coins` (`Coins`), `stamp` (`Stamp`), `disc-3` (`Disc3`) and `layers` (`Layers`), so the Collection set's Coins, Stamps, Records and Cards types have icons of their own. The icon picker shows them with the hobby icons, after Music and Palette; it now has 42 icons.
+- **Why**: not present in mock. The set's types need icons the picker lacked. The choice of icons is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the icons agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` adds an item types view.
+
 #### 2026-11-25 — Item types page
 
 - **Issue/PR**: #2802 / PR #2863
@@ -876,6 +885,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` adds templates to its item type or field views.
 
 ### Forms & Validation
+
+#### 2026-11-26 — Create group page: what the group is for
+
+- **Issue/PR**: #1607
+- **Mock**: none for creating a group; the page follows the existing create form. The radio cards follow the scope picker of the API token dialog (`CreateAPITokenDialog`), which follows the `RadioGroup` of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx).
+- **Reality**: `frontend/src/pages/groups/CreateGroupPage.tsx` adds a **What is the group for?** field after the currency: two radio cards side by side from `sm` up, **Household items** (`Home` icon, the default) and **Collection** (`Library` icon), each with a one-line description, and the note "You can change this later in the group settings." below. **Collection** sends `collection_set` and `hidden_sections: ["warranties"]` with the create request. When the response says the set was not added, the page shows an error toast pointing to Sections in the group settings instead of the success toast, and still opens the new group.
+- **Why**: not present in mock. Owner decision 4 on #1607 asks for two cards, Household items by default and Collection, with the note. The icons, the descriptions and the toast on a partial create are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the icons, descriptions and the partial-create toast agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock once `inventario-design` draws the create group page.
 
 #### 2026-05-29 — Design-system "start": blessed FieldError + dropdown policy with annotated native-`<select>` exceptions
 
@@ -962,6 +980,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reality**: The group settings rail gains a **Sections** entry after Info (`LayoutList` icon), and `frontend/src/components/groups/SectionsCard.tsx` renders a bordered card with a title, a subtitle and one row per section (Warranties, Maintenance and repairs, Loans, Upcoming): label, a muted description of what hiding removes, and a `Switch` that is on while the section shows. Members without the admin role see the same rows with the switches disabled and a muted note. While a save is in flight the switches show the requested state. `?section=<id>` on the settings URL opens a rail entry directly, which the hidden-section notice uses. The Notifications card leaves out the warranty alert row while the group hides warranties.
 - **Why**: not present in mock. The owner decision asks for a per-group setting an admin changes for all members; the card follows the Notifications card anatomy. Read-only switches for other roles, the in-flight state, the `?section=` deep link and dropping the warranty alert row are agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; read-only switches, the deep link and the warranty alert row agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the setting; otherwise permanent.
+
+#### 2026-11-26 — Collection set card in the group settings
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no ready-made set of item types or fields; the nearest anatomy is its bordered cards, and the confirmation follows the confirm dialog the item type delete uses.
+- **Reality**: The **Sections** pane of the group settings shows `frontend/src/components/groups/CollectionSetCard.tsx` below the Sections card: a bordered card with a `Library` icon tile, a title, a subtitle, a state badge (**Not added**, **Partly added**, **Added**), the set's item types as outline badges with their icons and its custom fields as outline badges (muted while the group lacks them), a note on names and reuse, and for admins **Add the set** (or **Add what is missing**) and an outline **Remove the set**. `CollectionSetRemoveDialog` lists, in a scrolling body, what is deleted and what stays, each row with its kind and, for a row that stays, the reason (the group's own row, items using it with the count, Trash included, or the last type); with nothing to delete it says so and offers only **Close**. Other members see the card without the buttons and a muted note. Results and failures show as toasts, with the item type and custom field limits named.
+- **Why**: not present in mock. Owner decision 2 on #1607 asks for a set an admin adds and removes in the group settings, with a confirmation that lists what goes and what stays and why. Placing the card in the Sections pane, the state badge, the badge lists and the read-only view for other roles are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decisions; the placement in the Sections pane, the state badge, the badge lists and the read-only view agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` draws the setting; otherwise permanent.
 
 #### 2026-11-25 — Storage card: Trash bucket and note

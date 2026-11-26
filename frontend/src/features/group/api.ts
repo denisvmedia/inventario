@@ -9,6 +9,13 @@ export type GroupRole = Schema<"models.GroupRole">
 export type GroupMembership = Schema<"models.GroupMembership">
 export type GroupInvite = Schema<"models.GroupInvite">
 export type GroupSection = Schema<"models.GroupSection">
+// The Collection set (#1607) as a group holds it: its item types and custom
+// fields, each missing, added by the set, or the group's own of that name.
+export type ItemSetView = Schema<"jsonapi.ItemSetView">
+export type ItemSetItemTypeView = Schema<"jsonapi.ItemSetItemTypeView">
+export type ItemSetFieldView = Schema<"jsonapi.ItemSetFieldView">
+export type ItemSetMeta = Schema<"jsonapi.ItemSetMeta">
+export type GroupCreateItemSetOutcome = Schema<"jsonapi.GroupCreateItemSetOutcome">
 // MembershipWithUser is the shape returned by the members list endpoint
 // after the #1533 expansion. The BE joins users so the FE can render
 // avatar / name / email in one round-trip; the legacy attribute set
@@ -33,6 +40,7 @@ interface GroupResponseEnvelope {
     attributes?: LocationGroup
     type?: string
   }
+  meta?: Schema<"jsonapi.LocationGroupCreateMeta">
 }
 
 interface MembershipsResponseEnvelope {
@@ -79,8 +87,10 @@ export async function getGroup(groupId: string, signal?: AbortSignal): Promise<L
 // LocationGroupRequest envelope shape: { data: { type: "groups", attributes: {...} } }.
 // `name` is required server-side on create; `icon` and `group_currency` are
 // optional. group_currency is set once on create and immutable on PATCH.
-function envelope(attributes: Partial<LocationGroup>): {
-  data: { type: string; attributes: Partial<LocationGroup> }
+type GroupAttributes = Schema<"jsonapi.LocationGroupAttributes">
+
+function envelope(attributes: Partial<GroupAttributes>): {
+  data: { type: string; attributes: Partial<GroupAttributes> }
 } {
   return { data: { type: "groups", attributes } }
 }
@@ -89,14 +99,25 @@ export interface CreateGroupRequest {
   name: string
   icon?: string
   group_currency?: string
+  // The sections the new group hides for every member.
+  hidden_sections?: GroupSection[]
+  // Adds the Collection set to the new group in the same request (#1607).
+  collection_set?: boolean
 }
 
-export async function createGroup(req: CreateGroupRequest): Promise<LocationGroup> {
+// A created group, with how adding the Collection set went when the
+// request asked for it. The group exists either way; when collectionSet
+// says it was not added, adding it from the group settings finishes it.
+export type CreatedGroup = LocationGroup & { collectionSet?: GroupCreateItemSetOutcome }
+
+export async function createGroup(req: CreateGroupRequest): Promise<CreatedGroup> {
   const body = await http.post<GroupResponseEnvelope>("/groups", envelope(req))
   if (!body.data?.attributes) {
     throw new Error("Create-group response missing data.attributes")
   }
-  return { ...body.data.attributes, id: body.data.id }
+  const created: CreatedGroup = { ...body.data.attributes, id: body.data.id }
+  if (body.meta?.collection_set) created.collectionSet = body.meta.collection_set
+  return created
 }
 
 export interface UpdateGroupRequest {
@@ -136,6 +157,52 @@ export async function setHiddenSections(
     throw new Error("Hidden-sections response missing data.attributes")
   }
   return { ...body.data.attributes, id: body.data.id }
+}
+
+interface ItemSetEnvelope {
+  data?: { id?: string; type?: string; attributes?: ItemSetView }
+  meta?: ItemSetMeta
+}
+
+// The Collection set as the group holds it, with what an add or a remove
+// did when it is the answer to one.
+export interface CollectionSetResult {
+  set: ItemSetView
+  meta?: ItemSetMeta
+}
+
+function unwrapItemSet(body: ItemSetEnvelope): CollectionSetResult {
+  if (!body.data?.attributes) {
+    throw new Error("Collection-set response missing data.attributes")
+  }
+  return { set: body.data.attributes, meta: body.meta }
+}
+
+function collectionSetPath(groupId: string): string {
+  return `/groups/${encodeURIComponent(groupId)}/collection-set`
+}
+
+// GET /groups/{id}/collection-set lists the set's item types and custom
+// fields and how the group holds each. Any member may read it.
+export async function getCollectionSet(
+  groupId: string,
+  signal?: AbortSignal
+): Promise<ItemSetView> {
+  return unwrapItemSet(await http.get<ItemSetEnvelope>(collectionSetPath(groupId), { signal })).set
+}
+
+// POST adds the set: it creates what the group lacks and uses a type or
+// field of the same name the group has. Adding again creates only what is
+// missing. Admin or owner only.
+export async function addCollectionSet(groupId: string): Promise<CollectionSetResult> {
+  return unwrapItemSet(await http.post<ItemSetEnvelope>(collectionSetPath(groupId)))
+}
+
+// DELETE removes the set: it deletes the types and fields the set created
+// that no item uses and reports what stays and why. Safe to repeat. Admin
+// or owner only.
+export async function removeCollectionSet(groupId: string): Promise<CollectionSetResult> {
+  return unwrapItemSet(await http.del<ItemSetEnvelope>(collectionSetPath(groupId)))
 }
 
 export interface DeleteGroupRequest {

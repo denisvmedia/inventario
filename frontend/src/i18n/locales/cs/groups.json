@@ -20,7 +20,20 @@
     "submitting": "Vytvářím…",
     "subtitle": "Nastavte si vlastní inventář a pozvěte do něj další.",
     "successToast": "Skupina vytvořena.",
-    "title": "Vytvořit novou skupinu"
+    "title": "Vytvořit novou skupinu",
+    "collectionSetFailed": "Skupina byla vytvořena, ale sada Sbírka nebyla přidána. Přidejte ji v nastavení skupiny v části Sekce.",
+    "kindHelp": "Později to můžete změnit v nastavení skupiny.",
+    "kindLabel": "K čemu skupina slouží?",
+    "kinds": {
+      "collection": {
+        "description": "Typy položek a pole pro umění, knihy, mince, známky, desky, hodinky a karty. Záruky jsou skryté.",
+        "label": "Sbírka"
+      },
+      "household": {
+        "description": "Spotřebiče, elektronika, nábytek a další věci, které patří do domácnosti.",
+        "label": "Domácnost"
+      }
+    }
   },
   "hiddenSection": {
     "description": "Správce skupiny tuto sekci vypnul pro všechny členy. Její data zůstávají a správce ji může znovu zobrazit v nastavení skupiny.",
@@ -182,7 +195,54 @@
     "slugHelp": "Slugy se generují náhodně při vytvoření a nelze je změnit.",
     "slugLabel": "Slug adresy URL",
     "subtitle": "Spravujte profil, členy a životní cyklus své skupiny.",
-    "title": "Nastavení skupiny"
+    "title": "Nastavení skupiny",
+    "collectionSet": {
+      "added": "Sada Sbírka přidána. Nové typy položek: {{types}}, nová vlastní pole: {{fields}}.",
+      "add": "Přidat sadu",
+      "addError": "Sadu se nepodařilo přidat. Zkuste to znovu: další přidání vytvoří jen to, co chybí.",
+      "addErrorFieldLimit": "Skupina má nejvíce vlastních polí, kolik může mít. Některá smažte a sadu přidejte znovu.",
+      "addErrorNotActive": "Skupina se právě maže.",
+      "addErrorTypeLimit": "Skupina má nejvíce typů položek, kolik může mít. Některé smažte nebo slučte a sadu přidejte znovu.",
+      "addMissing": "Přidat, co chybí",
+      "adding": "Přidávám…",
+      "adminOnly": "Sadu mohou přidat nebo odebrat jen správci a vlastníci.",
+      "customFields": "Vlastní pole",
+      "itemTypes": "Typy položek",
+      "loadError": "Sadu Sbírka se nepodařilo načíst.",
+      "note": "Sériové číslo zůstává samostatným polem. Typ nebo pole se stejným názvem, které skupina už má, se použije místo nového. Názvy jsou anglicky; přejmenujte je jako jakýkoli jiný typ nebo pole.",
+      "remove": "Odebrat sadu",
+      "removeError": "Sadu se nepodařilo odebrat. Zkuste to znovu.",
+      "removed": "Sada Sbírka odebrána. Smazané typy položek: {{types}}, smazaná vlastní pole: {{fields}}.",
+      "removal": {
+        "confirm": "Odebrat sadu",
+        "description": "Typy a pole, které sada vytvořila a nic je nepoužívá, se smažou. Ostatní zůstanou.",
+        "goes": "Smaže se ({{total}})",
+        "keepFieldInUse_few": "{{count}} položky mají hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_many": "{{count}} položek má hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_one": "{{count}} položka má hodnotu tohoto pole, včetně koše.",
+        "keepFieldInUse_other": "{{count}} položek má hodnotu tohoto pole, včetně koše.",
+        "keepLastType": "Poslední typ položek ve skupině. Skupina si vždy ponechá aspoň jeden.",
+        "keepOwnField": "Vlastní pole skupiny. Sada ho používá, ale nevytvořila ho.",
+        "keepOwnType": "Vlastní typ skupiny. Sada ho používá, ale nevytvořila ho.",
+        "keepTypeInUse_few": "{{count}} položky mají tento typ, včetně koše.",
+        "keepTypeInUse_many": "{{count}} položek má tento typ, včetně koše.",
+        "keepTypeInUse_one": "{{count}} položka má tento typ, včetně koše.",
+        "keepTypeInUse_other": "{{count}} položek má tento typ, včetně koše.",
+        "kindField": "Vlastní pole",
+        "kindType": "Typ položek",
+        "nothing": "Nic nelze smazat: všechny typy a pole sady, které skupina má, zůstanou z níže uvedených důvodů.",
+        "removing": "Odebírám…",
+        "stays": "Zůstane ({{total}})",
+        "title": "Odebrat sadu Sbírka?"
+      },
+      "state": {
+        "complete": "Přidáno",
+        "none": "Nepřidáno",
+        "partial": "Přidáno zčásti"
+      },
+      "subtitle": "Typy položek a vlastní pole pro sbírky: umění, knihy, mince, známky, desky, hodinky a karty. Každé pole sady se zobrazuje u každého z těchto typů.",
+      "title": "Sada Sbírka"
+    }
   },
   "validation": {
     "confirmWordMismatch": "Název skupiny neodpovídá",

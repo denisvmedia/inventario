@@ -24,6 +24,7 @@ import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { NotificationsCard } from "@/components/groups/NotificationsCard"
 import { PlanCard } from "@/components/groups/PlanCard"
+import { CollectionSetCard } from "@/components/groups/CollectionSetCard"
 import { SectionsCard } from "@/components/groups/SectionsCard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
@@ -92,8 +93,9 @@ const SECTIONS: SectionMeta[] = [
 //   - Info           identity (name, icon, slug, currency + migrate)
 //                    + Plan & quota card (#1887: moved out of the
 //                    page header so it no longer renders everywhere)
-//   - Sections       the sections the group hides for all members
-//                    (#1607); admins switch them, others read them
+//   - Sections       the sections the group hides for all members, and
+//                    the Collection set of item types and fields
+//                    (#1607); admins change them, others read them
 //   - Members        members link + leave-group panel
 //   - Notifications  per-group notification preference toggles
 //                    (#1887: pulled out of the page header into its
@@ -199,6 +201,7 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
             {active === "sections" ? (
               <div className="space-y-6" data-testid="group-section-sections">
                 <SectionsCard group={group} isAdmin={isAdmin} />
+                <CollectionSetCard group={group} isAdmin={isAdmin} />
               </div>
             ) : null}
             {active === "members" ? (
