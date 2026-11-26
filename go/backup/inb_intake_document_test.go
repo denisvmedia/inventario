@@ -91,7 +91,7 @@ func TestINBExport_IntakeDocuments(t *testing.T) {
 	var manifest types.INBManifest
 	c.Assert(json.Unmarshal(jsons["manifest.json"], &manifest), qt.IsNil)
 	c.Check(manifest.Version, qt.Equals, export.INBFormatVersion)
-	c.Check(manifest.Version, qt.Equals, "3.7")
+	c.Check(manifest.Version, qt.Equals, "3.8")
 	c.Check(manifest.IntakeDocumentsFile, qt.Equals, types.INBIntakeDocumentsMember)
 
 	// After the drafts, before the files document.

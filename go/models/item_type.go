@@ -118,6 +118,12 @@ type ItemType struct {
 	//ptah:schema:field name="icon" type="TEXT" not_null="true" default=""
 	Icon string `json:"icon" db:"icon" example:"car"`
 
+	// SetEntry is the entry of the item set that created the type (#1607),
+	// or empty for a type a member added or a built-in one. The registries
+	// keep the stored value on every update; it is not part of the API.
+	//ptah:schema:field name="set_entry" type="TEXT" not_null="true" default=""
+	SetEntry ItemSetEntry `json:"-" db:"set_entry" userinput:"false"`
+
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 

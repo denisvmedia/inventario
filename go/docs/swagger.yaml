@@ -3154,6 +3154,20 @@ definitions:
       meta:
         $ref: '#/definitions/jsonapi.FilesMeta'
     type: object
+  jsonapi.GroupCreateItemSetOutcome:
+    properties:
+      added:
+        example: true
+        type: boolean
+      created_custom_fields:
+        example: 8
+        format: int64
+        type: integer
+      created_item_types:
+        example: 7
+        format: int64
+        type: integer
+    type: object
   jsonapi.GroupDeleteRequest:
     properties:
       confirm_word:
@@ -3917,6 +3931,183 @@ definitions:
       data:
         $ref: '#/definitions/jsonapi.InviteInfoData'
     type: object
+  jsonapi.ItemSetFieldView:
+    properties:
+      custom_field_id:
+        description: CustomFieldID is the ID of the group's field; absent while missing.
+        example: 5d2e...
+        type: string
+      field_type:
+        description: |-
+          FieldType is the type of the group's field, or the set's type for a
+          missing one.
+        example: select
+        type: string
+      item_count:
+        description: |-
+          ItemCount and TrashedItemCount count the items with a value of the
+          field, outside Trash and in it.
+        example: 0
+        format: int64
+        type: integer
+      keep_reason:
+        description: |-
+          KeepReason says why removing the set keeps a field the group has:
+          own or in_use (items have a value of it). Absent when the field is
+          removable or missing.
+        enum:
+        - own
+        - in_use
+        example: in_use
+        type: string
+      key:
+        description: Key identifies the field within the set.
+        example: condition
+        type: string
+      name:
+        description: |-
+          Name is the name of the group's field, which a member may have
+          changed, or the set's name for a field the group does not have.
+        example: Condition
+        type: string
+      removable:
+        description: Removable is true when removing the set deletes the field.
+        example: true
+        type: boolean
+      state:
+        description: State is missing, added or own, as for an item type.
+        enum:
+        - missing
+        - added
+        - own
+        example: added
+        type: string
+      trashed_item_count:
+        example: 0
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemSetItemTypeView:
+    properties:
+      icon:
+        example: coins
+        type: string
+      item_count:
+        example: 0
+        format: int64
+        type: integer
+      item_type_id:
+        description: ItemTypeID is the ID of the group's type; absent while missing.
+        example: 8f1c...
+        type: string
+      keep_reason:
+        description: |-
+          KeepReason says why removing the set keeps a type the group has:
+          own (a member made it), in_use (items have it, in Trash or not) or
+          last_type (a group keeps at least one type). Absent when the type is
+          removable or missing.
+        enum:
+        - own
+        - in_use
+        - last_type
+        example: in_use
+        type: string
+      key:
+        description: Key identifies the type within the set.
+        example: coins
+        type: string
+      name:
+        description: |-
+          Name is the name of the group's type, which a member may have changed,
+          or the set's name for a type the group does not have.
+        example: Coins
+        type: string
+      removable:
+        description: Removable is true when removing the set deletes the type.
+        example: true
+        type: boolean
+      state:
+        description: |-
+          State is missing when the group has no such type and adding the set
+          creates it, added when the set created the type, and own when it is
+          a member's type of the same name, which the set uses and never
+          deletes.
+        enum:
+        - missing
+        - added
+        - own
+        example: added
+        type: string
+      trashed_item_count:
+        example: 0
+        format: int64
+        type: integer
+    type: object
+  jsonapi.ItemSetMeta:
+    properties:
+      added_templates:
+        description: |-
+          AddedTemplates counts the fields the add put on a type's template,
+          besides those of the fields it created.
+        example: 0
+        format: int64
+        type: integer
+      created_custom_fields:
+        example: 8
+        format: int64
+        type: integer
+      created_item_types:
+        example: 7
+        format: int64
+        type: integer
+      deleted_custom_fields:
+        items:
+          type: string
+        type: array
+      deleted_item_types:
+        description: DeletedItemTypes and DeletedCustomFields name what a remove deleted.
+        items:
+          type: string
+        type: array
+    type: object
+  jsonapi.ItemSetResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.ItemSetResponseData'
+      meta:
+        $ref: '#/definitions/jsonapi.ItemSetMeta'
+    type: object
+  jsonapi.ItemSetResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.ItemSetView'
+      id:
+        example: collection
+        type: string
+      type:
+        enum:
+        - item_sets
+        example: item_sets
+        type: string
+    type: object
+  jsonapi.ItemSetView:
+    properties:
+      complete:
+        description: Complete is true when the group has every type and field of the
+          set.
+        example: true
+        type: boolean
+      custom_fields:
+        items:
+          $ref: '#/definitions/jsonapi.ItemSetFieldView'
+        type: array
+      item_types:
+        description: ItemTypes and CustomFields list the set's entries in the set's
+          order.
+        items:
+          $ref: '#/definitions/jsonapi.ItemSetItemTypeView'
+        type: array
+    type: object
   jsonapi.ItemTypeDeleteMeta:
     properties:
       reassigned_items:
@@ -4103,6 +4294,13 @@ definitions:
     type: object
   jsonapi.LocationGroupAttributes:
     properties:
+      collection_set:
+        description: |-
+          CollectionSet, on create, adds the Collection set to the new group
+          (#1607): its item types and custom fields, as POST
+          /groups/{groupID}/collection-set does. It is not stored; the response
+          meta says whether the set was added. Create only.
+        type: boolean
       description:
         description: |-
           Description is the free-form one-line subtitle surfaced on the
@@ -4132,6 +4330,15 @@ definitions:
       name:
         type: string
     type: object
+  jsonapi.LocationGroupCreateMeta:
+    properties:
+      collection_set:
+        allOf:
+        - $ref: '#/definitions/jsonapi.GroupCreateItemSetOutcome'
+        description: |-
+          CollectionSet reports on adding the Collection set, when the request
+          had collection_set.
+    type: object
   jsonapi.LocationGroupData:
     properties:
       attributes:
@@ -4153,6 +4360,12 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.LocationGroupResponseData'
+      meta:
+        allOf:
+        - $ref: '#/definitions/jsonapi.LocationGroupCreateMeta'
+        description: |-
+          Meta is set on a create that asked for extras such as the Collection
+          set.
     type: object
   jsonapi.LocationGroupResponseData:
     properties:
@@ -15258,9 +15471,9 @@ paths:
     post:
       consumes:
       - application/vnd.api+json
-      description: Creates a new location group with a random non-guessable slug.
-        The creator becomes the group admin. hidden_sections, when given, sets the
-        sections the new group hides.
+      description: |-
+        Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+        collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
       parameters:
       - description: Group data
         in: body
@@ -15391,6 +15604,114 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update group
+      tags:
+      - groups
+  /groups/{groupID}/collection-set:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Deletes the item types and custom fields the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+        Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
+        meta names what the request deleted; the attributes show what stays and why. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: The group is being deleted (group.not_active)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Remove the Collection set from the group
+      tags:
+      - groups
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:
+        missing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).
+        Each one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group member
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get the group's Collection set
+      tags:
+      - groups
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,
+        Certificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.
+        A type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.
+        The names are English; members rename them like any other. meta counts what the request created. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.ItemSetResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: The group has 100 item types (item_type.limit)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: The group is being deleted (group.not_active), or has 200 custom
+            fields (custom_field.limit_reached)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Add the Collection set to the group
       tags:
       - groups
   /groups/{groupID}/hidden-sections:

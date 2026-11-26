@@ -405,6 +405,7 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 	stored = r.factory.copyField(stored)
 	def.TenantGroupAwareEntityID = stored.TenantGroupAwareEntityID
 	def.Type = stored.Type
+	def.SetEntry = stored.SetEntry
 	def.CreatedAt = stored.CreatedAt
 	def.UpdatedAt = time.Now()
 	def.Normalize()
@@ -442,6 +443,38 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 		return nil, errxtrace.Wrap("failed to update custom field", err)
 	}
 	return r.factory.copyField(updated), nil
+}
+
+// AddTemplates adds the missing template entries of the field.
+func (r *CustomFieldRegistry) AddTemplates(ctx context.Context, id string, itemTypeIDs []string) (int, error) {
+	r.factory.mu.Lock()
+	defer r.factory.mu.Unlock()
+
+	stored, err := r.Registry.Get(ctx, id)
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to get custom field", err)
+	}
+	def := *r.factory.copyField(stored)
+	var missing []models.CustomFieldTemplate
+	for _, typeID := range itemTypeIDs {
+		onTemplate := slices.ContainsFunc(def.Templates, func(t models.CustomFieldTemplate) bool { return t.ItemTypeID == typeID })
+		listed := slices.ContainsFunc(missing, func(t models.CustomFieldTemplate) bool { return t.ItemTypeID == typeID })
+		if !onTemplate && !listed {
+			missing = append(missing, models.CustomFieldTemplate{ItemTypeID: typeID})
+		}
+	}
+	if err := r.checkTemplates(def.GroupID, missing); err != nil {
+		return 0, err
+	}
+	if len(missing) == 0 {
+		return 0, nil
+	}
+	def.Templates = append(def.Templates, missing...)
+	def.UpdatedAt = time.Now()
+	if _, err := r.Registry.UpdateWithUser(ctx, def); err != nil {
+		return 0, errxtrace.Wrap("failed to add custom field templates", err)
+	}
+	return len(missing), nil
 }
 
 // cloneTemplates returns a copy of templates that shares no memory with it,

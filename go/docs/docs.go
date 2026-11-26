@@ -11118,7 +11118,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.",
+                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.\ncollection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11310,6 +11310,152 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/collection-set": {
+            "get": {
+                "description": "Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:\nmissing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).\nEach one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Get the group's Collection set",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group member",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,\nCertificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.\nA type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.\nThe names are English; members rename them like any other. meta counts what the request created. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Add the Collection set to the group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "The group has 100 item types (item_type.limit)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "The group is being deleted (group.not_active), or has 200 custom fields (custom_field.limit_reached)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the item types and custom fields the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.\nTypes and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.\nmeta names what the request deleted; the attributes show what stays and why. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Remove the Collection set from the group",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.ItemSetResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "The group is being deleted (group.not_active)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -16858,6 +17004,25 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.GroupCreateItemSetOutcome": {
+            "type": "object",
+            "properties": {
+                "added": {
+                    "type": "boolean",
+                    "example": true
+                },
+                "created_custom_fields": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 8
+                },
+                "created_item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 7
+                }
+            }
+        },
         "jsonapi.GroupDeleteRequest": {
             "type": "object",
             "properties": {
@@ -17944,6 +18109,212 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.ItemSetFieldView": {
+            "type": "object",
+            "properties": {
+                "custom_field_id": {
+                    "description": "CustomFieldID is the ID of the group's field; absent while missing.",
+                    "type": "string",
+                    "example": "5d2e..."
+                },
+                "field_type": {
+                    "description": "FieldType is the type of the group's field, or the set's type for a\nmissing one.",
+                    "type": "string",
+                    "example": "select"
+                },
+                "item_count": {
+                    "description": "ItemCount and TrashedItemCount count the items with a value of the\nfield, outside Trash and in it.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "keep_reason": {
+                    "description": "KeepReason says why removing the set keeps a field the group has:\nown or in_use (items have a value of it). Absent when the field is\nremovable or missing.",
+                    "type": "string",
+                    "enum": [
+                        "own",
+                        "in_use"
+                    ],
+                    "example": "in_use"
+                },
+                "key": {
+                    "description": "Key identifies the field within the set.",
+                    "type": "string",
+                    "example": "condition"
+                },
+                "name": {
+                    "description": "Name is the name of the group's field, which a member may have\nchanged, or the set's name for a field the group does not have.",
+                    "type": "string",
+                    "example": "Condition"
+                },
+                "removable": {
+                    "description": "Removable is true when removing the set deletes the field.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "state": {
+                    "description": "State is missing, added or own, as for an item type.",
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "added",
+                        "own"
+                    ],
+                    "example": "added"
+                },
+                "trashed_item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                }
+            }
+        },
+        "jsonapi.ItemSetItemTypeView": {
+            "type": "object",
+            "properties": {
+                "icon": {
+                    "type": "string",
+                    "example": "coins"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "item_type_id": {
+                    "description": "ItemTypeID is the ID of the group's type; absent while missing.",
+                    "type": "string",
+                    "example": "8f1c..."
+                },
+                "keep_reason": {
+                    "description": "KeepReason says why removing the set keeps a type the group has:\nown (a member made it), in_use (items have it, in Trash or not) or\nlast_type (a group keeps at least one type). Absent when the type is\nremovable or missing.",
+                    "type": "string",
+                    "enum": [
+                        "own",
+                        "in_use",
+                        "last_type"
+                    ],
+                    "example": "in_use"
+                },
+                "key": {
+                    "description": "Key identifies the type within the set.",
+                    "type": "string",
+                    "example": "coins"
+                },
+                "name": {
+                    "description": "Name is the name of the group's type, which a member may have changed,\nor the set's name for a type the group does not have.",
+                    "type": "string",
+                    "example": "Coins"
+                },
+                "removable": {
+                    "description": "Removable is true when removing the set deletes the type.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "state": {
+                    "description": "State is missing when the group has no such type and adding the set\ncreates it, added when the set created the type, and own when it is\na member's type of the same name, which the set uses and never\ndeletes.",
+                    "type": "string",
+                    "enum": [
+                        "missing",
+                        "added",
+                        "own"
+                    ],
+                    "example": "added"
+                },
+                "trashed_item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                }
+            }
+        },
+        "jsonapi.ItemSetMeta": {
+            "type": "object",
+            "properties": {
+                "added_templates": {
+                    "description": "AddedTemplates counts the fields the add put on a type's template,\nbesides those of the fields it created.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "created_custom_fields": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 8
+                },
+                "created_item_types": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 7
+                },
+                "deleted_custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
+                "deleted_item_types": {
+                    "description": "DeletedItemTypes and DeletedCustomFields name what a remove deleted.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                }
+            }
+        },
+        "jsonapi.ItemSetResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.ItemSetResponseData"
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.ItemSetMeta"
+                }
+            }
+        },
+        "jsonapi.ItemSetResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.ItemSetView"
+                },
+                "id": {
+                    "type": "string",
+                    "example": "collection"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "item_sets"
+                    ],
+                    "example": "item_sets"
+                }
+            }
+        },
+        "jsonapi.ItemSetView": {
+            "type": "object",
+            "properties": {
+                "complete": {
+                    "description": "Complete is true when the group has every type and field of the set.",
+                    "type": "boolean",
+                    "example": true
+                },
+                "custom_fields": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemSetFieldView"
+                    }
+                },
+                "item_types": {
+                    "description": "ItemTypes and CustomFields list the set's entries in the set's order.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.ItemSetItemTypeView"
+                    }
+                }
+            }
+        },
         "jsonapi.ItemTypeDeleteMeta": {
             "type": "object",
             "properties": {
@@ -18205,6 +18576,10 @@ const docTemplate = `{
         "jsonapi.LocationGroupAttributes": {
             "type": "object",
             "properties": {
+                "collection_set": {
+                    "description": "CollectionSet, on create, adds the Collection set to the new group\n(#1607): its item types and custom fields, as POST\n/groups/{groupID}/collection-set does. It is not stored; the response\nmeta says whether the set was added. Create only.",
+                    "type": "boolean"
+                },
                 "description": {
                     "description": "Description is the free-form one-line subtitle surfaced on the\ngroup settings page and the sidebar group-switcher (#1647).\nOptional; empty string means \"no description\". Capped at\n200 chars to match the locations.description cap.",
                     "type": "string"
@@ -18225,6 +18600,19 @@ const docTemplate = `{
                 },
                 "name": {
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.LocationGroupCreateMeta": {
+            "type": "object",
+            "properties": {
+                "collection_set": {
+                    "description": "CollectionSet reports on adding the Collection set, when the request\nhad collection_set.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.GroupCreateItemSetOutcome"
+                        }
+                    ]
                 }
             }
         },
@@ -18259,6 +18647,14 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.LocationGroupResponseData"
+                },
+                "meta": {
+                    "description": "Meta is set on a create that asked for extras such as the Collection\nset.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.LocationGroupCreateMeta"
+                        }
+                    ]
                 }
             }
         },

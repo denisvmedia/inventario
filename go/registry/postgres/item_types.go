@@ -219,14 +219,15 @@ func (r *ItemTypeRegistry) assignSlugInTx(ctx context.Context, tx *sqlx.Tx, row 
 	return registry.ChooseItemTypeSlug(row, taken)
 }
 
-// Update writes the type's name and icon. The slug and the creation time stay
-// as stored.
+// Update writes the type's name and icon. The slug, the set entry and the
+// creation time stay as stored.
 func (r *ItemTypeRegistry) Update(ctx context.Context, itemType models.ItemType) (*models.ItemType, error) {
 	existing, err := r.Get(ctx, itemType.ID)
 	if err != nil {
 		return nil, err
 	}
 	itemType.Slug = existing.Slug
+	itemType.SetEntry = existing.SetEntry
 	itemType.Normalize()
 	itemType.CreatedAt = existing.CreatedAt
 	itemType.UpdatedAt = time.Now()

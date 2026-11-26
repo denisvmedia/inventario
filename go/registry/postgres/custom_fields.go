@@ -204,7 +204,8 @@ func (r *CustomFieldRegistry) Create(ctx context.Context, def models.CustomField
 }
 
 // Update writes the field's name and options, and its template entries when
-// def.Templates is not nil. The type and the creation time stay as stored.
+// def.Templates is not nil. The type, the set entry and the creation time
+// stay as stored.
 // The values and template defaults that name a dropped option are deleted
 // in the same transaction.
 func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomFieldDefinition) (*models.CustomFieldDefinition, error) {
@@ -217,6 +218,7 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 		}
 		def.TenantGroupAwareEntityID = stored.TenantGroupAwareEntityID
 		def.Type = stored.Type
+		def.SetEntry = stored.SetEntry
 		def.CreatedAt = stored.CreatedAt
 		def.UpdatedAt = time.Now().Truncate(time.Microsecond)
 		def.Normalize()
@@ -255,6 +257,51 @@ func (r *CustomFieldRegistry) Update(ctx context.Context, def models.CustomField
 		return nil, errxtrace.Wrap("failed to update custom field", err)
 	}
 	return &updated, nil
+}
+
+// AddTemplates adds the missing template entries of the field. It locks the
+// field's row and then the item types, in the order Update takes them, so a
+// concurrent Update or AddTemplates of the field waits and then sees these
+// entries.
+func (r *CustomFieldRegistry) AddTemplates(ctx context.Context, id string, itemTypeIDs []string) (int, error) {
+	added := 0
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		var stored models.CustomFieldDefinition
+		query := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.CustomFieldDefinitions())
+		if err := scanOne(ctx, tx, &stored, query, id); err != nil {
+			return errxtrace.Wrap("failed to lock custom field", err, errx.Attrs("custom_field_id", id))
+		}
+		if err := r.loadTemplatesInTx(ctx, tx, &stored); err != nil {
+			return err
+		}
+		var missing []models.CustomFieldTemplate
+		for _, typeID := range itemTypeIDs {
+			onTemplate := slices.ContainsFunc(stored.Templates, func(t models.CustomFieldTemplate) bool { return t.ItemTypeID == typeID })
+			listed := slices.ContainsFunc(missing, func(t models.CustomFieldTemplate) bool { return t.ItemTypeID == typeID })
+			if !onTemplate && !listed {
+				missing = append(missing, models.CustomFieldTemplate{ItemTypeID: typeID})
+			}
+		}
+		if err := lockTemplateItemTypesInTx(ctx, tx, r.tableNames, stored.GroupID, missing); err != nil {
+			return err
+		}
+		if len(missing) == 0 {
+			return nil
+		}
+		if err := r.insertTemplatesInTx(ctx, tx, &stored, missing); err != nil {
+			return err
+		}
+		touch := fmt.Sprintf(`UPDATE %s SET updated_at = $2 WHERE id = $1`, r.tableNames.CustomFieldDefinitions())
+		if _, err := tx.ExecContext(ctx, touch, id, time.Now().Truncate(time.Microsecond)); err != nil {
+			return errxtrace.Wrap("failed to update custom field", err)
+		}
+		added = len(missing)
+		return nil
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to add custom field templates", err)
+	}
+	return added, nil
 }
 
 // dropRemovedOptionsInTx deletes the values and clears the template

@@ -1980,6 +1980,13 @@ type CustomFieldRegistry interface {
 	// a value, or AnyValueCount; when another number of items has a value,
 	// it fails with ErrCustomFieldInUse and nothing is deleted.
 	DeleteWithValues(ctx context.Context, id string, expected int) (int, error)
+
+	// AddTemplates puts the field with id on the template of each item
+	// type in itemTypeIDs it is not on yet, with no default, and returns
+	// how many entries it added. The entries the field has keep their
+	// defaults. An ID that names no item type of the group fails with
+	// ErrInvalidInput and adds nothing.
+	AddTemplates(ctx context.Context, id string, itemTypeIDs []string) (int, error)
 }
 
 // AnyValueCount lets CustomFieldRegistry.DeleteWithValues delete the values

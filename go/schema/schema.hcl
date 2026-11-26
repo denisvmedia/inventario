@@ -1748,6 +1748,10 @@ table "custom_field_definitions" {
     type = JSONB
     null = true
   }
+  column "set_entry" {
+    type = TEXT
+    default = ""
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
@@ -3050,6 +3054,10 @@ table "item_types" {
     type = TEXT
   }
   column "icon" {
+    type = TEXT
+    default = ""
+  }
+  column "set_entry" {
     type = TEXT
     default = ""
   }

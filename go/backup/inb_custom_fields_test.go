@@ -15,6 +15,7 @@ import (
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 )
 
 // customFieldFixture is an inbFixture with a second item, a remote, and
@@ -428,4 +429,46 @@ func TestINBRoundTrip_DraftCustomFieldsFollowTheFields(t *testing.T) {
 		fieldsB["Size"].ID:   float64(0),
 		fieldsB["Remote"].ID: map[string]any{"value": remoteB.ID},
 	})
+}
+
+// The Collection set's marks survive a backup (#1607, format 3.8): a group
+// restored after the set was removed holds the set's types and fields as the
+// set's, so removing the set again deletes them.
+func TestINBRoundTrip_ItemSetEntriesAreKept(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newInbFixture(c)
+	itemTypes := must.Must(f.fs.ItemTypeRegistryFactory.CreateUserRegistry(f.ctx))
+	must.Must(itemTypes.EnsureBuiltins(f.ctx))
+	fields := must.Must(f.fs.CustomFieldRegistryFactory.CreateUserRegistry(f.ctx))
+	set := services.NewItemSetService(models.CollectionSet, itemTypes, fields)
+	must.Must(set.Add(f.ctx))
+
+	blobKey, archive := f.runExport(c, signer)
+	manifest, _ := manifestAndItems(c, archive)
+	entries := map[string]string{}
+	for _, t := range manifest.ItemTypes {
+		entries[t.Name] = t.SetEntry
+	}
+	for _, cf := range manifest.CustomFields {
+		entries[cf.Name] = cf.SetEntry
+	}
+	c.Check(entries["Coins"], qt.Equals, "collection/coins")
+	c.Check(entries["Condition"], qt.Equals, "collection/condition")
+
+	removed := must.Must(set.Remove(f.ctx))
+	c.Assert(removed.DeletedItemTypes, qt.HasLen, len(models.CollectionSet.ItemTypes))
+
+	final, err := restoreInb(c, f, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+
+	st := must.Must(set.Status(f.ctx))
+	c.Check(st.Complete(), qt.IsTrue)
+	for _, ts := range st.ItemTypes {
+		c.Check(ts.State, qt.Equals, services.ItemSetEntryAdded, qt.Commentf("type %s", ts.Entry.Key))
+	}
+	for _, fs := range st.Fields {
+		c.Check(fs.State, qt.Equals, services.ItemSetEntryAdded, qt.Commentf("field %s", fs.Entry.Key))
+	}
 }

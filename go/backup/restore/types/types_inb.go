@@ -131,6 +131,7 @@ type INBCustomField struct {
 	Type      string                   `json:"type"`
 	Options   []INBCustomFieldOption   `json:"options,omitempty"`
 	Templates []INBCustomFieldTemplate `json:"templates,omitempty"`
+	SetEntry  string                   `json:"setEntry,omitempty"`
 }
 
 // INBCustomFieldOption mirrors backup/export.INBCustomFieldOption.
@@ -148,9 +149,10 @@ type INBCustomFieldTemplate struct {
 // INBItemType is an archived item type keyed by its slug, which
 // INBCommodity.Type holds. Mirrors backup/export.INBItemType.
 type INBItemType struct {
-	Slug string `json:"slug"`
-	Name string `json:"name,omitempty"`
-	Icon string `json:"icon,omitempty"`
+	Slug     string `json:"slug"`
+	Name     string `json:"name,omitempty"`
+	Icon     string `json:"icon,omitempty"`
+	SetEntry string `json:"setEntry,omitempty"`
 }
 
 // INBSeller is an archived seller keyed by its immutable UUID. Mirrors

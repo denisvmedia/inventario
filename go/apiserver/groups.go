@@ -54,6 +54,9 @@ type groupsAPI struct {
 	// fileSigningService signs the avatar_url each member carries in the
 	// members list. Nil leaves it out and the UI shows initials.
 	fileSigningService *services.FileSigningService
+	// factorySet builds the group-scoped item type and custom field
+	// registries the Collection set writes through (#1607).
+	factorySet *registry.FactorySet
 }
 
 func groupFromContext(ctx context.Context) *models.LocationGroup {
@@ -316,6 +319,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 		publicBaseURL:      strings.TrimSpace(params.PublicURL),
 		avatarService:      services.NewAvatarService(params.FactorySet, params.UploadLocation),
 		fileSigningService: services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
+		factorySet:         params.FactorySet,
 	}
 	return func(r chi.Router) {
 		r.Use(apiTokenAllowlist(groupsAPITokenRoutes()))
@@ -329,6 +333,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 
 			r.Get("/", api.getGroup)
 			r.Get("/members", api.listMembers)
+			r.Get("/collection-set", api.getCollectionSet)
 			// A member's photo is readable by anyone in the group, which is the
 			// check this subtree already applies. Mounted here rather than under
 			// a bare user id so the authorization rule has somewhere to live.
@@ -345,6 +350,8 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 				r.Use(requireGroupAdmin(groupService))
 				r.Patch("/", api.updateGroup)
 				r.Put("/hidden-sections", api.setHiddenSections)
+				r.Post("/collection-set", api.addCollectionSet)
+				r.Delete("/collection-set", api.removeCollectionSet)
 				r.Delete("/members/{memberUserID}", api.removeMember)
 				r.Patch("/members/{memberUserID}", api.updateMemberRole)
 				r.Post("/invites", api.createInvite)
@@ -446,6 +453,7 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 // createGroup creates a new location group.
 // @Summary Create a group
 // @Description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+// @Description collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -484,6 +492,9 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(group).WithStatusCode(http.StatusCreated)
+	if attrs.CollectionSet {
+		resp.Meta = &jsonapi.LocationGroupCreateMeta{CollectionSet: api.addCollectionSetToNewGroup(r, group)}
+	}
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
 		return

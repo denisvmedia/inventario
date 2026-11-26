@@ -287,6 +287,7 @@ func (r *ItemTypeRegistry) Update(ctx context.Context, itemType models.ItemType)
 		return nil, errxtrace.Wrap("failed to get item type", err)
 	}
 	itemType.Slug = existing.Slug
+	itemType.SetEntry = existing.SetEntry
 	itemType.Normalize()
 	if r.nameTaken(existing.GroupID, &itemType) {
 		return nil, errxtrace.Classify(registry.ErrAlreadyExists, errx.Attrs("name", itemType.Name))
