@@ -411,6 +411,16 @@ when to add an entry and where it goes.
 
 ### Changed
 
+- Subscription plans are hidden. The feature is on hold, so the profile and
+  Preferences pages show no "Free plan" badge or Upgrade link, `/plans`
+  redirects to the group home, the group settings card is titled **Usage**
+  and shows the group's items, locations and file storage without limits,
+  and the admin tenant page has no Plan tile. `GET /g/{slug}/plan` reports
+  the unlimited plan whatever the tenant's `plan_id` is. No plan limit was
+  enforced before and none is now; the group storage quota does not depend
+  on plans. The server's operator can show plans again (see Operators)
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
+
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
   a cover set that way before shows the first photo instead. The No photo
@@ -562,6 +572,11 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
+  `features.plans`) shows the subscription plan surfaces that are now hidden
+  by default. It is off by default, and `GET /feature-flags` reports it as
+  `plans`. With it on, `GET /g/{slug}/plan` reports the tenant's plan again
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
