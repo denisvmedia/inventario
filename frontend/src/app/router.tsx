@@ -247,6 +247,9 @@ const AdminGroupDetailPage = lazy(() =>
     default: m.AdminGroupDetailPage,
   }))
 )
+const AdminFailedJobsPage = lazy(() =>
+  import("@/pages/admin/AdminFailedJobsPage").then((m) => ({ default: m.AdminFailedJobsPage }))
+)
 // Back-office auth plane pages (#1785 Phase 6). The login page is a
 // public route; the operator-card lives under the same guard as
 // /admin/*.
@@ -549,6 +552,7 @@ export function AppRoutes() {
               <Route path="users/:userId" element={<AdminUserDetailPage />} />
               <Route path="groups" element={<AdminGroupsPage />} />
               <Route path="groups/:groupId" element={<AdminGroupDetailPage />} />
+              <Route path="failed-jobs" element={<AdminFailedJobsPage />} />
             </Route>
           </Route>
         </Route>

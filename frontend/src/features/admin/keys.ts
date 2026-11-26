@@ -35,6 +35,14 @@ export interface AdminGroupsParams {
   order?: "asc" | "desc"
 }
 
+// Cross-tenant failed-job listing params (GET /admin/failed-jobs, #1307).
+export interface AdminFailedJobsParams {
+  type?: string
+  tenantID?: string
+  page?: number
+  perPage?: number
+}
+
 export const adminKeys = {
   all: ["admin"] as const,
   tenants: () => [...adminKeys.all, "tenants"] as const,
@@ -55,6 +63,10 @@ export const adminKeys = {
   // so block/unblock mutations can invalidate exactly this entry.
   users: () => [...adminKeys.all, "users"] as const,
   userDetail: (id: string) => [...adminKeys.users(), "detail", id] as const,
+  // Failed background jobs across tenants (#1307).
+  failedJobs: () => [...adminKeys.all, "failed-jobs"] as const,
+  failedJobList: (params: AdminFailedJobsParams) =>
+    [...adminKeys.failedJobs(), "list", params] as const,
   impersonation: () => [...adminKeys.all, "impersonation"] as const,
   impersonationCurrent: () => [...adminKeys.impersonation(), "current"] as const,
 }

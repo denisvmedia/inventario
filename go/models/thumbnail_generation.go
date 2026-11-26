@@ -73,6 +73,11 @@ type ThumbnailGenerationJob struct {
 	// UpdatedAt is when the job was last updated
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at"`
+
+	// DiscardedAt is when an operator discarded the failed job (#1307). The
+	// row stays, with its error, until the job cleanup removes it.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at"`
 }
 
 // PostgreSQL-specific indexes for thumbnail generation jobs

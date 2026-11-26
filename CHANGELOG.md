@@ -444,6 +444,20 @@ when to add an entry and where it goes.
   estimated value now follows the dashboard: an item's current value, else
   its purchase price
   ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
+- Failed background jobs. Group admins and owners see the jobs of their
+  group that stopped after their last attempt (exports, imports, restores,
+  thumbnails, document scans and currency migrations) in **Group settings →
+  Data & storage**, with the error and a **Retry** button. A restore and a
+  currency migration cannot be retried; the card says so, and a new one has
+  to be started. System admins get a **Failed jobs** page in the back office
+  with every tenant's failed jobs, type and tenant filters, **Retry** and
+  **Discard**. Discarding takes a job off the list but keeps its record and
+  error until the normal cleanup removes them. Every retry and discard is
+  written to the audit log. The API gains `GET /g/{groupSlug}/failed-jobs`
+  and `POST /g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` for group
+  admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
+  `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 
 ### Changed
 
@@ -622,6 +636,20 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `inventario jobs failed list|retry|discard` lists, retries and discards
+  the background jobs that failed for good, across every tenant, and writes
+  each retry and discard to the audit log. Two metrics come with it:
+  `inventario_jobs_dead_lettered_total{type}`, counted by every process that
+  runs workers, and the `inventario_jobs_dead_letter_depth{type}` gauge of
+  jobs nobody retried or discarded, collected by the housekeeping worker
+  group (or `run all`) every `--business-metrics-interval`. The upgrade runs
+  one more database migration: it adds `discarded_at` to `exports`,
+  `restore_operations`, `thumbnail_generation_jobs`, `intake_sources` and
+  `currency_migrations`, `attempt_count` to `exports`, and an index on the
+  failed intake sources. During a rolling upgrade, pods that still run the
+  previous version can fail reads of those tables until they are replaced,
+  as with the `hidden_sections` column below. See the admin runbook §10
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 - The upgrade runs one more database migration, which adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run the previous version fail every read of a group until

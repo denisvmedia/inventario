@@ -7,6 +7,9 @@ import { hardRedirect } from "@/lib/navigation"
 
 import {
   addAdminGroupMember,
+  discardAdminFailedJob,
+  listAdminFailedJobs,
+  retryAdminFailedJob,
   blockAdminUser,
   endImpersonation,
   getAdminGroup,
@@ -24,6 +27,8 @@ import {
   updateAdminGroupMemberRole,
   type AdminAddMemberRequest,
   type AdminBlockRequest,
+  type AdminFailedJob,
+  type AdminFailedJobsResult,
   type AdminGroupDetail,
   type AdminGroupMember,
   type AdminGroupsResult,
@@ -38,6 +43,7 @@ import {
 } from "./api"
 import {
   adminKeys,
+  type AdminFailedJobsParams,
   type AdminGroupsParams,
   type AdminTenantsParams,
   type AdminTenantUsersParams,
@@ -345,5 +351,39 @@ export function useImpersonationState({ enabled = true }: QueryOptions = {}) {
     // 403 on every tab refocus for the non-admin majority.
     staleTime: 5 * 60 * 1000,
     refetchOnWindowFocus: false,
+  })
+}
+
+// Lists failed background jobs across tenants for the admin Failed jobs
+// page (#1307). Gated on the back-office session like the sibling reads.
+export function useAdminFailedJobs(
+  params: AdminFailedJobsParams = {},
+  { enabled = true }: QueryOptions = {}
+) {
+  const isBackofficeAuthed = useIsBackofficeAuthed()
+  return useQuery<AdminFailedJobsResult>({
+    queryKey: adminKeys.failedJobList(params),
+    queryFn: ({ signal }) => listAdminFailedJobs(params, signal),
+    enabled: enabled && isBackofficeAuthed,
+  })
+}
+
+type FailedJobRef = Pick<AdminFailedJob, "id" | "job_type">
+
+// Retry and discard both refetch the list when they settle: the job leaves
+// it on success, and a 404 means someone else already acted on it.
+export function useRetryAdminFailedJob() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, FailedJobRef>({
+    mutationFn: (job) => retryAdminFailedJob(job.job_type ?? "", job.id),
+    onSettled: () => qc.invalidateQueries({ queryKey: adminKeys.failedJobs() }),
+  })
+}
+
+export function useDiscardAdminFailedJob() {
+  const qc = useQueryClient()
+  return useMutation<void, Error, FailedJobRef>({
+    mutationFn: (job) => discardAdminFailedJob(job.job_type ?? "", job.id),
+    onSettled: () => qc.invalidateQueries({ queryKey: adminKeys.failedJobs() }),
   })
 }

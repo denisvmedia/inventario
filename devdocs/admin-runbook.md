@@ -588,6 +588,103 @@ sweep after it resumes.
 
 ---
 
+## 10. Failed jobs (#1307)
+
+A background job that fails for good stays in its own table with its last
+error, status `failed`. There is no separate dead-letter table: each job
+type reads, retries and discards its failed jobs in the table it already
+uses.
+
+| Type | Table | Failed when | Retry |
+| ---- | ----- | ----------- | ----- |
+| `export` | `exports` (`type <> 'imported'`) | the export run returns an error | yes: runs again from the start |
+| `import` | `exports` (`type = 'imported'`) | the upload cannot be read or validated | yes: reads the uploaded file again |
+| `restore` | `restore_operations` | the restore run returns an error | no: it may have written part of the backup; start a new restore |
+| `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
+| `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
+| `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
+
+The email queue, the reminder sweeps, group purge and the cleanup sweepers
+keep no failed jobs: they retry on their next run.
+
+**Discard** marks a job (`discarded_at`); it does not delete it. The job
+leaves the failed list and the depth gauge, but its row and its error stay
+until the normal cleanup of that table removes them. Discarding works for
+every type. A retried job leaves the list too; if it fails again, it comes
+back.
+
+### Who sees what
+
+- **System admins** see the failed jobs of every tenant on the back office
+  page **Admin → Failed jobs** (`/admin/failed-jobs`), with type and tenant
+  filters, Retry and Discard.
+- **Group admins and owners** see their own group's failed jobs in **Group
+  settings → Data & storage**, with Retry. They cannot discard.
+
+### CLI
+
+`inventario jobs failed` acts on every tenant, like the back office page
+(PostgreSQL only; `memory://` is rejected):
+
+```bash
+# List the failed jobs nobody retried or discarded, newest first
+inventario jobs failed list --db-dsn postgres://user:pass@localhost:5432/inventario
+
+# One type, one tenant (id or slug), at most 20 rows (0 prints all)
+inventario jobs failed list --type export --tenant acme --limit 20 --db-dsn postgres://...
+
+# Put a job back in its queue
+inventario jobs failed retry --type thumbnail <job-id> --db-dsn postgres://...
+
+# Discard a job
+inventario jobs failed discard --type restore <job-id> --db-dsn postgres://...
+```
+
+`list` prints the type, id, tenant, group, failure time, attempts, whether
+the job can be retried, its title and its error. `retry` on a restore or a
+currency migration fails with "this kind of job cannot be retried"; a job
+that is no longer failed fails with "not found".
+
+### Admin REST API
+
+| Method & path | Effect |
+| ------------- | ------ |
+| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
+| `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/retry` | Retry one job (204). |
+| `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/discard` | Discard one job (204). |
+| `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. |
+| `POST /api/v1/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` | A group admin's retry. |
+
+Error codes: `failed_job.unknown_type` (404 on a path, 400 on the `?type`
+filter), `failed_job.not_found` (404: no such job, or it is no longer
+failed), `failed_job.not_retryable` (409). Members without the admin role
+get 403 on the group routes.
+
+### Audit
+
+Every retry and discard writes an audit row, also when it is refused:
+`admin.failed_job_retry` and `admin.failed_job_discard` from the back office
+and the CLI (the CLI has no actor, as for `workers pause`), and
+`failed_job_retry` from group settings. The entity type is the job type and
+the entity id is the job id. Listing from the back office writes
+`admin.failed_job_list`.
+
+### Observability
+
+- `inventario_jobs_dead_lettered_total{type}` is a counter: the jobs this
+  process marked failed for good. It is exported by the processes that run
+  workers (`run workers` and `run all`), with a zero series per type from
+  the start. Sum it across processes:
+  `sum by (type) (increase(inventario_jobs_dead_lettered_total[1h]))`.
+- `inventario_jobs_dead_letter_depth{type}` is a gauge: the failed jobs that
+  are neither retried nor discarded, across every tenant. It is collected by
+  the housekeeping worker group (or `run all`) on the
+  `--business-metrics-interval` cadence, so read it with `max()`, like the
+  business gauges. A failed collection keeps the last values and increments
+  `inventario_jobs_dead_letter_collect_errors_total`.
+
+---
+
 ## See also
 
 - [`devdocs/security/admin-threat-model.md`](security/admin-threat-model.md)

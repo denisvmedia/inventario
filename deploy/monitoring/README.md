@@ -107,6 +107,12 @@ In a **split** deployment the producers are split across processes:
   (`inventario_users`, `inventario_commodities`, `inventario_file_storage_bytes`,
   `inventario_email_queue_depth`, …) on its probe port `:3334`.
 
+The failed-job metrics (#1307) follow the same split:
+`inventario_jobs_dead_lettered_total` is counted by each process that runs
+workers, so sum it, and `inventario_jobs_dead_letter_depth` is collected by the
+housekeeping worker group (or `run all`), so read it with `max()`. See the
+[admin runbook §10](../../devdocs/admin-runbook.md).
+
 The business/email gauges also exist (at `0`) in the apiserver process because
 they are package-level, so a Prometheus that scrapes **only** the apiserver
 target will show those panels flat at `0`. To get real values, scrape the

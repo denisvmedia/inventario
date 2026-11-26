@@ -17,6 +17,7 @@ import (
 	"go.5x5.cz/inventario/backup/restore/types"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/internal/validationctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -754,6 +755,7 @@ func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, cause
 	if _, err = restoreOperationRegistry.Update(ctx, *restoreOperation); err != nil {
 		return err
 	}
+	metrics.RecordJobDeadLettered(string(models.WorkerTypeRestore))
 
 	l.createRestoreStep(ctx, "Restore failed", models.RestoreStepResultError, failure.Error())
 	return failure

@@ -112,7 +112,8 @@
   "nav": {
     "groups": "Skupiny",
     "section": "Správa",
-    "tenants": "Tenanty"
+    "tenants": "Tenanty",
+    "failedJobs": "Neúspěšné úlohy"
   },
   "pagination": {
     "next": "Další stránka",
@@ -286,5 +287,43 @@
       "success": "Uživatel {{name}} byl odblokován."
     },
     "unknownTenant": "Neznámý tenant"
+  },
+  "failedJobs": {
+    "title": "Neúspěšné úlohy",
+    "subtitle": "Úlohy na pozadí všech tenantů, které definitivně selhaly a které nikdo nezopakoval ani nezahodil, od nejnovějších.",
+    "filter": {
+      "typeLabel": "Filtrovat podle druhu úlohy",
+      "allTypes": "Všechny druhy úloh",
+      "tenantLabel": "Filtrovat podle tenantu",
+      "allTenants": "Všechny tenanty"
+    },
+    "table": {
+      "job": "Úloha",
+      "tenant": "Tenant / skupina",
+      "error": "Chyba",
+      "failed": "Selhalo",
+      "attempts": "Pokusy",
+      "actions": "Akce"
+    },
+    "loading": "Načítání neúspěšných úloh…",
+    "loadError": "Neúspěšné úlohy se nepodařilo načíst. Zkuste to později.",
+    "empty": "Žádné neúspěšné úlohy.",
+    "emptyFiltered": "Těmto filtrům neodpovídají žádné neúspěšné úlohy.",
+    "retry": "Opakovat",
+    "retryLabel": "Opakovat {{title}}",
+    "discard": "Zahodit",
+    "discardLabel": "Zahodit {{title}}",
+    "retried": "Úloha je zpět ve frontě.",
+    "discarded": "Úloha je zahozena.",
+    "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
+    "notRetryable": "Tento druh úlohy nelze opakovat. Zahoďte ji.",
+    "retryError": "Úlohu se nepodařilo zopakovat. Zkuste to později.",
+    "discardError": "Úlohu se nepodařilo zahodit. Zkuste to později.",
+    "discardDialog": {
+      "title": "Zahodit tuto neúspěšnou úlohu?",
+      "body": "Úloha zmizí ze seznamu neúspěšných úloh i z metriky. Její záznam a chyba zůstanou, dokud je neodstraní běžný úklid. Tuto akci nelze vrátit.",
+      "cancel": "Zrušit",
+      "confirm": "Zahodit"
+    }
   }
 }

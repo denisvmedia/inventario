@@ -10,6 +10,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -299,6 +300,8 @@ func (s *ThumbnailGenerationService) markJobFailed(ctx context.Context, jobRegis
 	statusErr := jobRegistry.UpdateJobStatus(ctx, job.ID, status, errorMessage)
 	if statusErr != nil {
 		slog.Error("Failed to update job status after failure", "job_id", job.ID, "error", statusErr)
+	} else if status == models.ThumbnailStatusFailed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeThumbnail))
 	}
 
 	slog.Error("Thumbnail generation job failed", "job_id", job.ID, "file_id", job.FileID, "attempt", job.AttemptCount, "max_attempts", job.MaxAttempts, "error", errorMessage)
