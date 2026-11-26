@@ -1,4 +1,4 @@
-import { useEffect, useId, useMemo, useRef, useState, type ReactNode } from "react"
+import { useEffect, useEffectEvent, useId, useMemo, useRef, useState, type ReactNode } from "react"
 import { Trans, useTranslation } from "react-i18next"
 import { useNavigate } from "react-router-dom"
 import { Controller, useForm } from "react-hook-form"
@@ -490,6 +490,14 @@ export function CommodityFormDialog({
   // the server. Save draft is then offered on every step.
   const draftMode = serverMode && !!watch("draft")
 
+  // The step a resumed draft opens on, checked against the schema as it is
+  // when the draft opens. The schema follows the group's custom fields, and
+  // their arrival or a refetch must not run the reset below again: that
+  // would send the form back to its first step and drop the input.
+  const resumeStepOf = useEffectEvent((values: CommodityFormInput, base: CommodityFormInput) =>
+    resumeStep(schema, values, base)
+  )
+
   // Reset to defaults whenever the dialog opens. In create mode we try
   // to rehydrate from the localStorage draft key first (per #1383) — if
   // the user partially filled the form on a previous visit, the values
@@ -537,7 +545,7 @@ export function CommodityFormDialog({
       // A resumed draft opens on the step it still needs, with the steps
       // before it shown as visited. A step it opens on because of a field
       // the form refuses shows that field marked, as Next would.
-      const resume = openDraft ? resumeStep(schema, starting, defaults) : null
+      const resume = openDraft ? resumeStepOf(starting, defaults) : null
       const landing = resume ? resume.step : initialStep
       const reached = FORM_STEPS.indexOf(landing as FormStepKey)
       setStep(landing)
@@ -601,7 +609,6 @@ export function CommodityFormDialog({
     resumeLoading,
     resumed,
     serverMode,
-    schema,
     openingVisitedSteps,
     trigger,
   ])
