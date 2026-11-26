@@ -226,24 +226,31 @@ time. More in [Files & photos](../files-and-photos/).
 
 Each file has a title and tags. The title starts as the file name without its
 extension (`receipt` for `receipt.pdf`); type over it to name the file
-differently. The title is kept with the rest of the form, so a reload does not
-lose it.
+differently. In **Add item**, the files and their titles are kept with the rest
+of the form, so a reload does not lose them. Files you add while editing an item
+are not kept: after a reload, add them again.
 
 When you click **Add item**, the files are uploaded first, one at a time, and
 the item is created only once all of them are uploaded. The dialog stays open
 while this runs: the button counts the uploads (**Uploading 1 of 3…**), and
 each file shows whether it is uploading, uploaded, or failed. Until it ends you
-cannot change the form or close the dialog. If you leave the page meanwhile,
-for example with the browser's Back button, the upload stops after the file in
-progress and no item is created. The next time you open **Add item**, the form
-has what you entered, and **Add item** goes on from there without uploading a
-file twice.
+cannot change the form or close the dialog. If you leave the page while the
+files upload, for example with the browser's Back button, the upload stops
+after the file in progress and no item is created. The next time you open
+**Add item**, the form has what you entered, and **Add item** goes on from
+there with the files still missing. Once the files are uploaded and the item is
+being created, leaving the page does not stop it, and the item may be created
+anyway. Look for it in the items list before you add it again.
 
 - If a file fails to upload, no item is created. The dialog names the file,
   marks it **Upload failed**, and keeps everything you entered. The files that
   made it move to the **Saved with this draft** list. **Retry** goes on from
   there: it uploads only the files still missing, then creates the item. You
-  do not pick the files again, and nothing is uploaded twice.
+  do not pick the files again.
+- A file is uploaded a second time when its first upload reached the server
+  but the answer did not, for example over a dropped connection. The first
+  copy then stays on the [Files](../files-and-photos/) page without an item;
+  you can delete it there.
 - If the files are uploaded but the item cannot be created, the dialog says
   so and **Retry** creates it with the files already uploaded.
 - For a new item, the files wait in a draft until the item is created, so a

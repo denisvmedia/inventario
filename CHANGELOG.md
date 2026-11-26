@@ -420,18 +420,18 @@ when to add an entry and where it goes.
 
 ### Changed
 
-- **Add item** uploads the item's files to its draft before it creates the
-  item, and the dialog stays open while it runs; leaving the page stops it
-  after the file in progress, and no item is created. Each file shows whether
-  it is uploading, uploaded or failed, and the button counts the uploads. A
-  failed upload creates no item: the dialog names the file and keeps the
-  form, and **Retry** uploads only the files still missing before it creates
-  the item. On a saved draft, a failed **Add item** leaves the draft's values
-  as they were saved. Each staged file has an editable title, the file name
-  without its extension by default. **Discard** in the Add item dialog, and
-  closing the batch intake dialog before its batch is queued, move the files
-  they uploaded to the Trash instead of leaving them as standalone files;
-  **Discard** keeps a draft the user saved since
+- **Add item** uploads the item's files to its draft before it creates the item,
+  and the dialog stays open while it runs; leaving the page during the uploads
+  stops them after the file in progress, and no item is created. Each file shows
+  whether it is uploading, uploaded or failed, and the button counts the
+  uploads. A failed upload creates no item: the dialog names the file and keeps
+  the form, and **Retry** uploads only the files still missing before it creates
+  the item. On a saved draft, a failed **Add item** leaves the draft's values as
+  they were saved. Each staged file has an editable title, the file name without
+  its extension by default. **Discard** in the Add item dialog, and closing the
+  batch intake dialog before its batch is queued, move the files they uploaded
+  to the Trash instead of leaving them as standalone files; **Discard** keeps a
+  draft the user saved since
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - An item's cover photo is one of its photos: an image attached to the item
