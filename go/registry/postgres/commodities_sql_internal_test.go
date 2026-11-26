@@ -14,15 +14,20 @@ import (
 	"go.5x5.cz/inventario/registry"
 )
 
-var testListTables = commodityListTables{
-	commodities:       "commodities",
-	loans:             "commodity_loans",
-	customFieldValues: "commodity_custom_field_values",
-}
-
 // The list query is assembled from a dozen optional filters, and a wrong
 // placeholder or a dropped predicate reads as "no results" rather than as an
 // error. These pin the text so a change to the builder has to be deliberate.
+
+// testCommodityTables are the default table names, as the SQL in these
+// tests spells them.
+var testCommodityTables = commodityTables{
+	commodities:       "commodities",
+	loans:             "commodity_loans",
+	fileLinks:         "file_links",
+	files:             "files",
+	customFieldValues: "commodity_custom_field_values",
+}
+
 func TestCommodityListSQL(t *testing.T) {
 	lentOut := true
 	notLentOut := false
@@ -224,11 +229,29 @@ func TestCommodityListSQL(t *testing.T) {
 				"ORDER BY LOWER(name) ASC, id ASC LIMIT $3 OFFSET $4",
 			args: []any{false, "in_use", 24, 0},
 		},
+		{
+			name: "NoPhoto looks for a live photo link",
+			opts: registry.CommodityListOptions{NoPhoto: true},
+			want: selectPrefix + "draft = $1 AND status = $2 AND " +
+				"NOT EXISTS (SELECT 1 FROM file_links l JOIN files f ON f.id = l.file_id " +
+				"WHERE l.entity_id = commodities.id AND l.entity_type = $3 AND l.meta = $4 " +
+				"AND f.deleted_at IS NULL AND f.type = $5 AND f.category = $6) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $7 OFFSET $8",
+			args: []any{false, "in_use", "commodity", "images", "image", "images", 24, 0},
+		},
+		{
+			name: "unknown purchase price and date",
+			opts: registry.CommodityListOptions{NoPurchasePrice: true, NoPurchaseDate: true},
+			want: selectPrefix + "draft = $1 AND status = $2 AND original_price IS NULL AND " +
+				"(purchase_date IS NULL OR purchase_date = $3) " +
+				"ORDER BY LOWER(name) ASC, id ASC LIMIT $4 OFFSET $5",
+			args: []any{false, "in_use", "", 24, 0},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
 
-			where := commodityWhere(tc.opts, testListTables)
+			where := commodityWhere(tc.opts, testCommodityTables)
 			sb := newSelect().
 				Select("*", totalCountColumn).
 				From("commodities").
@@ -237,7 +260,7 @@ func TestCommodityListSQL(t *testing.T) {
 			if where != nil {
 				sb.AddWhereClause(where)
 			}
-			applyCommodityOrder(sb, tc.opts, testListTables)
+			applyCommodityOrder(sb, tc.opts, testCommodityTables)
 
 			got, args := sb.Build()
 			c.Check(got, qt.Equals, tc.want)
@@ -256,7 +279,7 @@ func TestCommodityCountSQLSharesThePredicate(t *testing.T) {
 		Search:   "drill",
 		Statuses: []models.CommodityStatus{"in_use"},
 	}
-	where := commodityWhere(opts, testListTables)
+	where := commodityWhere(opts, testCommodityTables)
 
 	countSB := newSelect().Select("COUNT(*)").From("commodities")
 	countSB.AddWhereClause(where)
@@ -273,7 +296,7 @@ func TestCommodityTagCountsSQL(t *testing.T) {
 
 	opts := registry.CommodityListOptions{Search: "drill"}
 	sb := commodityTagCountsSelect("commodities")
-	query, args := addWhere(sb, commodityWhere(opts, testListTables)).Build()
+	query, args := addWhere(sb, commodityWhere(opts, testCommodityTables)).Build()
 
 	c.Check(query, qt.Equals,
 		"SELECT t.slug, COUNT(DISTINCT commodities.id) FROM commodities "+

@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
 
 import {
+  fetchRecordAfter,
   listPageQuery,
   resolveListPosition,
   useListNavigation,
@@ -290,5 +291,56 @@ describe("useListNavigation", () => {
     await waitFor(() => expect(result.current.error).toBe(true))
     expect(result.current.loading).toBe(false)
     expect(result.current.next).toBeNull()
+  })
+})
+
+// The list as read after "d" (offset 3) was saved out of it.
+describe("fetchRecordAfter", () => {
+  function after(ids: string[], expected: string | null, pageSize = 3) {
+    const fetched: number[] = []
+    const source = makeSource({ ids }, 1, fetched, pageSize)
+    return fetchRecordAfter(newClient(), source, 3, { skipId: "d", expected }).then((r) => ({
+      r,
+      fetched,
+    }))
+  }
+
+  it("goes to the record that followed, now at the offset", async () => {
+    const { r, fetched } = await after(["a", "b", "c", "e", "f", "g"], "e")
+    expect(r).toEqual({ id: "e", page: 2 })
+    expect(fetched).toEqual([2])
+  })
+
+  it("finds the record that followed after earlier records left elsewhere", async () => {
+    // "a" left too: "e" moved up to offset 2, and offset 3 holds "f".
+    const { r } = await after(["b", "c", "e", "f", "g"], "e")
+    expect(r).toEqual({ id: "e", page: 1 })
+  })
+
+  it("goes to the remaining record when the offset is past the end", async () => {
+    // "a", "b" and "c" left too: only "e" is left, at offset 0.
+    const { r } = await after(["e"], "e")
+    expect(r).toEqual({ id: "e", page: 1 })
+  })
+
+  it("does not go back to a record before the one that left", async () => {
+    // "e" left elsewhere: offset 3 holds "f".
+    const { r } = await after(["a", "b", "c", "f", "g"], "e")
+    expect(r).toEqual({ id: "f", page: 2 })
+  })
+
+  it("ends when no record is left after the one that left", async () => {
+    const { r } = await after(["a", "b", "c"], "e")
+    expect(r).toBeNull()
+  })
+
+  it("reads the record at the offset when nothing followed", async () => {
+    const { r } = await after(["a", "b", "c", "e"], null)
+    expect(r).toEqual({ id: "e", page: 2 })
+  })
+
+  it("passes over the record that should have left when it is still there", async () => {
+    const { r } = await after(["a", "b", "c", "d", "e"], null)
+    expect(r).toEqual({ id: "e", page: 2 })
   })
 })

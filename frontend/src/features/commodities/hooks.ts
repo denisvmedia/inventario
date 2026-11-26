@@ -296,21 +296,29 @@ export function useCreateCommodity() {
   })
 }
 
-export function useUpdateCommodity(id: string) {
+// The item to write is named with each call, not when the hook is
+// rendered: a call that waits for a dialog or an upload still writes the
+// item it was started for after the page has moved to another one.
+export interface UpdateCommodityVars {
+  id: string
+  values: UpdateCommodityRequest
+}
+
+export function useUpdateCommodity() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const invalidateTags = useInvalidateTags()
   const invalidateSellers = useInvalidateSellers()
-  const detailKey = commodityKeys.detail(slug, id)
-  return useMutation<Commodity, Error, UpdateCommodityRequest>({
-    mutationFn: (req) => updateCommodity(id, req),
-    onSuccess: (commodity) => {
+  return useMutation<Commodity, Error, UpdateCommodityVars>({
+    mutationFn: ({ id, values }) => updateCommodity(id, values),
+    onSuccess: (commodity, { id }) => {
       // Patch the cached detail query in place so the page rerenders
       // immediately with the new values. The detail GET also returns
       // attached file lists in `meta`; preserve whatever was cached
       // there since the update endpoint's response doesn't repopulate
       // it.
+      const detailKey = commodityKeys.detail(slug, id)
       const cached = qc.getQueryData<{
         commodity: Commodity
         meta: CommodityMeta
@@ -349,14 +357,19 @@ export function useDeleteCommodity() {
 // query so the hero / cards re-render with the new cover without a
 // round-trip; the list cache is invalidated since the resolved cover
 // also surfaces under `meta.covers[id]`.
-export function useSetCommodityCover(id: string) {
+// As with useUpdateCommodity, the item is named with each call.
+export function useSetCommodityCover() {
   const qc = useQueryClient()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
-  const detailKey = commodityKeys.detail(slug, id)
-  return useMutation<{ commodity: Commodity; meta: CommodityMeta }, Error, string | null>({
-    mutationFn: (fileId) => setCommodityCover(id, fileId),
-    onSuccess: ({ commodity, meta }) => {
+  return useMutation<
+    { commodity: Commodity; meta: CommodityMeta },
+    Error,
+    { id: string; fileId: string | null }
+  >({
+    mutationFn: ({ id, fileId }) => setCommodityCover(id, fileId),
+    onSuccess: ({ commodity, meta }, { id }) => {
+      const detailKey = commodityKeys.detail(slug, id)
       const cached = qc.getQueryData<{ linkedItems?: Record<string, LinkedItemSummary> }>(detailKey)
       qc.setQueryData(detailKey, {
         commodity: { ...commodity, id },

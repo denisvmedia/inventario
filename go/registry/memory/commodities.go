@@ -598,19 +598,19 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 	if now.IsZero() {
 		now = time.Now()
 	}
-	// Lift OpenLoanCommodityIDs into a set ONCE per call so the per-row
-	// membership check is O(1) instead of O(len(openIDs)). slices.Contains
-	// in the inner loop would otherwise make filterCommodities quadratic
-	// on the open-loan count.
-	var openSet map[string]struct{}
-	if opts.LentOut != nil && len(opts.OpenLoanCommodityIDs) > 0 {
-		openSet = make(map[string]struct{}, len(opts.OpenLoanCommodityIDs))
-		for _, id := range opts.OpenLoanCommodityIDs {
-			openSet[id] = struct{}{}
-		}
+	// Lift OpenLoanCommodityIDs and PhotoCommodityIDs into sets ONCE per
+	// call so the per-row membership checks are O(1) instead of
+	// O(len(ids)). slices.Contains in the inner loop would otherwise make
+	// filterCommodities quadratic on the number of IDs.
+	var sets matchSets
+	if opts.LentOut != nil {
+		sets.open = idSet(opts.OpenLoanCommodityIDs)
+	}
+	if opts.NoPhoto {
+		sets.photos = idSet(opts.PhotoCommodityIDs)
 	}
 	for _, c := range in {
-		if c == nil || !commodityMatches(c, opts, terms, now, openSet) {
+		if c == nil || !commodityMatches(c, opts, terms, now, sets) {
 			continue
 		}
 		out = append(out, c)
@@ -661,7 +661,21 @@ func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOption
 	}
 }
 
-func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, terms []string, now time.Time, openSet map[string]struct{}) bool {
+// matchSets are the ID sets filterCommodities lifts out of the options.
+type matchSets struct {
+	open   map[string]struct{}
+	photos map[string]struct{}
+}
+
+func idSet(ids []string) map[string]struct{} {
+	out := make(map[string]struct{}, len(ids))
+	for _, id := range ids {
+		out[id] = struct{}{}
+	}
+	return out
+}
+
+func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, terms []string, now time.Time, sets matchSets) bool {
 	if !commodityMatchesDefaultView(c, opts) {
 		return false
 	}
@@ -698,7 +712,25 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 			return false
 		}
 	}
-	if !matchesLentOut(c, opts.LentOut, openSet) {
+	if !matchesLentOut(c, opts.LentOut, sets.open) {
+		return false
+	}
+	return commodityMatchesMissing(c, opts, sets.photos)
+}
+
+// commodityMatchesMissing applies the missing-data filters: no photo (by
+// the pre-resolved set of items with one), an unknown purchase price and an
+// unknown purchase date. A known zero price is a price (#2813).
+func commodityMatchesMissing(c *models.Commodity, opts registry.CommodityListOptions, photos map[string]struct{}) bool {
+	if opts.NoPhoto {
+		if _, has := photos[c.ID]; has {
+			return false
+		}
+	}
+	if opts.NoPurchasePrice && c.OriginalPrice != nil {
+		return false
+	}
+	if opts.NoPurchaseDate && pdateString(c.PurchaseDate) != "" {
 		return false
 	}
 	for _, f := range opts.CustomFields {

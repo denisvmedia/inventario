@@ -42,6 +42,9 @@ const (
 	ParamTagMode               = "tag_mode"
 	ParamTagsExclude           = "tags_exclude"
 	ParamNoTags                = "no_tags"
+	ParamNoPhoto               = "no_photo"
+	ParamNoPurchasePrice       = "no_purchase_price"
+	ParamNoPurchaseDate        = "no_purchase_date"
 	ParamTrashed               = "trashed"
 	ParamSort                  = "sort"
 )
@@ -85,6 +88,15 @@ type Query struct {
 	LentOut *bool
 	// Tags narrows by tag slugs; see registry.CommodityTagFilter.
 	Tags registry.CommodityTagFilter
+	// NoPhoto, NoPurchasePrice and NoPurchaseDate keep the items that lack
+	// a photo, a purchase price or a purchase date. An unknown value is
+	// missing whether or not the item was reviewed with it: the data keeps
+	// no "unknown on purpose" mark (#2813). A known zero price is a price.
+	// The photos of an item in Trash are in Trash too, so NoPhoto cannot be
+	// combined with Trashed.
+	NoPhoto         bool
+	NoPurchasePrice bool
+	NoPurchaseDate  bool
 	// CustomFields keeps the items that pass every condition (#2803); see
 	// ParamCustomField.
 	CustomFields []CustomFieldCondition
@@ -130,6 +142,7 @@ var filterParams = []string{
 	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
 	ParamLentOut, ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
+	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate,
 	ParamCustomField, ParamTrashed, ParamSort,
 }
 
@@ -158,7 +171,7 @@ func Parse(values url.Values, reserved ...string) (Query, error) {
 	p := parser{values: values, reserved: reserved}
 
 	steps := []func(*Query) error{
-		p.text, p.types, p.statuses, p.area, p.sellers, p.flags, p.warranty, p.tags, p.customFields, p.sort,
+		p.text, p.types, p.statuses, p.area, p.sellers, p.flags, p.missing, p.warranty, p.tags, p.customFields, p.sort,
 	}
 	for _, step := range steps {
 		if err := step(&q); err != nil {
@@ -354,6 +367,29 @@ func (p parser) flags(q *Query) error {
 	return nil
 }
 
+// missing reads the missing-data flags. It runs after flags, which reads
+// trashed.
+func (p parser) missing(q *Query) error {
+	for _, f := range []struct {
+		name string
+		dst  *bool
+	}{
+		{ParamNoPhoto, &q.NoPhoto},
+		{ParamNoPurchasePrice, &q.NoPurchasePrice},
+		{ParamNoPurchaseDate, &q.NoPurchaseDate},
+	} {
+		v, err := p.flag(f.name)
+		if err != nil {
+			return err
+		}
+		*f.dst = v != nil && *v
+	}
+	if q.Trashed && q.NoPhoto {
+		return paramError(ParamNoPhoto, "", "cannot be combined with trashed=true: the photos of an item in Trash are in Trash too")
+	}
+	return nil
+}
+
 func (p parser) warranty(q *Query) error {
 	for _, v := range p.list(ParamWarrantyStatus) {
 		s := registry.WarrantyStatusFilter(v)
@@ -465,9 +501,6 @@ func (q Query) Values() url.Values {
 	if q.AreaID != "" {
 		v.Set(ParamAreaID, q.AreaID)
 	}
-	if q.Unassigned {
-		v.Set(ParamUnassigned, "true")
-	}
 	for _, id := range q.SellerIDs {
 		v.Add(ParamSellerID, id)
 	}
@@ -492,14 +525,23 @@ func (q Query) Values() url.Values {
 	if len(q.Tags.Exclude) > 0 {
 		v.Set(ParamTagsExclude, strings.Join(q.Tags.Exclude, ","))
 	}
-	if q.Tags.Untagged {
-		v.Set(ParamNoTags, "true")
-	}
 	for _, cond := range q.CustomFields {
 		v.Add(ParamCustomField, cond.String())
 	}
-	if q.Trashed {
-		v.Set(ParamTrashed, "true")
+	for _, flag := range []struct {
+		param string
+		on    bool
+	}{
+		{ParamUnassigned, q.Unassigned},
+		{ParamNoTags, q.Tags.Untagged},
+		{ParamNoPhoto, q.NoPhoto},
+		{ParamNoPurchasePrice, q.NoPurchasePrice},
+		{ParamNoPurchaseDate, q.NoPurchaseDate},
+		{ParamTrashed, q.Trashed},
+	} {
+		if flag.on {
+			v.Set(flag.param, "true")
+		}
 	}
 	if q.SortField != "" {
 		sort := string(q.SortField)
@@ -528,6 +570,9 @@ func (q Query) ListOptions() registry.CommodityListOptions {
 		WarrantyStatuses:      q.WarrantyStatuses,
 		WarrantyExpiresBefore: q.WarrantyExpiresBefore,
 		LentOut:               q.LentOut,
+		NoPhoto:               q.NoPhoto,
+		NoPurchasePrice:       q.NoPurchasePrice,
+		NoPurchaseDate:        q.NoPurchaseDate,
 		Trashed:               q.Trashed,
 	}
 }

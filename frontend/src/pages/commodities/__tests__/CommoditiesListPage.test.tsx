@@ -576,6 +576,43 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("filters by missing details from the Missing menu and keeps them in the URL (#2794)", async () => {
+    const user = userEvent.setup()
+    const queries: string[] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(apiUrl(`/g/${SLUG}/commodities`), ({ request }) => {
+        queries.push(new URL(request.url).search)
+        return HttpResponse.json({ data: [commodityRes("c1", { name: "Item" })] })
+      })
+    )
+    renderList()
+    await screen.findByTestId("commodity-card")
+
+    const trigger = screen.getByTestId("commodities-filter-missing")
+    await user.click(trigger)
+    await user.click(await screen.findByTestId("commodities-filter-missing-noPhoto"))
+    await waitFor(() => {
+      expect(queries.some((q) => /[?&]no_photo=true\b/.test(q))).toBe(true)
+    })
+    await user.click(trigger)
+    await user.click(await screen.findByTestId("commodities-filter-missing-noPurchaseDate"))
+    await waitFor(() => {
+      const tail = queries[queries.length - 1] ?? ""
+      expect(tail).toMatch(/[?&]no_photo=true\b/)
+      expect(tail).toMatch(/[?&]no_purchase_date=true\b/)
+      expect(tail).not.toMatch(/no_purchase_price/)
+    })
+    expect(trigger).toHaveTextContent("2")
+
+    await user.click(screen.getByTestId("commodities-clear-filters"))
+    await waitFor(() => {
+      const tail = queries[queries.length - 1] ?? ""
+      expect(tail).not.toMatch(/no_photo|no_purchase_date/)
+    })
+  })
+
   it("clears all active filters via Clear filters", async () => {
     const user = userEvent.setup()
     server.use(

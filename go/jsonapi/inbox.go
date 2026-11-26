@@ -85,3 +85,31 @@ func (*InboxCountResponse) Render(_ http.ResponseWriter, r *http.Request) error 
 	render.Status(r, http.StatusOK)
 	return nil
 }
+
+// InboxCheck is an optional quality check next to the inbox: the items that
+// lack one piece of information. It is not part of the inbox or its counts.
+// Query is the item query of the check, in the parameter names of
+// GET /commodities, and Count is the total that list reports for it.
+type InboxCheck struct {
+	Key   string `json:"key" example:"no_photo" enums:"no_location,no_photo,no_purchase_price,no_purchase_date,untagged"`
+	Query string `json:"query" example:"include_inactive=false&no_photo=true"`
+	Count int    `json:"count" example:"4"`
+}
+
+// InboxChecksResponse is the payload of GET /inbox/checks.
+type InboxChecksResponse struct {
+	Data []InboxCheck `json:"data"`
+}
+
+// NewInboxChecksResponse builds the response of GET /inbox/checks.
+func NewInboxChecksResponse(checks []InboxCheck) *InboxChecksResponse {
+	if checks == nil {
+		checks = []InboxCheck{}
+	}
+	return &InboxChecksResponse{Data: checks}
+}
+
+func (*InboxChecksResponse) Render(_ http.ResponseWriter, r *http.Request) error {
+	render.Status(r, http.StatusOK)
+	return nil
+}
