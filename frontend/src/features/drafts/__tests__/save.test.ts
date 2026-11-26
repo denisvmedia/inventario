@@ -315,6 +315,67 @@ describe("saveDraftWithFiles", () => {
     expect(revisionConflict(err)).toEqual({ revision: 4 })
     expect(fake.drafts[0].values).toEqual({ name: "A" })
   })
+
+  it("adds only the files with keepValues, leaving the draft's values and revision", async () => {
+    const fake = draftHandlers.backend(SLUG, [{ id: "d1", values: { name: "A" }, revision: 2 }])
+    server.use(...fake.handlers)
+    const result = await saveDraftWithFiles({
+      draft: { id: "d1", revision: 2 },
+      clientKey: "form:keep",
+      values: { name: "B" },
+      keepValues: true,
+      pendingFiles: [pending("front.png")],
+    })
+    expect(result.draft).toMatchObject({ id: "d1", revision: 2 })
+    expect(fake.drafts[0]).toMatchObject({ revision: 2, values: { name: "A" } })
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: "d1" }),
+    ])
+  })
+
+  it("adds no file with keepValues to a draft saved or finished elsewhere", async () => {
+    const fake = draftHandlers.backend(SLUG, [
+      { id: "d1", values: { name: "A" }, revision: 3 },
+      { id: "d2", values: {}, status: "promoted", promoted_commodity_id: "item-9" },
+    ])
+    server.use(...fake.handlers)
+    const save = (id: string) =>
+      saveDraftWithFiles({
+        draft: { id, revision: 2 },
+        clientKey: "form:keep",
+        values: { name: "B" },
+        keepValues: true,
+        pendingFiles: [pending("front.png")],
+      }).catch((e: unknown) => e)
+    expect(revisionConflict(await save("d1"))).toEqual({ revision: 3 })
+    expect(promotedConflict(await save("d2"))).toEqual({ commodityId: "item-9" })
+    expect(discardedConflict(await save("d-gone"))).toBe(true)
+    expect(fake.uploads).toBe(0)
+  })
+
+  it("names the draft before any file is sent, and stops before the next file when asked", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...fake.handlers)
+    const events: string[] = []
+    let stop = false
+    const result = await saveDraftWithFiles({
+      draft: null,
+      clientKey: "form:stop",
+      values: { name: "Drill" },
+      pendingFiles: [pending("a.png"), pending("b.png")],
+      onDraft: (draft) => events.push(`draft ${draft.id}`),
+      onFileStart: (entry) => events.push(`start ${entry.file.name}`),
+      onFileSaved: (entry) => {
+        events.push(`saved ${entry.file.name}`)
+        stop = true
+      },
+      shouldStop: () => stop,
+    })
+    expect(events).toEqual([`draft ${result.draft.id}`, "start a.png", "saved a.png"])
+    expect(result.stopped).toBe(true)
+    expect(result.failedFiles).toEqual([])
+    expect(fake.uploads).toBe(1)
+  })
 })
 
 describe("promoteDraft", () => {

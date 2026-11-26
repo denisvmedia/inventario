@@ -44,8 +44,19 @@ export interface PendingFile {
   uploadedFileId?: string
 }
 
-// The longest title the server takes for a file.
+// The longest title the server takes for a file, in characters (Unicode
+// code points, not UTF-16 units).
 export const FILE_TITLE_MAX_LENGTH = 255
+
+// capFileTitle cuts a title to the longest the server takes. It counts code
+// points, as the server does, so a cut never splits a character that takes
+// two UTF-16 units.
+export function capFileTitle(title: string): string {
+  const chars = Array.from(title)
+  return chars.length > FILE_TITLE_MAX_LENGTH
+    ? chars.slice(0, FILE_TITLE_MAX_LENGTH).join("")
+    : title
+}
 
 // defaultFileTitle is the title a staged file starts with: its name without
 // the extension.
@@ -57,8 +68,7 @@ export function defaultFileTitle(file: File): string {
 // pendingFileTitle is the title a staged file is saved with: the one the
 // user typed, or the default when the field is blank.
 export function pendingFileTitle(entry: PendingFile): string {
-  const title = entry.title?.trim() || defaultFileTitle(entry.file)
-  return title.slice(0, FILE_TITLE_MAX_LENGTH)
+  return capFileTitle(entry.title?.trim() || defaultFileTitle(entry.file))
 }
 
 // placePendingFile gives an uploaded file the staged title and tags, then

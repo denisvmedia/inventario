@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 import { useTranslation } from "react-i18next"
+import { useQueryClient, type QueryClient } from "@tanstack/react-query"
 import { AlertCircle, CheckCircle2, FileText, Loader2, Plus, X } from "lucide-react"
 
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
@@ -26,6 +27,9 @@ import {
 } from "@/features/intake/api"
 import { useInvalidateIntake } from "@/features/intake/hooks"
 import { trashUnlinkedFile } from "@/features/files/api"
+import { fileKeys } from "@/features/files/keys"
+import { storageKeys } from "@/features/storage/keys"
+import { trashKeys } from "@/features/trash/keys"
 import { formatBytes, formatList } from "@/lib/intl"
 import { parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
@@ -119,6 +123,7 @@ function IntakeUploadForm({
 }: IntakeUploadDialogProps) {
   const { t } = useTranslation()
   const invalidate = useInvalidateIntake()
+  const queryClient = useQueryClient()
   const [files, setFiles] = useState<StagedFile[]>(() => stage(initialFiles))
   const [oneItem, setOneItem] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -141,10 +146,10 @@ function IntakeUploadForm({
     return () => {
       mounted.current = false
       void (running.current ?? Promise.resolve()).finally(() =>
-        trashUploads(target.current, [...leftovers]).then(() => leftovers.clear())
+        trashUploads(queryClient, target.current, [...leftovers]).then(() => leftovers.clear())
       )
     }
-  }, [])
+  }, [queryClient])
 
   const accepted = new Set(limits.acceptedMimeTypes)
   const maxFiles = oneItem
@@ -240,7 +245,7 @@ function IntakeUploadForm({
       for (const id of ids) unqueued.current.delete(id)
       const spare = [...unqueued.current]
       unqueued.current.clear()
-      void trashUploads(dest, spare)
+      void trashUploads(queryClient, dest, spare)
       await invalidate()
       if (mounted.current) onQueued(session)
     } catch (err) {
@@ -442,12 +447,20 @@ function IntakeUploadForm({
 
 // trashUploads moves files the dialog uploaded but no batch holds to Trash.
 // A file the batch holds after all (a queue request whose answer was lost)
-// is linked to it and stays.
-async function trashUploads(target: IntakeUploadTarget | null, ids: string[]): Promise<void> {
+// is linked to it and stays. The target's group is known by its paths only,
+// so the Trash, files and storage of every group are read again.
+async function trashUploads(
+  queryClient: QueryClient,
+  target: IntakeUploadTarget | null,
+  ids: string[]
+): Promise<void> {
   if (!target || ids.length === 0) return
   const results = await Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, target.filesPath)))
   const failed = results.filter((r) => r.status === "rejected").length
   if (failed > 0) console.warn(`[intake] ${failed} uploaded files could not be moved to Trash`)
+  void queryClient.invalidateQueries({ queryKey: trashKeys.all })
+  void queryClient.invalidateQueries({ queryKey: fileKeys.all })
+  void queryClient.invalidateQueries({ queryKey: storageKeys.all })
 }
 
 function FileStatusIcon({ status, rejected }: { status: StagedFile["status"]; rejected: boolean }) {

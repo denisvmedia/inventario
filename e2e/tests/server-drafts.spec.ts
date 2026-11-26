@@ -12,6 +12,8 @@
  *      dialog.
  *   4. A failed upload adds no item; Retry uploads what is missing and
  *      then adds the item with every file.
+ *   5. Discard after a failed Add item deletes the draft it made and moves
+ *      the files it uploaded to Trash.
  *
  * Names carry a suffix unique to the run, so rows from parallel specs in
  * the same group do not match.
@@ -77,6 +79,24 @@ async function itemFileCount(
   itemId: string,
 ): Promise<number> {
   return (await itemFiles(request, auth, slug, itemId)).length;
+}
+
+interface TrashedFileRow {
+  id: string;
+  attributes: { title: string };
+}
+
+async function trashedFiles(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+): Promise<TrashedFileRow[]> {
+  const resp = await request.get(`/api/v1/g/${encodeURIComponent(slug)}/trash/files?per_page=100`, {
+    headers: headers(auth),
+  });
+  expect(resp.ok(), `GET /trash/files → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as { data: TrashedFileRow[] };
+  return body.data;
 }
 
 // pickType picks the item type on Basics.
@@ -293,5 +313,54 @@ test.describe("Server drafts (#2812)", () => {
     itemIds.push(itemId);
     expect(await itemFileCount(request, auth, slug, itemId)).toBe(2);
     expect((await listDrafts(request, auth, slug)).some((d) => d.title === name)).toBe(false);
+  });
+
+  test("Discard after a failed Add item moves its uploads to Trash", async ({ page, request }) => {
+    const name = `Kettle ${run}`;
+    let failed = false;
+    // The first attach fails: image.jpg is uploaded but on nothing, while
+    // invoice.pdf reaches the draft Add item made.
+    await page.route(`**/api/v1/g/${slug}/files/*/links`, async (route) => {
+      if (route.request().method() !== "POST" || failed) return route.continue();
+      failed = true;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/vnd.api+json",
+        body: JSON.stringify({ errors: [{ status: "500", title: "Internal Server Error" }] }),
+      });
+    });
+
+    await openNewItemForm(page, slug);
+    await page.locator("#commodity-name").fill(name);
+    await pickType(page, /Equipment/i);
+    await walkToFiles(page);
+    await page
+      .locator('[data-testid="commodity-files-dropzone"] input[type="file"]')
+      .setInputFiles(["fixtures/files/image.jpg", "fixtures/files/invoice.pdf"]);
+    await page.getByLabel("Title of image.jpg").fill(`Front view ${run}`);
+    await page.getByLabel("Title of invoice.pdf").fill(`Invoice ${run}`);
+    await page.getByTestId("commodity-form-submit").click();
+    await expect(page.getByTestId("draft-save-error")).toContainText("image.jpg");
+    expect(failed).toBe(true);
+    expect((await listDrafts(request, auth, slug)).filter((d) => d.title === name)).toHaveLength(1);
+
+    await page.getByTestId("commodity-form-cancel").click();
+    await page.getByTestId("commodity-form-close-confirm-discard").click();
+    await expect(page.getByTestId("commodity-form-files-step")).toBeHidden();
+
+    const ours = async () =>
+      (await trashedFiles(request, auth, slug)).filter((f) => f.attributes.title.includes(run));
+    await expect
+      .poll(async () => (await ours()).map((f) => f.attributes.title).sort())
+      .toEqual([`Front view ${run}`, `Invoice ${run}`].sort());
+    expect((await listDrafts(request, auth, slug)).some((d) => d.title === name)).toBe(false);
+
+    for (const f of await ours()) {
+      await request
+        .delete(`/api/v1/g/${encodeURIComponent(slug)}/trash/files/${encodeURIComponent(f.id)}`, {
+          headers: headers(auth),
+        })
+        .catch(() => {});
+    }
   });
 });

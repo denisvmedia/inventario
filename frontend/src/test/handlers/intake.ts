@@ -72,6 +72,10 @@ export interface FakeIntakeBackend {
   failCreate: number | null
   // Ids of the files DELETE /files/{id} moved to Trash, in order.
   trashed: string[]
+  // How many uploads were sent, answered or not.
+  uploadRequests: number
+  // When set, each upload waits for it before the server answers.
+  holdUploads: Promise<void> | null
   // How long each upload and each candidate review takes, in ms.
   uploadDelayMs: number
   reviewDelayMs: number
@@ -175,6 +179,8 @@ export function backend(
     loseCreate: false,
     failCreate: null,
     trashed: [],
+    uploadRequests: 0,
+    holdUploads: null,
     uploadDelayMs: 0,
     reviewDelayMs: 0,
     refuseRescan: null,
@@ -213,6 +219,8 @@ export function backend(
       return s ? detail(s) : notFound()
     }),
     http.post(apiUrl(`${base}/uploads/file`), async () => {
+      state.uploadRequests++
+      if (state.holdUploads) await state.holdUploads
       if (state.uploadDelayMs > 0) await delay(state.uploadDelayMs)
       state.uploads++
       const id = `file-${++seq}`

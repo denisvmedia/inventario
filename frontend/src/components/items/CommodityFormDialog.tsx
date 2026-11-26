@@ -48,6 +48,7 @@ import { Textarea } from "@/components/ui/textarea"
 import { TagsInput } from "@/components/files/TagsInput"
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip"
 import { applyServerFieldErrors } from "@/lib/form-errors"
+import { HttpError } from "@/lib/http"
 import { clearPendingFiles, loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import {
   type ClassifiedServerError,
@@ -61,9 +62,9 @@ import { useQueryClient } from "@tanstack/react-query"
 import { categoryFromMime } from "@/features/files/constants"
 import {
   buildDefaults,
+  capFileTitle,
   clearDraft,
   defaultFileTitle,
-  FILE_TITLE_MAX_LENGTH,
   mergePendingFiles,
   readDraft,
   toRequest,
@@ -437,6 +438,9 @@ export function CommodityFormDialog({
   const addingRef = useRef(false)
   // Discard is moving this form's uploads to Trash.
   const [discarding, setDiscarding] = useState(false)
+  // The dialog is open and mounted. Add item stops when it closes: browser
+  // Back can close the dialog or leave the page while the save runs.
+  const liveRef = useRef(false)
   // A seller name the AI scan read that matches none of the group's sellers
   // (#2804). The Purchase step offers to create it; nothing is created
   // before the user agrees.
@@ -668,6 +672,13 @@ export function CommodityFormDialog({
     trigger,
   ])
 
+  useEffect(() => {
+    liveRef.current = open
+    return () => {
+      liveRef.current = false
+    }
+  }, [open])
+
   // Mark each form step visited the moment we land on it. The
   // segmented stepper uses this to decide whether a forward jump is
   // allowed (only previously-seen surfaces are clickable). Also
@@ -820,11 +831,12 @@ export function CommodityFormDialog({
     // files this form uploaded but never attached go to Trash (#1626).
     setDiscarding(true)
     const itemDraft = localKey ? itemDraftOf(localKey) : null
-    const failed = await cleanUpUploads(itemDraft, uploadedLeftovers(pendingFiles))
+    const outcome = await cleanUpUploads(itemDraft, uploadedLeftovers(pendingFiles))
     setDiscarding(false)
-    if (failed.draft) toast.error(t("commodities:drafts.discardFailed"))
-    if (failed.files > 0) {
-      toast.error(t("commodities:form.leftoverFilesFailed", { count: failed.files }))
+    if (outcome.added) toast.info(t("commodities:form.discardAlreadyAdded"))
+    if (outcome.draftFailed) toast.error(t("commodities:drafts.discardFailed"))
+    if (outcome.failedFiles > 0) {
+      toast.error(t("commodities:form.leftoverFilesFailed", { count: outcome.failedFiles }))
     }
     if (localKey) {
       clearDraft(localKey)
@@ -838,28 +850,40 @@ export function CommodityFormDialog({
 
   // cleanUpUploads discards the draft Add item made for this form and moves
   // the given uploads to Trash when nothing links them. Discarding a draft
-  // sends its files that nothing else uses to Trash as well. It resolves
-  // what it could not clean up.
+  // sends its files that nothing else uses to Trash as well. The draft is
+  // discarded only while it is open at the revision this form saved: one
+  // the user saved since, from the Inbox or another device, is theirs, and
+  // one that became an item is left as it is. It resolves what happened.
   async function cleanUpUploads(
     itemDraft: string | null,
     fileIds: string[]
-  ): Promise<{ draft: boolean; files: number }> {
-    const failed = { draft: false, files: 0 }
-    if (!itemDraft && fileIds.length === 0) return failed
+  ): Promise<{ added: boolean; draftFailed: boolean; failedFiles: number }> {
+    const outcome = { added: false, draftFailed: false, failedFiles: 0 }
+    if (!itemDraft && fileIds.length === 0) return outcome
     if (itemDraft) {
       try {
-        await discardDraft(itemDraft)
-      } catch {
-        failed.draft = true
+        const current = await getDraft(itemDraft)
+        if (current.status === "promoted") outcome.added = true
+        else if (
+          current.status === "open" &&
+          localKey &&
+          current.revision === readBaseRevision(localKey)
+        ) {
+          await discardDraft(itemDraft)
+        }
+      } catch (err) {
+        // A draft that is gone has nothing left to discard.
+        if (!(err instanceof HttpError && err.status === 404)) outcome.draftFailed = true
       }
     }
     const results = await Promise.allSettled(fileIds.map((id) => trashUnlinkedFile(id)))
-    failed.files = results.filter((r) => r.status === "rejected").length
+    outcome.failedFiles = results.filter((r) => r.status === "rejected").length
     const slug = activeSlug ?? ""
     void invalidateDrafts()
     void queryClient.invalidateQueries({ queryKey: trashKeys.group(slug) })
+    void queryClient.invalidateQueries({ queryKey: fileKeys.group(slug) })
     void queryClient.invalidateQueries({ queryKey: storageKeys.group(slug) })
-    return failed
+    return outcome
   }
 
   // removePendingFile takes a staged file off the form. A file an earlier
@@ -934,8 +958,19 @@ export function CommodityFormDialog({
         clientKey,
         lastSavedRevision: readBaseRevision(localKey) ?? 1,
         values,
+        // Add item on a draft the form already has only adds the files: the
+        // promotion carries the values, so a failed Add item leaves a draft
+        // the user saved as they saved it.
+        keepValues: !!opts.forItem && !!target,
         pendingFiles: staged,
         carryFilesFrom: carryFromRef.current,
+        // The draft is known before any file is sent, so a reload or a
+        // closed dialog in the middle of the uploads still finds it.
+        onDraft: (draft) => {
+          writeBaseRevision(localKey, draft.revision)
+          if (opts.forItem && firstSave) rememberItemDraft(localKey, draft.id)
+        },
+        shouldStop: opts.forItem ? () => !liveRef.current : undefined,
         onFileStart: (entry) => mark(entry.id, "uploading"),
         onFileUploaded: (entry, fileId) =>
           setPendingFiles((prev) =>
@@ -954,11 +989,17 @@ export function CommodityFormDialog({
         savedEntries,
       }
       setServerDraft({ id: saved.id, revision: saved.revision })
-      writeBaseRevision(localKey, result.draft.revision)
       if (!opts.forItem) forgetItemDraft(localKey)
-      else if (firstSave) rememberItemDraft(localKey, saved.id)
       void invalidateDrafts()
       if (result.failedCarried.length === 0) carryFromRef.current = null
+      if (opts.forItem && (result.stopped || !liveRef.current)) {
+        // The dialog closed while Add item ran: no item is made. The draft
+        // keeps the files that reached it, the local recovery keeps the
+        // form, and the next opening adds the item from there.
+        setFileStatus({})
+        setDraftSave({ kind: "idle" })
+        return null
+      }
       const failedNames = [
         ...result.failedCarried,
         ...result.failedFiles.map((f) => f.entry.file.name),
@@ -995,11 +1036,19 @@ export function CommodityFormDialog({
       // for the next attempt, which reuses what this one uploaded.
       setFileStatus({})
       // Add item retried after a promotion whose answer was lost finds its
-      // draft already an item. The promotion that follows tells whether this
-      // form made it.
-      if (opts.forItem && target && promotedConflict(err)) {
+      // draft already an item, also after a reload. The promotion that
+      // follows tells whether this form made it: one with this form's key
+      // answers with the item.
+      const promotedId =
+        (err instanceof DraftStateError ? err.meta.draft_id : undefined) || target?.id
+      if (opts.forItem && promotedId && promotedConflict(err)) {
         setDraftSave({ kind: "idle" })
-        return { id: target.id, revision: target.revision, savedEntries: [], promoted: true }
+        return {
+          id: promotedId,
+          revision: target?.revision ?? readBaseRevision(localKey) ?? 1,
+          savedEntries: [],
+          promoted: true,
+        }
       }
       if (opts.forItem) showDraftRefusal(err, t("commodities:form.addFailed"), true)
       else showDraftRefusal(err, t("commodities:drafts.saveFailed"))
@@ -1130,7 +1179,7 @@ export function CommodityFormDialog({
         // that fails stops here with nothing created: the alert names it,
         // and Retry runs this again from where it stopped.
         saved = await saveToServer({ forItem: true })
-        if (!saved) return
+        if (!saved || !liveRef.current) return
       }
       const target = saved ?? serverDraft
       // A promotion carries the slot's promotion key, the same for every
@@ -2909,8 +2958,11 @@ function PendingFileRow({
           id={titleId}
           value={entry.title ?? defaultTitle}
           placeholder={defaultTitle}
-          maxLength={FILE_TITLE_MAX_LENGTH}
-          onChange={(e) => onTitleChange(e.target.value)}
+          onChange={(e) => onTitleChange(capFileTitle(e.target.value))}
+          onKeyDown={(e) => {
+            // Enter in a file title would submit the whole form.
+            if (e.key === "Enter") e.preventDefault()
+          }}
           className="h-7 px-1.5 text-xs md:text-xs"
           data-testid={`commodity-files-title-${entry.id}`}
         />

@@ -1,4 +1,5 @@
 import { useState } from "react"
+import { QueryClient } from "@tanstack/react-query"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
@@ -8,6 +9,7 @@ import { IntakeUploadDialog } from "@/components/items/IntakeUploadDialog"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { DEFAULT_LIMITS } from "@/test/handlers/intake"
+import { trashKeys } from "@/features/trash/keys"
 import type { IntakeLimits, IntakeSessionDetail } from "@/features/intake/api"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
@@ -184,8 +186,15 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
     )
   }
 
+  // renderClosable returns a check that the dialog has finished moving its
+  // uploads to Trash: it reads the Trash again once it is done.
   function renderClosable(files: File[], l?: IntakeLimits) {
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
+    })
+    const invalidate = vi.spyOn(queryClient, "invalidateQueries")
     renderWithProviders({
+      queryClient,
       initialPath: `/g/${SLUG}/commodities`,
       routes: (
         <Route
@@ -200,6 +209,8 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
         />
       ),
     })
+    const trashRead = () => expect(invalidate).toHaveBeenCalledWith({ queryKey: trashKeys.all })
+    return { trashRead }
   }
 
   it("moves the uploads to Trash when the dialog is closed after the batch failed", async () => {
@@ -226,7 +237,8 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
       expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
     )
     expect(fake.sessions).toHaveLength(1)
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The batch holds both files before the dialog closes, so nothing is
+    // left for the dialog to move to Trash.
     expect(fake.trashed).toEqual([])
   })
 
@@ -235,15 +247,41 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
     fake.loseCreate = true
     server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
     const user = userEvent.setup()
-    renderClosable([jpg("a.jpg")])
+    const { trashRead } = renderClosable([jpg("a.jpg")])
     await user.click(await screen.findByTestId("intake-upload-submit"))
     expect(await screen.findByTestId("intake-upload-error")).toBeInTheDocument()
     await user.click(screen.getByRole("button", { name: "Cancel" }))
     await waitFor(() =>
       expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
     )
-    await new Promise((resolve) => setTimeout(resolve, 50))
+    // The dialog looked at the file, found the batch holding it, and left it.
+    await waitFor(trashRead)
     expect(fake.trashed).toEqual([])
+  })
+
+  it("stops when the dialog is closed during an upload and moves that upload to Trash", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    let release = () => {}
+    fake.holdUploads = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { trashRead } = renderClosable([jpg("a.jpg"), jpg("b.jpg")])
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    await waitFor(() => expect(fake.uploadRequests).toBe(1))
+    await user.keyboard("{Escape}")
+    await waitFor(() =>
+      expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
+    )
+    // The upload in flight ends first; the dialog then sends nothing more,
+    // queues nothing, and moves that one upload to Trash.
+    expect(fake.trashed).toEqual([])
+    release()
+    await waitFor(trashRead)
+    expect(fake.trashed).toEqual(["file-1"])
+    expect(fake.uploadRequests).toBe(1)
+    expect(fake.sessions).toHaveLength(0)
   })
 
   it("moves an upload the batch left out to Trash", async () => {

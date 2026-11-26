@@ -59,6 +59,9 @@ export function CommodityCreateModalRoute() {
   // late `navigate(-1)` could fire after the user has already moved
   // somewhere else.
   const navigateTimerRef = useRef<number | null>(null)
+  // A request that ends after the modal unmounted (browser Back while Add
+  // item runs) must not move the user from wherever they went.
+  const mountedRef = useRef(false)
   function clearNavigateTimer() {
     if (navigateTimerRef.current !== null) {
       window.clearTimeout(navigateTimerRef.current)
@@ -67,12 +70,19 @@ export function CommodityCreateModalRoute() {
   }
   function scheduleNavigate(fn: () => void) {
     clearNavigateTimer()
+    if (!mountedRef.current) return
     navigateTimerRef.current = window.setTimeout(() => {
       navigateTimerRef.current = null
       fn()
     }, DIALOG_CLOSE_ANIMATION_MS)
   }
-  useEffect(() => clearNavigateTimer, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearNavigateTimer()
+    }
+  }, [])
 
   function close() {
     setOpen(false)

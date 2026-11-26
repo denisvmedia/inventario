@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { Route, useLocation } from "react-router-dom"
-import { act, fireEvent, screen, waitFor, within } from "@testing-library/react"
+import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
@@ -9,6 +9,7 @@ import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { promoteDraft } from "@/features/drafts/api"
 import type { DraftRef } from "@/features/drafts/hooks"
+import { itemDraftOf } from "@/features/drafts/save"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -22,6 +23,7 @@ import {
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
 import { renderWithProviders } from "@/test/render"
+import { toastSpies } from "@/test/global-mocks"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -80,6 +82,51 @@ function renderForm(
     ),
   })
   return { onSubmit, onOpenChange }
+}
+
+// renderClosableForm renders a new-item form whose host can close and open
+// it, as browser Back does on the Items page.
+function renderClosableForm(
+  onSubmit: (values: CreateCommodityRequest, draft?: DraftRef) => Promise<unknown>
+) {
+  setAccessToken("good-token")
+  const host = { setOpen: (_open: boolean) => {} }
+  function Host() {
+    const [open, setOpenState] = useState(true)
+    useEffect(() => {
+      host.setOpen = setOpenState
+    }, [])
+    return (
+      <CommodityFormDialog
+        open={open}
+        onOpenChange={setOpenState}
+        mode="create"
+        areas={areas}
+        locations={locations}
+        defaultCurrency="USD"
+        onSubmit={onSubmit as never}
+        draftKey={DRAFT_KEY}
+        serverDrafts
+      />
+    )
+  }
+  renderWithProviders({
+    initialPath: `/g/${SLUG}/commodities/new`,
+    routes: (
+      <Route
+        path="/g/:groupSlug/commodities/new"
+        element={
+          <GroupProvider>
+            <Host />
+          </GroupProvider>
+        }
+      />
+    ),
+  })
+  return {
+    close: () => act(() => host.setOpen(false)),
+    reopen: () => act(() => host.setOpen(true)),
+  }
 }
 
 async function fillManually(user: ReturnType<typeof userEvent.setup>) {
@@ -269,14 +316,15 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Couch", type: "furniture", draft: false })
-    // Add item saves the draft first (#1626), so the promotion is based on
-    // that save. It names its key, kept for a retry until it succeeds.
+    // The promotion carries the values and the revision the form loaded;
+    // Add item leaves the saved draft as it was (#1626). It names its key,
+    // kept for a retry until it succeeds.
     expect(draft).toEqual({
       id: "d1",
-      revision: 4,
+      revision: 3,
       promotionKey: expect.stringMatching(/^promote:/),
     })
-    expect(fake.drafts[0].values).toMatchObject({ name: "Couch", draft: false })
+    expect(fake.drafts[0]).toMatchObject({ revision: 3, values: { draft: true } })
   })
 
   it("saves the custom field values typed in the form with the draft", async () => {
@@ -340,8 +388,7 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values.custom_fields).toEqual({ "cf-plate": "AB 123" })
-    // Add item saved the draft before promoting it.
-    expect(draft).toMatchObject({ id: "d1", revision: 3 })
+    expect(draft).toMatchObject({ id: "d1", revision: 2 })
   })
 
   it("offers to create the seller a batch intake draft names", async () => {
@@ -408,8 +455,7 @@ describe("<CommodityFormDialog /> server drafts", () => {
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
     const [values, draft] = (onSubmit as ReturnType<typeof vi.fn>).mock.calls[0]
     expect(values).toMatchObject({ name: "Drill", seller_id: "s-gone" })
-    // Add item saved the draft before promoting it.
-    expect(draft).toMatchObject({ id: "d1", revision: 3 })
+    expect(draft).toMatchObject({ id: "d1", revision: 2 })
     // The form goes back to Purchase, where the field still says why.
     expect(await screen.findByTestId("commodity-seller-gone")).toBeInTheDocument()
   })
@@ -1164,5 +1210,227 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
     await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
     expect(fake.trashed).toEqual([])
     expect(fake.files).toHaveLength(1)
+  })
+
+  // failNewItem runs Add item on a new form whose first file fails to
+  // upload: the draft Add item made holds label.png, and no item exists.
+  async function failNewItem(user: ReturnType<typeof userEvent.setup>) {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const rendered = renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    expect(fake.drafts).toHaveLength(1)
+    return { fake, ...rendered }
+  }
+
+  async function discard(user: ReturnType<typeof userEvent.setup>) {
+    await user.click(screen.getByTestId("commodity-form-cancel"))
+    await user.click(await screen.findByTestId("commodity-form-close-confirm-discard"))
+  }
+
+  it("keeps the draft a failed Add item made once the user saved it elsewhere", async () => {
+    const user = userEvent.setup()
+    const { fake, onOpenChange } = await failNewItem(user)
+    // The user opened the draft from the Inbox and saved it there.
+    fake.drafts[0].revision = 2
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(1)
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: fake.drafts[0].id }),
+    ])
+    expect(toastSpies.error).not.toHaveBeenCalled()
+  })
+
+  it("says the item was added when the draft became one elsewhere before Discard", async () => {
+    const user = userEvent.setup()
+    const { fake, onOpenChange } = await failNewItem(user)
+    fake.drafts[0].status = "promoted"
+    fake.drafts[0].promoted_commodity_id = "item-9"
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts).toHaveLength(1)
+    expect(toastSpies.info.mock.calls.map(([message]) => message)).toEqual([
+      "The item was already added to your inventory.",
+    ])
+    expect(toastSpies.error).not.toHaveBeenCalled()
+  })
+
+  it("leaves a resumed draft as saved when Add item fails, with the uploaded file on it", async () => {
+    const fake = draftHandlers.backend(SLUG, [complete])
+    fake.nextUploads = [{ name: "label.png", size: 3 }]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    server.use(
+      http.post(
+        apiUrl(`/g/${SLUG}/uploads/file`),
+        () => HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 }),
+        { once: true }
+      )
+    )
+    const user = userEvent.setup()
+    const { onOpenChange } = await openResumedOn("d1", "commodity-form-purchase-step", {
+      onSubmit: promoteThrough() as never,
+    })
+    const name = await toBasics(user)
+    await user.clear(name)
+    await user.type(name, "Electric kettle")
+    await walkToFiles(user)
+    await stage(user, [
+      new File(["png"], "receipt.png", { type: "image/png" }),
+      new File(["png"], "label.png", { type: "image/png" }),
+    ])
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await screen.findByTestId("draft-save-error")
+    // Add item does not save the values; the promotion would carry them.
+    expect(fake.drafts[0]).toMatchObject({ revision: 1, values: { name: "Kettle" } })
+    expect(screen.getByTestId("draft-saved-files")).toHaveTextContent("label.png")
+
+    await discard(user)
+    await waitFor(() => expect(onOpenChange).toHaveBeenCalledWith(false))
+    expect(fake.drafts[0]).toMatchObject({
+      status: "open",
+      revision: 1,
+      values: { name: "Kettle" },
+    })
+    expect(fake.files[0].links).toEqual([
+      expect.objectContaining({ entity_type: "draft", entity_id: "d1" }),
+    ])
+  })
+
+  it("adds no item when the dialog closes during the uploads, and the next opening goes on", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [
+      { name: "a.png", size: 3 },
+      { name: "b.png", size: 3 },
+    ]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    // The first upload waits until the test lets it go.
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/file`), async () => {
+        calls++
+        if (calls === 1) await held
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { close, reopen } = renderClosableForm(onSubmit)
+    const files = () => [
+      new File(["png"], "a.png", { type: "image/png" }),
+      new File(["png"], "b.png", { type: "image/png" }),
+    ]
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(pendingRows()[0]).toHaveAttribute("data-status", "uploading"))
+    // The form knows its draft before the first upload ends, so a Discard
+    // after a reload still finds it.
+    expect(itemDraftOf(DRAFT_KEY)).toBe(fake.drafts[0].id)
+
+    close()
+    release()
+    await waitFor(() => expect(fake.files[0]?.links).toHaveLength(1))
+
+    // The next opening has the input; Add item attaches the rest and adds
+    // the item, without uploading a.png again.
+    reopen()
+    const name = await fillManually(user)
+    expect(name).toHaveValue("Kettle")
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(fake.drafts[0].status).toBe("promoted"))
+    expect(fake.uploads).toBe(2)
+    expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([
+      [`item-from-${fake.drafts[0].id}`],
+      [`item-from-${fake.drafts[0].id}`],
+    ])
+  })
+
+  it("gets the item a lost promotion made, also after a reload", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.loseResponse.promote = true
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    expect(await screen.findByTestId("commodity-form-error")).toBeInTheDocument()
+    expect(fake.drafts[0].status).toBe("promoted")
+
+    // A reload: the form comes back from this device with the same keys.
+    cleanup()
+    const onSubmit = promoteThrough()
+    renderForm({ onSubmit: onSubmit as never })
+    expect(await fillManually(user)).toHaveValue("Kettle")
+    await walkToFiles(user)
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await expect(onSubmit.mock.results[0].value).resolves.toMatchObject({
+      id: `item-from-${fake.drafts[0].id}`,
+    })
+    expect(screen.queryByTestId("draft-save-promoted")).not.toBeInTheDocument()
+  })
+
+  it("does not add the item when Enter is pressed in a file title", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    renderForm({ onSubmit: onSubmit as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [new File(["pdf"], "receipt.pdf", { type: "application/pdf" })])
+    const title = within(pendingRows()[0]).getByLabelText("Title of receipt.pdf")
+    const submitted = vi.fn((e: Event) => e.preventDefault())
+    title.closest("form")?.addEventListener("submit", submitted)
+    await user.clear(title)
+    await user.type(title, "Shop receipt{Enter}")
+    expect(title).toHaveValue("Shop receipt")
+    expect(submitted).not.toHaveBeenCalled()
+    expect(onSubmit).not.toHaveBeenCalled()
+  })
+
+  it("cuts a long file title at 255 characters without splitting one", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    renderForm({ onSubmit: promoteThrough() as never })
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, [new File(["pdf"], "receipt.pdf", { type: "application/pdf" })])
+    const title = within(pendingRows()[0]).getByLabelText("Title of receipt.pdf")
+    fireEvent.change(title, { target: { value: "📦".repeat(300) } })
+    expect(title).toHaveValue("📦".repeat(255))
   })
 })
