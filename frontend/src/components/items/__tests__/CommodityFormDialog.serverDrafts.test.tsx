@@ -324,13 +324,9 @@ describe("<CommodityFormDialog /> server drafts", () => {
       ...fake.handlers
     )
     const user = userEvent.setup()
-    const { onSubmit } = await openResumed("d1", "Van")
-    for (const step of ["purchase", "warranty", "tags"]) {
-      await user.click(screen.getByTestId("commodity-form-next"))
-      if (step === "purchase") await screen.findByLabelText(/Purchase date/i)
-      if (step === "warranty") await screen.findByTestId("commodity-form-warranty-step")
-      if (step === "tags") await screen.findByTestId("commodity-tags-input")
-    }
+    // The values are on Extras, so the draft opens on the step after it.
+    const { onSubmit } = await openResumedOn("d1", "commodity-form-files-step")
+    await user.click(screen.getByRole("button", { name: "Extras" }))
     expect(await screen.findByLabelText(/^Plate$/)).toHaveValue("AB 123")
     await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByTestId("commodity-form-files-step")
