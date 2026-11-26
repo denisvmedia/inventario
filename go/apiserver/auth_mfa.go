@@ -578,6 +578,11 @@ func (api *AuthAPI) loginMFA(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Invalid or expired MFA token", http.StatusUnauthorized)
 		return
 	}
+	// The challenge can be completed on another host than the one it was
+	// issued on, so the host's tenant check does not cover the user's own.
+	if refuseInactiveUserTenant(w, r, api.tenantRegistry, user) {
+		return
+	}
 
 	if !api.checkMFALoginLockout(w, r, user.Email) {
 		return

@@ -41,6 +41,11 @@ type Service struct {
 	// copies the user's profile photo into the new tenant's storage. A move
 	// of a user who has a photo is refused while it is nil.
 	avatars *services.AvatarService
+	// blacklist is optional. When set (via SetTokenBlacklist), ending a
+	// tenant's sessions stamps it for every user of the tenant, for
+	// blacklistTTL.
+	blacklist    services.TokenBlacklister
+	blacklistTTL time.Duration
 }
 
 // NewServiceWithFactorySet returns a service over an already opened factory
@@ -146,17 +151,28 @@ type TenantListResponse struct {
 	TotalCount int
 }
 
-// CreateTenant creates a new tenant
+// CreateTenant creates a new tenant. An empty Slug is generated from the
+// name (GenerateTenantSlug), an empty Status means active, and an empty
+// RegistrationMode means closed. A slug or domain another tenant already has
+// is refused with registry.ErrSlugAlreadyExists or ErrTenantDomainTaken.
 func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*models.Tenant, error) {
 	mode := req.RegistrationMode
 	if mode == "" {
 		mode = models.RegistrationModeClosed
 	}
+	slug := req.Slug
+	if slug == "" {
+		slug = GenerateTenantSlug(req.Name)
+	}
+	status := req.Status
+	if status == "" {
+		status = models.TenantStatusActive
+	}
 	tenant := &models.Tenant{
 		Name:             req.Name,
-		Slug:             req.Slug,
-		Domain:           req.Domain,
-		Status:           req.Status,
+		Slug:             slug,
+		Domain:           normalizeTenantDomain(req.Domain),
+		Status:           status,
 		IsDefault:        req.Default,
 		Settings:         req.Settings,
 		RegistrationMode: mode,
@@ -165,6 +181,9 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	// Validate tenant
 	if err := tenant.ValidateWithContext(ctx); err != nil {
 		return nil, fmt.Errorf("tenant validation failed: %w", err)
+	}
+	if err := s.checkTenantDomainFree(ctx, "", tenant.Domain); err != nil {
+		return nil, err
 	}
 
 	// Create tenant using factory set
@@ -184,7 +203,7 @@ func (s *Service) GetTenant(ctx context.Context, idOrSlug string) (*models.Tenan
 		// Try by slug
 		tenant, err = s.factorySet.TenantRegistry.GetBySlug(ctx, idOrSlug)
 		if err != nil {
-			return nil, fmt.Errorf("tenant '%s' not found (tried both ID and slug)", idOrSlug)
+			return nil, errxtrace.ClassifyNew(fmt.Sprintf("tenant '%s' not found (tried both ID and slug)", idOrSlug), registry.ErrNotFound)
 		}
 	}
 
@@ -225,13 +244,21 @@ func (s *Service) ListTenants(ctx context.Context, req TenantListRequest) (*Tena
 	}, nil
 }
 
-// UpdateTenant updates a tenant
+// UpdateTenant updates a tenant. Only the fields req sets change; an empty
+// Domain clears the domain. A slug or domain another tenant already has is
+// refused with registry.ErrSlugAlreadyExists or ErrTenantDomainTaken.
+//
+// A change of status away from active ends the sessions of every user in the
+// tenant, as SuspendTenant does. When the error wraps
+// ErrTenantSessionsNotEnded the update was saved and the returned tenant is
+// the saved row.
 func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantUpdateRequest) (*models.Tenant, error) {
 	// Get existing tenant
 	tenant, err := s.GetTenant(ctx, idOrSlug)
 	if err != nil {
 		return nil, err
 	}
+	previousStatus := tenant.Status
 
 	// Apply updates
 	if req.Name != nil {
@@ -241,7 +268,7 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 		tenant.Slug = *req.Slug
 	}
 	if req.Domain != nil {
-		tenant.Domain = req.Domain
+		tenant.Domain = normalizeTenantDomain(req.Domain)
 	}
 	if req.Status != nil {
 		tenant.Status = *req.Status
@@ -257,6 +284,9 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	if err := tenant.ValidateWithContext(ctx); err != nil {
 		return nil, fmt.Errorf("tenant validation failed: %w", err)
 	}
+	if err := s.checkTenantDomainFree(ctx, tenant.ID, tenant.Domain); err != nil {
+		return nil, err
+	}
 
 	// Update tenant
 	updatedTenant, err := s.factorySet.TenantRegistry.Update(ctx, *tenant)
@@ -264,6 +294,9 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 		return nil, fmt.Errorf("failed to update tenant: %w", err)
 	}
 
+	if previousStatus == models.TenantStatusActive && updatedTenant.Status != models.TenantStatusActive {
+		return updatedTenant, s.EndTenantSessions(ctx, updatedTenant.ID)
+	}
 	return updatedTenant, nil
 }
 

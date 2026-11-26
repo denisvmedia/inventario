@@ -789,7 +789,82 @@ export type paths = {
             };
         };
         put?: never;
-        post?: never;
+        /**
+         * Create a tenant (admin)
+         * @description Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.
+         *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            /** @description Tenant */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminTenantCreateRequest"];
+                };
+            };
+            responses: {
+                /** @description Created */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the slug or the domain is taken */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid fields */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -859,6 +934,341 @@ export type paths = {
         };
         put?: never;
         post?: never;
+        /**
+         * Delete a tenant (admin)
+         * @description Deletes the tenant, its users, groups, items and files, with the same rules as `inventario tenants delete`.
+         *     The stored files go first, so an unreachable file store stops the deletion before any row is removed. It cannot be undone.
+         *     `confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.
+         *     Deleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+         *     Requires the platform_admin role.
+         */
+        delete: {
+            parameters: {
+                query: {
+                    /** @description The tenant's slug, typed to confirm */
+                    confirm_slug: string;
+                };
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - the confirmation does not match, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        /**
+         * Update a tenant (admin)
+         * @description Changes the fields the body sets, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain.
+         *     A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does. Making the tenant that serves this request's host inactive is refused with 422 `admin.tenant.serves_this_host`.
+         *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     Requires the platform_admin role.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Fields to change */
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["apiserver.AdminTenantUpdateRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the slug or the domain is taken */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid fields, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}/reactivate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Reactivate a tenant (admin)
+         * @description Sets the tenant's status back to active. Sessions that the suspension ended stay ended: the users sign in again. Reactivating an active tenant returns 200 and changes nothing.
+         *     A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["apiserver.AdminTenantStatusRequest"];
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid reason */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/tenants/{tenantID}/suspend": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Suspend a tenant (admin)
+         * @description Sets the tenant's status to suspended and ends the sessions of every user in it, the same teardown blocking a user runs: refresh tokens and personal API tokens are revoked and access tokens are refused.
+         *     While suspended, the tenant's users cannot sign in by any method and every request on the tenant's host is refused. Suspending a suspended tenant ends the sessions again and returns 200.
+         *     Suspending the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
+         *     A missing or blank reason is 422 `admin.tenant.reason_required`, one over 500 characters `admin.tenant.reason_too_long`.
+         *     Requires the platform_admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Tenant ID */
+                    tenantID: string;
+                };
+                cookie?: never;
+            };
+            requestBody: components["requestBodies"]["apiserver.AdminTenantStatusRequest"];
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
+                };
+                /** @description Bad Request - invalid body */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - the operator is not a platform admin (admin.role_required) */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Tenant not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unprocessable Entity - invalid reason, or the tenant serves this host */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
         delete?: never;
         options?: never;
         head?: never;
@@ -1135,7 +1545,8 @@ export type paths = {
          *     `is_system_admin=false`; it cannot be refreshed and cannot start a nested impersonation. The operator's own
          *     `backoffice_refresh_token` cookie is captured server-side at start and restored by POST /admin/impersonation/end.
          *     Returns 422 with `admin.impersonate.target_is_admin` when the target is a system admin,
-         *     `admin.impersonate.target_blocked` when the target account is blocked, and `admin.impersonate.nested`
+         *     `admin.impersonate.target_blocked` when the target account is blocked, `tenant.not_active` when the target's
+         *     tenant is suspended or inactive, and `admin.impersonate.nested`
          *     when the caller is already impersonating. Returns 429 with `admin.impersonate.rate_limited` when the
          *     per-operator start rate limit (10/hour) is exceeded.
          */
@@ -1201,7 +1612,7 @@ export type paths = {
                         "application/json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - target is admin / blocked / nested impersonation / reason too long */
+                /** @description Unprocessable Entity - target is admin / blocked / in a tenant that is not active / nested impersonation / reason too long */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -14452,6 +14863,38 @@ export type components = {
              */
             reason: string;
         };
+        "apiserver.AdminTenantCreateRequest": {
+            /** @description Domain is an optional custom domain the tenant is reached on. */
+            domain?: string;
+            /** @description Name is the tenant's display name (1 to 100 characters). */
+            name?: string;
+            /**
+             * @description Slug is generated from the name when empty: lowercase letters, digits
+             *     and hyphens, at most 50 characters.
+             */
+            slug?: string;
+            /**
+             * @description Status defaults to active.
+             * @enum {unknown}
+             */
+            status?: "active" | "suspended" | "inactive";
+        };
+        "apiserver.AdminTenantStatusRequest": {
+            /** @description Reason is the operator's justification (1 to 500 characters). */
+            reason?: string;
+        };
+        "apiserver.AdminTenantUpdateRequest": {
+            /** @description Domain set to an empty string removes the custom domain. */
+            domain?: string;
+            name?: string;
+            slug?: string;
+            /**
+             * @description Status away from active ends the sessions of the tenant's users, as
+             *     POST /admin/tenants/{tenantID}/suspend does.
+             * @enum {unknown}
+             */
+            status?: "active" | "suspended" | "inactive";
+        };
         "apiserver.AdminUnblockRequest": {
             /** @description Reason is the free-form justification for the unblock (max 500 chars). */
             reason: string;
@@ -19311,6 +19754,12 @@ export type components = {
         "jsonapi.AreaRequest": {
             content: {
                 "application/vnd.api+json": components["schemas"]["jsonapi.AreaRequest"];
+            };
+        };
+        /** @description Reason */
+        "apiserver.AdminTenantStatusRequest": {
+            content: {
+                "application/json": components["schemas"]["apiserver.AdminTenantStatusRequest"];
             };
         };
         /** @description Commodity object */

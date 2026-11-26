@@ -144,7 +144,21 @@ func (r *TenantRegistry) Update(ctx context.Context, tenant models.Tenant) (*mod
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Update(ctx, tenant, nil)
+	err := reg.Update(ctx, tenant, func(ctx context.Context, tx *sqlx.Tx) error {
+		// The unique index on slug would refuse a taken slug too, with an
+		// error that names the index; this gives the same sentinel Create
+		// returns.
+		var existingTenant models.Tenant
+		txReg := store.NewTxRegistry[models.Tenant](tx, r.tableNames.Tenants())
+		err := txReg.ScanOneByField(ctx, store.Pair("slug", tenant.Slug), &existingTenant)
+		switch {
+		case err == nil && existingTenant.ID != tenant.GetID():
+			return errxtrace.Classify(registry.ErrSlugAlreadyExists, errx.Attrs("slug", tenant.Slug))
+		case err != nil && !errors.Is(err, store.ErrNotFound):
+			return errxtrace.Wrap("failed to check for existing tenant", err)
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant", "entity_id", tenant.GetID()))

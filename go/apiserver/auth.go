@@ -94,6 +94,8 @@ type AuthAPI struct {
 	groupMembershipRegistry registry.GroupMembershipRegistry
 	loginEventRegistry      registry.LoginEventRegistry
 	mfaRegistry             registry.UserMFASecretRegistry
+	// tenantRegistry backs the check that the user's tenant is active.
+	tenantRegistry registry.TenantRegistry
 	// systemAdminGrantRegistry resolves the is_system_admin advisory
 	// claim baked into access tokens (#1784). The claim is FE-only —
 	// authorization happens server-side in RequireBackofficeAuth /
@@ -492,6 +494,19 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		slog.Warn("Refresh token for invalid/inactive user", "user_id", refreshToken.UserID)
 		clearRefreshCookie(w, r)
 		http.Error(w, "User not found or inactive", http.StatusUnauthorized)
+		return
+	}
+
+	// A suspended tenant's sessions end (#1037). Suspending revokes the
+	// refresh tokens too; this refuses one that the revocation missed.
+	if active, tenantErr := userTenantIsActive(r.Context(), api.tenantRegistry, user); tenantErr != nil {
+		slog.Error("Failed to check the tenant status on refresh", "user_id", user.ID, "error", tenantErr)
+		http.Error(w, "Internal server error", http.StatusInternalServerError)
+		return
+	} else if !active {
+		slog.Warn("Refresh refused: the user's tenant is not active", "user_id", user.ID, "tenant_id", user.TenantID)
+		clearRefreshCookie(w, r)
+		http.Error(w, tenantSuspendedMessage, http.StatusForbidden)
 		return
 	}
 
@@ -980,6 +995,11 @@ type AuthParams struct {
 	GroupMembershipRegistry registry.GroupMembershipRegistry
 	LoginEventRegistry      registry.LoginEventRegistry
 	MFARegistry             registry.UserMFASecretRegistry
+	// TenantRegistry lets the MFA and magic-link sign-ins, refresh and the
+	// authenticated /auth routes refuse a user whose tenant is not active
+	// (#1037). Nil skips the check where the request did not resolve to
+	// the user's tenant.
+	TenantRegistry registry.TenantRegistry
 	// SystemAdminGrantRegistry resolves the is_system_admin advisory
 	// FE claim baked into access tokens (#1784). May be nil — tokens
 	// then carry is_system_admin=false (FE renders the non-admin
@@ -1030,6 +1050,7 @@ func Auth(params AuthParams) func(r chi.Router) {
 		groupMembershipRegistry:  params.GroupMembershipRegistry,
 		loginEventRegistry:       params.LoginEventRegistry,
 		mfaRegistry:              params.MFARegistry,
+		tenantRegistry:           params.TenantRegistry,
 		systemAdminGrantRegistry: params.SystemAdminGrantRegistry,
 		blacklistService:         params.BlacklistService,
 		rateLimiter:              params.RateLimiter,
@@ -1047,7 +1068,11 @@ func Auth(params AuthParams) func(r chi.Router) {
 		apiTokens:                params.APITokenService,
 	}
 
-	requireAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
+	jwtAuth := RequireAuth(params.JWTSecret, params.UserRegistry, params.BlacklistService)
+	activeTenant := requireActiveUserTenant(params.TenantRegistry)
+	requireAuth := func(next http.Handler) http.Handler {
+		return jwtAuth(activeTenant(next))
+	}
 	return func(r chi.Router) {
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login", api.login)
 		r.With(AuthLoginRateLimitMiddleware(params.RateLimiter)).Post("/login/mfa", api.loginMFA)
@@ -1853,7 +1878,7 @@ func (api *AuthAPI) userFromBrowserSession(r *http.Request) (*models.User, error
 
 	// 1) Authorization: Bearer fast path.
 	if user, ok := api.userFromBearerHeader(r); ok {
-		return user, nil
+		return api.userWithActiveTenant(r, user)
 	}
 
 	// 2) Refresh-cookie path — the real browser navigation.
@@ -1888,6 +1913,19 @@ func (api *AuthAPI) userFromBrowserSession(r *http.Request) (*models.User, error
 		case blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix():
 			return nil, errors.New("refresh token predates user blacklist cutoff")
 		}
+	}
+	return api.userWithActiveTenant(r, user)
+}
+
+// userWithActiveTenant returns the user when their tenant is active and an
+// error otherwise.
+func (api *AuthAPI) userWithActiveTenant(r *http.Request, user *models.User) (*models.User, error) {
+	active, err := userTenantIsActive(r.Context(), api.tenantRegistry, user)
+	if err != nil {
+		return nil, err
+	}
+	if !active {
+		return nil, errors.New("the user's tenant is not active")
 	}
 	return user, nil
 }
