@@ -179,13 +179,6 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		if err := r.reattributeIntakeDocuments(ctx, tx, tenantID, userID); err != nil {
 			return err
 		}
-		// The drafts those documents made go with them, so a replay finds
-		// the draft the record names. The ones whose group has no heir are
-		// purged with the user's other drafts below.
-		if err := r.reattributeRows(ctx, tx, r.tableNames.CommodityDrafts(), "t.client_key LIKE $3",
-			tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%"); err != nil {
-			return err
-		}
 
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
@@ -439,7 +432,9 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 // reattributeIntakeDocuments gives each document delivered through the
 // user's API tokens (#2809) to the member reattributeGroupConfiguration
 // picks. A document whose group has no other member is deleted: its group is
-// private and leaves with the user.
+// private and leaves with the user. The drafts the documents made go to the
+// same member, so a replay finds the draft the record names; the ones whose
+// group has no heir are purged with the user's other drafts.
 func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
 	docs := r.tableNames.IntakeDocuments()
 	if err := r.reattributeGroupConfiguration(ctx, tx, docs, tenantID, userID); err != nil {
@@ -450,7 +445,8 @@ func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx
 		return errxtrace.Wrap("failed to purge the user's delivered documents", err,
 			errx.Attrs("table", string(docs), "tenant_id", tenantID, "user_id", userID))
 	}
-	return nil
+	return r.reattributeRows(ctx, tx, r.tableNames.CommodityDrafts(), "t.client_key LIKE $3",
+		tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%")
 }
 
 // groupConfigurationTables lists the group-scoped tables whose rows are

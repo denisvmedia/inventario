@@ -55,7 +55,9 @@ func (f *CommodityDraftRegistryFactory) promotedItem(groupID, draftID string) *s
 
 // deliveredDrafts is the drafts made for the documents other systems
 // delivered (#2809). The user purge hands them over with the documents.
-type deliveredDrafts struct{ f *CommodityDraftRegistryFactory }
+type deliveredDrafts struct {
+	f *CommodityDraftRegistryFactory
+}
 
 func (d deliveredDrafts) owned(draft *models.CommodityDraft, tenantID, userID string) bool {
 	return draft.TenantID == tenantID && draft.CreatedByUserID == userID &&
