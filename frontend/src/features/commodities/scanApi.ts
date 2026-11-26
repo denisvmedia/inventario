@@ -89,6 +89,28 @@ export interface ScanItem {
 
 export type ScanCustomFieldGuesses = Record<string, { value: unknown; confidence: number }>
 
+// The kinds of document the scan tells apart for a file (#1626).
+export const SCAN_DOCUMENT_TYPES = [
+  "invoice",
+  "receipt",
+  "manual",
+  "warranty",
+  "photo",
+  "other",
+] as const
+
+export type ScanDocumentType = (typeof SCAN_DOCUMENT_TYPES)[number]
+
+// What the scan suggests for one file it was given (#1626). index is the
+// file's position among the files of the request, counted from 0; the
+// server counts a part it skipped (an empty file) too, so it always names
+// the file the client sent at that position.
+export interface ScanFileGuess {
+  index: number
+  documentType?: { value: ScanDocumentType; confidence: number }
+  title?: { value: string; confidence: number }
+}
+
 export interface ScanResult {
   fields: ScanResultFields
   customFields: ScanCustomFieldGuesses
@@ -96,6 +118,8 @@ export interface ScanResult {
   // product; the dialog then renders a chooser so the user picks which to
   // pre-fill. Empty for the common single-item case (review uses `fields`).
   items: ScanItem[]
+  // One entry per file the scan has a suggestion for; empty when none.
+  files: ScanFileGuess[]
   warnings: ScanWarning[]
 }
 
@@ -104,6 +128,14 @@ export interface ScanResult {
 type RawFieldMap = Partial<Record<ScanFieldName, { value?: unknown; confidence?: number } | null>>
 
 type RawCustomFieldMap = Record<string, { value?: unknown; confidence?: number } | null> | null
+
+type RawGuess = { value?: unknown; confidence?: unknown } | null | undefined
+
+type RawFileGuess = {
+  index?: unknown
+  document_type?: RawGuess
+  title?: RawGuess
+} | null
 
 // On-the-wire JSON:API envelope. Kept loose because the only contract
 // the FE relies on is the `data.attributes` shape; everything else
@@ -116,6 +148,7 @@ interface ScanResponseEnvelope {
       fields?: RawFieldMap
       custom_fields?: RawCustomFieldMap
       items?: Array<{ fields?: RawFieldMap; custom_fields?: RawCustomFieldMap } | null> | null
+      files?: RawFileGuess[] | null
       warnings?: ScanWarning[] | null
     }
   }
@@ -191,8 +224,47 @@ export function normalizeScanResponse(env: ScanResponseEnvelope): ScanResult {
     fields,
     customFields: normalizeCustomFields(attrs?.custom_fields),
     items,
+    files: normalizeFiles(attrs?.files),
     warnings: Array.isArray(attrs?.warnings) ? attrs.warnings : [],
   }
+}
+
+// normalizeFiles keeps the file suggestions with a whole, non-negative index,
+// the first one for an index the server repeated. A type the client does not
+// know or an empty title is left out of its entry; an entry left with
+// neither is dropped.
+function normalizeFiles(raw: RawFileGuess[] | null | undefined): ScanFileGuess[] {
+  const out: ScanFileGuess[] = []
+  const seen = new Set<number>()
+  for (const entry of Array.isArray(raw) ? raw : []) {
+    const index = entry?.index
+    if (typeof index !== "number" || !Number.isInteger(index) || index < 0) continue
+    if (seen.has(index)) continue
+    const guess: ScanFileGuess = { index }
+    const docType = entry?.document_type?.value
+    if (
+      typeof docType === "string" &&
+      (SCAN_DOCUMENT_TYPES as readonly string[]).includes(docType)
+    ) {
+      guess.documentType = {
+        value: docType as ScanDocumentType,
+        confidence: confidenceOf(entry?.document_type),
+      }
+    }
+    const title = entry?.title?.value
+    if (typeof title === "string" && title.trim() !== "") {
+      guess.title = { value: title.trim(), confidence: confidenceOf(entry?.title) }
+    }
+    if (!guess.documentType && !guess.title) continue
+    seen.add(index)
+    out.push(guess)
+  }
+  return out
+}
+
+function confidenceOf(guess: RawGuess): number {
+  const c = guess?.confidence
+  return typeof c === "number" && Number.isFinite(c) ? c : 0
 }
 
 // normalizeCustomFields drops the custom field guesses without a value.

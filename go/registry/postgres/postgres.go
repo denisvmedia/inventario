@@ -85,6 +85,7 @@ func NewFactorySet(dbx *sqlx.DB) *registry.FactorySet {
 	fs.UserPurger = NewUserPurger(dbx)
 	fs.UserContentOwnershipChecker = NewUserContentOwnershipChecker(dbx)
 	fs.UserTenantMover = NewUserTenantMover(dbx)
+	fs.FailedJobRegistry = NewFailedJobRegistry(dbx)
 	fs.WarrantyReminderRegistry = NewWarrantyReminderRegistry(dbx)
 	fs.StorageQuotaReminderRegistry = NewStorageQuotaReminderRegistry(dbx)
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry(dbx)

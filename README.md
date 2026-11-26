@@ -153,7 +153,7 @@ A back-office `platform_admin` can do the same in the browser: create, edit,
 suspend, reactivate and delete tenants. Suspending a tenant signs its users
 out and keeps them out until it is reactivated; a status change made with
 `tenants update` does the same. The rules are in
-[the admin runbook](devdocs/admin-runbook.md#10-managing-tenants-1037).
+[the admin runbook](devdocs/admin-runbook.md#11-managing-tenants-1037).
 
 #### User Management
 ```bash
@@ -271,6 +271,29 @@ is distinct from `run workers`, which *starts* the worker process. See the
 [System Admin Operations Runbook §7](devdocs/admin-runbook.md) for the
 canonical worker types, the equivalent admin REST API, and the
 `inventario_worker_paused` metric.
+
+#### Failed Background Jobs (#1307)
+
+List, retry and discard the background jobs that failed for good, across
+every tenant. A discarded job keeps its row and its error; it only leaves
+the failed list.
+
+```bash
+# List the failed jobs nobody retried or discarded, newest first
+./inventario jobs failed list --type export --tenant acme
+
+# Put a job back in its queue
+./inventario jobs failed retry --type thumbnail <job-id>
+
+# Discard a job (restores and currency migrations can only be discarded)
+./inventario jobs failed discard --type restore <job-id>
+```
+
+These commands require a PostgreSQL DSN. See the
+[System Admin Operations Runbook §10](devdocs/admin-runbook.md) for the job
+types, what a retry does for each, the admin REST API and the
+`inventario_jobs_dead_lettered_total` and `inventario_jobs_dead_letter_depth`
+metrics.
 
 #### Command Options
 

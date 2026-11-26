@@ -14,6 +14,19 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The **Add item** dialog uses what the AI scan suggests for each file:
+  on the **Files** step a scanned file gets its **Invoice**, **Manual**,
+  **Warranty** or **Photo** tag as a chip marked with a sparkle, and its
+  suggested title replaces the file name. A title the user typed or a
+  suggested title the user changed, one of those tags the user set, and
+  every suggested tag the user removed stay as they are, also when the file
+  is scanned again. A scan no longer
+  overwrites what the form holds: the review shows the user's value next to
+  the scan's and leaves that field unticked, and ticked scanned tags are
+  added to the form's tags. The files saved with a draft show their title
+  and tags on the **Files** step and can be changed there, and a batch of
+  files is read again once its scans finish, so the tags and titles the
+  scan gave its files show without a reload (#1626).
 - Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
@@ -51,8 +64,8 @@ when to add an entry and where it goes.
   suggestions on the files once they are scanned: the **Invoice** tag for an
   invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
   others, and the title. Only a file that still has the title and the tags
-  of its upload changes, so a file you renamed or tagged keeps what you
-  gave it and a rescan does not change it again (#1626).
+  of its upload changes, so a file you renamed or gave one of those tags
+  keeps what you gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date
@@ -482,6 +495,23 @@ when to add an entry and where it goes.
   estimated value now follows the dashboard: an item's current value, else
   its purchase price
   ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
+- Failed background jobs. Group admins and owners see the jobs of their
+  group that stopped after their last attempt (exports, imports, restores,
+  thumbnails, document scans and currency migrations) in **Group settings →
+  Data & storage**, with the error and a **Retry** button. A restore and a
+  currency migration cannot be retried; the card says to start a new one
+  instead. System admins get a **Failed jobs** page in the back office
+  with every tenant's failed jobs, type and tenant filters, **Retry** and
+  **Discard**; a support agent can retry, and only a platform admin can
+  discard. Discarding takes a job off the list but keeps its record and
+  error until the normal cleanup removes them. A file whose thumbnail failed
+  for good is no longer tried again on every view: it stays one failed job
+  until it is retried or discarded. Every retry and discard is written to
+  the audit log. The API gains `GET /g/{groupSlug}/failed-jobs`
+  and `POST /g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` for group
+  admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
+  `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 
 ### Changed
 
@@ -681,6 +711,26 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `inventario jobs failed list|retry|discard` lists, retries and discards
+  the background jobs that failed for good, across every tenant, and writes
+  each retry and discard to the audit log. Two metrics come with it:
+  `inventario_jobs_dead_lettered_total{type}`, counted by every process that
+  runs workers, and the `inventario_jobs_dead_letter_depth{type}` gauge of
+  jobs nobody retried or discarded, collected by the housekeeping worker
+  group (or `run all`) every `--business-metrics-interval`. The upgrade runs
+  one more database migration: it adds `discarded_at` to `exports`,
+  `restore_operations`, `thumbnail_generation_jobs`, `intake_sources` and
+  `currency_migrations`, `attempt_count` to `exports`, and an index on the
+  failed intake sources. During a rolling upgrade, pods that still run the
+  previous version can fail reads of those tables until they are replaced,
+  as with the `hidden_sections` column below
+  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). Jobs
+  that failed before the upgrade count toward the depth gauge from the first
+  collection, so an alert on a depth above zero fires on day one until they
+  are retried or discarded
+  ([#2946](https://github.com/denisvmedia/inventario/issues/2946)). See the
+  admin runbook §10
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 - `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
   `features.plans`, Compose `ENABLE_PLANS` in `.env`) shows the subscription
   plan surfaces that are now hidden by default. It is off by default, and
@@ -779,7 +829,7 @@ when to add an entry and where it goes.
   deletion. A change that would take the tenant serving the back office off
   its host is refused over HTTP, so in single-tenant mode suspending or
   deleting the default tenant stays a CLI task. With a tenant base domain, a
-  custom domain under it is refused. See §10 of `devdocs/admin-runbook.md`
+  custom domain under it is refused. See §11 of `devdocs/admin-runbook.md`
   ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
 - Suspending a tenant now ends its users' sessions: refresh tokens and
   personal API tokens are revoked and access tokens issued before the

@@ -488,6 +488,33 @@ func StartBusinessMetricsWorker(ctx context.Context, rs *RuntimeSetup, _ *Config
 	return coll.Stop
 }
 
+// StartFailedJobDepthWorker wires and starts the collector of the
+// inventario_jobs_dead_letter_depth gauge (#1307). The counts span every
+// tenant, so like StartBusinessMetricsWorker it runs in exactly one
+// producer, the housekeeping worker group or `run all`, on the same
+// interval as the business gauges.
+func StartFailedJobDepthWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
+	if rs.FactorySet.FailedJobRegistry == nil {
+		slog.InfoContext(ctx, "Failed-job depth collector disabled; no failed-job registry configured")
+		return func() {}
+	}
+	svc := services.NewFailedJobService(rs.FactorySet.FailedJobRegistry)
+	coll := metrics.NewJobDepthCollector(svc.Depths, rs.WorkerDurations.BusinessMetricsInterval)
+	coll.Start(ctx)
+	return coll.Stop
+}
+
+// initJobMetrics exports a zero dead-letter counter series for each job
+// type that keeps failed jobs.
+func initJobMetrics() {
+	types := models.FailedJobTypes()
+	names := make([]string, 0, len(types))
+	for _, t := range types {
+		names = append(names, string(t))
+	}
+	metrics.InitJobTypes(names...)
+}
+
 // systemStatsToBusinessStats copies the registry-layer SystemStats
 // snapshot into the metrics-layer BusinessStats the collector consumes.
 // Kept as an explicit, separately-testable function so the field mapping

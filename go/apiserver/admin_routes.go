@@ -231,6 +231,13 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
 	}
+	// #1307: failed background jobs across tenants, over each job type's
+	// own table.
+	failedJobsAPI := &adminFailedJobsAPI{
+		factorySet:   params.FactorySet,
+		service:      services.NewFailedJobService(params.FactorySet.FailedJobRegistry),
+		auditService: params.AuditService,
+	}
 	// #2113 L-4: GET /admin/debug — moved off the tenant surface onto the
 	// back-office plane. DebugInfo may be nil; the handler then encodes the
 	// zero value (same as the legacy /debug behaviour with a nil info).
@@ -301,6 +308,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		r.Group(func(r chi.Router) {
 			r.Use(backofficeAuth)
 			adminBackofficeRoutes(r, tenantsAPI, usersAPI, groupsAPI, groupMembersAPI, impersonationAPI, workersAPI, debugAPIInst)
+			adminFailedJobRoutes(r, failedJobsAPI)
 		})
 	}
 }
@@ -403,6 +411,17 @@ func adminBackofficeRoutes(
 	// impersonation (tenant) tokens, so an active impersonation context
 	// at the handler would mean the gate was bypassed.
 	r.With(RequirePlatformAdmin).Post("/users/{userID}/impersonate", impersonationAPI.startImpersonation)
+}
+
+// adminFailedJobRoutes registers the failed-jobs routes (#1307) in the
+// RequireBackofficeAuth group. Retry and discard are audited; so is the
+// list, which reads tenant data across tenants. A support_agent may list
+// and retry; a discard takes a failure off every list, so it needs
+// platform_admin.
+func adminFailedJobRoutes(r chi.Router, api *adminFailedJobsAPI) {
+	r.Get("/failed-jobs", api.listFailedJobs)
+	r.Post("/failed-jobs/{jobType}/{jobID}/retry", api.retryFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

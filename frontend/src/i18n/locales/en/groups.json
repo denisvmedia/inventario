@@ -92,6 +92,27 @@
       "title": "Migrate currency"
     },
     "errorGeneric": "Couldn't save the group. Please try again.",
+    "failedJobs": {
+      "attempts_one": "{{count}} attempt",
+      "attempts_other": "{{count}} attempts",
+      "cannotRetry": "Cannot be retried. Start a new one instead.",
+      "empty": "No failed jobs in this group.",
+      "failedAt": "Failed {{date}}",
+      "gone": "This job is no longer failed. The list is up to date now.",
+      "insteadCurrencyMigration": "Cannot be retried. Start a new currency change instead. An operator can dismiss this one.",
+      "insteadRestore": "Cannot be retried. Start a new restore from the backup instead. An operator can dismiss this one.",
+      "loadError": "Could not load the failed jobs. Try again later.",
+      "loading": "Loading failed jobs…",
+      "more_one": "{{count}} more failed job is not shown.",
+      "more_other": "{{count}} more failed jobs are not shown.",
+      "notRetryable": "This kind of job cannot be retried.",
+      "retried": "The job is back in the queue.",
+      "retry": "Retry",
+      "retryError": "Could not retry the job. Try again later.",
+      "retryLabel": "Retry {{title}}",
+      "subtitle": "Jobs of this group that stopped after their last attempt. Retry puts a job back in its queue.",
+      "title": "Failed background jobs"
+    },
     "hiddenSections": {
       "adminOnly": "Only admins and owners can change which sections the group shows.",
       "loans": {

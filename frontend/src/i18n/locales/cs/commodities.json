@@ -494,7 +494,14 @@
             "lowConfidence": "Nízká jistota",
             "multipleItems": "Vypadá to na více než jednu položku — předvyplnili jsme tu nejvýraznější. Ostatní přidejte samostatně po uložení.",
             "unreadableSerial": "Sériové číslo bylo špatně čitelné"
-          }
+          },
+          "yours": "Vaše",
+          "scanned": "Sken",
+          "tagsMerge": "Zaškrtnuté štítky se přidají k vašim.",
+          "fileSuggestions_one": "Sken navrhuje štítek nebo název pro {{count}} soubor. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_few": "Sken navrhuje štítek nebo název pro {{count}} soubory. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_many": "Sken navrhuje štítek nebo název pro {{count}} souboru. Změnit je můžete v kroku Soubory.",
+          "fileSuggestions_other": "Sken navrhuje štítek nebo název pro {{count}} souborů. Změnit je můžete v kroku Soubory."
         },
         "scanning": {
           "cancel": "Zrušit",
@@ -524,7 +531,9 @@
         },
         "tagsPlaceholder": "Zadejte štítky oddělené čárkou, např. faktura, záruka, návod…",
         "title": "Soubory",
-        "titleLabel": "Název souboru {{name}}"
+        "titleLabel": "Název souboru {{name}}",
+        "suggestedTitle": "Název navržený AI rozpoznáváním",
+        "suggestedTag": "navrženo AI rozpoznáváním"
       },
       "purchase": {
         "title": "Nákup"
@@ -970,7 +979,8 @@
     "discarded": "Koncept „{{title}}“ byl zahozen",
     "discardedBody": "Byl zahozen v jiném zařízení nebo panelu. Pokud chcete zdejší údaje zachovat, uložte je jako nový koncept.",
     "discardedTitle": "Tento koncept byl zahozen",
-    "discardFailed": "Koncept se nepodařilo zahodit."
+    "discardFailed": "Koncept se nepodařilo zahodit.",
+    "updateFileFailed": "Název a štítky souboru se nepodařilo uložit."
   },
   "intake": {
     "addFromFiles": "Přidat ze souborů",

@@ -73,6 +73,56 @@ definitions:
     required:
     - reason
     type: object
+  apiserver.AdminFailedJobListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/apiserver.AdminFailedJobResource'
+        type: array
+      meta:
+        $ref: '#/definitions/apiserver.FailedJobListMeta'
+    type: object
+  apiserver.AdminFailedJobResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/apiserver.AdminFailedJobView'
+      id:
+        type: string
+      type:
+        example: failed_jobs
+        type: string
+    type: object
+  apiserver.AdminFailedJobView:
+    properties:
+      attempts:
+        example: 3
+        type: integer
+      created_at:
+        type: string
+      error:
+        type: string
+      failed_at:
+        type: string
+      group_id:
+        type: string
+      group_name:
+        type: string
+      group_slug:
+        type: string
+      job_type:
+        example: export
+        type: string
+      retryable:
+        type: boolean
+      tenant_id:
+        type: string
+      tenant_name:
+        type: string
+      title:
+        type: string
+      user_id:
+        type: string
+    type: object
   apiserver.AdminMemberEnvelope:
     properties:
       data:
@@ -359,6 +409,78 @@ definitions:
   apiserver.DeleteAccountRequest:
     properties:
       password:
+        type: string
+    type: object
+  apiserver.FailedJobListEnvelope:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/apiserver.FailedJobResource'
+        type: array
+      meta:
+        $ref: '#/definitions/apiserver.FailedJobListMeta'
+    type: object
+  apiserver.FailedJobListMeta:
+    properties:
+      job_types:
+        items:
+          $ref: '#/definitions/apiserver.FailedJobTypeInfo'
+        type: array
+      page:
+        example: 1
+        type: integer
+      per_page:
+        example: 50
+        type: integer
+      total:
+        example: 3
+        type: integer
+      total_pages:
+        example: 1
+        type: integer
+    type: object
+  apiserver.FailedJobResource:
+    properties:
+      attributes:
+        $ref: '#/definitions/apiserver.FailedJobView'
+      id:
+        type: string
+      type:
+        example: failed_jobs
+        type: string
+    type: object
+  apiserver.FailedJobTypeInfo:
+    properties:
+      retryable:
+        type: boolean
+      type:
+        example: export
+        type: string
+    type: object
+  apiserver.FailedJobView:
+    properties:
+      attempts:
+        example: 3
+        type: integer
+      created_at:
+        type: string
+      error:
+        description: Error is the last error the job recorded.
+        type: string
+      failed_at:
+        type: string
+      job_type:
+        description: JobType is the worker type that ran the job.
+        example: export
+        type: string
+      retryable:
+        description: Retryable is false for a type whose jobs can only be discarded.
+        type: boolean
+      title:
+        description: 'Title names the job: an export''s description, a file''s title.'
+        type: string
+      user_id:
+        description: UserID is the member who started the job.
         type: string
     type: object
   apiserver.FeatureFlags:
@@ -7535,6 +7657,159 @@ paths:
       summary: Get debug information
       tags:
       - admin
+  /admin/failed-jobs:
+    get:
+      description: |-
+        Returns the background jobs that failed for good and were neither
+        retried nor discarded, across every tenant, newest failure first
+        (#1307). Each job is read from its type's own table; `id` is the row
+        id there. ?type limits the list to one job type and ?tenantID to one
+        tenant. `meta.job_types` lists the job types with whether each can be
+        retried.
+        An unknown ?type returns 400 with `failed_job.unknown_type`.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: query
+        name: type
+        type: string
+      - description: Tenant ID
+        in: query
+        name: tenantID
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.AdminFailedJobListEnvelope'
+        "400":
+          description: Bad Request - unknown job type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List failed background jobs (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/{jobType}/{jobID}/discard:
+    post:
+      description: |-
+        Marks the failed job discarded (#1307). It leaves the failed list and
+        the depth gauge but keeps its row and its error until the normal
+        cleanup removes it. Every job type can be discarded. Needs the
+        platform_admin role: a support_agent gets 403 `admin.role_required`.
+        404 `failed_job.unknown_type` for an unknown type, 404
+        `failed_job.not_found` when the job is not failed or was already
+        retried or discarded.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - account disabled, or not a platform_admin
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Discard a failed background job (admin)
+      tags:
+      - admin
+  /admin/failed-jobs/{jobType}/{jobID}/retry:
+    post:
+      description: |-
+        Puts the failed job back in its queue the way its type runs it again
+        (#1307): an export or import runs from the start, a thumbnail gets a
+        fresh set of attempts, an intake scan is due again at once. A restore
+        and a currency migration cannot be retried (409
+        `failed_job.not_retryable`); discard them instead. 404
+        `failed_job.unknown_type` for an unknown type, 404
+        `failed_job.not_found` when the job is not failed or was already
+        retried or discarded.
+      parameters:
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized - back-office authentication required
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Account disabled
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - this type of job cannot be retried
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Retry a failed background job (admin)
+      tags:
+      - admin
   /admin/groups:
     get:
       description: Returns every location group with computed member_count and an
@@ -12351,6 +12626,114 @@ paths:
       summary: Import backup archive
       tags:
       - exports
+  /g/{groupSlug}/failed-jobs:
+    get:
+      description: |-
+        Returns the group's background jobs that failed for good and were
+        neither retried nor discarded, newest failure first (#1307). Group
+        admins only. ?type limits the list to one job type; an unknown type
+        returns 400 with `failed_job.unknown_type`. `meta.job_types` lists the
+        job types with whether each can be retried.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: query
+        name: type
+        type: string
+      - description: Page number (default 1)
+        in: query
+        name: page
+        type: integer
+      - description: Items per page (default 50, max 100)
+        in: query
+        name: per_page
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/apiserver.FailedJobListEnvelope'
+        "400":
+          description: Bad Request - unknown job type
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - group admins only
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: List the group's failed background jobs
+      tags:
+      - failed-jobs
+  /g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry:
+    post:
+      description: |-
+        Puts the group's failed job back in its queue (#1307). Group admins
+        only. A restore and a currency migration cannot be retried (409
+        `failed_job.not_retryable`). 404 `failed_job.unknown_type` for an
+        unknown type, 404 `failed_job.not_found` when the group has no such
+        failed job, also one of another group.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Job type
+        enum:
+        - export
+        - import
+        - restore
+        - thumbnail
+        - intake
+        - currency-migration
+        in: path
+        name: jobType
+        required: true
+        type: string
+      - description: Job ID
+        in: path
+        name: jobID
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: Unauthorized
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "403":
+          description: Forbidden - group admins only
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "404":
+          description: Not Found - unknown type or no such failed job
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - this type of job cannot be retried
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Retry one of the group's failed background jobs
+      tags:
+      - failed-jobs
   /g/{groupSlug}/files:
     get:
       consumes:

@@ -1,3 +1,4 @@
+import { useEffect, useMemo, useRef } from "react"
 import { useMutation, useQuery, useQueryClient, type QueryClient } from "@tanstack/react-query"
 
 import { draftKeys } from "@/features/drafts/keys"
@@ -23,6 +24,7 @@ import {
   type IntakeLimits,
   type IntakeListOptions,
   type IntakeSessionDetail,
+  type IntakeSessionState,
   type IntakeSessionsPage,
 } from "./api"
 import { listIntakeDocuments, type DocumentSource } from "./documents"
@@ -54,7 +56,7 @@ export function useIntakeLimits(enabled = true) {
 // the progress moves without a reload.
 export function useIntakeSessions(opts: IntakeListOptions = {}) {
   const slug = useSlug()
-  return useQuery<IntakeSessionsPage>({
+  const query = useQuery<IntakeSessionsPage>({
     queryKey: intakeKeys.list(slug, opts),
     queryFn: ({ signal }) => listIntakeSessions(opts, signal),
     enabled: !!slug,
@@ -62,17 +64,67 @@ export function useIntakeSessions(opts: IntakeListOptions = {}) {
     refetchInterval: (query) =>
       query.state.data?.sessions.some((s) => s.state === "processing") ? INTAKE_POLL_MS : false,
   })
+  useRefreshWhenScanned(query.data?.sessions)
+  return query
 }
 
 export function useIntakeSession(id: string | null | undefined) {
   const slug = useSlug()
-  return useQuery<IntakeSessionDetail>({
+  const query = useQuery<IntakeSessionDetail>({
     queryKey: intakeKeys.detail(slug, id ?? ""),
     queryFn: ({ signal }) => getIntakeSession(id ?? "", signal),
     enabled: !!slug && !!id,
     retry: false,
     refetchInterval: (query) => (query.state.data?.state === "processing" ? INTAKE_POLL_MS : false),
   })
+  const session = query.data
+  const scanned = useMemo(
+    () => (session ? [{ id: session.id, state: session.state }] : undefined),
+    [session]
+  )
+  useRefreshWhenScanned(scanned)
+  return query
+}
+
+// useRefreshWhenScanned reads a batch and the file lists once more after the
+// batch stops scanning (#1626). Once the server stores a file's scan it puts
+// the scan's tag and title on the file, so the read that finds the batch
+// out of "processing" can still show the files as they were. The second
+// read comes one poll interval later, enough for those writes. A read that
+// finds the batch done from the start reads nothing again.
+export function useRefreshWhenScanned(
+  sessions: readonly { id: string; state: IntakeSessionState }[] | undefined
+) {
+  const qc = useQueryClient()
+  const slug = useSlug()
+  const lastState = useRef(new Map<string, IntakeSessionState>())
+  const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
+  useEffect(() => {
+    const pending = timers.current
+    return () => {
+      for (const timer of pending) clearTimeout(timer)
+      pending.clear()
+    }
+  }, [])
+  useEffect(() => {
+    const settled: string[] = []
+    for (const s of sessions ?? []) {
+      if (lastState.current.get(s.id) === "processing" && s.state !== "processing") {
+        settled.push(s.id)
+      }
+      lastState.current.set(s.id, s.state)
+    }
+    if (settled.length === 0 || !slug) return
+    const timer = setTimeout(() => {
+      timers.current.delete(timer)
+      for (const id of settled) {
+        void qc.invalidateQueries({ queryKey: intakeKeys.detail(slug, id) })
+      }
+      void qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
+      void qc.invalidateQueries({ queryKey: draftKeys.group(slug) })
+    }, INTAKE_POLL_MS)
+    timers.current.add(timer)
+  }, [sessions, qc, slug])
 }
 
 // useItemSource returns the other system an item's document came from

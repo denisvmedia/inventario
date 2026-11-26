@@ -65,6 +65,30 @@ If AI vision is enabled on your server:
 4. The files you scanned are attached to the item automatically — manage them
    on the **Files** step.
 
+A scan never replaces what you entered unless you ask it to. When a field
+already holds your value, the review shows both, **Yours** and **Scan**, and
+the field starts unticked; tick it to take the scan's value. Tags work the
+same way, except that ticked scanned tags are added to your tags instead of
+replacing them. This holds when you scan again later, too: a value an earlier
+scan filled in counts as yours. The currency a new item starts with is not
+your value, so the scan's currency starts ticked. Neither is the short name
+the form makes from the name you typed, nor a
+[custom field](../custom-fields/) that still holds the default its item type
+gives it. When you edit an item, its saved values count as yours.
+
+The scan also suggests a tag and a title for each file you scanned, and the
+review says how many files got one. On the **Files** step the suggested tag
+shows on the file as a chip with a sparkle: an invoice or a receipt gets the
+**Invoice** tag, a manual **Manual**, a warranty card **Warranty**, and a
+photo of the product **Photo**. Remove the chip if the tag is wrong. A
+suggested title, such as "Bosch invoice, March 2024", replaces the file name
+in the title field and is marked with the same sparkle; type over it to change
+it. What you set yourself stays: a file you gave a title keeps it, a file
+that already has one of those four tags gets no other, and a scan does not
+put back a tag you removed, however many scans suggested it. Once you change
+a suggested title, also back to the file name, later scans leave the title
+alone. A tag you add back by hand is yours and shows without the sparkle.
+
 A few things to know:
 
 - If AI finds more than one product, it pre-fills the most prominent one and
@@ -174,11 +198,16 @@ file once the file is scanned:
 What you set yourself stays. The scan changes a file only while the file is as
 the upload left it: its title is still the file name without the extension,
 and it has none of the **Invoice**, **Manual**, **Warranty** and **Photo**
-tags. A file you renamed or tagged before the scan finished keeps what you
-gave it, and gets neither suggestion. A suggestion the scan is unsure of is
+tags. A file you renamed, or gave one of those tags, before the scan finished
+keeps what you gave it, and gets neither suggestion; any other tag does not
+stop the suggestions. A suggestion the scan is unsure of is
 left out. A **Rescan** leaves a file alone once the scan has changed it. A
 file [another system sent](../documents-from-other-systems/) is not scanned,
 so it keeps the title it came with.
+
+The batch page reads the files again once the last file is scanned, so the
+new titles and tags show without a reload. To check or change them, open the
+draft: its files are on the **Files** step, under **Saved with this draft**.
 
 ## All the fields
 
@@ -244,9 +273,16 @@ time. More in [Files & photos](../files-and-photos/).
 
 Each file has a title and tags. The title starts as the file name without its
 extension (`receipt` for `receipt.pdf`); type over it to name the file
-differently. In **Add item**, the files and their titles are kept with the rest
-of the form, so a reload does not lose them. Files you add while editing an item
-are not kept: after a reload, add them again.
+differently. A tag and a title marked with a sparkle were suggested by
+[Fill with AI](#fill-with-ai). In **Add item**, the files and their titles are
+kept with the rest of the form, so a reload does not lose them. Files you add
+while editing an item are not kept: after a reload, add them again.
+
+The files already saved with a draft are listed under **Saved with this
+draft**, each with its title and tags, such as the ones a
+[batch of files](#add-items-from-files) gave it. Change them there: a tag is
+saved as soon as you add or remove it, a title when you leave the field. A
+title you clear goes back to the file name.
 
 When you click **Add item**, the files are uploaded first, one at a time, and
 the item is created only once all of them are uploaded. The dialog stays open

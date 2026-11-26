@@ -1014,6 +1014,8 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// keeping the surface inert in production (#202 §8) until
 		// the operator flips the flag on.
 		r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
+		// #1307: the group's failed background jobs, group admins only.
+		r.Route("/failed-jobs", GroupFailedJobs(params, groupService, auditSvc))
 		r.Route("/storage-usage", StorageUsage())
 		r.Route("/plan", GroupPlan(params.PlansEnabled))
 		r.Route("/notifications", GroupNotifications(params.FactorySet))

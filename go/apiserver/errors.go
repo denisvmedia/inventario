@@ -760,6 +760,19 @@ func codedNotFoundError(w http.ResponseWriter, r *http.Request, err error, code 
 	return render.Render(w, r, jsonapi.NewErrors(jsErr))
 }
 
+// codedBadRequestError renders a 400 with a JSON:API error code, for a
+// query filter the FE can branch on, such as an unknown failed-job type.
+func codedBadRequestError(w http.ResponseWriter, r *http.Request, err error, code string) error {
+	jsErr := jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusBadRequest,
+		StatusText:     "Bad Request",
+		Code:           code,
+	}
+	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
 func conflictError(w http.ResponseWriter, r *http.Request, err, userErr error) error {
 	conflictErr := jsonapi.Error{
 		Err:            err,

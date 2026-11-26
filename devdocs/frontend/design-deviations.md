@@ -53,6 +53,33 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
 - **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
 
+#### 2026-11-26 — Add item dialog: the scan's tag and title on each file
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name, the size and a remove button. The mock has no per-file tags, and its AI review (L761–L786) lists item fields only; nothing the scan reads is shown on a file.
+- **Reality**: After **Use these values**, each scanned file the scan classified gets the matching tag (**Invoice** for an invoice or a receipt, **Manual**, **Warranty**, **Photo**) in its tags input. The chip is a `Badge variant="outline"` with a dashed `border-amber-500/60` border, a `Sparkles` icon in `text-amber-500` (the AI accent the mock uses on the Fill with AI title and dropzone, L514 and L845), and the pill color of that tag from `FILE_TAG_PILLS`; it reads "suggested by the AI scan" on hover and to screen readers, and is removed with its X like any chip. A suggested title fills the title input and gets a `Sparkles` icon before it, with the same note for screen readers; typing over it clears the marker. The review gets one muted line with a `Sparkles` icon saying how many files got a suggestion. The suggestion applies only while the file has its default title and none of those four tags, and a tag the user removed is not suggested again on the next scan.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the suggested tag as a removable chip on each file, using the existing file tag UI, and the suggested title only while the title is the default. The sparkle marker, the review line and remembering a removed tag across scans were agent-suggested; they follow those decisions (design deviations for #1626 pre-approved).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the marker, the review line and the removed-tag memory are agent-suggested.
+- **Reversion plan**: Follow the mock if `inventario-design` draws per-file tags or AI suggestions in the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — AI scan review: the user's value next to the scan's
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) review phase (L761–L786) shows a two-column grid of read-only cards, one value each, and no way to keep a value the form already holds.
+- **Reality**: The review keeps the row per field, with a checkbox and a confidence badge, that it already had. A row for a field that already holds a value the user entered shows two lines in a small `auto / 1fr` grid: "Yours" with the form's value, then "Scan" with the scan's value in `font-medium`, labels in `text-[11px] text-muted-foreground`. Such a row starts unticked whatever its confidence. The tags row adds "Ticked, these tags are added to yours." below, and ticked scanned tags merge into the form's tags (case-insensitive) instead of replacing them. The same holds for custom fields and for a second scan.
+- **Why**: Decision 3 of the owner's #1626 comment (2026-11-26): a scan never overwrites user input; a field with a user value shows both values and is unticked by default, and scanned tags merge. What counts as entered was decided by the agent: a value that differs from what a new, empty form holds, so the group currency a new form starts with, the short name the form derives from the name, and a custom field value equal to its item type's default do not count, while values typed, accepted from an earlier scan, brought by a resumed draft, or an existing item's saved values do.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; the "entered" rule and the merge hint line are agent-suggested.
+- **Reversion plan**: Permanent unless the mock draws its own conflict state for the AI review.
+
+#### 2026-11-26 — Add item dialog: title and tags on the files saved with a draft
+
+- **Issue/PR**: #1626 / #2937
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) has no drafts and no files already on the server; its `FileDropZone` rows (L1483–L1493) show a name, a size and a remove button.
+- **Reality**: Each row under "Saved with this draft" keeps its name, size and remove button, and gains the same compact title `Input` and tags input the pending-file rows have (#2905). A tag change is saved at once and a title when the field loses focus or on Enter, with `PUT /files/{id}`, which also sends the file's description back since the PUT replaces it; an empty title saves the file name. While Add item runs, the row's fields are disabled; a failed save shows an error toast and the row shows the file's saved title and tags again.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for the saved-file rows of a resumed draft to show title and tags and let the user edit both, saved through the files API, so the tags and titles batch intake set can be checked before the item is added. Saving on blur instead of with the form was agent-suggested: the files already exist on the server, and the form's Save draft does not write files.
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions; saving on blur is agent-suggested.
+- **Reversion plan**: Permanent unless the mock adds drafts with their own file rows.
+
 #### 2026-11-26 — Donated and Stolen item statuses
 
 - **Issue/PR**: #1607 / #2903
@@ -973,6 +1000,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the agent-suggested parts are listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds a personal data export surface; otherwise permanent.
 
+#### 2026-11-26 — Failed background jobs card in the group settings
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no list of background jobs; its Data card (L134–L156) holds the Members and Backup & Restore rows only.
+- **Reality**: For admins and owners, the Data & storage section ends with `frontend/src/components/groups/FailedJobsCard.tsx`, a bordered card with a title, a subtitle and a `divide-y` list of the group's failed jobs, newest first. Each row has an outline `Badge` with the job type, the job's title, a muted line with the failure time and the attempt count, the last error in the destructive color (up to three lines; an intake scan's error code reads as the sentence the Inbox uses), and an outline **Retry** button (`RotateCcw` icon) for a type that can run again, or a muted note that says what to do instead: start a new restore or a new currency change, which an operator can dismiss. Nothing failed shows the empty-state block with a `CircleCheck` icon. The card lists the 50 newest and says how many more there are. Members without the admin role do not get the card.
+- **Why**: not present in mock. The owner decision on #1307 gives group admins their group's failed jobs with a Retry button in the group settings; the card follows the Sections card anatomy and the empty-state block of the admin lists. The what-to-do-instead note is the owner's decision in the review of #2938. The 50-row cap with the count note and leaving the card out (rather than disabling it) for other roles are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the note by the review of 2026-11-26; the row cap and leaving the card out for other roles agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card; otherwise permanent.
+
 #### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
 
 - **Issue/PR**: #1389 / #2923
@@ -1311,6 +1347,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-26 — Admin Failed jobs page
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs; the nearest list is [`GroupsView.tsx`](../../design-mocks/src/views/admin/GroupsView.tsx).
+- **Reality**: `frontend/src/pages/admin/AdminFailedJobsPage.tsx` at `/admin/failed-jobs`, reached from a third **Failed jobs** pill in the `AdminLayout` secondary nav. It follows `AdminGroupsPage`: the icon tile (`TriangleAlert`), title and subtitle, a row of two `Select` filters (job type, tenant), a bordered `Table` and `AdminPagination`. The columns are the job (type `Badge`, title, id in mono), the tenant with the group below it, the last error (muted, up to three lines), the failure time, the attempt count, and outline **Retry** (`RotateCcw`, only for a type that can run again) and **Discard** (`ArchiveX`, only for a `platform_admin`; a support agent may retry but not discard) buttons. Discard opens a `Dialog` that asks first and names the job in a muted bordered block: type `Badge`, title, tenant · group, id in mono. The filters and the page round-trip through `?type`, `?tenantID` and `?page`. With filters on, the empty state says that nothing matches them.
+- **Why**: not present in mock. The owner decision on #1307 gives system admins a Failed jobs page in the back office with type and tenant filters; the page reuses the admin list anatomy so it reads like its siblings. Discard for platform admins only and the job named in the dialog are the owner's decisions in the review of #2938. The discard confirmation, the job id in the row (the CLI takes it) and the filtered empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the role split and the named job by the review of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
 
 #### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
 

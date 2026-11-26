@@ -6,9 +6,11 @@ import (
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	_ "gocloud.dev/blob/memblob" // register the memory:// blob driver
 
 	importpkg "go.5x5.cz/inventario/backup/import"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 )
 
@@ -39,6 +41,9 @@ func TestImportService_ProcessImport_ForeignTenantSourcePath_FailsFast(t *testin
 		TenantGroupAwareEntityID: models.TenantGroupAwareEntityID{TenantID: "test-tenant"},
 	}))
 
+	counter := metrics.JobsDeadLetteredFor(string(models.WorkerTypeImport))
+	before := testutil.ToFloat64(counter)
+
 	// Another tenant's namespace — must be rejected without reading the bucket.
 	err := service.ProcessImport(ctx, createdExport.ID, "t/other-tenant/exports/backup_full_database_20260101.inb")
 	c.Assert(err, qt.IsNotNil)
@@ -47,4 +52,6 @@ func TestImportService_ProcessImport_ForeignTenantSourcePath_FailsFast(t *testin
 	updatedExport := must.Must(registrySet.ExportRegistry.Get(ctx, createdExport.ID))
 	c.Assert(updatedExport.Status, qt.Equals, models.ExportStatusFailed)
 	c.Assert(updatedExport.ErrorMessage, qt.Contains, "import source path is outside the export's tenant namespace")
+	c.Assert(updatedExport.CompletedDate, qt.IsNotNil)
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, float64(1), qt.Commentf("the failed import is counted once (#1307)"))
 }

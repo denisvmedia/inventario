@@ -147,6 +147,9 @@ func (c *Command) run() error {
 	stopBusinessMetrics := bootstrap.StartBusinessMetricsWorker(ctx, rs, c.cfg)
 	defer stopBusinessMetrics()
 
+	stopFailedJobDepth := bootstrap.StartFailedJobDepthWorker(ctx, rs, c.cfg)
+	defer stopFailedJobDepth()
+
 	stopAssetNumberBackfill := bootstrap.StartAssetNumberBackfill(ctx, rs, c.cfg)
 	defer stopAssetNumberBackfill()
 

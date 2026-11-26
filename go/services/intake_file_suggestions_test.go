@@ -202,7 +202,7 @@ func TestIntakeWorker_FileSuggestionsNeedTheStoredScan(t *testing.T) {
 	worker := f.workerWith(&editingProvider{Provider: mock.New(), edit: func() {
 		// The sweep takes the claim away, as when it thinks the worker died.
 		reg := f.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
-		c.Check(must.Must(reg.SweepStuckSources(context.Background(), time.Now().Add(time.Hour), time.Now(), 0, "")), qt.Equals, 1)
+		c.Check(must.Must(reg.SweepStuckSources(context.Background(), time.Now().Add(time.Hour), time.Now(), 0, "")).Changed, qt.Equals, 1)
 	}})
 
 	c.Assert(worker.Tick(context.Background()), qt.Equals, 1)

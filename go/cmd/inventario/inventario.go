@@ -14,6 +14,7 @@ import (
 	"go.5x5.cz/inventario/cmd/inventario/db"
 	"go.5x5.cz/inventario/cmd/inventario/features"
 	"go.5x5.cz/inventario/cmd/inventario/initconfig"
+	"go.5x5.cz/inventario/cmd/inventario/jobs"
 	"go.5x5.cz/inventario/cmd/inventario/run"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/cmd/inventario/tenants"
@@ -69,6 +70,9 @@ Use "inventario [command] --help" for detailed information about each command.`,
 	// worker process): this group MUTATES the shared pause state of an
 	// already-running deployment.
 	rootCmd.AddCommand(workers.New(&dbConfig))
+	// `jobs failed list|retry|discard`: the background jobs that failed for
+	// good, across every tenant (#1307).
+	rootCmd.AddCommand(jobs.New(&dbConfig))
 	rootCmd.AddCommand(backfill.New(&dbConfig))
 	rootCmd.AddCommand(backup.New())
 	rootCmd.AddCommand(backoffice.New(&dbConfig))
