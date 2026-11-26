@@ -467,8 +467,10 @@ func TestIntakeDeliver_SessionDeletedBeforeTheDraft(t *testing.T) {
 // TestIntakeDeliver_SessionOfALostRecord: a session carries the document's
 // identity, but the group lost the record of the delivery that made it. A
 // delivery of the document is refused, with the same values too, since what
-// the first one held is not known, and so is its repeat; nothing is stored.
-// Once the member deleted that session, the draft it made is the document's.
+// the first one held is not known, and so is its repeat; nothing is stored,
+// the record included. The draft that session made is refused the same way
+// once the member deleted the session; after it is discarded, the document
+// makes a new one.
 func TestIntakeDeliver_SessionOfALostRecord(t *testing.T) {
 	changed := paperlessDelivery("117")
 	changed.Title = "Another invoice"
@@ -483,21 +485,27 @@ func TestIntakeDeliver_SessionOfALostRecord(t *testing.T) {
 			docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
 			c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
 			files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
-
-			for range 2 {
+			refused := func() {
+				c.Helper()
 				result, err := f.intake.Deliver(f.ctx, in, blob("t/tenant-a/files/again.pdf"))
 				c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
 				c.Assert(result.File, qt.IsNil)
 				c.Assert(result.Document.DraftID, qt.IsNil)
 				c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
 				c.Assert(f.drafts(c), qt.HasLen, 1)
+				c.Assert(must.Must(docs.List(f.ctx)), qt.HasLen, 0)
 			}
+			refused()
+			refused()
 
 			c.Assert(f.intake.Delete(f.ctx, *first.Document.SessionID), qt.IsNil)
+			refused()
+
+			c.Assert(services.NewCommodityDraftService(f.factorySet).Discard(f.ctx, *first.Document.DraftID), qt.IsNil)
 			result := f.deliver(c, in, blob("t/tenant-a/files/again.pdf"))
+			c.Assert(result.Created, qt.IsTrue)
 			c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
-			c.Assert(*result.Document.DraftID, qt.Equals, *first.Document.DraftID)
-			c.Assert(f.drafts(c), qt.HasLen, 1)
+			c.Assert(*result.Document.DraftID, qt.Not(qt.Equals), *first.Document.DraftID)
 		})
 	}
 }
@@ -696,6 +704,167 @@ func TestIntakeDeliver_SessionKeyIsReserved(t *testing.T) {
 	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
 	session := must.Must(must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx)).Get(f.ctx, *result.Document.SessionID))
 	c.Assert(session.Origin, qt.Equals, models.IntakeOriginExternal)
+}
+
+// failingAttach is a draft registry whose AttachFile fails while asked to.
+type failingAttach struct {
+	registry.CommodityDraftRegistryFactory
+	fail atomic.Bool
+}
+
+type failingAttachRegistry struct {
+	registry.CommodityDraftRegistry
+	f *failingAttach
+}
+
+func (f *failingAttach) CreateUserRegistry(ctx context.Context) (registry.CommodityDraftRegistry, error) {
+	reg, err := f.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	return &failingAttachRegistry{CommodityDraftRegistry: reg, f: f}, err
+}
+
+func (r *failingAttachRegistry) AttachFile(ctx context.Context, draftID string, link models.FileLink) (*models.FileLink, bool, error) {
+	if r.f.fail.Load() {
+		return nil, false, errLostWrite
+	}
+	return r.CommodityDraftRegistry.AttachFile(ctx, draftID, link)
+}
+
+// TestIntakeDeliver_FileNotAttached: the draft was made but its file could
+// not be attached. The repeat attaches it and finishes the product before it
+// records the draft.
+func TestIntakeDeliver_FileNotAttached(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+	w := &failingAttach{CommodityDraftRegistryFactory: f.factorySet.CommodityDraftRegistryFactory}
+	f.factorySet.CommodityDraftRegistryFactory = w
+	w.fail.Store(true)
+	_, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
+	w.fail.Store(false)
+	c.Assert(err, qt.ErrorIs, errLostWrite)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+
+	replay := f.deliver(c, paperlessDelivery("117"), blob)
+	c.Assert(replay.State, qt.Equals, models.IntakeDocumentDraft)
+	draft := f.drafts(c)[0]
+	c.Assert(*replay.Document.DraftID, qt.Equals, draft.ID)
+	files := must.Must(must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx)).ListByLinkedEntity(f.ctx, models.FileLinkDraft, draft.ID))
+	c.Assert(files, qt.HasLen, 1)
+	c.Assert(files[0].ID, qt.Equals, *replay.Document.FileID)
+	detail := must.Must(f.intake.GetSession(f.ctx, *replay.Document.SessionID))
+	c.Assert(detail.Candidates, qt.HasLen, 1)
+	c.Assert(detail.Candidates[0].Outcome, qt.Equals, models.IntakeCandidateCreated)
+}
+
+// beforeCreateSession runs hook once, in the first CreateSession after it
+// is armed, before the session is made.
+type beforeCreateSession struct {
+	registry.IntakeRegistryFactory
+	armed atomic.Bool
+	hook  func()
+}
+
+type beforeCreateSessionRegistry struct {
+	registry.IntakeRegistry
+	f *beforeCreateSession
+}
+
+func (b *beforeCreateSession) CreateUserRegistry(ctx context.Context) (registry.IntakeRegistry, error) {
+	reg, err := b.IntakeRegistryFactory.CreateUserRegistry(ctx)
+	return &beforeCreateSessionRegistry{IntakeRegistry: reg, f: b}, err
+}
+
+func (r *beforeCreateSessionRegistry) CreateSession(ctx context.Context, session models.IntakeSession, sources []registry.IntakeSourceInput, maxQueued int) (*models.IntakeSession, bool, error) {
+	if r.f.armed.CompareAndSwap(true, false) {
+		r.f.hook()
+	}
+	return r.IntakeRegistry.CreateSession(ctx, session, sources, maxQueued)
+}
+
+// TestIntakeDeliver_SessionDeletedDuringADelivery: while one delivery is
+// about to make the session, a concurrent one makes and records its own,
+// with the draft, and the member deletes that session. The first delivery
+// does not bring the session back: it deletes the one it made and ends with
+// the draft the deleted session made.
+func TestIntakeDeliver_SessionDeletedDuringADelivery(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	w := &beforeCreateSession{IntakeRegistryFactory: f.factorySet.IntakeRegistryFactory}
+	f.factorySet.IntakeRegistryFactory = w
+	var other *services.IntakeDeliveryResult
+	w.hook = func() {
+		other = f.deliver(c, paperlessDelivery("117"), nil)
+		c.Assert(f.intake.Delete(f.ctx, *other.Document.SessionID), qt.IsNil)
+	}
+	w.armed.Store(true)
+
+	result := f.deliver(c, paperlessDelivery("117"), nil)
+	c.Assert(other, qt.IsNotNil)
+	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*result.Document.DraftID, qt.Equals, *other.Document.DraftID)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+	sessions := must.Must(must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx)).List(f.ctx))
+	c.Assert(sessions, qt.HasLen, 0)
+}
+
+// promoteOnSecondGet promotes the draft right after the first Get of it
+// once armed, so the next read finds it promoted.
+type promoteOnSecondGet struct {
+	registry.CommodityDraftRegistryFactory
+	armed   atomic.Bool
+	promote func(*models.CommodityDraft)
+}
+
+type promoteOnSecondGetRegistry struct {
+	registry.CommodityDraftRegistry
+	f *promoteOnSecondGet
+}
+
+func (p *promoteOnSecondGet) CreateUserRegistry(ctx context.Context) (registry.CommodityDraftRegistry, error) {
+	reg, err := p.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
+	return &promoteOnSecondGetRegistry{CommodityDraftRegistry: reg, f: p}, err
+}
+
+func (r *promoteOnSecondGetRegistry) Get(ctx context.Context, id string) (*models.CommodityDraft, error) {
+	draft, err := r.CommodityDraftRegistry.Get(ctx, id)
+	if err == nil && r.f.armed.CompareAndSwap(true, false) {
+		r.f.promote(draft)
+	}
+	return draft, err
+}
+
+// TestIntakeDeliver_PromotedWhileAnswering: the draft becomes an item between
+// the reads of the replay. The answer that says item names the item.
+func TestIntakeDeliver_PromotedWhileAnswering(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	first := f.deliver(c, paperlessDelivery("117"), nil)
+	regs := must.Must(f.factorySet.CreateUserRegistrySet(f.ctx))
+	location := must.Must(regs.LocationRegistry.Create(f.ctx, models.Location{Name: "Home"}))
+	area := must.Must(regs.AreaRegistry.Create(f.ctx, models.Area{Name: "Office", LocationID: location.ID}))
+	orig := f.factorySet.CommodityDraftRegistryFactory
+	w := &promoteOnSecondGet{CommodityDraftRegistryFactory: orig}
+	var item *models.Commodity
+	w.promote = func(draft *models.CommodityDraft) {
+		f.factorySet.CommodityDraftRegistryFactory = orig
+		defer func() { f.factorySet.CommodityDraftRegistryFactory = w }()
+		var err error
+		item, _, err = services.NewCommodityDraftService(f.factorySet).Promote(f.ctx, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+			Name: "Invoice 117", ShortName: "Invoice 117", Type: models.CommodityTypeOther, AreaID: new(area.ID),
+			Count: 1, Status: models.CommodityStatusInUse, Tags: models.ValuerSlice[string]{},
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	f.factorySet.CommodityDraftRegistryFactory = w
+	w.armed.Store(true)
+
+	replay := f.deliver(c, paperlessDelivery("117"), nil)
+	f.factorySet.CommodityDraftRegistryFactory = orig
+	c.Assert(item, qt.IsNotNil)
+	c.Assert(*replay.Document.DraftID, qt.Equals, *first.Document.DraftID)
+	c.Assert(replay.State, qt.Equals, models.IntakeDocumentItem)
+	c.Assert(replay.Document.CommodityID, qt.IsNotNil)
+	c.Assert(*replay.Document.CommodityID, qt.Equals, item.ID)
 }
 
 // TestIntakeListDocuments_OldestFirst: documents found by their draft and by

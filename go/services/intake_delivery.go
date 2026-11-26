@@ -332,6 +332,13 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 	}
 	if result.Document.DraftID == nil {
 		if err := s.finishDelivery(ctx, set, n, file, result); err != nil {
+			if created && result.Document.FileID == nil && errors.Is(err, ErrIntakeDocumentConflict) {
+				// The refused delivery keeps no record, so its values
+				// reserve nothing.
+				if delErr := docs.Delete(context.WithoutCancel(ctx), doc.ID); delErr != nil {
+					err = errors.Join(err, delErr)
+				}
+			}
 			return result, err
 		}
 	}
@@ -340,6 +347,12 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 	}
 	if result.State, err = s.documentState(ctx, set, result.Document); err != nil {
 		return result, err
+	}
+	if result.State == models.IntakeDocumentItem && result.Document.CommodityID == nil {
+		// The draft became an item after recordPromotion read it.
+		if err := recordPromotion(ctx, set, result); err != nil {
+			return result, err
+		}
 	}
 	return result, nil
 }
@@ -380,27 +393,16 @@ func dropDeliveredFile(ctx context.Context, set *registry.Set, stored *models.Fi
 // finishDelivery makes what the document does not have yet, the file of the
 // group, the intake session and the draft, and records each on it.
 func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) error {
-	// The draft may be there without the document naming it: a call made it
-	// and stopped before recording it, also when its session is gone since,
-	// or a restore brought the draft back without the session.
-	draft, err := set.CommodityDraftRegistry.GetByClientKey(ctx, result.Document.DraftClientKey())
+	session, err := s.deliverySession(ctx, set, result)
+	if errors.Is(err, errNoDeliverySession) {
+		session, err = s.newDeliverySession(ctx, set, n, file, result)
+	}
 	switch {
-	case err == nil:
-		if err := ownsTheIdentity(ctx, set.IntakeRegistry, result.Document); err != nil {
-			return err
-		}
-		return recordDraft(ctx, set, result, draft.ID)
-	case !errors.Is(err, registry.ErrNotFound):
-		return err
-	}
-	session, err := s.deliverySession(ctx, set, n, file, result)
-	if errors.Is(err, errDeliverySessionGone) {
-		// The session was deleted before its draft was made. A new session
-		// would bring back what the member deleted, so the delivery is done
-		// without a draft.
-		return recordDraft(ctx, set, result, "")
-	}
-	if err != nil {
+	case errors.Is(err, errDeliveryFinished):
+		return nil
+	case errors.Is(err, errDeliverySessionGone):
+		return finishWithoutSession(ctx, set, result)
+	case err != nil:
 		return err
 	}
 	doc, err := set.IntakeDocumentRegistry.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{SessionID: &session.ID})
@@ -408,7 +410,20 @@ func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n
 		return err
 	}
 	result.Document = doc
+	if *doc.SessionID != session.ID {
+		// A concurrent delivery recorded its session first, and the member
+		// deleted it since: the key of a session is unique, so this one
+		// could not be made while that one was there. Making the draft
+		// would bring back what the member deleted.
+		if err := s.Delete(ctx, session.ID); err != nil && !errors.Is(err, registry.ErrNotFound) {
+			return errxtrace.Wrap("failed to delete the session the delivery made again", err)
+		}
+		return finishWithoutSession(ctx, set, result)
+	}
 
+	// The session may hold the draft already. Making the drafts again is
+	// safe and finishes what a call that stopped half way left, such as
+	// attaching the file to the draft.
 	made, err := s.CreateDrafts(ctx, session.ID)
 	if err != nil {
 		return err
@@ -423,6 +438,17 @@ func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n
 	// The draft with the document's key is being discarded.
 	_, err = recordDraftByKey(ctx, set, result)
 	return err
+}
+
+// finishWithoutSession finishes a delivery whose session was deleted. A
+// draft the session made stays and is the document's. Without one, a new
+// session would bring back what the member deleted, so the delivery is done
+// without a draft.
+func finishWithoutSession(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult) error {
+	if found, err := recordDraftByKey(ctx, set, result); found || err != nil {
+		return err
+	}
+	return recordDraft(ctx, set, result, "")
 }
 
 // recordDraft records the draft on the document. A failed write leaves
@@ -510,13 +536,17 @@ func (s *IntakeService) storeDeliveredFile(ctx context.Context, set *registry.Se
 // document no longer exists.
 var errDeliverySessionGone = errx.NewSentinel("the intake session of the delivery was deleted")
 
+// errNoDeliverySession reports that no intake session carries the document.
+var errNoDeliverySession = errx.NewSentinel("no intake session carries the document")
+
+// errDeliveryFinished reports that the document names its draft: this call
+// recorded it, or a concurrent delivery did.
+var errDeliveryFinished = errx.NewSentinel("the delivery has its draft")
+
 // deliverySession returns the intake session that carries the delivery: the
 // one recorded on the document, or the one a call that stopped before
-// recording it made under the document's key. Without one it stores the file
-// and makes the session, whose one source is already scanned: it carries the
-// external identity, the delivered file and the product the delivery
-// describes.
-func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
+// recording it made under the document's key.
+func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
 	reg := set.IntakeRegistry
 	if id := result.Document.SessionID; id != nil {
 		session, err := reg.Get(ctx, *id)
@@ -538,12 +568,54 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 	case !errors.Is(err, registry.ErrNotFound):
 		return nil, errxtrace.Wrap("failed to look up the source of the document", err)
 	}
-	if file != nil && doc.FileID == nil {
+	return nil, errNoDeliverySession
+}
+
+// newDeliverySession goes on with a document that no session carries. It
+// stores the file and makes the session, whose one source is already
+// scanned: it carries the external identity, the delivered file and the
+// product the delivery describes.
+//
+// A draft with the document's key can be there without a session: a restore
+// brings back the record and the draft, not the session, and the draft is
+// the record's. On a record this call made, the draft is the one of an
+// earlier delivery whose record the group no longer has. What that delivery
+// held is not known, so the delivery is refused rather than take the draft
+// over.
+func (s *IntakeService) newDeliverySession(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
+	draft, err := set.CommodityDraftRegistry.GetByClientKey(ctx, result.Document.DraftClientKey())
+	if err != nil && !errors.Is(err, registry.ErrNotFound) {
+		return nil, err
+	}
+	// A concurrent delivery of the document may have recorded its session
+	// or its draft since this call read the document. It records the
+	// session before it makes the draft, so a draft found above comes with
+	// its session in this read.
+	if result.Document, err = set.IntakeDocumentRegistry.Get(ctx, result.Document.ID); err != nil {
+		return nil, err
+	}
+	switch {
+	case result.Document.DraftID != nil:
+		return nil, errDeliveryFinished
+	case result.Document.SessionID != nil:
+		return s.deliverySession(ctx, set, result)
+	case draft != nil && result.Created:
+		return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", result.Document.ID))
+	case draft != nil:
+		if err := recordDraft(ctx, set, result, draft.ID); err != nil {
+			return nil, err
+		}
+		return nil, errDeliveryFinished
+	}
+	if file != nil && result.Document.FileID == nil {
 		if err := s.recordDeliveredFile(ctx, set, n, file, result); err != nil {
 			return nil, err
 		}
-		doc = result.Document
+		if result.Document.SessionID != nil {
+			return s.deliverySession(ctx, set, result)
+		}
 	}
+	doc := result.Document
 	cand, err := n.candidate()
 	if err != nil {
 		return nil, err
@@ -552,7 +624,9 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 	if doc.FileID != nil {
 		fileIDs = []string{*doc.FileID}
 	}
-	session, _, err = reg.CreateSession(ctx,
+	reg := set.IntakeRegistry
+	clientKey := models.IntakeDeliverySessionKeyPrefix + doc.ID
+	session, _, err := reg.CreateSession(ctx,
 		models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginExternal},
 		[]registry.IntakeSourceInput{{
 			FileIDs:            fileIDs,
@@ -572,23 +646,6 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 		return sessionOfSource(ctx, reg, src, clientKey, doc)
 	}
 	return session, err
-}
-
-// ownsTheIdentity refuses the document when a session made for another
-// record carries its identity, as sessionOfSource does. The session the
-// document names is its own.
-func ownsTheIdentity(ctx context.Context, reg registry.IntakeRegistry, doc *models.IntakeDocument) error {
-	src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
-	switch {
-	case errors.Is(err, registry.ErrNotFound):
-		return nil
-	case err != nil:
-		return errxtrace.Wrap("failed to look up the source of the document", err)
-	case doc.SessionID != nil && *doc.SessionID == src.SessionID:
-		return nil
-	}
-	_, err = sessionOfSource(ctx, reg, src, models.IntakeDeliverySessionKeyPrefix+doc.ID, doc)
-	return err
 }
 
 // sessionOfSource returns the session of a source that carries the
