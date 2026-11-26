@@ -77,6 +77,7 @@ export function CreateAPITokenDialog({ open, onOpenChange }: Props) {
   return (
     <Dialog open={open} onOpenChange={handleOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         data-testid="api-token-create-dialog"
         className="sm:max-w-md"
         onInteractOutside={(e) => {

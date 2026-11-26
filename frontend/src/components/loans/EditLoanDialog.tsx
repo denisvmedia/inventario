@@ -122,7 +122,11 @@ export function EditLoanDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="edit-loan-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-md"
+        data-testid="edit-loan-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isClosed ? t("loans:editDialog.titleClosed") : t("loans:editDialog.title")}

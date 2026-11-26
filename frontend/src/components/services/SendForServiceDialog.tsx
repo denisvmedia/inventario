@@ -79,7 +79,11 @@ export function SendForServiceDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="service-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-md"
+        data-testid="service-dialog"
+      >
         <DialogHeader>
           <DialogTitle>{t("services:dialog.title")}</DialogTitle>
           <DialogDescription>{t("services:dialog.description")}</DialogDescription>

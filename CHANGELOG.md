@@ -418,6 +418,16 @@ the section matching the tag and publishes it as the GitHub Release body. See
 
 ### Changed
 
+- On a phone (a screen narrower than 640px) the dialogs that hold a longer
+  form fill the screen: adding and editing an item, locations, areas, custom
+  fields, sellers, changing the group currency, adding items from files,
+  uploading files, lending and loans, sending for service, maintenance
+  schedules, reminders, API tokens and feedback. The title and the close
+  button stay at the top, the buttons stay at the bottom, and the form
+  scrolls between them. Confirmations and short dialogs stay small cards, and
+  wider screens keep the centered dialog
+  ([#1627](https://github.com/denisvmedia/inventario/issues/1627)).
+
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
   a cover set that way before shows the first photo instead. The No photo

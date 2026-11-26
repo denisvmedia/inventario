@@ -407,7 +407,11 @@ export function UploadFilesDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[80vh] sm:max-w-2xl" data-testid="files-upload-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-h-[80vh] sm:max-w-2xl"
+        data-testid="files-upload-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {linkedEntity?.name

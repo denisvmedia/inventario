@@ -81,7 +81,7 @@ export function LendDialog({ open, onOpenChange, onSubmit, isPending = false }: 
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md" data-testid="lend-dialog">
+      <DialogContent variant="fullscreen-mobile" className="sm:max-w-md" data-testid="lend-dialog">
         <DialogHeader>
           <DialogTitle>{t("loans:dialog.title")}</DialogTitle>
           <DialogDescription>{t("loans:dialog.description")}</DialogDescription>

@@ -1372,7 +1372,14 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
-_None yet._
+#### 2026-11-26 — Long-form dialogs fill the screen below `sm`
+
+- **Issue/PR**: #1627 / PR (pending)
+- **Mock**: Every dialog in the mock is the shadcn centered card at every width: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) keeps a 16px margin on each side below `sm`, opens with a fade and zoom, and stacks the footer buttons in a column below `sm`. [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx), [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) have no phone layout of their own.
+- **Reality**: `frontend/src/components/ui/dialog.tsx` adds `variant="fullscreen-mobile"` to `DialogContent`. Below 640px the dialog covers the screen edge to edge (`100dvh`, no border, radius or shadow) and scrolls inside; `DialogHeader` sticks to the top with a bottom border and carries its own close button (40px, the first control, so it takes the focus on open); `DialogFooter` sticks to the bottom with a top border, pads itself by `env(safe-area-inset-bottom)`, and lays its buttons out in a row that wraps. The dialog slides up from the bottom on open and down on close (a fade under reduced motion). From 640px up it is the centered card, unchanged. The variant is used by the item create/edit dialog (every step, the AI scan step included), location, area, custom field, seller, currency change, add from files, upload files, lend, edit loan, send for service, maintenance schedule, reminder, create API token and feedback dialogs. Confirmations and short dialogs stay centered cards at every width and open above a full-screen dialog.
+- **Why**: The owner approved the full-screen layout for every long-form dialog on 2026-11-26 (#1627): on a 375–412px phone the card loses 32px of width to its margins, its footer competes with the on-screen keyboard, and a tall dialog's top runs off the screen. The footer's row layout below `sm` (the mock stacks the buttons) is agent-suggested: stacked, three or four pinned buttons take a fifth of the screen.
+- **Approved by**: user (explicit) — owner decision of 2026-11-26 on #1627; the footer row agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
 
 ### Backup & Restore
 

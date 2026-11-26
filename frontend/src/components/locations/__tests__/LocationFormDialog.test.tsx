@@ -53,6 +53,23 @@ beforeEach(() => {
 })
 
 describe("<LocationFormDialog />", () => {
+  // #1627: full screen below `sm`, the centered card from `sm` up.
+  it("uses the full-screen layout on a phone", async () => {
+    renderWithProviders({
+      children: (
+        <LocationFormDialog
+          open
+          onOpenChange={() => undefined}
+          location={null}
+          onSubmit={async () => undefined}
+        />
+      ),
+    })
+    const dialog = await screen.findByTestId("location-form-dialog")
+    expect(dialog).toHaveAttribute("data-variant", "fullscreen-mobile")
+    expect(dialog.className).toContain("sm:max-w-lg")
+  })
+
   it("prefills from the location prop on mount", async () => {
     renderWithProviders({
       children: (

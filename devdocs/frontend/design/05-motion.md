@@ -69,10 +69,12 @@ The defaults are correct.
 | Dialog close | `fade-out-0 zoom-out-95` | 300ms ease-in |
 | Sheet open (right) | `slide-in-from-right` | 300ms ease-out |
 | Sheet close (right) | `slide-out-to-right` | 300ms ease-in |
+| Full-screen dialog open, below `sm` | `slide-in-from-bottom` (no fade, no zoom); a fade under reduced motion | 300ms ease-out |
+| Full-screen dialog close, below `sm` | `slide-out-to-bottom`; a fade under reduced motion | 300ms ease-in |
 | Sonner toast in | `slide-in-from-bottom` | 300ms ease-out |
 | Reveal-on-hover (kebab in row) | `transition-opacity` | 150ms |
 | Skeleton shimmer | `animate-pulse` | infinite |
-| Wizard step swap (container resize) | `transition-[height]` 200ms ease-out | 200ms |
+| Wizard step swap (container resize), from `sm` up | `transition-[height]` 200ms ease-out | 200ms |
 | List row enter (URL `+ Add`, file attached, reveal-on-click section) | `animate-in fade-in slide-in-from-top-1` | 150ms ease-out |
 | List row exit (URL × button) | `animate-out fade-out slide-out-to-top-1 fill-mode-forwards` | 150ms ease-in |
 | Page transition between routes | none | — |
@@ -80,6 +82,19 @@ The defaults are correct.
 **No page transitions** — switching between routes is instant. Adding a
 fade between pages adds latency the user doesn't want and breaks
 keyboard / back-button rhythm.
+
+## Full-screen dialogs on phones
+
+`<DialogContent variant="fullscreen-mobile">` (long forms, #1627) is the
+centered card from `sm` up, with the card's fade and zoom. Below `sm` it
+fills the screen and slides up from the bottom edge on open and back down
+on close, without fading or zooming, like a native full-screen sheet. The
+slide is applied under `motion-safe:` only; with
+`prefers-reduced-motion: reduce` the dialog fades in and out instead.
+
+Inside it, a wizard swaps steps without the container-resize animation
+below: the dialog's height is the screen's, so there is no box to
+resize, and `StepResizeWrapper` applies its pixel height from `sm` up.
 
 ## Smoothness — no abrupt jerks
 

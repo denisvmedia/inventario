@@ -57,7 +57,7 @@ export function ReminderDialog({
 }: ReminderDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent variant="fullscreen-mobile">
         {open ? (
           <ReminderForm
             key={initial?.id ?? "create"}

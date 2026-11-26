@@ -246,7 +246,11 @@ function IntakeUploadForm({
   }
 
   return (
-    <DialogContent className="sm:max-w-lg" data-testid="intake-upload-dialog">
+    <DialogContent
+      variant="fullscreen-mobile"
+      className="sm:max-w-lg"
+      data-testid="intake-upload-dialog"
+    >
       <DialogHeader>
         <DialogTitle>{t("commodities:intake.upload.title")}</DialogTitle>
         <DialogDescription>{t("commodities:intake.upload.description")}</DialogDescription>

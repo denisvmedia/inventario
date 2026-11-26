@@ -5,6 +5,52 @@ import { Dialog as DialogPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
 
+// "default" is the centered card at every width. "fullscreen-mobile" is for
+// long forms: below `sm` (640px) the dialog fills the screen, the header
+// (title and close button) sticks to the top, the footer (the actions) sticks
+// to the bottom above the safe-area inset, and the content between them
+// scrolls; it slides up on open and down on close. From `sm` up it is the
+// same centered card as "default".
+type DialogContentVariant = "default" | "fullscreen-mobile"
+
+// DialogHeader and DialogFooter read the variant from here, so a dialog opts
+// in with one prop on DialogContent and keeps its markup.
+const DialogLayoutContext = React.createContext<{
+  variant: DialogContentVariant
+  showCloseButton: boolean
+}>({ variant: "default", showCloseButton: false })
+
+const closeButtonClassName =
+  "opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+
+// Below `sm` the content box is the scroll container. Every direct child
+// keeps its height (`*:shrink-0`) so an inner list with its own max height
+// does not collapse. A direct child that wraps the footer (usually the
+// form) grows to fill the screen and drops its bottom padding, so the
+// footer (`mt-auto`) sits on the bottom edge even when the content is
+// short. Under reduced motion the slide becomes the default fade.
+const fullscreenMobileContentClassName = cn(
+  "max-sm:top-0 max-sm:left-0 max-sm:flex max-sm:h-dvh max-sm:max-h-none max-sm:w-full max-sm:max-w-none max-sm:translate-none max-sm:flex-col",
+  "max-sm:overflow-y-auto max-sm:overscroll-contain max-sm:rounded-none max-sm:border-0 max-sm:px-4 max-sm:py-0 max-sm:shadow-none",
+  "max-sm:*:shrink-0",
+  "max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-1 max-sm:[&>*:has(>[data-slot=dialog-footer])]:flex-col max-sm:[&>*:has(>[data-slot=dialog-footer])]:pb-0",
+  "max-sm:duration-300 max-sm:data-[state=closed]:ease-in max-sm:data-[state=open]:ease-out",
+  "max-sm:data-[state=closed]:zoom-out-100 max-sm:data-[state=open]:zoom-in-100",
+  "max-sm:motion-safe:data-[state=closed]:fade-out-100 max-sm:motion-safe:data-[state=closed]:slide-out-to-bottom",
+  "max-sm:motion-safe:data-[state=open]:fade-in-100 max-sm:motion-safe:data-[state=open]:slide-in-from-bottom"
+)
+
+// The header sticks to the top of the scrolling content and spans it edge to
+// edge (`-mx-4` cancels the content's side padding). `pr-12` keeps the title
+// clear of the close button.
+const fullscreenMobileHeaderClassName =
+  "text-left max-sm:sticky max-sm:top-0 max-sm:z-10 max-sm:-mx-4 max-sm:border-b max-sm:bg-background max-sm:px-4 max-sm:pt-[calc(0.75rem+env(safe-area-inset-top))] max-sm:pb-3 max-sm:pr-12"
+
+// The footer sticks to the bottom, lays its buttons out in a row (wrapping
+// when they do not fit) and pads itself above the home indicator.
+const fullscreenMobileFooterClassName =
+  "flex-row justify-end max-sm:sticky max-sm:bottom-0 max-sm:z-10 max-sm:-mx-4 max-sm:mt-auto max-sm:flex-wrap max-sm:border-t max-sm:bg-background max-sm:px-4 max-sm:pt-3 max-sm:pb-[calc(0.75rem+env(safe-area-inset-bottom))]"
+
 function Dialog({ ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   return <DialogPrimitive.Root data-slot="dialog" {...props} />
 }
@@ -41,26 +87,38 @@ function DialogContent({
   className,
   children,
   showCloseButton = true,
+  variant = "default",
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Content> & {
   showCloseButton?: boolean
+  variant?: DialogContentVariant
 }) {
+  const fullscreenMobile = variant === "fullscreen-mobile"
+  const layout = React.useMemo(() => ({ variant, showCloseButton }), [variant, showCloseButton])
   return (
     <DialogPortal data-slot="dialog-portal">
       <DialogOverlay />
       <DialogPrimitive.Content
         data-slot="dialog-content"
+        data-variant={variant}
         className={cn(
           "fixed top-[50%] left-[50%] z-50 grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border bg-background p-6 shadow-lg duration-200 outline-none data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=closed]:zoom-out-95 data-[state=open]:animate-in data-[state=open]:fade-in-0 data-[state=open]:zoom-in-95 sm:max-w-lg",
+          fullscreenMobile && fullscreenMobileContentClassName,
           className
         )}
         {...props}
       >
-        {children}
+        <DialogLayoutContext.Provider value={layout}>{children}</DialogLayoutContext.Provider>
         {showCloseButton && (
+          // In the full-screen layout the header carries the close button
+          // below `sm`, so this one only shows from `sm` up.
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="absolute top-4 right-4 rounded-xs opacity-70 ring-offset-background transition-opacity hover:opacity-100 focus:ring-2 focus:ring-ring focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none data-[state=open]:bg-accent data-[state=open]:text-muted-foreground [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4"
+            className={cn(
+              "absolute top-4 right-4 rounded-xs focus:ring-2 focus:ring-ring focus:ring-offset-2",
+              closeButtonClassName,
+              fullscreenMobile && "max-sm:hidden"
+            )}
           >
             <XIcon />
             <span className="sr-only">Close</span>
@@ -71,13 +129,39 @@ function DialogContent({
   )
 }
 
-function DialogHeader({ className, ...props }: React.ComponentProps<"div">) {
+function DialogHeader({ className, children, ...props }: React.ComponentProps<"div">) {
+  const { variant, showCloseButton } = React.useContext(DialogLayoutContext)
+  const fullscreenMobile = variant === "fullscreen-mobile"
   return (
     <div
       data-slot="dialog-header"
-      className={cn("flex flex-col gap-2 text-center sm:text-left", className)}
+      className={cn(
+        "flex flex-col gap-2 text-center sm:text-left",
+        fullscreenMobile && fullscreenMobileHeaderClassName,
+        className
+      )}
       {...props}
-    />
+    >
+      {children}
+      {fullscreenMobile && showCloseButton && (
+        // Below `sm` the close button stays with the sticky header. It is the
+        // first control in the dialog there, so it takes the focus on open
+        // and the on-screen keyboard stays closed until a field is tapped.
+        // The ring shows for keyboard focus only. From `sm` up it is hidden
+        // and the content's own close button (last in the dialog) is used,
+        // as in "default".
+        <DialogPrimitive.Close
+          data-slot="dialog-close"
+          className={cn(
+            "absolute top-1 right-1 mt-[env(safe-area-inset-top)] inline-flex size-10 items-center justify-center rounded-md focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 sm:hidden",
+            closeButtonClassName
+          )}
+        >
+          <XIcon />
+          <span className="sr-only">Close</span>
+        </DialogPrimitive.Close>
+      )}
+    </div>
   )
 }
 
@@ -89,10 +173,15 @@ function DialogFooter({
 }: React.ComponentProps<"div"> & {
   showCloseButton?: boolean
 }) {
+  const { variant } = React.useContext(DialogLayoutContext)
   return (
     <div
       data-slot="dialog-footer"
-      className={cn("flex flex-col-reverse gap-2 sm:flex-row sm:justify-end", className)}
+      className={cn(
+        "flex flex-col-reverse gap-2 sm:flex-row sm:justify-end",
+        variant === "fullscreen-mobile" && fullscreenMobileFooterClassName,
+        className
+      )}
       {...props}
     >
       {children}
@@ -139,4 +228,5 @@ export {
   DialogPortal,
   DialogTitle,
   DialogTrigger,
+  type DialogContentVariant,
 }

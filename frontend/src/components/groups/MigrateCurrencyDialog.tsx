@@ -328,7 +328,12 @@ function MigrateCurrencyDialogBody({
   }
 
   return (
-    <DialogContent className="sm:max-w-2xl" data-testid="migrate-currency-dialog" data-step={step}>
+    <DialogContent
+      variant="fullscreen-mobile"
+      className="sm:max-w-2xl"
+      data-testid="migrate-currency-dialog"
+      data-step={step}
+    >
       <DialogHeader>
         <DialogTitle>{t("groups:settings.dialog.title")}</DialogTitle>
         <DialogDescription>{t("groups:settings.migrateCurrencyHelp")}</DialogDescription>

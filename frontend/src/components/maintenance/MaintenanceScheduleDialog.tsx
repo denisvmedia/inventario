@@ -61,7 +61,7 @@ export function MaintenanceScheduleDialog({
 }: MaintenanceScheduleDialogProps) {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent variant="fullscreen-mobile">
         {open ? (
           <MaintenanceScheduleForm
             key={initial?.id ?? "create"}
