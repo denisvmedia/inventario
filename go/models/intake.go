@@ -463,10 +463,21 @@ func (c *IntakeCandidate) DraftClientKey() string {
 	return IntakeDraftClientKey(c.ID)
 }
 
+// The client keys of the drafts intake makes start with one of these
+// prefixes.
+const (
+	// IntakeDraftKeyPrefix starts the key of a draft made for a product an
+	// intake session found.
+	IntakeDraftKeyPrefix = "intake:"
+	// IntakeDeliveredDraftKeyPrefix starts the key of a draft made for a
+	// document another system delivered.
+	IntakeDeliveredDraftKeyPrefix = "intake-doc:"
+)
+
 // IntakeDraftClientKey is the client key of the draft made for the candidate
 // with the given id.
 func IntakeDraftClientKey(candidateID string) string {
-	return "intake:" + candidateID
+	return IntakeDraftKeyPrefix + candidateID
 }
 
 // IntakeDeliveredDraftClientKey is the client key of the draft made for a
@@ -476,7 +487,7 @@ func IntakeDraftClientKey(candidateID string) string {
 // delivery finds the draft without the session.
 func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
 	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
-	return "intake-doc:" + hex.EncodeToString(sum[:])
+	return IntakeDeliveredDraftKeyPrefix + hex.EncodeToString(sum[:])
 }
 
 // DraftClientKey is the client key of the draft made for a product of the

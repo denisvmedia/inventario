@@ -171,8 +171,8 @@ func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
 
 // TestUserPurger_Postgres_HandsOverDeliveredDocuments covers #2809: the
 // record of a document another system delivered through the user's API token
-// is group content. It goes to the group's owner, so a replay of the
-// delivery still finds it, and the users row can go.
+// is group content. It goes to the group's owner with the draft it made, so a
+// replay of the delivery still finds both, and the users row can go.
 func TestUserPurger_Postgres_HandsOverDeliveredDocuments(t *testing.T) {
 	c := qt.New(t)
 	fx := newTagPGFixture(t)
@@ -212,11 +212,28 @@ func TestUserPurger_Postgres_HandsOverDeliveredDocuments(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 	c.Assert(doc.CreatedByUserID, qt.Equals, member.ID)
+	memberCtx := tagCtxFor(member, fx.groupAID)
+	delivered, _, err := memberSet.CommodityDraftRegistry.CreateOrGet(memberCtx, models.CommodityDraft{
+		ClientKey: doc.DraftClientKey(), Values: models.CommodityDraftValues{"name": "Invoice 7"},
+	})
+	c.Assert(err, qt.IsNil)
+	own, _, err := memberSet.CommodityDraftRegistry.CreateOrGet(memberCtx, models.CommodityDraft{
+		ClientKey: "form-1", Values: models.CommodityDraftValues{"name": "Lamp"},
+	})
+	c.Assert(err, qt.IsNil)
 
 	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(t.Context(), tenantID, member.ID), qt.IsNil)
 	got, err := fx.factorySet.IntakeDocumentRegistryFactory.CreateServiceRegistry().Get(t.Context(), doc.ID)
 	c.Assert(err, qt.IsNil)
 	c.Check(got.CreatedByUserID, qt.Equals, fx.user.ID)
+	// The draft the document made goes with it; the member's own draft goes
+	// with the member.
+	drafts := fx.factorySet.CommodityDraftRegistryFactory.CreateServiceRegistry()
+	kept, err := drafts.Get(t.Context(), delivered.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(kept.CreatedByUserID, qt.Equals, fx.user.ID)
+	_, err = drafts.Get(t.Context(), own.ID)
+	c.Check(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Check(fx.factorySet.UserRegistry.Delete(ctx, member.ID), qt.IsNil)
 }
 

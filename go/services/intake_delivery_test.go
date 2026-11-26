@@ -641,3 +641,31 @@ func TestIntakeDeliver_OutlivesTheAccountThatDelivered(t *testing.T) {
 		c.Assert(d.Status, qt.Not(qt.Equals), models.CommodityDraftOpen)
 	}
 }
+
+// TestIntakeDeliver_OpenDraftOutlivesTheAccountThatDelivered: the draft a
+// delivery made goes to the member who gets its record, with the member's
+// own drafts left out. A replay finds it waiting in the inbox.
+func TestIntakeDeliver_OpenDraftOutlivesTheAccountThatDelivered(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	role := models.GroupRoleUser
+	integrator := f.member(c, "integrator@example.com", &role)
+	first, err := f.intake.Deliver(f.as(integrator), paperlessDelivery("117"), nil)
+	c.Assert(err, qt.IsNil)
+	drafts := must.Must(f.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(f.as(integrator)))
+	own, _, err := drafts.CreateOrGet(f.as(integrator), models.CommodityDraft{ClientKey: "form-1", Values: models.CommodityDraftValues{"name": "Lamp"}})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(f.factorySet.UserPurger.PurgeUserDependents(context.Background(), "tenant-a", integrator.ID), qt.IsNil)
+	left := f.drafts(c)
+	c.Assert(left, qt.HasLen, 1)
+	c.Assert(left[0].ID, qt.Equals, *first.Document.DraftID)
+	c.Assert(left[0].CreatedByUserID, qt.Equals, f.user.ID)
+	c.Assert(left[0].ID, qt.Not(qt.Equals), own.ID)
+
+	again := f.deliver(c, paperlessDelivery("117"), nil)
+	c.Assert(again.Created, qt.IsFalse)
+	c.Assert(again.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*again.Document.DraftID, qt.Equals, *first.Document.DraftID)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
+}

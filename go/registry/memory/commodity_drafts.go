@@ -53,6 +53,47 @@ func (f *CommodityDraftRegistryFactory) promotedItem(groupID, draftID string) *s
 	return new(*draft.PromotedCommodityID)
 }
 
+// deliveredDrafts is the drafts made for the documents other systems
+// delivered (#2809). The user purge hands them over with the documents.
+type deliveredDrafts struct{ f *CommodityDraftRegistryFactory }
+
+func (d deliveredDrafts) owned(draft *models.CommodityDraft, tenantID, userID string) bool {
+	return draft.TenantID == tenantID && draft.CreatedByUserID == userID &&
+		strings.HasPrefix(draft.ClientKey, models.IntakeDeliveredDraftKeyPrefix)
+}
+
+func (d deliveredDrafts) groupsCreatedBy(tenantID, userID string) []string {
+	d.f.base.lock.RLock()
+	defer d.f.base.lock.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for pair := d.f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		if draft := pair.Value; d.owned(draft, tenantID, userID) && !seen[draft.GroupID] {
+			seen[draft.GroupID] = true
+			out = append(out, draft.GroupID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the delivered drafts userID created to
+// heirs[groupID]. The ones whose group has no heir stay, for the purge of
+// the user's drafts.
+func (d deliveredDrafts) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+	d.f.writes.Lock()
+	defer d.f.writes.Unlock()
+	d.f.base.lock.Lock()
+	defer d.f.base.lock.Unlock()
+	for pair := d.f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		draft := pair.Value
+		if heir := heirs[draft.GroupID]; heir != "" && d.owned(draft, tenantID, userID) {
+			cp := *draft
+			cp.CreatedByUserID = heir
+			pair.Value = &cp
+		}
+	}
+}
+
 // CommodityDraftRegistry is the context-aware in-memory registry of drafts.
 type CommodityDraftRegistry struct {
 	*Registry[models.CommodityDraft, *models.CommodityDraft]

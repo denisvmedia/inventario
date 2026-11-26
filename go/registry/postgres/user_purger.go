@@ -179,6 +179,13 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		if err := r.reattributeIntakeDocuments(ctx, tx, tenantID, userID); err != nil {
 			return err
 		}
+		// The drafts those documents made go with them, so a replay finds
+		// the draft the record names. The ones whose group has no heir are
+		// purged with the user's other drafts below.
+		if err := r.reattributeRows(ctx, tx, r.tableNames.CommodityDrafts(), "t.client_key LIKE $3",
+			tenantID, userID, models.IntakeDeliveredDraftKeyPrefix+"%"); err != nil {
+			return err
+		}
 
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
@@ -462,6 +469,16 @@ var groupConfigurationTables = []func(t store.TableNames) store.TableName{
 // other member keeps its creator; such a group is private and is purged
 // before the user is.
 func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx.Tx, table store.TableName, tenantID, userID string) error {
+	return r.reattributeRows(ctx, tx, table, "", tenantID, userID)
+}
+
+// reattributeRows hands over the rows of table the user created as
+// reattributeGroupConfiguration does. A filter that is not empty further
+// limits the rows of t; its parameters start at $3.
+func (r *UserPurger) reattributeRows(ctx context.Context, tx *sqlx.Tx, table store.TableName, filter, tenantID, userID string, filterArgs ...any) error {
+	if filter != "" {
+		filter = " AND " + filter
+	}
 	memberships := string(r.tableNames.GroupMemberships())
 	query := fmt.Sprintf(`
 		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
@@ -473,9 +490,9 @@ func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx
 				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
 				joined_at, member_user_id
 		) heir
-		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id`,
-		string(table), memberships)
-	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id%[3]s`,
+		string(table), memberships, filter)
+	if _, err := tx.ExecContext(ctx, query, append([]any{tenantID, userID}, filterArgs...)...); err != nil {
 		return errxtrace.Wrap(
 			"failed to hand over the user's group configuration",
 			err,

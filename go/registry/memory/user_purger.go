@@ -174,6 +174,15 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			}
 			return r.reattributeGroupConfiguration(ctx, r.intakeDocuments, tenantID, userID)
 		}},
+		// The drafts those documents made go with them, so a replay finds
+		// the draft the record names.
+		{"delivered_drafts", func() error {
+			drafts, ok := r.drafts.(*CommodityDraftRegistryFactory)
+			if !ok {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, deliveredDrafts{drafts}, tenantID, userID)
+		}},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.

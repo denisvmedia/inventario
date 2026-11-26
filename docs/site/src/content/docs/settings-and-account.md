@@ -73,9 +73,9 @@ A couple of things to know:
   their own items. [Item types](../item-types/) you added to a shared group
   stay with the group and pass to its owner, so they don't block deletion. So
   does the record of the [documents other systems sent](../documents-from-other-systems/)
-  with one of your API tokens.
+  with one of your API tokens, together with the drafts those documents made.
   Item reminders you set in a shared group are deleted with your account,
-  since they only ever emailed you. So are the
+  since they only ever emailed you. So are the other
   [drafts of new items](../items/#drafts-of-a-new-item) you started there. A
   file saved with one of those drafts counts like any other file: one you
   uploaded needs to be removed first, and one another member uploaded stays in
