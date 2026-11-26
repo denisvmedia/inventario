@@ -175,3 +175,50 @@ func TestLocationGroupRegistry_Update_And_Delete(t *testing.T) {
 	_, err = registrySet.LocationGroupRegistry.Get(ctx, created.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
+
+// -- Hidden sections -------------------------------------------------------
+
+func TestLocationGroupRegistry_HiddenSections_RoundTrip(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	// A group written without the setting hides nothing, and reads back an
+	// empty list rather than null.
+	created, err := registrySet.LocationGroupRegistry.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "Plain"))
+	c.Assert(err, qt.IsNil)
+	got, err := registrySet.LocationGroupRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{})
+
+	got.HiddenSections = models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans}
+	_, err = registrySet.LocationGroupRegistry.Update(ctx, *got)
+	c.Assert(err, qt.IsNil)
+
+	reread, err := registrySet.LocationGroupRegistry.GetBySlug(ctx, user.TenantID, created.Slug)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reread.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+
+	listed, err := registrySet.LocationGroupRegistry.ListByTenant(ctx, user.TenantID)
+	c.Assert(err, qt.IsNil)
+	var found bool
+	for _, g := range listed {
+		if g.ID == created.ID {
+			found = true
+			c.Assert(g.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+		}
+	}
+	c.Assert(found, qt.IsTrue)
+
+	// A group created with the setting keeps it.
+	withSections := newTestGroup(c, user.TenantID, user.ID, "Stamps")
+	withSections.HiddenSections = models.GroupSections{models.GroupSectionWarranties}
+	stamps, err := registrySet.LocationGroupRegistry.Create(ctx, withSections)
+	c.Assert(err, qt.IsNil)
+	got, err = registrySet.LocationGroupRegistry.Get(ctx, stamps.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties})
+}

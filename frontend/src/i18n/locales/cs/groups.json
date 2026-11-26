@@ -22,6 +22,12 @@
     "successToast": "Skupina vytvořena.",
     "title": "Vytvořit novou skupinu"
   },
+  "hiddenSection": {
+    "description": "Správce skupiny tuto sekci vypnul pro všechny členy. Její data zůstávají a správce ji může znovu zobrazit v nastavení skupiny.",
+    "goToDashboard": "Přejít na přehled",
+    "openSettings": "Otevřít nastavení skupiny",
+    "title": "Sekce {{section}} je v této skupině skrytá"
+  },
   "migration": {
     "banner": "Probíhá migrace měny pro skupinu {{name}}.",
     "rateLabel": "1 {{from}} = {{rate}} {{to}}",
@@ -88,6 +94,28 @@
       "title": "Migrovat měnu"
     },
     "errorGeneric": "Skupinu se nepodařilo uložit. Zkuste to prosím znovu.",
+    "hiddenSections": {
+      "adminOnly": "Které sekce skupina zobrazuje, mohou měnit pouze správci a vlastníci.",
+      "loans": {
+        "description": "Stránka Zapůjčeno, půjčování položek a e-maily s připomínkami vrácení.",
+        "label": "Výpůjčky"
+      },
+      "maintenance": {
+        "description": "Stránky údržby a servisu, přidávání plánů údržby, odesílání položek do servisu a e-maily s připomínkami údržby.",
+        "label": "Údržba a opravy"
+      },
+      "saveError": "Sekce se nepodařilo uložit. Zkuste to znovu.",
+      "subtitle": "Skryjte pro všechny členy části Inventaria, které tato skupina nepoužívá. Skrytím sekce se její data nemažou: položka, která už má záruku, výpůjčku nebo údržbu, je dál zobrazuje, a sekci můžete kdykoli znovu zobrazit.",
+      "title": "Sekce",
+      "upcoming": {
+        "description": "Stránka Nadcházející, která ukazuje blížící se termíny celé skupiny.",
+        "label": "Nadcházející"
+      },
+      "warranties": {
+        "description": "Stránka Záruky a její karty na přehledu, krok Záruka ve formuláři položky a e-maily s připomínkami záruky.",
+        "label": "Záruky"
+      }
+    },
     "iconLabel": "Ikona",
     "leaveCta": "Opustit skupinu",
     "leaveDescription": "Ztratíte přístup ke všem datům v této skupině.",
@@ -148,7 +176,8 @@
       "info": "Informace",
       "management": "Správa",
       "members": "Členové",
-      "notifications": "Oznámení"
+      "notifications": "Oznámení",
+      "sections": "Sekce"
     },
     "slugHelp": "Slugy se generují náhodně při vytvoření a nelze je změnit.",
     "slugLabel": "Slug adresy URL",
