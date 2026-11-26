@@ -331,6 +331,11 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 	if err != nil {
 		return err
 	}
+	// A promotion that committed between the drafts read and the items
+	// read put the item in the archive; the delivered document names it.
+	if err := b.loadPromotions(scope); err != nil {
+		return err
+	}
 	b.commoditiesByAreaID = make(map[string][]*models.Commodity, len(commodities))
 	b.commodityUUIDByDBID = make(map[string]string, len(commodities))
 	for _, com := range commodities {
@@ -426,6 +431,29 @@ func (b *inbBuilder) loadDrafts(scope *inbScope) error {
 		}
 		return strings.Compare(x.UUID, y.UUID)
 	})
+	return nil
+}
+
+// loadPromotions reads the drafts again for the items they became, after
+// the items were read. The open drafts the archive carries stay the ones
+// loadDrafts read.
+func (b *inbBuilder) loadPromotions(scope *inbScope) error {
+	if !scope.wholeClass || len(b.intakeDocuments) == 0 || b.svc.factorySet.CommodityDraftRegistryFactory == nil {
+		return nil
+	}
+	reg, err := b.svc.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to create draft registry", err)
+	}
+	drafts, err := reg.List(b.ctx)
+	if err != nil {
+		return errxtrace.Wrap("failed to list drafts", err)
+	}
+	for _, d := range drafts {
+		if d != nil && d.PromotedCommodityID != nil {
+			b.promotedItemByDraft[d.ID] = *d.PromotedCommodityID
+		}
+	}
 	return nil
 }
 

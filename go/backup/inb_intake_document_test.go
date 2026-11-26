@@ -323,13 +323,15 @@ func TestINBRestore_MergeNamesTheKeptDraft(t *testing.T) {
 	c.Check(open, qt.Equals, 1)
 }
 
-// promoteOnList promotes a draft the first time the export lists the drafts,
-// as a promotion that commits between the documents read and the drafts
-// read would.
+// promoteOnList promotes a draft the first time the export lists the drafts:
+// before that read, as a promotion that commits between the documents read
+// and the drafts read would, or after it, as one that commits between the
+// drafts read and the items read would.
 type promoteOnList struct {
 	registry.CommodityDraftRegistryFactory
-	once sync.Once
-	run  func()
+	after bool
+	once  sync.Once
+	run   func()
 }
 
 type promoteOnListRegistry struct {
@@ -343,45 +345,55 @@ func (p *promoteOnList) CreateUserRegistry(ctx context.Context) (registry.Commod
 }
 
 func (r *promoteOnListRegistry) List(ctx context.Context) ([]*models.CommodityDraft, error) {
-	r.f.once.Do(r.f.run)
-	return r.CommodityDraftRegistry.List(ctx)
+	if !r.f.after {
+		r.f.once.Do(r.f.run)
+	}
+	drafts, err := r.CommodityDraftRegistry.List(ctx)
+	if r.f.after {
+		r.f.once.Do(r.f.run)
+	}
+	return drafts, err
 }
 
-// A promotion between the documents read and the drafts read: the document
-// was read naming the open draft, the drafts read finds it promoted. The
-// archive names the item, so the restored item keeps its document.
+// A promotion while the export reads: the document was read naming the open
+// draft, and the item is in the items read. The archive names the item, so
+// the restored item keeps its document.
 func TestINBExport_PromotionBetweenTheReads(t *testing.T) {
-	c := qt.New(t)
-	signer := testSigner(c)
-	f := newDeliveredFixture(c)
-	orig := f.fs.CommodityDraftRegistryFactory
-	wrap := &promoteOnList{CommodityDraftRegistryFactory: orig}
-	var item *models.Commodity
-	wrap.run = func() {
-		draft := must.Must(must.Must(orig.CreateUserRegistry(f.ctx)).Get(f.ctx, *f.open.DraftID))
-		f.fs.CommodityDraftRegistryFactory = orig
-		defer func() { f.fs.CommodityDraftRegistryFactory = wrap }()
-		var err error
-		item, _, err = services.NewCommodityDraftService(f.fs).Promote(f.ctx, draft.ID, draft.Revision, "promotion-between", models.Commodity{
-			Name: "Invoice 1", ShortName: "invoice", Type: models.CommodityTypeOther, Count: 1,
-			Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
-		})
-		c.Assert(err, qt.IsNil)
-	}
-	f.fs.CommodityDraftRegistryFactory = wrap
-	blobKey, _ := f.runExport(c, signer)
-	f.fs.CommodityDraftRegistryFactory = orig
-	c.Assert(item, qt.IsNotNil)
+	for name, after := range map[string]bool{"before the drafts read": false, "before the items read": true} {
+		t.Run(name, func(t *testing.T) {
+			c := qt.New(t)
+			signer := testSigner(c)
+			f := newDeliveredFixture(c)
+			orig := f.fs.CommodityDraftRegistryFactory
+			wrap := &promoteOnList{CommodityDraftRegistryFactory: orig, after: after}
+			var item *models.Commodity
+			wrap.run = func() {
+				draft := must.Must(must.Must(orig.CreateUserRegistry(f.ctx)).Get(f.ctx, *f.open.DraftID))
+				f.fs.CommodityDraftRegistryFactory = orig
+				defer func() { f.fs.CommodityDraftRegistryFactory = wrap }()
+				var err error
+				item, _, err = services.NewCommodityDraftService(f.fs).Promote(f.ctx, draft.ID, draft.Revision, "promotion-between", models.Commodity{
+					Name: "Invoice 1", ShortName: "invoice", Type: models.CommodityTypeOther, Count: 1,
+					Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
+				})
+				c.Assert(err, qt.IsNil)
+			}
+			f.fs.CommodityDraftRegistryFactory = wrap
+			blobKey, _ := f.runExport(c, signer)
+			f.fs.CommodityDraftRegistryFactory = orig
+			c.Assert(item, qt.IsNotNil)
 
-	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
-	c.Assert(err, qt.IsNil)
-	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
-	restored := f.commodityByUUID(c, item.UUID)
-	c.Assert(restored, qt.IsNotNil)
-	docs := must.Must(f.intake.ListDocuments(f.ctx, nil, []string{restored.ID}))
-	c.Assert(docs, qt.HasLen, 1)
-	states := must.Must(f.intake.DocumentStates(f.ctx, docs))
-	c.Assert(states[docs[0].ID], qt.Equals, models.IntakeDocumentItem)
+			final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+			c.Assert(err, qt.IsNil)
+			c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+			restored := f.commodityByUUID(c, item.UUID)
+			c.Assert(restored, qt.IsNotNil)
+			docs := must.Must(f.intake.ListDocuments(f.ctx, nil, []string{restored.ID}))
+			c.Assert(docs, qt.HasLen, 1)
+			states := must.Must(f.intake.DocumentStates(f.ctx, docs))
+			c.Assert(states[docs[0].ID], qt.Equals, models.IntakeDocumentItem)
+		})
+	}
 }
 
 // draftNotRecordedYet lists the documents as an export reads them while a
