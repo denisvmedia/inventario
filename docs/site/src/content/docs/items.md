@@ -233,7 +233,11 @@ When you click **Add item**, the files are uploaded first, one at a time, and
 the item is created only once all of them are uploaded. The dialog stays open
 while this runs: the button counts the uploads (**Uploading 1 of 3…**), and
 each file shows whether it is uploading, uploaded, or failed. Until it ends you
-cannot change the form or close the dialog.
+cannot change the form or close the dialog. If you leave the page meanwhile,
+for example with the browser's Back button, the upload stops after the file in
+progress and no item is created. The next time you open **Add item**, the form
+has what you entered, and **Add item** goes on from there without uploading a
+file twice.
 
 - If a file fails to upload, no item is created. The dialog names the file,
   marks it **Upload failed**, and keeps everything you entered. The files that
@@ -242,9 +246,16 @@ cannot change the form or close the dialog.
   do not pick the files again, and nothing is uploaded twice.
 - If the files are uploaded but the item cannot be created, the dialog says
   so and **Retry** creates it with the files already uploaded.
-- If you close the dialog with **Discard** instead, the files it uploaded go
-  to the [Trash](../trash/), and so does a file you remove from the list after
-  it was uploaded.
+- For a new item, the files wait in a draft until the item is created, so a
+  failed **Add item** leaves that draft in the [Inbox](../inbox/). If you
+  close the dialog with **Discard**, that draft is deleted and the files the
+  dialog uploaded go to the [Trash](../trash/), and so does a file you remove
+  from the list after it was uploaded. A draft you saved yourself since, from
+  the Inbox or on another device, stays.
+- When you are finishing a saved draft, a failed **Add item** leaves the
+  draft's values as they were last saved. The files it uploaded stay with the
+  draft, under **Saved with this draft**, where you can remove them;
+  **Discard changes** does not take them off.
 
 ## Quantity and bundles
 
@@ -378,8 +389,9 @@ copy stays on this device only; to continue on another device, save a draft.
 - If a draft cannot be saved, for example while you are offline, the dialog
   says so and keeps your input on this device. Click **Retry** when you are
   back online. A file that was already uploaded is not uploaded again.
-- **Add item** saves the item's values and files the same way before it
-  creates the item, so a failed upload keeps them on this device too.
+- **Add item** uploads the files to a draft the same way before it creates
+  the item, and keeps what you entered on this device until the item exists,
+  so a failed upload loses nothing.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
 
@@ -387,9 +399,9 @@ copy stays on this device only; to continue on another device, save a draft.
 If you try to close the dialog with unsaved changes, Inventario asks whether to
 **Save as draft**, **Discard**, or **Keep editing**. **Save as draft** saves a
 draft as described above. When you continue a draft, **Discard changes**
-drops only what you changed since it was last saved. **Discard** also moves
-the files the dialog uploaded for an item it did not create to the
-[Trash](../trash/).
+drops only what you changed since it was last saved; files that **Add item**
+already uploaded to the draft stay with it. **Discard** also moves the files
+the dialog uploaded for an item it did not create to the [Trash](../trash/).
 :::
 
 ## The item detail page

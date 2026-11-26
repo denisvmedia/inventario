@@ -419,14 +419,17 @@ the section matching the tag and publishes it as the GitHub Release body. See
 ### Changed
 
 - **Add item** uploads the item's files to its draft before it creates the
-  item, and the dialog stays open until the item exists. Each file shows
-  whether it is uploading, uploaded or failed, and the button counts the
-  uploads. A failed upload creates no item: the dialog names the file and
-  keeps the form, and **Retry** uploads only the files still missing before
-  it creates the item. Each staged file has an editable title, the file name
+  item, and the dialog stays open while it runs; leaving the page stops it
+  after the file in progress, and no item is created. Each file shows whether
+  it is uploading, uploaded or failed, and the button counts the uploads. A
+  failed upload creates no item: the dialog names the file and keeps the
+  form, and **Retry** uploads only the files still missing before it creates
+  the item. On a saved draft, a failed **Add item** leaves the draft's values
+  as they were saved. Each staged file has an editable title, the file name
   without its extension by default. **Discard** in the Add item dialog, and
   closing the batch intake dialog before its batch is queued, move the files
-  they uploaded to the Trash instead of leaving them as standalone files
+  they uploaded to the Trash instead of leaving them as standalone files;
+  **Discard** keeps a draft the user saved since
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - An item's cover photo is one of its photos: an image attached to the item
@@ -508,6 +511,11 @@ the section matching the tag and publishes it as the GitHub Release body. See
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
+- A file title may have 255 characters in any language. The server counted
+  the limit in UTF-8 bytes, so a Czech or Russian title of more than about
+  127 letters was refused with 422
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - The Helm chart's Grafana dashboard shows its "Scrape target up" panel on
