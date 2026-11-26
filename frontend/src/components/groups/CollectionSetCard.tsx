@@ -66,6 +66,9 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
   const hasSetRows =
     !!view &&
     [...(view.item_types ?? []), ...(view.custom_fields ?? [])].some((r) => r.state === "added")
+  // A field of the set the group has that some of the set's types do not
+  // offer: the set is partly added although every row is there.
+  const linksMissing = (view?.custom_fields ?? []).some((r) => (r.missing_templates ?? 0) > 0)
   const checkFailed = query.isError && query.errorUpdatedAt >= openedAt && !query.isFetching
   const checking = !checkFailed && (query.isFetching || query.dataUpdatedAt < openedAt)
 
@@ -195,7 +198,14 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
               </p>
               <ul className="mt-2 flex flex-wrap gap-1.5" data-testid="collection-set-fields">
                 {(view.custom_fields ?? []).map((row) => {
-                  const label = rowStateLabel(t, row.state as RowState, "field")
+                  const missingLinks = row.missing_templates ?? 0
+                  const label =
+                    missingLinks > 0
+                      ? `${rowStateLabel(t, row.state as RowState, "field")}; ${t(
+                          "groups:settings.collectionSet.rowState.notOnTypes",
+                          { count: missingLinks }
+                        )}`
+                      : rowStateLabel(t, row.state as RowState, "field")
                   return (
                     <li key={row.key}>
                       <Badge
@@ -216,6 +226,14 @@ export function CollectionSetCard({ group, isAdmin, className }: CollectionSetCa
             <p className="text-xs text-muted-foreground">
               {t("groups:settings.collectionSet.note")}
             </p>
+            {linksMissing ? (
+              <p
+                className="text-xs text-muted-foreground"
+                data-testid="collection-set-links-missing"
+              >
+                {t("groups:settings.collectionSet.linksMissing")}
+              </p>
+            ) : null}
           </div>
 
           {isAdmin ? (

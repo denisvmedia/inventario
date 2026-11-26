@@ -27,6 +27,8 @@ interface Row {
   icon?: string
   field_type?: string
   taken_by?: string
+  // For a field: how many of the set's types the group has do not offer it.
+  missing_templates?: number
 }
 
 interface RemoveBody {
@@ -125,7 +127,9 @@ function setBackend(
     )
   }
   const view = () => ({
-    complete: [...types, ...fields].every((r) => r.state !== "missing"),
+    complete:
+      [...types, ...fields].every((r) => r.state !== "missing") &&
+      fields.every((r) => !r.missing_templates),
     item_types: types.map((r) => ({
       key: r.key,
       name: r.name,
@@ -145,6 +149,7 @@ function setBackend(
       state: r.state,
       taken_by: r.taken_by,
       custom_field_id: has(r) ? `field-${r.key}` : undefined,
+      missing_templates: r.missing_templates ?? 0,
       item_count: r.item_count,
       trashed_item_count: 0,
       removable: removable(r),
@@ -206,6 +211,7 @@ function setBackend(
           r.state = "added"
           createdFields++
         }
+        r.missing_templates = 0
       }
       return HttpResponse.json(
         envelope({
@@ -350,6 +356,41 @@ describe("<GroupSettingsPage /> — Collection set (#1607)", () => {
     expect(within(card).getByTestId("collection-set-type-stamps")).toHaveTextContent(
       "Not added: another type of the set has this name"
     )
+  })
+
+  it("is partly added while a field is not offered on every type of the set", async () => {
+    const backend = setBackend(
+      "admin",
+      Object.fromEntries([
+        ...TYPES.map(([key]) => [key, { state: "own" as State }]),
+        ...FIELDS.map(([key]) => [key, { state: "own" as State }]),
+        ["signed", { state: "own" as State, missing_templates: 7 }],
+      ])
+    )
+    server.use(...backend.handlers)
+    const user = userEvent.setup()
+    renderSettings()
+
+    const card = await screen.findByTestId("collection-set-card")
+    expect(await within(card).findByTestId("collection-set-state")).toHaveTextContent(
+      "Partly added"
+    )
+    expect(within(card).getByTestId("collection-set-links-missing")).toHaveTextContent(
+      "Some of the set's fields are not offered on all of its types yet."
+    )
+    expect(within(card).getByTestId("collection-set-field-signed")).toHaveTextContent(
+      "The group's own; not offered on 7 of the set's types"
+    )
+    expect(within(card).getByTestId("collection-set-field-condition")).not.toHaveTextContent(
+      "not offered"
+    )
+
+    await user.click(within(card).getByTestId("collection-set-add"))
+    await waitFor(() =>
+      expect(within(card).getByTestId("collection-set-state")).toHaveTextContent("Added")
+    )
+    expect(backend.calls.posts).toBe(1)
+    expect(within(card).queryByTestId("collection-set-links-missing")).not.toBeInTheDocument()
   })
 
   it("lists what removing deletes and what stays, with the reason, and removes on confirm", async () => {

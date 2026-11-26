@@ -142,8 +142,9 @@ already exists keeps its name and icon, whichever strategy you pick, and
 
 A backup remembers which types and fields the
 [Collection set](../groups-and-sharing/#add-the-collection-set) created, so
-after a restore, removing the set still deletes the ones it created that
-nothing uses.
+after a restore, removing the set still deletes the ones it created. As
+without a restore, it deletes only those the confirmation lists and nothing
+uses, and it keeps the group's last item type even when nothing uses it.
 
 ### Custom fields
 

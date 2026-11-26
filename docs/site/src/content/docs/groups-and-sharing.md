@@ -97,7 +97,7 @@ To add the set:
 1. Open the group selector and choose **Group settings**, then open the **Sections** section.
 2. On the **Collection set** card, click **Add the set**.
 
-If the group already has a type or field with one of these names (upper and lower case don't matter), the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it.
+If the group already has a type or field with one of these names (upper and lower case don't matter), the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it. The card also shows **Partly added** while one of the set's fields is not offered on every one of its types, for example when the group already had all of them under these names; **Add what is missing** then offers each field on each type.
 
 The card names the state of each type and field: added by the set, the group's own, or not in the group. If you renamed one of the set's types or fields to the name of another one, for example **Coins** to **Stamps** after deleting **Stamps**, the card shows that name as not added: the renamed type or field stands for it, and adding the set does not create a second one of that name.
 
@@ -109,7 +109,7 @@ To remove the set, click **Remove the set** on the same card. The confirmation c
 
 Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
 
-A type or field the group had before the set keeps what the set linked to it. Such a type still offers the set's fields that stay, and such a field is still offered on the set's types that stay and on the group's own types the set linked it to. To undo a link, untick the type under **Item types** in the field's dialog (see [Custom fields](../custom-fields/#offer-a-field-on-item-types)).
+A type or field the group had before the set keeps what the set linked to it. Such a type still offers the set's fields that stay, and such a field is still offered on the set's types that stay and on the group's own types the set linked it to. To undo a link, untick the type under **Item types** in the field's dialog (see [Custom fields](../custom-fields/#offer-a-field-on-item-types)). While the set's types are in the group, the card then shows **Partly added**, and **Add what is missing** would put the link back.
 
 Only an **Owner** or **Administrator** can add or remove the set. Other members see the card without the buttons. Each add and remove is recorded in the audit log of the server, with what it created or deleted. The people who run the server can read that log; group members don't see it.
 
