@@ -84,7 +84,11 @@ To send a price you keep in a monetary custom field, for example one named
 **Price**, add `amount` with the value
 `{{ custom_fields | get_cf_value("Price", "") }}`. Paperless-ngx writes such a
 value with its currency in front, for example `EUR12.30`, which Inventario
-reads as the amount and its currency.
+reads as the amount and its currency. Workflow templates can read custom
+fields from Paperless-ngx 3.4.0. On an earlier version, leave `amount` out and
+enter the price on the draft: there the value cannot be filled in, and
+Paperless-ngx sends the request without `amount` and without the parameters
+listed after it.
 
 Paperless-ngx waits five seconds for an answer and does not follow redirects,
 so use the address Inventario answers on. It tries again up to three times when
