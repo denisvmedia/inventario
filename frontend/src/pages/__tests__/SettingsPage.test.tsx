@@ -262,6 +262,31 @@ describe("<SettingsPage />", () => {
     expect(screen.getByTestId("delete-password")).toBeInTheDocument()
   })
 
+  // #2177 — the dialog sends the user to "Download my data" before erasing.
+  it("delete-account dialog links to the personal data export", async () => {
+    server.use(...baseHandlers)
+    const scrollIntoView = vi.fn()
+    Element.prototype.scrollIntoView = scrollIntoView
+    const user = userEvent.setup()
+    renderSettings()
+    await user.click(await screen.findByTestId("settings-nav-account"))
+    expect(await screen.findByTestId("personal-data-export")).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByTestId("personal-data-export-request")).toBeEnabled())
+
+    await user.click(screen.getByTestId("delete-account-button"))
+    await screen.findByTestId("delete-account-dialog")
+    expect(screen.getByTestId("delete-export-first")).toHaveTextContent(
+      "Want to keep a copy of your data?"
+    )
+    await user.click(screen.getByTestId("delete-export-first-link"))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("delete-account-dialog")).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(scrollIntoView).toHaveBeenCalled())
+    expect(screen.getByTestId("personal-data-export-request")).toHaveFocus()
+  })
+
   it("delete-account dialog blocks submit on an email mismatch (client-side)", async () => {
     let deleteCalls = 0
     server.use(

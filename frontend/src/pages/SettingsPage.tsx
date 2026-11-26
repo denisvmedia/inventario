@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useForm } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
@@ -26,6 +26,10 @@ import { FeedbackDialog } from "@/components/feedback/FeedbackDialog"
 import { ConnectedAccountsCard } from "@/components/settings/ConnectedAccountsCard"
 import { LeadTimeField } from "@/components/settings/LeadTimeField"
 import { MFASettingsRow } from "@/components/settings/MFASettingsRow"
+import {
+  PERSONAL_DATA_EXPORT_ANCHOR,
+  PersonalDataExportCard,
+} from "@/components/settings/PersonalDataExportCard"
 import { useAPITokensList } from "@/features/api-tokens/hooks"
 import { useSessionsList } from "@/features/sessions/hooks"
 import { CurrencyCombobox } from "@/components/CurrencyCombobox"
@@ -367,6 +371,8 @@ function AccountSection() {
         </SettingRow>
       </div>
 
+      <PersonalDataExportCard />
+
       <div className="rounded-xl border border-destructive/30 bg-destructive/5 p-4 space-y-2">
         <p className="text-sm font-semibold text-destructive">
           {t("settings:account.dangerZone.title")}
@@ -450,6 +456,26 @@ function DeleteAccountDialog({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- intentionally only re-run on open changes; form is a stable RHF handle
   }, [open])
 
+  // goToDataExport closes the dialog and brings the "Download my data"
+  // section above it into view, with focus on its first control, so the
+  // user can take a copy before erasing the account (#2177). The jump runs
+  // when the dialog would hand focus back to its trigger.
+  const jumpToDataExport = useRef(false)
+  function goToDataExport() {
+    jumpToDataExport.current = true
+    onOpenChange(false)
+  }
+  function onCloseAutoFocus(event: Event) {
+    if (!jumpToDataExport.current) return
+    jumpToDataExport.current = false
+    const section = document.getElementById(PERSONAL_DATA_EXPORT_ANCHOR)
+    if (!section) return
+    event.preventDefault()
+    section.scrollIntoView({ behavior: "smooth", block: "start" })
+    const target = section.querySelector<HTMLElement>("button:not([disabled])") ?? section
+    target.focus({ preventScroll: true })
+  }
+
   async function onSubmit(values: DeleteAccountInput) {
     setServerError(null)
     // Client-side guard: the typed email must match the signed-in user's
@@ -498,13 +524,25 @@ function DeleteAccountDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent data-testid="delete-account-dialog">
+      <DialogContent data-testid="delete-account-dialog" onCloseAutoFocus={onCloseAutoFocus}>
         <DialogHeader>
           <DialogTitle>{t("settings:account.dangerZone.deleteDialog.title")}</DialogTitle>
           <DialogDescription>
             {t("settings:account.dangerZone.deleteDialog.body")}
           </DialogDescription>
         </DialogHeader>
+        <p className="text-sm text-muted-foreground" data-testid="delete-export-first">
+          {t("settings:account.dangerZone.deleteDialog.exportFirst")}{" "}
+          <Button
+            type="button"
+            variant="link"
+            className="h-auto p-0 text-sm"
+            onClick={goToDataExport}
+            data-testid="delete-export-first-link"
+          >
+            {t("settings:account.dangerZone.deleteDialog.exportFirstLink")}
+          </Button>
+        </p>
         <form className="space-y-4" onSubmit={form.handleSubmit(onSubmit)} noValidate>
           <div className="space-y-1.5">
             <Label htmlFor="delete-account-email">

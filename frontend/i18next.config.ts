@@ -126,6 +126,11 @@ export default defineConfig({
       //   via `t(\`settings:storage.breakdown.${key}\`)`. The extractor only
       //   sees the template literal.
       "settings:storage.breakdown.*",
+      // settings:account.dataExport.status.* — PersonalDataExportCard labels
+      //   each row with `t(\`settings:account.dataExport.status.${status}\`)`
+      //   over the export status union. The extractor only sees the
+      //   template literal.
+      "settings:account.dataExport.status.*",
       // settings:apiTokens.{scopes,scopeDescriptions,expiry,errors,validation}.*
       //   — the API tokens page and its create dialog look these up from
       //   the scope / expiry-preset unions, map server error codes via
