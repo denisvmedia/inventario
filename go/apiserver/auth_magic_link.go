@@ -77,7 +77,7 @@ func (api *AuthAPI) requestMagicLink(w http.ResponseWriter, r *http.Request) {
 	// unscoped, which is not something to paper over with a neutral 200
 	// (#2131).
 	if tenantID == "" {
-		slog.Error("Magic-link request without tenant context")
+		slog.ErrorContext(r.Context(), "Magic-link request without tenant context")
 		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
 		return
 	}
@@ -141,7 +141,7 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 
 	tenantID := TenantIDFromContext(r.Context())
 	if tenantID == "" {
-		slog.Error("Magic-link verify attempted without tenant context in request")
+		slog.ErrorContext(r.Context(), "Magic-link verify attempted without tenant context in request")
 		http.Error(w, "Tenant context not established", http.StatusInternalServerError)
 		return
 	}
@@ -155,7 +155,7 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// it invalid (#2131).
 	mlt, err := api.magicLinkRegistry.GetByToken(r.Context(), req.Token)
 	if err != nil {
-		slog.Error("Failed to load magic-link token", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to load magic-link token", "error", err)
 		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
 	}
@@ -166,21 +166,21 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// Tenant guard: the token must belong to the resolved tenant (mirrors
 	// the loginMFA claims check).
 	if mlt.TenantID != tenantID {
-		slog.Warn("Magic-link verify: tenant mismatch", "user_id", mlt.UserID)
+		slog.WarnContext(r.Context(), "Magic-link verify: tenant mismatch", "user_id", mlt.UserID)
 		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
 	}
 
 	user, err := api.userRegistry.Get(r.Context(), mlt.UserID)
 	if err != nil {
-		slog.Error("Failed to look up user for magic-link verify", "user_id", mlt.UserID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to look up user for magic-link verify", "user_id", mlt.UserID, "error", err)
 		http.Error(w, "Invalid or expired sign-in link", http.StatusBadRequest)
 		return
 	}
 	// Blocked/disabled accounts are refused at verify even with a valid token
 	// (mirrors login()).
 	if !user.IsActive {
-		slog.Warn("Magic-link verify: account disabled", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Magic-link verify: account disabled", "user_id", user.ID)
 		http.Error(w, "User account disabled", http.StatusForbidden)
 		return
 	}
@@ -200,7 +200,7 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// concurrent clicks both reach here and exactly one wins the claim.
 	claimed, err := api.magicLinkRegistry.MarkClaimed(r.Context(), req.Token)
 	if err != nil {
-		slog.Error("Failed to claim magic-link token", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to claim magic-link token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -215,13 +215,13 @@ func (api *AuthAPI) verifyMagicLink(w http.ResponseWriter, r *http.Request) {
 	// account that just proved control of the inbox.
 	if api.rateLimiter != nil {
 		if err := api.rateLimiter.ClearFailedLogins(r.Context(), user.Email); err != nil {
-			slog.Error("Failed to clear failed login counters after magic-link auth", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to clear failed login counters after magic-link auth", "user_id", user.ID, "error", err)
 		}
 	}
 
 	// Invalidate any other outstanding links for this user.
 	if delErr := api.magicLinkRegistry.DeleteByUserID(r.Context(), user.ID); delErr != nil {
-		slog.Warn("Failed to clean up magic-link tokens", "user_id", user.ID, "error", delErr)
+		slog.WarnContext(r.Context(), "Failed to clean up magic-link tokens", "user_id", user.ID, "error", delErr)
 	}
 
 	// MFA hand-off (load-bearing): if the user has TOTP enrolled, return the
@@ -242,12 +242,12 @@ func (api *AuthAPI) sendMagicLink(r *http.Request, user *models.User) {
 	}
 	// Supersede any existing pending links before issuing a new one.
 	if err := api.magicLinkRegistry.DeleteByUserID(r.Context(), user.ID); err != nil {
-		slog.Warn("Failed to delete old magic-link tokens", "user_id", user.ID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to delete old magic-link tokens", "user_id", user.ID, "error", err)
 	}
 
 	token, err := models.GenerateMagicLinkToken()
 	if err != nil {
-		slog.Error("Failed to generate magic-link token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to generate magic-link token", "user_id", user.ID, "error", err)
 		return
 	}
 	mlt := models.MagicLinkToken{
@@ -258,18 +258,18 @@ func (api *AuthAPI) sendMagicLink(r *http.Request, user *models.User) {
 		ExpiresAt: time.Now().Add(magicLinkLoginExpiration),
 	}
 	if _, err := api.magicLinkRegistry.Create(r.Context(), mlt); err != nil {
-		slog.Error("Failed to store magic-link record", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to store magic-link record", "user_id", user.ID, "error", err)
 		return
 	}
 
 	signInQuery := url.Values{"token": {token}}
 	signInURL := "/magic-link?" + signInQuery.Encode()
 	if api.publicBaseURL == "" {
-		slog.Warn("Public base URL is not configured; using relative magic-link URL", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Public base URL is not configured; using relative magic-link URL", "user_id", user.ID)
 	} else {
 		signInURL, err = buildPublicURL(api.publicBaseURL, "/magic-link", signInQuery)
 		if err != nil {
-			slog.Error("Failed to build magic-link URL", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to build magic-link URL", "user_id", user.ID, "error", err)
 			return
 		}
 	}
@@ -283,7 +283,7 @@ func (api *AuthAPI) sendMagicLink(r *http.Request, user *models.User) {
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
 		if err := api.emailService.SendMagicLinkEmail(ctx, user.Email, user.Name, signInURL); err != nil {
-			slog.Error("Failed to send magic-link email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to send magic-link email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
@@ -296,13 +296,13 @@ func (api *AuthAPI) sendMagicLink(r *http.Request, user *models.User) {
 func (api *AuthAPI) issueMagicLinkSession(w http.ResponseWriter, r *http.Request, user *models.User, tenantID string) {
 	rti, rawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Magic-link login: refresh token failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Magic-link login: refresh token failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return
 	}
 	accessToken, _, err := api.issueAccessToken(r.Context(), user, rti)
 	if err != nil {
-		slog.Error("Magic-link login: access token failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Magic-link login: access token failed", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
@@ -312,11 +312,11 @@ func (api *AuthAPI) issueMagicLinkSession(w http.ResponseWriter, r *http.Request
 	now := time.Now()
 	user.LastLoginAt = &now
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to update user last login time", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user last login time", "user_id", user.ID, "error", err)
 	}
 
 	csrfToken := api.generateCSRFTokenForUser(r.Context(), user.ID)
-	slog.Info("Successful magic-link login", "email", user.Email, "user_id", user.ID)
+	slog.InfoContext(r.Context(), "Successful magic-link login", "email", user.Email, "user_id", user.ID)
 	api.logAuth(r.Context(), "magic_link_login", &user.ID, &user.TenantID, true, r, nil)
 	userID := user.ID
 	api.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &userID, models.LoginOutcomeOK, models.LoginMethodMagicLink, r)

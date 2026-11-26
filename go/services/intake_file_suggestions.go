@@ -115,20 +115,20 @@ func (w *IntakeWorker) applyIntakeFileSuggestions(ctx context.Context, fileIDs [
 	if len(tags) > 0 {
 		// A tag a file refers to has to exist in the group.
 		if _, err := NewTagService(w.factorySet).NormalizeAndEnsureSlugs(ctx, models.TagKindFile, tags); err != nil {
-			log.Warn("Intake worker: cannot create the suggested file tags", "error", err)
+			log.WarnContext(ctx, "Intake worker: cannot create the suggested file tags", "error", err)
 			return
 		}
 	}
 	files, err := w.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		log.Warn("Intake worker: cannot apply the file suggestions", "error", err)
+		log.WarnContext(ctx, "Intake worker: cannot apply the file suggestions", "error", err)
 		return
 	}
 	for _, guess := range guesses {
 		fileLog := log.With("file_id", fileIDs[guess.Index])
 		current, err := files.Get(ctx, fileIDs[guess.Index])
 		if err != nil {
-			fileLog.Warn("Intake worker: cannot read a file to apply its suggestion", "error", err)
+			fileLog.WarnContext(ctx, "Intake worker: cannot read a file to apply its suggestion", "error", err)
 			continue
 		}
 		updated, changed := intakeFileSuggestion(*current, guess, w.clock())
@@ -136,9 +136,9 @@ func (w *IntakeWorker) applyIntakeFileSuggestions(ctx context.Context, fileIDs [
 			continue
 		}
 		if _, err := files.Update(ctx, updated); err != nil {
-			fileLog.Warn("Intake worker: cannot apply a file suggestion", "error", err)
+			fileLog.WarnContext(ctx, "Intake worker: cannot apply a file suggestion", "error", err)
 			continue
 		}
-		fileLog.Info("Intake worker: applied a file suggestion", "tags", []string(updated.Tags), "title_changed", updated.Title != current.Title)
+		fileLog.InfoContext(ctx, "Intake worker: applied a file suggestion", "tags", []string(updated.Tags), "title_changed", updated.Title != current.Title)
 	}
 }

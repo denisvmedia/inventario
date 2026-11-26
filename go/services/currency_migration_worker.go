@@ -260,7 +260,7 @@ func (w *CurrencyMigrationWorker) Start(ctx context.Context) {
 		return
 	}
 	if w.registry == nil || w.processor == nil {
-		slog.Warn("CurrencyMigrationWorker: missing registry or processor, skipping startup")
+		slog.WarnContext(ctx, "CurrencyMigrationWorker: missing registry or processor, skipping startup")
 		return
 	}
 	w.mu.Lock()
@@ -279,7 +279,7 @@ func (w *CurrencyMigrationWorker) Start(ctx context.Context) {
 		}()
 		w.run(ctx)
 	})
-	slog.Info("Currency migration worker started",
+	slog.InfoContext(ctx, "Currency migration worker started",
 		"active_interval", w.activeInterval,
 		"idle_interval", w.idleInterval,
 	)

@@ -327,7 +327,7 @@ func (s *Service) DeleteTenant(ctx context.Context, idOrSlug string) error {
 			return errxtrace.Wrap("failed to delete tenant physical blobs", err)
 		}
 	} else {
-		slog.Warn(
+		slog.WarnContext(ctx,
 			"DeleteTenant: no file service wired — skipping physical blob cleanup; object-storage blobs for this tenant will be orphaned",
 			"tenant_id", tenant.ID,
 			"tenant_slug", tenant.Slug,
@@ -1064,7 +1064,7 @@ func (s *Service) logWorkerAction(ctx context.Context, action, workerType string
 	}
 
 	if _, createErr := s.factorySet.AuditLogRegistry.Create(ctx, entry); createErr != nil {
-		slog.Error("Failed to write worker-control audit log entry",
+		slog.ErrorContext(ctx, "Failed to write worker-control audit log entry",
 			"action", action, "worker_type", workerType, "error", createErr)
 	}
 }
@@ -1110,7 +1110,7 @@ func (s *Service) logAdminAction(ctx context.Context, action string, tenantID *s
 		// Best-effort: the CLI surfaces success/failure of the operation
 		// itself; a missing audit row is recoverable. Log via slog so
 		// operators with audit-completeness monitoring can still notice.
-		slog.Error("Failed to write admin audit log entry",
+		slog.ErrorContext(ctx, "Failed to write admin audit log entry",
 			"action", action, "error", createErr)
 	}
 }

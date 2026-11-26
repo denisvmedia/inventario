@@ -495,14 +495,14 @@ func (d OrphanFileGCDeps) missingDeps() []string {
 // outright rather than deferred to a panic mid-sweep.
 func (w *OrphanFileGCWorker) Start(ctx context.Context) {
 	if missing := w.deps.missingDeps(); len(missing) > 0 {
-		slog.Error("OrphanFileGCWorker: incomplete dependencies, skipping startup",
+		slog.ErrorContext(ctx, "OrphanFileGCWorker: incomplete dependencies, skipping startup",
 			"missing", strings.Join(missing, ","))
 		return
 	}
 	w.wg.Go(func() {
 		w.runCleanup(ctx)
 	})
-	slog.Info("Orphan file GC worker started",
+	slog.InfoContext(ctx, "Orphan file GC worker started",
 		"interval", w.interval, "min_age", w.minAge, "mode", w.mode)
 }
 
@@ -577,7 +577,7 @@ func (w *OrphanFileGCWorker) RunOnce(ctx context.Context) {
 	// through, which is the one thing the gate exists to prevent.
 	gate, err := w.buildConcurrencyGate(ctx, start)
 	if err != nil {
-		slog.Error("Orphan file GC: failed to build the in-flight concurrency gate; aborting tick", "error", err)
+		slog.ErrorContext(ctx, "Orphan file GC: failed to build the in-flight concurrency gate; aborting tick", "error", err)
 		orphanGCRunsTotal.WithLabelValues("error").Inc()
 		orphanGCBlockedTenants.Set(0) // the gate was never evaluated — assert nothing
 		return
@@ -587,14 +587,14 @@ func (w *OrphanFileGCWorker) RunOnce(ctx context.Context) {
 
 	rows, err := w.sweepRows(ctx, gate, cutoff)
 	if err != nil {
-		slog.Error("Orphan file GC: row sweep aborted", "error", err)
+		slog.ErrorContext(ctx, "Orphan file GC: row sweep aborted", "error", err)
 		orphanGCRunsTotal.WithLabelValues("error").Inc()
 		return
 	}
 
 	blobs, err := w.sweepThumbnails(ctx, gate, cutoff)
 	if err != nil {
-		slog.Error("Orphan file GC: thumbnail sweep aborted", "error", err)
+		slog.ErrorContext(ctx, "Orphan file GC: thumbnail sweep aborted", "error", err)
 		orphanGCRunsTotal.WithLabelValues("error").Inc()
 		return
 	}
@@ -616,10 +616,10 @@ func (w *OrphanFileGCWorker) RunOnce(ctx context.Context) {
 		"duration_ms", time.Since(start).Milliseconds(),
 	}
 	if rows.candidates > 0 || blobs.candidates > 0 {
-		slog.Info("Orphan file GC tick found candidates", attrs...)
+		slog.InfoContext(ctx, "Orphan file GC tick found candidates", attrs...)
 		return
 	}
-	slog.Debug("Orphan file GC tick clean", attrs...)
+	slog.DebugContext(ctx, "Orphan file GC tick clean", attrs...)
 }
 
 // orphanGCStats is the per-sweep tally reported on the tick log line.
@@ -1099,7 +1099,7 @@ func (w *OrphanFileGCWorker) deleteRow(ctx context.Context, file *models.FileEnt
 		return false // another replica won the race
 	default:
 		orphanGCFailuresTotal.Inc()
-		slog.Error("Orphan file GC: failed to delete orphan file row",
+		slog.ErrorContext(ctx, "Orphan file GC: failed to delete orphan file row",
 			"event", "orphan_gc.row", "action", "failed",
 			"file_id", file.ID, "tenant_id", file.TenantID, "error", err.Error())
 		return false
@@ -1292,7 +1292,7 @@ func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 		fileID, size, ok := parseThumbnailBlobKey(tenantID, cand.key)
 		if !ok {
 			orphanGCSkippedTotal.WithLabelValues(orphanGCSkipUnparseableKey).Inc()
-			slog.Warn("Orphan file GC: unparseable thumbnail key, keeping",
+			slog.WarnContext(ctx, "Orphan file GC: unparseable thumbnail key, keeping",
 				"event", "orphan_gc.thumbnail", "action", "skipped",
 				"reason", orphanGCSkipUnparseableKey, "blob_key", cand.key, "tenant_id", tenantID)
 			continue
@@ -1338,7 +1338,7 @@ func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 			// path does: the cursor moves past it, so a permanently-failing
 			// probe stops a tick each time the cycle returns to it, and the
 			// metric alone gives an operator nothing to grep for.
-			slog.Error("Orphan file GC: thumbnail row probe failed; aborting tick",
+			slog.ErrorContext(ctx, "Orphan file GC: thumbnail row probe failed; aborting tick",
 				"event", "orphan_gc.thumbnail", "action", "failed",
 				"reason", orphanGCSkipProbeError, "blob_key", cand.key,
 				"file_id", fileID, "tenant_id", tenantID, "error", err.Error())
@@ -1445,7 +1445,7 @@ func (w *OrphanFileGCWorker) listAgedThumbnails(
 	if truncated && lastKey != "" {
 		w.thumbCursor[tenantID] = lastKey
 		orphanGCSkippedTotal.WithLabelValues(orphanGCSkipBudgetExhausted).Inc()
-		slog.Warn("Orphan file GC: thumbnail listing truncated, resuming next tick",
+		slog.WarnContext(ctx, "Orphan file GC: thumbnail listing truncated, resuming next tick",
 			"event", "orphan_gc.thumbnail", "action", "skipped",
 			"reason", orphanGCSkipBudgetExhausted, "tenant_id", tenantID,
 			"budget", w.thumbBudget, "resume_after", lastKey)
@@ -1517,7 +1517,7 @@ func (w *OrphanFileGCWorker) deleteThumbnail(ctx context.Context, bucket *blob.B
 			return false
 		}
 		orphanGCFailuresTotal.Inc()
-		slog.Error("Orphan file GC: failed to delete orphan thumbnail",
+		slog.ErrorContext(ctx, "Orphan file GC: failed to delete orphan thumbnail",
 			"event", "orphan_gc.thumbnail", "action", "failed",
 			"blob_key", key, "tenant_id", tenantID, "error", err.Error())
 		return false

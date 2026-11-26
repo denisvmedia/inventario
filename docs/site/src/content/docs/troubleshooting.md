@@ -15,6 +15,11 @@ docker compose logs inventario                       # Docker Compose
 kubectl -n <namespace> logs deploy/<release>-inventario   # Kubernetes
 ```
 
+To find the lines of one failed request, open the browser's developer tools,
+find the request in the Network tab and copy its `X-Request-ID` response
+header. The lines the server logged for that request carry the same value as
+`request_id`, so searching the log for it finds them.
+
 ## Sign-in and email
 
 ### The verification email never arrived

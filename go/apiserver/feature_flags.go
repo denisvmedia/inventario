@@ -42,6 +42,13 @@ type FeatureFlags struct {
 	// false the FE hides the CTA and the POST /public/commodities/scan
 	// route is not mounted (404).
 	PublicScan bool `json:"public_scan"`
+
+	// Plans mirrors Params.PlansEnabled (#1389). The plans feature is
+	// frozen, so the flag is off by default. When false the FE hides every
+	// plan surface (plan badge, Upgrade links, the /plans page, the plan
+	// part of the group settings card and the plan in the admin tenant
+	// pages) and GET /g/{groupSlug}/plan reports the unlimited plan.
+	Plans bool `json:"plans"`
 }
 
 // FeatureFlagsHandler returns a constant-shaped feature-flag payload
@@ -61,6 +68,7 @@ func FeatureFlagsHandler(params Params) func(r chi.Router) {
 		CurrencyMigration: params.FeatureCurrencyMigration,
 		MagicLinkLogin:    params.MagicLinkLoginEnabled,
 		PublicScan:        params.PublicScanEnabled,
+		Plans:             params.PlansEnabled,
 	}
 	return func(r chi.Router) {
 		r.Get("/", func(w http.ResponseWriter, _ *http.Request) {

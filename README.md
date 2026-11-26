@@ -502,6 +502,7 @@ This test validates:
 - [Email Deliverability Runbook](devdocs/email-deliverability.md) - SPF/DKIM/DMARC for the sending domain, and how to check that verification and invite mail lands
 - [System Admin Operations Runbook](devdocs/admin-runbook.md) - Bootstrapping system admins, audit-log inspection, lockout recovery
 - [Admin Section Threat Model](devdocs/security/admin-threat-model.md) - Security model for the cross-tenant admin surface
+- [Logging Guideline](devdocs/logging.md) - Log levels, field names, what never goes into a log, and request ids
 
 ## Security
 

@@ -127,7 +127,7 @@ func (s *ItemReminderService) RemindOnce(ctx context.Context, now time.Time) (It
 		sent, processErr := s.processOne(ctx, st, r, occurrence, lead, daysLeft)
 		if processErr != nil {
 			stats.Failed++
-			slog.Error("item reminder failed",
+			slog.ErrorContext(ctx, "item reminder failed",
 				"reminder_id", r.ID,
 				"occurrence_on", string(occurrence),
 				"lead_days", lead,
@@ -177,7 +177,7 @@ func (s *ItemReminderService) processOne(ctx context.Context, st *sweepState, r 
 		return false, nil
 	}
 	if st.prefs != nil && !st.prefs.IsEnabledForGroup(ctx, user, r.TenantID, r.GroupID, notifications.CategoryItemReminder, notifications.ChannelEmail) {
-		slog.Debug("item reminder: recipient opted out", "reminder_id", r.ID, "user_id", user.ID)
+		slog.DebugContext(ctx, "item reminder: recipient opted out", "reminder_id", r.ID, "user_id", user.ID)
 		return false, nil
 	}
 

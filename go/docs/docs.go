@@ -9088,7 +9088,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/plan": {
             "get": {
-                "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).",
+                "description": "Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids give unlimited, as does any id while the plans feature flag is off (#1389).",
                 "produces": [
                     "application/json"
                 ],
@@ -13336,6 +13336,10 @@ const docTemplate = `{
                 },
                 "magic_link_login": {
                     "description": "MagicLinkLogin mirrors Params.MagicLinkLoginEnabled. The entry point\nis pre-login (a \"Email me a sign-in link\" affordance on the Login\npage), so it is exposed here on the public /feature-flags surface\nrather than the auth-gated /system endpoint. When false the FE hides\nthe affordance and the /auth/magic-link routes return 404.",
+                    "type": "boolean"
+                },
+                "plans": {
+                    "description": "Plans mirrors Params.PlansEnabled (#1389). The plans feature is\nfrozen, so the flag is off by default. When false the FE hides every\nplan surface (plan badge, Upgrade links, the /plans page, the plan\npart of the group settings card and the plan in the admin tenant\npages) and GET /g/{groupSlug}/plan reports the unlimited plan.",
                     "type": "boolean"
                 },
                 "public_scan": {
