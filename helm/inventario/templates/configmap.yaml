@@ -35,7 +35,9 @@ data:
   # cmd/inventario/run/bootstrap/config.go resolves at runtime to
   # INVENTARIO_RUN_FEATURE_*. See values.yaml `features:` block.
   INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: {{ .Values.features.currencyMigration | quote }}
-  # Subscription plans (#1389), off by default: the feature is frozen.
+  # Subscription plans (#1389), off by default: the feature is frozen. The
+  # exception to the FEATURE_* naming above: its env tag is ENABLE_PLANS,
+  # matching the server's --enable-plans flag.
   INVENTARIO_RUN_ENABLE_PLANS: {{ .Values.features.plans | default false | quote }}
   {{- if .Values.demo.mailpit.enabled }}
   # Demo mail-trap (templates/demo/mailpit-*.yaml): route ALL transactional

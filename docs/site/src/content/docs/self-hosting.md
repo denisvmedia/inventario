@@ -61,7 +61,7 @@ Whichever route you choose, set up regular backups of your database and uploaded
 
 ## Subscription plans
 
-Subscription plans are on hold, so a server hides them unless the operator turns them on: users see no plan badge, no Upgrade link and no plans page, the group settings card shows only what the group holds, and the admin tenant page has no Plan tile. Turning them on (`INVENTARIO_RUN_ENABLE_PLANS=true`, or `--enable-plans` on `inventario run`, or `features.plans` in the Helm chart) only shows those screens again. No plan limit is applied either way, and the group storage quota and its reminder emails do not depend on it.
+Subscription plans are on hold, so a server hides them unless the operator turns them on: users see no plan badge, no Upgrade link and no plans page, the group settings card shows only what the group holds, and the admin tenant page has no Plan tile. Turning them on only shows those screens again. With Docker Compose, set `ENABLE_PLANS=true` in `.env`; Compose passes it to the server as `INVENTARIO_RUN_ENABLE_PLANS`, which is the variable to set when you run the binary or the image yourself. The binary also takes `--enable-plans` on `inventario run`, and the Helm chart has `features.plans`. No plan limit is applied either way, and the group storage quota and its reminder emails do not depend on it.
 
 ## Where to next
 

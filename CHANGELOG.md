@@ -582,9 +582,10 @@ when to add an entry and where it goes.
 ### Operators
 
 - `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
-  `features.plans`) shows the subscription plan surfaces that are now hidden
-  by default. It is off by default, and `GET /feature-flags` reports it as
-  `plans`. With it on, `GET /g/{slug}/plan` reports the tenant's plan again
+  `features.plans`, Compose `ENABLE_PLANS` in `.env`) shows the subscription
+  plan surfaces that are now hidden by default. It is off by default, and
+  `GET /feature-flags` reports it as `plans`. With it on,
+  `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,

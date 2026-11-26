@@ -531,7 +531,9 @@ app:
 
 # ============================================================
 # Feature flags — toggle in-development surfaces without rebuilding.
-# Each flag flips a corresponding INVENTARIO_RUN_FEATURE_* env var.
+# Each flag flips a corresponding INVENTARIO_RUN_FEATURE_* env var, except
+# `plans`, which maps to INVENTARIO_RUN_ENABLE_PLANS (the server's
+# --enable-plans flag).
 # Defaults reflect the maintainer's "ship-on" stance for features that
 # have already gone GA; flip to false on operator-managed deployments
 # that want the surface dark.
@@ -551,7 +553,7 @@ features:
   # the admin tenant pages. GET /g/{slug}/plan reports the unlimited plan.
   # Nothing enforces plan limits either way; storage quotas do not come
   # from plans. Default false.
-  # Env: INVENTARIO_RUN_ENABLE_PLANS
+  # Env: INVENTARIO_RUN_ENABLE_PLANS (not INVENTARIO_RUN_FEATURE_*)
   plans: false
 
 # ============================================================
