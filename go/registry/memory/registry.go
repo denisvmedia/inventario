@@ -65,12 +65,12 @@ func copyOut[T any](item *T) *T {
 	return &cp
 }
 
-func (r *Registry[_, P]) Get(_ context.Context, id string) (P, error) {
+func (r *Registry[_, P]) Get(ctx context.Context, id string) (P, error) {
 	var zero P
 	// Debug, not Info: this fires on every read, and the access log already
 	// records the request that caused it. The type and user id are here for
 	// tracing a visibility decision, which is a debugging question.
-	slog.Debug("Getting item", "item_id", id, "user_id", r.userID, "item_type", fmt.Sprintf("%T", zero))
+	slog.DebugContext(ctx, "Getting item", "item_id", id, "user_id", r.userID, "item_type", fmt.Sprintf("%T", zero))
 
 	r.lock.RLock()
 	item, ok := r.items.Get(id)

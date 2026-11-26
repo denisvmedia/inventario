@@ -28,7 +28,7 @@ func BackfillAssetNumbers(ctx context.Context, factorySet *registry.FactorySet, 
 		numbered, err := reg.BackfillAssetNumbers(ctx)
 		if err == nil {
 			if numbered > 0 {
-				slog.Info("asset number backfill complete",
+				slog.InfoContext(ctx, "asset number backfill complete",
 					"numbered", numbered,
 					"duration_ms", time.Since(start).Milliseconds())
 			}
@@ -37,7 +37,7 @@ func BackfillAssetNumbers(ctx context.Context, factorySet *registry.FactorySet, 
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("asset number backfill failed; will retry",
+		slog.WarnContext(ctx, "asset number backfill failed; will retry",
 			"error", err.Error(), "numbered", numbered, "retry_in", retryInterval.String())
 
 		timer := time.NewTimer(retryInterval)

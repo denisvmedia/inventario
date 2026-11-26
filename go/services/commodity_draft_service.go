@@ -290,7 +290,7 @@ func (s *CommodityDraftService) FinishStaleDiscards(ctx context.Context) (int, e
 	for _, draft := range stale {
 		err := s.Discard(ctx, draft.ID)
 		if err != nil && !errors.Is(err, registry.ErrNotFound) {
-			slog.Error("Failed to finish a stopped draft discard", "draft_id", draft.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to finish a stopped draft discard", "draft_id", draft.ID, "error", err)
 			if firstErr == nil {
 				firstErr = errxtrace.Wrap("failed to finish a stopped discard", err, errx.Attrs("draft_id", draft.ID))
 			}

@@ -145,12 +145,12 @@ func (c *Controller) Start(ctx context.Context) {
 		return
 	}
 	if err := c.RefreshOnce(ctx); err != nil {
-		slog.Warn("Worker pause controller: initial refresh failed; workers run until first successful poll", "error", err)
+		slog.WarnContext(ctx, "Worker pause controller: initial refresh failed; workers run until first successful poll", "error", err)
 	}
 	c.wg.Go(func() {
 		c.run(ctx)
 	})
-	slog.Info("Worker pause controller started", "refresh_interval", c.refreshInterval)
+	slog.InfoContext(ctx, "Worker pause controller started", "refresh_interval", c.refreshInterval)
 }
 
 // Stop signals the poll goroutine and waits for it to exit. Idempotent.
@@ -203,7 +203,7 @@ func (c *Controller) RefreshOnce(ctx context.Context) error {
 		c.mu.Lock()
 		if !c.listErrored {
 			c.listErrored = true
-			slog.Warn("Worker pause controller: failed to refresh pause state; retaining last-known state", "error", err)
+			slog.WarnContext(ctx, "Worker pause controller: failed to refresh pause state; retaining last-known state", "error", err)
 		}
 		c.mu.Unlock()
 		return err

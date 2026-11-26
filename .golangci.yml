@@ -28,6 +28,7 @@ linters:
     - nestif
     - nolintlint
     - revive
+    - sloglint
     - staticcheck
     - unused
     - whitespace
@@ -208,6 +209,12 @@ linters:
           disabled: false
         - name: waitgroup-by-value
           disabled: false
+    sloglint:
+      # A log call made where a context.Context or an *http.Request is in scope
+      # has to pass the context, or the line loses request_id. `--fix` rewrites
+      # slog.Info(...) to slog.InfoContext(ctx, ...). See devdocs/logging.md.
+      context: scope
+      key-naming-case: snake
     staticcheck:
       checks:
         # STxxxx checks in https://staticcheck.io/docs/checks/#ST

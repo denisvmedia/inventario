@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/logctx"
 	"go.5x5.cz/inventario/internal/utcclock"
 	"go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/registry/postgres"
@@ -57,7 +58,8 @@ func setupSlog() {
 		handler = slog.NewTextHandler(os.Stdout, opts)
 	}
 
-	slog.SetDefault(slog.New(handler))
+	// request_id comes from the context of each call; see internal/logctx.
+	slog.SetDefault(slog.New(logctx.NewHandler(handler)))
 }
 
 // logLevel reads INVENTARIO_LOG_LEVEL. Empty or unparseable means info, which

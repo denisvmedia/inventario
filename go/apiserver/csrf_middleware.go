@@ -71,7 +71,7 @@ func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 
 			tokenFromHeader := r.Header.Get(csrfHeaderName)
 			if tokenFromHeader == "" {
-				slog.Warn("CSRF token missing in state-changing request",
+				slog.WarnContext(r.Context(), "CSRF token missing in state-changing request",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
@@ -87,7 +87,7 @@ func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 				// Only mutating methods reach this point — the safe-method
 				// switch above already returned — so rejecting here cannot
 				// block reads.
-				slog.Error("CSRF service error; rejecting state-changing request (fail-closed)",
+				slog.ErrorContext(r.Context(), "CSRF service error; rejecting state-changing request (fail-closed)",
 					"error", err,
 					"user_id", user.ID,
 					"method", r.Method,
@@ -98,7 +98,7 @@ func CSRFMiddleware(csrfService csrf.Service) func(http.Handler) http.Handler {
 			}
 
 			if !valid {
-				slog.Warn("CSRF token invalid or not found for user",
+				slog.WarnContext(r.Context(), "CSRF token invalid or not found for user",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,

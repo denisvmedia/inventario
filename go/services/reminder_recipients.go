@@ -78,7 +78,7 @@ func groupAdminUsers(ctx context.Context, users registry.UserRegistry, groupID s
 			return nil, err
 		}
 		if user == nil {
-			slog.Warn("reminder: skip member with missing user",
+			slog.WarnContext(ctx, "reminder: skip member with missing user",
 				"user_id", m.MemberUserID,
 				"group_id", groupID,
 			)

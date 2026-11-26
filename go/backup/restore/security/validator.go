@@ -46,8 +46,8 @@ func NewRestoreSecurityValidator(logger *slog.Logger) *RestoreSecurityValidator 
 }
 
 // LogUnauthorizedAttempt logs details about unauthorized access attempts
-func (v *RestoreSecurityValidator) LogUnauthorizedAttempt(_ context.Context, attempt UnauthorizedAttempt) {
-	v.logger.Warn("Unauthorized entity access attempt",
+func (v *RestoreSecurityValidator) LogUnauthorizedAttempt(ctx context.Context, attempt UnauthorizedAttempt) {
+	v.logger.WarnContext(ctx, "Unauthorized entity access attempt",
 		"user_id", attempt.UserID,
 		"target_entity_id", attempt.TargetEntityID,
 		"entity_type", attempt.EntityType,
