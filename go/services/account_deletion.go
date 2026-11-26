@@ -163,7 +163,7 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	// leak the schema/constraint name.
 	if err := s.factorySet.UserRegistry.Delete(ctx, userID); err != nil {
 		if isForeignKeyViolation(err) {
-			slog.Warn("account deletion: users-row delete rejected by FK (still owns content)",
+			slog.WarnContext(ctx, "account deletion: users-row delete rejected by FK (still owns content)",
 				"user_id", userID, "tenant_id", tenantID, "error", err)
 			return errxtrace.Classify(ErrAccountStillOwnsContent)
 		}

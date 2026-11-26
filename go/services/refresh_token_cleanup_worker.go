@@ -80,13 +80,13 @@ func NewRefreshTokenCleanupWorker(r registry.RefreshTokenRegistry, opts ...Refre
 // Start launches the background cleanup goroutine. It is a no-op if the registry is nil.
 func (w *RefreshTokenCleanupWorker) Start(ctx context.Context) {
 	if w.registry == nil {
-		slog.Warn("RefreshTokenCleanupWorker: no registry configured, skipping startup")
+		slog.WarnContext(ctx, "RefreshTokenCleanupWorker: no registry configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.runCleanup(ctx)
 	})
-	slog.Info("Refresh token cleanup worker started", "interval", w.cleanupInterval)
+	slog.InfoContext(ctx, "Refresh token cleanup worker started", "interval", w.cleanupInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -123,8 +123,8 @@ func (w *RefreshTokenCleanupWorker) cleanupOnce(ctx context.Context) {
 	}
 
 	if err := w.registry.DeleteExpired(ctx); err != nil {
-		slog.Error("Failed to delete expired refresh tokens", "error", err)
+		slog.ErrorContext(ctx, "Failed to delete expired refresh tokens", "error", err)
 	} else {
-		slog.Debug("Expired refresh tokens cleaned up")
+		slog.DebugContext(ctx, "Expired refresh tokens cleaned up")
 	}
 }

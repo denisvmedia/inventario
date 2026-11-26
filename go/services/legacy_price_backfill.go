@@ -36,7 +36,7 @@ func RunLegacyPriceBackfill(ctx context.Context, factorySet *registry.FactorySet
 		rewritten, err := BackfillLegacyPrices(ctx, factorySet)
 		if err == nil {
 			if rewritten > 0 {
-				slog.Info("legacy prices backfilled",
+				slog.InfoContext(ctx, "legacy prices backfilled",
 					"commodities", rewritten, "duration_ms", time.Since(start).Milliseconds())
 			}
 			return
@@ -44,7 +44,7 @@ func RunLegacyPriceBackfill(ctx context.Context, factorySet *registry.FactorySet
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("legacy price backfill failed; will retry",
+		slog.WarnContext(ctx, "legacy price backfill failed; will retry",
 			"error", err.Error(), "commodities", rewritten, "retry_in", retryInterval.String())
 		if !sleepCtx(ctx, retryInterval) {
 			return

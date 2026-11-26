@@ -241,7 +241,7 @@ func (p *OIDCProvider) discovery(ctx context.Context) (*oidcDiscovery, error) {
 	}
 	p.discovered = d
 	p.lastErr = nil
-	slog.Info("OAuth: OpenID Connect discovery succeeded", "issuer", p.issuer, "backchannel", p.backchannel)
+	slog.InfoContext(ctx, "OAuth: OpenID Connect discovery succeeded", "issuer", p.issuer, "backchannel", p.backchannel)
 	return d, nil
 }
 
@@ -279,7 +279,7 @@ func (p *OIDCProvider) fetchDiscovery(ctx context.Context) (*oidcDiscovery, erro
 		// Sign-in still sends S256. A provider that does not support it
 		// ignores the challenge or refuses the request; either way the
 		// operator should know why.
-		slog.Warn("OAuth: OpenID Connect provider does not list PKCE S256 as supported",
+		slog.WarnContext(ctx, "OAuth: OpenID Connect provider does not list PKCE S256 as supported",
 			"issuer", p.issuer, "code_challenge_methods_supported", d.CodeChallengeMethodsSupported)
 	}
 	return &d, nil

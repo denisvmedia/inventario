@@ -114,7 +114,7 @@ func (w *ExportWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	})
 
-	slog.Info("Export worker started")
+	slog.InfoContext(ctx, "Export worker started")
 }
 
 // Stop stops the export worker
@@ -172,7 +172,7 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 	reg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	exports, err := reg.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get exports", "error", err)
+		slog.ErrorContext(ctx, "Failed to get exports", "error", err)
 		return
 	}
 
@@ -195,7 +195,7 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to acquire semaphore", "error", err)
+			slog.ErrorContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 
@@ -205,7 +205,7 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to claim export", "export_id", export.ID, "error", claimErr)
+			slog.ErrorContext(ctx, "Failed to claim export", "export_id", export.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
@@ -225,11 +225,11 @@ func (w *ExportWorker) processPendingExports(ctx context.Context) {
 
 // processExport processes a single export request
 func (w *ExportWorker) processExport(ctx context.Context, exportID string) {
-	slog.Info("Processing export", "export_id", exportID)
+	slog.InfoContext(ctx, "Processing export", "export_id", exportID)
 
 	if err := w.exportService.ProcessExport(ctx, exportID); err != nil {
-		slog.Error("Failed to process export", "export_id", exportID, "error", err)
+		slog.ErrorContext(ctx, "Failed to process export", "export_id", exportID, "error", err)
 		return
 	}
-	slog.Info("Successfully processed export", "export_id", exportID)
+	slog.InfoContext(ctx, "Successfully processed export", "export_id", exportID)
 }

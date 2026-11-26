@@ -43,6 +43,11 @@ func TestFileUpdateRequestValidate_Passes(t *testing.T) {
 				Path: "renamed-file.jpg",
 			},
 		},
+		{
+			// 255 characters, 510 bytes in UTF-8: the limit counts characters.
+			name:  "title of 255 Cyrillic characters",
+			attrs: jsonapi.FileUpdateRequestFileData{Title: strings.Repeat("ж", 255)},
+		},
 	}
 
 	for _, tc := range cases {
@@ -67,6 +72,10 @@ func TestFileUpdateRequestValidate_Rejects(t *testing.T) {
 		{
 			name:  "title over 255 characters",
 			attrs: jsonapi.FileUpdateRequestFileData{Title: strings.Repeat("t", 256)},
+		},
+		{
+			name:  "title over 255 Czech characters",
+			attrs: jsonapi.FileUpdateRequestFileData{Title: strings.Repeat("ř", 256)},
 		},
 		{
 			name:  "description over 1000 characters",
@@ -187,6 +196,16 @@ func TestFileLinkRequestValidate_Envelope(t *testing.T) {
 	req := newFileLinkRequest(jsonapi.FileLinkRequestAttributes{EntityType: "commodity", EntityID: "commodity-1"})
 	req.Data.Type = "files"
 	c.Assert(req.ValidateWithContext(context.Background()), qt.IsNotNil)
+}
+
+// TestFileRequestDataValidate_TitleLength checks that the title limit of a
+// new file counts characters, as the update request and the model do.
+func TestFileRequestDataValidate_TitleLength(t *testing.T) {
+	c := qt.New(t)
+	ok := jsonapi.FileRequestData{Title: strings.Repeat("ж", 255)}
+	c.Assert(ok.ValidateWithContext(context.Background()), qt.IsNil)
+	tooLong := jsonapi.FileRequestData{Title: strings.Repeat("ж", 256)}
+	c.Assert(tooLong.ValidateWithContext(context.Background()), qt.IsNotNil)
 }
 
 // TestFileUpdateRequestValidate_TypeRequired guards the outer envelope: a

@@ -53,7 +53,7 @@ func rejectTenantHeader(w http.ResponseWriter, r *http.Request, allowTestTenantH
 		if allowTestTenantHeader && strings.EqualFold(headerName, TestTenantHeaderName) {
 			continue
 		}
-		slog.Error("Security violation: user-provided tenant ID in header",
+		slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in header",
 			"header", headerName,
 			"value", strings.Join(headerValues, ","),
 			"user_agent", r.UserAgent(),
@@ -91,7 +91,7 @@ func rejectTenantQueryParam(w http.ResponseWriter, r *http.Request) bool {
 		if !strings.Contains(strings.ToLower(paramName), "tenant") {
 			continue
 		}
-		slog.Error("Security violation: user-provided tenant ID in query parameter",
+		slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in query parameter",
 			"param", paramName,
 			"value", strings.Join(paramValues, ","),
 			"user_agent", r.UserAgent(),
@@ -200,12 +200,12 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 	body, err := io.ReadAll(io.LimitReader(r.Body, tenantScanMaxBodyBytes+1))
 	_ = r.Body.Close() // mirrors PasswordResetRateLimitMiddleware; r.Body is replaced below
 	if err != nil {
-		slog.Error("Failed to read request body for security validation", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to read request body for security validation", "error", err)
 		http.Error(w, "Failed to read request body", http.StatusBadRequest)
 		return true
 	}
 	if int64(len(body)) > tenantScanMaxBodyBytes {
-		slog.Error("Security violation: request body exceeds tenant-scan size cap",
+		slog.ErrorContext(r.Context(), "Security violation: request body exceeds tenant-scan size cap",
 			"method", r.Method,
 			"path", r.URL.Path,
 			"content_type", contentType,
@@ -234,7 +234,7 @@ func rejectTenantBody(w http.ResponseWriter, r *http.Request) bool {
 		!strings.Contains(bodyLower, "\"tenantid\"") {
 		return false
 	}
-	slog.Error("Security violation: user-provided tenant ID in request body",
+	slog.ErrorContext(r.Context(), "Security violation: user-provided tenant ID in request body",
 		"content_type", contentType,
 		"body_preview", truncateString(bodyStr, 200),
 		"user_agent", r.UserAgent(),
@@ -285,7 +285,7 @@ func RejectSpecificTenantHeaders() func(http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			for _, header := range forbiddenHeaders {
 				if value := r.Header.Get(header); value != "" {
-					slog.Error("Security violation: forbidden tenant header detected",
+					slog.ErrorContext(r.Context(), "Security violation: forbidden tenant header detected",
 						"header", header,
 						"value", value,
 						"user_agent", r.UserAgent(),
@@ -307,7 +307,7 @@ func LogSecurityAttempts() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			// Log all requests for security monitoring
-			slog.Debug("API request",
+			slog.DebugContext(r.Context(), "API request",
 				"method", r.Method,
 				"path", r.URL.Path,
 				"user_agent", r.UserAgent(),

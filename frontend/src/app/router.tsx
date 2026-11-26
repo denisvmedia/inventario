@@ -12,7 +12,7 @@ import { RequireBackofficeAuth } from "@/components/routing/RequireBackofficeAut
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
 import { SectionRoute } from "@/components/routing/SectionRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
-import { ComingSoonPage } from "@/components/coming-soon"
+import { PlansRoute } from "@/components/routing/PlansRoute"
 import { AdminShell } from "@/app/AdminShell"
 import { Shell } from "@/app/Shell"
 import { ConfirmProvider } from "@/hooks/useConfirm"
@@ -358,8 +358,10 @@ export function AppRoutes() {
           {/* Permanent "coming soon" pages — features whose backend isn't
               implemented yet. Each links to its own per-surface tracker
               (resolved from the registry); #1417 is the umbrella aggregator
-              issue, not the destination of these links. */}
-          <Route path="/plans" element={<ComingSoonPage surface="plans" />} />
+              issue, not the destination of these links. /plans is one only
+              when the deployment has plans on (#1389); otherwise it
+              redirects to the group home. */}
+          <Route path="/plans" element={<PlansRoute />} />
           {/* /help is not its own page: everything it would hold — docs,
               shortcuts, what's new, feedback, the version footer — already
               lives in Settings → Help. The route stays so existing links and

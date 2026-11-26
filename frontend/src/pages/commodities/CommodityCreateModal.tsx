@@ -59,6 +59,9 @@ export function CommodityCreateModalRoute() {
   // late `navigate(-1)` could fire after the user has already moved
   // somewhere else.
   const navigateTimerRef = useRef<number | null>(null)
+  // A request that ends after the modal unmounted (browser Back while Add
+  // item runs) must not move the user from wherever they went.
+  const mountedRef = useRef(false)
   function clearNavigateTimer() {
     if (navigateTimerRef.current !== null) {
       window.clearTimeout(navigateTimerRef.current)
@@ -67,12 +70,19 @@ export function CommodityCreateModalRoute() {
   }
   function scheduleNavigate(fn: () => void) {
     clearNavigateTimer()
+    if (!mountedRef.current) return
     navigateTimerRef.current = window.setTimeout(() => {
       navigateTimerRef.current = null
       fn()
     }, DIALOG_CLOSE_ANIMATION_MS)
   }
-  useEffect(() => clearNavigateTimer, [])
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+      clearNavigateTimer()
+    }
+  }, [])
 
   function close() {
     setOpen(false)
@@ -87,11 +97,8 @@ export function CommodityCreateModalRoute() {
   async function handleSubmit(values: CreateCommodityRequest, draft?: DraftRef) {
     const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
-    // Return the created commodity to the dialog so it can run
-    // post-create work (uploading + linking pending files from
-    // the Files step). The dialog fires those uploads as fire-and-
-    // forget so the close + navigate sequence below doesn't have
-    // to wait on them.
+    // The dialog uploaded the Files step's attachments to the draft
+    // before handing it over (#1626), so the item has them already.
     if (slug && created?.id) {
       // Animate the dialog out before the route changes — matches the
       // close-without-submit path. `replace: true` so the back button

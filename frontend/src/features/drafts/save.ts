@@ -6,9 +6,8 @@
 // the draft instead of making a second one. A file whose content is already
 // attached to the draft, or that an earlier attempt uploaded, is not uploaded
 // again.
-import { attachFile, updateFile, uploadFile, type ListedFile } from "@/features/files/api"
-import { categoryFromMime } from "@/features/files/constants"
-import type { PendingFile } from "@/features/commodities/draft"
+import { attachFile, uploadFile, type ListedFile } from "@/features/files/api"
+import { placePendingFile, type PendingFile } from "@/features/commodities/draft"
 import { HttpError } from "@/lib/http"
 
 import {
@@ -43,6 +42,10 @@ const BASE_REVISION_SUFFIX = ":base-revision"
 // retry of a promotion whose response was lost sends the same key and gets
 // the item it made.
 const PROMOTION_KEY_SUFFIX = ":promotion-key"
+// The draft the form made only to add the item (#1626), kept until the user
+// saves it as a draft of their own or the form forgets the slot. Discarding
+// the form discards that draft too, unless it was saved elsewhere since.
+const ITEM_DRAFT_SUFFIX = ":item-draft"
 
 // Files larger than this are matched by name and size only: hashing reads
 // the whole file into memory.
@@ -140,11 +143,28 @@ export function forgetBaseRevision(localKey: string): void {
   remove("local", localKey + BASE_REVISION_SUFFIX)
 }
 
-// clearDraftSession forgets the client key, base revision and promotion key
-// of a slot.
+// rememberItemDraft records that the slot's draft was made by Add item, not
+// by a save the user asked for.
+export function rememberItemDraft(localKey: string, draftId: string): void {
+  write("session", localKey + ITEM_DRAFT_SUFFIX, draftId)
+}
+
+// itemDraftOf returns the draft Add item made for the slot, if any.
+export function itemDraftOf(localKey: string): string | null {
+  return read("session", localKey + ITEM_DRAFT_SUFFIX)
+}
+
+// forgetItemDraft keeps the slot's draft as one the user saved.
+export function forgetItemDraft(localKey: string): void {
+  remove("session", localKey + ITEM_DRAFT_SUFFIX)
+}
+
+// clearDraftSession forgets the client key, base revision, promotion key
+// and item draft of a slot.
 export function clearDraftSession(localKey: string): void {
   remove("session", localKey + CLIENT_KEY_SUFFIX)
   remove("session", localKey + PROMOTION_KEY_SUFFIX)
+  remove("session", localKey + ITEM_DRAFT_SUFFIX)
   remove("local", localKey + BASE_REVISION_SUFFIX)
 }
 
@@ -205,10 +225,23 @@ export interface SaveDraftInput {
   // lost response). 1 when the slot never saved.
   lastSavedRevision?: number
   values: DraftValues
+  // Leave the values of draft as they are and only add the files, for Add
+  // item on a draft the user saved (#1626): the promotion carries the
+  // values, so a failed Add item does not overwrite the draft. The draft
+  // must still be open at the given revision.
+  keepValues?: boolean
   pendingFiles: PendingFile[]
   // A draft whose saved files the new draft should get too, for "save as a
   // new draft". The files are linked, not copied.
   carryFilesFrom?: string | null
+  // Called once the draft is known, before any file is sent.
+  onDraft?: (draft: Draft) => void
+  // Asked before each file; true ends the save there, with the files after
+  // it left pending.
+  shouldStop?: () => boolean
+  // Called for each pending file as its turn comes, before anything is sent
+  // for it.
+  onFileStart?: (entry: PendingFile) => void
   // Called for each pending file once it is uploaded, with the file's id,
   // so a retry attaches that file instead of uploading it again.
   onFileUploaded?: (entry: PendingFile, fileId: string) => void
@@ -221,6 +254,8 @@ export interface SaveDraftResult {
   failedFiles: { entry: PendingFile; error: unknown }[]
   // Names of the files of carryFilesFrom that could not be linked.
   failedCarried: string[]
+  // shouldStop ended the save before every file had its turn.
+  stopped: boolean
 }
 
 // isDraftRefusal reports an error that ends the save: the draft became an
@@ -275,6 +310,34 @@ async function createOrFind(input: SaveDraftInput): Promise<Draft> {
   return putValues(draft.id, draft.revision, input.values)
 }
 
+// checkDraft reads the draft the form works on and makes sure it can take
+// files: still open, at the revision the form's values are based on.
+async function checkDraft(ref: { id: string; revision: number }): Promise<Draft> {
+  let draft: Draft
+  try {
+    draft = await getDraft(ref.id)
+  } catch (err) {
+    if (isGone(err)) throw new DraftStateError(DRAFT_DISCARDED, { draft_id: ref.id })
+    throw err
+  }
+  if (draft.status === "promoted") {
+    throw new DraftStateError(DRAFT_PROMOTED, {
+      commodity_id: draft.promotedCommodityId ?? "",
+      draft_id: draft.id,
+    })
+  }
+  if (draft.status !== "open") {
+    throw new DraftStateError(DRAFT_DISCARDED, { draft_id: draft.id })
+  }
+  if (draft.revision !== ref.revision) {
+    throw new DraftStateError(DRAFT_REVISION_CONFLICT, {
+      revision: String(draft.revision),
+      draft_id: draft.id,
+    })
+  }
+  return draft
+}
+
 // carryFiles links the saved files of draft from to draft to, keeping each
 // file's bucket. It returns the names of the files it could not link.
 async function carryFiles(from: string, to: string): Promise<string[]> {
@@ -311,18 +374,10 @@ function isGone(err: unknown): boolean {
   return err instanceof HttpError && err.status === 404
 }
 
-// placeFile tags an uploaded file and attaches it to the draft. Both steps
-// can be repeated.
-async function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise<void> {
-  if (entry.tags.length > 0) {
-    await updateFile(fileId, { tags: entry.tags })
-  }
-  const category = categoryFromMime(entry.file.type)
-  await attachFile(fileId, {
-    entityType: "draft",
-    entityId: draftId,
-    meta: category === "other" ? undefined : category,
-  })
+// placeFile titles and tags an uploaded file and attaches it to the draft.
+// Both steps can be repeated.
+function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise<void> {
+  return placePendingFile(entry, fileId, { entityType: "draft", entityId: draftId })
 }
 
 // saveDraftWithFiles stores the values, then uploads and attaches the
@@ -330,9 +385,12 @@ async function placeFile(entry: PendingFile, fileId: string, draftId: string): P
 // draft that became an item or is being discarded; a failed file is
 // reported in failedFiles and stays pending.
 export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDraftResult> {
-  const draft = input.draft
-    ? await putValues(input.draft.id, input.draft.revision, input.values)
-    : await createOrFind(input)
+  const draft = !input.draft
+    ? await createOrFind(input)
+    : input.keepValues
+      ? await checkDraft(input.draft)
+      : await putValues(input.draft.id, input.draft.revision, input.values)
+  input.onDraft?.(draft)
 
   const failedCarried =
     input.carryFilesFrom && input.carryFilesFrom !== draft.id
@@ -340,7 +398,9 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
       : []
 
   const failedFiles: SaveDraftResult["failedFiles"] = []
-  if (input.pendingFiles.length === 0) return { draft, failedFiles, failedCarried }
+  if (input.pendingFiles.length === 0) {
+    return { draft, failedFiles, failedCarried, stopped: false }
+  }
 
   let attached: ListedFile[] = []
   try {
@@ -350,6 +410,8 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
     // saving it.
   }
   for (const entry of input.pendingFiles) {
+    if (input.shouldStop?.()) return { draft, failedFiles, failedCarried, stopped: true }
+    input.onFileStart?.(entry)
     try {
       const done = entry.uploadedFileId
         ? attached.some((row) => row.file.id === entry.uploadedFileId)
@@ -374,5 +436,5 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
       failedFiles.push({ entry, error })
     }
   }
-  return { draft, failedFiles, failedCarried }
+  return { draft, failedFiles, failedCarried, stopped: false }
 }

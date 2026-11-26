@@ -10053,7 +10053,7 @@ export type paths = {
         };
         /**
          * Get the active plan + per-group usage
-         * @description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited. Powers the GroupSettings Plan card (#1389 / #1537).
+         * @description Tenant plan (caps + gates) + current group usage (items, locations, storage). Plan resolved from tenants.plan_id; unknown ids give unlimited, as does any id while the plans feature flag is off (#1389).
          */
         get: {
             parameters: {
@@ -14592,6 +14592,14 @@ export type components = {
              *     the affordance and the /auth/magic-link routes return 404.
              */
             magic_link_login?: boolean;
+            /**
+             * @description Plans mirrors Params.PlansEnabled (#1389). The plans feature is
+             *     frozen, so the flag is off by default. When false the FE hides every
+             *     plan surface (plan badge, Upgrade links, the /plans page, the plan
+             *     part of the group settings card and the plan in the admin tenant
+             *     pages) and GET /g/{groupSlug}/plan reports the unlimited plan.
+             */
+            plans?: boolean;
             /**
              * @description PublicScan mirrors Params.PublicScanEnabled. The entry point is the
              *     anonymous landing-page "add your first item" CTA (#1988), so — like

@@ -88,6 +88,19 @@ describe("pending-files-store", () => {
     expect(await loaded[0].file.text()).toBe("hello")
   })
 
+  it("keeps the title typed for a file", async () => {
+    await savePendingFiles("draft:title", [
+      { ...entry("a.png"), title: "Front of the box" },
+      entry("b.png"),
+    ])
+
+    const loaded = await loadPendingFiles("draft:title")
+    expect(loaded.map((e) => [e.file.name, e.title])).toEqual([
+      ["a.png", "Front of the box"],
+      ["b.png", undefined],
+    ])
+  })
+
   it("keeps the server file a draft save uploaded for an entry", async () => {
     await savePendingFiles("draft:uploaded", [
       { ...entry("a.png"), uploadedFileId: "file-7" },
@@ -134,6 +147,7 @@ describe("pending-files-store", () => {
       { id: 42, file: new File(["x"], "bad-id.png"), tags: [] },
       { id: "no-tags", file: new File(["x"], "no-tags.png") },
       { id: "bad-upload", file: new File(["x"], "bad-upload.png"), tags: [], uploadedFileId: 7 },
+      { id: "bad-title", file: new File(["x"], "bad-title.png"), tags: [], title: 7 },
       null,
     ])
 

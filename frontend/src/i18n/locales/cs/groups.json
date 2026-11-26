@@ -182,7 +182,11 @@
     "slugHelp": "Slugy se generují náhodně při vytvoření a nelze je změnit.",
     "slugLabel": "Slug adresy URL",
     "subtitle": "Spravujte profil, členy a životní cyklus své skupiny.",
-    "title": "Nastavení skupiny"
+    "title": "Nastavení skupiny",
+    "usage": {
+      "errorGeneric": "Využití se nepodařilo načíst.",
+      "title": "Využití"
+    }
   },
   "validation": {
     "confirmWordMismatch": "Název skupiny neodpovídá",

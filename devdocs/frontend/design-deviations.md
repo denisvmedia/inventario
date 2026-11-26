@@ -35,6 +35,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
+
+- **Issue/PR**: #1626 / #2905
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) disables Cancel and Back while it saves and turns the primary button into a spinner with "Saving…" (L658, L698–L711). Its file rows in `FileDropZone` (L1454–L1497) show an icon, the name, the size and a remove button, with no upload state; the mock has no failure state for a file.
+- **Reality**: In create mode for a signed-in user, **Add item** saves the form as a server draft, uploads the staged files to it one at a time, and promotes the draft only once all of them are on it. While this runs, each pending-file row shows a status icon before the size, as `IntakeUploadDialog` does: a spinning `Loader2` while uploading, a `CheckCircle2` in `text-status-active` once uploaded, an `AlertCircle` in `text-destructive` and the line "Upload failed" (in place of the category line) when it failed; a screen reader hears the state after the file name. The primary button reads "Uploading 1 of 3…" next to the spinner until the files are up, then "Saving…"; a polite `sr-only` status region repeats the count. When a file fails, nothing is promoted: the destructive `Alert` below the steps reads "Item not added", names the files not uploaded, says that the uploaded files stay under "Saved with this draft", where they can be removed, and that Retry goes on from where it stopped; its **Retry** runs Add item again without re-picking files. The files that made it move to the "Saved with this draft" list. A promotion that fails shows the existing server-error banner with **Retry**, which only promotes.
+- **Why**: The owner decision on #1626 (2026-11-26) is that files go up with the draft before the item exists, so a failed upload is visible and retryable instead of a toast after the dialog closed. The icons and colors are the ones `IntakeUploadDialog` already uses for the same states. Showing the same count on **Save draft**, locking the Save as draft switch, the stepper, Continue, the dropzone and the file rows (no edit, no remove) while a save runs, discarding the draft Add item made when the form is discarded, and moving an uploaded file to Trash when its row is removed were agent-suggested; they follow the owner's #1626 decisions (orphans are deleted on cancel, design deviations pre-approved).
+- **Approved by**: agent-suggested-then-user-confirmed — pre-approved for #1626 by the 2026-11-26 owner decisions; the agent-suggested parts accepted in the #2905 review (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` draws upload progress for the Add item dialog; otherwise permanent.
+
+#### 2026-11-26 — Add item dialog: an editable title per staged file
+
+- **Issue/PR**: #1626 / #2905
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) `FileDropZone` rows (L1483–L1493) show the file name as plain text; a file cannot be named in the dialog.
+- **Reality**: Each pending-file row has a compact `Input` (`h-7`, `text-xs`) between the name line and the tags input, filled with the file name without its extension and labeled "Title of {name}" for screen readers. The title is kept with the staged file in IndexedDB and sent with the file's tags in `PUT /files/{id}`; an empty title falls back to the default. While a save runs the input is disabled.
+- **Why**: The owner decision on #1626 (2026-11-26) asks for an editable title per file in the Add item dialog. Without it the server names an upload after the file and the time of the upload (`receipt-1767225600`).
+- **Approved by**: user (explicit) — pre-approved for #1626 by the 2026-11-26 owner decisions.
+- **Reversion plan**: Permanent unless the mock adds its own way to name a file before upload.
+
 #### 2026-11-26 — Donated and Stolen item statuses
 
 - **Issue/PR**: #1607 / #2903
@@ -888,6 +906,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Auth & Profile
 
+#### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L93–L97) shows an outline "Free plan" badge and an outline **Upgrade** button beside the avatar; the button opens [`PlansView.tsx`](../../design-mocks/src/views/PlansView.tsx).
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/ProfilePage.tsx` renders neither the badge nor the Upgrade link; the avatar row keeps only the avatar. `/plans` (`components/routing/PlansRoute.tsx`) redirects to the group home (`/g/<slug>` for the group in `?g=`, otherwise `/`) instead of showing its coming-soon page. With the flag on, the profile matches the mock and `/plans` is the coming-soon page as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. The redirect goes to the group home rather than the previous page: nothing links to `/plans` with the flag off, so a visit comes from an old link and usually has no previous page in the app.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the redirect target was agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
+
 #### 2026-11-24 — A third sign-in button for the operator's OpenID Connect provider
 
 - **Issue/PR**: #2786 / PR (pending)
@@ -936,6 +963,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent. If the upstream mock ever ships its own layout primitive, swap the token values to match and drop this entry. Pages requesting an exemption (centered error/auth/empty-state cards, print pages) are listed in the convention guard's `SPECIAL_PURPOSE_PAGES` allow list — those stay bespoke by design.
 
 ### Settings & Preferences
+
+#### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) (L31–L79) shows the Plan card: a `Zap` tile, "Pro Plan" with an **Active** badge, "Owner: …", an outline **Upgrade** button, three chips in the "9 / 500" form, and an info banner about the owner's subscription. [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (L138) puts a secondary "Free plan" badge under the name on the account card.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/components/groups/PlanCard.tsx` renders the same card anatomy with a `Gauge` tile, the title "Usage" and the three chips showing only the current count or size (no "/ limit"); the plan name, Active badge, owner line, Upgrade button and banner are not rendered. The card shows its skeleton until the feature flags have loaded, and the skeleton has the shape of the card the flag gives: without the owner line, Upgrade button and banner when plans are off. While the flags are still loading the skeleton assumes plans are off, so only a deployment with plans on sees the card grow when it loads. The account card on Preferences (`SettingsPage.tsx`) leaves out the "Free plan" badge. With the flag on, both match the mock as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. Storage usage is not a plan feature and stays visible. The title is "Usage" because the card also counts items and locations, so "Storage" would not fit; the tile icon is `Gauge`; the owner line goes with the plan.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the title, the icon and dropping the owner line were agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-26 — Sections card in the group settings
 
@@ -1266,6 +1302,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) (L87) has a Plan stat among four tiles.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders three tiles (Users, Groups, Created) in a `sm:grid-cols-3` grid; with the flag on it renders the Plan tile with the raw `plan_id` as before (see "Tenant detail header has no Plan-name lookup"). The tenant list already has no Plan column ("Admin Tenants list drops the mock's `Plan` column").
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it, the admin pages included.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default.
+- **Reversion plan**: Back to the four tiles when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-25 — Trash page (`/g/:slug/trash`)
 

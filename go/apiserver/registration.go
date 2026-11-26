@@ -159,7 +159,7 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 		default:
 			// Fail closed on unknown modes — a misconfigured tenant setting
 			// should not accidentally open self-registration.
-			slog.Error("Unknown registration mode, rejecting registration", "mode", mode)
+			slog.ErrorContext(r.Context(), "Unknown registration mode, rejecting registration", "mode", mode)
 			http.Error(w, "Registrations are currently unavailable", http.StatusServiceUnavailable)
 			return
 		}
@@ -216,24 +216,24 @@ func (api *RegistrationAPI) handleRegister(w http.ResponseWriter, r *http.Reques
 			writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 			return
 		}
-		slog.Error("Failed to create user during registration", "email", req.Email, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to create user during registration", "email", req.Email, "error", err)
 		http.Error(w, "Failed to create account", http.StatusInternalServerError)
 		return
 	}
 
 	switch {
 	case inviteBypass:
-		slog.Info("User registered via invite, account active", "user_id", created.ID, "email", created.Email)
+		slog.InfoContext(r.Context(), "User registered via invite, account active", "user_id", created.ID, "email", created.Email)
 	case mode == models.RegistrationModeOpen:
 		// Send email verification only in open mode.
 		api.sendVerification(r, created)
 	default:
 		// Approval mode: log that the account is pending admin approval.
-		slog.Info("User registered, pending admin approval", "user_id", created.ID, "email", created.Email)
+		slog.InfoContext(r.Context(), "User registered, pending admin approval", "user_id", created.ID, "email", created.Email)
 	}
 
 	api.logAuth(r, "register", &created.ID, true, "")
-	slog.Info("User registered", "user_id", created.ID, "email", created.Email, "mode", mode, "invite", inviteBypass)
+	slog.InfoContext(r.Context(), "User registered", "user_id", created.ID, "email", created.Email, "mode", mode, "invite", inviteBypass)
 	writeJSON(w, http.StatusOK, map[string]string{"message": successMsg})
 }
 
@@ -262,7 +262,7 @@ func (api *RegistrationAPI) resolveInvite(r *http.Request, token, callerEmail st
 	if api.groupService == nil {
 		// The deployment wasn't wired with a group service (e.g. very old
 		// config or tests). Treat as misconfiguration, not caller error.
-		slog.Error("Invite-based registration requested but GroupService is not configured")
+		slog.ErrorContext(r.Context(), "Invite-based registration requested but GroupService is not configured")
 		return false, &registrationError{status: http.StatusServiceUnavailable, userMessage: "Invite-based registration is not available on this server"}
 	}
 
@@ -271,7 +271,7 @@ func (api *RegistrationAPI) resolveInvite(r *http.Request, token, callerEmail st
 		if errors.Is(err, registry.ErrNotFound) {
 			return false, &registrationError{status: http.StatusBadRequest, userMessage: "This invite link is invalid"}
 		}
-		slog.Error("Failed to look up invite during registration", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to look up invite during registration", "error", err)
 		return false, &registrationError{status: http.StatusInternalServerError, userMessage: "Failed to validate invite"}
 	}
 
@@ -348,7 +348,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 			http.Error(w, "Invalid verification token", http.StatusBadRequest)
 			return
 		}
-		slog.Error("Failed to look up verification token", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to look up verification token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -375,7 +375,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	// activated.
 	user.IsActive = true
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to activate user", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to activate user", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to verify email", http.StatusInternalServerError)
 		return
 	}
@@ -389,7 +389,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 	// account is already active, so the retry re-claims cleanly.
 	claimed, err := api.verificationRegistry.MarkVerified(r.Context(), token)
 	if err != nil {
-		slog.Error("Failed to mark verification as used", "id", ev.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to mark verification as used", "id", ev.ID, "error", err)
 		http.Error(w, "Failed to verify email", http.StatusInternalServerError)
 		return
 	}
@@ -400,7 +400,7 @@ func (api *RegistrationAPI) handleVerifyEmail(w http.ResponseWriter, r *http.Req
 
 	api.logAuth(r, "email_verified", &user.ID, true, "")
 	api.sendWelcome(user)
-	slog.Info("Email verified", "user_id", user.ID, "email", user.Email)
+	slog.InfoContext(r.Context(), "Email verified", "user_id", user.ID, "email", user.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Email verified successfully. You can now log in."})
 }
 
@@ -449,14 +449,14 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 	if existing, err := api.verificationRegistry.GetByUserID(r.Context(), user.ID); err == nil {
 		for _, old := range existing {
 			if err := api.verificationRegistry.Delete(r.Context(), old.ID); err != nil {
-				slog.Warn("Failed to delete old verification token", "id", old.ID, "user_id", user.ID, "error", err)
+				slog.WarnContext(r.Context(), "Failed to delete old verification token", "id", old.ID, "user_id", user.ID, "error", err)
 			}
 		}
 	}
 
 	token, err := models.GenerateVerificationToken()
 	if err != nil {
-		slog.Error("Failed to generate verification token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to generate verification token", "user_id", user.ID, "error", err)
 		return
 	}
 	ev := models.EmailVerification{
@@ -467,18 +467,18 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
 	if _, err := api.verificationRegistry.Create(r.Context(), ev); err != nil {
-		slog.Error("Failed to store verification record", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to store verification record", "user_id", user.ID, "error", err)
 		return
 	}
 
 	verificationQuery := url.Values{"token": {token}}
 	verificationURL := "/verify-email?" + verificationQuery.Encode()
 	if api.publicBaseURL == "" {
-		slog.Warn("Public base URL is not configured; using relative verification URL", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Public base URL is not configured; using relative verification URL", "user_id", user.ID)
 	} else {
 		verificationURL, err = buildPublicURL(api.publicBaseURL, "/verify-email", verificationQuery)
 		if err != nil {
-			slog.Error("Failed to build verification URL", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to build verification URL", "user_id", user.ID, "error", err)
 			return
 		}
 	}
@@ -492,7 +492,7 @@ func (api *RegistrationAPI) sendVerification(r *http.Request, user *models.User)
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
 		if err := api.emailService.SendVerificationEmail(ctx, user.Email, user.Name, verificationURL); err != nil {
-			slog.Error("Failed to send verification email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to send verification email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
