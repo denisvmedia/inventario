@@ -73,13 +73,34 @@ authTest.describe("What's new (#1386)", () => {
         await expect(
           releases.first().getByRole("heading", { level: 2 }),
         ).toHaveText(/^v\d+\.\d+\.\d+/);
-        expect((await saved).status()).toBe(200);
+        const savedResponse = await saved;
+        expect(savedResponse.status()).toBe(200);
+        const storedVersion = savedResponse.request().postDataJSON() as string;
+        expect(storedVersion).toMatch(/^\d+\.\d+\.\d+/);
         await expect(page.getByTestId("sidebar-help-unread")).toHaveCount(0);
 
-        // The stored value survives a reload: back on Settings, no dot.
+        // The stored value survives a reload: back on Settings, no dot. The
+        // dot stays off until the settings have loaded, so wait for that
+        // read and check what it returned before checking the dots.
+        const reloaded = page.waitForResponse(
+          (r) =>
+            r.request().method() === "GET" &&
+            new URL(r.url()).pathname.endsWith(
+              `/g/${encodeURIComponent(group.slug)}/settings`,
+            ),
+        );
         await page.goto(
           `/settings?section=help&g=${encodeURIComponent(group.slug)}`,
         );
+        const reloadedResponse = await reloaded;
+        expect(reloadedResponse.status()).toBe(200);
+        expect(
+          (
+            (await reloadedResponse.json()) as {
+              whatsNewLastSeenVersion?: string;
+            }
+          ).whatsNewLastSeenVersion,
+        ).toBe(storedVersion);
         await expect(row).toBeVisible({ timeout: 30000 });
         await expect(page.getByTestId("help-row-whatsNew-unread")).toHaveCount(
           0,
