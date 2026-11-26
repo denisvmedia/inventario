@@ -264,7 +264,12 @@ export async function trashUnlinkedFile(id: string, filesPath?: string): Promise
     if (err instanceof HttpError && err.status === 404) return false
     throw err
   }
-  if (ordinaryLinks(file.attributes ?? {}).length > 0) return false
+  // Without the file's links there is no telling whether it is safe to
+  // trash, so a malformed answer leaves the file where it is.
+  if (!file.attributes) {
+    throw new Error(`Malformed GET /files/${id} response: missing attributes`)
+  }
+  if (ordinaryLinks(file.attributes).length > 0) return false
   await http.del<void>(path, init)
   return true
 }
