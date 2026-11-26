@@ -13,6 +13,22 @@ func UserPurgeTableNames() []string {
 	return names
 }
 
+// TenantPurgeTableNames exposes every table the tenant purge deletes from by
+// tenant_id: the FK-ordered list, then audit_logs, location_groups and users,
+// which PurgeTenantDependents handles after it. A test checks the list against
+// the live schema. It compiles only under `go test`.
+func TenantPurgeTableNames() []string {
+	names := make([]string, 0, len(tenantPurgeOrder)+3)
+	for _, nameFn := range tenantPurgeOrder {
+		names = append(names, nameFn(store.DefaultTableNames))
+	}
+	return append(names,
+		string(store.DefaultTableNames.AuditLogs()),
+		string(store.DefaultTableNames.LocationGroups()),
+		string(store.DefaultTableNames.Users()),
+	)
+}
+
 // SQLInjectionPayloads exposes the payload corpus of the white-box injection
 // property to the black-box test that runs the same payloads against
 // PostgreSQL. It compiles only under `go test`.

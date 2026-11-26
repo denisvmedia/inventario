@@ -629,7 +629,7 @@
                 }
             },
             "post": {
-                "description": "Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.\nA slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.\nRequires the platform_admin role.",
+                "description": "Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.\nA slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.\nRequires the platform_admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -683,7 +683,7 @@
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity - invalid fields",
+                        "description": "Unprocessable Entity - invalid fields, or a reserved domain",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -738,7 +738,7 @@
                 }
             },
             "delete": {
-                "description": "Deletes the tenant, its users, groups, items and files, with the same rules as `inventario tenants delete`.\nThe stored files go first, so an unreachable file store stops the deletion before any row is removed. It cannot be undone.\n`confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.\nDeleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.\nRequires the platform_admin role.",
+                "description": "Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.\nIt then deletes the tenant, its users, groups, items and files in the background with the rules of `inventario tenants delete`.\nThe stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.\nA failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.\n`confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.\nDeleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.\nRequires the platform_admin role.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -763,8 +763,11 @@
                     }
                 ],
                 "responses": {
-                    "204": {
-                        "description": "No Content"
+                    "202": {
+                        "description": "Accepted - the tenant is suspended and its deletion is running",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.AdminTenantResponse"
+                        }
                     },
                     "401": {
                         "description": "Unauthorized - back-office authentication required",
@@ -793,7 +796,7 @@
                 }
             },
             "patch": {
-                "description": "Changes the fields the body sets, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain.\nA status away from active ends the sessions of every user in the tenant, as the suspend endpoint does. Making the tenant that serves this request's host inactive is refused with 422 `admin.tenant.serves_this_host`.\nA slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.\nRequires the platform_admin role.",
+                "description": "Changes the fields the body sets to a value other than the stored one, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain. A body that changes nothing writes nothing.\nA status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.\nA change that takes the tenant serving this request off the request's host is refused with 422 `admin.tenant.serves_this_host`: a status away from active and,\nwith a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.\nA slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.\nA domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.\nRequires the platform_admin role.",
                 "consumes": [
                     "application/json"
                 ],
@@ -860,7 +863,7 @@
                         }
                     },
                     "422": {
-                        "description": "Unprocessable Entity - invalid fields, or the tenant serves this host",
+                        "description": "Unprocessable Entity - invalid fields, a reserved domain, or the tenant serves this host",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -2935,7 +2938,7 @@
                         }
                     },
                     "403": {
-                        "description": "Impersonation session",
+                        "description": "Impersonation session, or the user's tenant is not active",
                         "schema": {
                             "type": "string"
                         }

@@ -127,6 +127,11 @@ type AdminParams struct {
 	// May be nil; the handler then reports zero-valued debug info.
 	DebugInfo *debug.Info
 
+	// TenantBaseDomain is the domain under which <slug>.<base> names a
+	// tenant, or "" in single-tenant mode. The tenant writes refuse a custom
+	// domain at or under it.
+	TenantBaseDomain string
+
 	// UploadLocation is the file store a tenant deletion removes the
 	// tenant's files from before its rows (#1037), the same location the
 	// rest of the apiserver uploads to.
@@ -193,6 +198,7 @@ func Admin(params AdminParams) func(r chi.Router) {
 		factorySet:   params.FactorySet,
 		auditService: params.AuditService,
 		service:      tenantService,
+		baseDomain:   normalizeHost(params.TenantBaseDomain),
 	}
 	usersAPI := &adminUsersAPI{
 		factorySet:   params.FactorySet,

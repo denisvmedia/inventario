@@ -22,6 +22,7 @@ import (
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/services"
 )
 
 const personalDataExportsPath = "/api/v1/users/me/data-exports"
@@ -117,6 +118,46 @@ func TestPersonalDataExports_RequestListAndDownload(t *testing.T) {
 	c.Assert(downloads, qt.HasLen, 1)
 	c.Assert(downloads[0].Success, qt.IsTrue)
 	c.Assert(*downloads[0].UserID, qt.Equals, env.user.ID)
+}
+
+// A signed URL outlives a suspension of its user's tenant, and it can be
+// opened on another tenant's host. The download is refused while the user's
+// tenant is not active (#1037).
+func TestPersonalDataExports_DownloadRefusedWhileTheTenantIsSuspended(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	env, svc := newPersonalDataExportEnv(c)
+
+	// A user of another tenant, with a finished export and a URL bound to
+	// the browser session. The requests reach the host tenant, which stays
+	// active, so only the download's own check can refuse them.
+	acme := must.Must(env.params.FactorySet.TenantRegistry.Create(ctx, models.Tenant{
+		Name: "Acme", Slug: "acme", Status: models.TenantStatusActive,
+	}))
+	member := createTestUserDirect(c, env.params, acme.ID, "ada@acme.test", true, false)
+	e := must.Must(svc.Request(ctx, member))
+	c.Assert(svc.Process(ctx, e.ID), qt.IsNil)
+	session := httptest.NewRequest(http.MethodGet, "/", nil)
+	session.AddCookie(refreshCookie(browserSession))
+	signer := services.NewFileSigningService(env.params.FileSigningKey, env.params.FileURLExpiration)
+	signedURL, _, err := signer.GeneratePersonalDataExportURL(e.ID, member.ID, services.ExtractSessionBinding(session))
+	c.Assert(err, qt.IsNil)
+	download := func() *httptest.ResponseRecorder {
+		return env.do(apiTokenRequest{method: http.MethodGet, path: signedURL, cookies: []*http.Cookie{refreshCookie(browserSession)}})
+	}
+
+	acme.Status = models.TenantStatusSuspended
+	acme = must.Must(env.params.FactorySet.TenantRegistry.Update(ctx, *acme))
+	rr := download()
+	c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf(rr.Body.String()))
+	c.Assert(rr.Body.String(), qt.Contains, "Tenant suspended")
+	c.Assert(env.auditRows("personal_data_export_download"), qt.HasLen, 0)
+
+	// The same URL works again once the tenant is active.
+	acme.Status = models.TenantStatusActive
+	must.Must(env.params.FactorySet.TenantRegistry.Update(ctx, *acme))
+	rr = download()
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
 }
 
 func TestPersonalDataExports_OncePerDay(t *testing.T) {

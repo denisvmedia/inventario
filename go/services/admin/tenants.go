@@ -179,3 +179,16 @@ func normalizeTenantDomain(domain *string) *string {
 	}
 	return domain
 }
+
+// sameTenantDomain reports whether two stored domains are equal, nil and ""
+// both meaning no domain.
+func sameTenantDomain(a, b *string) bool {
+	return strings.EqualFold(stringOrEmpty(a), stringOrEmpty(b))
+}
+
+func stringOrEmpty(s *string) string {
+	if s == nil {
+		return ""
+	}
+	return *s
+}

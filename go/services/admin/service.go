@@ -195,19 +195,24 @@ func (s *Service) CreateTenant(ctx context.Context, req TenantCreateRequest) (*m
 	return createdTenant, nil
 }
 
-// GetTenant retrieves a tenant by ID or slug
+// GetTenant retrieves a tenant by ID or slug. Only a tenant that matches
+// neither is registry.ErrNotFound; a failed lookup is returned as it is.
 func (s *Service) GetTenant(ctx context.Context, idOrSlug string) (*models.Tenant, error) {
-	// Try by ID first
 	tenant, err := s.factorySet.TenantRegistry.Get(ctx, idOrSlug)
-	if err != nil {
-		// Try by slug
-		tenant, err = s.factorySet.TenantRegistry.GetBySlug(ctx, idOrSlug)
-		if err != nil {
-			return nil, errxtrace.ClassifyNew(fmt.Sprintf("tenant '%s' not found (tried both ID and slug)", idOrSlug), registry.ErrNotFound)
-		}
+	if err == nil {
+		return tenant, nil
 	}
-
-	return tenant, nil
+	if !errors.Is(err, registry.ErrNotFound) {
+		return nil, errxtrace.Wrap("failed to look the tenant up by ID", err)
+	}
+	tenant, err = s.factorySet.TenantRegistry.GetBySlug(ctx, idOrSlug)
+	if err == nil {
+		return tenant, nil
+	}
+	if !errors.Is(err, registry.ErrNotFound) {
+		return nil, errxtrace.Wrap("failed to look the tenant up by slug", err)
+	}
+	return nil, errxtrace.ClassifyNew(fmt.Sprintf("tenant '%s' not found (tried both ID and slug)", idOrSlug), registry.ErrNotFound)
 }
 
 // ListTenants lists tenants with filtering and pagination
@@ -245,8 +250,9 @@ func (s *Service) ListTenants(ctx context.Context, req TenantListRequest) (*Tena
 }
 
 // UpdateTenant updates a tenant. Only the fields req sets change; an empty
-// Domain clears the domain. A slug or domain another tenant already has is
-// refused with registry.ErrSlugAlreadyExists or ErrTenantDomainTaken.
+// Domain clears the domain. A slug another tenant already has is refused
+// with registry.ErrSlugAlreadyExists, and a new domain another tenant
+// already has with ErrTenantDomainTaken.
 //
 // A change of status away from active ends the sessions of every user in the
 // tenant, as SuspendTenant does. When the error wraps
@@ -259,6 +265,7 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 		return nil, err
 	}
 	previousStatus := tenant.Status
+	previousDomain := tenant.Domain
 
 	// Apply updates
 	if req.Name != nil {
@@ -284,8 +291,12 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 	if err := tenant.ValidateWithContext(ctx); err != nil {
 		return nil, fmt.Errorf("tenant validation failed: %w", err)
 	}
-	if err := s.checkTenantDomainFree(ctx, tenant.ID, tenant.Domain); err != nil {
-		return nil, err
+	// Only a domain the update changes is checked: a stored domain that
+	// another tenant also has must not block an edit of the name.
+	if !sameTenantDomain(previousDomain, tenant.Domain) {
+		if err := s.checkTenantDomainFree(ctx, tenant.ID, tenant.Domain); err != nil {
+			return nil, err
+		}
 	}
 
 	// Update tenant
@@ -301,18 +312,24 @@ func (s *Service) UpdateTenant(ctx context.Context, idOrSlug string, req TenantU
 }
 
 // DeleteTenant hard-deletes a tenant and every row that depends on it,
-// mirroring the GroupPurgeService orchestration order (#2115). Before this the
-// method issued a bare DELETE FROM tenants, which the ~35 NO ACTION child FKs
-// rejected — so deleting any tenant that had ever held data failed.
+// mirroring the GroupPurgeService orchestration order (#2115).
 //
 // Order (each step aborts the whole operation on error):
 //
-//	a) delete the tenant's physical blobs first, so a dead object store aborts
-//	   the operation before any DB row is touched (idempotent + retryable). If
-//	   no fileService was wired, blob cleanup is skipped with a loud WARNING and
+//	a) check that the row purge and the tenants DELETE can succeed
+//	   (TenantPurger.CheckTenantPurge, a rolled-back dry run), so a foreign
+//	   key the purge misses stops the deletion before any blob is removed.
+//	b) delete the tenant's physical blobs. They go before the rows because the
+//	   shared-key guard of the blob delete reads the tenant's file rows. A dead
+//	   object store stops the deletion with every row in place. If no
+//	   fileService was wired, blob cleanup is skipped with a loud WARNING and
 //	   the blobs are orphaned — the DB purge still proceeds.
-//	b) purge every tenant-scoped dependent row (TenantPurger), in FK-safe order.
-//	c) drop the now-childless tenants row itself.
+//	c) purge every tenant-scoped dependent row (TenantPurger), in FK-safe order.
+//	d) drop the now-childless tenants row itself.
+//
+// Every step is idempotent, so calling DeleteTenant again after a failure, or
+// after the process stopped half-way, continues the deletion: blobs already
+// removed are skipped and the rows go as before.
 func (s *Service) DeleteTenant(ctx context.Context, idOrSlug string) error {
 	// Validate the tenant exists (and resolve slug -> id).
 	tenant, err := s.GetTenant(ctx, idOrSlug)
@@ -320,8 +337,13 @@ func (s *Service) DeleteTenant(ctx context.Context, idOrSlug string) error {
 		return err
 	}
 
-	// (a) Physical blobs first — fail fast so a down object store aborts
-	// before we mutate the database.
+	// (a) Dry run of the row purge, before anything is removed.
+	if err := s.factorySet.TenantPurger.CheckTenantPurge(ctx, tenant.ID); err != nil {
+		return errxtrace.Wrap("the tenant's rows cannot be purged, so no blob was deleted", err)
+	}
+
+	// (b) Physical blobs, while the file rows the shared-key guard reads are
+	// still there.
 	if s.fileService != nil {
 		if err := s.fileService.DeletePhysicalFilesForTenant(ctx, tenant.ID); err != nil {
 			return errxtrace.Wrap("failed to delete tenant physical blobs", err)
@@ -334,12 +356,12 @@ func (s *Service) DeleteTenant(ctx context.Context, idOrSlug string) error {
 		)
 	}
 
-	// (b) Purge every tenant-scoped dependent row in FK-safe order.
+	// (c) Purge every tenant-scoped dependent row in FK-safe order.
 	if err := s.factorySet.TenantPurger.PurgeTenantDependents(ctx, tenant.ID); err != nil {
 		return errxtrace.Wrap("failed to purge tenant dependents", err)
 	}
 
-	// (c) Drop the now-childless tenants row.
+	// (d) Drop the now-childless tenants row.
 	if err := s.factorySet.TenantRegistry.Delete(ctx, tenant.ID); err != nil {
 		return errxtrace.Wrap("failed to delete tenant row", err)
 	}

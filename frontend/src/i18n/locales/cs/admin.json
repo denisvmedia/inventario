@@ -136,10 +136,10 @@
       "title": "Nebezpečná zóna"
     },
     "delete": {
-      "body": "Tím se trvale smaže tenant a vše, co obsahuje: jeho uživatelé, skupiny, položky a soubory. Tuto akci nelze vrátit.",
+      "body": "Tenant se nejprve pozastaví a relace jeho uživatelů skončí, poté se trvale smaže tenant a vše, co obsahuje: jeho uživatelé, skupiny, položky a soubory. Tuto akci nelze vrátit.",
       "confirmLabel": "Pro potvrzení zadejte slug tenanta:",
       "submit": "Smazat tenanta",
-      "success": "Tenant {{name}} byl smazán.",
+      "success": "Tenant {{name}} se maže. Do dokončení mazání zůstane pozastavený.",
       "title": "Smazat {{name}}?"
     },
     "edit": {
@@ -151,12 +151,13 @@
     },
     "errors": {
       "confirmationMismatch": "Zadaný slug neodpovídá slugu tenanta.",
+      "domainReserved": "Tato doména leží pod základní doménou tenantů, kde je každá subdoména adresou některého tenanta. Použijte doménu mimo ni.",
       "domainTaken": "Tuto doménu již používá jiný tenant.",
       "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
       "reasonRequired": "Důvod je povinný.",
       "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
       "roleRequired": "Tenanty může měnit pouze správce platformy.",
-      "servesThisHost": "Back office je otevřený na adrese tohoto tenanta, takže jeho pozastavení nebo smazání by back office zablokovalo. Použijte místo toho CLI inventario tenants.",
+      "servesThisHost": "Back office je otevřený na adrese tohoto tenanta, takže by tato změna back office zablokovala. Použijte místo toho CLI inventario tenants.",
       "slugTaken": "Tento slug již používá jiný tenant."
     },
     "reactivate": {

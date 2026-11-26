@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { useCompleteLoginMFA } from "@/features/auth/hooks"
-import { parseServerError } from "@/lib/server-error"
+import { isTenantSuspendedError, parseServerError } from "@/lib/server-error"
 
 // MFAChallenge owns the second-step UI of the post-MFA login flow.
 // Rendered by LoginPage after /auth/login responds with mfa_required.
@@ -63,7 +63,11 @@ export function MFAChallenge({ mfaToken, email, onSuccess, onCancel }: Props) {
       })
       onSuccess()
     } catch (err) {
-      setServerError(parseServerError(err, t("auth:mfa.challenge.error")))
+      setServerError(
+        isTenantSuspendedError(err)
+          ? t("auth:login.errorTenantSuspended")
+          : parseServerError(err, t("auth:mfa.challenge.error"))
+      )
     }
   }
 

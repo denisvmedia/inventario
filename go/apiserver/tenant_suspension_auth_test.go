@@ -154,8 +154,9 @@ func TestSuspendedTenant_RefusedOnAnotherTenantsHost(t *testing.T) {
 
 	// Credentials minted after the suspension, so neither the revocation
 	// nor the blacklist stamp catches them: only the tenant check is left.
-	time.Sleep(1100 * time.Millisecond)
-	accessToken := mintAccessTokenForUser(t, env.member.ID, 0)
+	// The stamp has whole-second precision; an iat two seconds ahead clears
+	// it without waiting.
+	accessToken := mintAccessTokenForUser(t, env.member.ID, 2*time.Second)
 	refresh := seedRefreshCookie(c, env.params, env.member)
 	apiToken := seedAPIToken(c, env.params, env.member)
 
@@ -209,7 +210,6 @@ func TestSuspendedTenant_MagicLinkAndOAuthLinkStartOnAnotherTenantsHost(t *testi
 
 	rr := env.do(c, http.MethodPost, tenantsPath("/"+env.acme.ID+"/suspend"), map[string]any{"reason": "unpaid invoice"})
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
-	time.Sleep(1100 * time.Millisecond)
 
 	token := must.Must(models.GenerateMagicLinkToken())
 	must.Must(params.FactorySet.MagicLinkTokenRegistry.Create(ctx, models.MagicLinkToken{
@@ -220,7 +220,7 @@ func TestSuspendedTenant_MagicLinkAndOAuthLinkStartOnAnotherTenantsHost(t *testi
 		ExpiresAt: time.Now().Add(15 * time.Minute),
 	}))
 	verify := suspensionRequest{method: http.MethodPost, path: "/api/v1/auth/magic-link/verify", body: map[string]string{"token": token}}
-	linkStart := suspensionRequest{method: http.MethodGet, path: "/api/v1/auth/oauth/google/link/start", bearer: mintAccessTokenForUser(t, env.member.ID, 0)}
+	linkStart := suspensionRequest{method: http.MethodGet, path: "/api/v1/auth/oauth/google/link/start", bearer: mintAccessTokenForUser(t, env.member.ID, 2*time.Second)}
 
 	rr = doSuspensionRequest(c, handler, verify)
 	c.Assert(rr.Code, qt.Equals, http.StatusForbidden, qt.Commentf(rr.Body.String()))

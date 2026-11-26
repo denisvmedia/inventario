@@ -237,6 +237,14 @@ block returns `401` after it.
 **Residual risk.** A window of at most one in-flight request between the
 block transaction committing and the next token check.
 
+The blacklist stamp lives in the API process that ran the block unless
+`--token-blacklist-redis-url` is set. With several replicas, or after that
+process restarts, a replica without the stamp accepts an access token issued
+before the block. While the user is blocked every replica still refuses it,
+because the user is inactive; an unblock within the token's 15-minute
+lifetime lets it back in there. Deployments with more than one replica set
+the Redis URL.
+
 ---
 
 ## T6a — A suspended tenant keeps working
@@ -259,6 +267,34 @@ their own tenant's host. Covered by `tenant_suspension_auth_test.go` and
 cannot stamp the running server's blacklist. Its access tokens are refused
 while the tenant is not active, but work again if the tenant is
 reactivated within their 15-minute lifetime.
+
+The same holds for a suspension made in the back office when the blacklist
+is in-process, which it is unless `--token-blacklist-redis-url` is set: the
+stamp exists only in the replica that ran the suspension, and is gone after
+it restarts. Every replica refuses the tenant's users while the tenant is
+not active, but after a reactivation within 15 minutes a replica without the
+stamp accepts their access tokens issued before the suspension. Deployments
+with more than one replica set the Redis URL.
+
+---
+
+## T6b — Deleting a tenant erases the record of what the operators did
+
+**Threat.** A tenant deletion removes the tenant's rows, its audit rows
+among them. An operator who impersonated one of its users, or changed the
+tenant, could then delete it and take the record of that with it.
+
+**Mitigations.** The purge keeps every audit row whose action starts with
+`admin.` and every row written during an impersonation (`impersonated_by`
+set), and removes the rest of the tenant's audit rows with its other data.
+The `admin.tenant_delete` rows for the request and for the outcome are
+written under the operator, and they survive the purge too. Covered by
+`TestTenantPurger_Postgres_KeepsTheOperatorsAuditTrail` and
+`TestAdminDeleteTenant`.
+
+**Residual risk.** The kept rows still name the deleted tenant and its
+users by ID, which no longer resolve. The sign-ins and other actions of the
+tenant's own users are removed with the tenant.
 
 ---
 

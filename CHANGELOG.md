@@ -766,10 +766,15 @@ when to add an entry and where it goes.
   actions. The API gains `POST /api/v1/admin/tenants`,
   `PATCH /api/v1/admin/tenants/{id}`, `POST …/suspend`, `POST …/reactivate`
   and `DELETE /api/v1/admin/tenants/{id}?confirm_slug=…`; every write leaves
-  an `admin.tenant_*` audit row. Deleting follows the rules of
-  `inventario tenants delete`. The tenant that serves the back office's own
-  host cannot be suspended or deleted over HTTP, so in single-tenant mode the
-  default tenant stays a CLI task. See §10 of `devdocs/admin-runbook.md`
+  an `admin.tenant_*` audit row. A delete suspends the tenant, answers `202`
+  and deletes the tenant in the background with the rules of
+  `inventario tenants delete`; a failed or interrupted deletion leaves the
+  tenant suspended, and sending the delete again continues it. The audit
+  rows of the back office and of impersonation sessions survive the
+  deletion. A change that would take the tenant serving the back office off
+  its host is refused over HTTP, so in single-tenant mode suspending or
+  deleting the default tenant stays a CLI task. With a tenant base domain, a
+  custom domain under it is refused. See §10 of `devdocs/admin-runbook.md`
   ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
 - Suspending a tenant now ends its users' sessions: refresh tokens and
   personal API tokens are revoked and access tokens issued before the
@@ -777,12 +782,14 @@ when to add an entry and where it goes.
   status change made with `inventario tenants update`, which revokes the
   refresh and API tokens; its access tokens are refused while the tenant is
   not active. A user of a suspended tenant was already refused on the
-  tenant's own host; they are now refused on every other host as well, and
-  cannot be impersonated
+  tenant's own host; they are now refused on every other host as well,
+  including the download of a personal data export, and cannot be
+  impersonated. The sign-in page says the user's site is suspended, in the
+  reader's language
   ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
-- Two tenants can no longer share a custom domain: creating or editing a
-  tenant with another tenant's domain is refused. The tenant name limit of
-  100 counts characters instead of bytes
+- Two tenants can no longer share a custom domain: creating a tenant with
+  another tenant's domain, or giving a tenant one, is refused. The tenant
+  name limit of 100 counts characters instead of bytes
   ([#1037](https://github.com/denisvmedia/inventario/issues/1037)).
 
 - Building the frontend now reads `CHANGELOG.md` from the repository root, for

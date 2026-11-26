@@ -1,8 +1,9 @@
 /**
  * E2E coverage for tenant management in the back office (#1037): a
  * platform admin creates a tenant, suspends and reactivates it, and
- * deletes it after typing its slug. A support agent is refused every
- * tenant write.
+ * deletes it after typing its slug; the deletion runs in the background
+ * and the spec waits for the tenant to be gone. A support agent is refused
+ * every tenant write.
  *
  * The spec works on a tenant it creates itself. The seeded tenant serves
  * every request of the e2e stack, so suspending or deleting it is refused
@@ -79,14 +80,21 @@ test.describe('Back-office tenant management (#1037)', () => {
       (r) => r.url().includes(`/api/v1/admin/tenants/${tenant.id}`) && r.request().method() === 'DELETE',
     );
     await confirm.click();
-    expect((await deleteResp).status(), 'delete tenant').toBe(204);
+    // The server suspends the tenant, answers 202, and deletes it in the
+    // background.
+    const deleted = await deleteResp;
+    expect(deleted.status(), 'delete tenant').toBe(202);
+    expect((await deleted.json()).data.status).toBe('suspended');
 
     await expect(page).toHaveURL(/\/admin\/tenants$/);
     const token = await page.evaluate(() => localStorage.getItem('backoffice_access_token') || '');
-    const gone = await page.request.get(`/api/v1/admin/tenants/${tenant.id}`, {
-      headers: bearer(token),
-    });
-    expect(gone.status(), 'deleted tenant').toBe(404);
+    await expect
+      .poll(
+        async () =>
+          (await page.request.get(`/api/v1/admin/tenants/${tenant.id}`, { headers: bearer(token) })).status(),
+        { message: 'deleted tenant', timeout: 30000 },
+      )
+      .toBe(404);
   });
 
   test('a support agent may read tenants but not change them', async ({ request }) => {

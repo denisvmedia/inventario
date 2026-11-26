@@ -164,13 +164,15 @@ export function useReactivateAdminTenant(tenantId: string) {
   return useTenantStatusMutation(tenantId, reactivateAdminTenant)
 }
 
-// Deletes a tenant and everything in it. The mutation variable carries the
-// slug the operator typed, which the BE checks. On success the detail entry
-// is dropped (the page navigates away) and the tenant, user and group lists
-// are marked stale: the tenant's users and groups are gone with it.
+// Starts deleting a tenant and everything in it; the tenant is suspended
+// until the background deletion removes it. The mutation variable carries
+// the slug the operator typed, which the BE checks. On success the detail
+// entry is dropped (the page navigates away) and the tenant, user and group
+// lists are marked stale: the tenant's users are signed out, and its users
+// and groups go with it.
 export function useDeleteAdminTenant(tenantId: string) {
   const qc = useQueryClient()
-  return useMutation<void, Error, string>({
+  return useMutation<AdminTenant, Error, string>({
     mutationFn: (confirmSlug) => deleteAdminTenant(tenantId, confirmSlug),
     onSuccess: () => {
       qc.removeQueries({ queryKey: adminKeys.tenantDetail(tenantId) })

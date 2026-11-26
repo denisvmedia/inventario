@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"strings"
@@ -115,6 +116,14 @@ func (c *Command) updateTenant(cfg *Config, dbConfig *shared.DatabaseConfig, idO
 
 	// Update the tenant via service
 	finalTenant, err := adminService.UpdateTenant(context.Background(), idOrSlug, *updateReq)
+	if errors.Is(err, admin.ErrTenantSessionsNotEnded) {
+		// The update is saved; only ending some sessions failed. The tenant's
+		// users are refused anyway while it is not active.
+		fmt.Fprintln(out, "Tenant updated, but ending the sessions of some of its users failed.")
+		fmt.Fprintln(out, "Their requests are refused while the tenant is not active. Suspend the tenant in the back office to end the remaining sessions.")
+		c.printTenantInfo(finalTenant)
+		return fmt.Errorf("tenant updated, but ending its sessions failed: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to update tenant: %w", err)
 	}

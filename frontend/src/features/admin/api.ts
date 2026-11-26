@@ -195,8 +195,10 @@ function tenantFromWrite(body: AdminTenantResponse, what: string): AdminTenant {
 }
 
 // Creates a tenant (POST /admin/tenants, 201). Codes the caller branches
-// on: 409 `tenant.slug_taken` and `tenant.domain_taken`; a 422 carries
-// field errors under data.attributes (name, slug, domain, status).
+// on: 409 `tenant.slug_taken` and `tenant.domain_taken`, 422
+// `tenant.domain_reserved` for a domain under the tenant base domain; any
+// other 422 carries field errors under data.attributes (name, slug, domain,
+// status).
 export async function createAdminTenant(payload: AdminTenantCreateRequest): Promise<AdminTenant> {
   const body = await http.post<AdminTenantResponse>("/admin/tenants", payload)
   return tenantFromWrite(body, "create")
@@ -204,8 +206,9 @@ export async function createAdminTenant(payload: AdminTenantCreateRequest): Prom
 
 // Updates a tenant's name, slug, domain or status (PATCH
 // /admin/tenants/{id}). Same error codes as createAdminTenant, plus 422
-// `admin.tenant.serves_this_host` for a status change away from active on
-// the tenant that serves the back office's host.
+// `admin.tenant.serves_this_host` for a change that takes the tenant serving
+// the back office off its host (a status away from active, or the slug or
+// domain the host was resolved by).
 export async function updateAdminTenant(
   tenantId: string,
   payload: AdminTenantUpdateRequest
@@ -245,15 +248,24 @@ export async function reactivateAdminTenant(
   return tenantFromWrite(body, "reactivate")
 }
 
-// Deletes a tenant and everything in it (DELETE /admin/tenants/{id}, 204).
-// `confirmSlug` is the slug the operator typed; the BE compares it with the
-// tenant's exactly, as `inventario tenants delete` does, and answers 422
+// Starts deleting a tenant and everything in it (DELETE
+// /admin/tenants/{id}). The BE suspends the tenant, answers 202 with the
+// suspended row, and deletes it in the background; a failed deletion leaves
+// it suspended and the same request continues it. `confirmSlug` is the slug
+// the operator typed; the BE compares it with the tenant's exactly, as
+// `inventario tenants delete` does, and answers 422
 // `admin.tenant.confirmation_mismatch` when it differs. 422
 // `admin.tenant.serves_this_host` refuses the tenant behind the back
 // office's own host.
-export async function deleteAdminTenant(tenantId: string, confirmSlug: string): Promise<void> {
+export async function deleteAdminTenant(
+  tenantId: string,
+  confirmSlug: string
+): Promise<AdminTenant> {
   const query = new URLSearchParams({ confirm_slug: confirmSlug })
-  await http.del<null>(`/admin/tenants/${encodeURIComponent(tenantId)}?${query.toString()}`)
+  const body = await http.del<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}?${query.toString()}`
+  )
+  return tenantFromWrite(body, "delete")
 }
 
 // Lists the users belonging to one tenant. Pagination + free-text search

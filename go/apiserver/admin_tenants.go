@@ -3,6 +3,7 @@ package apiserver
 import (
 	"errors"
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -26,6 +27,12 @@ type adminTenantsAPI struct {
 	factorySet   *registry.FactorySet
 	auditService services.AuditLogger
 	service      *adminservice.Service
+	// baseDomain is the normalized tenant base domain, "" in single-tenant
+	// mode.
+	baseDomain string
+	// deletions holds the IDs of the tenants this process is deleting, so a
+	// repeated delete request does not start a second run.
+	deletions sync.Map
 }
 
 // listTenants returns a paginated, filtered, sorted listing of every

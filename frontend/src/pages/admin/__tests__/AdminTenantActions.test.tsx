@@ -1,5 +1,5 @@
-import type { ReactNode } from "react"
-import { screen, waitFor, within } from "@testing-library/react"
+import { useState, type ReactNode } from "react"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
@@ -12,6 +12,7 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
+import { TenantStatusDialog } from "@/pages/admin/AdminTenantDialogs"
 import { AdminTenantDetailPage } from "@/pages/admin/AdminTenantDetailPage"
 import { AdminTenantsPage } from "@/pages/admin/AdminTenantsPage"
 import { backofficeAuthHandlers } from "@/test/handlers"
@@ -250,6 +251,45 @@ describe("edit tenant", () => {
     expect(await screen.findByRole("heading", { name: "Northwind Holdings" })).toBeInTheDocument()
   })
 
+  it("sends nothing when nothing changed", async () => {
+    seedReads({ tenant })
+    let patched = false
+    server.use(
+      http.patch(api("/admin/tenants/t1"), () => {
+        patched = true
+        return HttpResponse.json({ data: tenant })
+      })
+    )
+    renderAt("/admin/tenants/t1")
+
+    await userEvent.click(await screen.findByTestId("admin-tenant-edit"))
+    await userEvent.click(screen.getByTestId("admin-tenant-form-submit"))
+
+    await waitFor(() =>
+      expect(screen.queryByTestId("admin-tenant-form-dialog")).not.toBeInTheDocument()
+    )
+    expect(patched).toBe(false)
+  })
+
+  it("puts a domain under the tenant base domain next to the domain field", async () => {
+    seedReads({ tenant })
+    server.use(
+      http.patch(api("/admin/tenants/t1"), () => codedError(422, "tenant.domain_reserved"))
+    )
+    renderAt("/admin/tenants/t1")
+
+    await userEvent.click(await screen.findByTestId("admin-tenant-edit"))
+    const domain = screen.getByTestId("admin-tenant-domain")
+    await userEvent.clear(domain)
+    await userEvent.type(domain, "acme.inventario.example.com")
+    await userEvent.click(screen.getByTestId("admin-tenant-form-submit"))
+
+    expect(await screen.findByTestId("admin-tenant-domain-error")).toHaveTextContent(
+      "This domain is under the tenant base domain"
+    )
+    expect(screen.getByTestId("admin-tenant-form-dialog")).toBeInTheDocument()
+  })
+
   it("does not let the slug be cleared", async () => {
     seedReads({ tenant })
     renderAt("/admin/tenants/t1")
@@ -316,6 +356,34 @@ describe("suspend and reactivate", () => {
     )
   })
 
+  it("keeps the action it was opened with while it is open", async () => {
+    function Harness() {
+      const [action, setAction] = useState<"suspend" | "reactivate">("reactivate")
+      return (
+        <>
+          <button type="button" data-testid="switch-action" onClick={() => setAction("suspend")} />
+          <TenantStatusDialog
+            action={action}
+            tenant={{ ...tenant, status: "suspended" }}
+            open
+            onOpenChange={() => {}}
+          />
+        </>
+      )
+    }
+    renderWithProviders({ children: <Harness /> })
+
+    const confirm = await screen.findByTestId("admin-tenant-status-confirm")
+    expect(confirm).toHaveTextContent("Reactivate tenant")
+    // The open modal makes the rest of the page inert, so the switch is
+    // clicked without the pointer checks of userEvent.
+    fireEvent.click(screen.getByTestId("switch-action"))
+    expect(screen.getByTestId("admin-tenant-status-confirm")).toHaveTextContent("Reactivate tenant")
+    expect(
+      screen.getByRole("heading", { name: "Reactivate Northwind Estates?" })
+    ).toBeInTheDocument()
+  })
+
   it("reactivates a suspended tenant", async () => {
     const box = { tenant: { ...tenant, status: "suspended" } }
     seedReads(box)
@@ -341,13 +409,14 @@ describe("suspend and reactivate", () => {
 describe("delete tenant", () => {
   beforeEach(() => signInAs("platform_admin"))
 
-  it("deletes only once the slug is typed exactly, then returns to the list", async () => {
+  it("starts the deletion only once the slug is typed exactly, then returns to the list", async () => {
     seedReads({ tenant })
     let confirmSlug: string | null = null
     server.use(
       http.delete(api("/admin/tenants/t1"), ({ request }) => {
         confirmSlug = new URL(request.url).searchParams.get("confirm_slug")
-        return new HttpResponse(null, { status: 204 })
+        // The BE suspends the tenant and deletes it in the background.
+        return HttpResponse.json({ data: { ...tenant, status: "suspended" } }, { status: 202 })
       })
     )
     renderAt("/admin/tenants/t1")

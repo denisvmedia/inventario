@@ -32,6 +32,22 @@ function pickEnvelopeMessage(env: ErrorEnvelope): string | null {
   return null
 }
 
+// The plain-text body of the 403 the BE answers when the tenant behind a
+// request is not active (tenantSuspendedMessage in
+// go/apiserver/tenant_status.go).
+const TENANT_SUSPENDED_BODY = "Tenant suspended"
+
+// isTenantSuspendedError reports whether err is that 403, so a sign-in
+// surface can show its own translated message instead of the English body.
+export function isTenantSuspendedError(err: unknown): boolean {
+  return (
+    err instanceof HttpError &&
+    err.status === 403 &&
+    typeof err.data === "string" &&
+    err.data.trim() === TENANT_SUSPENDED_BODY
+  )
+}
+
 // Returns a user-facing message. Pass `fallback` for the copy to use when no
 // useful detail can be extracted (e.g. a 5xx with a stringified HTML page).
 export function parseServerError(err: unknown, fallback: string): string {

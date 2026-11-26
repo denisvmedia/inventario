@@ -873,6 +873,9 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			DebugInfo:       params.DebugInfo,
 			APITokenService: apiTokenSvc, // block and revoke-sessions end tokens too
 			UploadLocation:  params.UploadLocation,
+			// The custom domains the back office accepts must stay clear of
+			// the hosts the resolver maps to tenant slugs.
+			TenantBaseDomain: tenantBaseDomain(tenantResolver),
 		}))
 		// The former /api/v1/users admin CRUD was removed together with the
 		// tenant-level `users.role` column. Per-group user management lives

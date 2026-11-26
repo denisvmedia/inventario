@@ -2,6 +2,7 @@ package memory
 
 import (
 	"context"
+	"strings"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
@@ -43,6 +44,15 @@ type TenantPurger struct {
 // called after every fs.* registry field is set.
 func NewTenantPurger(fs *registry.FactorySet) *TenantPurger {
 	return &TenantPurger{fs: fs}
+}
+
+// CheckTenantPurge always succeeds: the memory registries enforce no foreign
+// keys, so nothing can refuse the purge.
+func (r *TenantPurger) CheckTenantPurge(_ context.Context, tenantID string) error {
+	if tenantID == "" {
+		return errxtrace.Wrap("tenantID required", registry.ErrFieldRequired)
+	}
+	return nil
 }
 
 // PurgeTenantDependents walks each tenant-scoped registry in FK-safe order and
@@ -222,10 +232,12 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			return nil
 		}},
 		// Audit logs (nullable tenant_id, no FK to tenants); a plain registry.
-		// TenantID is *string, so read it through a nil-safe extractor.
+		// TenantID is *string, so read it through a nil-safe extractor. The
+		// back-office actions ("admin.*") and the rows written inside an
+		// impersonation session are kept, as the postgres purge keeps them.
 		{"audit_logs", func() error {
 			return purgeByTenant(ctx, tenantID, fs.AuditLogRegistry.List, fs.AuditLogRegistry.Delete, func(a *models.AuditLog) string {
-				if a.TenantID == nil {
+				if a.TenantID == nil || strings.HasPrefix(a.Action, "admin.") || a.ImpersonatedBy != nil {
 					return ""
 				}
 				return *a.TenantID

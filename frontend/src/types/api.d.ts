@@ -793,6 +793,7 @@ export type paths = {
          * Create a tenant (admin)
          * @description Creates a tenant with the same rules as `inventario tenants create`: an empty slug is generated from the name, the status defaults to active and registration to closed.
          *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
          *     Requires the platform_admin role.
          */
         post: {
@@ -854,7 +855,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - invalid fields */
+                /** @description Unprocessable Entity - invalid fields, or a reserved domain */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -936,8 +937,10 @@ export type paths = {
         post?: never;
         /**
          * Delete a tenant (admin)
-         * @description Deletes the tenant, its users, groups, items and files, with the same rules as `inventario tenants delete`.
-         *     The stored files go first, so an unreachable file store stops the deletion before any row is removed. It cannot be undone.
+         * @description Suspends the tenant and ends its sessions, as the suspend endpoint does, and answers 202 with the suspended tenant.
+         *     It then deletes the tenant, its users, groups, items and files in the background with the rules of `inventario tenants delete`.
+         *     The stored files go after a dry run of the row purge and before the rows, so a purge that would fail or an unreachable file store stops the deletion with the rows in place. It cannot be undone.
+         *     A failed or interrupted deletion leaves the tenant suspended; sending the same request again continues it. The audit log records the request and the outcome.
          *     `confirm_slug` must be the tenant's slug, the same confirmation the CLI prompt asks for; anything else is 422 `admin.tenant.confirmation_mismatch`.
          *     Deleting the tenant that serves this request's host is refused with 422 `admin.tenant.serves_this_host`.
          *     Requires the platform_admin role.
@@ -957,12 +960,14 @@ export type paths = {
             };
             requestBody?: never;
             responses: {
-                /** @description No Content */
-                204: {
+                /** @description Accepted - the tenant is suspended and its deletion is running */
+                202: {
                     headers: {
                         [name: string]: unknown;
                     };
-                    content?: never;
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.AdminTenantResponse"];
+                    };
                 };
                 /** @description Unauthorized - back-office authentication required */
                 401: {
@@ -1006,9 +1011,12 @@ export type paths = {
         head?: never;
         /**
          * Update a tenant (admin)
-         * @description Changes the fields the body sets, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain.
-         *     A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does. Making the tenant that serves this request's host inactive is refused with 422 `admin.tenant.serves_this_host`.
+         * @description Changes the fields the body sets to a value other than the stored one, with the same rules as `inventario tenants update`. An empty `domain` removes the custom domain. A body that changes nothing writes nothing.
+         *     A status away from active ends the sessions of every user in the tenant, as the suspend endpoint does.
+         *     A change that takes the tenant serving this request off the request's host is refused with 422 `admin.tenant.serves_this_host`: a status away from active and,
+         *     with a tenant base domain, a new domain when the request came through the tenant's domain or a new slug when it came another way.
          *     A slug another tenant has is refused with 409 `tenant.slug_taken`, a domain another tenant has with 409 `tenant.domain_taken`, and invalid fields with 422 naming them under data.attributes.
+         *     A domain that is the tenant base domain or a host under it is refused with 422 `tenant.domain_reserved`.
          *     Requires the platform_admin role.
          */
         patch: {
@@ -1082,7 +1090,7 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Unprocessable Entity - invalid fields, or the tenant serves this host */
+                /** @description Unprocessable Entity - invalid fields, a reserved domain, or the tenant serves this host */
                 422: {
                     headers: {
                         [name: string]: unknown;
@@ -3989,7 +3997,7 @@ export type paths = {
                         "application/gzip": string;
                     };
                 };
-                /** @description Impersonation session */
+                /** @description Impersonation session, or the user's tenant is not active */
                 403: {
                     headers: {
                         [name: string]: unknown;

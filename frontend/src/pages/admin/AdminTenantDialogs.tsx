@@ -45,6 +45,7 @@ const REASON_MAX = 500
 const TENANT_ERROR_KEY: Record<string, string> = {
   "tenant.slug_taken": "slugTaken",
   "tenant.domain_taken": "domainTaken",
+  "tenant.domain_reserved": "domainReserved",
   "admin.tenant.reason_required": "reasonRequired",
   "admin.tenant.reason_too_long": "reasonTooLong",
   "admin.tenant.serves_this_host": "servesThisHost",
@@ -118,8 +119,8 @@ export function TenantFormDialog(props: TenantFormProps) {
 
   function placeServerError(err: unknown) {
     const key = tenantErrorKey(err)
-    // A taken slug or domain belongs next to its field.
-    if (key === "slugTaken" || key === "domainTaken") {
+    // A taken slug, or a taken or reserved domain, belongs next to its field.
+    if (key === "slugTaken" || key === "domainTaken" || key === "domainReserved") {
       const field = key === "slugTaken" ? "slug" : "domain"
       form.setError(field, { message: `admin:tenantActions.errors.${key}` })
       return
@@ -148,6 +149,11 @@ export function TenantFormDialog(props: TenantFormProps) {
       if (values.name !== (tenant?.name ?? "")) changes.name = values.name
       if (values.slug !== (tenant?.slug ?? "")) changes.slug = values.slug
       if (values.domain !== (tenant?.domain ?? "")) changes.domain = values.domain
+      // Nothing changed: nothing to save.
+      if (Object.keys(changes).length === 0) {
+        onOpenChange(false)
+        return
+      }
       const updated = await updateMutation.mutateAsync(changes)
       toast.success(t("tenantActions.edit.success", { name: updated.name ?? "" }))
       onOpenChange(false)
@@ -274,7 +280,17 @@ export function TenantStatusDialog({
   const tenantId = tenant.id ?? ""
   const suspendMutation = useSuspendAdminTenant(tenantId)
   const reactivateMutation = useReactivateAdminTenant(tenantId)
-  const mutation = action === "suspend" ? suspendMutation : reactivateMutation
+  // The action the dialog was opened with, held until it opens again. The
+  // parent's action can change while the dialog is open or closing (a
+  // refetched status, the parent's dialog state going back to none), and
+  // the confirm button must do what the operator read.
+  const [shownAction, setShownAction] = useState(action)
+  const [wasOpen, setWasOpen] = useState(open)
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) setShownAction(action)
+  }
+  const mutation = shownAction === "suspend" ? suspendMutation : reactivateMutation
   const [reason, setReason] = useState("")
   const [errorKey, setErrorKey] = useState<string | null>(null)
 
@@ -299,7 +315,7 @@ export function TenantStatusDialog({
           onOpenChange(false)
           const name = updated.name ?? ""
           toast.success(
-            action === "suspend"
+            shownAction === "suspend"
               ? t("tenantActions.suspend.success", { name })
               : t("tenantActions.reactivate.success", { name })
           )
@@ -319,12 +335,12 @@ export function TenantStatusDialog({
       <DialogContent data-testid="admin-tenant-status-dialog">
         <DialogHeader>
           <DialogTitle>
-            {action === "suspend"
+            {shownAction === "suspend"
               ? t("tenantActions.suspend.title", { name: tenant.name ?? "" })
               : t("tenantActions.reactivate.title", { name: tenant.name ?? "" })}
           </DialogTitle>
           <DialogDescription>
-            {action === "suspend"
+            {shownAction === "suspend"
               ? t("tenantActions.suspend.body")
               : t("tenantActions.reactivate.body")}
           </DialogDescription>
@@ -361,12 +377,12 @@ export function TenantStatusDialog({
             {t("tenantActions.cancel")}
           </Button>
           <Button
-            variant={action === "suspend" ? "destructive" : "default"}
+            variant={shownAction === "suspend" ? "destructive" : "default"}
             onClick={handleConfirm}
             disabled={mutation.isPending || reasonInvalid}
             data-testid="admin-tenant-status-confirm"
           >
-            {action === "suspend"
+            {shownAction === "suspend"
               ? t("tenantActions.suspend.submit")
               : t("tenantActions.reactivate.submit")}
           </Button>
@@ -376,9 +392,10 @@ export function TenantStatusDialog({
   )
 }
 
-// DeleteTenantDialog deletes a tenant once the operator has typed its slug,
-// the confirmation `inventario tenants delete` asks for. The BE checks the
-// slug again and refuses a mismatch.
+// DeleteTenantDialog starts deleting a tenant once the operator has typed its
+// slug, the confirmation `inventario tenants delete` asks for. The BE checks
+// the slug again and refuses a mismatch. It suspends the tenant and deletes
+// it in the background, so the toast says the deletion has started.
 export function DeleteTenantDialog({
   tenant,
   open,

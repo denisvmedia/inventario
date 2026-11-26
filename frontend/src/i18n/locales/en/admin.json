@@ -136,10 +136,10 @@
       "title": "Danger zone"
     },
     "delete": {
-      "body": "This permanently deletes the tenant and everything in it: its users, groups, items and files. It cannot be undone.",
+      "body": "This suspends the tenant and ends its users' sessions, then permanently deletes the tenant and everything in it: its users, groups, items and files. It cannot be undone.",
       "confirmLabel": "To confirm, type the tenant's slug:",
       "submit": "Delete tenant",
-      "success": "Tenant {{name}} deleted.",
+      "success": "Deleting {{name}}. The tenant stays suspended until the deletion finishes.",
       "title": "Delete {{name}}?"
     },
     "edit": {
@@ -151,12 +151,13 @@
     },
     "errors": {
       "confirmationMismatch": "The slug you typed does not match the tenant's slug.",
+      "domainReserved": "This domain is under the tenant base domain, where each subdomain is a tenant's address. Use a domain outside it.",
       "domainTaken": "Another tenant already uses this domain.",
       "generic": "Something went wrong. Please try again.",
       "reasonRequired": "A reason is required.",
       "reasonTooLong": "The reason is too long. Keep it under 500 characters.",
       "roleRequired": "Only a platform admin can change tenants.",
-      "servesThisHost": "The back office is open on this tenant's address, so suspending or deleting it here would lock the back office out. Use the inventario tenants CLI instead.",
+      "servesThisHost": "The back office is open on this tenant's address, so this change would lock the back office out. Use the inventario tenants CLI instead.",
       "slugTaken": "Another tenant already uses this slug."
     },
     "reactivate": {
