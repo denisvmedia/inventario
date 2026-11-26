@@ -15733,10 +15733,11 @@ export type components = {
         "jsonapi.CommodityScanFileGuess": {
             document_type?: components["schemas"]["jsonapi.CommodityScanDocumentTypeGuess"];
             /**
-             * @description Index is the file's position in the request, counted from 0.
+             * @description Index is the file's position among the photos parts of the request,
+             *     counted from 0. An empty part the server skipped still counts.
              * @example 0
              */
-            index?: number;
+            index: number;
             title?: components["schemas"]["jsonapi.CommodityScanTitleGuess"];
         };
         "jsonapi.CommodityScanItem": {

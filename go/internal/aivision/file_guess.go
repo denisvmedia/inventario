@@ -77,10 +77,8 @@ type rawFileGuess struct {
 // below fileCount), when it repeats the index of an earlier entry, or when it
 // is left with neither a document type nor a title. A document type outside
 // FileDocumentTypes and an empty title are left out of an entry that keeps
-// the other. A title is trimmed, has its runs of whitespace and control
-// characters collapsed into one space, and is cut to MaxFileTitleRunes. Each
-// problem becomes a "low_confidence" warning on FieldNameFiles; none fails
-// the scan.
+// the other. A title is cleaned by CleanFileTitle. Each problem becomes a
+// "low_confidence" warning on FieldNameFiles; none fails the scan.
 func decodeFileGuesses(raw json.RawMessage, fileCount int) ([]FileGuess, []Warning) {
 	if len(raw) == 0 || string(raw) == "null" {
 		return nil, nil
@@ -133,7 +131,7 @@ func decodeFileGuess(raw json.RawMessage, fileCount int) (FileGuess, []string) {
 	guess := FileGuess{Index: index}
 	var problems []string
 	if r.DocumentType != nil {
-		if v, ok := decodeDocumentType(r.DocumentType.Value); ok {
+		if v, ok := decodeEnum(r.DocumentType.Value, FileDocumentTypes); ok {
 			guess.DocumentType = &FieldGuess{Value: v, Confidence: r.DocumentType.Confidence}
 		} else {
 			problems = append(problems, "unknown document type")
@@ -160,13 +158,15 @@ func decodeFileIndex(raw json.RawMessage, fileCount int) (int, bool) {
 	return int(n), true
 }
 
-func decodeDocumentType(raw json.RawMessage) (string, bool) {
+// decodeEnum reads a string that must be one of values, ignoring case and
+// surrounding spaces.
+func decodeEnum(raw json.RawMessage, values []string) (string, bool) {
 	var s string
 	if json.Unmarshal(raw, &s) != nil {
 		return "", false
 	}
 	s = strings.ToLower(strings.TrimSpace(s))
-	return s, slices.Contains(FileDocumentTypes, s)
+	return s, slices.Contains(values, s)
 }
 
 func decodeFileTitle(raw json.RawMessage) (string, bool) {
@@ -178,12 +178,16 @@ func decodeFileTitle(raw json.RawMessage) (string, bool) {
 	return s, s != ""
 }
 
-// CleanFileTitle returns s as a file title: control characters and runs of
-// whitespace become one space, the ends are trimmed, and the title is cut to
-// MaxFileTitleRunes.
+// CleanFileTitle returns s as a file title: format characters (bidi
+// overrides, zero-width spaces and joiners) are removed, control characters
+// and runs of whitespace become one space, the ends are trimmed, and the
+// title is cut to MaxFileTitleRunes.
 func CleanFileTitle(s string) string {
 	s = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		switch {
+		case unicode.Is(unicode.Cf, r):
+			return -1
+		case unicode.IsControl(r):
 			return ' '
 		}
 		return r

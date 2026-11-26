@@ -537,3 +537,40 @@ func TestCommodityScan_ReturnsFileSuggestions(t *testing.T) {
 	// which stays.
 	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.data.attributes.fields.document_type.value"), "other")
 }
+
+// TestCommodityScan_FileSuggestionsNameTheRequestParts: an empty part is
+// skipped, and a file suggestion still names the part's position among the
+// photos the client sent.
+func TestCommodityScan_FileSuggestionsNameTheRequestParts(t *testing.T) {
+	c := qt.New(t)
+
+	params, userID, slug := newScanParams(mock.New(), services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100})
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	body, contentType := buildScanMultipart(c, []struct {
+		name string
+		mime string
+		body []byte
+	}{
+		{"empty.jpg", "image/jpeg", nil},
+		{"kettle.jpg", "image/jpeg", []byte("aaa")},
+		{"empty-too.jpg", "image/jpeg", nil},
+		{"manual.jpg", "image/jpeg", []byte("bbb")},
+	})
+	req := httptest.NewRequest(http.MethodPost, "/api/v1/g/"+slug+"/commodities/scan", body)
+	req.Header.Set("Content-Type", contentType)
+	addTestUserAuthHeader(req, userID)
+
+	rr := httptest.NewRecorder()
+	handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	var resp jsonapi.CommodityScanResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
+	files := resp.Data.Attributes.Files
+	c.Assert(files, qt.HasLen, 2)
+	c.Check(files[0].Index, qt.Equals, 1)
+	c.Check(files[0].DocumentType.Value, qt.Equals, "photo")
+	c.Check(files[1].Index, qt.Equals, 3)
+	c.Check(files[1].DocumentType.Value, qt.Equals, "manual")
+}

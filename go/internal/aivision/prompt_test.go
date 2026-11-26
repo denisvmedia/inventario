@@ -16,7 +16,7 @@ func TestResponseSchema_TypeEnumWarrantyShortNameMultiItem(t *testing.T) {
 	c := qt.New(t)
 	schema := aivision.ResponseSchema(aivision.ScanRequest{})
 
-	props := schema["properties"].(map[string]any)
+	props := schema["properties"].(aivision.ResponseProperties)
 
 	// items[] is the REQUIRED primary output — a list of products. Making the
 	// model produce a list is what gets every invoice line enumerated.
@@ -136,7 +136,7 @@ func TestResponseSchemaAndPrompt_UseTheGroupsItemTypes(t *testing.T) {
 	}}
 
 	schema := aivision.ResponseSchema(req)
-	fields := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	fields := schema["properties"].(aivision.ResponseProperties)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 	typeEnum := fields[aivision.FieldNameType].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)["enum"].([]string)
 	c.Assert(typeEnum, qt.DeepEquals, []string{"electronics", "vehicle", "автомобиль"})
 
@@ -161,7 +161,7 @@ func TestResponseSchemaAndPrompt_OfferTheGroupsCustomFields(t *testing.T) {
 	}}
 
 	schema := aivision.ResponseSchema(req)
-	fields := schema["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	fields := schema["properties"].(aivision.ResponseProperties)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 	custom := fields[aivision.FieldNameCustomFields].(map[string]any)["properties"].(map[string]any)
 	c.Check(custom, qt.HasLen, 3, qt.Commentf("money and item links are left out"))
 	fuelEnum := custom["f-fuel"].(map[string]any)["properties"].(map[string]any)["value"].(map[string]any)["enum"].([]string)
@@ -174,7 +174,7 @@ func TestResponseSchemaAndPrompt_OfferTheGroupsCustomFields(t *testing.T) {
 
 	// Without custom fields the schema has no custom_fields member.
 	plain := aivision.ResponseSchema(aivision.ScanRequest{})
-	plainFields := plain["properties"].(map[string]any)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
+	plainFields := plain["properties"].(aivision.ResponseProperties)["items"].(map[string]any)["items"].(map[string]any)["properties"].(map[string]any)
 	_, has := plainFields[aivision.FieldNameCustomFields]
 	c.Check(has, qt.IsFalse)
 }

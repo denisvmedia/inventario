@@ -2225,11 +2225,15 @@ definitions:
       document_type:
         $ref: '#/definitions/jsonapi.CommodityScanDocumentTypeGuess'
       index:
-        description: Index is the file's position in the request, counted from 0.
+        description: |-
+          Index is the file's position among the photos parts of the request,
+          counted from 0. An empty part the server skipped still counts.
         example: 0
         type: integer
       title:
         $ref: '#/definitions/jsonapi.CommodityScanTitleGuess'
+    required:
+    - index
     type: object
   jsonapi.CommodityScanItem:
     properties:

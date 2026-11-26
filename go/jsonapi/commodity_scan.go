@@ -81,8 +81,9 @@ type CommodityScanFieldGuess struct {
 // CommodityScanFileGuess is the suggestion for one input file of a scan.
 // Each part is absent when the model gave nothing usable for it.
 type CommodityScanFileGuess struct {
-	// Index is the file's position in the request, counted from 0.
-	Index        int                             `json:"index" example:"0"`
+	// Index is the file's position among the photos parts of the request,
+	// counted from 0. An empty part the server skipped still counts.
+	Index        int                             `json:"index" example:"0" validate:"required"`
 	DocumentType *CommodityScanDocumentTypeGuess `json:"document_type,omitempty"`
 	Title        *CommodityScanTitleGuess        `json:"title,omitempty"`
 }

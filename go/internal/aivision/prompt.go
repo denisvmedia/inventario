@@ -1,8 +1,12 @@
 package aivision
 
 import (
+	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -219,10 +223,11 @@ func ResponseSchema(req ScanRequest) map[string]any {
 	// reliably gets every line of a multi-product invoice enumerated instead
 	// of the model picking just one. A single product is simply a 1-element
 	// array. The service derives the single-item `fields` from items[0].
-	// files is required too: one suggestion per attached file.
+	// files is required too: one suggestion per attached file. The
+	// properties are ResponseProperties so the products come first.
 	return map[string]any{
 		"type": "object",
-		"properties": map[string]any{
+		"properties": ResponseProperties{
 			FieldNameFiles: filesSchema(len(req.Photos), fieldGuessEnum(FileDocumentTypes), fieldGuessStringMax(MaxFileTitleRunes)),
 			"items": map[string]any{
 				"type":     "array",
@@ -245,6 +250,51 @@ func ResponseSchema(req ScanRequest) map[string]any {
 		"required":             []string{"items", FieldNameFiles},
 		"additionalProperties": false,
 	}
+}
+
+// ResponseProperties are the members of the response object. They marshal
+// in the order the model should write them: the products, then the file
+// suggestions, then the warnings, and any other member after those in name
+// order. A model writes its answer in the order of the schema, so the
+// product lines of a long receipt come before the file suggestions in the
+// output budget. A plain map would marshal "files" first.
+type ResponseProperties map[string]any
+
+// responsePropertyOrder ranks the members of ResponseProperties.
+var responsePropertyOrder = []string{"items", FieldNameFiles, "warnings"}
+
+// MarshalJSON writes the members in the order of responsePropertyOrder.
+func (p ResponseProperties) MarshalJSON() ([]byte, error) {
+	rank := func(name string) int {
+		if i := slices.Index(responsePropertyOrder, name); i >= 0 {
+			return i
+		}
+		return len(responsePropertyOrder)
+	}
+	names := slices.Collect(maps.Keys(p))
+	slices.SortFunc(names, func(a, b string) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a, b))
+	})
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, name := range names {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		key, err := json.Marshal(name)
+		if err != nil {
+			return nil, err
+		}
+		value, err := json.Marshal(p[name])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(key)
+		buf.WriteByte(':')
+		buf.Write(value)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
 }
 
 // filesSchema is the schema of the per-file suggestions: one entry per
@@ -531,6 +581,8 @@ func decodeFieldValue(name string, raw json.RawMessage) (any, bool) {
 			return nil, false
 		}
 		return s, true
+	case FieldNameDocumentType:
+		return decodeEnum(raw, ScanDocumentTypes)
 	default:
 		var s string
 		if err := json.Unmarshal(raw, &s); err != nil {

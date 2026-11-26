@@ -15483,12 +15483,15 @@
         },
         "jsonapi.CommodityScanFileGuess": {
             "type": "object",
+            "required": [
+                "index"
+            ],
             "properties": {
                 "document_type": {
                     "$ref": "#/definitions/jsonapi.CommodityScanDocumentTypeGuess"
                 },
                 "index": {
-                    "description": "Index is the file's position in the request, counted from 0.",
+                    "description": "Index is the file's position among the photos parts of the request,\ncounted from 0. An empty part the server skipped still counts.",
                     "type": "integer",
                     "example": 0
                 },

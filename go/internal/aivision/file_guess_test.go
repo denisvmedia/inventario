@@ -1,6 +1,7 @@
 package aivision_test
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -119,6 +120,12 @@ func TestToScanResult_Files(t *testing.T) {
 			files:     `[{"index":0,"title":{"value":"Bosch\u0000invoice\r\n2024","confidence":0.5}}]`,
 			fileCount: 1,
 			want:      []aivision.FileGuess{fileGuess(0, "", 0, "Bosch invoice 2024", 0.5)},
+		},
+		{
+			name:      "format characters in a title are removed",
+			files:     `[{"index":0,"title":{"value":"Bo\u200bsch \u202einvoice\u200d","confidence":0.5}}]`,
+			fileCount: 1,
+			want:      []aivision.FileGuess{fileGuess(0, "", 0, "Bosch invoice", 0.5)},
 		},
 		{
 			name:         "files that are not a list cost the file suggestions only",
@@ -248,7 +255,7 @@ func TestResponseSchemaAndPrompt_FilesFollowTheRequest(t *testing.T) {
 		{ContentType: "image/png", Data: []byte{3}},
 	}}
 
-	files := aivision.ResponseSchema(req)["properties"].(map[string]any)[aivision.FieldNameFiles].(map[string]any)
+	files := aivision.ResponseSchema(req)["properties"].(aivision.ResponseProperties)[aivision.FieldNameFiles].(map[string]any)
 	c.Check(files["minItems"], qt.Equals, 3)
 	c.Check(files["maxItems"], qt.Equals, 3)
 	entry := files["items"].(map[string]any)
@@ -267,4 +274,62 @@ func TestResponseSchemaAndPrompt_FilesFollowTheRequest(t *testing.T) {
 
 	one := aivision.ScanRequest{Photos: req.Photos[:1]}
 	c.Check(aivision.UserPromptHeader(one), qt.Contains, "There is 1 attached file, labeled File 0.")
+}
+
+// TestToScanResult_ScanDocumentType: the scan-level document type is one of
+// ScanDocumentTypes; any other value is dropped with a warning.
+func TestToScanResult_ScanDocumentType(t *testing.T) {
+	tests := []struct {
+		name  string
+		value string
+		want  any
+	}{
+		{name: "a known type", value: `"receipt"`, want: "receipt"},
+		{name: "case and spaces are ignored", value: `" Manual "`, want: "manual"},
+		{name: "a file-only type is dropped", value: `"photo"`},
+		{name: "an unknown type is dropped", value: `"brochure"`},
+		{name: "a number is dropped", value: `3`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			body := `{"items":[{"name":{"value":"Kettle","confidence":0.9},"document_type":{"value":` + tt.value + `,"confidence":0.7}}]}`
+			res, err := aivision.ToScanResult([]byte(body), 1)
+			c.Assert(err, qt.IsNil)
+			c.Check(res.Fields[aivision.FieldNameDocumentType].Value, qt.Equals, tt.want)
+			c.Check(res.Fields[aivision.FieldNameName].Value, qt.Equals, "Kettle")
+		})
+	}
+}
+
+// TestResponseSchema_ProductsComeFirst: the response members are sent in the
+// order the model should write them, products before file suggestions.
+func TestResponseSchema_ProductsComeFirst(t *testing.T) {
+	c := qt.New(t)
+	raw, err := aivision.ResponseSchemaJSON(aivision.ScanRequest{Photos: []aivision.PhotoInput{{ContentType: "image/jpeg", Data: []byte{1}}}})
+	c.Assert(err, qt.IsNil)
+	var schema struct {
+		Properties json.RawMessage `json:"properties"`
+	}
+	c.Assert(json.Unmarshal(raw, &schema), qt.IsNil)
+	c.Check(topLevelKeys(c, schema.Properties), qt.DeepEquals, []string{"items", aivision.FieldNameFiles, "warnings"})
+}
+
+// topLevelKeys returns the member names of a JSON object in their order.
+func topLevelKeys(c *qt.C, raw json.RawMessage) []string {
+	c.Helper()
+	dec := json.NewDecoder(strings.NewReader(string(raw)))
+	_, err := dec.Token()
+	c.Assert(err, qt.IsNil)
+	var keys []string
+	for dec.More() {
+		tok, err := dec.Token()
+		c.Assert(err, qt.IsNil)
+		key, ok := tok.(string)
+		c.Assert(ok, qt.IsTrue)
+		keys = append(keys, key)
+		var skip json.RawMessage
+		c.Assert(dec.Decode(&skip), qt.IsNil)
+	}
+	return keys
 }
