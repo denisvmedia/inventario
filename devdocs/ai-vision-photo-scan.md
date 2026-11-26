@@ -52,6 +52,26 @@ When the provider is `none` (the default), the route stays mounted but returns
 `503` and the FE shows an "AI vision is unavailable" banner with a "Fill
 manually" fallback.
 
+### Per-file suggestions (#1626)
+
+Besides the products, the model returns `files`: one entry per input file
+with its `index` (the file's position in the request, counted from 0), a
+`document_type` (`invoice`, `receipt`, `manual`, `warranty`, `photo` for a
+picture of the product, or `other`) and a `title` of at most 120 characters,
+each a value with a confidence. Each provider puts a `File N` text label
+before every file so the model can name the file it means; the schema asks
+for exactly one entry per file.
+
+`aivision.ToScanResult` checks the list against the number of files sent.
+It drops an entry whose index is missing, out of range or repeated, and
+leaves out an unknown document type or an empty title; a title is trimmed
+and cut to 120 characters. Each drop is a `low_confidence` warning with
+`field: "files"`, never a failed scan. The scan-level
+`fields.document_type` stays for older clients: when the model gives none,
+`ScanResult.FillDocumentType` takes the first document among the files, or
+`other` for photos only. The mock provider reads the type from a keyword in
+the file name and gives a fixed title per type.
+
 ### Batch intake (#2810)
 
 Add items from files reuses this pipeline from a background worker instead
@@ -72,7 +92,16 @@ of the request.
   and the audit row apply as in the item form. A rate-limited source waits
   (`wait_reason = rate_limited`) without using an attempt; a provider error
   that may pass is retried with a delay and fails after three attempts. A
-  stored scan is never repeated unless the member asks for a rescan.
+  stored scan is never repeated unless the member asks for a rescan. Once a
+  scan is stored, the worker applies the per-file suggestions to the files
+  (`go/services/intake_file_suggestions.go`): the tag of the document type
+  (`invoice` for an invoice or a receipt, `manual`, `warranty`; none for a
+  photo or other) while the file has none of those three tags, and the title
+  while it still equals the file name without the extension. Suggestions
+  under the review's accept confidence (0.3) are skipped. A second apply
+  finds nothing to change, so a rescan leaves the files alone unless the
+  member removed the tag. The file is read again just before the write, but
+  the read and the write are not one transaction.
 - Service: `go/services/intake_service.go`. A batch takes at most 50 files
   and a group at most 200 waiting purchases. `CreateDrafts` makes one draft
   per selected candidate with the client key `intake:<candidate id>`, so a

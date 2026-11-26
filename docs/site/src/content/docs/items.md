@@ -161,6 +161,23 @@ A file you dropped is an ordinary file of the group: you find it on the
 files**. A file uploaded before the batch was queued (if you closed the dialog
 after an upload failed, for example) stays there as a standalone file.
 
+The scan also suggests a type and a title for each file, and sets them on the
+file once the file is scanned:
+
+- The type becomes a tag: an invoice or a receipt gets the **Invoice** tag, a
+  manual the **Manual** tag, a warranty card the **Warranty** tag. A photo of
+  the product and any other file get no tag.
+- The title is short and readable, such as "Bosch invoice, March 2024", in the
+  language of the document. The file name does not change.
+
+What you set yourself stays. The scan changes the title only while it is still
+the file name without the extension, and adds a tag only while the file has
+none of the **Invoice**, **Manual** and **Warranty** tags. A suggestion the
+scan is unsure of is left out. A **Rescan** does not change the title again;
+it does add the tag back if you removed it. A file
+[another system sent](../documents-from-other-systems/) is not scanned, so it
+keeps the title it came with.
+
 ## All the fields
 
 The form is split across the five steps. Only a handful of fields are required
