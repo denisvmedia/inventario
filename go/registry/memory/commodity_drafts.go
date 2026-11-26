@@ -38,6 +38,19 @@ type CommodityDraftRegistryFactory struct {
 // item a promotion records.
 func (f *CommodityDraftRegistryFactory) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactory) {
 	f.intakeDocuments = docs
+	docs.drafts = f
+}
+
+// promotedItem returns the item the group's draft became, nil while it is
+// not promoted or when there is no such draft. The caller holds writes.
+func (f *CommodityDraftRegistryFactory) promotedItem(groupID, draftID string) *string {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	draft, ok := f.base.items.Get(draftID)
+	if !ok || draft.GroupID != groupID || draft.PromotedCommodityID == nil {
+		return nil
+	}
+	return new(*draft.PromotedCommodityID)
 }
 
 // CommodityDraftRegistry is the context-aware in-memory registry of drafts.

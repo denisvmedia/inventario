@@ -1755,6 +1755,10 @@ type IntakeDocumentRegistry interface {
 	// and returns the document. A field that is already set keeps its value,
 	// so of two deliveries racing on one document the first to record a
 	// file, a session or a draft wins, and the other finds it in the result.
+	// Recording a draft that is already promoted records its item too, so a
+	// promotion that ran before the draft was recorded is not lost; the
+	// draft is locked as a promotion locks it, so one of the two always
+	// sees the other.
 	RecordProgress(ctx context.Context, id string, progress IntakeDocumentProgress) (*models.IntakeDocument, error)
 
 	// ListByDrafts returns the group's documents whose DraftID is one of

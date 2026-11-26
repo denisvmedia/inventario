@@ -40,6 +40,7 @@ func RunIntakeDocumentContract(t *testing.T, newEnv func(t *testing.T) IntakeDoc
 		{"progress is recorded once", intakeDocumentContractProgress},
 		{"documents list by draft and by item", intakeDocumentContractLists},
 		{"a promotion records the item", intakeDocumentContractPromotion},
+		{"recording a promoted draft records its item", intakeDocumentContractPromotedFirst},
 		{"the service registry is refused", intakeDocumentContractNeedsGroup},
 		{"restored timestamps are kept", intakeDocumentContractTimestamps},
 	}
@@ -220,6 +221,46 @@ func intakeDocumentContractPromotion(t *testing.T, env IntakeDocumentEnv) {
 	untouched, err := env.Documents.Get(env.Ctx, other.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(untouched.CommodityID, qt.IsNil)
+}
+
+// intakeDocumentContractPromotedFirst: the draft became an item before the
+// delivery recorded it, so the promotion found no document to update.
+// Recording the draft records the item with it; a document that already
+// names another draft is left alone.
+func intakeDocumentContractPromotedFirst(t *testing.T, env IntakeDocumentEnv) {
+	c := qt.New(t)
+	draft, _, err := env.Drafts.CreateOrGet(env.Ctx, models.CommodityDraft{
+		ClientKey: "intake:candidate-1",
+		Values:    models.CommodityDraftValues{"name": "Drill"},
+	})
+	c.Assert(err, qt.IsNil)
+	promotion, err := env.Drafts.Promote(env.Ctx, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+		Name:      "Drill",
+		ShortName: "Drill",
+		Type:      models.CommodityTypeOther,
+		AreaID:    new(env.AreaID),
+		Count:     1,
+		Status:    models.CommodityStatusInUse,
+		Tags:      models.ValuerSlice[string]{},
+	})
+	c.Assert(err, qt.IsNil)
+
+	doc, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("7"))
+	c.Assert(err, qt.IsNil)
+	got, err := env.Documents.RecordProgress(env.Ctx, doc.ID, registry.IntakeDocumentProgress{DraftID: &draft.ID})
+	c.Assert(err, qt.IsNil)
+	c.Assert(*got.DraftID, qt.Equals, draft.ID)
+	c.Assert(got.CommodityID, qt.IsNotNil)
+	c.Assert(*got.CommodityID, qt.Equals, promotion.Commodity.ID)
+
+	other, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("8"))
+	c.Assert(err, qt.IsNil)
+	_, err = env.Documents.RecordProgress(env.Ctx, other.ID, registry.IntakeDocumentProgress{DraftID: new("draft-other")})
+	c.Assert(err, qt.IsNil)
+	got, err = env.Documents.RecordProgress(env.Ctx, other.ID, registry.IntakeDocumentProgress{DraftID: &draft.ID})
+	c.Assert(err, qt.IsNil)
+	c.Assert(*got.DraftID, qt.Equals, "draft-other")
+	c.Assert(got.CommodityID, qt.IsNil)
 }
 
 func intakeDocumentContractNeedsGroup(t *testing.T, env IntakeDocumentEnv) {

@@ -248,16 +248,29 @@ func (r *IntakeDocumentRegistry) RecordProgress(ctx context.Context, id string, 
 	}
 	var doc models.IntakeDocument
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		// The draft is locked as a promotion locks it: a promotion either
+		// committed, and the draft names its item, or waits for this
+		// transaction and then finds the draft recorded.
+		var promotedItem *string
+		if progress.DraftID != nil {
+			lock := fmt.Sprintf(`SELECT promoted_commodity_id FROM %s WHERE id = $1 AND group_id = $2 FOR SHARE`,
+				r.tableNames.CommodityDrafts())
+			err := tx.QueryRowxContext(ctx, lock, *progress.DraftID, r.groupID).Scan(&promotedItem)
+			if err != nil && !errors.Is(err, sql.ErrNoRows) {
+				return errxtrace.Wrap("failed to lock the recorded draft", err)
+			}
+		}
 		query := fmt.Sprintf(`
 			UPDATE %s SET
 				file_id = COALESCE(file_id, $1),
 				session_id = COALESCE(session_id, $2),
 				draft_id = COALESCE(draft_id, $3),
-				updated_at = $4
-			WHERE id = $5 AND group_id = $6
+				commodity_id = COALESCE(commodity_id, CASE WHEN draft_id IS NULL THEN $4::text END),
+				updated_at = $5
+			WHERE id = $6 AND group_id = $7
 			RETURNING *`, r.tableNames.IntakeDocuments())
 		err := tx.QueryRowxContext(ctx, query,
-			progress.FileID, progress.SessionID, progress.DraftID, time.Now().UTC(), id, r.groupID,
+			progress.FileID, progress.SessionID, progress.DraftID, promotedItem, time.Now().UTC(), id, r.groupID,
 		).StructScan(&doc)
 		if errors.Is(err, sql.ErrNoRows) {
 			return intakeDocumentNotFound(id)

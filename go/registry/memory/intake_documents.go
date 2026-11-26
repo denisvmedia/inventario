@@ -22,6 +22,9 @@ import (
 type IntakeDocumentRegistryFactory struct {
 	base   *Registry[models.IntakeDocument, *models.IntakeDocument]
 	writes *sync.Mutex
+	// drafts is set by CommodityDraftRegistryFactory.SetIntakeDocumentFactory.
+	// Recording a draft reads whether it is promoted.
+	drafts *CommodityDraftRegistryFactory
 }
 
 // IntakeDocumentRegistry is the context-aware in-memory registry of the
@@ -175,6 +178,15 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 	if err := r.requireGroup(); err != nil {
 		return nil, err
 	}
+	// The draft factory's writes lock comes first, as in a promotion: a
+	// promotion either finished, and the draft names its item, or starts
+	// after this call and finds the draft recorded.
+	var promotedItem *string
+	if drafts := r.factory.drafts; progress.DraftID != nil && drafts != nil {
+		drafts.writes.Lock()
+		defer drafts.writes.Unlock()
+		promotedItem = drafts.promotedItem(r.groupID, *progress.DraftID)
+	}
 	r.factory.writes.Lock()
 	defer r.factory.writes.Unlock()
 	r.lock.Lock()
@@ -196,6 +208,9 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 			*f.dst = new(*f.src)
 			changed = true
 		}
+	}
+	if changed && promotedItem != nil && doc.CommodityID == nil && *doc.DraftID == *progress.DraftID {
+		doc.CommodityID = new(*promotedItem)
 	}
 	if changed {
 		doc.UpdatedAt = time.Now().UTC()
