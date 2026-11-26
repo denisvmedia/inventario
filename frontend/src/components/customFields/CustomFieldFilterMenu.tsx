@@ -126,7 +126,12 @@ export function CustomFieldFilterMenu({
           <ChevronDown className="size-3.5" aria-hidden="true" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
+      {/* Bounded to the room below or above the button, so the editor and
+          Add stay reachable under a long list of conditions. */}
+      <PopoverContent
+        align="start"
+        className="max-h-(--radix-popover-content-available-height) w-80 overflow-y-auto p-0"
+      >
         <div className="px-3 py-2 text-sm font-medium">{t("customFields:filter.title")}</div>
         <Separator />
         {conditions.length > 0 ? (
