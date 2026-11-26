@@ -11,6 +11,7 @@ import (
 	"go.5x5.cz/inventario/internal/aivision"
 	"go.5x5.cz/inventario/internal/aivision/mock"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -33,19 +34,45 @@ func (f *intakeFixture) editFile(c *qt.C, id string, edit func(*models.FileEntit
 	must.Must(files.Update(f.ctx, *file))
 }
 
-func TestIntakeDocumentTypeTags(t *testing.T) {
-	c := qt.New(t)
-	c.Check(services.IntakeDocumentTypeTags, qt.DeepEquals, map[string]string{
+// workerWith is a worker of the fixture's group that scans with provider,
+// one source per tick.
+func (f *intakeFixture) workerWith(provider aivision.Provider) *services.IntakeWorker {
+	scan := services.NewCommodityScanService(provider, f.factorySet.CommodityScanAuditRegistry, services.CommodityScanConfig{
+		MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100,
+	})
+	return services.NewIntakeWorker(f.factorySet, scan, f.uploadLocation, services.WithIntakeClock(f.clock), services.WithIntakeSourcesPerTick(1))
+}
+
+// assertUntouched checks that a file still has the title and the tags its
+// upload gave it.
+func assertUntouched(c *qt.C, got *models.FileEntity) {
+	c.Helper()
+	c.Check(got.Title, qt.Equals, got.Path)
+	c.Check([]string(got.Tags), qt.DeepEquals, []string{})
+}
+
+func TestIntakeDocumentTypeTag(t *testing.T) {
+	want := map[string]string{
 		aivision.DocumentTypeInvoice:  models.FileTagInvoice,
 		aivision.DocumentTypeReceipt:  models.FileTagInvoice,
 		aivision.DocumentTypeManual:   models.FileTagManual,
 		aivision.DocumentTypeWarranty: models.FileTagWarranty,
-	})
+		aivision.DocumentTypePhoto:    models.FileTagPhoto,
+	}
+	for _, docType := range aivision.FileDocumentTypes {
+		t.Run(docType, func(t *testing.T) {
+			c := qt.New(t)
+			tag, ok := services.IntakeDocumentTypeTag(docType)
+			wantTag, wantOK := want[docType]
+			c.Check(ok, qt.Equals, wantOK)
+			c.Check(tag, qt.Equals, wantTag)
+		})
+	}
 }
 
 // TestIntakeWorker_AppliesFileSuggestions: once a source is scanned, each of
-// its files gets the tag of its document type and the suggested title. A
-// photo gets a title and no tag. The tags exist in the group afterwards.
+// its files gets the tag of its document type and the suggested title, and
+// the tags exist in the group afterwards.
 func TestIntakeWorker_AppliesFileSuggestions(t *testing.T) {
 	c := qt.New(t)
 	f := newIntakeFixture(c)
@@ -64,7 +91,7 @@ func TestIntakeWorker_AppliesFileSuggestions(t *testing.T) {
 		receipt.ID:  {"Sample Store receipt, March 2024", []string{models.FileTagInvoice}},
 		manual.ID:   {"Sample user manual", []string{models.FileTagManual}},
 		warranty.ID: {"Sample warranty card", []string{models.FileTagWarranty}},
-		kettle.ID:   {"Sample product photo", []string{}},
+		kettle.ID:   {"Sample product photo", []string{models.FileTagPhoto}},
 	}
 	for id, w := range want {
 		got := f.file(c, id)
@@ -74,38 +101,43 @@ func TestIntakeWorker_AppliesFileSuggestions(t *testing.T) {
 	}
 
 	tags := must.Must(f.factorySet.TagRegistryFactory.CreateUserRegistry(f.ctx))
-	for _, slug := range []string{models.FileTagInvoice, models.FileTagManual, models.FileTagWarranty} {
+	for _, slug := range []string{models.FileTagInvoice, models.FileTagManual, models.FileTagWarranty, models.FileTagPhoto} {
 		_, err := tags.GetBySlug(f.ctx, models.TagKindFile, slug)
 		c.Check(err, qt.IsNil, qt.Commentf("tag %s", slug))
 	}
 }
 
-// TestIntakeWorker_FileSuggestionsKeepWhatTheMemberSet: a title the member
-// changed stays, a file the member classified keeps its document tag, and a
-// tag of the member's own is kept next to the suggested one.
+// TestIntakeWorker_FileSuggestionsKeepWhatTheMemberSet: a file the member
+// renamed or classified before the scan gets no suggestion at all. A tag of
+// the member's own that says nothing about the kind of file does not count.
 func TestIntakeWorker_FileSuggestionsKeepWhatTheMemberSet(t *testing.T) {
 	c := qt.New(t)
 	f := newIntakeFixture(c)
 	renamed := f.pdf(c, "invoice-1")
 	classified := f.pdf(c, "invoice-2")
-	ownTag := f.pdf(c, "invoice-3")
+	asPhoto := f.pdf(c, "invoice-3")
+	ownTag := f.pdf(c, "invoice-4")
 	f.editFile(c, renamed.ID, func(file *models.FileEntity) { file.Title = "My Bosch invoice" })
 	f.editFile(c, classified.ID, func(file *models.FileEntity) { file.Tags = models.StringSlice{models.FileTagManual} })
+	f.editFile(c, asPhoto.ID, func(file *models.FileEntity) { file.Tags = models.StringSlice{models.FileTagPhoto} })
 	f.editFile(c, ownTag.ID, func(file *models.FileEntity) { file.Tags = models.StringSlice{"kitchen"} })
-	f.create(c, "kept", source(renamed, classified, ownTag))
+	f.create(c, "kept", source(renamed, classified, asPhoto, ownTag))
 
 	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
 
 	c.Check(f.file(c, renamed.ID).Title, qt.Equals, "My Bosch invoice")
-	c.Check([]string(f.file(c, renamed.ID).Tags), qt.DeepEquals, []string{models.FileTagInvoice})
+	c.Check([]string(f.file(c, renamed.ID).Tags), qt.DeepEquals, []string{})
+	c.Check(f.file(c, classified.ID).Title, qt.Equals, "invoice-2")
 	c.Check([]string(f.file(c, classified.ID).Tags), qt.DeepEquals, []string{models.FileTagManual})
-	c.Check(f.file(c, classified.ID).Title, qt.Equals, "Sample Store invoice, March 2024")
+	c.Check(f.file(c, asPhoto.ID).Title, qt.Equals, "invoice-3")
+	c.Check([]string(f.file(c, asPhoto.ID).Tags), qt.DeepEquals, []string{models.FileTagPhoto})
+	c.Check(f.file(c, ownTag.ID).Title, qt.Equals, "Sample Store invoice, March 2024")
 	c.Check([]string(f.file(c, ownTag.ID).Tags), qt.DeepEquals, []string{"kitchen", models.FileTagInvoice})
 }
 
 // TestIntakeWorker_FileSuggestionsApplyOnce: a scan that failed and was
-// retried applies the suggestions once, and a rescan of the source changes
-// nothing more.
+// retried applies the suggestions once, with the worker's time, and a rescan
+// of the source changes nothing more.
 func TestIntakeWorker_FileSuggestionsApplyOnce(t *testing.T) {
 	c := qt.New(t)
 	f := newIntakeFixture(c)
@@ -114,12 +146,13 @@ func TestIntakeWorker_FileSuggestionsApplyOnce(t *testing.T) {
 	f.provider.failNext(aivision.ErrProviderUnavailable)
 
 	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
-	c.Check(f.file(c, receipt.ID).Title, qt.Equals, "receipt-coffee", qt.Commentf("a failed scan suggests nothing"))
+	assertUntouched(c, f.file(c, receipt.ID))
 	f.ahead += 10 * time.Minute
 	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
 	applied := f.file(c, receipt.ID)
 	c.Check(applied.Title, qt.Equals, "Sample Store receipt, March 2024")
 	c.Check([]string(applied.Tags), qt.DeepEquals, []string{models.FileTagInvoice})
+	c.Check(applied.UpdatedAt.After(time.Now().Add(5*time.Minute)), qt.IsTrue, qt.Commentf("updated at %s, from the worker's clock", applied.UpdatedAt))
 
 	must.Must(f.intake.Rescan(f.ctx, session.Session.ID, session.Sources[0].Source.ID))
 	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
@@ -127,35 +160,78 @@ func TestIntakeWorker_FileSuggestionsApplyOnce(t *testing.T) {
 	c.Check(f.provider.callCount(), qt.Equals, 3)
 }
 
-// editingProvider is the mock provider that lets the member change a file
-// while the scan runs.
+// editingProvider is the mock provider that runs edit while the scan runs,
+// once.
 type editingProvider struct {
 	*mock.Provider
 	edit func()
 }
 
 func (p *editingProvider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivision.ScanResult, error) {
-	p.edit()
+	if p.edit != nil {
+		p.edit()
+		p.edit = nil
+	}
 	return p.Provider.Scan(ctx, req)
 }
 
-// TestIntakeWorker_FileSuggestionsSeeEditsDuringTheScan: a title the member
-// sets while the scan runs stays.
+// TestIntakeWorker_FileSuggestionsSeeEditsDuringTheScan: a file the member
+// renames while the scan runs gets no suggestion.
 func TestIntakeWorker_FileSuggestionsSeeEditsDuringTheScan(t *testing.T) {
 	c := qt.New(t)
 	f := newIntakeFixture(c)
 	receipt := f.pdf(c, "receipt-coffee")
 	f.create(c, "during", source(receipt))
-	provider := &editingProvider{Provider: mock.New(), edit: func() {
+	worker := f.workerWith(&editingProvider{Provider: mock.New(), edit: func() {
 		f.editFile(c, receipt.ID, func(file *models.FileEntity) { file.Title = "Coffee receipt" })
-	}}
-	scan := services.NewCommodityScanService(provider, f.factorySet.CommodityScanAuditRegistry, services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100})
-	worker := services.NewIntakeWorker(f.factorySet, scan, f.uploadLocation, services.WithIntakeClock(f.clock))
+	}})
 
 	c.Assert(worker.Tick(context.Background()), qt.Equals, 1)
 	got := f.file(c, receipt.ID)
 	c.Check(got.Title, qt.Equals, "Coffee receipt")
-	c.Check([]string(got.Tags), qt.DeepEquals, []string{models.FileTagInvoice})
+	c.Check([]string(got.Tags), qt.DeepEquals, []string{})
+}
+
+// TestIntakeWorker_FileSuggestionsNeedTheStoredScan: when the source changes
+// during the scan, the result is dropped and the files stay as they are.
+func TestIntakeWorker_FileSuggestionsNeedTheStoredScan(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	receipt := f.pdf(c, "receipt-coffee")
+	session := f.create(c, "changed", source(receipt))
+	worker := f.workerWith(&editingProvider{Provider: mock.New(), edit: func() {
+		// The sweep takes the claim away, as when it thinks the worker died.
+		reg := f.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
+		c.Check(must.Must(reg.SweepStuckSources(context.Background(), time.Now().Add(time.Hour), time.Now(), 0, "")), qt.Equals, 1)
+	}})
+
+	c.Assert(worker.Tick(context.Background()), qt.Equals, 1)
+	c.Check(f.get(c, f.ctx, session.Session.ID).Sources[0].Source.Status, qt.Equals, models.IntakeSourcePending)
+	assertUntouched(c, f.file(c, receipt.ID))
+}
+
+// TestIntakeWorker_ExternalSourceKeepsItsFiles: a source that carries a
+// document of another system keeps the files as they came, even when it is
+// scanned.
+func TestIntakeWorker_ExternalSourceKeepsItsFiles(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	invoice := f.pdf(c, "invoice-9")
+	reg := must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx))
+	session, _, err := reg.CreateSession(f.ctx,
+		models.IntakeSession{ClientKey: "external-test", Origin: models.IntakeOriginExternal},
+		[]registry.IntakeSourceInput{{
+			FileIDs:            []string{invoice.ID},
+			OneItem:            true,
+			ExternalSystem:     "paperless-ngx",
+			ExternalDocumentID: "9",
+		}}, 0)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(f.worker.Tick(context.Background()), qt.Equals, 1)
+	c.Check(f.get(c, f.ctx, session.ID).Sources[0].Source.Status, qt.Equals, models.IntakeSourceScanned)
+	c.Check(f.provider.callCount(), qt.Equals, 1)
+	assertUntouched(c, f.file(c, invoice.ID))
 }
 
 // TestIntakeWorker_UnsureFileSuggestionsAreLeftOut: a suggestion below the
@@ -165,21 +241,17 @@ func TestIntakeWorker_UnsureFileSuggestionsAreLeftOut(t *testing.T) {
 	f := newIntakeFixture(c)
 	receipt := f.pdf(c, "scan-1")
 	f.create(c, "unsure", source(receipt))
-	provider := mock.New(mock.WithDefaultResult(aivision.ScanResult{
+	worker := f.workerWith(mock.New(mock.WithDefaultResult(aivision.ScanResult{
 		Fields: map[string]aivision.FieldGuess{aivision.FieldNameName: {Value: "Kettle", Confidence: 0.9}},
 		Files: []aivision.FileGuess{{
 			Index:        0,
 			DocumentType: &aivision.FieldGuess{Value: aivision.DocumentTypeInvoice, Confidence: services.IntakeAcceptConfidence / 2},
 			Title:        &aivision.FieldGuess{Value: "Maybe an invoice", Confidence: services.IntakeAcceptConfidence / 2},
 		}},
-	}))
-	scan := services.NewCommodityScanService(provider, f.factorySet.CommodityScanAuditRegistry, services.CommodityScanConfig{MaxPhotos: 5, MaxPhotoBytes: 1 << 20, RateLimitPerHour: 100})
-	worker := services.NewIntakeWorker(f.factorySet, scan, f.uploadLocation, services.WithIntakeClock(f.clock))
+	})))
 
 	c.Assert(worker.Tick(context.Background()), qt.Equals, 1)
-	got := f.file(c, receipt.ID)
-	c.Check(got.Title, qt.Equals, "scan-1")
-	c.Check([]string(got.Tags), qt.DeepEquals, []string{})
+	assertUntouched(c, f.file(c, receipt.ID))
 }
 
 // TestIntakeWorker_DeliveredFileKeepsItsTitle: a file delivered from another
