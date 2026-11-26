@@ -400,11 +400,7 @@ func scanItemTypesFromContext(ctx context.Context) []services.ScanItemType {
 		slog.Warn("commodity scan: item types unavailable, offering the built-in ones", "error", err.Error())
 		return nil
 	}
-	out := make([]services.ScanItemType, 0, len(types))
-	for _, t := range types {
-		out = append(out, services.ScanItemType{Slug: string(t.Slug), Name: t.DisplayName()})
-	}
-	return out
+	return services.ScanItemTypes(types)
 }
 
 // scanCustomFieldsFromContext lists the group's custom fields for the scan

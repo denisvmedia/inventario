@@ -26,6 +26,11 @@ var (
 	// ErrExportLinkNotRemovable is returned when the link to remove is the
 	// export link of a backup bundle.
 	ErrExportLinkNotRemovable = errx.NewSentinel("the export link of a backup file cannot be removed")
+	// ErrIntakeLinkNotRemovable is returned when the link to remove ties
+	// the file to a purchase of an intake session (#2810). The scan and the
+	// drafts of the session read the file through that link; deleting the
+	// session removes it.
+	ErrIntakeLinkNotRemovable = errx.NewSentinel("the link of a file to an intake session cannot be removed")
 )
 
 // FileLinkService attaches files to entities and removes attachments. It is the
@@ -193,8 +198,11 @@ func (s *FileLinkService) Detach(ctx context.Context, fileID, linkID string) (*m
 	if link == nil {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "file_link", "entity_id", linkID))
 	}
-	if link.EntityType == models.FileLinkExport {
+	switch link.EntityType {
+	case models.FileLinkExport:
 		return nil, errxtrace.Classify(ErrExportLinkNotRemovable, errx.Attrs("file_id", fileID))
+	case models.FileLinkIntake:
+		return nil, errxtrace.Classify(ErrIntakeLinkNotRemovable, errx.Attrs("file_id", fileID))
 	}
 
 	if _, err := fileReg.RemoveLink(ctx, fileID, linkID); err != nil {

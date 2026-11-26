@@ -531,7 +531,7 @@ func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
 // @Description is removed stays as a standalone file; deleting it is a separate
 // @Description call. Removing the attachment of an item's cover photo clears
 // @Description that item's cover choice. The link of a backup export file
-// @Description cannot be removed.
+// @Description and the link to a batch intake purchase cannot be removed.
 // @Tags files
 // @Accept json-api
 // @Produce json-api
@@ -540,7 +540,7 @@ func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
 // @Param linkID path string true "Link ID"
 // @Success 200 {object} jsonapi.FileResponse "The file with its remaining attachments"
 // @Failure 404 {object} jsonapi.Errors "File or link not found"
-// @Failure 422 {object} jsonapi.Errors "Export link"
+// @Failure 422 {object} jsonapi.Errors "Export or intake link"
 // @Router /g/{groupSlug}/files/{fileID}/links/{linkID} [delete].
 func (api *filesAPI) detachFile(w http.ResponseWriter, r *http.Request) {
 	registrySet := RegistrySetFromContext(r.Context())
@@ -601,7 +601,8 @@ func renderFileLinkError(w http.ResponseWriter, r *http.Request, err error) {
 	case errors.Is(err, services.ErrFileLinkInvalid),
 		errors.Is(err, services.ErrFileLinkTargetNotFound),
 		errors.Is(err, services.ErrExportFileNotAttachable),
-		errors.Is(err, services.ErrExportLinkNotRemovable):
+		errors.Is(err, services.ErrExportLinkNotRemovable),
+		errors.Is(err, services.ErrIntakeLinkNotRemovable):
 		unprocessableEntityError(w, r, err)
 	default:
 		renderEntityError(w, r, err)

@@ -293,6 +293,13 @@ export function formatBytes(value: number, opts: { locale?: string } = {}): stri
   return `${number} ${BINARY_SUFFIXES[unit]}`
 }
 
+// formatList joins items into one phrase of the locale ("JPEG, PNG and
+// PDF").
+export function formatList(items: readonly string[], opts: { locale?: string } = {}): string {
+  const locale = opts.locale ?? currentLocale()
+  return new Intl.ListFormat(locale, { style: "long", type: "conjunction" }).format(items)
+}
+
 // safeFilename converts a label into something safe to use in a download
 // `filename=` header. Strips path separators and Windows-reserved chars,
 // collapses any whitespace into a single underscore, and trims leading/

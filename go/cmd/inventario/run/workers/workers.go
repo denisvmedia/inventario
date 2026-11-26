@@ -158,7 +158,7 @@ func (c *Command) run() error {
 			},
 			bootstrap.StartImportWorker,
 		}},
-		{WorkerMedia, []starter{bootstrap.StartThumbnailWorker}},
+		{WorkerMedia, []starter{bootstrap.StartThumbnailWorker, bootstrap.StartIntakeWorker}},
 		{WorkerHousekeeping, []starter{
 			bootstrap.StartRefreshTokenCleanupWorker,
 			bootstrap.StartEmailVerificationCleanupWorker,
