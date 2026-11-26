@@ -48,13 +48,18 @@ interface Draft {
 
 const EMPTY_DRAFT: Draft = { fieldId: "", op: "", value: "", optionIds: [] }
 
-// The value a draft condition carries, or null while it is incomplete.
+// The value a draft condition carries, or null while it is incomplete. A
+// picked option the field no longer has (the field list was read again
+// while the menu was open) is left out: it is not listed, so it could not
+// be unticked.
 function draftValue(field: CustomField, draft: Draft): string | null {
   if (!draft.op) return null
   if (!opTakesValue(draft.op)) return ""
   switch (field.type) {
-    case "select":
-      return draft.optionIds.length > 0 ? draft.optionIds.join(",") : null
+    case "select": {
+      const ids = draft.optionIds.filter((id) => field.options.some((o) => o.id === id))
+      return ids.length > 0 ? ids.join(",") : null
+    }
     case "number":
     case "money": {
       const v = draft.value.trim()
