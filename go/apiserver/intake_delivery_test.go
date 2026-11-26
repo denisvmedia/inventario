@@ -338,19 +338,27 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 		name  string
 		body  string
 		field string
+		code  string
 	}{
 		{name: "a member given twice", body: `{` + member + `,"document_id":"118"}`, field: "document_id"},
 		{name: "a second object", body: `{` + member + `}{"title":"Other"}`},
 		{name: "text after the object", body: `{` + member + `} trailing`},
 		{name: "an unclosed object", body: `{` + member},
 		{name: "an empty body", body: ``},
+		// 300 and 300.0 are one number; as document ids they would be two.
+		{name: "a document id that is not an integer", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":300.0}`, field: "document_id", code: "validation_intake_field_type"},
+		{name: "a NUL in the title", body: `{"title":"Inv\u0000oice","source_system":"paperless-ngx","document_id":"117"}`, field: "title", code: "validation_intake_text"},
 	} {
 		c.Run(tc.name, func(c *qt.C) {
 			rr := env.raw(token, path, "application/json", []byte(tc.body))
 			c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf(rr.Body.String()))
 			if tc.field != "" {
+				code := tc.code
+				if code == "" {
+					code = "validation_intake_repeated_field"
+				}
 				c.Check(rr.Body.String(), qt.Contains, tc.field)
-				c.Check(rr.Body.String(), qt.Contains, "validation_intake_repeated_field")
+				c.Check(rr.Body.String(), qt.Contains, code)
 			}
 		})
 	}
@@ -366,6 +374,35 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 	rr = env.raw(token, path, "application/json", []byte("{"+member+"}\n\t "))
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 	c.Assert(env.openDrafts(), qt.HasLen, 1)
+
+	// An integer document id is its digits.
+	rr = env.raw(token, path, "application/json", []byte(`{"title":"Invoice","source_system":"paperless-ngx","document_id":300}`))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	c.Assert(decodeIntakeDocument(c, rr).Attributes.ExternalDocumentID, qt.Equals, "300")
+}
+
+// TestIntakeDelivery_FieldRefusedBeforeTheFile: a field the delivery refuses
+// fails it before the file part is read. The file part here never ends, so
+// reading it would fail in another way.
+func TestIntakeDelivery_FieldRefusedBeforeTheFile(t *testing.T) {
+	c := qt.New(t)
+	env, token := newIntakeDeliveryEnv(c)
+	path := env.groupPath(env.group, "/intake")
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	c.Assert(mw.WriteField("bogus", "x"), qt.IsNil)
+	for name, values := range paperlessForm("5") {
+		c.Assert(mw.WriteField(name, values[0]), qt.IsNil)
+	}
+	part, err := mw.CreateFormFile("file", "invoice.pdf")
+	c.Assert(err, qt.IsNil)
+	_, err = part.Write(pdf)
+	c.Assert(err, qt.IsNil)
+
+	rr := env.raw(token, path, mw.FormDataContentType(), buf.Bytes())
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf(rr.Body.String()))
+	c.Assert(rr.Body.String(), qt.Contains, "validation_intake_unknown_field")
+	c.Assert(rr.Body.String(), qt.Contains, "bogus")
 }
 
 func TestIntakeDelivery_WhoMayDeliver(t *testing.T) {

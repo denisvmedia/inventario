@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"mime"
 	"net/http"
+	"regexp"
 	"strings"
 
 	"github.com/go-chi/render"
@@ -244,6 +245,10 @@ func (api *intakeDeliveryAPI) readMultipart(r *http.Request, tenantID string) (s
 			fields.set(part.FormName(), string(value))
 			continue
 		}
+		// A field the delivery refuses fails it before the file is stored.
+		if err := fields.err(); err != nil {
+			return fields.delivery, file, err
+		}
 		if part.FormName() != intakeDeliveryFilePart || file != nil {
 			fields.fail(part.FormName(), validation.NewError("validation_intake_file", "only one file, in the part \"file\", is accepted"))
 			return fields.delivery, file, fields.err()
@@ -328,6 +333,11 @@ func (f *intakeFieldReader) readJSON(body io.Reader) error {
 		case string:
 			f.set(name, v)
 		case json.Number:
+			if intakeIdentityFields[name] && !intakeIntegerPattern.MatchString(v.String()) {
+				// 300 and 300.0 are one number but two document ids.
+				f.fail(name, validation.NewError("validation_intake_field_type", "must be a string or an integer"))
+				continue
+			}
 			f.set(name, v.String())
 		case nil:
 			f.set(name, "")
@@ -343,6 +353,13 @@ func (f *intakeFieldReader) readJSON(body io.Reader) error {
 	}
 	return f.err()
 }
+
+// intakeIdentityFields are the fields that identify the document. A JSON
+// number in one must be an integer, whose text is the same however it is
+// written.
+var intakeIdentityFields = map[string]bool{"source_system": true, "source_instance": true, "document_id": true}
+
+var intakeIntegerPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
 
 // intakeJSONError turns a JSON body over the size limit into 413 and any
 // other problem with it, including content after the object, into 422.
