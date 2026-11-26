@@ -1424,6 +1424,8 @@ definitions:
         - lost
         - disposed
         - written_off
+        - donated
+        - stolen
         example: disposed
         type: string
     type: object
@@ -5945,6 +5947,8 @@ definitions:
     - lost
     - disposed
     - written_off
+    - donated
+    - stolen
     type: string
     x-enum-varnames:
     - CommodityStatusInUse
@@ -5952,6 +5956,8 @@ definitions:
     - CommodityStatusLost
     - CommodityStatusDisposed
     - CommodityStatusWrittenOff
+    - CommodityStatusDonated
+    - CommodityStatusStolen
   models.CurrencyMigration:
     properties:
       commodity_count:
@@ -9435,8 +9441,8 @@ paths:
         name: type
         type: array
       - collectionFormat: multi
-        description: Filter by status (in_use, sold, lost, disposed, written_off);
-          repeat to OR
+        description: Filter by status (in_use, sold, lost, disposed, written_off,
+          donated, stolen); repeat to OR
         in: query
         items:
           type: string
@@ -13940,7 +13946,7 @@ paths:
         type: array
       - collectionFormat: multi
         description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
-          written_off); repeat to OR'
+          written_off, donated, stolen); repeat to OR'
         in: query
         items:
           type: string

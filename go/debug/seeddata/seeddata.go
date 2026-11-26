@@ -25,7 +25,8 @@
 //   - Services (#1508) — 2 active workshop dispatches + 2 completed
 //     services with cost recorded.
 //   - Status mix — at least one of each {sold, lost, disposed,
-//     written_off} so the Inactive toggle has filters to apply.
+//     written_off, donated, stolen} so the Inactive toggle has filters
+//     to apply.
 //   - Group membership (#1533) — admin (owner) + 1 'user'-role
 //     teammate + 1 pending viewer invite; a second group exists with
 //     the admin as a non-owner member so the group switcher dropdown

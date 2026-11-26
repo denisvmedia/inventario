@@ -585,6 +585,8 @@ an item as:
 | **Lost** | You can't find it — you can revert later. |
 | **Disposed** | Permanently removed from your inventory. |
 | **Written Off** | Written off, usually for insurance or accounting. |
+| **Donated** | You gave it away. |
+| **Stolen** | Someone took it; the note can hold a police report number. Use **Lost** for an item you can't find. |
 
 To change status, open the item and use the **Change Status** buttons, or
 change several items at once from the bulk-action bar (see [Select and change
@@ -605,8 +607,8 @@ The **All Items** page lists every item in your group. Across the top you have:
   notes, warranty notes, status note, or asset ID (`A-0042`). See [Searching for
   items](#searching-for-items).
 - **Type** — filter by one or more of your group's [item types](../item-types/).
-- **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**, or
-  **Written Off**.
+- **Status** — filter by **In Use**, **Sold**, **Lost**, **Disposed**,
+  **Written Off**, **Donated**, or **Stolen**.
 - **Area** — narrow to a single area, or **All areas**.
 - **Seller** — show items bought from one or more [sellers](../sellers/). The
   menu appears once your group has a seller.
@@ -814,13 +816,13 @@ On the **All Items** page you can act on several items at once:
        item's tags.
      - **Type…** — pick one of your group's [item types](../item-types/), or add
        one with **New type**, and click **Set type**.
-     - Under **Set status**, a status. **Lost**, **Disposed**, and
-       **Written Off** open the same dialog as a single change, for the
-       **date** and an optional **note**. An item that already has that
-       status keeps its own date and note. **In Use** asks for confirmation and
-       clears the status date, note, and sale price. **Sold** is not offered,
-       because each item needs its own sale price: mark items sold one at a
-       time.
+     - Under **Set status**, a status. **Lost**, **Disposed**,
+       **Written Off**, **Donated**, and **Stolen** open the same dialog as a
+       single change, for the **date** and an optional **note**. An item that
+       already has that status keeps its own date and note. **In Use** asks
+       for confirmation and clears the status date, note, and sale price.
+       **Sold** is not offered, because each item needs its own sale price:
+       mark items sold one at a time.
    - **Print labels** — opens the label page with a label for each selected
      item (see [Print labels](#print-labels)).
    - **Delete** — moves the selected items to the [Trash](../trash/) after a
