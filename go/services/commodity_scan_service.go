@@ -406,7 +406,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 		// Internal-only path: see the doc-comment above. Log loudly so
 		// the wiring failure is visible to operators even though no
 		// audit row is written (the FK constraint would reject it).
-		slog.Error("commodity scan called without tenant or user identity; deployment-wiring bug", "tenant_id_empty", tenantID == "", "user_id_empty", userID == "", "provider", s.providerName())
+		slog.ErrorContext(ctx, "commodity scan called without tenant or user identity; deployment-wiring bug", "tenant_id_empty", tenantID == "", "user_id_empty", userID == "", "provider", s.providerName())
 		return nil, errxtrace.Classify(ErrScanIdentityMissing)
 	}
 
@@ -706,7 +706,7 @@ func (s *CommodityScanService) checkRateLimit(ctx context.Context, tenantID, use
 		// Fail open on counter error — observability wins over a hard
 		// block. Log loudly so operators notice an actual outage of
 		// the audit store.
-		slog.Error("commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID, "provider", s.providerName())
+		slog.ErrorContext(ctx, "commodity scan rate-limit counter failed; allowing request", "error", err.Error(), "user_id", userID, "provider", s.providerName())
 		return nil
 	}
 	if count >= s.cfg.RateLimitPerHour {
@@ -752,6 +752,6 @@ func (s *CommodityScanService) writeAudit(ctx context.Context, audit models.Comm
 		return
 	}
 	if _, err := s.audit.Record(ctx, audit); err != nil {
-		slog.Error("commodity scan audit write failed", "error", err.Error(), "user_id", audit.UserID, "status", audit.Status)
+		slog.ErrorContext(ctx, "commodity scan audit write failed", "error", err.Error(), "user_id", audit.UserID, "status", audit.Status)
 	}
 }

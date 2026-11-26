@@ -933,6 +933,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Auth & Profile
 
+#### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L93–L97) shows an outline "Free plan" badge and an outline **Upgrade** button beside the avatar; the button opens [`PlansView.tsx`](../../design-mocks/src/views/PlansView.tsx).
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/ProfilePage.tsx` renders neither the badge nor the Upgrade link; the avatar row keeps only the avatar. `/plans` (`components/routing/PlansRoute.tsx`) redirects to the group home (`/g/<slug>` for the group in `?g=`, otherwise `/`) instead of showing its coming-soon page. With the flag on, the profile matches the mock and `/plans` is the coming-soon page as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. The redirect goes to the group home rather than the previous page: nothing links to `/plans` with the flag off, so a visit comes from an old link and usually has no previous page in the app.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the redirect target was agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
+
 #### 2026-11-24 — A third sign-in button for the operator's OpenID Connect provider
 
 - **Issue/PR**: #2786 / PR (pending)
@@ -981,6 +990,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent. If the upstream mock ever ships its own layout primitive, swap the token values to match and drop this entry. Pages requesting an exemption (centered error/auth/empty-state cards, print pages) are listed in the convention guard's `SPECIAL_PURPOSE_PAGES` allow list — those stay bespoke by design.
 
 ### Settings & Preferences
+
+#### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) (L31–L79) shows the Plan card: a `Zap` tile, "Pro Plan" with an **Active** badge, "Owner: …", an outline **Upgrade** button, three chips in the "9 / 500" form, and an info banner about the owner's subscription. [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (L138) puts a secondary "Free plan" badge under the name on the account card.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/components/groups/PlanCard.tsx` renders the same card anatomy with a `Gauge` tile, the title "Usage" and the three chips showing only the current count or size (no "/ limit"); the plan name, Active badge, owner line, Upgrade button and banner are not rendered. The card shows its skeleton until the feature flags have loaded, and the skeleton has the shape of the card the flag gives: without the owner line, Upgrade button and banner when plans are off. While the flags are still loading the skeleton assumes plans are off, so only a deployment with plans on sees the card grow when it loads. The account card on Preferences (`SettingsPage.tsx`) leaves out the "Free plan" badge. With the flag on, both match the mock as before.
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it. Storage usage is not a plan feature and stays visible. The title is "Usage" because the card also counts items and locations, so "Storage" would not fit; the tile icon is `Gauge`; the owner line goes with the plan.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default; the title, the icon and dropping the owner line were agent-suggested and accepted in the review of #2923.
+- **Reversion plan**: Back to the mock when the owner unfreezes plans and deployments turn the flag on.
 
 #### 2026-11-26 — Sections card in the group settings
 
@@ -1285,6 +1303,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Tables & Lists
 
+#### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
+
+- **Issue/PR**: #1389 / #2923
+- **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) (L87) has a Plan stat among four tiles.
+- **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders three tiles (Users, Groups, Created) in a `sm:grid-cols-3` grid; with the flag on it renders the Plan tile with the raw `plan_id` as before (see "Tenant detail header has no Plan-name lookup"). The tenant list already has no Plan column ("Admin Tenants list drops the mock's `Plan` column").
+- **Why**: The owner froze the plans feature; self-hosted installs must not show it, the admin pages included.
+- **Approved by**: user (explicit) — pre-approved for #1389 by the owner's decision of 2026-11-26 to hide the frozen plans feature behind a deployment flag that is off by default.
+- **Reversion plan**: Back to the four tiles when the owner unfreezes plans and deployments turn the flag on.
+
 #### 2026-11-25 — Trash page (`/g/:slug/trash`)
 
 - **Issue/PR**: #2799 / PR #2835
@@ -1471,7 +1498,32 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Cross-cutting (theme, density, a11y, performance)
 
-_None yet._
+#### 2026-11-26 — Long-form dialogs fill the screen below `sm`
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: Every dialog in the mock is the shadcn centered card at every width: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) keeps a 16px margin on each side below `sm` and opens with a fade and zoom. [`AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx), [`LocationDialog.tsx`](../../design-mocks/src/components/LocationDialog.tsx) and [`AreaDialog.tsx`](../../design-mocks/src/components/AreaDialog.tsx) have no phone layout of their own.
+- **Reality**: `frontend/src/components/ui/dialog.tsx` adds `variant="fullscreen-mobile"` to `DialogContent`. Below 640px the dialog covers the screen edge to edge (`100dvh`, no border, radius or shadow) and scrolls inside; `DialogHeader` sticks to the top with a bottom border and carries its own close button, the first control, so it takes the focus on open; `DialogFooter` sticks to the bottom with a top border and pads itself by `env(safe-area-inset-bottom)`. The dialog slides up from the bottom on open and down on close (a fade under reduced motion). From 640px up it is the centered card, which with this variant is never taller than the screen minus 2rem and scrolls as a whole (a phone held sideways). The variant is used by the item create/edit dialog (every step, the AI scan step included), location, area, custom field, seller, currency change, add from files, upload files, attach an existing file, restore from export, lend, edit loan, send for service, maintenance schedule, reminder, create API token and feedback dialogs. Confirmations and short dialogs stay centered cards at every width and open above a full-screen dialog. The on-screen keyboard still covers the bottom of the screen, the pinned footer included, while a field has the focus; that is not solved here.
+- **Why**: The owner approved the full-screen layout for every long-form dialog on 2026-11-26 (#1627): on a 375–412px phone the card loses 32px of width to its margins and a tall dialog's top runs off the screen.
+- **Approved by**: user (explicit) — owner decision of 2026-11-26 on #1627.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs; otherwise permanent.
+
+#### 2026-11-26 — Full-screen dialog header below `sm`: left-aligned, 44px close button
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogHeader` is `text-center sm:text-left`, so below `sm` the title and description are centered; the only close button is the 16px icon in the corner of the card.
+- **Reality**: In the `fullscreen-mobile` variant the header text is left-aligned at every width, and below `sm` the header holds a 44px square close button at its right edge; the title keeps 56px clear of it.
+- **Why**: A centered title collides with the close button that sits in the same row of the sticky header. 44px is the tap-target minimum of [14-accessibility.md](design/14-accessibility.md).
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
+
+#### 2026-11-26 — Full-screen dialog footer below `sm`: one row
+
+- **Issue/PR**: #1627 / PR #2904
+- **Mock**: [`design-mocks/src/components/ui/dialog.tsx`](../../design-mocks/src/components/ui/dialog.tsx) `DialogFooter` is `flex-col-reverse sm:flex-row sm:justify-end`, so below `sm` the buttons stack in a column.
+- **Reality**: In the `fullscreen-mobile` variant the footer lays its buttons out in a row at every width, aligned to the end, and wraps to a second row when they do not fit.
+- **Why**: The footer stays pinned to the bottom of the screen; stacked, three or four buttons would take a fifth of a phone screen.
+- **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
+- **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
 ### Backup & Restore
 

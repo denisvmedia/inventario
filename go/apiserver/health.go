@@ -69,7 +69,7 @@ func (api *healthAPI) readyz(w http.ResponseWriter, r *http.Request) {
 			Status: "error",
 			Error:  readinessCheckErrorMessage,
 		}
-		slog.Warn("Readiness check failed", "dependency", "database", "error", err)
+		slog.WarnContext(r.Context(), "Readiness check failed", "dependency", "database", "error", err)
 	} else {
 		resp.Checks["database"] = readinessCheck{
 			Status:  "ok",
@@ -88,7 +88,7 @@ func (api *healthAPI) readyz(w http.ResponseWriter, r *http.Request) {
 				Status: "error",
 				Error:  readinessCheckErrorMessage,
 			}
-			slog.Warn("Readiness check failed", "dependency", "redis", "error", err)
+			slog.WarnContext(r.Context(), "Readiness check failed", "dependency", "redis", "error", err)
 		} else {
 			resp.Checks["redis"] = readinessCheck{
 				Status:  "ok",

@@ -2,6 +2,7 @@ import { createContext, useContext, useEffect, useMemo, type ReactNode } from "r
 import { useLocation, useNavigate, useParams, useSearchParams } from "react-router-dom"
 
 import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { setCurrentGroupSlug } from "@/lib/group-context"
 
 import { useGroups } from "./hooks"
@@ -38,10 +39,19 @@ const PATHS_WITH_GROUP_QUERY = new Set([
   "/profile",
   "/profile/edit",
   "/settings",
-  "/plans",
   "/help",
   "/whats-new",
 ])
+
+// /plans renders a page only when the deployment has plans turned on
+// (#1389). With them off the route redirects to the group home, so it is
+// one of the redirect stubs above and must not get ?g= either.
+const PLANS_PATH = "/plans"
+
+function pathTakesGroupQuery(pathname: string, plansEnabled: boolean): boolean {
+  if (pathname === PLANS_PATH) return plansEnabled
+  return PATHS_WITH_GROUP_QUERY.has(pathname)
+}
 
 const Context = createContext<GroupContextValue | undefined>(undefined)
 
@@ -95,6 +105,7 @@ export function GroupProvider({ children }: GroupProviderProps) {
   const auth = useOptionalAuth()
   const user = auth?.user
   const { data: groups, isLoading, isError } = useGroups()
+  const plansEnabled = useFeatureFlag("plans") === true
 
   const slugFromPath = params.groupSlug ?? null
   const idFromPath = params.groupId ?? null
@@ -179,7 +190,7 @@ export function GroupProvider({ children }: GroupProviderProps) {
     if (idFromPath) return
     if (!groups || groups.length === 0) return
     if (slugFromQuery && groups.some((g) => g.slug === slugFromQuery)) return
-    if (!PATHS_WITH_GROUP_QUERY.has(location.pathname)) return
+    if (!pathTakesGroupQuery(location.pathname, plansEnabled)) return
     const preferredSlug =
       (user?.default_group_id ? groups.find((g) => g.id === user.default_group_id)?.slug : null) ??
       groups.find((g) => !!g.slug)?.slug
@@ -199,6 +210,7 @@ export function GroupProvider({ children }: GroupProviderProps) {
     groups,
     user?.default_group_id,
     location.pathname,
+    plansEnabled,
     navigate,
     setSearchParams,
   ])

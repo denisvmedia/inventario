@@ -61,7 +61,7 @@ func (api *savedViewsAPI) actor(w http.ResponseWriter, r *http.Request) (service
 			http.Error(w, "Forbidden", http.StatusForbidden)
 			return services.SavedViewActor{}, false
 		}
-		slog.Error("saved views: role lookup failed", "group_id", group.ID, "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "saved views: role lookup failed", "group_id", group.ID, "user_id", user.ID, "error", err)
 		internalServerError(w, r, err)
 		return services.SavedViewActor{}, false
 	}

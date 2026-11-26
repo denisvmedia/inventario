@@ -1614,13 +1614,16 @@ export function CommodityFormDialog({
         onOpenChange(next)
       }}
     >
-      {/* `max-h-[90vh] overflow-y-auto` keeps the whole dialog scrollable
-          inside the viewport. Without it the centered-translate
+      {/* Below `sm` the dialog fills the screen ("fullscreen-mobile"):
+          the header and footer stick and the steps scroll between them.
+          From `sm` up, `max-h-[90vh] overflow-y-auto` keeps the card
+          scrollable inside the viewport. Without it the centered-translate
           positioning lets a tall variant (e.g. the #1554 bundle banner +
           the 5-step wizard combined) push the footer below the visible
           viewport on small CI viewports, and Playwright's actionability
           check refuses to click an off-viewport Next button. */}
       <DialogContent
+        variant="fullscreen-mobile"
         // `interpolate-size: allow-keywords` lets CSS animate height
         // to/from `auto`, so step swaps and within-step reveals (e.g.
         // "+ Add" URL row, "This item has multiple serial numbers")
@@ -1628,15 +1631,10 @@ export function CommodityFormDialog({
         // covers both the content height and the centred-translate
         // recalc Radix performs when the box grows or shrinks.
         //
-        // `max-w-2xl` only on `sm:` so the shadcn baseline
-        // `max-w-[calc(100%-2rem)]` keeps the mobile dialog 16px
-        // away from each edge — without `sm:` our override widens
-        // the box to the viewport on mobile and long filenames poke
-        // off the right edge. `overflow-x-hidden` is a belt-and-
-        // suspenders cap: even if a child somehow exceeds the
-        // content area, it gets clipped instead of pushing the
-        // dialog wider.
-        className="max-h-[90vh] overflow-x-hidden overflow-y-auto sm:max-w-2xl transition-[height,max-height,transform] duration-200 ease-out [interpolate-size:allow-keywords]"
+        // `overflow-x-hidden` is a belt-and-suspenders cap: even if a
+        // child somehow exceeds the content area, it gets clipped
+        // instead of pushing the dialog wider.
+        className="overflow-x-hidden overflow-y-auto sm:max-h-[90vh] sm:max-w-2xl transition-[height,max-height,transform] duration-200 ease-out [interpolate-size:allow-keywords]"
         data-testid="commodity-form-dialog"
       >
         <DialogHeader>
@@ -3375,6 +3373,10 @@ function TagsSuggestionChips({
 // post-layout pixel height; we feed that back into the wrapper's
 // inline style and let the CSS `transition-[height]` rule animate
 // between the old and new pixel values.
+//
+// The height applies from `sm` up only. Below `sm` the dialog fills the
+// screen and scrolls, so a step keeps its natural height and swaps
+// without animating a box whose size the user cannot see change.
 function StepResizeWrapper({ children }: { children: ReactNode }) {
   const innerRef = useRef<HTMLDivElement>(null)
   const [height, setHeight] = useState<number | null>(null)
@@ -3408,7 +3410,9 @@ function StepResizeWrapper({ children }: { children: ReactNode }) {
         // visible — `overflow-hidden` was eating them on inputs near
         // the wrapper edge.
         "overflow-clip [overflow-clip-margin:6px]",
-        transitionsReady && "transition-[height] duration-200 ease-out"
+        // Only an important rule overrides the inline height.
+        "max-sm:h-auto!",
+        transitionsReady && "sm:transition-[height] sm:duration-200 sm:ease-out"
       )}
     >
       <div ref={innerRef}>{children}</div>

@@ -71,13 +71,13 @@ func NewBusinessCollector(source BusinessStatsFunc, interval time.Duration) *Bus
 // configured.
 func (c *BusinessCollector) Start(ctx context.Context) {
 	if c.source == nil {
-		c.logger.Warn("BusinessCollector: no source configured, skipping startup")
+		c.logger.WarnContext(ctx, "BusinessCollector: no source configured, skipping startup")
 		return
 	}
 	c.wg.Go(func() {
 		c.run(ctx)
 	})
-	c.logger.Info("Business metrics collector started", "interval", c.interval)
+	c.logger.InfoContext(ctx, "Business metrics collector started", "interval", c.interval)
 }
 
 // Stop signals the goroutine and waits for it to exit. Safe to call
@@ -120,7 +120,7 @@ func (c *BusinessCollector) collectOnce(ctx context.Context) {
 	stats, err := c.source(ctx)
 	if err != nil {
 		businessCollectErrorsTotal.Inc()
-		c.logger.Warn("Business metrics collection failed", "error", err)
+		c.logger.WarnContext(ctx, "Business metrics collection failed", "error", err)
 		return
 	}
 

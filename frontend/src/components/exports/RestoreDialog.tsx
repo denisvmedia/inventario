@@ -19,6 +19,7 @@ import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { type Export } from "@/features/export/api"
 import { useCreateRestore } from "@/features/export/hooks"
 import { useAppToast } from "@/hooks/useAppToast"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { formatDateTime } from "@/lib/intl"
 
 export interface RestoreDialogProps {
@@ -42,24 +43,35 @@ const defaultState: RestoreOptionsFormValue = {
 //
 // Wrapper-only: form state lives inside `RestoreDialogContent` so a fresh
 // state is acquired every time the dialog opens (the inner component is
-// keyed on `exp.id` and only mounts while open). Avoids the React-19
+// keyed on `exp.id` and lives in the dialog content, which mounts on open
+// and unmounts once the close animation ends). Avoids the React-19
 // `react-hooks/set-state-in-effect` smell of resetting state in a useEffect.
+// The parent clears the export when it closes the dialog; the dialog keeps
+// showing it while it closes.
 export function RestoreDialog({
   open,
   onOpenChange,
   export: exp,
   onCompleted,
 }: RestoreDialogProps) {
+  const visible = open && !!exp
+  const shown = useValueWhileOpen(visible, exp)
   return (
-    <Dialog open={open && !!exp} onOpenChange={onOpenChange}>
-      {exp && open && (
-        <RestoreDialogContent
-          key={exp.id}
-          export={exp}
-          onOpenChange={onOpenChange}
-          onCompleted={onCompleted}
-        />
-      )}
+    <Dialog open={visible} onOpenChange={onOpenChange}>
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="restore-dialog"
+      >
+        {shown && (
+          <RestoreDialogContent
+            key={shown.id}
+            export={shown}
+            onOpenChange={onOpenChange}
+            onCompleted={onCompleted}
+          />
+        )}
+      </DialogContent>
     </Dialog>
   )
 }
@@ -123,7 +135,7 @@ function RestoreDialogContent({
   }
 
   return (
-    <DialogContent className="sm:max-w-lg" data-testid="restore-dialog">
+    <>
       <DialogHeader>
         <DialogTitle>{t("exports:restore.dialog.title")}</DialogTitle>
         <DialogDescription>{description}</DialogDescription>
@@ -162,6 +174,6 @@ function RestoreDialogContent({
               : t("exports:restore.dialog.submit")}
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </>
   )
 }

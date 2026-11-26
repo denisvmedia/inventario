@@ -104,7 +104,7 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 		hidden, hideErr := sections.hides(ctx, m.GroupID, models.GroupSectionMaintenance)
 		if hideErr != nil {
 			stats.Failed++
-			slog.Error("maintenance reminder failed",
+			slog.ErrorContext(ctx, "maintenance reminder failed",
 				"schedule_id", m.ID,
 				"error", hideErr,
 			)
@@ -116,7 +116,7 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 		target, planErr := s.planSchedule(ctx, m, now, prefsCache, sweep)
 		if planErr != nil {
 			stats.Failed++
-			slog.Error("maintenance reminder failed",
+			slog.ErrorContext(ctx, "maintenance reminder failed",
 				"schedule_id", m.ID,
 				"error", planErr,
 			)
@@ -126,7 +126,7 @@ func (s *MaintenanceReminderService) RemindOnce(ctx context.Context, now time.Ti
 			ok, processErr := s.processOne(ctx, m, threshold, target, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
-				slog.Error("maintenance reminder failed",
+				slog.ErrorContext(ctx, "maintenance reminder failed",
 					"schedule_id", m.ID,
 					"threshold", threshold,
 					"error", processErr,
@@ -429,8 +429,7 @@ func (s *MaintenanceReminderService) commitWithoutSend(ctx context.Context, m *m
 		if commodity != nil {
 			attrs = append(attrs, "commodity_id", commodity.ID, "group_id", commodity.GroupID)
 		}
-		//nolint:sloglint // structured fields are constructed dynamically.
-		slog.Info("maintenance reminder row inserted without sending email", attrs...)
+		slog.InfoContext(ctx, "maintenance reminder row inserted without sending email", attrs...)
 	}
 	return false, nil
 }
@@ -460,7 +459,7 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			continue
 		}
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, commodity.TenantID, commodity.GroupID, notifications.CategoryMaintenanceReminder, notifications.ChannelEmail) {
-			slog.Debug("maintenance reminder: recipient opted out",
+			slog.DebugContext(ctx, "maintenance reminder: recipient opted out",
 				"schedule_id", m.ID,
 				"group_id", commodity.GroupID,
 				"to", r.email,
@@ -474,7 +473,7 @@ func (s *MaintenanceReminderService) fanOutToRecipients(
 			if firstEnqueueErr == nil {
 				firstEnqueueErr = sendErr
 			}
-			slog.Error("maintenance reminder: enqueue failed",
+			slog.ErrorContext(ctx, "maintenance reminder: enqueue failed",
 				"schedule_id", m.ID,
 				"to", r.email,
 				"error", sendErr,

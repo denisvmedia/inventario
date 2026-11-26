@@ -98,10 +98,10 @@ func (m *Migrator) SetLogger(logger *slog.Logger) *Migrator {
 
 // MigrateUp applies migrations using embedded migrations or file-based migrations
 func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
-	m.logger.Info("Applying migrations up", "db_url", m.dbURL, "dry_run", args.DryRun)
+	m.logger.InfoContext(ctx, "Applying migrations up", "db_url", m.dbURL, "dry_run", args.DryRun)
 
 	if args.DryRun {
-		m.logger.Info("Dry run mode enabled - no actual changes will be made")
+		m.logger.InfoContext(ctx, "Dry run mode enabled - no actual changes will be made")
 	}
 
 	// Connect to database using standard ptah approach
@@ -129,7 +129,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 	fmt.Println("Using file-based migrations...")
 
 	if args.DryRun {
-		m.logger.Info("Dry run completed successfully")
+		m.logger.InfoContext(ctx, "Dry run completed successfully")
 		return nil
 	}
 
@@ -174,7 +174,7 @@ func (m *Migrator) MigrateUp(ctx context.Context, args Args) error {
 		return errxtrace.Wrap("post-migrate schema verification failed", err)
 	}
 
-	m.logger.Info("Migrations completed successfully")
+	m.logger.InfoContext(ctx, "Migrations completed successfully")
 	return nil
 }
 
@@ -205,7 +205,7 @@ func (m *Migrator) verifyExtensions(ctx context.Context) error {
 		return nil
 	}
 
-	m.logger.Error("required PostgreSQL extension is missing — bootstrap has not run against this database",
+	m.logger.ErrorContext(ctx, "required PostgreSQL extension is missing — bootstrap has not run against this database",
 		"missing", strings.Join(missing, ", "),
 	)
 
@@ -469,7 +469,7 @@ func (m *Migrator) DropDatabase(ctx context.Context, dryRun bool, confirm bool) 
 		return errxtrace.Wrap("failed to parse database DSN", err)
 	}
 
-	m.logger.Info("Preparing to drop database", "database", dbName, "dry_run", dryRun)
+	m.logger.InfoContext(ctx, "Preparing to drop database", "database", dbName, "dry_run", dryRun)
 
 	fmt.Printf("Target database: %s\n", dbName)
 	fmt.Println()

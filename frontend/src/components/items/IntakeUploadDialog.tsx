@@ -107,15 +107,32 @@ export interface IntakeUploadDialogProps {
 // IntakeUploadDialog sends dropped files to batch intake (#2810): it uploads
 // each file, then queues the batch for the background scan. Each file is a
 // purchase of its own unless the member says that all files show one item.
+// The form lives in the dialog content, which mounts on open and unmounts
+// once the close animation ends, so every open starts with the files just
+// dropped. It is keyed on the opening, so a dialog opened again during the
+// close animation starts a new form too.
 export function IntakeUploadDialog(props: IntakeUploadDialogProps) {
+  const [opening, setOpening] = useState(0)
+  const [wasOpen, setWasOpen] = useState(props.open)
+  if (props.open !== wasOpen) {
+    setWasOpen(props.open)
+    if (props.open) setOpening((n) => n + 1)
+  }
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
-      {props.open ? <IntakeUploadForm {...props} /> : null}
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="intake-upload-dialog"
+      >
+        <IntakeUploadForm key={opening} {...props} />
+      </DialogContent>
     </Dialog>
   )
 }
 
 function IntakeUploadForm({
+  open,
   onOpenChange,
   limits,
   initialFiles,
@@ -139,6 +156,8 @@ function IntakeUploadForm({
   // moves those files to Trash once the run has stopped.
   const unqueued = useRef(new Set<string>())
   const running = useRef<Promise<void> | null>(null)
+  // False once the dialog has closed. The form stays mounted through the
+  // close animation, so closing, not the unmount, is what stops the run.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -150,6 +169,9 @@ function IntakeUploadForm({
       )
     }
   }, [queryClient])
+  useEffect(() => {
+    if (!open) mounted.current = false
+  }, [open])
 
   const accepted = new Set(limits.acceptedMimeTypes)
   const maxFiles = oneItem
@@ -281,7 +303,7 @@ function IntakeUploadForm({
   }
 
   return (
-    <DialogContent className="sm:max-w-lg" data-testid="intake-upload-dialog">
+    <>
       <DialogHeader>
         <DialogTitle>{t("commodities:intake.upload.title")}</DialogTitle>
         <DialogDescription>{t("commodities:intake.upload.description")}</DialogDescription>
@@ -297,7 +319,7 @@ function IntakeUploadForm({
 
       {files.length > 0 ? (
         <ul
-          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border"
+          className="flex max-h-64 flex-col divide-y divide-border overflow-y-auto rounded-md border max-sm:max-h-none"
           data-testid="intake-upload-files"
         >
           {files.map((f) => {
@@ -444,7 +466,7 @@ function IntakeUploadForm({
               : t("commodities:intake.upload.submit", { count: sendable.length })}
         </Button>
       </DialogFooter>
-    </DialogContent>
+    </>
   )
 }
 

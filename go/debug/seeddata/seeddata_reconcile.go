@@ -97,7 +97,7 @@ func reconcileSeedBlobs(ctx context.Context, set *registry.Set, tenant *models.T
 		}
 	}
 	if repaired > 0 || resized > 0 {
-		slog.Info("Reconciled seed blobs",
+		slog.InfoContext(ctx, "Reconciled seed blobs",
 			"tenant", tenant.Slug,
 			"bytes_rewritten", repaired,
 			"sizes_healed", resized,

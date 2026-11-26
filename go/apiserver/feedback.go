@@ -177,7 +177,7 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		// only bounces the shell for *untyped* 503s; a dotted JSON:API
 		// error code marks this as a per-feature state, not an outage
 		// (same contract as commodity_scan.provider_disabled, #1720).
-		slog.Warn("Feedback submission rejected: SUPPORT_EMAIL not configured", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Feedback submission rejected: SUPPORT_EMAIL not configured", "user_id", user.ID)
 		_ = render.Render(w, r, jsonapi.NewErrors(jsonapi.Error{
 			Err:            errFeedbackNotConfigured,
 			UserError:      errormarshal.Marshal(errFeedbackNotConfigured),
@@ -252,12 +252,12 @@ func (api *feedbackAPI) submit(w http.ResponseWriter, r *http.Request) {
 		replyTo,
 		diagnostics,
 	); err != nil {
-		slog.Error("Failed to enqueue feedback email", "error", err, "user_id", user.ID, "type", typeLabel)
+		slog.ErrorContext(r.Context(), "Failed to enqueue feedback email", "error", err, "user_id", user.ID, "type", typeLabel)
 		http.Error(w, "Failed to send feedback", http.StatusInternalServerError)
 		return
 	}
 
-	slog.Info("Feedback submitted",
+	slog.InfoContext(r.Context(), "Feedback submitted",
 		"user_id", user.ID,
 		"type", typeLabel,
 		"message_chars", len(message),
