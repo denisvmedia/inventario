@@ -63,6 +63,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2812 by the 2026-11-24 goal to implement the open enhancements; the 20-character cut agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Permanent.
 
+#### 2026-11-25 — Batch intake on the Items page: drop target, Add from files, intake dialog, batches card
+
+- **Issue/PR**: #2810 / #2869
+- **Mock**: [`design-mocks/src/views/ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) has one primary **Add Item** button in the header, no drop target and no list of scanned files. [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) scans photos for one item only.
+- **Reality**: Files dragged from the desktop over the Items page show a fixed overlay (`bg-background/80`, a dashed `border-primary` card with a `FileUp` icon, "Drop files to add items"); dropping them opens `frontend/src/components/items/IntakeUploadDialog.tsx`. An outline **Add from files** button (`FileUp`) before **Add item** opens the same dialog with no files. Both show only to members who can edit items, outside a currency migration, when the server has an AI scan provider. The dialog (`sm:max-w-lg`) states the limits, lists each file with its size or the reason it will not be sent (a type the scan does not read, naming the types it reads; a HEIC photo, saying to save it as JPEG; size; batch count), has an outline small **Add files** button, a **All files show one item** `Switch` with a hint line, a destructive `Alert` when the scan queue has no room, and a destructive `Alert` when an upload or the queue request fails; the primary button reads "Scan N files", "Uploading N of M…" while it runs, then "Try again"; an `sr-only` polite status region announces the upload progress and each row's name carries an `sr-only` "uploading" or "uploaded". `frontend/src/components/items/IntakeCard.tsx` renders a `Card` between the page header and the inbox line while the group has batches: a `ScanText` title "Added from files" with a count `Badge`, one row per batch with a state icon, "N files", a state `Badge` (Scanning / To review / Done), "Added {relative time} · summary", an outline small **Review** or **Open** button and, for a batch that is not scanning, a ghost `Trash2` button that removes it after the confirm dialog.
+- **Why**: not present in mock. The issue asks for a drop target on the Items page, explicit limits and progress, and a summary such as "7 drafts created, 1 file unreadable". The **Add from files** button gives keyboard and touch users the same entry as the drop target, and the queued-batch navigation to the review page follows from the issue's progress requirement; both are agent-suggested. The card's placement above the inbox line and its remove button are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the Add from files button, the opening of the review after queuing, the card placement and the card's remove button agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: The inbox lists the open batches too (see "Batches of files in the inbox"); the card stays as the Items page's list of every batch, the finished ones included. Follow the mock if `inventario-design` draws batch intake.
+
+#### 2026-11-25 — Batch review page (`/g/:slug/intake/:id`)
+
+- **Issue/PR**: #2810 / #2869
+- **Mock**: No such page in [`design-mocks/src/views/`](../../design-mocks/src/views/). Fallback: [`design-mocks/src/views/UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (Card, Checkbox, Badge, Alert, Button, Input).
+- **Reality**: `frontend/src/pages/intake/IntakeSessionPage.tsx` is a narrow `Page` with a detail `PageHeader`: a back link to Items, "Review files" with the state `Badge`, "Added {date} · summary" as the subtitle, and for members who can edit an outline **Stop scanning** (while scanning), an outline **Retry unfinished** (when files failed or were stopped) and a ghost `Trash2` remove button. While files are scanned a default `Alert` with a spinning `Loader2` says the scan runs on the server. Each purchase is a `Card`: a 40px thumbnail or `FileText` tile, the file name (or "name and N more files"), a **One item** outline `Badge`, a status line (queued, waiting for the hourly scan limit, retried shortly, scanning, stopped, N products found, or why it failed in destructive text) and a ghost small **Rescan** in `CardAction` while the file is not queued or scanned and none of its products has a draft; when the server still refuses (a draft the page did not know of, or a scan still running after Stop scanning), an error toast says why and the page reads the batch again. Each product is a row with a `Checkbox` (make a draft), the name (italic muted "Unnamed product" without one), brand, model and the line amount, a quantity `Input` (`h-8 w-20`), a ghost toggle "N fields used" that lists every field the scan read with a `Checkbox`, its value and the confidence, and an outcome `Badge` (Draft created / Left out / Draft failed) with an outline **Continue** button that opens the draft in the item form. A sticky footer with a top border says how many products become drafts and holds the primary **Create N drafts** (or **Leave all out**) button while something is undecided; a click first waits for the product choices still being saved (the button stays enabled meanwhile, since the quantity field saves on the blur that the press on the button causes, and a button disabled between press and release loses the click), and the button and every **Rescan** stay disabled until the drafts are made.
+- **Why**: not present in mock. The issue asks for a durable review where the member keeps some detected products, accepts or rejects fields, and sees per-product and per-file outcomes on any device. The sticky footer and the per-field confidence are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the sticky footer and the confidence column agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a batch review; permanent otherwise.
+
 #### 2026-11-25 — Views control on the items list toolbar
 
 - **Issue/PR**: #2793 / #2839
@@ -455,6 +473,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2794 by the 2026-11-24 goal to implement the open enhancements; the tab choice agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Add a Drafts filter if the item query gains one that covers server drafts; otherwise permanent.
 
+#### 2026-11-25 — Batches of files in the inbox
+
+- **Issue/PR**: #2810 / #2869
+- **Mock**: none. `design-mocks/src/views/` has no inbox and no batch intake.
+- **Reality**: `frontend/src/pages/inbox/InboxPage.tsx` lists every batch of files that is not finished, after the drafts and the items to review, in the row anatomy of the other inbox rows: a `ScanText` icon, "Batch of N files" with the batch's state `Badge` (Scanning / To review / Done, shared with the Items page card), an "Added from files" reason `Badge`, and "Added {relative time} · summary" ("1 of 3 scanned", "2 products to review", "1 file unreadable") as the meta text. The row ends with an outline small **Review** (a batch to review, for members who can edit) or **Open** button that opens the batch's review page, and for a batch that is not scanning a ghost `Trash2` button that removes it after the confirm dialog. A fourth tab **From files (N)** filters them. While a batch on the page is being scanned, the page is read again every 3 seconds. The Items page's inbox line leaves batches out of its summary, since the Items page lists them in its own card; the dashboard card and the sidebar count include them.
+- **Why**: #2794 asks the inbox to hold pending and failed intake next to the drafts, and #2810 says the results of a batch wait in the inbox. A batch whose file could not be read stays until a member retries or removes it, so a failure is not lost. Placing the batches after the items to review keeps the page of a review entry in the All list computable from the number of drafts. The polling, the remove button in the row and leaving batches out of the Items page line are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #2810 and #2794 by the 2026-11-24 goal to implement the open enhancements; the order, polling, remove button and Items page line agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an inbox.
+
 ### Dashboard / Overview
 
 #### 2026-11-25 — Needs attention card on the dashboard
@@ -569,6 +596,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage in the stats strip.
 
 ### Files & Attachments
+
+#### 2026-11-25 — "Added from files" link on the file detail
+
+- **Issue/PR**: #2810 / #2869
+- **Mock**: [`design-mocks/src/views/FileBrowserView.tsx`](../../design-mocks/src/views/FileBrowserView.tsx) has no "Linked to" list; the list itself is an earlier deviation.
+- **Reality**: `frontend/src/components/files/FileLinksList.tsx` shows a file held by a batch of dropped files as "Added from files" with a `ScanText` icon, without a link and without the remove button: the batch holds the file until the batch is removed.
+- **Why**: not present in mock. Files dropped for batch intake are ordinary files of the group, so the list has to name what holds them. Leaving out the remove button is agent-suggested: detaching the file would leave the purchase with nothing to scan.
+- **Approved by**: user (explicit) — pre-approved for #2810 by the 2026-11-24 goal to implement the open enhancements; the missing remove button agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent.
 
 #### 2026-11-25 — Files bulk bar: Tags… button and dialog
 

@@ -225,3 +225,80 @@ func TestInboxReason_Valid(t *testing.T) {
 	c.Check(services.InboxReason("no_location").Valid(), qt.IsFalse)
 	c.Check(services.InboxReason("").Valid(), qt.IsFalse)
 }
+
+func TestInboxService_IntakeSessions(t *testing.T) {
+	c := qt.New(t)
+	f := newDraftFixture(c)
+	svc := services.NewInboxService()
+	intake := f.regs.IntakeRegistry
+	worker := f.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
+	session := func(key string, files ...string) *models.IntakeSession {
+		var ids []string
+		for _, name := range files {
+			ids = append(ids, f.file(c, name).ID)
+		}
+		s, _, err := intake.CreateSession(f.ctx, models.IntakeSession{ClientKey: key}, []registry.IntakeSourceInput{{FileIDs: ids}}, 0)
+		c.Assert(err, qt.IsNil)
+		time.Sleep(5 * time.Millisecond)
+		return s
+	}
+	scan := func(names ...string) {
+		src := must.Must(worker.ClaimNextSource(f.ctx, time.Now().Add(time.Second)))
+		var found registry.IntakeScan
+		for _, name := range names {
+			found.Candidates = append(found.Candidates, models.IntakeCandidate{
+				Fields:   models.IntakeFields{"name": {Value: name, Confidence: 0.9}},
+				Selected: true, AcceptedFields: []string{"name"}, Quantity: 1,
+			})
+		}
+		c.Assert(worker.StoreScan(f.ctx, src.ID, src.Attempts, found, time.Now()), qt.IsNil)
+	}
+
+	// A batch whose products all have an outcome is finished.
+	done := session("done", "done.jpg")
+	scan("Kettle")
+	cands := must.Must(intake.ListCandidates(f.ctx, done.ID))
+	must.Must(intake.SetCandidateOutcome(f.ctx, cands[0].ID, models.IntakeCandidateCreated, new("draft-1"), ""))
+	// A batch with a product to decide on.
+	review := session("review", "receipt.jpg", "box.jpg")
+	scan("Lamp", "Bulb")
+	// A batch whose file could not be scanned.
+	failed := session("failed", "blurry.jpg")
+	src := must.Must(worker.ClaimNextSource(f.ctx, time.Now().Add(time.Second)))
+	c.Assert(worker.FailSource(f.ctx, src.ID, src.Attempts, services.IntakeErrorFileUnreadable), qt.IsNil)
+	// A batch still in the queue.
+	queued := session("queued", "later.jpg")
+	f.draft(c, "key-saw", "Saw")
+
+	counts, err := svc.Count(f.ctx, f.regs)
+	c.Assert(err, qt.IsNil)
+	c.Check(counts, qt.DeepEquals, services.InboxCounts{
+		Total:   4,
+		Reasons: map[services.InboxReason]int{services.InboxReasonDraft: 1, services.InboxReasonIntake: 3},
+	})
+
+	page, err := svc.List(f.ctx, f.regs, services.InboxListOptions{Limit: 50})
+	c.Assert(err, qt.IsNil)
+	c.Check(page.Counts, qt.DeepEquals, counts)
+	intakeReason := []services.InboxReason{services.InboxReasonIntake}
+	c.Check(inboxRows(page.Entries), qt.DeepEquals, []inboxRow{
+		{Kind: services.InboxKindDraft, Title: "Saw", Reasons: []services.InboxReason{services.InboxReasonDraft}},
+		// The batches come last, newest first.
+		{Kind: services.InboxKindIntakeSession, Reasons: intakeReason, Files: 1},
+		{Kind: services.InboxKindIntakeSession, Reasons: intakeReason, Files: 1},
+		{Kind: services.InboxKindIntakeSession, Reasons: intakeReason, Files: 2},
+	})
+	ids := []string{page.Entries[1].ID, page.Entries[2].ID, page.Entries[3].ID}
+	c.Check(ids, qt.DeepEquals, []string{queued.ID, failed.ID, review.ID})
+	c.Check(page.Entries[1].Intake.State(), qt.Equals, models.IntakeSessionProcessing)
+	c.Check(page.Entries[2].Intake.Failed, qt.Equals, 1)
+	c.Check(page.Entries[3].Intake.Undecided, qt.Equals, 2)
+	c.Check(page.Entries[3].UpdatedAt, qt.IsNotNil)
+	c.Check(page.Entries[0].Intake, qt.IsNil)
+
+	page, err = svc.List(f.ctx, f.regs, services.InboxListOptions{Reason: services.InboxReasonIntake, Limit: 1, Offset: 2})
+	c.Assert(err, qt.IsNil)
+	c.Check(page.Total, qt.Equals, 3)
+	c.Check(page.Entries, qt.HasLen, 1)
+	c.Check(page.Entries[0].ID, qt.Equals, review.ID)
+}

@@ -44,5 +44,7 @@ describe("inbox review list context", () => {
     // A reason the inbox ranks after the items to review, or one this client
     // does not know, comes after them and moves nothing.
     expect(reviewPageForAllOffset(52, { draft: 2, item_draft: 60, later: 40 })).toBe(2)
+    // Batches of files are ranked after the items to review.
+    expect(reviewPageForAllOffset(52, { draft: 2, item_draft: 60, intake: 40 })).toBe(2)
   })
 })

@@ -17,6 +17,7 @@ export interface FakeInboxEntry {
   reasons: string[]
   updated_at?: string | null
   file_count?: number
+  intake?: { state: string; summary: Record<string, number> }
 }
 
 export interface FakeInboxCheck {
@@ -66,6 +67,26 @@ export function itemDraft(id: string, title: string, extra: Partial<FakeInboxEnt
   return { kind: "commodity", id, title, reasons: ["item_draft"], updated_at: null, ...extra }
 }
 
+// intakeSession is an open batch of files (#2810) in the given state with the
+// summary counts given; the rest of the summary is zero.
+export function intakeSession(
+  id: string,
+  state: "processing" | "review" | "done",
+  summary: Record<string, number> = {},
+  extra: Partial<FakeInboxEntry> = {}
+): FakeInboxEntry {
+  return {
+    kind: "intake_session",
+    id,
+    title: "",
+    reasons: ["intake"],
+    updated_at: "2026-11-20T10:00:00Z",
+    file_count: summary.files ?? 1,
+    intake: { state, summary: { sources: 1, files: 1, ...summary } },
+    ...extra,
+  }
+}
+
 // refusedReview is the server's answer to a review of an item priced in
 // another currency without an amount in the group currency: a 422 with the
 // tree of field errors and codes, and no detail or title.
@@ -99,7 +120,7 @@ export function refusedReview(): { status: number; body: JsonBodyType } {
 }
 
 function counts(entries: FakeInboxEntry[]) {
-  const reasons: Record<string, number> = { draft: 0, item_draft: 0 }
+  const reasons: Record<string, number> = { draft: 0, item_draft: 0, intake: 0 }
   for (const e of entries) for (const r of e.reasons) reasons[r] = (reasons[r] ?? 0) + 1
   return { total: entries.length, reasons }
 }
@@ -137,6 +158,12 @@ export function backend(slug: string, seed: FakeInboxEntry[] = []): FakeInboxBac
     }),
     http.delete(apiUrl(`${base}/drafts/:id`), ({ params }) => {
       state.entries = state.entries.filter((e) => !(e.kind === "draft" && e.id === params.id))
+      return new HttpResponse(null, { status: 204 })
+    }),
+    http.delete(apiUrl(`${base}/intake/sessions/:id`), ({ params }) => {
+      state.entries = state.entries.filter(
+        (e) => !(e.kind === "intake_session" && e.id === params.id)
+      )
       return new HttpResponse(null, { status: 204 })
     }),
     http.get(apiUrl(`${base}/commodities/:id`), ({ params }) => {

@@ -7,6 +7,7 @@ import {
   ChevronDown,
   Eye,
   EyeOff,
+  FileUp,
   LayoutGrid,
   LayoutList,
   List,
@@ -52,6 +53,8 @@ import {
 } from "@/components/items/CommodityPhotoCard"
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
 import { InboxNotice } from "@/components/items/InboxNotice"
+import { IntakeCard } from "@/components/items/IntakeCard"
+import { IntakeUploadDialog } from "@/components/items/IntakeUploadDialog"
 import { SearchMatchHint } from "@/components/items/SearchMatchHint"
 import { TagFilterMenu } from "@/components/tags/TagFilterMenu"
 import { TagPill } from "@/components/tags/TagPill"
@@ -108,6 +111,10 @@ import { useCommoditySelection } from "@/features/commodities/selection"
 import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useMyGroupRole } from "@/features/group/roles"
+import type { IntakeSessionDetail } from "@/features/intake/api"
+import { useIntakeLimits } from "@/features/intake/hooks"
+import { useFileDrop } from "@/features/intake/useFileDrop"
 import { useUserSettings } from "@/features/settings/hooks"
 import { useLoanCounts } from "@/features/loans/hooks"
 import { useServiceCounts } from "@/features/services/hooks"
@@ -287,6 +294,31 @@ export function CommoditiesListPage() {
 
   const create = useSubmitNewItem()
   const toast = useAppToast()
+
+  // ---- Batch intake (#2810) ----------------------------------------------
+  // Files dropped on the page, or picked with "Add from files", go to the
+  // intake dialog, which uploads them and queues them for the AI scan.
+  const role = useMyGroupRole()
+  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const intakeLimits = useIntakeLimits(enabled && canWrite)
+  const intakeEnabled = canWrite && !migrationLock.locked && !!intakeLimits.data?.enabled
+  const [intakeOpen, setIntakeOpen] = useState(false)
+  const [intakeFiles, setIntakeFiles] = useState<File[]>([])
+  const drop = useFileDrop(intakeEnabled && !intakeOpen, (files) => {
+    setIntakeFiles(files)
+    setIntakeOpen(true)
+  })
+  function openIntake() {
+    setIntakeFiles([])
+    setIntakeOpen(true)
+  }
+  function handleIntakeQueued(session: IntakeSessionDetail) {
+    setIntakeOpen(false)
+    toast.success(t("commodities:intake.upload.queued", { count: session.summary.sources }))
+    if (slug) {
+      navigate(`/g/${encodeURIComponent(slug)}/intake/${encodeURIComponent(session.id)}`)
+    }
+  }
 
   // ---- Selection ---------------------------------------------------------
   // Picked rows, or every item the query matches ("Select all N matching").
@@ -525,26 +557,56 @@ export function CommoditiesListPage() {
   return (
     <>
       <RouteTitle title={t("commodities:list.documentTitle")} />
-      <Page width="wide" data-testid="page-commodities">
+      <Page width="wide" data-testid="page-commodities" {...drop.handlers}>
+        {drop.dragging ? (
+          <div
+            className="pointer-events-none fixed inset-0 z-50 flex items-center justify-center bg-background/80 p-6"
+            data-testid="intake-drop-overlay"
+          >
+            <div className="flex flex-col items-center gap-2 rounded-xl border-2 border-dashed border-primary bg-card px-10 py-8 text-center">
+              <FileUp className="size-8 text-primary" aria-hidden="true" />
+              <p className="text-base font-medium">{t("commodities:intake.drop.title")}</p>
+              <p className="text-sm text-muted-foreground">
+                {t("commodities:intake.drop.description")}
+              </p>
+            </div>
+          </div>
+        ) : null}
         <PageHeader
           title={t("commodities:list.heading")}
           subtitle={t("commodities:list.subtitle", { count: total })}
           subtitleClassName="leading-7"
           actions={
-            <Button
-              type="button"
-              onClick={() => setCreateOpen(true)}
-              data-testid="commodities-add-button"
-              className="gap-2"
-              disabled={migrationLock.locked}
-              title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-              aria-disabled={migrationLock.locked || undefined}
-            >
-              <Plus className="size-4" aria-hidden="true" />
-              {t("commodities:list.addItem")}
-            </Button>
+            <div className="flex flex-wrap items-center gap-2">
+              {intakeEnabled ? (
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={openIntake}
+                  data-testid="commodities-add-from-files"
+                  className="gap-2"
+                >
+                  <FileUp className="size-4" aria-hidden="true" />
+                  {t("commodities:intake.addFromFiles")}
+                </Button>
+              ) : null}
+              <Button
+                type="button"
+                onClick={() => setCreateOpen(true)}
+                data-testid="commodities-add-button"
+                className="gap-2"
+                disabled={migrationLock.locked}
+                title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                aria-disabled={migrationLock.locked || undefined}
+              >
+                <Plus className="size-4" aria-hidden="true" />
+                {t("commodities:list.addItem")}
+              </Button>
+            </div>
           }
         />
+
+        <IntakeCard />
 
         <InboxNotice />
 
@@ -704,6 +766,16 @@ export function CommoditiesListPage() {
         serverDrafts
         resumeDraftId={resumeDraftId}
       />
+
+      {intakeLimits.data ? (
+        <IntakeUploadDialog
+          open={intakeOpen}
+          onOpenChange={setIntakeOpen}
+          limits={intakeLimits.data}
+          initialFiles={intakeFiles}
+          onQueued={handleIntakeQueued}
+        />
+      ) : null}
 
       {/*
         The dedicated preview Sheet that used to live here was

@@ -5,6 +5,12 @@
 // and counts each record once, so the counter never comes from the length
 // of a page.
 import { setCommodityDraftMark, type Commodity } from "@/features/commodities/api"
+import {
+  toIntakeState,
+  toIntakeSummary,
+  type IntakeSessionState,
+  type IntakeSummary,
+} from "@/features/intake/api"
 import { http } from "@/lib/http"
 import type { Schema } from "@/types"
 
@@ -16,7 +22,7 @@ type InboxChecksEnvelope = Schema<"jsonapi.InboxChecksResponse">
 // The reasons this client knows how to show and act on, in display order.
 // An entry can carry a reason a newer server added; the page shows it
 // without an action.
-export const INBOX_REASONS = ["draft", "item_draft"] as const
+export const INBOX_REASONS = ["draft", "item_draft", "intake"] as const
 export type InboxReason = (typeof INBOX_REASONS)[number]
 
 export function isInboxReason(value: string): value is InboxReason {
@@ -24,14 +30,18 @@ export function isInboxReason(value: string): value is InboxReason {
 }
 
 export interface InboxEntry {
-  // "draft" for a server draft of a new item, "commodity" for an item. A
-  // newer server may send another kind.
+  // "draft" for a server draft of a new item, "commodity" for an item,
+  // "intake_session" for a batch of files (#2810). A newer server may send
+  // another kind.
   kind: string
   id: string
   title: string
   reasons: string[]
+  // When the record was last saved; for a batch, when it was added.
   updatedAt: string | null
   fileCount: number
+  // The progress of a batch of files; null for other kinds.
+  intake: { state: IntakeSessionState; summary: IntakeSummary } | null
 }
 
 export interface InboxCounts {
@@ -77,6 +87,9 @@ export async function listInbox(
       reasons: [...(e.reasons ?? [])],
       updatedAt: e.updated_at ?? null,
       fileCount: e.file_count ?? 0,
+      intake: e.intake
+        ? { state: toIntakeState(e.intake.state), summary: toIntakeSummary(e.intake.summary) }
+        : null,
     })),
     total: body.meta?.entries ?? 0,
     counts: toCounts(body.meta?.counts),

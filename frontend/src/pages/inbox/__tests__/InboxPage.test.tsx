@@ -68,6 +68,7 @@ function renderPage(path = `/g/${SLUG}/inbox`) {
         <Route path="/g/:groupSlug/commodities/new" element={<Probe />} />
         <Route path="/g/:groupSlug/commodities/:id" element={<Probe />} />
         <Route path="/g/:groupSlug/commodities" element={<Probe />} />
+        <Route path="/g/:groupSlug/intake/:id" element={<Probe />} />
       </>
     ),
   })
@@ -112,6 +113,64 @@ describe("<InboxPage />", () => {
     expect(screen.getByTestId("inbox-tab-all")).toHaveTextContent("All (3)")
     expect(screen.getByTestId("inbox-tab-draft")).toHaveTextContent("Drafts (2)")
     expect(screen.getByTestId("inbox-tab-item_draft")).toHaveTextContent("Items to review (1)")
+  })
+
+  it("lists the batches of files that are not finished, with their progress", async () => {
+    const fake = inboxHandlers.backend(SLUG, [
+      inboxHandlers.draft("d1", "Cordless drill"),
+      inboxHandlers.intakeSession("s1", "processing", {
+        files: 3,
+        sources: 3,
+        pending: 2,
+        scanned: 1,
+      }),
+      inboxHandlers.intakeSession("s2", "review", {
+        files: 2,
+        sources: 1,
+        scanned: 1,
+        undecided: 2,
+      }),
+      inboxHandlers.intakeSession("s3", "done", { files: 1, sources: 1, failed: 1 }),
+    ])
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(groups),
+      members("user"),
+      ...fake.handlers
+    )
+    const user = userEvent.setup()
+    renderPage()
+    const scanning = await screen.findByTestId("inbox-row-intake_session-s1")
+    // The actions follow the member's role, which may answer after the list.
+    await screen.findByTestId("inbox-intake-remove-s3")
+    expect(scanning).toHaveTextContent("Batch of 3 files")
+    expect(scanning).toHaveTextContent("Scanning")
+    expect(scanning).toHaveTextContent("1 of 3 scanned")
+    expect(within(scanning).getByTestId("inbox-reason")).toHaveTextContent("Added from files")
+    // A batch being scanned cannot be removed yet.
+    expect(screen.queryByTestId("inbox-intake-remove-s1")).not.toBeInTheDocument()
+    expect(screen.getByTestId("inbox-row-intake_session-s2")).toHaveTextContent(
+      "2 products to review"
+    )
+    expect(screen.getByTestId("inbox-intake-open-s2")).toHaveAccessibleName(
+      "Review: Batch of 2 files"
+    )
+    expect(screen.getByTestId("inbox-row-intake_session-s3")).toHaveTextContent("1 file unreadable")
+    expect(screen.getByTestId("inbox-intake-open-s3")).toHaveTextContent("Open")
+    expect(screen.getByTestId("inbox-tab-intake")).toHaveTextContent("From files (3)")
+
+    // Removing a batch clears its row; its drafts stay.
+    await user.click(screen.getByTestId("inbox-intake-remove-s3"))
+    await user.click(
+      within(await screen.findByTestId("confirm-dialog")).getByTestId("confirm-accept")
+    )
+    await waitFor(() =>
+      expect(screen.queryByTestId("inbox-row-intake_session-s3")).not.toBeInTheDocument()
+    )
+    expect(screen.getByTestId("inbox-tab-intake")).toHaveTextContent("From files (2)")
+
+    await user.click(screen.getByTestId("inbox-intake-open-s2"))
+    expect(await screen.findByTestId("loc")).toHaveTextContent(`/g/${SLUG}/intake/s2`)
   })
 
   it("has no axe violations", async () => {

@@ -20,33 +20,34 @@ func TestIntakeSessionSummary_State(t *testing.T) {
 		sources    []*models.IntakeSource
 		candidates []*models.IntakeCandidate
 		state      models.IntakeSessionState
-		attention  bool
+		open       bool
 	}{
 		{
 			name:    "queued",
 			sources: []*models.IntakeSource{src(models.IntakeSourcePending), src(models.IntakeSourceScanned)},
 			state:   models.IntakeSessionProcessing,
+			open:    true,
 		},
 		{
 			name:       "scanned and undecided",
 			sources:    []*models.IntakeSource{src(models.IntakeSourceScanned)},
 			candidates: []*models.IntakeCandidate{cand(true, models.IntakeCandidatePending)},
 			state:      models.IntakeSessionReview,
-			attention:  true,
+			open:       true,
 		},
 		{
 			name:       "every product left out but not yet skipped",
 			sources:    []*models.IntakeSource{src(models.IntakeSourceScanned)},
 			candidates: []*models.IntakeCandidate{cand(false, models.IntakeCandidatePending)},
 			state:      models.IntakeSessionReview,
-			attention:  true,
+			open:       true,
 		},
 		{
 			name:       "a draft failed",
 			sources:    []*models.IntakeSource{src(models.IntakeSourceScanned)},
 			candidates: []*models.IntakeCandidate{cand(true, models.IntakeCandidateCreated), cand(true, models.IntakeCandidateFailed)},
 			state:      models.IntakeSessionReview,
-			attention:  true,
+			open:       true,
 		},
 		{
 			name:       "done",
@@ -59,7 +60,7 @@ func TestIntakeSessionSummary_State(t *testing.T) {
 			sources: []*models.IntakeSource{src(models.IntakeSourceFailed), src(models.IntakeSourceCanceled)},
 			state:   models.IntakeSessionDone,
 			// The failed file still asks for a look.
-			attention: true,
+			open: true,
 		},
 	}
 	for _, tc := range tests {
@@ -73,7 +74,7 @@ func TestIntakeSessionSummary_State(t *testing.T) {
 				s.AddCandidate(candidate)
 			}
 			c.Check(s.State(), qt.Equals, tc.state)
-			c.Check(s.NeedsAttention(), qt.Equals, tc.attention)
+			c.Check(s.Open(), qt.Equals, tc.open)
 			c.Check(s.Files, qt.Equals, len(tc.sources))
 		})
 	}

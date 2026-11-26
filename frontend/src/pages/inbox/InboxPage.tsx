@@ -15,12 +15,14 @@ import {
   MapPinOff,
   Package,
   Paperclip,
+  ScanText,
   Tag,
   Trash2,
   type LucideIcon,
 } from "lucide-react"
 
 import { ListLoadError } from "@/components/common/ListLoadError"
+import { StateBadge } from "@/components/items/IntakeCard"
 import { Pagination } from "@/components/common/Pagination"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { Badge } from "@/components/ui/badge"
@@ -57,6 +59,8 @@ import {
   reviewPageForAllOffset,
 } from "@/features/inbox/listContext"
 import { reviewRefusal } from "@/features/inbox/reviewRefusal"
+import { useDeleteIntakeSession } from "@/features/intake/hooks"
+import { useIntakeSummaryText } from "@/features/intake/summary"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { useLocationGuard } from "@/hooks/useLocationGuard"
@@ -214,6 +218,8 @@ function tabLabel(t: TFn, r: ReasonFilter, n: number | null): string {
       return n === null ? t("inbox:tabs.draft") : t("inbox:tabs.draftCount", { n })
     case "item_draft":
       return n === null ? t("inbox:tabs.itemDraft") : t("inbox:tabs.itemDraftCount", { n })
+    case "intake":
+      return n === null ? t("inbox:tabs.intake") : t("inbox:tabs.intakeCount", { n })
     default:
       return n === null ? t("inbox:tabs.all") : t("inbox:tabs.allCount", { n })
   }
@@ -319,6 +325,8 @@ function InboxRow(props: RowProps) {
       return <DraftRow {...props} />
     case "commodity":
       return <ItemRow {...props} />
+    case "intake_session":
+      return <IntakeRow {...props} />
     default:
       // A kind a newer server added: shown with its reasons, without an
       // action this client does not know.
@@ -339,6 +347,8 @@ function reasonLabel(t: TFn, reason: string): string {
       return t("inbox:reason.draft")
     case "item_draft":
       return t("inbox:reason.itemDraft")
+    case "intake":
+      return t("inbox:reason.intake")
     default:
       return t("inbox:reason.other")
   }
@@ -533,6 +543,92 @@ function ItemRow({ entry, slug, canWrite, reviewContext }: RowProps) {
             {t("inbox:markReviewed")}
           </Button>
         ) : null
+      }
+    />
+  )
+}
+
+// A batch of files (#2810) that is not finished: a file waits for its scan
+// or could not be scanned, or a product waits for a decision or its draft.
+// Review opens the batch, where each of these is cleared; a batch that is
+// not being scanned can be removed here, which keeps the drafts made from it.
+function IntakeRow({ entry, slug, canWrite }: RowProps) {
+  const { t } = useTranslation(["inbox", "commodities"])
+  const navigate = useNavigate()
+  const toast = useAppToast()
+  const confirm = useConfirm()
+  const summaryText = useIntakeSummaryText()
+  const remove = useDeleteIntakeSession()
+  const state = entry.intake?.state ?? "processing"
+  const title = t("inbox:intakeTitle", { count: entry.fileCount })
+  const added = entry.updatedAt ? formatRelative(entry.updatedAt) : ""
+  const summary = entry.intake ? summaryText(entry.intake.summary) : ""
+  const action =
+    state === "review" && canWrite ? t("commodities:intake.review") : t("commodities:intake.open")
+
+  async function handleRemove() {
+    const ok = await confirm({
+      title: t("commodities:intake.removeTitle"),
+      description: t("commodities:intake.removeDescription"),
+      confirmLabel: t("commodities:intake.remove"),
+      destructive: true,
+    })
+    if (!ok) return
+    try {
+      await remove.mutateAsync(entry.id)
+      toast.success(t("commodities:intake.removed"))
+    } catch (err) {
+      toast.error(parseServerError(err, t("commodities:intake.removeFailed")))
+    }
+  }
+
+  return (
+    <RowShell
+      icon={ScanText}
+      testId={`inbox-row-intake_session-${entry.id}`}
+      title={
+        <span className="inline-flex flex-wrap items-center gap-2">
+          <span>{title}</span>
+          <StateBadge state={state} />
+        </span>
+      }
+      reasons={entry.reasons}
+      meta={
+        <span data-testid={`inbox-intake-summary-${entry.id}`}>
+          {[added ? t("commodities:intake.addedAgo", { when: added }) : "", summary]
+            .filter(Boolean)
+            .join(" · ")}
+        </span>
+      }
+      actions={
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() =>
+              navigate(`/g/${encodeURIComponent(slug)}/intake/${encodeURIComponent(entry.id)}`)
+            }
+            aria-label={t("inbox:intakeActionLabel", { action, title })}
+            data-testid={`inbox-intake-open-${entry.id}`}
+          >
+            {action}
+          </Button>
+          {canWrite && state !== "processing" ? (
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="size-8 text-muted-foreground hover:text-destructive"
+              onClick={() => void handleRemove()}
+              disabled={remove.isPending}
+              aria-label={t("commodities:intake.removeLabel")}
+              data-testid={`inbox-intake-remove-${entry.id}`}
+            >
+              <Trash2 className="size-4" aria-hidden="true" />
+            </Button>
+          ) : null}
+        </>
       }
     />
   )

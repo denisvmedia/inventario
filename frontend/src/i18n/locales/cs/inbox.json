@@ -5,10 +5,15 @@
     "title": "Vyžaduje pozornost: {{total}}"
   },
   "empty": {
-    "description": "Uložené koncepty a položky označené jako koncept tu čekají, dokud je nedokončíte.",
+    "description": "Uložené koncepty, položky označené jako koncept a přidané dávky souborů tu čekají, dokud je nedokončíte.",
     "filteredTitle": "Z tohoto důvodu tu nic není",
     "title": "Nic nevyžaduje pozornost"
   },
+  "intakeActionLabel": "{{action}}: {{title}}",
+  "intakeTitle_few": "Dávka: {{count}} soubory",
+  "intakeTitle_many": "Dávka: {{count}} souboru",
+  "intakeTitle_one": "Dávka: {{count}} soubor",
+  "intakeTitle_other": "Dávka: {{count}} souborů",
   "itemDraftHint": "Zkontrolujte její údaje a označte ji jako zkontrolovanou.",
   "markReviewed": "Označit jako zkontrolovanou",
   "markReviewedLabel": "Označit jako zkontrolovanou: {{title}}",
@@ -25,6 +30,7 @@
   "openItem": "Otevřít položku",
   "reason": {
     "draft": "Koncept",
+    "intake": "Přidáno ze souborů",
     "itemDraft": "Označeno jako koncept",
     "other": "Vyžaduje pozornost"
   },
@@ -36,13 +42,17 @@
   "sidebarCount_other": "{{count}} vyžaduje pozornost",
   "subtitle": "Nedokončená práce v této skupině. U každé položky je uvedeno, proč tu je, a krok, který ji vyřeší.",
   "summary": {
-    "drafts_one": "{{count}} koncept k dokončení",
     "drafts_few": "{{count}} koncepty k dokončení",
     "drafts_many": "{{count}} konceptu k dokončení",
+    "drafts_one": "{{count}} koncept k dokončení",
     "drafts_other": "{{count}} konceptů k dokončení",
-    "review_one": "{{count}} položka ke kontrole",
+    "intake_few": "{{count}} dávky souborů k dokončení",
+    "intake_many": "{{count}} dávky souborů k dokončení",
+    "intake_one": "{{count}} dávka souborů k dokončení",
+    "intake_other": "{{count}} dávek souborů k dokončení",
     "review_few": "{{count}} položky ke kontrole",
     "review_many": "{{count}} položky ke kontrole",
+    "review_one": "{{count}} položka ke kontrole",
     "review_other": "{{count}} položek ke kontrole"
   },
   "tabs": {
@@ -50,6 +60,8 @@
     "allCount": "Vše ({{n}})",
     "draft": "Koncepty",
     "draftCount": "Koncepty ({{n}})",
+    "intake": "Ze souborů",
+    "intakeCount": "Ze souborů ({{n}})",
     "itemDraft": "Ke kontrole",
     "itemDraftCount": "Ke kontrole ({{n}})"
   },

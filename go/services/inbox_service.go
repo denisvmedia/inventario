@@ -23,6 +23,8 @@ const (
 	InboxKindDraft InboxKind = "draft"
 	// InboxKindCommodity is an item.
 	InboxKindCommodity InboxKind = "commodity"
+	// InboxKindIntakeSession is a batch of files added from files (#2810).
+	InboxKindIntakeSession InboxKind = "intake_session"
 )
 
 // InboxReason says why a record needs attention. A record can have several.
@@ -36,12 +38,18 @@ const (
 	// is not complete. Clearing the mark completes the review, also when the
 	// item's purchase data stays unknown.
 	InboxReasonItemDraft InboxReason = "item_draft"
+	// InboxReasonIntake is a batch of files that is not finished: a file
+	// waits for its scan or could not be scanned, or a product the scan
+	// found waits for a decision or for its draft.
+	InboxReasonIntake InboxReason = "intake"
 )
 
 // inboxReasonOrder lists the reasons in the order the inbox shows them. An
 // entry is placed by its first reason, so the drafts come before the items
-// that wait for review.
-var inboxReasonOrder = []InboxReason{InboxReasonDraft, InboxReasonItemDraft}
+// that wait for review, and the batches of files come last. A new reason
+// goes at the end: the client finds the page of an item to review in the
+// list of all entries from the number of drafts before it.
+var inboxReasonOrder = []InboxReason{InboxReasonDraft, InboxReasonItemDraft, InboxReasonIntake}
 
 // InboxReasons returns every reason, in display order.
 func InboxReasons() []InboxReason {
@@ -69,11 +77,15 @@ type InboxEntry struct {
 	Title string
 	// Reasons is never empty and holds each reason once, in display order.
 	Reasons []InboxReason
-	// UpdatedAt is when the record was last saved, when its source knows.
+	// UpdatedAt is when the record was last saved, when its source knows;
+	// for a batch of files, when it was added.
 	UpdatedAt *time.Time
-	// FileCount is the number of live files attached to a draft. Only the
-	// entries of a page carry it (see InboxDetailer).
+	// FileCount is the number of live files attached to a draft or dropped
+	// in a batch. Only the entries of a page carry it for a draft (see
+	// InboxDetailer).
 	FileCount int
+	// Intake is the progress of a batch of files; nil for other kinds.
+	Intake *models.IntakeSessionSummary
 }
 
 // InboxRef names a record a source flags and why, without the record's
@@ -153,11 +165,11 @@ func NewInboxService(sources ...InboxSource) *InboxService {
 }
 
 // DefaultInboxSources returns the sources of the default inbox: the open
-// server drafts and the items marked as draft. Missing information (no
-// location, no photo, an unknown price) is not unfinished work and has no
-// source here.
+// server drafts, the items marked as draft and the open batches of files.
+// Missing information (no location, no photo, an unknown price) is not
+// unfinished work and has no source here.
 func DefaultInboxSources() []InboxSource {
-	return []InboxSource{DraftInboxSource{}, ItemDraftInboxSource{}}
+	return []InboxSource{DraftInboxSource{}, ItemDraftInboxSource{}, IntakeInboxSource{}}
 }
 
 // Count returns the counts of the inbox of regSet's group. It reads the
@@ -277,6 +289,9 @@ func mergeInboxEntries(a, b InboxEntry) InboxEntry {
 		a.UpdatedAt = b.UpdatedAt
 	}
 	a.FileCount = max(a.FileCount, b.FileCount)
+	if a.Intake == nil {
+		a.Intake = b.Intake
+	}
 	return a
 }
 
