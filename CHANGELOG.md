@@ -23,6 +23,21 @@ when to add an entry and where it goes.
   inbox counts, the upcoming warranties, the location insurance report and
   every total; its single-item insurance report still opens from its page.
   Backups carry the new statuses, and older backups restore as before.
+- Hidden sections. A group admin or owner can hide Warranties, Maintenance
+  and repairs (with In service), Loans, and Upcoming for every member, from
+  the new **Sections** part of the group settings. A hidden section leaves
+  the sidebar, the command palette, the Dashboard, the item form and the
+  item's actions and tabs; a link to its page shows a notice with a way to
+  the settings. Items keep the data they hold and still show it, and no
+  write is refused. While a section is hidden, its reminder emails stop and
+  the weekly digest leaves its lines out; showing it again resumes them.
+  Existing groups hide nothing. The group resource gains `hidden_sections`
+  (`warranties`, `maintenance`, `loans`, `upcoming`), which every member
+  reads; `PUT /groups/{groupID}/hidden-sections` replaces the list and is
+  admin-only, and creating or updating a group takes `hidden_sections` too. An unknown
+  section is refused with 422 `group.invalid_section`; duplicates are
+  dropped. Like the group name and icon, the setting is not part of a backup
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
   (unique in the group, ignoring case) and a type that never changes: text,
   long text, number, money, date, yes/no, select, URL or a link to another

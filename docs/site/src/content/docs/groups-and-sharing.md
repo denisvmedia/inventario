@@ -46,6 +46,28 @@ The app switches to that group immediately.
 You can keep two browser tabs open on two different groups — they stay independent of each other. The same dropdown also has shortcuts to **Group settings** (for the current group) and **Create new group**.
 :::
 
+## Hide sections the group doesn't use
+
+Not every inventory needs every part of Inventario: a group for a book collection has no warranties to watch, for example. An administrator or owner can hide these sections for everyone in the group:
+
+| Section | What hiding it removes |
+| --- | --- |
+| **Warranties** | The **Warranties** page, the warranty cards on the Dashboard, the **Warranty** step of the item form, and warranty reminder emails. |
+| **Maintenance and repairs** | The **Maintenance** and **In service** pages, adding a schedule or sending an item for service, and maintenance reminder emails. |
+| **Loans** | The **Lent out** page, lending an item out, and loan reminder emails. |
+| **Upcoming** | The **Upcoming** page. |
+
+To hide a section or show it again:
+
+1. Open the group selector and choose **Group settings**, then open the **Sections** section.
+2. Switch a section off to hide it, or on to show it. The change applies at once, for every member.
+
+Members with the **User** or **Viewer** role see the same switches but can't change them.
+
+Hiding a section keeps its data. An item that already has a warranty date, a loan, or a maintenance schedule still shows it on its page, and the item form keeps the **Warranty** step for an item that has a warranty. You can still mark a loan returned or a task done; you can't start a new loan, schedule, or service visit until the section shows again. While a section is hidden, its reminder emails stop and the [weekly digest](../settings-and-account/#weekly-digest) leaves its lines out. When you show it again, reminders pick up from the dates as they are then, as described in [Reminder emails](../warranties-loans-maintenance/#reminder-emails).
+
+A link or a bookmark to a hidden page opens a notice that the section is hidden, with a link to the group settings.
+
 ## Invite people by email
 
 You invite people from the **Members** page. You need to be an **Owner** or **Administrator** of the group to send invites.
