@@ -37,7 +37,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-26 — Donated and Stolen item statuses
 
-- **Issue/PR**: #1607 / PR pending
+- **Issue/PR**: #1607 / #2903
 - **Mock**: [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) has five statuses (`in_use`, `sold`, `lost`, `disposed`, `written_off`) in `CommodityStatus` (L10) and `COMMODITY_STATUS_CONFIG` (L589–L598); the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lists Sold, Lost, Disposed and Written Off (L720).
 - **Reality**: Two more statuses, **Donated** and **Stolen**, follow Written Off everywhere a status is listed: the Change Status row on the item page, the status select of the item form, the Status filter on All Items and on an area's items, and the bulk **Set status** menu. Donated uses the `chart-3` color (blue) and Stolen `chart-4` (orange): as the text color of the Change Status button, and as text, `/30` border and `/10` background of the status pill on cards and rows and of the status card on the item page. They open the same date and note dialog as Lost, with their own description and note placeholder. Like the other statuses, they have no icon.
 - **Why**: Owner decision 5 on #1607 (2026-11-26) makes Donated and Stolen statuses of their own. The mock's status colors (green, amber, red, muted) are all in use, so the two take chart colors that the file category badges already use. Appending them after Written Off keeps the mock's order for the existing statuses. The order and the two colors are agent-suggested.
