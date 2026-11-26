@@ -498,11 +498,11 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// A suspended tenant's sessions end (#1037). Suspending revokes the
 	// refresh tokens too; this refuses one that the revocation missed.
 	if active, tenantErr := userTenantIsActive(r.Context(), api.tenantRegistry, user); tenantErr != nil {
-		slog.Error("Failed to check the tenant status on refresh", "user_id", user.ID, "error", tenantErr)
+		slog.ErrorContext(r.Context(), "Failed to check the tenant status on refresh", "user_id", user.ID, "error", tenantErr)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	} else if !active {
-		slog.Warn("Refresh refused: the user's tenant is not active", "user_id", user.ID, "tenant_id", user.TenantID)
+		slog.WarnContext(r.Context(), "Refresh refused: the user's tenant is not active", "user_id", user.ID, "tenant_id", user.TenantID)
 		clearRefreshCookie(w, r)
 		http.Error(w, tenantSuspendedMessage, http.StatusForbidden)
 		return

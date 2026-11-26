@@ -51,12 +51,12 @@ func userTenantIsActive(ctx context.Context, tenants registry.TenantRegistry, us
 func refuseInactiveUserTenant(w http.ResponseWriter, r *http.Request, tenants registry.TenantRegistry, user *models.User) bool {
 	active, err := userTenantIsActive(r.Context(), tenants, user)
 	if err != nil {
-		slog.Error("Failed to check the user's tenant status", "user_id", user.ID, "tenant_id", user.TenantID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to check the user's tenant status", "user_id", user.ID, "tenant_id", user.TenantID, "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return true
 	}
 	if !active {
-		slog.Warn("Refused a request for a user whose tenant is not active",
+		slog.WarnContext(r.Context(), "Refused a request for a user whose tenant is not active",
 			"user_id", user.ID, "tenant_id", user.TenantID, "method", r.Method, "path", r.URL.Path)
 		http.Error(w, tenantSuspendedMessage, http.StatusForbidden)
 		return true

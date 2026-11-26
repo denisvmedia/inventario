@@ -374,7 +374,7 @@ func (api *adminTenantsAPI) respondCreatedTenant(w http.ResponseWriter, r *http.
 func (api *adminTenantsAPI) readTenantDetail(w http.ResponseWriter, r *http.Request, tenantID string) (*jsonapi.AdminTenantResponse, bool) {
 	item, err := api.factorySet.TenantRegistry.GetAdmin(r.Context(), tenantID)
 	if err != nil {
-		slog.Error("admin tenant write: failed to read the tenant back", "tenant_id", tenantID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to read the tenant back after an admin write", "tenant_id", tenantID, "error", err)
 		_ = renderEntityError(w, r, err)
 		return nil, false
 	}
