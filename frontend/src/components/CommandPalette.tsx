@@ -8,6 +8,7 @@ import {
   HardDriveDownload,
   LayoutDashboard,
   ListFilter,
+  ListPlus,
   MapPin,
   Package,
   Search,
@@ -112,6 +113,11 @@ const NAVIGATION: PaletteEntry[] = [
     labelKey: "common:nav.itemTypes",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/item-types` : null),
     icon: Shapes,
+  },
+  {
+    labelKey: "common:nav.customFields",
+    to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/custom-fields` : null),
+    icon: ListPlus,
   },
   {
     labelKey: "common:nav.files",

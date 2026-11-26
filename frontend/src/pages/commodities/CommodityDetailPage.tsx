@@ -19,6 +19,7 @@ import {
   FileInput,
   FileText,
   Hash,
+  ListPlus,
   MapPin,
   Maximize2,
   Package,
@@ -117,7 +118,15 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
 }
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
+import type {
+  Commodity,
+  LinkedItemSummary,
+  UpdateCommodityRequest,
+} from "@/features/commodities/api"
+import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
+import type { CustomFieldValues } from "@/features/customFields/api"
+import { useCustomFields } from "@/features/customFields/hooks"
+import { hasValue } from "@/features/customFields/values"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -730,6 +739,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       }}
       mode="edit"
       initialValues={dialogDraft ?? commodity}
+      linkedItems={detail.data?.linkedItems}
       areas={areas.data ?? []}
       locations={locations.data ?? []}
       defaultCurrency={currency}
@@ -762,6 +772,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             onExit={stopEditing}
             onGoTo={(target) => goToNeighbor(target, true)}
             onAllFields={(values) => setAllFieldsOn({ id, values })}
+            linkedItems={detail.data?.linkedItems}
             // The mock's form is sized for the side panel; on the full page
             // it keeps a readable column.
             className={isSheet ? undefined : "mx-auto w-full max-w-2xl"}
@@ -1248,6 +1259,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
+                linkedItems={detail.data?.linkedItems}
               />
               {detailHref ? (
                 <Button
@@ -1279,6 +1291,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
+                linkedItems={detail.data?.linkedItems}
               />
               {commodity.id ? (
                 // One instance per item, as the tabs below; the key differs
@@ -1559,6 +1572,8 @@ interface DetailsTabProps {
   saving?: boolean
   areas?: AreaOption[]
   locations?: LocationOption[]
+  // Names of the items the item's link fields point at (meta.linked_items).
+  linkedItems?: Record<string, LinkedItemSummary>
 }
 
 type QuickEditField = "location" | "tags" | "notes"
@@ -1576,10 +1591,14 @@ function DetailsTab({
   saving = false,
   areas = [],
   locations = [],
+  linkedItems,
 }: DetailsTabProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
+  const customFields = useCustomFields().data
+  const customValues = commodity.custom_fields as CustomFieldValues | undefined
+  const shownCustomFields = (customFields ?? []).filter((f) => hasValue(customValues, f.id))
   const tagIndex = useTagIndex("commodity")
   const sellers = useSellers()
   // The other system the item's document came from (#2809), if any.
@@ -1956,6 +1975,27 @@ function DetailsTab({
             </div>
           )
         ) : null}
+        {/* Custom fields (#2803): one row per field the item has a value
+            for, in the group's order. The mock has no custom fields; they
+            take the rows' own shape. */}
+        {shownCustomFields.map((field) => (
+          <DetailRow
+            key={field.id}
+            icon={ListPlus}
+            label={field.name}
+            value={
+              <CustomFieldValue
+                field={field}
+                raw={customValues?.[field.id]}
+                linkedItems={linkedItems}
+                groupSlug={groupSlug}
+              />
+            }
+            variant={variant}
+            withDivider={isSheet}
+            testId={`commodity-detail-custom-field-${field.id}`}
+          />
+        ))}
         {isSheet ? null : <Separator className={separatorClass} />}
         <DetailRow
           icon={Calendar}

@@ -10,12 +10,16 @@
 //
 // Behaviour is identical to the in-dialog originals — this is a pure
 // move. The dialog re-imports every symbol below.
+import type { DeepPartial } from "react-hook-form"
+
 import { attachFile, uploadFile, updateFile } from "@/features/files/api"
 import { categoryFromMime } from "@/features/files/constants"
 import { HttpError } from "@/lib/http"
 import type { CommodityStatusValue } from "@/features/commodities/constants"
 import type { CommodityFormInput } from "@/features/commodities/schemas"
 import { formValueToPrice, priceToFormValue } from "@/features/commodities/price"
+import type { CustomFieldValues } from "@/features/customFields/api"
+import { toFormValues } from "@/features/customFields/values"
 import type {
   Commodity,
   CreateCommodityRequest,
@@ -94,7 +98,9 @@ export function readDraft(key: string): Partial<CommodityFormInput> | undefined 
   }
 }
 
-export function writeDraft(key: string, values: Partial<CommodityFormInput>): void {
+// values is what react-hook-form's watch hands over, typed as a deep
+// partial; at run time it is the whole form.
+export function writeDraft(key: string, values: DeepPartial<CommodityFormInput>): void {
   if (typeof window === "undefined") return
   try {
     window.localStorage.setItem(key, JSON.stringify(values))
@@ -162,6 +168,7 @@ export function buildDefaults(
     draft: initial?.draft ?? defaultDraft,
     warranty_expires_at: (initial?.warranty_expires_at as string) ?? "",
     warranty_notes: initial?.warranty_notes ?? "",
+    custom_fields: toFormValues(initial?.custom_fields as CustomFieldValues | undefined),
   }
 }
 

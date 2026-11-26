@@ -9,7 +9,7 @@ import {
   type ScanAcceptMeta,
 } from "@/components/items/AiScanStep"
 import { server } from "@/test/server"
-import { apiUrl, commodityScanHandlers } from "@/test/handlers"
+import { apiUrl, commodityScanHandlers, customFieldHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 
@@ -167,5 +167,58 @@ describe("<AiScanStep /> seller in the anonymous flow (#2804)", () => {
     })
     const values = await scanAnonymously()
     expect(values.comments).toBe("Paid in cash\nSeller: Corner Market")
+  })
+})
+
+describe("<AiScanStep /> custom fields (#2803)", () => {
+  afterEach(() => {
+    __resetGroupContextForTests()
+  })
+
+  beforeEach(() => {
+    server.use(
+      http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR"])),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({
+          id: "cf-fuel",
+          name: "Fuel",
+          type: "select",
+          options: [{ id: "opt-diesel", label: "Diesel" }],
+        }),
+        customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+        customFieldHandlers.field({ id: "cf-awd", name: "AWD", type: "boolean" }),
+      ])
+    )
+  })
+
+  it("reviews the values read for the group's fields and hands back the checked ones", async () => {
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { name: { value: "Car", confidence: 0.9 } },
+        custom_fields: {
+          "cf-fuel": { value: "opt-diesel", confidence: 0.8 },
+          "cf-plate": { value: "AB 123", confidence: 0.9 },
+          "cf-awd": { value: false, confidence: 0.2 },
+          "cf-gone": { value: "x", confidence: 0.9 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    const { onAccept } = renderStep()
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), makeImage())
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+
+    expect(await screen.findByTestId("commodity-form-ai-row-custom-cf-fuel")).toHaveTextContent(
+      "Diesel"
+    )
+    expect(screen.getByTestId("commodity-form-ai-row-custom-cf-awd")).toHaveTextContent("No")
+    // A low confidence starts unchecked; uncheck the plate too.
+    expect(screen.getByTestId("commodity-form-ai-row-custom-cf-awd-check")).not.toBeChecked()
+    await user.click(screen.getByTestId("commodity-form-ai-row-custom-cf-plate-check"))
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+
+    const [values] = onAccept.mock.calls[0]
+    expect(values.custom_fields).toEqual({ "cf-fuel": { value: "opt-diesel", currency: "" } })
   })
 })

@@ -82,10 +82,16 @@ export interface ScanResultFields {
 // top-level result so the review UI consumes a chosen item unchanged.
 export interface ScanItem {
   fields: ScanResultFields
+  // Custom field values read (#2803), by field id, in the API form of the
+  // field's type (a select field's option id). Empty when none.
+  customFields: ScanCustomFieldGuesses
 }
+
+export type ScanCustomFieldGuesses = Record<string, { value: unknown; confidence: number }>
 
 export interface ScanResult {
   fields: ScanResultFields
+  customFields: ScanCustomFieldGuesses
   // Present (length > 1) only when the BE detected more than one distinct
   // product; the dialog then renders a chooser so the user picks which to
   // pre-fill. Empty for the common single-item case (review uses `fields`).
@@ -97,6 +103,8 @@ export interface ScanResult {
 // the OpenAPI spec; narrowed in assignField).
 type RawFieldMap = Partial<Record<ScanFieldName, { value?: unknown; confidence?: number } | null>>
 
+type RawCustomFieldMap = Record<string, { value?: unknown; confidence?: number } | null> | null
+
 // On-the-wire JSON:API envelope. Kept loose because the only contract
 // the FE relies on is the `data.attributes` shape; everything else
 // (links, meta, etc.) is ignored.
@@ -106,7 +114,8 @@ interface ScanResponseEnvelope {
     id?: string
     attributes?: {
       fields?: RawFieldMap
-      items?: Array<{ fields?: RawFieldMap } | null> | null
+      custom_fields?: RawCustomFieldMap
+      items?: Array<{ fields?: RawFieldMap; custom_fields?: RawCustomFieldMap } | null> | null
       warnings?: ScanWarning[] | null
     }
   }
@@ -173,13 +182,30 @@ export function normalizeScanResponse(env: ScanResponseEnvelope): ScanResult {
   // that came back empty so a stray {} never renders a blank choice.
   const rawItems = Array.isArray(attrs?.items) ? attrs.items : []
   const items: ScanItem[] = rawItems
-    .map((it) => ({ fields: normalizeFields(it?.fields) }))
+    .map((it) => ({
+      fields: normalizeFields(it?.fields),
+      customFields: normalizeCustomFields(it?.custom_fields),
+    }))
     .filter((it) => Object.keys(it.fields).length > 0)
   return {
     fields,
+    customFields: normalizeCustomFields(attrs?.custom_fields),
     items,
     warnings: Array.isArray(attrs?.warnings) ? attrs.warnings : [],
   }
+}
+
+// normalizeCustomFields drops the custom field guesses without a value.
+function normalizeCustomFields(raw: RawCustomFieldMap | undefined): ScanCustomFieldGuesses {
+  const out: ScanCustomFieldGuesses = {}
+  for (const [id, guess] of Object.entries(raw ?? {})) {
+    if (!guess || guess.value === null || guess.value === undefined) continue
+    out[id] = {
+      value: guess.value,
+      confidence: typeof guess.confidence === "number" ? guess.confidence : 0,
+    }
+  }
+  return out
 }
 
 // normalizeFields converts a raw BE field map into ScanResultFields,

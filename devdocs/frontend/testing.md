@@ -17,6 +17,7 @@ frontend/src/test/
     ├── commodities.ts
     ├── commodityScan.ts
     ├── currencyMigrations.ts
+    ├── customFields.ts
     ├── exports.ts
     ├── files.ts
     ├── groups.ts
@@ -106,7 +107,7 @@ Each module exposes focused factories that take a fixture and return an array of
 
 For ad-hoc handlers, import `apiUrl` from `@/test/handlers` and reach for `msw.http.*` directly — no need to add a module.
 
-`server.ts` passes a base set to `setupServer(...)`, which survives `server.resetHandlers()`. It holds only what nearly every surface that renders an item fetches: `GET /g/:groupSlug/item-types` answering with the six built-in types (`itemTypeHandlers.defaults()`, #2802), since an item's type label and icon come from the group's types. A test that cares about the types overrides it with `itemTypeHandlers.list(slug, types)`. Add to the base set only for an endpoint of that reach; everything else goes through `server.use(...)`.
+`server.ts` passes a base set to `setupServer(...)`, which survives `server.resetHandlers()`. It holds only what nearly every surface that renders an item fetches: `GET /g/:groupSlug/item-types` answering with the six built-in types (`itemTypeHandlers.defaults()`, #2802), since an item's type label and icon come from the group's types. A test that cares about the types overrides it with `itemTypeHandlers.list(slug, types)`. `GET /g/:groupSlug/custom-fields` is there too, answering with no fields (`customFieldHandlers.defaults()`, #2803), since the item form and the item page read the group's custom fields; `customFieldHandlers.list(slug, fields)` overrides it. Add to the base set only for an endpoint of that reach; everything else goes through `server.use(...)`.
 
 ## Driving Radix Select / portal-based primitives
 

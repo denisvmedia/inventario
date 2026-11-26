@@ -1,5 +1,8 @@
 import { z } from "zod"
 
+import type { CustomField } from "@/features/customFields/api"
+import { validateFormValue } from "@/features/customFields/values"
+
 // Validation schemas for the commodity create/edit form. i18n keys live
 // in the `commodities` namespace under `validation`; pages translate
 // `errors[name].message` at render time the same way the location form
@@ -83,9 +86,25 @@ const urlOrEmpty = z
 // branch) and so do we. Pass an empty string to skip the cross-field
 // check entirely (used by tests / boot states where the active group
 // hasn't loaded yet).
-export function buildCommoditySchema(groupCurrency: string = "") {
+export function buildCommoditySchema(
+  groupCurrency: string = "",
+  customFields: readonly CustomField[] = []
+) {
   const groupCurrencyUpper = groupCurrency.trim().toUpperCase()
   return baseCommoditySchema.superRefine((vals, ctx) => {
+    // A custom field value the server would refuse, on a draft too: the
+    // server checks the values of every write.
+    for (const field of customFields) {
+      const v = vals.custom_fields?.[field.id]
+      const key = v ? validateFormValue(field, v) : undefined
+      if (key) {
+        ctx.addIssue({
+          path: ["custom_fields", field.id, "value"],
+          code: z.ZodIssueCode.custom,
+          message: `customFields:errors.${key}`,
+        })
+      }
+    }
     if (vals.draft) return
     if (!groupCurrencyUpper) return
     const purchaseCurrencyUpper = (vals.original_price_currency ?? "").trim().toUpperCase()
@@ -157,6 +176,13 @@ const baseCommoditySchema = z
     // bound (a 5-year warranty starting today is normal).
     warranty_expires_at: z.string().trim(),
     warranty_notes: z.string().max(1000, COMMENTS_TOO_LONG),
+    // Custom field values by field id (#2803), as text the way the other
+    // inputs keep numbers; see features/customFields/values.ts. A key is a
+    // field the form shows. The checks need the fields' types, so they
+    // live in buildCommoditySchema.
+    custom_fields: z
+      .record(z.string(), z.object({ value: z.string(), currency: z.string() }))
+      .optional(),
   })
   .superRefine((vals, ctx) => {
     // #1554: bundle commodities (count > 1) don't carry warranty. Fire

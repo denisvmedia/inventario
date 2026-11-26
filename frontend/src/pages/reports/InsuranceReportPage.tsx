@@ -396,6 +396,7 @@ export function InsuranceReportPage() {
                     groupCurrency={groupCurrency}
                     purchaseCurrency={commodity.original_price_currency ?? groupCurrency}
                     generatedDate={generatedDate}
+                    linkedItems={detail.data?.linkedItems}
                   />
                 ) : (
                   <EmptyState message={t("reports:insurance.empty.noItem")} />
