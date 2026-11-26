@@ -29,6 +29,9 @@ interface MaintenanceTabProps {
   // mirror the LendTab pattern of showing an empty-state hint and
   // disabling the CTA.
   commodityCount?: number
+  // False while the group hides maintenance and repairs (#1607): the tab
+  // still shows the item's schedules, without Add schedule.
+  canStart?: boolean
 }
 
 type ScheduleRow = MaintenanceScheduleEntity & { id: string }
@@ -37,7 +40,11 @@ type ScheduleRow = MaintenanceScheduleEntity & { id: string }
 // CommodityDetailPage (#1368). Renders the list of schedules ordered
 // by next_due_at, surfaces a "Did this" action that advances the
 // next-due date, plus add/edit/delete affordances.
-export function MaintenanceTab({ commodityId, commodityCount }: MaintenanceTabProps) {
+export function MaintenanceTab({
+  commodityId,
+  commodityCount,
+  canStart = true,
+}: MaintenanceTabProps) {
   const { t } = useTranslation(["maintenance", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -131,18 +138,20 @@ export function MaintenanceTab({ commodityId, commodityCount }: MaintenanceTabPr
             })}
           </p>
         </div>
-        <Button
-          variant="default"
-          size="sm"
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-          data-testid="maintenance-add"
-        >
-          <Plus className="size-4" />
-          {t("maintenance:tab.add", { defaultValue: "Add schedule" })}
-        </Button>
+        {canStart ? (
+          <Button
+            variant="default"
+            size="sm"
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+            data-testid="maintenance-add"
+          >
+            <Plus className="size-4" />
+            {t("maintenance:tab.add", { defaultValue: "Add schedule" })}
+          </Button>
+        ) : null}
       </div>
 
       {list.isLoading ? (

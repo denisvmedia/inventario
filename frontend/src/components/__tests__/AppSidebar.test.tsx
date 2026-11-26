@@ -345,3 +345,61 @@ describe("<AppSidebar /> — What's new dot (#1386)", () => {
     expect(screen.getByTestId("sidebar-help")).toHaveAccessibleName("Help")
   })
 })
+
+describe("<AppSidebar /> — hidden sections (#1607)", () => {
+  function inventoryLinkTexts(inventory: HTMLElement): string[] {
+    return within(inventory)
+      .getAllByRole("link")
+      .map((l) => l.textContent ?? "")
+  }
+
+  it("lists every section while the group hides none", async () => {
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list())
+    renderSidebar("/g/household")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Warranties" })
+    expect(inventoryLinkTexts(inventory)).toEqual(
+      expect.arrayContaining(["Upcoming", "Warranties", "Maintenance", "Lent out", "In service"])
+    )
+  })
+
+  it("leaves out the entries of the sections the group hides", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list([
+        {
+          id: "g1",
+          slug: "household",
+          name: "Household",
+          hidden_sections: ["warranties", "maintenance"],
+        },
+        { id: "g2", slug: "office", name: "Office" },
+      ])
+    )
+    renderSidebar("/g/household")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Lent out" })
+    expect(inventoryLinkTexts(inventory)).toEqual([
+      "Dashboard",
+      "Inbox",
+      "Locations",
+      "All Items",
+      "Upcoming",
+      "Lent out",
+    ])
+  })
+
+  it("follows the setting of the group in the URL", async () => {
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list([
+        { id: "g1", slug: "household", name: "Household", hidden_sections: ["loans"] },
+        { id: "g2", slug: "office", name: "Office", hidden_sections: ["upcoming"] },
+      ])
+    )
+    renderSidebar("/g/office")
+    const inventory = await screen.findByTestId("sidebar-inventory-group")
+    await within(inventory).findByRole("link", { name: "Lent out" })
+    expect(inventoryLinkTexts(inventory)).not.toContain("Upcoming")
+  })
+})

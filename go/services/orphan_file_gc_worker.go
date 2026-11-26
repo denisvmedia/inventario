@@ -300,8 +300,9 @@ type OrphanFileGCDeps struct {
 // Get→write race).
 //
 // It sweeps EXACTLY those two classes. It never enumerates t/<tenant>/files/,
-// t/<tenant>/exports/, t/<tenant>/restores/, seed keys, or anything outside the
-// t/ prefix — see sweepTenantThumbnails for why each of those is a NEVER-SWEEP.
+// t/<tenant>/exports/, t/<tenant>/restores/, t/<tenant>/avatars/, seed keys, or
+// anything outside the t/ prefix — see sweepTenantThumbnails for why each of
+// those is a NEVER-SWEEP.
 // Every field below the config block is owned by the sweep goroutine: RunOnce
 // is called from the ticker loop only (and, in tests, serially), never
 // concurrently with itself.
@@ -1251,10 +1252,14 @@ type orphanThumbKey struct {
 //     POST /exports/import, rowless forever if the user never submits, and
 //     rowless forever if the import FAILS. A "blobs with no owning file row"
 //     sweep here would destroy a user's uploaded backup.
+//   - t/<tenant>/avatars/  — profile photos, referenced by users.avatar_path
+//     and by no file row; a tenant move writes the copy before the users row
+//     points at it. The avatar service deletes the photos it replaces.
 //   - t/<tenant>/seed-*    — sits directly under the tenant root; owned by real
 //     file rows.
 //   - anything outside t/  — legacy flat keys (pre-#1793) are still live
-//     wherever `inventario backfill blobs` was never run.
+//     wherever `inventario backfill blobs` was never run, and so are profile
+//     photos with a flat avatars/<user>/ key.
 func (w *OrphanFileGCWorker) sweepTenantThumbnails(
 	ctx context.Context,
 	bucket *blob.Bucket,

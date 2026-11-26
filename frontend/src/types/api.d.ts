@@ -1093,6 +1093,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
                 422: {
                     headers: {
@@ -1382,6 +1391,15 @@ export type paths = {
                 };
                 /** @description Not Found - unknown user */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -12572,7 +12590,7 @@ export type paths = {
         put?: never;
         /**
          * Create a group
-         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin.
+         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
          */
         post: {
             parameters: {
@@ -12733,7 +12751,8 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+         *     The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {
@@ -12785,6 +12804,82 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/groups/{groupID}/hidden-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the group's hidden sections
+         * @description Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+         *     An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+         *     Unknown sections are refused; duplicates are dropped. Requires group admin role.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Hidden sections */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.GroupHiddenSectionsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.LocationGroupResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/groups/{groupID}/invites": {
@@ -15692,9 +15787,20 @@ export type components = {
             custom_fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Fields are the values read, keyed by field name. Its document_type
+             *     classifies the scan as a whole; files is the per-file source, and
+             *     document_type is derived from it when the model gives none.
+             */
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Files holds one suggestion per input file the model said something
+             *     usable about, ordered by index; a file without one has no entry.
+             *     Absent when there are none.
+             */
+            files?: components["schemas"]["jsonapi.CommodityScanFileGuess"][];
             /**
              * @description Items is present only when the source described more than one
              *     distinct product; one entry per product, most prominent first. The
@@ -15705,10 +15811,29 @@ export type components = {
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
         };
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            /** @example 0.9 */
+            confidence?: number;
+            /**
+             * @example invoice
+             * @enum {string}
+             */
+            value?: "invoice" | "receipt" | "manual" | "warranty" | "photo" | "other";
+        };
         "jsonapi.CommodityScanFieldGuess": {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanFileGuess": {
+            document_type?: components["schemas"]["jsonapi.CommodityScanDocumentTypeGuess"];
+            /**
+             * @description Index is the file's position among the photos parts of the request,
+             *     counted from 0. An empty part the server skipped still counts.
+             * @example 0
+             */
+            index: number;
+            title?: components["schemas"]["jsonapi.CommodityScanTitleGuess"];
         };
         "jsonapi.CommodityScanItem": {
             custom_fields?: {
@@ -15728,6 +15853,12 @@ export type components = {
         };
         "jsonapi.CommodityScanResponse": {
             data?: components["schemas"]["jsonapi.CommodityScanResource"];
+        };
+        "jsonapi.CommodityScanTitleGuess": {
+            /** @example 0.8 */
+            confidence?: number;
+            /** @example Bosch invoice, March 2024 */
+            value?: string;
         };
         "jsonapi.CommodityScanWarning": {
             /**
@@ -16360,6 +16491,25 @@ export type components = {
         "jsonapi.GroupDeleteRequest": {
             confirm_word?: string;
             password?: string;
+        };
+        "jsonapi.GroupHiddenSectionsAttributes": {
+            /**
+             * @description HiddenSections is the full list of sections to hide: warranties,
+             *     maintenance, loans, upcoming. An empty list shows every section.
+             *     Unknown sections are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
+        };
+        "jsonapi.GroupHiddenSectionsData": {
+            attributes?: components["schemas"]["jsonapi.GroupHiddenSectionsAttributes"];
+            /**
+             * @example groups
+             * @enum {string}
+             */
+            type?: "groups";
+        };
+        "jsonapi.GroupHiddenSectionsRequest": {
+            data?: components["schemas"]["jsonapi.GroupHiddenSectionsData"];
         };
         "jsonapi.GroupInviteCreateAttrs": {
             /** @example colleague@example.com */
@@ -16999,6 +17149,14 @@ export type components = {
              *     reprice-aware currency migration is tracked under #202.
              */
             group_currency?: string;
+            /**
+             * @description HiddenSections lists the sections the group hides for all its
+             *     members: warranties, maintenance, loans, upcoming. Optional. On
+             *     create, absent means the group hides nothing; on update, absent
+             *     leaves the list as it is and a list replaces it. Unknown sections
+             *     are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
             icon?: string;
             name?: string;
         };
@@ -18609,6 +18767,8 @@ export type components = {
         };
         /** @enum {string} */
         "models.GroupRole": "viewer" | "user" | "admin" | "owner";
+        /** @enum {string} */
+        "models.GroupSection": "warranties" | "maintenance" | "loans" | "upcoming";
         "models.IntakeCandidate": {
             accepted_fields?: string[];
             created_at?: string;
@@ -18737,6 +18897,13 @@ export type components = {
              *     update endpoint; changing it triggers a reprice of the group's commodities.
              */
             group_currency?: string;
+            /**
+             * @description HiddenSections lists the sections the group hides for all its members
+             *     (see GroupSection). Empty for a group that hides nothing. Admins change
+             *     it through the group's update endpoints; every member reads it with the
+             *     group.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
             /**
              * @description Icon is an optional emoji from the curated set in
              *     models.ValidGroupIcons. Empty string means "no icon". Issue #1255.
@@ -19009,10 +19176,12 @@ export type components = {
              * @description AvatarPath is the blob key of the user's profile photo, or nil when they
              *     have none and the UI falls back to their initials (#1382).
              *
-             *     The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-             *     bust browser caches: replacing a photo writes a new key rather than
-             *     overwriting one, so nothing has to reason about cache headers to make the
-             *     new picture show up.
+             *     The key lives under the user's tenant and ends in a revision number and a
+             *     random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+             *     with a flat `avatars/<user>/...` key works the same). Replacing a
+             *     photo writes a new key rather than overwriting one, so nothing has to
+             *     reason about cache headers to make the new picture show up, and a tenant
+             *     move copies the photo to a new key under the new tenant.
              *
              *     Not user input: it is set by the avatar endpoints, which decide the key
              *     after validating and re-encoding what was uploaded. A client that could

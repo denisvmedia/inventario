@@ -112,7 +112,7 @@ func (s *LoanReminderService) RemindOnce(ctx context.Context, now time.Time) (Lo
 	if s.factorySet == nil {
 		return stats, errxtrace.Wrap("loan reminder service: factorySet is required", registry.ErrFieldRequired)
 	}
-	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}}
+	sweep := &loanSweep{prefs: s.prefsForSweep(), lenders: map[string]loanLender{}, sections: newSectionGate(s.factorySet)}
 	for _, kind := range []registry.LoanReminderKind{
 		registry.LoanReminderKindOverdue,
 		registry.LoanReminderKindDueSoon,
@@ -146,6 +146,22 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		return 0, 0, errxtrace.Wrap("loan reminder: list pending", err)
 	}
 	for _, l := range loans {
+		hidden, hideErr := sweep.sections.hides(ctx, l.GroupID, models.GroupSectionLoans)
+		if hideErr != nil {
+			failed++
+			slog.Error("loan reminder failed",
+				"loan_id", l.ID,
+				"commodity_id", l.CommodityID,
+				"kind", string(kind),
+				"error", hideErr,
+			)
+			continue
+		}
+		if hidden {
+			// The flag stays unset, so the reminder goes out if the
+			// section is shown again while the loan is still due.
+			continue
+		}
 		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, sweep)
 		if processErr != nil {
 			failed++
@@ -319,6 +335,8 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 type loanSweep struct {
 	prefs   *notifications.Cache
 	lenders map[string]loanLender
+	// sections skips the loans of groups that hide the loans section.
+	sections *sectionGate
 }
 
 type loanLender struct {

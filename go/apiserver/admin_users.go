@@ -365,6 +365,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
+// @Failure 409 {object} jsonapi.Errors "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - self-block or admin-on-admin without force"
 // @Router /admin/users/{userID}/block [post]
 func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
@@ -461,7 +462,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("admin block: failed to deactivate user", "user_id", target.ID, "error", err)
 		api.logBlockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error(), forced)
-		_ = internalServerError(w, r, err)
+		_ = renderEntityError(w, r, err)
 		return
 	}
 
@@ -499,6 +500,7 @@ func (api *adminUsersAPI) blockUser(w http.ResponseWriter, r *http.Request) {
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown user"
+// @Failure 409 {object} jsonapi.Errors "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)"
 // @Failure 422 {object} jsonapi.Errors "Unprocessable Entity - invalid reason"
 // @Router /admin/users/{userID}/unblock [post]
 func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
@@ -547,7 +549,7 @@ func (api *adminUsersAPI) unblockUser(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		slog.Error("admin unblock: failed to reactivate user", "user_id", target.ID, "error", err)
 		api.logUnblockOutcome(r, actor.ID, target.ID, target.TenantID, req, false, err.Error())
-		_ = internalServerError(w, r, err)
+		_ = renderEntityError(w, r, err)
 		return
 	}
 

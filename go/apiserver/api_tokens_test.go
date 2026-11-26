@@ -520,12 +520,10 @@ func TestAPITokens_RejectedTokensAnswer401(t *testing.T) {
 			must.Must(env.params.FactorySet.UserRegistry.Update(context.Background(), *u))
 			return tok.Secret
 		}},
-		{"owner moved to another tenant", func(env *apiTokenEnv) string {
-			tok := env.mint(nil)
-			u := must.Must(env.params.FactorySet.UserRegistry.Get(context.Background(), env.user.ID))
-			u.TenantID = "some-other-tenant"
-			must.Must(env.params.FactorySet.UserRegistry.Update(context.Background(), *u))
-			return tok.Secret
+		// A token whose tenant is not its owner's, as a token would be if its
+		// owner moved and the move had not deleted it.
+		{"owner in another tenant", func(env *apiTokenEnv) string {
+			return env.insert(func(tk *models.APIToken) { tk.TenantID = "some-other-tenant" })
 		}},
 	}
 	for _, tt := range tests {

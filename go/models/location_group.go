@@ -84,6 +84,13 @@ type LocationGroup struct {
 	//ptah:schema:field name="group_currency" type="TEXT" not_null="true" default="USD"
 	GroupCurrency Currency `json:"group_currency" db:"group_currency"`
 
+	// HiddenSections lists the sections the group hides for all its members
+	// (see GroupSection). Empty for a group that hides nothing. Admins change
+	// it through the group's update endpoints; every member reads it with the
+	// group.
+	//ptah:schema:field name="hidden_sections" type="JSONB" not_null="true" default_expr="'[]'"
+	HiddenSections GroupSections `json:"hidden_sections" db:"hidden_sections"`
+
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at" userinput:"false"`
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
@@ -152,6 +159,7 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 		// (frontend/src/features/locations/schemas.ts, 200 chars). Empty
 		// string is the unset value, so no NotEmpty.
 		validation.Field(&lg.Description, validation.Length(0, 200)),
+		validation.Field(&lg.HiddenSections),
 	)
 
 	return validation.ValidateStructWithContext(ctx, lg, fields...)
@@ -160,6 +168,11 @@ func (lg *LocationGroup) ValidateWithContext(ctx context.Context) error {
 // IsActive returns true if the group is in the active state.
 func (lg *LocationGroup) IsActive() bool {
 	return lg.Status == LocationGroupStatusActive
+}
+
+// HidesSection reports whether the group hides section for its members.
+func (lg *LocationGroup) HidesSection(section GroupSection) bool {
+	return lg.HiddenSections.Contains(section)
 }
 
 // GenerateGroupSlug creates a cryptographically random, URL-safe slug

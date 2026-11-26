@@ -35,6 +35,7 @@ import {
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldsRequest } from "@/features/customFields/values"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import type { ListNavigation, ListNeighbor } from "@/hooks/useListNavigation"
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard"
@@ -245,6 +246,12 @@ export function CommodityEditForm({
   const isBundle = Number.isFinite(count) && count > 1
   const expiresAt = watch("warranty_expires_at")
   const warrantyNotes = watch("warranty_notes")
+  // A group that hides warranties (#1607) gets no Warranty section, unless
+  // the item holds a warranty. The fields stay in the form values, so a
+  // save keeps what the item holds.
+  const showWarranties = useSectionVisible("warranties")
+  const showWarrantySection =
+    showWarranties || !!commodity.warranty_expires_at || !!commodity.warranty_notes
   const purchaseCurrency = watch("original_price_currency") ?? ""
   const isForeignCurrency =
     !!purchaseCurrency &&
@@ -502,45 +509,49 @@ export function CommodityEditForm({
             ) : null}
           </div>
 
-          <Separator />
+          {showWarrantySection ? (
+            <>
+              <Separator />
 
-          <div className="space-y-3">
-            <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
-            {/* A bundle (count > 1) carries no warranty (#1554). An empty
+              <div className="space-y-3">
+                <SectionLabel>{t("commodities:editForm.sections.warranty")}</SectionLabel>
+                {/* A bundle (count > 1) carries no warranty (#1554). An empty
               field is disabled; a filled one stays editable so legacy data
               can be cleared. */}
-            <EditField
-              label={t("commodities:editForm.warrantyExpiry")}
-              htmlFor="edit-warranty-exp"
-              hint={
-                isBundle
-                  ? t("commodities:trackingRestrictions.warrantyStepHint")
-                  : t("commodities:editForm.warrantyExpiryHint")
-              }
-              error={errors.warranty_expires_at}
-            >
-              <Input
-                id="edit-warranty-exp"
-                type="date"
-                disabled={isBundle && !expiresAt?.trim()}
-                {...register("warranty_expires_at")}
-                aria-invalid={!!errors.warranty_expires_at}
-              />
-            </EditField>
-            <EditField
-              label={t("commodities:fields.warrantyNotes")}
-              htmlFor="edit-warranty-notes"
-              error={errors.warranty_notes}
-            >
-              <Textarea
-                id="edit-warranty-notes"
-                rows={2}
-                className="resize-none"
-                disabled={isBundle && !warrantyNotes?.trim()}
-                {...register("warranty_notes")}
-              />
-            </EditField>
-          </div>
+                <EditField
+                  label={t("commodities:editForm.warrantyExpiry")}
+                  htmlFor="edit-warranty-exp"
+                  hint={
+                    isBundle
+                      ? t("commodities:trackingRestrictions.warrantyStepHint")
+                      : t("commodities:editForm.warrantyExpiryHint")
+                  }
+                  error={errors.warranty_expires_at}
+                >
+                  <Input
+                    id="edit-warranty-exp"
+                    type="date"
+                    disabled={isBundle && !expiresAt?.trim()}
+                    {...register("warranty_expires_at")}
+                    aria-invalid={!!errors.warranty_expires_at}
+                  />
+                </EditField>
+                <EditField
+                  label={t("commodities:fields.warrantyNotes")}
+                  htmlFor="edit-warranty-notes"
+                  error={errors.warranty_notes}
+                >
+                  <Textarea
+                    id="edit-warranty-notes"
+                    rows={2}
+                    className="resize-none"
+                    disabled={isBundle && !warrantyNotes?.trim()}
+                    {...register("warranty_notes")}
+                  />
+                </EditField>
+              </div>
+            </>
+          ) : null}
 
           <Separator />
 

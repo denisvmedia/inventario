@@ -6,7 +6,8 @@
  * like a receipt as a purchase of an espresso machine, a milk frother and a
  * line of two espresso cups.
  *
- *   1. The member drops the receipt. While its products wait for a decision
+ *   1. The member drops the receipt. The scan names the receipt file and
+ *      tags it as an invoice (#1626). While its products wait for a decision
  *      the inbox lists the batch and leads back to its review. The member
  *      leaves the frother out and creates the drafts. The answer to that
  *      request is lost on the way back, as on a dropped connection.
@@ -36,6 +37,11 @@ interface CandidateRow {
   id: string;
   outcome: string;
   draft_id?: string;
+}
+
+interface FileRow {
+  title: string;
+  tags: string[];
 }
 
 function headers(auth: ApiAuth): Record<string, string> {
@@ -72,6 +78,38 @@ async function listCandidates(
   expect(resp.ok(), `GET /intake/sessions/{id} → ${resp.status()}`).toBe(true);
   return ((await resp.json()) as { data: { attributes: { candidates: CandidateRow[] } } }).data
     .attributes.candidates;
+}
+
+// sessionFiles returns the title and the tags of each file of the session's
+// sources, as the files API shows them.
+async function sessionFiles(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  sessionId: string,
+): Promise<FileRow[]> {
+  const base = `/api/v1/g/${encodeURIComponent(slug)}`;
+  const resp = await request.get(`${base}/intake/sessions/${encodeURIComponent(sessionId)}`, {
+    headers: headers(auth),
+  });
+  expect(resp.ok(), `GET /intake/sessions/{id} → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as {
+    data: { attributes: { sources: { files: { id: string }[] }[] } };
+  };
+  const files: FileRow[] = [];
+  for (const source of body.data.attributes.sources) {
+    for (const { id } of source.files) {
+      const fileResp = await request.get(`${base}/files/${encodeURIComponent(id)}`, {
+        headers: headers(auth),
+      });
+      expect(fileResp.ok(), `GET /files/{id} → ${fileResp.status()}`).toBe(true);
+      const file = (await fileResp.json()) as {
+        attributes: { title: string; tags?: string[] | null };
+      };
+      files.push({ title: file.attributes.title, tags: file.attributes.tags ?? [] });
+    }
+  }
+  return files;
 }
 
 // inboxListsBatch reports whether the group's inbox lists the batch.
@@ -156,6 +194,12 @@ test.describe("Batch intake (#2810)", () => {
     await expect(page.getByText("Milk Frother")).toBeVisible();
     await expect(page.getByText("Espresso Cups")).toBeVisible();
     await expect(page.getByTestId("intake-create-drafts")).toHaveText("Create 3 drafts");
+
+    // The scan gave the receipt file a readable title and the invoice tag.
+    // The worker writes the files just after it stores the scan, so wait.
+    await expect
+      .poll(() => sessionFiles(request, auth, slug, sessionId), { timeout: 15_000 })
+      .toEqual([{ title: "Sample Store receipt, March 2024", tags: ["invoice"] }]);
 
     // The inbox lists the batch while its products wait for a decision, and
     // leads back to the review.

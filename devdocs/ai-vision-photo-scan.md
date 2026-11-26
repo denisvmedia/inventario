@@ -52,6 +52,37 @@ When the provider is `none` (the default), the route stays mounted but returns
 `503` and the FE shows an "AI vision is unavailable" banner with a "Fill
 manually" fallback.
 
+### Per-file suggestions (#1626)
+
+Besides the products, the model returns `files`: one entry per input file
+with its `index` (the file's position in the request, counted from 0), a
+`document_type` (`invoice`, `receipt`, `manual`, `warranty`, `photo` for a
+picture of the product, or `other`) and a `title` of at most 120 characters,
+each a value with a confidence. Each provider puts a `File N` text label
+before every file so the model can name the file it means; the schema asks
+for exactly one entry per file. The response schema lists `items` before
+`files` (`aivision.ResponseProperties` keeps that order when it is
+marshaled), so the model writes the product lines first and a long receipt
+does not spend the output budget on file suggestions before its products.
+
+The scan handler skips an empty `photos` part. It maps each file it sent to
+the provider back to the part's position in the request, so `index` in the
+response always names the part the client sent, empty parts included.
+
+`aivision.ToScanResult` checks the list against the number of files sent.
+It drops an entry whose index is missing, out of range or repeated, and
+leaves out an unknown document type or an empty title. A title loses its
+format characters (bidi overrides, zero-width spaces), has control
+characters and runs of whitespace collapsed into one space, and is cut to
+120 characters. Each drop is a `low_confidence` warning with
+`field: "files"`, never a failed scan. The scan-level
+`fields.document_type` must be one of `invoice`, `manual`, `receipt`,
+`warranty` or `other`; any other value is dropped with a `low_confidence`
+warning. It stays for older clients: when the model gives none,
+`ScanResult.FillDocumentType` takes the first document among the files, or
+`other` for photos only. The mock provider reads the type from a keyword in
+the file name and gives a fixed title per type.
+
 ### Batch intake (#2810)
 
 Add items from files reuses this pipeline from a background worker instead
@@ -72,7 +103,26 @@ of the request.
   and the audit row apply as in the item form. A rate-limited source waits
   (`wait_reason = rate_limited`) without using an attempt; a provider error
   that may pass is retried with a delay and fails after three attempts. A
-  stored scan is never repeated unless the member asks for a rescan.
+  stored scan is never repeated unless the member asks for a rescan. Once a
+  scan is stored, the worker applies the per-file suggestions to the files
+  (`go/services/intake_file_suggestions.go`). The files are written after the
+  session's result is stored, so a client that reads the session as soon as
+  it leaves `processing` may still see the old titles and tags; it reads the
+  files once more to get them. A suggestion applies only to a file that
+  still has both values its upload gave it: the title equals the file name
+  without the extension, and the file has none of the tags a scan gives
+  (`invoice`, `manual`, `warranty`, `photo`). Then the tag of the document
+  type is added (`invoice` for an invoice or a receipt, `manual`, `warranty`,
+  `photo`; none for other) and the title is replaced. A file the member
+  renamed or classified before the scan gets nothing, and a file a scan
+  changed is left alone by a rescan. One edge is accepted: when the scan gave
+  a document type but no title and the member removed the tag, the file has
+  its upload values again and a rescan adds the tag back. Suggestions under
+  the review's accept confidence (0.3) are skipped, and so is a source that
+  carries a document of another system. A result the registry refuses as
+  stale (`ErrIntakeSourceChanged`) changes no file. The file is read again
+  just before the write, but the read and the write are not one
+  transaction.
 - Service: `go/services/intake_service.go`. A batch takes at most 50 files
   and a group at most 200 waiting purchases. `CreateDrafts` makes one draft
   per selected candidate with the client key `intake:<candidate id>`, so a

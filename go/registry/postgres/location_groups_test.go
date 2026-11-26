@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -173,5 +174,104 @@ func TestLocationGroupRegistry_Update_And_Delete(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	_, err = registrySet.LocationGroupRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// -- Hidden sections -------------------------------------------------------
+
+func TestLocationGroupRegistry_HiddenSections_RoundTrip(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+
+	// A group written without the setting hides nothing, and reads back an
+	// empty list rather than null.
+	created, err := registrySet.LocationGroupRegistry.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "Plain"))
+	c.Assert(err, qt.IsNil)
+	got, err := registrySet.LocationGroupRegistry.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{})
+
+	got.HiddenSections = models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans}
+	_, err = registrySet.LocationGroupRegistry.Update(ctx, *got)
+	c.Assert(err, qt.IsNil)
+
+	reread, err := registrySet.LocationGroupRegistry.GetBySlug(ctx, user.TenantID, created.Slug)
+	c.Assert(err, qt.IsNil)
+	c.Assert(reread.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+
+	listed, err := registrySet.LocationGroupRegistry.ListByTenant(ctx, user.TenantID)
+	c.Assert(err, qt.IsNil)
+	var found bool
+	for _, g := range listed {
+		if g.ID == created.ID {
+			found = true
+			c.Assert(g.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+		}
+	}
+	c.Assert(found, qt.IsTrue)
+
+	// A group created with the setting keeps it.
+	withSections := newTestGroup(c, user.TenantID, user.ID, "Stamps")
+	withSections.HiddenSections = models.GroupSections{models.GroupSectionWarranties}
+	stamps, err := registrySet.LocationGroupRegistry.Create(ctx, withSections)
+	c.Assert(err, qt.IsNil)
+	got, err = registrySet.LocationGroupRegistry.Get(ctx, stamps.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties})
+}
+
+func TestLocationGroupRegistry_SetHiddenSections(t *testing.T) {
+	registrySet, cleanup := setupTestRegistrySet(t)
+	defer cleanup()
+
+	c := qt.New(t)
+	ctx := context.Background()
+	user := getTestUser(c, registrySet)
+	groups := registrySet.LocationGroupRegistry
+
+	created, err := groups.Create(ctx, newTestGroup(c, user.TenantID, user.ID, "Books"))
+	c.Assert(err, qt.IsNil)
+
+	// A rename that commits after the caller read the group is kept: the
+	// write touches the hidden sections and updated_at only.
+	stale, err := groups.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	renamed := *stale
+	renamed.Name = "Book collection"
+	_, err = groups.Update(ctx, renamed)
+	c.Assert(err, qt.IsNil)
+
+	at := time.Now().Add(time.Minute).UTC().Truncate(time.Microsecond)
+	got, applied, err := groups.SetHiddenSections(ctx, created.ID, models.GroupSections{models.GroupSectionLoans, models.GroupSectionWarranties}, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+	c.Assert(got.Name, qt.Equals, "Book collection")
+
+	stored, err := groups.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Name, qt.Equals, "Book collection")
+	c.Assert(stored.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+	c.Assert(stored.UpdatedAt.Equal(at), qt.IsTrue, qt.Commentf("updated_at %s, want %s", stored.UpdatedAt, at))
+
+	// A group whose deletion started is left as it is.
+	pending := *stored
+	pending.Status = models.LocationGroupStatusPendingDeletion
+	_, err = groups.Update(ctx, pending)
+	c.Assert(err, qt.IsNil)
+	got, applied, err = groups.SetHiddenSections(ctx, created.ID, models.GroupSections{}, time.Now())
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsFalse)
+	c.Assert(got.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	stored, err = groups.Get(ctx, created.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	c.Assert(stored.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties, models.GroupSectionLoans})
+
+	_, _, err = groups.SetHiddenSections(ctx, "no-such-group", models.GroupSections{}, time.Now())
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
