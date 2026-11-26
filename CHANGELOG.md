@@ -14,6 +14,16 @@ when to add an entry and where it goes.
 
 ### Added
 
+- Two item statuses for every group: **Donated** and **Stolen**, next to
+  Sold, Lost, Disposed and Written Off. They are set like the other end
+  statuses, from the item page, the item form or the bulk **Set status**
+  menu, with a date and an optional note and no sale price. The status
+  filter, saved views, search and the API's `status` parameter take
+  `donated` and `stolen`. Like the other end statuses, such an item leaves
+  the default items list, the inbox counts, the upcoming warranties, the
+  location insurance report and every total; its single-item insurance
+  report still opens from its page. Backups carry the new statuses, and
+  older backups restore as before.
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
   (unique in the group, ignoring case) and a type that never changes: text,
   long text, number, money, date, yes/no, select, URL or a link to another

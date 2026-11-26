@@ -53,7 +53,7 @@ Locations (Top-level containers)
   - Basic Info: Name, Short Name, Type, Count
   - Financial: Original Price, Current Price, Currency handling
   - Identification: Serial Numbers, Part Numbers
-  - Status: Draft, Active, Sold, Lost, Disposed, Written Off
+  - Status: Draft, Active, Sold, Lost, Disposed, Written Off, Donated, Stolen
   - Dates: Purchase Date, Registration Date, Last Modified
   - Organization: Tags, Comments, URLs
 - **Relationships**: Optionally filed under one Area — `AreaID` is nullable (#1986), so a commodity may be unassigned ("No location"); has multiple Files (Images, Invoices, Manuals)
