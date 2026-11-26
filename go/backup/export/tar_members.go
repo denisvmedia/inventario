@@ -10,8 +10,9 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/shopspring/decimal"
-	"go.5x5.cz/inventario/models"
 	"gocloud.dev/blob"
+
+	"go.5x5.cz/inventario/models"
 )
 
 // gzipLevel is the compression level of a payload.tar.gz, the group backup's
