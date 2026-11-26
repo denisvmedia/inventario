@@ -229,7 +229,9 @@ Both ArgoCD ApplicationSets use a GitHub App to talk to the GitHub API:
   used because `denisvmedia` is a user, not an org).
 
 Both reuse the same `github-app-creds` Secret (repo-creds format created
-by `apply-secrets.sh` from the sops bundle).
+by `apply-secrets.sh` from the sops bundle). The `preview-health-check`
+CronJob uses it too, to comment on a PR whose preview did not come up, so
+the App needs **Pull requests: Read and write** (#1946).
 
 Walkthrough: [SECRETS.md §2 "Create the GitHub App"](./SECRETS.md#2-create-the-github-app).
 
@@ -362,7 +364,8 @@ Expected timing on a fresh VM: 3-5 minutes. The script:
 9. Materializes Kubernetes Secrets from the sops bundle (the `inventario-admin`
    seed for both `inv-vcl01-master` and `inv-vcl01-longevity`, the GitHub App
    repo-creds, the TS operator OAuth).
-10. Applies the cluster-extras manifests (`ts-orphan-cleanup` CronJob, plus
+10. Applies the cluster-extras manifests (the `ts-orphan-cleanup`,
+    `argocd-stuck-sync-watchdog` and `preview-health-check` CronJobs, plus
     the tailnet Ingress that exposes the ArgoCD UI at
     `argocd-inv-vcl01.<tailnet>.ts.net`).
 11. Applies the ArgoCD `AppProject` and three `ApplicationSet`s — the master
@@ -438,6 +441,23 @@ A sticky comment on the PR shows the deployed hostname, the head SHA, and
 the admin credentials (`admin@example.com` / `PreviewAdmin123` for the seeded
 dev login). The hostname is shown as plain text on purpose — see
 [devdocs note](../devdocs/infra/dev/README.md#7-github-workflows) for why.
+
+There is no limit on how many previews run at once: the Kubernetes scheduler
+decides what fits on the VM, within each preview namespace's own
+`ResourceQuota`. A preview it has no room for waits with its pods `Pending`
+until capacity frees up, for example when another preview is removed. When a
+preview is still not healthy 15 minutes after the cluster first saw it
+unhealthy at the PR's head commit, the in-cluster
+[`preview-health-check`](./vm/cluster-extras/preview-health-check.yaml)
+CronJob posts a second comment, "Inventario preview env: not up", with the
+cause when the pods or events show it. "Waiting for capacity" means pods
+cannot be scheduled for lack of memory or CPU: the PR is fine, and the preview
+starts on its own once there is room. The other causes it names are pods that
+cannot be scheduled for another reason, a quota that rejects pods, an image
+that cannot be pulled, a container that keeps restarting, and an ArgoCD sync
+error. The comment is edited when the cause changes, when the preview comes
+up, and when the preview is removed first; a preview that comes up in time
+gets only the link comment.
 
 ### Tear down a preview
 
@@ -775,6 +795,22 @@ KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd \
 Bump `requeueAfterSeconds` in `infra/argocd/applicationset-pr.yaml` (default
 60 → 180) and re-apply. The trade-off is slower preview discovery.
 
+### `preview-health-check` Jobs fail
+
+```bash
+KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd get jobs \
+  -l app.kubernetes.io/name=preview-health-check
+KUBECONFIG=~/.kube/inv-vcl01.config kubectl -n argocd logs job/<name-from-above>
+```
+
+- `HTTP 403 ... Resource not accessible by integration` → the GitHub App
+  lacks **Pull requests: Read and write**; see
+  [SECRETS.md §2](./SECRETS.md#2-create-the-github-app).
+- `argocd/github-app-creds is missing or incomplete` → the sops bundle has
+  no `github.app_*` keys, so nothing can be posted.
+- `failed to read ConfigMap argocd/preview-health-state` → re-run
+  `make bootstrap`, which applies the manifest that creates it.
+
 ### Stale Tailscale device records accumulating
 
 In normal operation, the `ts-orphan-cleanup` CronJob handles this hourly.
@@ -998,9 +1034,11 @@ Each has its own dedicated issue:
   filling the `velero.*` keys in the sops bundle. Full runbook in
   [§6 "Disaster recovery"](#6-disaster-recovery).
 - **[#1866](https://github.com/denisvmedia/inventario/issues/1866) Resource
-  quotas per preview namespace.** Today each preview can consume up to the
-  VM's total budget; under load this would degrade other previews. Quotas
-  cap per-PR CPU/memory/storage.
+  quotas per preview namespace — ✅ implemented.** Each preview namespace gets
+  a `ResourceQuota` and `LimitRange` (sized in
+  [`helm-overlays/preview-base.values.yaml`](./helm-overlays/preview-base.values.yaml)).
+  The number of previews is not capped ([#1946](https://github.com/denisvmedia/inventario/issues/1946));
+  see [§4 "Trigger a preview"](#trigger-a-preview).
 
 Other open follow-ups touch the chart or workflow rather than the runtime:
 [#1882](https://github.com/denisvmedia/inventario/issues/1882) (TLS
@@ -1036,6 +1074,7 @@ infra/
     │   └── velero.yaml              Velero static values: plugin, node-agent, schedule (#1865)
     ├── cluster-extras/
     │   ├── argocd-ts-ingress.yaml  tailnet Ingress for the ArgoCD UI (#1892)
+    │   ├── preview-health-check.yaml  comments on a PR whose preview did not come up (#1946)
     │   └── ts-orphan-cleanup.yaml  hourly TS device GC CronJob
     ├── scripts/
     │   ├── apply-secrets.sh       translate sops bundle into k8s Secrets

@@ -53,10 +53,11 @@ The dev flow has three independent loops:
 2. **Sync loop** — ArgoCD's ApplicationSet PR generator polls GitHub (`appSecretName: github-app-creds` — see [#1854](https://github.com/denisvmedia/inventario/issues/1854) for the GitHub App). On seeing a PR with the `preview` label, it spawns/updates an Application; ArgoCD reconciles the rendered chart against the cluster.
 3. **Tailnet loop** — the chart's Ingress (`ingressClassName: tailscale`) is picked up by the [Tailscale Operator](https://tailscale.com/kb/1236/kubernetes-operator-cluster-ingress), which provisions a per-Ingress proxy pod that joins the tailnet under the requested hostname, exchanges TLS via the coordination server, and proxies HTTPS traffic to the backing Service.
 
-Two ancillary loops keep the system healthy:
+Three ancillary loops keep the system healthy:
 
 4. **PR comment loop** — `.github/workflows/pr-preview-status.yml`: on each PR event (`labeled` / `synchronize` / `unlabeled` / `closed`) updates a sticky comment with the deployed hostname.
 5. **Tailnet-device GC loop** — `infra/vm/cluster-extras/ts-orphan-cleanup.yaml`: hourly CronJob inside the cluster that lists tailnet devices, finds orphan records matching the PR-preview naming convention that have been offline > 1 hour, and `DELETE`s them via the TS API. Without this, every closed PR (or snapshot-rolled-back cluster) would leave a stale device record holding the original hostname slot, and the next deploy of the same PR number would get a `-1`/`-2` suffix.
+6. **Preview health loop** — `infra/vm/cluster-extras/preview-health-check.yaml` ([#1946](https://github.com/denisvmedia/inventario/issues/1946)): CronJob every 5 minutes that finds PR previews still not healthy 15 minutes after it first saw them unhealthy at the head commit, reads their pods and events, and comments on the PR with the cause, most importantly pods the scheduler cannot place for lack of memory or CPU. There is no cap on the number of previews; the scheduler decides what fits. It runs in the cluster because GitHub Actions has no route to it, and it reads Pods and Events because ArgoCD Notifications only sees the Application.
 
 ---
 

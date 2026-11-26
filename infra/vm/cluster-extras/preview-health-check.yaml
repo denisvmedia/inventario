@@ -1,0 +1,595 @@
+# In-cluster check that a PR preview actually came up, with a comment on the
+# pull request when it did not (#1946).
+#
+# Why this exists:
+#   There is deliberately no cap on the number of concurrent previews. A fixed
+#   count would ignore how much each deployment requests and what the VM can
+#   hold; the Kubernetes scheduler already decides what fits. The cost is that
+#   a preview the VM has no room for just sits Pending, and the sticky link
+#   comment from pr-preview-status.yml cannot tell. This job tells the author,
+#   and says why when the pods or events show it, above all when pods cannot
+#   be scheduled for lack of memory or CPU (`Insufficient memory` /
+#   `Insufficient cpu`), so a preview waiting on capacity is not mistaken for
+#   a broken PR. A healthy preview gets no extra comment.
+#
+# Why here and not in CI or ArgoCD Notifications:
+#   GitHub Actions has no route to the cluster (no Tailscale step, no
+#   kubeconfig secret), so a workflow cannot wait for the Application. ArgoCD
+#   Notifications can post to GitHub, but its templates only see the
+#   Application object: scheduling failures live on Pods and Events, so it
+#   could say "Degraded" but never "out of memory". This CronJob reads both
+#   through the Kubernetes API (curl + jq, like argocd-stuck-sync-watchdog) and
+#   posts with the GitHub App ArgoCD already uses.
+#
+# What it does, every 5 minutes, for each Application labeled `inventario-pr`:
+#   - Healthy (and the current revision synced): nothing, unless it reported
+#     a problem earlier; then it edits that comment to say the preview is up.
+#   - Not healthy: the first time it sees that for the PR's head commit it
+#     notes the time. GRACE_SECONDS (15 min) later, still not healthy, it
+#     reads the namespace's pods and events and posts one comment naming the
+#     cause: pods the scheduler cannot place (capacity, or another reason), a
+#     quota that rejects pods, an image that cannot be pulled, a container in
+#     CrashLoopBackOff, or ArgoCD's sync error. When the cause changes it edits
+#     the same comment; edits do not notify anyone again.
+#   - Application gone while a problem was reported (label dropped, PR
+#     closed): the comment is edited to say the preview was removed.
+#   The clock starts at the first unhealthy sighting rather than at the sync
+#   start, so the watchdog re-kicking a sync does not reset it.
+#
+# State:
+#   ConfigMap `preview-health-state` keeps, per Application, the head commit,
+#   when it was first seen unhealthy, what was reported and the comment id.
+#   The manifest carries no `data`, so re-applying it keeps the state. Without
+#   the state (deleted ConfigMap data), the job finds its earlier comment by
+#   the `<!-- inventario-preview-health -->` marker.
+#
+# GitHub permission:
+#   The App behind `argocd/github-app-creds` needs **Pull requests: Read and
+#   write** (infra/SECRETS.md §2). Without it every comment fails with 403, the
+#   Job fails, and `kubectl -n argocd get jobs` shows it.
+#
+# Resources:
+#   The container sets no requests or limits. Its whole point is the moment the
+#   VM is full, and a pod that requests nothing still passes the scheduler's
+#   resource check when every other pod is `Insufficient memory`.
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: preview-health-check
+  namespace: argocd
+---
+# List Applications; read and patch only the state ConfigMap.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: preview-health-check
+  namespace: argocd
+rules:
+  - apiGroups: ["argoproj.io"]
+    resources: ["applications"]
+    verbs: ["get", "list"]
+  - apiGroups: [""]
+    resources: ["configmaps"]
+    resourceNames: ["preview-health-state"]
+    verbs: ["get", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: preview-health-check
+  namespace: argocd
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: preview-health-check
+subjects:
+  - kind: ServiceAccount
+    name: preview-health-check
+    namespace: argocd
+---
+# Read pods and events cluster-wide: preview namespaces (inv-vcl01-pr<N>) are
+# created dynamically. Read-only.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: preview-health-check-reader
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "events"]
+    verbs: ["get", "list"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: preview-health-check-reader
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: preview-health-check-reader
+subjects:
+  - kind: ServiceAccount
+    name: preview-health-check
+    namespace: argocd
+---
+# Written by the job. No `data` here on purpose (see State above).
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preview-health-state
+  namespace: argocd
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: preview-health-check
+  namespace: argocd
+data:
+  check.sh: |
+    #!/bin/sh
+    # Comment on a PR whose preview did not come up, naming the cause when the
+    # pods or events show it (see the header of preview-health-check.yaml). A
+    # failed Kubernetes or GitHub call fails the Job, so a broken check shows up
+    # in `kubectl -n argocd get jobs` instead of going quiet.
+    set -eu
+
+    API="https://kubernetes.default.svc"
+    SA="/var/run/secrets/kubernetes.io/serviceaccount"
+    TOKEN="$(cat "$SA/token")"
+    CA="$SA/ca.crt"
+    # Hardcoded, NOT an env knob: the Role below is bound to `argocd`.
+    ARGO_NS="argocd"
+    STATE_CM="preview-health-state"
+    GRACE="${GRACE_SECONDS:-900}"
+    REPO="${GITHUB_REPOSITORY:?missing GITHUB_REPOSITORY env}"
+    GH_API="https://api.github.com"
+    GH_KEY_FILE="/github-app/private-key.pem"
+    MARKER="<!-- inventario-preview-health -->"
+    GH_TOKEN=""
+
+    WORK="$(mktemp -d)"
+    trap 'rm -rf "$WORK"' EXIT
+    FAILMARK="$WORK/failed"
+    NOW="$(date +%s)"
+
+    kube_get() {
+        curl -sS --fail --cacert "$CA" -H "Authorization: Bearer $TOKEN" "$API$1"
+    }
+
+    b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
+
+    # Exchange a GitHub App JWT for an installation token, once per run and only
+    # when there is something to post. Returns non-zero when it cannot.
+    gh_login() {
+        [ -z "$GH_TOKEN" ] || return 0
+        if [ -z "${GH_APP_ID:-}" ] || [ -z "${GH_INSTALLATION_ID:-}" ] || [ ! -s "$GH_KEY_FILE" ]; then
+            echo "WARN: argocd/github-app-creds is missing or incomplete; cannot comment on PRs." >&2
+            return 1
+        fi
+        case "$GH_APP_ID" in
+            *[!0-9]*) iss="\"$GH_APP_ID\"" ;;
+            *) iss="$GH_APP_ID" ;;
+        esac
+        header="$(printf '%s' '{"alg":"RS256","typ":"JWT"}' | b64url)"
+        payload="$(printf '{"iat":%s,"exp":%s,"iss":%s}' "$((NOW - 60))" "$((NOW + 540))" "$iss" | b64url)"
+        sig="$(printf '%s.%s' "$header" "$payload" | openssl dgst -sha256 -sign "$GH_KEY_FILE" -binary | b64url)"
+        if ! GH_TOKEN="$(curl -sS --fail -X POST \
+            -H "Authorization: Bearer $header.$payload.$sig" \
+            -H "Accept: application/vnd.github+json" \
+            "$GH_API/app/installations/$GH_INSTALLATION_ID/access_tokens" | jq -r '.token // empty')"; then
+            GH_TOKEN=""
+        fi
+        if [ -z "$GH_TOKEN" ]; then
+            echo "WARN: could not get a GitHub App installation token." >&2
+            return 1
+        fi
+    }
+
+    # gh_call <method> <path> [json-file]: response body lands in $WORK/gh.out,
+    # the HTTP status is printed (000 when curl itself failed).
+    gh_call() {
+        if [ -n "${3:-}" ]; then
+            curl -sS -o "$WORK/gh.out" -w '%{http_code}' -X "$1" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                -H "Content-Type: application/json" \
+                --data-binary "@$3" "$GH_API$2" || true
+        else
+            curl -sS -o "$WORK/gh.out" -w '%{http_code}' -X "$1" \
+                -H "Authorization: Bearer $GH_TOKEN" \
+                -H "Accept: application/vnd.github+json" \
+                -H "X-GitHub-Api-Version: 2022-11-28" \
+                "$GH_API$2" || true
+        fi
+    }
+
+    # find_comment <pr>: id of the comment this job posted earlier, if any.
+    find_comment() {
+        page=1
+        while [ "$page" -le 10 ]; do
+            code="$(gh_call GET "/repos/$REPO/issues/$1/comments?per_page=100&page=$page")"
+            if [ "$code" != 200 ]; then
+                echo "WARN: listing comments on #$1 -> HTTP $code" >&2
+                return 1
+            fi
+            id="$(jq -r --arg m "$MARKER" '[.[] | select(.user.type == "Bot" and ((.body // "") | startswith($m))) | .id] | first // empty' "$WORK/gh.out")"
+            if [ -n "$id" ]; then
+                echo "$id"
+                return 0
+            fi
+            [ "$(jq 'length' "$WORK/gh.out")" -eq 100 ] || return 0
+            page=$((page + 1))
+        done
+    }
+
+    # post_comment <pr> <comment-id or ""> <body-file>: edit the comment, or
+    # create one when there is none (or it was deleted). Prints the comment id.
+    post_comment() {
+        jq -Rs '{body: .}' "$3" >"$WORK/gh.json"
+        if [ -n "$2" ]; then
+            code="$(gh_call PATCH "/repos/$REPO/issues/comments/$2" "$WORK/gh.json")"
+            if [ "$code" = 200 ]; then
+                echo "$2"
+                return 0
+            fi
+            if [ "$code" != 404 ]; then
+                echo "WARN: editing comment $2 on #$1 -> HTTP $code: $(head -c 300 "$WORK/gh.out")" >&2
+                return 1
+            fi
+        fi
+        code="$(gh_call POST "/repos/$REPO/issues/$1/comments" "$WORK/gh.json")"
+        if [ "$code" != 201 ]; then
+            echo "WARN: commenting on #$1 -> HTTP $code: $(head -c 300 "$WORK/gh.out")" >&2
+            return 1
+        fi
+        jq -r '.id' "$WORK/gh.out"
+    }
+
+    # report <pr> <comment-id or ""> <body-file>: log in, find the earlier
+    # comment, post. Prints the comment id; non-zero (and FAILMARK) on failure.
+    report() {
+        cid="$2"
+        if gh_login; then
+            if [ -z "$cid" ]; then
+                cid="$(find_comment "$1")" || cid=""
+            fi
+            if cid="$(post_comment "$1" "$cid" "$3")"; then
+                echo "$cid"
+                return 0
+            fi
+        fi
+        touch "$FAILMARK"
+        return 1
+    }
+
+    footer() {
+        # shellcheck disable=SC2016 # the backticks are Markdown
+        printf '\n<sub>Posted by the `preview-health-check` CronJob on the preview cluster ([source](https://github.com/%s/blob/master/infra/vm/cluster-extras/preview-health-check.yaml)). It edits this comment when the state changes.</sub>\n' "$REPO"
+    }
+
+    render_up() {  # <sha7>
+        {
+            echo "$MARKER"
+            echo "### Inventario preview env: up"
+            echo
+            echo "The preview of \`$1\` is healthy now. The problem reported earlier in this comment is resolved."
+            footer
+        } >"$WORK/body.md"
+    }
+
+    render_removed() {
+        {
+            echo "$MARKER"
+            echo "### Inventario preview env: removed"
+            echo
+            echo "The preview was removed before it came up: the \`preview\` label was dropped or the pull request was closed."
+            footer
+        } >"$WORK/body.md"
+    }
+
+    # render_down <app-name> <namespace> <sha7>: read the namespace's pods and
+    # events and describe why the preview is not up.
+    render_down() {
+        jq --arg n "$1" '.items[] | select(.metadata.name == $n)' "$WORK/apps.json" >"$WORK/app.json"
+        kube_get "/api/v1/namespaces/$2/pods" >"$WORK/pods.json" || {
+            echo "WARN: cannot list pods in $2" >&2
+            touch "$FAILMARK"
+            echo '{"items":[]}' >"$WORK/pods.json"
+        }
+        kube_get "/api/v1/namespaces/$2/events" >"$WORK/events.json" || {
+            echo "WARN: cannot list events in $2" >&2
+            touch "$FAILMARK"
+            echo '{"items":[]}' >"$WORK/events.json"
+        }
+        {
+            echo "$MARKER"
+            jq -n -r \
+                --slurpfile app "$WORK/app.json" \
+                --slurpfile pods "$WORK/pods.json" \
+                --slurpfile events "$WORK/events.json" \
+                --arg ns "$2" --arg sha "$3" \
+                --argjson grace "$GRACE" --argjson now "$NOW" '
+                def clip: gsub("\\s+"; " ") | if length > 300 then .[:300] + "..." else . end;
+                def ts: (. // "") | sub("\\.[0-9]+"; "") | (try fromdateiso8601 catch 0);
+                def statuses: (.status.initContainerStatuses // []) + (.status.containerStatuses // []);
+                ($app[0] // {}) as $a
+                | ($pods[0].items // []) as $p
+                | ($events[0].items // []) as $e
+                # Pods the scheduler cannot place now ...
+                | [ $p[] | select(.status.phase == "Pending") | . as $pod
+                    | (.status.conditions // [])[]
+                    | select(.type == "PodScheduled" and .status == "False" and .reason == "Unschedulable")
+                    | {pod: $pod.metadata.name, msg: (.message // "" | clip)} ] as $current
+                # ... or could not place recently: a Job pod that timed out is gone,
+                # but its FailedScheduling event stays.
+                | (if ($current | length) > 0 then $current else
+                    [ $e[] | select(.type == "Warning" and .reason == "FailedScheduling")
+                      | select(((.series.lastObservedTime // .lastTimestamp // .eventTime // .metadata.creationTimestamp) | ts) > ($now - $grace))
+                      | {pod: (.involvedObject.name // "?"), msg: (.message // "" | clip)} ]
+                    | unique_by(.pod) end) as $unsched
+                | [ $unsched[] | select(.msg | test("Insufficient (memory|cpu)")) ] as $capacity
+                | [ $unsched[] | select(.msg | test("Insufficient (memory|cpu)") | not) ] as $otherSched
+                | ([ $capacity[].msg | select(test("Insufficient memory")) ] | length > 0) as $mem
+                | ([ $capacity[].msg | select(test("Insufficient cpu")) ] | length > 0) as $cpu
+                | [ $e[] | select(.type == "Warning" and .reason == "FailedCreate")
+                    | (.message // "") | select(test("exceeded quota")) | clip ] | unique as $quota
+                | [ $p[] | . as $pod | statuses[]
+                    | select((.state.waiting.reason // "") | test("^(ImagePullBackOff|ErrImagePull)$"))
+                    | {pod: $pod.metadata.name, image: .image} ] as $image
+                | [ $p[] | . as $pod | statuses[]
+                    | select((.state.waiting.reason // "") == "CrashLoopBackOff")
+                    | {pod: $pod.metadata.name, container: .name, restarts: (.restartCount // 0)} ] as $crash
+                | [ ($a.status.resources // [])[]
+                    | select(.health != null and .health.status != "Healthy")
+                    | "- \(.kind) `\(.name)`: \(.health.status)\(if (.health.message // "") != "" then ", " + (.health.message | clip) else "" end)" ] as $unhealthy
+                | ($a.status.operationState // {}) as $op
+                | ((($op.phase // "") | test("^(Failed|Error)$")) and (($a.status.sync.status // "") != "Synced")) as $syncFailed
+                | [
+                    "### Inventario preview env: not up",
+                    "",
+                    "The preview of `\($sha)` has not come up within \($grace / 60 | floor) minutes. ArgoCD reports health `\($a.status.health.status // "Unknown")` and sync status `\($a.status.sync.status // "Unknown")`.",
+                    ""
+                  ]
+                  + (if ($capacity | length) > 0 then [
+                      "**Waiting for capacity.** \(if ($capacity | length) == 1 then "1 pod cannot" else "\($capacity | length) pods cannot" end) be scheduled: the \(if $mem and $cpu then "memory and CPU" elif $mem then "memory" else "CPU" end) that other pods on the VM already request leaves no room for them.",
+                      ""
+                    ] + [ $capacity[] | "- `\(.pod)`: \(.msg)" ] + [
+                      "",
+                      "This is not a problem with the pull request. There is no limit on the number of previews; the Kubernetes scheduler starts these pods by itself once capacity frees up, for example when another preview is removed.",
+                      ""
+                    ] else [] end)
+                  + (if ($otherSched | length) > 0 then [
+                      "**Pods cannot be scheduled.**",
+                      ""
+                    ] + [ $otherSched[] | "- `\(.pod)`: \(.msg)" ] + [""] else [] end)
+                  + (if ($quota | length) > 0 then [
+                      "**The namespace quota rejects new pods.** The preview quota is set in `infra/helm-overlays/preview-base.values.yaml`.",
+                      ""
+                    ] + [ $quota[] | "- \(.)" ] + [""] else [] end)
+                  + (if ($image | length) > 0 then [
+                      "**An image cannot be pulled.** The Docker image workflow publishes `sha-\($sha)` a few minutes after a push; check whether it is still running or failed for this commit.",
+                      ""
+                    ] + [ $image[] | "- `\(.pod)`: `\(.image)`" ] + [""] else [] end)
+                  + (if ($crash | length) > 0 then [
+                      "**A container keeps restarting.**",
+                      ""
+                    ] + [ $crash[] | "- `\(.pod)`, container `\(.container)`: restarted \(.restarts) times" ] + [
+                      "",
+                      "Its logs: `kubectl -n \($ns) logs <pod> -c <container> --previous`.",
+                      ""
+                    ] else [] end)
+                  + (if ($unsched + $quota + $image + $crash | length) > 0 then []
+                     elif $syncFailed then [
+                      "**ArgoCD could not apply this commit.** The previous commit may still be running.",
+                      "",
+                      "> \($op.message // "no message" | clip)",
+                      ""
+                    ] elif ($unhealthy | length) > 0 then [
+                      "**The cause is not known.** These resources are not healthy:",
+                      ""
+                    ] + $unhealthy + [""]
+                     else [
+                      "**The cause is not known.** ArgoCD lists no unhealthy resource; open the Application in the ArgoCD UI.",
+                      ""
+                    ] end)
+                  + [ "To look yourself: `kubectl -n \($ns) get pods,events`, or the `\($a.metadata.name // $ns)` Application in the ArgoCD UI." ]
+                | join("\n")'
+            footer
+        } >"$WORK/body.md"
+    }
+
+    # --- Inputs ---
+    if ! kube_get "/apis/argoproj.io/v1alpha1/namespaces/$ARGO_NS/applications?labelSelector=inventario-pr" >"$WORK/apps.json"; then
+        echo "ERROR: failed to list Applications in '$ARGO_NS' (apiserver unreachable or RBAC denied)." >&2
+        exit 1
+    fi
+    if ! kube_get "/api/v1/namespaces/$ARGO_NS/configmaps/$STATE_CM" >"$WORK/cm.json"; then
+        echo "ERROR: failed to read ConfigMap $ARGO_NS/$STATE_CM (apply preview-health-check.yaml)." >&2
+        exit 1
+    fi
+    jq -c '(.data // {}) | map_values(fromjson? // {})' "$WORK/cm.json" >"$WORK/old_state.json"
+    echo '{}' >"$WORK/new_state.json"
+
+    # One line per PR preview: name|namespace|pr|head sha|healthy (yes/no).
+    # Healthy means ArgoCD health Healthy and no failed sync of the current
+    # revision; a failed sync leaves the previous commit running and healthy.
+    jq -r '
+        .items[]
+        | select(.metadata.deletionTimestamp == null)
+        | select((.metadata.labels["inventario-pr"] // "") | test("^[0-9]+$"))
+        | [ .metadata.name,
+            .spec.destination.namespace,
+            .metadata.labels["inventario-pr"],
+            (((.spec.sources // [.spec.source])[0].targetRevision) // "unknown"),
+            ( if (.status.health.status // "") == "Healthy"
+                 and ((((.status.operationState.phase // "") | test("^(Failed|Error)$")) and ((.status.sync.status // "") != "Synced")) | not)
+              then "yes" else "no" end )
+          ]
+        | join("|")' "$WORK/apps.json" >"$WORK/apps.txt"
+
+    # --- Current previews ---
+    # fd 3, so nothing in the loop body can read the list by accident.
+    while IFS='|' read -r name ns pr sha healthy <&3; do
+        [ -n "$name" ] || continue
+        sha7="$(printf '%s' "$sha" | cut -c1-7)"
+        IFS='|' read -r prev_sha since reported fp cid <<EOF
+    $(jq -r --arg k "$name" '.[$k] // {} | [(.sha // ""), (.since // 0), (.reported // ""), (.fingerprint // ""), (.comment // "")] | map(tostring) | join("|")' "$WORK/old_state.json")
+    EOF
+        since="${since:-0}"
+
+        if [ "$healthy" = yes ]; then
+            if [ "$reported" = down ]; then
+                render_up "$sha7"
+                if newcid="$(report "$pr" "$cid" "$WORK/body.md")"; then
+                    echo "$name: healthy again at $sha7 -> comment $newcid marked up"
+                    cid="$newcid"
+                    reported=up
+                    fp=""
+                fi
+            fi
+            since=0
+        elif [ "$sha" != "$prev_sha" ] || [ "$since" -eq 0 ]; then
+            echo "$name: not healthy at $sha7; checking again after ${GRACE}s"
+            since="$NOW"
+        elif [ $((NOW - since)) -ge "$GRACE" ]; then
+            render_down "$name" "$ns" "$sha7"
+            newfp="$(sha256sum "$WORK/body.md" | cut -d' ' -f1)"
+            if [ "$reported" != down ] || [ "$newfp" != "$fp" ]; then
+                if newcid="$(report "$pr" "$cid" "$WORK/body.md")"; then
+                    echo "$name: not up at $sha7 -> comment $newcid"
+                    cid="$newcid"
+                    reported=down
+                    fp="$newfp"
+                fi
+            else
+                echo "$name: still not up at $sha7, already reported"
+            fi
+        else
+            echo "$name: not healthy at $sha7 for $((NOW - since))s of ${GRACE}s"
+        fi
+
+        jq -c --arg k "$name" --arg pr "$pr" --arg sha "$sha" --argjson since "$since" \
+            --arg reported "$reported" --arg fp "$fp" --arg cid "$cid" \
+            '.[$k] = {pr: $pr, sha: $sha, since: $since, reported: $reported, fingerprint: $fp, comment: $cid}' \
+            "$WORK/new_state.json" >"$WORK/tmp.json"
+        mv "$WORK/tmp.json" "$WORK/new_state.json"
+    done 3<"$WORK/apps.txt"
+
+    # --- Previews that are gone (label dropped, PR closed) ---
+    jq -r --slurpfile new "$WORK/new_state.json" '
+        to_entries[]
+        | select((.key as $k | $new[0] | has($k)) | not)
+        | [.key, (.value.pr // ""), (.value.reported // ""), (.value.comment // "")]
+        | map(tostring) | join("|")' "$WORK/old_state.json" >"$WORK/gone.txt"
+    while IFS='|' read -r name pr reported cid <&3; do
+        [ -n "$name" ] || continue
+        if [ "$reported" = down ] && [ -n "$pr" ]; then
+            render_removed
+            if report "$pr" "$cid" "$WORK/body.md" >/dev/null; then
+                echo "$name: removed before it came up -> comment updated"
+            else
+                # Keep the entry so the next run tries again.
+                jq -c --arg k "$name" --slurpfile old "$WORK/old_state.json" '.[$k] = $old[0][$k]' \
+                    "$WORK/new_state.json" >"$WORK/tmp.json"
+                mv "$WORK/tmp.json" "$WORK/new_state.json"
+            fi
+        fi
+    done 3<"$WORK/gone.txt"
+
+    # --- Save state (merge patch; null deletes a key) ---
+    if [ "$(jq -n --slurpfile o "$WORK/old_state.json" --slurpfile n "$WORK/new_state.json" '$o[0] == $n[0]')" != true ]; then
+        jq -n -c --slurpfile o "$WORK/old_state.json" --slurpfile n "$WORK/new_state.json" '
+            ($n[0] | map_values(tojson)) as $data
+            | {data: ($data + ([($o[0] | keys)[] | select(. as $k | $data | has($k) | not) | {(.): null}] | add // {}))}' \
+            >"$WORK/patch.json"
+        if ! curl -sS --fail -o /dev/null --cacert "$CA" -H "Authorization: Bearer $TOKEN" \
+            -H "Content-Type: application/merge-patch+json" -X PATCH \
+            "$API/api/v1/namespaces/$ARGO_NS/configmaps/$STATE_CM" --data-binary "@$WORK/patch.json"; then
+            echo "ERROR: failed to save state to $ARGO_NS/$STATE_CM." >&2
+            exit 1
+        fi
+    fi
+
+    if [ -f "$FAILMARK" ]; then
+        echo "One or more GitHub or Kubernetes calls failed (see WARN above); failing the Job to surface it." >&2
+        exit 1
+    fi
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: preview-health-check
+  namespace: argocd
+spec:
+  schedule: "*/5 * * * *"
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 3
+  startingDeadlineSeconds: 120
+  jobTemplate:
+    metadata:
+      labels:
+        app.kubernetes.io/name: preview-health-check
+    spec:
+      # No retry inside a run: the next tick, 5 minutes later, is the retry,
+      # and a failed Job stays listed for `kubectl -n argocd get jobs`.
+      backoffLimit: 0
+      ttlSecondsAfterFinished: 86400
+      template:
+        spec:
+          restartPolicy: Never
+          serviceAccountName: preview-health-check
+          automountServiceAccountToken: true
+          containers:
+            - name: check
+              image: alpine:3.20
+              imagePullPolicy: IfNotPresent
+              env:
+                - name: GITHUB_REPOSITORY
+                  value: denisvmedia/inventario
+                # How long a preview may stay unhealthy at one commit before
+                # the PR gets a comment. A normal deploy, image build
+                # included, takes 3-5 minutes.
+                - name: GRACE_SECONDS
+                  value: "900"
+                # optional: a bundle without the GitHub App still bootstraps;
+                # the job then fails only when it has something to post.
+                - name: GH_APP_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-app-creds
+                      key: githubAppID
+                      optional: true
+                - name: GH_INSTALLATION_ID
+                  valueFrom:
+                    secretKeyRef:
+                      name: github-app-creds
+                      key: githubAppInstallationID
+                      optional: true
+              command: ["/bin/sh", "-c"]
+              args:
+                - |
+                  apk add --no-cache curl jq openssl >/dev/null
+                  exec /bin/sh /script/check.sh
+              volumeMounts:
+                - name: script
+                  mountPath: /script
+                  readOnly: true
+                - name: github-app
+                  mountPath: /github-app
+                  readOnly: true
+              resources: {}
+          volumes:
+            - name: script
+              configMap:
+                name: preview-health-check
+                defaultMode: 0755
+            - name: github-app
+              secret:
+                secretName: github-app-creds
+                optional: true
+                defaultMode: 0400
+                items:
+                  - key: githubAppPrivateKey
+                    path: private-key.pem

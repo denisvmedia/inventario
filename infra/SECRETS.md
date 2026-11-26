@@ -90,8 +90,10 @@ a second one and re-encrypt — also covered in "Adding teammates".
 
 ArgoCD's `repo-server` (for `git clone` of the inventario repo) and the
 ApplicationSet PR generator (for listing PRs and reading labels) consume
-a GitHub App credential — no PAT, no custom bot component. Permissions are
-read-only; ArgoCD never writes to GitHub.
+a GitHub App credential — no PAT, no custom bot component. ArgoCD only
+reads. The one write is the `preview-health-check` CronJob, which uses the
+same App to comment on a PR whose preview did not come up (#1946); that is
+why **Pull requests** is Read and write.
 
 1. Open <https://github.com/settings/apps/new>
 2. Fill in:
@@ -102,7 +104,7 @@ read-only; ArgoCD never writes to GitHub.
    - **Repository permissions**:
      - **Contents**: Read-only
      - **Metadata**: Read-only (always required by GitHub)
-     - **Pull requests**: Read-only
+     - **Pull requests**: Read and write
      - (everything else stays "No access")
    - **Subscribe to events**: none (we poll)
    - **Where can this GitHub App be installed?**: **Only on this account**
@@ -119,6 +121,13 @@ read-only; ArgoCD never writes to GitHub.
 
 Stash these three values (App ID, Installation ID, private key PEM) for
 the "Filling the bundle" step below.
+
+If your App has **Pull requests: Read-only**, raise it on the App's page
+(**Permissions & events** → **Pull requests** → **Read and write** → **Save
+changes**), then accept the change on the installation
+(<https://github.com/settings/installations> → **Configure** → **Review
+request** → **Accept new permissions**). The private key and the sops bundle
+stay as they are. Until then `preview-health-check` Jobs fail with HTTP 403.
 
 ### 3. Create the Tailscale OAuth client
 
