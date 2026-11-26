@@ -5,7 +5,8 @@
  *      in, the item page shows the value, and renaming the field keeps it.
  *   2. Deleting a field that an item has a value for asks to confirm that
  *      the values go too, then deletes the field and the value.
- *   3. A value typed in the Add item dialog is kept by a server draft,
+ *   3. The items list filters by a field's value through the Fields menu.
+ *   4. A value typed in the Add item dialog is kept by a server draft,
  *      shows again when the draft is resumed, and lands on the item the
  *      draft becomes.
  *
@@ -151,6 +152,32 @@ test.describe("Custom fields (#2803)", () => {
     }
   });
 
+  // setValue gives item a value for field; an item update takes the whole
+  // record, as the item form sends it.
+  async function setValue(
+    request: APIRequestContext,
+    item: string,
+    fieldId: string,
+    value: unknown,
+  ): Promise<void> {
+    const current = await request.get(itemUrl(slug, item), { headers: jsonHeaders(auth) });
+    expect(current.ok(), `GET /commodities/${item} → ${current.status()}`).toBe(true);
+    const { attributes } = ((await current.json()) as {
+      data: { attributes: Record<string, unknown> };
+    }).data;
+    const put = await request.put(itemUrl(slug, item), {
+      headers: jsonHeaders(auth),
+      data: {
+        data: {
+          id: item,
+          type: "commodities",
+          attributes: { ...attributes, custom_fields: { [fieldId]: value } },
+        },
+      },
+    });
+    expect(put.ok(), `PUT /commodities/${item} → ${put.status()}`).toBe(true);
+  }
+
   async function createItem(request: APIRequestContext, name: string): Promise<string> {
     const { id } = await createCommodityViaAPI(
       request,
@@ -224,23 +251,7 @@ test.describe("Custom fields (#2803)", () => {
     const field = await createField(request, auth, slug, `Contract ${run}`);
     fieldNames.push(field.name);
     const item = await createItem(request, `Boiler ${run}`);
-    // An item update takes the whole record, as the item form sends it.
-    const current = await request.get(itemUrl(slug, item), { headers: jsonHeaders(auth) });
-    expect(current.ok(), `GET /commodities/${item} → ${current.status()}`).toBe(true);
-    const { attributes } = ((await current.json()) as {
-      data: { attributes: Record<string, unknown> };
-    }).data;
-    const put = await request.put(itemUrl(slug, item), {
-      headers: jsonHeaders(auth),
-      data: {
-        data: {
-          id: item,
-          type: "commodities",
-          attributes: { ...attributes, custom_fields: { [field.id]: "C-42" } },
-        },
-      },
-    });
-    expect(put.ok(), `PUT /commodities/${item} → ${put.status()}`).toBe(true);
+    await setValue(request, item, field.id, "C-42");
 
     await page.goto(
       `/g/${encodeURIComponent(slug)}/custom-fields?q=${encodeURIComponent(field.name)}`,
@@ -262,6 +273,35 @@ test.describe("Custom fields (#2803)", () => {
     expect(await itemValues(request, auth, slug, item)).toEqual({});
     const left = await listFields(request, auth, slug);
     expect(left.find((f) => f.id === field.id)).toBeUndefined();
+  });
+
+  test("the items list filters by a custom field value", async ({ page, request }) => {
+    const field = await createField(request, auth, slug, `Frame ${run}`);
+    fieldNames.push(field.name);
+    const match = await createItem(request, `Road bike ${run}`);
+    const other = await createItem(request, `Gravel bike ${run}`);
+    await setValue(request, match, field.id, "FR-100");
+    await setValue(request, other, field.id, "XQ-200");
+
+    // The search keeps the list to this run's items.
+    await page.goto(
+      `/g/${encodeURIComponent(slug)}/commodities?q=${encodeURIComponent(run)}&inactive=1`,
+    );
+    const card = (id: string) => page.locator(`[data-commodity-id="${id}"]`);
+    await expect(card(match)).toBeVisible();
+    await expect(card(other)).toBeVisible();
+
+    await page.getByTestId("commodities-filter-custom-fields").click();
+    await page.getByTestId("commodities-filter-cf-field").click();
+    await page.getByRole("option", { name: field.name }).click();
+    await page.getByTestId("commodities-filter-cf-value").fill("fr-1");
+    await page.getByTestId("commodities-filter-cf-add").click();
+    await expect(page.getByTestId("commodities-filter-cf-condition-0")).toContainText(
+      `${field.name} contains`,
+    );
+    await expect(page).toHaveURL(/[?&]cf=/);
+    await expect(card(match)).toBeVisible();
+    await expect(card(other)).toBeHidden();
   });
 
   test("a value typed in the Add item dialog survives a draft and lands on the item", async ({

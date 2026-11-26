@@ -9,6 +9,7 @@ import {
   isSavedViewChanged,
   savedViewHref,
   savedViewQuery,
+  savedViewQueryString,
   staleReferences,
 } from "../view"
 
@@ -63,6 +64,16 @@ describe("isSavedViewChanged", () => {
     expect(isSavedViewChanged(view, query, "grid")).toBe(false)
   })
 
+  // The filter menu writes the options of an "in" condition in the order
+  // they were ticked; the server stores them sorted.
+  it("is false right after saving options ticked in another order", () => {
+    const list = parseCommodityQuery(new URLSearchParams("cf=f1:in:opt-b,opt-a"))
+    const sent = savedViewQueryString(list)
+    expect(sent).toContain("cf=f1%3Ain%3Aopt-a%2Copt-b")
+    const stored = { query: sent, layout: "" as const }
+    expect(isSavedViewChanged(stored, list, "list")).toBe(false)
+  })
+
   it("is true when a condition or the sort differs", () => {
     expect(isSavedViewChanged(view, DEFAULT_COMMODITY_QUERY, "grid")).toBe(true)
     const resorted = { ...DEFAULT_COMMODITY_QUERY, types: ["equipment", "other"], sortDesc: true }
@@ -92,7 +103,13 @@ describe("staleReferences", () => {
       tags: { include: ["red", "gone"], mode: "all" as const, exclude: ["old"], untagged: false },
     }
     const stale = staleReferences(query, new Set(["a1"]), new Set(["red"]))
-    expect(stale).toEqual({ area: true, tags: ["gone", "old"], sellers: [], types: [] })
+    expect(stale).toEqual({
+      area: true,
+      tags: ["gone", "old"],
+      sellers: [],
+      types: [],
+      customFields: [],
+    })
     expect(hasStaleReferences(stale)).toBe(true)
   })
 
@@ -119,6 +136,27 @@ describe("staleReferences", () => {
     expect(hasStaleReferences(known)).toBe(true)
     const unknown = staleReferences(query, new Set(), new Set())
     expect(unknown.types).toEqual([])
+    expect(hasStaleReferences(unknown)).toBe(false)
+  })
+
+  it("names deleted custom fields of the conditions and the sort once the fields are known", () => {
+    const query = {
+      ...DEFAULT_COMMODITY_QUERY,
+      customFields: ["cf-plate:contains:AB", "cf-gone:set"],
+      customFieldSort: "cf-old",
+    }
+    const known = staleReferences(
+      query,
+      new Set(),
+      new Set(),
+      undefined,
+      undefined,
+      new Set(["cf-plate"])
+    )
+    expect(known.customFields).toEqual(["cf-gone", "cf-old"])
+    expect(hasStaleReferences(known)).toBe(true)
+    const unknown = staleReferences(query, new Set(), new Set())
+    expect(unknown.customFields).toEqual([])
     expect(hasStaleReferences(unknown)).toBe(false)
   })
 })

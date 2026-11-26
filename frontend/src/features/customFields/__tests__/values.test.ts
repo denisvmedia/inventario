@@ -7,6 +7,7 @@ import {
   toFormValue,
   toFormValues,
   validateFormValue,
+  withTemplate,
 } from "@/features/customFields/values"
 
 function field(id: string, type: CustomField["type"]): CustomField {
@@ -26,6 +27,13 @@ describe("toFormValue / toFormValues", () => {
       value: "12.5",
       currency: "EUR",
     })
+  })
+
+  it("writes a JSON number without an exponent", () => {
+    expect(toFormValue(0.0000005)).toEqual({ value: "0.0000005", currency: "" })
+    expect(toFormValue(-1.25e-7)).toEqual({ value: "-0.000000125", currency: "" })
+    expect(toFormValue(1.5e21)).toEqual({ value: "1500000000000000000000", currency: "" })
+    expect(toFormValue(12.5)).toEqual({ value: "12.5", currency: "" })
   })
 
   it("keeps zero, false and empty text, and drops null", () => {
@@ -93,5 +101,48 @@ describe("validateFormValue", () => {
     expect(validateFormValue(field("t", "text"), v(""))).toBeUndefined()
     expect(validateFormValue(field("d", "date"), v("0000-01-01"))).toBe("date")
     expect(validateFormValue(field("d", "date"), v("2028-02-29"))).toBeUndefined()
+  })
+})
+
+describe("withTemplate", () => {
+  const plate = { ...field("plate", "text"), templates: [{ item_type_id: "car" }] }
+  const price = {
+    ...field("price", "money"),
+    templates: [{ item_type_id: "car", default_value: { amount: 9.5, currency: "EUR" } }],
+  }
+  const awd = {
+    ...field("awd", "boolean"),
+    templates: [{ item_type_id: "car", default_value: false }],
+  }
+  const frame = { ...field("frame", "text"), templates: [{ item_type_id: "bike" }] }
+  const fields = [plate, price, awd, frame]
+
+  it("shows the type's fields and fills the defaults where the form has no value", () => {
+    expect(withTemplate(fields, "car", undefined, "USD")).toEqual({
+      plate: { value: "", currency: "" },
+      price: { value: "9.5", currency: "EUR" },
+      awd: { value: "false", currency: "" },
+    })
+  })
+
+  it("keeps a value already in the form and the fields of an earlier type", () => {
+    const current = {
+      frame: { value: "F-1", currency: "" },
+      awd: { value: "true", currency: "" },
+      price: { value: "", currency: "USD" },
+    }
+    expect(withTemplate(fields, "car", current, "USD")).toEqual({
+      frame: { value: "F-1", currency: "" },
+      awd: { value: "true", currency: "" },
+      price: { value: "9.5", currency: "EUR" },
+      plate: { value: "", currency: "" },
+    })
+  })
+
+  it("changes nothing when the type has no template or it is applied already", () => {
+    expect(withTemplate(fields, "boat", undefined, "USD")).toBeUndefined()
+    expect(
+      withTemplate([plate], "car", { plate: { value: "", currency: "" } }, "USD")
+    ).toBeUndefined()
   })
 })

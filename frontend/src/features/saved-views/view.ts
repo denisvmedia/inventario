@@ -18,6 +18,7 @@ import {
   type LucideIcon,
 } from "lucide-react"
 
+import { staleCustomFieldIds } from "@/features/customFields/conditions"
 import {
   DEFAULT_COMMODITY_QUERY,
   commodityQueryFromApiQuery,
@@ -95,24 +96,28 @@ export function savedViewQueryString(query: CommodityQuery): string {
 }
 
 // What a view's query names that no longer exists: an area that was
-// deleted, tags without a tag row, the IDs of deleted sellers and the slugs
-// of item types the group no longer has. Only meaningful once the areas and
+// deleted, tags without a tag row, the IDs of deleted sellers, the slugs
+// of item types the group no longer has and the IDs of deleted custom
+// fields, in its conditions or its sort. Only meaningful once the areas and
 // tags have loaded.
 export interface StaleReferences {
   area: boolean
   tags: string[]
   sellers: string[]
   types: string[]
+  customFields: string[]
 }
 
-// sellerIds and typeSlugs are undefined while the sellers or the item types
-// are not known (loading or failed): none of them is reported deleted then.
+// sellerIds, typeSlugs and fieldIds are undefined while the sellers, the
+// item types or the custom fields are not known (loading or failed): none
+// of them is reported deleted then.
 export function staleReferences(
   query: CommodityQuery,
   areaIds: ReadonlySet<string>,
   tagSlugs: ReadonlySet<string>,
   sellerIds?: ReadonlySet<string>,
-  typeSlugs?: ReadonlySet<string>
+  typeSlugs?: ReadonlySet<string>,
+  fieldIds?: ReadonlySet<string>
 ): StaleReferences {
   const named = [...query.tags.include, ...query.tags.exclude]
   return {
@@ -120,11 +125,20 @@ export function staleReferences(
     tags: named.filter((slug) => !tagSlugs.has(slug)),
     sellers: sellerIds ? query.sellerIds.filter((id) => !sellerIds.has(id)) : [],
     types: typeSlugs ? query.types.filter((slug) => !typeSlugs.has(slug)) : [],
+    customFields: fieldIds
+      ? staleCustomFieldIds(query.customFields, query.customFieldSort, fieldIds)
+      : [],
   }
 }
 
 export function hasStaleReferences(stale: StaleReferences): boolean {
-  return stale.area || stale.tags.length > 0 || stale.sellers.length > 0 || stale.types.length > 0
+  return (
+    stale.area ||
+    stale.tags.length > 0 ||
+    stale.sellers.length > 0 ||
+    stale.types.length > 0 ||
+    stale.customFields.length > 0
+  )
 }
 
 // A view the dashboard offers to a member who has none yet. Each one runs a

@@ -63,9 +63,10 @@ export function commoditySubtitle(
   t: TFunction,
   attrs: CommodityAttrs,
   match: CommoditySearchMatch | undefined,
-  tagLabel: (slug: string) => string
+  tagLabel: (slug: string) => string,
+  customFieldName?: (id: string) => string | undefined
 ): string | undefined {
-  if (match) return searchMatchText(t, match, tagLabel)
+  if (match) return searchMatchText(t, match, tagLabel, customFieldName)
   return (
     [formatAssetId(attrs.asset_number), attrs.short_name].filter(Boolean).join(" · ") || undefined
   )

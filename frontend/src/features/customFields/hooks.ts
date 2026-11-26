@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useCallback } from "react"
 
 import { commodityKeys } from "@/features/commodities/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
@@ -32,6 +33,13 @@ export function useCustomFields({ slug: slugProp }: { slug?: string } = {}) {
     enabled: slug.length > 0,
     staleTime: CUSTOM_FIELDS_STALE_MS,
   })
+}
+
+// useCustomFieldName returns the name of a field of the current group by
+// id, undefined for one this client does not know.
+export function useCustomFieldName(): (id: string) => string | undefined {
+  const data = useCustomFields().data
+  return useCallback((id: string) => data?.find((f) => f.id === id)?.name, [data])
 }
 
 function useInvalidate() {

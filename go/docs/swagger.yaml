@@ -1308,6 +1308,14 @@ definitions:
           `created_at` ASC; option (B) `cover_file_id` override is filed as a
           follow-up sub-issue.
         type: object
+      linked_items:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.LinkedItemSummary'
+        description: |-
+          LinkedItems names, per item ID, the items the listed items' "link to
+          an item" custom fields point at, with whether each is in Trash.
+          Omitted when no listed item has such a value.
+        type: object
       matches:
         additionalProperties:
           items:

@@ -438,8 +438,42 @@ describe("<CommodityEditForm /> custom fields", () => {
     expect(onSubmit).not.toHaveBeenCalled()
   })
 
+  it("applies the template of the type picked without overwriting a value", async () => {
+    server.use(
+      ...customFieldHandlers.list(SLUG, [
+        { ...fields[0], templates: [{ item_type_id: "type-equipment" }] },
+        { ...fields[1], templates: [{ item_type_id: "type-equipment", default_value: "ZZ" }] },
+        { ...fields[2], templates: [{ item_type_id: "type-equipment", default_value: "3" }] },
+      ])
+    )
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ custom_fields: { "cf-plate": "AB 123" } as never })
+    expect(await screen.findByLabelText("Plate")).toHaveValue("AB 123")
+    // Opening the form applies nothing.
+    expect(screen.queryByLabelText("Weight")).not.toBeInTheDocument()
+
+    await pickRadixSelect(user, /^Type/, { optionLabel: /^Equipment$/ })
+    expect(screen.getByLabelText("Plate")).toHaveValue("AB 123")
+    expect(await screen.findByLabelText("Weight")).toHaveValue("3")
+    expect(screen.getByRole("combobox", { name: "Fuel" })).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    const req = onSubmit.mock.calls[0][0] as UpdateCommodityRequest
+    expect(req.type).toBe("equipment")
+    expect(req.custom_fields).toEqual({ "cf-plate": "AB 123", "cf-weight": "3" })
+  })
+
   it("shows a value the server refused under its field", async () => {
-    server.use(...customFieldHandlers.list(SLUG, fields))
+    let listed = 0
+    server.use(
+      // Counts the reads and leaves the answer to the next handler.
+      http.get(apiUrl(`/g/${SLUG}/custom-fields`), () => {
+        listed++
+        return undefined
+      }),
+      ...customFieldHandlers.list(SLUG, fields)
+    )
     const user = userEvent.setup()
     renderForm(
       { custom_fields: stored },
@@ -459,6 +493,8 @@ describe("<CommodityEditForm /> custom fields", () => {
     expect(await screen.findByTestId("custom-field-cf-plate-error")).toHaveTextContent(
       "must be at most 200 characters"
     )
+    // The fields are read again, in case one changed meanwhile.
+    await waitFor(() => expect(listed).toBe(2))
   })
 
   it("names the currency picker of a money field and flags it with the amount", async () => {

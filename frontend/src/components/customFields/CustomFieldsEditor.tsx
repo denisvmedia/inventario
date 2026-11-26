@@ -103,7 +103,7 @@ export function CustomFieldsEditor({
                 <X aria-hidden="true" className="size-3.5" />
               </Button>
             </div>
-            <FieldInput
+            <CustomFieldValueInput
               field={field}
               inputId={inputId}
               value={value}
@@ -174,7 +174,7 @@ export function CustomFieldsEditor({
   )
 }
 
-interface FieldInputProps {
+export interface CustomFieldValueInputProps {
   field: CustomField
   inputId: string
   value: CustomFieldFormValue
@@ -187,7 +187,9 @@ interface FieldInputProps {
   disabled?: boolean
 }
 
-function FieldInput({
+// CustomFieldValueInput is the input of one value, by the field's type: the
+// item forms' inputs and the default of a template entry.
+export function CustomFieldValueInput({
   field,
   inputId,
   value,
@@ -198,7 +200,7 @@ function FieldInput({
   selfId,
   groupCurrency,
   disabled,
-}: FieldInputProps) {
+}: CustomFieldValueInputProps) {
   const { t } = useTranslation()
   const common = {
     id: inputId,

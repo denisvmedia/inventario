@@ -287,6 +287,10 @@ export default defineConfig({
       "customFields:validation.*",
       "customFields:types.*",
       "customFields:errors.*",
+      // customFields:filter.ops.* / filter.chip.* — a condition's comparison,
+      // `t(\`customFields:filter.ops.${op}\`)` in the filter menu and the chips.
+      "customFields:filter.ops.*",
+      "customFields:filter.chip.*",
       "tags:list.usageItems*",
       "tags:list.usageFiles*",
       "tags:usage.items*",

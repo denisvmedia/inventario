@@ -27,7 +27,11 @@ import { Textarea } from "@/components/ui/textarea"
 import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
 import { buildDefaults, toRequest } from "@/features/commodities/draft"
 import { buildCommoditySchema, type CommodityFormInput } from "@/features/commodities/schemas"
-import type { CustomField, CustomFieldValues } from "@/features/customFields/api"
+import {
+  CUSTOM_FIELD_INVALID_VALUE,
+  type CustomField,
+  type CustomFieldValues,
+} from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldsRequest } from "@/features/customFields/values"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
@@ -36,7 +40,11 @@ import type { ListNavigation, ListNeighbor } from "@/hooks/useListNavigation"
 import { useUnsavedChangesGuard } from "@/hooks/useUnsavedChangesGuard"
 import { currencyMeta, priceInputPaddingClass } from "@/lib/currency-meta"
 import { applyServerFieldErrors } from "@/lib/form-errors"
-import { classifyServerError, type ClassifiedServerError } from "@/lib/server-error"
+import {
+  classifyServerError,
+  getServerErrorCode,
+  type ClassifiedServerError,
+} from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 
 const NO_FIELDS: readonly CustomField[] = []
@@ -164,6 +172,10 @@ export function CommodityEditForm({
       toast.success(t("commodities:toast.updated"))
       return true
     } catch (err) {
+      // A refused value often means a field or an option was deleted
+      // meanwhile; read the group's fields again so the form shows them as
+      // they are.
+      if (getServerErrorCode(err) === CUSTOM_FIELD_INVALID_VALUE) void customFieldsQuery.refetch()
       const result = applyServerFieldErrors(err, form.setError, { fields: FORM_FIELDS })
       const hidden = !!result && Object.keys(result.unmapped).length > 0
       setHiddenFieldError(hidden)
@@ -362,7 +374,10 @@ export function CommodityEditForm({
                   <ItemTypeField
                     id="edit-category"
                     value={field.value ?? ""}
-                    onChange={field.onChange}
+                    onChange={(slug) => {
+                      field.onChange(slug)
+                      customFieldsBinding.applyTemplate(slug)
+                    }}
                     invalid={!!errors.type}
                     errorMessage={errors.type?.message}
                   />

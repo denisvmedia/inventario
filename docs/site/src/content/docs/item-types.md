@@ -84,6 +84,13 @@ items shown, so the list holds the same items as the count. On **All Items**
 the **Type** menu in the toolbar lists your group's types (see
 [Items](../items/#the-all-items-page-search-filter-sort)).
 
+## Custom fields of a type
+
+A [custom field](../custom-fields/#offer-a-field-on-item-types) can be offered
+on the items of some types, with a default value for each. Picking such a type
+in an item form shows those fields and fills in their defaults. Deleting a type
+removes it from the fields that were offered on it.
+
 ## Item types read by AI
 
 When [Fill with AI](../files-and-photos/#scan-an-item-from-a-photo-or-pdf-with-ai)

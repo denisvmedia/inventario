@@ -133,6 +133,11 @@ type CommoditiesMeta struct {
 	// request has no `q`.
 	Matches map[string][]registry.CommoditySearchMatch `json:"matches,omitempty"`
 
+	// LinkedItems names, per item ID, the items the listed items' "link to
+	// an item" custom fields point at, with whether each is in Trash.
+	// Omitted when no listed item has such a value.
+	LinkedItems map[string]LinkedItemSummary `json:"linked_items,omitempty"`
+
 	// SelectionDigest names the set of items the query selects, on every
 	// page: the hex SHA-256 of their sorted ids (commodityquery.Digest). A
 	// bulk action on the query sends it back unchanged as expected_digest,
@@ -197,6 +202,14 @@ func (cr *CommoditiesResponse) WithMatches(matches map[string][]registry.Commodi
 // WithSelectionDigest sets meta.selection_digest.
 func (cr *CommoditiesResponse) WithSelectionDigest(digest string) *CommoditiesResponse {
 	cr.Meta.SelectionDigest = digest
+	return cr
+}
+
+// WithLinkedItems sets meta.linked_items; an empty map leaves it out.
+func (cr *CommoditiesResponse) WithLinkedItems(items map[string]LinkedItemSummary) *CommoditiesResponse {
+	if len(items) > 0 {
+		cr.Meta.LinkedItems = items
+	}
 	return cr
 }
 
