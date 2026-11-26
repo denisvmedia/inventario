@@ -1,6 +1,6 @@
 ---
 title: Settings & account
-description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, API tokens, and connected sign-in methods.
+description: Manage your Inventario profile, preferences, password, two-factor authentication, sessions, API tokens, and connected sign-in methods, and download a copy of your data.
 ---
 
 Everything about your account, your preferences, and keeping it secure lives in
@@ -63,8 +63,10 @@ A couple of things to know:
   you type your email address to confirm and — for password accounts — re-enter
   your password. (Accounts that sign in only with Google or another social
   provider don't need to enter a password.) Deletion is **permanent and can't be
-  undone**: it erases your account together with the inventory you own, so
-  export or back up anything you want to keep first. A couple of cases are
+  undone**: it erases your account together with the inventory you own. The
+  dialog links to [Download my data](#download-my-data), so you can take a
+  copy first; a copy you requested is deleted with the account. A couple of
+  cases are
   blocked with an explanation instead of deleting: if you're the **only owner**
   of a group that still has other members, hand ownership to someone else first;
   and if you created anything inside a group someone else owns (items, files,
@@ -84,6 +86,54 @@ A couple of things to know:
 
 For more on groups, roles, and inviting people, see
 [Groups & sharing](../groups-and-sharing/).
+
+## Download my data
+
+The **Download my data** card in the **Account** section of Preferences gives
+you a copy of your own data, in a form you can read or take to another
+service. Click **Request a copy**. Inventario prepares it in the background and
+sends you an email when it is ready; the email links back to this card, not to
+the file. While it is being prepared the copy shows as **Waiting** or
+**Preparing**, and the list updates on its own. When it is **Ready**, the row
+shows its size and the day it is deleted, and **Download** saves it as
+`inventario-personal-data-<date>.tar.gz`.
+
+The copy has:
+
+- your profile: name, email address, when you joined, your default group and
+  your profile photo;
+- your preferences and your notification choices for each group;
+- the groups you belong to, with the group name, your role and the day you
+  joined;
+- in each group, what you created there: items (including the ones in the
+  [Trash](../trash/)) with their custom fields, the files you uploaded with
+  their contents, loans, maintenance schedules, service records, reminders,
+  supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
+  saved views, and the history entries you made.
+
+Locations, areas, sellers and tags appear by name on your items. Other members
+appear only as ids, and text you typed is kept as you typed it. The files are
+JSON, packed into a `.tar.gz` archive that any archive tool can open; a
+`manifest.json` at the top says whose data it is and when it was made.
+
+A few rules apply:
+
+- You can request **one copy a day**. Until the next request is allowed, the
+  button is disabled and the card says when you can request again. This counts
+  a request that failed, too.
+- Each copy is **deleted 7 days** after it is ready, whether you downloaded it
+  or not. A copy that could not be prepared shows as **Failed** and is removed
+  from the list 7 days after the request; request a new one when the daily
+  limit allows.
+- Only you can see and download your copies. The download works in the browser
+  where you are signed in.
+- A copy is **not a backup**. It holds only your part of each group, so it
+  cannot be restored, and the
+  [restore upload](../backup-and-restore/#import-a-backup-file) refuses it.
+  To keep a copy of a whole group, make a [group backup](../backup-and-restore/)
+  instead.
+- An administrator who is signed in as you to help with a problem cannot
+  request or download your copy.
 
 ## Appearance and preferences
 

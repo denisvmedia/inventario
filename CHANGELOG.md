@@ -31,7 +31,11 @@ when to add an entry and where it goes.
   download one, and each request and download is recorded in the audit log.
   `GET /users/me/data-exports` lists the exports and when the next request is
   allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
-  download link
+  download link. In the app, **Download my data** in Preferences → Account
+  requests a copy, lists the copies with their status, size and deletion
+  date, and downloads a finished one; the button stays disabled until the
+  next request is allowed. The delete-account dialog links to it, and the
+  restore upload names a personal data export when one is chosen
   ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 
 - Custom fields. A group keeps up to 200 fields of its own, each with a name

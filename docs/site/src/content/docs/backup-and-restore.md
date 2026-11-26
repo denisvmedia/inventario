@@ -62,7 +62,7 @@ Storing your `.inb` files somewhere outside Inventario (a synced folder, an exte
 If you have an `.inb` file from before — perhaps from another Inventario instance, or a download you saved — you can bring it back in.
 
 1. Go to **Backup** and click **Import backup**.
-2. Click the dropzone to choose a backup file. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file."
+2. Click the dropzone to choose a backup file. Only `.inb` files are accepted; anything else is rejected with "Choose a backup (.inb) file." A [personal data export](#a-backup-is-not-a-personal-data-export) is refused with its own message, even when renamed to `.inb`.
 3. Optionally add a **Description** so you can find the import in the list later.
 4. Click **Upload and continue**.
 
@@ -71,6 +71,20 @@ The file is staged on the server first and only inspected when you start the res
 :::caution[Backups stay with your group]
 A backup restores only into the current group. Inventario confines an uploaded backup to the group that owns it — you can't import or restore someone else's backup into your group, and yours can't be pulled into theirs.
 :::
+
+### A backup is not a personal data export
+
+**Download my data** in [Settings & account](../settings-and-account/#download-my-data) gives each person a copy of their own data: their profile, and in every group they belong to, the items, files and records they created. A group backup is the other way round: it holds the whole group, whoever created each part of it, and only for that one group.
+
+| | Group backup | Personal data export |
+| --- | --- | --- |
+| Holds | Everything in one group | One person's data across all their groups |
+| Made from | **Backup** in the group | **Preferences → Account**, by each person for themselves |
+| File | Signed `.inb` | `.tar.gz` of JSON files |
+| Kept | Until you delete it | 7 days |
+| Restores | Into the group | Never |
+
+Use a backup to keep or move a group. Use the personal data export to see or take away what you put into Inventario.
 
 ## Restore a backup
 

@@ -41,6 +41,7 @@
     "importFailed": "Could not import backup: {{error}}",
     "invalidFileType": "Choose a backup (.inb) file.",
     "loadFailed": "Could not load exports: {{error}}",
+    "personalDataExport": "This is a personal data export, a copy of one person's data. It cannot be restored. Choose a group backup (.inb) file.",
     "restoreCreateFailed": "Could not start restore: {{error}}",
     "uploadFailed": "Could not upload file: {{error}}"
   },

@@ -901,6 +901,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-26 — Account: "Download my data" card and the delete dialog's link to it
+
+- **Issue/PR**: #2177 / PR #2925 (backend), UI PR stacked on it
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `AccountSection` (L125–L160) has the profile card and the name, email and member-since rows only. The closest surface is `DataSection` (L403–L452): a `rounded-xl border` card, a `divide-y` list card, and outline small buttons with a `Download` icon, "Export data (JSON)" and "Export data (CSV)". The mock's danger zone (L388–L397, in `PrivacySection`) is a sentence and a button; it has no delete-account dialog.
+- **Reality**: `frontend/src/components/settings/PersonalDataExportCard.tsx` renders a `rounded-xl border p-4` card in Account settings between the account rows and the danger zone, with the `DataSection` anatomy: title "Download my data", a description that states the content, the `.tar.gz` format, the once-a-day limit, the retention in days and that it cannot be restored, and an outline small **Request a copy** button with the `Download` icon. While the daily limit holds the button is disabled and a muted line gives the date and time of the next allowed request. Below, a `divide-y` list card has one row per copy: "Requested {date}", a status `Badge` (outline with a spinner for waiting and preparing, secondary for ready, destructive for failed) and a muted line with the size and deletion date, the preparing note or the failure note; a ready row has an outline small **Download** button. The list polls every 5 seconds while a copy is being prepared. In the delete-account dialog the body no longer says "Export or back up anything first"; a line under the header asks "Want to keep a copy of your data?" with a link-variant button **Download my data first**, which closes the dialog, scrolls to the card and focuses its button.
+- **Why**: not present in mock. The issue asks for a start button with the daily limit explained, a list of finished exports with size, expiry and download link, in-progress and failed states, and a delete-account dialog that points to the button. The card reuses the `DataSection` export button and list card rather than inventing a new pattern. Agent-suggested: placing the card in Account rather than Privacy & security, the 5-second polling, disabling the button with the next allowed time instead of answering the click with 429, and the scroll-and-focus behavior of the dialog link.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the agent-suggested parts are listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` adds a personal data export surface; otherwise permanent.
+
 #### 2026-11-25 — Storage card: Trash bucket and note
 
 - **Issue/PR**: #2799 / PR #2835
@@ -1375,6 +1384,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 _None yet._
 
 ### Backup & Restore
+
+#### 2026-11-26 — Restore upload names a personal data export
+
+- **Issue/PR**: #2177 / UI PR stacked on PR #2925
+- **Mock**: [`design-mocks/src/views/BackupView.tsx`](../../design-mocks/src/views/BackupView.tsx) has no file validation messages on the restore upload.
+- **Reality**: `frontend/src/pages/exports/ExportImportPage.tsx` refuses a file named `inventario-personal-data-*.tar.gz` before uploading, with the inline error "This is a personal data export, a copy of one person's data. It cannot be restored. Choose a group backup (.inb) file.", and shows the same text when the server answers 422 `restore.personal_data_export` for one renamed to `.inb`. The error uses the existing inline file-error line and the existing error `Alert`.
+- **Why**: The issue asks the restore path to refuse a personal data export clearly. A user who downloaded one from Account settings may well take it for a backup. Agent-suggested: the client-side check by file name.
+- **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the file-name check is agent-suggested and listed in the PR.
+- **Reversion plan**: Permanent.
 
 #### 2026-05-12 — Standalone `/exports/:id/restore` page preserved alongside the in-context Restore dialog
 
