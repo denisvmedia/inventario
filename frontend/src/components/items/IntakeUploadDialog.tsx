@@ -109,8 +109,15 @@ export interface IntakeUploadDialogProps {
 // purchase of its own unless the member says that all files show one item.
 // The form lives in the dialog content, which mounts on open and unmounts
 // once the close animation ends, so every open starts with the files just
-// dropped.
+// dropped. It is keyed on the opening, so a dialog opened again during the
+// close animation starts a new form too.
 export function IntakeUploadDialog(props: IntakeUploadDialogProps) {
+  const [opening, setOpening] = useState(0)
+  const [wasOpen, setWasOpen] = useState(props.open)
+  if (props.open !== wasOpen) {
+    setWasOpen(props.open)
+    if (props.open) setOpening((n) => n + 1)
+  }
   return (
     <Dialog open={props.open} onOpenChange={props.onOpenChange}>
       <DialogContent
@@ -118,13 +125,14 @@ export function IntakeUploadDialog(props: IntakeUploadDialogProps) {
         className="sm:max-w-lg"
         data-testid="intake-upload-dialog"
       >
-        <IntakeUploadForm {...props} />
+        <IntakeUploadForm key={opening} {...props} />
       </DialogContent>
     </Dialog>
   )
 }
 
 function IntakeUploadForm({
+  open,
   onOpenChange,
   limits,
   initialFiles,
@@ -148,6 +156,8 @@ function IntakeUploadForm({
   // moves those files to Trash once the run has stopped.
   const unqueued = useRef(new Set<string>())
   const running = useRef<Promise<void> | null>(null)
+  // False once the dialog has closed. The form stays mounted through the
+  // close animation, so closing, not the unmount, is what stops the run.
   const mounted = useRef(true)
   useEffect(() => {
     mounted.current = true
@@ -159,6 +169,9 @@ function IntakeUploadForm({
       )
     }
   }, [queryClient])
+  useEffect(() => {
+    if (!open) mounted.current = false
+  }, [open])
 
   const accepted = new Set(limits.acceptedMimeTypes)
   const maxFiles = oneItem
