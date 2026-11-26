@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/blobkeys"
 	_ "go.5x5.cz/inventario/internal/fileblob" // register file:// driver
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -326,6 +328,35 @@ func TestAccountDeletionService_DeleteAccount_RemovesTheProfilePhoto(t *testing.
 	exists, err := b.Exists(ctx, key)
 	c.Assert(err, qt.IsNil)
 	c.Assert(exists, qt.IsFalse)
+}
+
+func TestAccountDeletionService_DeleteAccount_RemovesThePersonalDataExports(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, uploadLocation := newAccountDeletionService(c)
+
+	user := seedAccountUser(c, ctx, fs, "export@example.com")
+	seedAccountGroupWithMember(c, ctx, fs, "export-group-slug-00000000000", user.ID, models.GroupRoleOwner)
+	now := time.Now().UTC()
+	export, blocking, err := fs.PersonalDataExportRegistry.CreateUnlessRequestedSince(ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: user.TenantID, UserID: user.ID},
+		CreatedAt:               now,
+		ExpiresAt:               now.Add(models.PersonalDataExportRetention),
+	}, now.Add(-models.PersonalDataExportRequestInterval))
+	c.Assert(err, qt.IsNil)
+	c.Assert(blocking, qt.IsNil)
+	key := blobkeys.BuildPersonalDataExportBlobKey(user.TenantID, export.ID)
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, key, []byte("archive"), nil), qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, user.TenantID, user.ID), qt.IsNil)
+
+	exists, err := b.Exists(ctx, key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse)
+	_, err = fs.PersonalDataExportRegistry.Get(ctx, export.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 // TestAccountDeletionService_DeleteAccount_RemovesTheMembersItemReminders

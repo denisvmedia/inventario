@@ -14,6 +14,26 @@ when to add an entry and where it goes.
 
 ### Added
 
+- Personal data export (GDPR Art. 20). `POST /users/me/data-exports` asks for
+  a copy of the caller's own data: their profile, settings and group
+  memberships, and in each group the items, files with their bytes, loans,
+  maintenance schedules, service records, reminders, supply links, open
+  drafts, saved views and history entries they created. An item's location,
+  area and seller are given by name; other members appear only as ids, never
+  by name or email. The archive is a plain `tar.gz` of JSON documents and
+  files whose manifest has kind `personal_data_export`; it is not a group
+  backup, and the restore upload refuses one with 422
+  `restore.personal_data_export`. The export worker builds it in the
+  background and emails the user when it is ready. One request is allowed per
+  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  archive is deleted after 7 days or with the account, only its owner can
+  list and download it, an impersonation session can neither request nor
+  download one, and each request and download is recorded in the audit log.
+  `GET /users/me/data-exports` lists the exports and when the next request is
+  allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
+  download link
+  ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
+
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
   (unique in the group, ignoring case) and a type that never changes: text,
   long text, number, money, date, yes/no, select, URL or a link to another
@@ -562,6 +582,11 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- The upgrade runs one more database migration, which adds the
+  `personal_data_exports` table for personal data exports. The archives are
+  stored with the uploads under `t/<tenant>/personal-exports/`; the export
+  worker deletes each one 7 days after it is finished
+  ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;

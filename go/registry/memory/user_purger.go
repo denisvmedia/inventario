@@ -58,6 +58,14 @@ type UserPurger struct {
 	customFields  *CustomFieldRegistryFactory
 	// intakeDocuments is set by SetIntakeDocumentFactory.
 	intakeDocuments *IntakeDocumentRegistryFactory
+	// personalDataExports is set by SetPersonalDataExportRegistry.
+	personalDataExports *PersonalDataExportRegistry
+}
+
+// SetPersonalDataExportRegistry wires the user's personal data exports
+// (#2177), which go with the user. Their archives are deleted by the caller.
+func (r *UserPurger) SetPersonalDataExportRegistry(reg *PersonalDataExportRegistry) {
+	r.personalDataExports = reg
 }
 
 // SetIntakeDocumentFactory wires the delivered documents (#2809); the ones
@@ -148,6 +156,12 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 	steps := []step{
 		{"refresh_tokens", func() error { return r.purgeRefreshTokens(ctx, userID) }},
 		{"api_tokens", func() error { return r.apiTokens.DeleteByUserID(ctx, userID) }},
+		{"personal_data_exports", func() error {
+			if r.personalDataExports == nil {
+				return nil
+			}
+			return r.personalDataExports.DeleteByUserID(ctx, userID)
+		}},
 		{"email_verifications", func() error { return r.purgeEmailVerifications(ctx, userID) }},
 		{"password_resets", func() error { return r.passwordReset.DeleteByUserID(ctx, userID) }},
 		{"magic_link_tokens", func() error { return r.magicLink.DeleteByUserID(ctx, userID) }},

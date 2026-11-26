@@ -101,13 +101,14 @@ func TestStubEmailService_EverySenderSucceeds(t *testing.T) {
 			"https://app.test/invite/abc", now), qt.IsNil)
 		c.Assert(svc.SendItemReminderEmail(ctx, "u@test", "U", "Car", "Inspection",
 			"2026-12-01", "https://app.test/c/3", 7), qt.IsNil)
+		c.Assert(svc.SendPersonalDataExportReadyEmail(ctx, "u@test", "U", "https://app.test/profile", now), qt.IsNil)
 	})
 
 	// Each one left a trace: a stub that silently drops the call would make a
 	// broken flow look healthy in development.
 	for _, want := range []string{
 		"password", "welcome", "warranty", "loan", "quota", "maintenance", "feedback", "invite",
-		"item reminder",
+		"item reminder", "personal data export",
 	} {
 		c.Assert(logged, qt.Contains, want)
 	}

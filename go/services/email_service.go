@@ -102,6 +102,13 @@ type EmailService interface {
 	// link.
 	SendItemReminderEmail(ctx context.Context, to, name, commodityName, title, dueDate, commodityURL string, daysLeft int) error
 
+	// SendPersonalDataExportReadyEmail tells a user their personal data
+	// export is ready (#2177). settingsURL links to Account settings, where
+	// the download is; the email never links the archive itself, so a
+	// forwarded or leaked email does not hand it out. expiresAt is when the
+	// archive is deleted.
+	SendPersonalDataExportReadyEmail(ctx context.Context, to, name, settingsURL string, expiresAt time.Time) error
+
 	// SendFeedbackEmail requests delivery of an in-app feedback /
 	// support submission (#1387) to the configured support address.
 	// `to` is the operator-configured support inbox; `fromEmail` /
@@ -479,6 +486,22 @@ func (s *StubEmailService) SendItemReminderEmail(_ context.Context, to, name, co
 	}
 	//nolint:sloglint // structured fields are constructed dynamically.
 	slog.Info("STUB email: item reminder", attrs...)
+	return nil
+}
+
+// SendPersonalDataExportReadyEmail logs the export-ready event without
+// dispatching anything externally.
+func (s *StubEmailService) SendPersonalDataExportReadyEmail(_ context.Context, to, name, settingsURL string, expiresAt time.Time) error {
+	attrs := []any{
+		"to", to,
+		"name", name,
+		"expires_at", expiresAt.UTC().Format(time.RFC3339),
+	}
+	if s.logEmailURLs {
+		attrs = append(attrs, "settings_url", settingsURL)
+	}
+	//nolint:sloglint // structured fields are constructed dynamically.
+	slog.Info("STUB email: personal data export ready", attrs...)
 	return nil
 }
 

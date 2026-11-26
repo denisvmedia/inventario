@@ -246,6 +246,7 @@ type FactorySet struct {
 	UserRegistry                          UserRegistry                  // UserRegistry doesn't need factory as it's not user-aware
 	RefreshTokenRegistry                  RefreshTokenRegistry          // RefreshTokenRegistry doesn't need factory as it's not user-aware
 	APITokenRegistry                      APITokenRegistry              // Personal API tokens (#2808); service-mode (looked up by digest before a user context exists)
+	PersonalDataExportRegistry            PersonalDataExportRegistry    // Personal data exports (#2177); service-mode (the export worker serves every user)
 	LoginEventRegistry                    LoginEventRegistry            // LoginEventRegistry runs under the background-worker role (write path) + app-level user_id filter (read path)
 	UserMFASecretRegistry                 UserMFASecretRegistry         // Per-user TOTP secrets (#1645); service-mode (called pre-RLS in login)
 	AuditLogRegistry                      AuditLogRegistry              // AuditLogRegistry doesn't need factory as it's not user-aware

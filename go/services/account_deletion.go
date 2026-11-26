@@ -8,6 +8,7 @@ import (
 	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -131,6 +132,12 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	if err != nil {
 		return errxtrace.Wrap("failed to load the user", err)
 	}
+	// The same goes for the personal data export archives: their rows go in
+	// step 3, their blobs after step 4.
+	exportKeys, err := s.personalDataExportKeys(ctx, tenantID, userID)
+	if err != nil {
+		return err
+	}
 
 	// 2) Purge each PRIVATE group via the existing per-group sequence.
 	for _, gid := range privateGroupIDs {
@@ -175,8 +182,40 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	if s.avatars != nil && user.AvatarPath != nil {
 		s.avatars.DeleteStored(ctx, *user.AvatarPath)
 	}
+	s.deletePersonalDataExportArchives(ctx, userID, exportKeys)
 
 	return nil
+}
+
+// deletePersonalDataExportArchives deletes the archives of a deleted
+// account: a copy of the user's data outlives the account no longer than
+// this. Best effort; the export worker's hourly sweep removes any archive a
+// failure here leaves behind.
+func (s *AccountDeletionService) deletePersonalDataExportArchives(ctx context.Context, userID string, keys []string) {
+	for _, key := range keys {
+		if err := s.purger.fileService.DeletePhysicalFile(ctx, key); err != nil {
+			slog.WarnContext(ctx, "account deletion: failed to delete a personal data export archive",
+				"user_id", userID, "error", err)
+		}
+	}
+}
+
+// personalDataExportKeys returns the blob keys of the user's personal data
+// export archives (#2177), the deterministic key of every export whatever its
+// status: one being built when the account goes still writes there.
+func (s *AccountDeletionService) personalDataExportKeys(ctx context.Context, tenantID, userID string) ([]string, error) {
+	if s.factorySet.PersonalDataExportRegistry == nil || s.purger.fileService == nil {
+		return nil, nil
+	}
+	exports, err := s.factorySet.PersonalDataExportRegistry.ListByUserID(ctx, userID)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list personal data exports", err)
+	}
+	keys := make([]string, 0, len(exports))
+	for _, e := range exports {
+		keys = append(keys, blobkeys.BuildPersonalDataExportBlobKey(tenantID, e.ID))
+	}
+	return keys, nil
 }
 
 // isForeignKeyViolation reports whether err is a Postgres foreign-key violation

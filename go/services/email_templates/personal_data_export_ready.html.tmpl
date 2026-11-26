@@ -1,0 +1,10 @@
+<!doctype html>
+<html lang="en">
+<body>
+<p>Hi {{.Name}},</p>
+<p>The copy of your data you asked for is ready. Download it from Account settings:</p>
+<p><a href="{{.URL}}">{{.URL}}</a></p>
+{{if .ExpiresAt}}<p>The file is deleted on {{.ExpiresAt}}. You can ask for a new copy once a day.</p>{{end}}
+<p>If you did not ask for a copy of your data, change your password and sign out your other sessions in Account settings.</p>
+</body>
+</html>

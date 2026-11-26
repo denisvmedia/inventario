@@ -54,6 +54,22 @@ Standalone files have no parent entity that could imply them into a selection, s
 
 A file whose blob is missing or unsized (orphan row, manual blob delete) is **dropped** from the document and the statistics in every branch. The tar header needs an exact size up front, and a restore hard-fails on a declared reference whose member never arrives.
 
+### Personal data export (`personal_*.go`)
+
+A personal data export (#2177) is one user's copy of their own data, not a backup. It belongs to the user, not a group, and lives in `personal_data_exports`. The archive is a plain `tar.gz` with no signed wrapper, written with the same tar helpers (`tar_members.go`):
+
+```text
+manifest.json                                kind "personal_data_export", subject, statistics; first member
+profile.json                                 account, settings, memberships, notification preferences
+profile/avatar<ext>                          the profile photo
+groups/<group-uuid>/group.json               what the user created in the group
+groups/<group-uuid>/files/<file-uuid>/<name> bytes of a file the user uploaded
+```
+
+A row is the user's when its `created_by_user_id` is the user (or `user_id` where a row has no author, such as saved view placements). Locations, areas, sellers and custom field definitions are group structure and appear only by name on the items and drafts. Other members appear only as ids. `inb.ReadContainer` and the restore upload refuse an archive whose first member is a manifest with this kind (`inb.ErrPersonalDataExport`).
+
+`PersonalDataExportService` takes one request per user per day, builds the archive to the deterministic key `t/<tenant>/personal-exports/<export-id>.tar.gz`, and deletes it 7 days after it is finished. `ExportWorker` runs the builds next to the group exports, sharing their concurrency limit, deletes expired exports every minute and sweeps archives without a row every hour.
+
 ### Legacy: XML (build-tag-gated)
 
 The pre-#534 XML format (root `<inventory>` with base64-embedded file data) is **deprecated** and compiled only with `go build -tags legacy_xml_backup`. Do not write new code against it.

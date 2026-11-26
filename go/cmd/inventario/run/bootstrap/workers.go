@@ -54,6 +54,12 @@ func StartExportWorker(ctx context.Context, rs *RuntimeSetup, cfg *Config) func(
 	if rs.PauseController != nil {
 		opts = append(opts, export.WithPauseController(rs.PauseController))
 	}
+	// The worker also builds and expires personal data exports (#2177).
+	personal := rs.Params.PersonalDataExports
+	if personal == nil {
+		personal = export.NewPersonalDataExportService(rs.FactorySet, rs.Params.UploadLocation)
+	}
+	opts = append(opts, export.WithPersonalDataExports(personal))
 	worker := export.NewExportWorker(service, rs.FactorySet, cfg.MaxConcurrentExports, opts...)
 	worker.Start(ctx)
 	return worker.Stop

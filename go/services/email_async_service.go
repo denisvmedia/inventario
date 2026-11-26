@@ -309,6 +309,18 @@ func (s *AsyncEmailService) SendItemReminderEmail(ctx context.Context, to, name,
 	})
 }
 
+// SendPersonalDataExportReadyEmail enqueues the notice that a personal data
+// export is ready (#2177).
+func (s *AsyncEmailService) SendPersonalDataExportReadyEmail(ctx context.Context, to, name, settingsURL string, expiresAt time.Time) error {
+	return s.enqueue(ctx, emailJob{
+		TemplateType: emailTemplatePersonalDataExportReady,
+		To:           to,
+		Name:         name,
+		URL:          settingsURL,
+		ExpiresAt:    new(expiresAt),
+	})
+}
+
 func (s *AsyncEmailService) enqueue(ctx context.Context, job emailJob) error {
 	job.ID = uuid.NewString()
 	job.To = strings.TrimSpace(job.To)
