@@ -1,9 +1,10 @@
+import { useMemo } from "react"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
 import type { Commodity } from "@/features/commodities/api"
 import { commodityKeys } from "@/features/commodities/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
-import { INTAKE_POLL_MS } from "@/features/intake/hooks"
+import { INTAKE_POLL_MS, useRefreshWhenScanned } from "@/features/intake/hooks"
 
 import {
   getInboxChecks,
@@ -35,7 +36,7 @@ function useSlug(): string {
 export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryOptions = {}) {
   const slug = useSlug()
   const queryKey = inboxKeys.list(slug, opts)
-  return useQuery<InboxPage>({
+  const query = useQuery<InboxPage>({
     queryKey,
     queryFn: ({ signal }) => listInbox(opts, signal),
     enabled: enabled && !!slug,
@@ -46,6 +47,14 @@ export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryO
         ? INTAKE_POLL_MS
         : false,
   })
+  // A batch that stops scanning has its files read again (#1626).
+  const entries = query.data?.entries
+  const batches = useMemo(
+    () => entries?.flatMap((e) => (e.intake ? [{ id: e.id, state: e.intake.state }] : [])),
+    [entries]
+  )
+  useRefreshWhenScanned(batches)
+  return query
 }
 
 // The server's count of the inbox, for the sidebar and the dashboard. It
