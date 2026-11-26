@@ -1010,6 +1010,8 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
     fake.nextUploads = [{ name: "receipt.png", size: 3 }]
     await user.click(screen.getByTestId("draft-save-retry"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    // The links move with the promotion, which the call only starts.
+    await onSubmit.mock.results[0].value
     expect(fake.uploads).toBe(2)
     expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([
       ["item-from-d1"],
@@ -1365,12 +1367,73 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
     await stage(user, files())
     await user.click(screen.getByTestId("commodity-form-submit"))
     await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
-    await waitFor(() => expect(fake.drafts[0].status).toBe("promoted"))
+    await onSubmit.mock.results[0].value
+    expect(fake.drafts[0].status).toBe("promoted")
     expect(fake.uploads).toBe(2)
     expect(fake.files.map((f) => f.links.map((l) => l.entity_id))).toEqual([
       [`item-from-${fake.drafts[0].id}`],
       [`item-from-${fake.drafts[0].id}`],
     ])
+  })
+
+  it("stops an Add item the dialog was closed and opened again during", async () => {
+    const fake = draftHandlers.backend(SLUG)
+    fake.nextUploads = [
+      { name: "a.png", size: 3 },
+      { name: "b.png", size: 3 },
+    ]
+    server.use(...groupHandlers.list(groups), ...fake.handlers)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    let calls = 0
+    server.use(
+      http.post(apiUrl(`/g/${SLUG}/uploads/file`), async () => {
+        calls++
+        if (calls === 1) await held
+        return undefined
+      })
+    )
+    const user = userEvent.setup()
+    const onSubmit = promoteThrough()
+    const { close, reopen } = renderClosableForm(onSubmit)
+    const files = () => [
+      new File(["png"], "a.png", { type: "image/png" }),
+      new File(["png"], "b.png", { type: "image/png" }),
+    ]
+    await user.type(await fillManually(user), "Kettle")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(pendingRows()[0]).toHaveAttribute("data-status", "uploading"))
+
+    // Closed and open again before the first upload answers. The form
+    // stays locked while the earlier Add item runs.
+    close()
+    reopen()
+    expect(await fillManually(user)).toHaveValue("Kettle")
+    const next = screen.getByTestId("commodity-form-next")
+    expect(next).toBeDisabled()
+    release()
+    // The earlier Add item ends after a.png, and nothing was promoted.
+    await waitFor(() => expect(next).toBeEnabled())
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(fake.promotions).toHaveLength(0)
+    expect(fake.drafts[0].status).toBe("open")
+    expect(calls).toBe(1)
+
+    // This opening's Add item finishes it, without uploading a.png again.
+    await walkToFiles(user)
+    await stage(user, files())
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    await expect(onSubmit.mock.results[0].value).resolves.toMatchObject({
+      id: `item-from-${fake.drafts[0].id}`,
+    })
+    expect(fake.promotions).toHaveLength(1)
+    expect(fake.uploads).toBe(2)
   })
 
   it("gets the item a lost promotion made, also after a reload", async () => {
