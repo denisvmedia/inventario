@@ -362,8 +362,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			modifyCommodity: func(c *models.Commodity) {
 				c.Status = models.CommodityStatusDonated
 				c.PurchaseDate = models.ToPDate("2026-01-01")
-				price := decimal.NewFromFloat(10)
-				c.SalePrice = &price
+				c.SalePrice = new(decimal.NewFromFloat(10))
 				c.StatusDate = models.ToPDate("2026-05-17")
 			},
 			modifyContext: func(ctx context.Context) context.Context {
@@ -376,8 +375,7 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 			modifyCommodity: func(c *models.Commodity) {
 				c.Status = models.CommodityStatusStolen
 				c.PurchaseDate = models.ToPDate("2026-01-01")
-				price := decimal.NewFromFloat(10)
-				c.SalePrice = &price
+				c.SalePrice = new(decimal.NewFromFloat(10))
 				c.StatusDate = models.ToPDate("2026-05-17")
 			},
 			modifyContext: func(ctx context.Context) context.Context {

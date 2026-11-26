@@ -42,7 +42,6 @@ func TestINBRoundTrip_Statuses(t *testing.T) {
 			StatusDate:               models.ToPDate("2026-11-26"),
 			StatusNote:               "note " + string(status),
 			OriginalPriceCurrency:    "USD",
-			Draft:                    true,
 		}
 		if status == models.CommodityStatusSold {
 			com.SalePrice = new(decimal.NewFromInt(40))

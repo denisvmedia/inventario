@@ -790,7 +790,6 @@ func TestCommodityUpdate_StatusTransition_LostKeepsSalePriceNil(t *testing.T) {
 // or stolen: the change needs a status date, keeps the note, and refuses a
 // sale price, which only a sold item has.
 func TestCommodityUpdate_StatusTransition_DonatedAndStolen(t *testing.T) {
-	salePrice := must.Must(decimal.NewFromString("10.00"))
 	tests := []struct {
 		name     string
 		status   models.CommodityStatus
@@ -809,7 +808,7 @@ func TestCommodityUpdate_StatusTransition_DonatedAndStolen(t *testing.T) {
 		{"stolen without a date", models.CommodityStatusStolen, func(*models.Commodity) {}, http.StatusUnprocessableEntity},
 		{"donated with a sale price", models.CommodityStatusDonated, func(m *models.Commodity) {
 			m.StatusDate = models.ToPDate("2026-11-26")
-			m.SalePrice = &salePrice
+			m.SalePrice = new(decimal.NewFromFloat(10))
 		}, http.StatusUnprocessableEntity},
 	}
 	for _, tt := range tests {
