@@ -52,6 +52,7 @@ const (
 var (
 	errIntakeAPITokenRequired = errx.NewDisplayable("the intake endpoint takes an API token")
 	errIntakeFieldsTooLarge   = errx.NewDisplayable("the delivery's fields exceed the size limit")
+	errIntakeJSONObject       = errx.NewDisplayable("the body must be one JSON object")
 )
 
 // intakeDeliveryFields maps each field of a delivery to its place in
@@ -300,17 +301,25 @@ func (f *intakeFieldReader) set(name, value string) {
 }
 
 // readJSON reads a flat object whose values are strings, numbers or null.
+// It reads the members one at a time, so a member given twice is refused as
+// a repeated form field is, and it refuses anything but white space after
+// the object.
 func (f *intakeFieldReader) readJSON(body io.Reader) error {
 	dec := json.NewDecoder(body)
 	dec.UseNumber()
-	var raw map[string]any
-	if err := dec.Decode(&raw); err != nil {
-		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return mapIntakeBodyError(err)
-		}
-		return &uploadHTTPError{status: http.StatusUnprocessableEntity, err: errxtrace.Wrap("the body must be a JSON object", err)}
+	if tok, err := dec.Token(); err != nil || tok != json.Delim('{') {
+		return intakeJSONError(err)
 	}
-	for name, value := range raw {
+	for dec.More() {
+		tok, err := dec.Token()
+		if err != nil {
+			return intakeJSONError(err)
+		}
+		name, _ := tok.(string)
+		var value any
+		if err := dec.Decode(&value); err != nil {
+			return intakeJSONError(err)
+		}
 		switch v := value.(type) {
 		case string:
 			f.set(name, v)
@@ -322,7 +331,28 @@ func (f *intakeFieldReader) readJSON(body io.Reader) error {
 			f.fail(name, validation.NewError("validation_intake_field_type", "must be a string"))
 		}
 	}
+	if _, err := dec.Token(); err != nil {
+		return intakeJSONError(err)
+	}
+	if _, err := dec.Token(); !errors.Is(err, io.EOF) {
+		return intakeJSONError(err)
+	}
 	return f.err()
+}
+
+// intakeJSONError turns a JSON body over the size limit into 413 and any
+// other problem with it, including content after the object, into 422.
+func intakeJSONError(err error) error {
+	if err != nil {
+		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
+			return mapIntakeBodyError(err)
+		}
+	}
+	var cause error = errIntakeJSONObject
+	if err != nil {
+		cause = errxtrace.Wrap("the body must be one JSON object", err)
+	}
+	return &uploadHTTPError{status: http.StatusUnprocessableEntity, err: cause}
 }
 
 func (f *intakeFieldReader) err() error {

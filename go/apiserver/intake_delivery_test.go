@@ -328,6 +328,46 @@ func TestIntakeDelivery_Limits(t *testing.T) {
 	c.Assert(env.openDrafts(), qt.HasLen, 0)
 }
 
+func TestIntakeDelivery_JSONBody(t *testing.T) {
+	c := qt.New(t)
+	env, token := newIntakeDeliveryEnv(c)
+	path := env.groupPath(env.group, "/intake")
+	const member = `"title":"Invoice","source_system":"paperless-ngx","document_id":"117"`
+
+	for _, tc := range []struct {
+		name  string
+		body  string
+		field string
+	}{
+		{name: "a member given twice", body: `{` + member + `,"document_id":"118"}`, field: "document_id"},
+		{name: "a second object", body: `{` + member + `}{"title":"Other"}`},
+		{name: "text after the object", body: `{` + member + `} trailing`},
+		{name: "an unclosed object", body: `{` + member},
+		{name: "an empty body", body: ``},
+	} {
+		c.Run(tc.name, func(c *qt.C) {
+			rr := env.raw(token, path, "application/json", []byte(tc.body))
+			c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf(rr.Body.String()))
+			if tc.field != "" {
+				c.Check(rr.Body.String(), qt.Contains, tc.field)
+				c.Check(rr.Body.String(), qt.Contains, "validation_intake_repeated_field")
+			}
+		})
+	}
+	c.Assert(env.openDrafts(), qt.HasLen, 0)
+
+	// A body past the size limit is refused as too large, even when what
+	// follows the object is only white space.
+	rr := env.raw(token, path, "application/json", []byte(`{`+member+`}`+strings.Repeat(" ", 70<<10)))
+	c.Assert(rr.Code, qt.Equals, http.StatusRequestEntityTooLarge, qt.Commentf(rr.Body.String()))
+	c.Assert(env.openDrafts(), qt.HasLen, 0)
+
+	// White space after the object is fine.
+	rr = env.raw(token, path, "application/json", []byte("{"+member+"}\n\t "))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	c.Assert(env.openDrafts(), qt.HasLen, 1)
+}
+
 func TestIntakeDelivery_WhoMayDeliver(t *testing.T) {
 	c := qt.New(t)
 	env, token := newIntakeDeliveryEnv(c)
