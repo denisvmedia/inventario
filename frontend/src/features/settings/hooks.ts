@@ -120,6 +120,9 @@ function applyOptimisticPatch(
     case "appearance.language":
       next.appearanceLanguage = value as string
       break
+    case "whats_new.last_seen_version":
+      next.whatsNewLastSeenVersion = (value as string | null) ?? undefined
+      break
   }
   return next
 }

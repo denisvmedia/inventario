@@ -65,6 +65,8 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useInboxCount } from "@/features/inbox/hooks"
+import { useWhatsNewUnread } from "@/features/whats-new/hooks"
+import { WhatsNewDot, WhatsNewUnreadLabel } from "@/features/whats-new/WhatsNewDot"
 import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
 
@@ -333,6 +335,9 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const navigate = useNavigate()
   const location = useLocation()
   const { t } = useTranslation()
+  // Help leads to Settings → Help, where the What's new row is, so it
+  // carries that row's unread dot (#1386).
+  const whatsNewUnread = useWhatsNewUnread()
 
   // Inventory + Group(Manage) entries all require an active group to resolve
   // (`/g/<slug>/...`), so rendering empty section headers when the user
@@ -512,8 +517,16 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
               <Link to={withGroupQuery(SETTINGS_HELP_URL, currentGroup?.slug)}>
                 <CircleHelp className="size-4" />
                 <span>{t("common:nav.help")}</span>
+                {whatsNewUnread ? <WhatsNewUnreadLabel /> : null}
               </Link>
             </SidebarMenuButton>
+            {/* Like the inbox count, the dot sits in the badge slot outside
+                the link; the link carries its meaning for screen readers. */}
+            {whatsNewUnread ? (
+              <SidebarMenuBadge aria-hidden="true">
+                <WhatsNewDot labelled={false} testId="sidebar-help-unread" />
+              </SidebarMenuBadge>
+            ) : null}
           </SidebarMenuItem>
           <SidebarMenuItem>
             <DropdownMenu>

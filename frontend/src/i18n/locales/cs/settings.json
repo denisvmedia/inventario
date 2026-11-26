@@ -504,5 +504,25 @@
     "usagePercent": "{{percent}} % kvóty skupiny"
   },
   "subtitle": "Spravujte svůj účet a předvolby.",
-  "title": "Předvolby"
+  "title": "Předvolby",
+  "whatsNew": {
+    "developmentDescription": "Tento server běží na verzi {{version}}, která není vydáním. Seznam ukazuje vydání, která obsahuje.",
+    "developmentTitle": "Vývojové sestavení",
+    "empty": "Zatím nebylo zveřejněno žádné vydání.",
+    "noUserChanges": "Toto vydání změnilo jen instalaci a provoz serveru.",
+    "operatorsNote": "Zobrazuje se jen správcům systému.",
+    "releaseTitle": "v{{version}}",
+    "sections": {
+      "added": "Přidáno",
+      "changed": "Změněno",
+      "deprecated": "Zastaralé",
+      "fixed": "Opraveno",
+      "operators": "Pro provozovatele",
+      "removed": "Odstraněno",
+      "security": "Zabezpečení"
+    },
+    "subtitle": "Změny v každém vydání tohoto serveru, od nejnovějšího. Poznámky k vydání jsou v angličtině.",
+    "title": "Novinky",
+    "unread": "nové vydání"
+  }
 }
