@@ -57,8 +57,9 @@ type commoditiesAPI struct {
 // @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
 // @Param no_purchase_price query bool false "Only items whose purchase price is unknown; a known zero is a price"
 // @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
+// @Param cf query []string false "Custom field condition as <field id>:<op>[:<value>], op one of set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field the group does not have matches no item" collectionFormat(multi)
 // @Param include_inactive query bool false "Include drafts and non-in_use commodities (default true; false hides them)"
-// @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
+// @Param sort query string false "Sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.<field id> for a custom field (items without a value last); prefix with '-' for descending"
 // @Param warranty_status query []string false "Filter by computed warranty status (active, expiring, expired, none); repeat to OR" collectionFormat(multi)
 // @Param warranty_expires_before query string false "Restrict to commodities whose warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Filter by current loan state: true = only currently lent (open loan), false = only currently not-lent"
@@ -89,7 +90,7 @@ func (api *commoditiesAPI) listCommodities(w http.ResponseWriter, r *http.Reques
 
 	result, err := commodityquery.List(r.Context(), regSet, query, offset, perPage)
 	if err != nil {
-		internalServerError(w, r, err)
+		queryRunError(w, r, err)
 		return
 	}
 
@@ -164,6 +165,7 @@ func listSelectionDigest(ctx context.Context, regSet *registry.Set, query commod
 // @Param no_photo query bool false "Only items without a photo; cannot be combined with trashed"
 // @Param no_purchase_price query bool false "Only items whose purchase price is unknown"
 // @Param no_purchase_date query bool false "Only items whose purchase date is unknown"
+// @Param cf query []string false "Custom field condition, as for GET /commodities" collectionFormat(multi)
 // @Param sort query string false "Accepted and ignored"
 // @Success 200 {object} jsonapi.CommodityTagCountsResponse "OK"
 // @Failure 400 {object} jsonapi.Errors "Unsupported parameter or invalid value"
@@ -187,7 +189,7 @@ func (*commoditiesAPI) countCommodityTags(w http.ResponseWriter, r *http.Request
 	}
 	counts, err := commodityquery.TagCounts(r.Context(), regSet, query)
 	if err != nil {
-		internalServerError(w, r, err)
+		queryRunError(w, r, err)
 		return
 	}
 	if err := render.Render(w, r, jsonapi.NewCommodityTagCountsResponse(counts)); err != nil {
@@ -290,6 +292,12 @@ func (api *commoditiesAPI) getCommodity(w http.ResponseWriter, r *http.Request) 
 	if cover := api.resolveCoverForOne(r, commodity); cover != nil {
 		resp = resp.WithCover(cover)
 	}
+	linked, err := linkedItemSummaries(r.Context(), RegistrySetFromContext(r.Context()), commodity)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+	resp = resp.WithLinkedItems(linked)
 
 	if err := render.Render(w, r, resp); err != nil {
 		internalServerError(w, r, err)
@@ -650,6 +658,9 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	}
 
 	updateData := *commodity
+	// Only the cover changes; the custom field values read with the item
+	// would overwrite one written since.
+	updateData.CustomFields = nil
 	if desired == "" {
 		updateData.CoverFileID = nil
 	} else {

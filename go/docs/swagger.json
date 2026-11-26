@@ -3146,6 +3146,16 @@
                         "in": "query"
                     },
                     {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Custom field condition as \u003cfield id\u003e:\u003cop\u003e[:\u003cvalue\u003e], op one of set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field the group does not have matches no item",
+                        "name": "cf",
+                        "in": "query"
+                    },
+                    {
                         "type": "boolean",
                         "description": "Include drafts and non-in_use commodities (default true; false hides them)",
                         "name": "include_inactive",
@@ -3153,7 +3163,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
+                        "description": "Sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.\u003cfield id\u003e for a custom field (items without a value last); prefix with '-' for descending",
                         "name": "sort",
                         "in": "query"
                     },
@@ -3717,6 +3727,16 @@
                         "type": "boolean",
                         "description": "Only items whose purchase date is unknown",
                         "name": "no_purchase_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
+                        "description": "Custom field condition, as for GET /commodities",
+                        "name": "cf",
                         "in": "query"
                     },
                     {
@@ -5303,6 +5323,264 @@
                     },
                     "404": {
                         "description": "Not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/custom-fields": {
+            "get": {
+                "description": "The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;\neach option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "custom-fields"
+                ],
+                "summary": "List custom fields",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldsResponse"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "description": "The name is required and unique in the group, ignoring case and runs of spaces. The type is fixed once the field exists.\nA select field needs at least one option; the server gives each option its ID. templates lists the item types whose form shows the field, each with an optional default value.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "custom-fields"
+                ],
+                "summary": "Create a custom field",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Custom field object",
+                        "name": "customField",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Custom field created",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldResponse"
+                        }
+                    },
+                    "409": {
+                        "description": "Another custom field of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem, or the group has the most fields it can have",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/custom-fields/{customFieldID}": {
+            "get": {
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "custom-fields"
+                ],
+                "summary": "Get a custom field",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Custom field ID",
+                        "name": "customFieldID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Custom field not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "delete": {
+                "description": "Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,\nunless delete_values=true; then its values are deleted with it, in the same transaction.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "custom-fields"
+                ],
+                "summary": "Delete a custom field",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Custom field ID",
+                        "name": "customFieldID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Delete the field's values along with it",
+                        "name": "delete_values",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "With delete_values=true: how many items the member confirmed to lose a value. When another number of items has one, the delete is refused with 409 custom_field.in_use and the counts in meta",
+                        "name": "expected_values",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Deleted; meta.deleted_values counts the values removed",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldDeleteResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Custom field not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Items have a value of the field and delete_values was not true, or expected_values is not how many items have one",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "delete_values is not a boolean, or expected_values is not a whole number of at least 0",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "description": "Attributes left out keep their value. Values, filters and list columns name the field by ID, so they keep working after a rename.\noptions replaces the list: an entry with an existing option's ID keeps that option and its values, an entry without an ID adds one, and an option left out is removed with its values.\ntemplates replaces the template entries. The type cannot change: a different type is a 422 on type.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "custom-fields"
+                ],
+                "summary": "Update a custom field",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Custom field ID",
+                        "name": "customFieldID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Custom field patch",
+                        "name": "customField",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldUpdateRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CustomFieldResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Custom field not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Another custom field of the group has this name",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -8889,6 +9167,16 @@
                             "type": "string"
                         },
                         "collectionFormat": "multi",
+                        "description": "Commodities only: custom field condition, as for GET /commodities",
+                        "name": "cf",
+                        "in": "query"
+                    },
+                    {
+                        "type": "array",
+                        "items": {
+                            "type": "string"
+                        },
+                        "collectionFormat": "multi",
                         "description": "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR",
                         "name": "status",
                         "in": "query"
@@ -8951,7 +9239,7 @@
                     },
                     {
                         "type": "string",
-                        "description": "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending",
+                        "description": "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.\u003cfield id\u003e; prefix with '-' for descending",
                         "name": "sort",
                         "in": "query"
                     }
@@ -14928,6 +15216,13 @@
             "properties": {
                 "cover": {
                     "$ref": "#/definitions/jsonapi.CommodityCover"
+                },
+                "linked_items": {
+                    "description": "LinkedItems names, per item ID, the items the commodity's \"link to\nanother item\" custom fields point at (#2803), so a client can show a\nlink without fetching each item. A linked item in Trash is listed\nwith trashed=true.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.LinkedItemSummary"
+                    }
                 }
             }
         },
@@ -14960,6 +15255,13 @@
         "jsonapi.CommodityScanAttributes": {
             "type": "object",
             "properties": {
+                "custom_fields": {
+                    "description": "CustomFields are the values read for the group's custom fields\n(#2803), keyed by field ID, in the form an item write takes them: a\nstring for text, long text, URL, date and a select field's option ID,\na number, or a boolean. Absent when the scan read none.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
                 "fields": {
                     "type": "object",
                     "additionalProperties": {
@@ -15002,6 +15304,12 @@
         "jsonapi.CommodityScanItem": {
             "type": "object",
             "properties": {
+                "custom_fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
                 "fields": {
                     "type": "object",
                     "additionalProperties": {
@@ -15558,6 +15866,240 @@
                     "items": {
                         "$ref": "#/definitions/jsonapi.CurrencyMigrationResponseData"
                     }
+                }
+            }
+        },
+        "jsonapi.CustomFieldDeleteMeta": {
+            "type": "object",
+            "properties": {
+                "deleted_values": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 4
+                }
+            }
+        },
+        "jsonapi.CustomFieldDeleteResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldDeleteMeta"
+                }
+            }
+        },
+        "jsonapi.CustomFieldOptionView": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "a1b2c3d4"
+                },
+                "item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 2
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Petrol"
+                }
+            }
+        },
+        "jsonapi.CustomFieldRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CustomFieldRequestData": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "License plate"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CustomFieldOption"
+                    }
+                },
+                "templates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CustomFieldTemplate"
+                    }
+                },
+                "type": {
+                    "type": "string",
+                    "example": "text"
+                }
+            }
+        },
+        "jsonapi.CustomFieldRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "custom_fields"
+                    ],
+                    "example": "custom_fields"
+                }
+            }
+        },
+        "jsonapi.CustomFieldResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldResponseData"
+                }
+            }
+        },
+        "jsonapi.CustomFieldResponseData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "custom_fields"
+                    ],
+                    "example": "custom_fields"
+                }
+            }
+        },
+        "jsonapi.CustomFieldUpdateRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldUpdateRequestDataWrapper"
+                }
+            }
+        },
+        "jsonapi.CustomFieldUpdateRequestData": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CustomFieldOption"
+                    }
+                },
+                "templates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CustomFieldTemplate"
+                    }
+                },
+                "type": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CustomFieldUpdateRequestDataWrapper": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldUpdateRequestData"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "custom_fields"
+                    ],
+                    "example": "custom_fields"
+                }
+            }
+        },
+        "jsonapi.CustomFieldView": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "item_count": {
+                    "description": "ItemCount and TrashedItemCount are the items with a value of the\nfield. Deleting the field deletes those values.",
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 3
+                },
+                "name": {
+                    "type": "string",
+                    "example": "License plate"
+                },
+                "options": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CustomFieldOptionView"
+                    }
+                },
+                "templates": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.CustomFieldTemplate"
+                    }
+                },
+                "trashed_item_count": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 0
+                },
+                "type": {
+                    "description": "Type is one of text, long_text, number, money, date, boolean, select,\nurl, item_link. It never changes.",
+                    "type": "string",
+                    "example": "text"
+                },
+                "updated_at": {
+                    "type": "string"
+                }
+            }
+        },
+        "jsonapi.CustomFieldsMeta": {
+            "type": "object",
+            "properties": {
+                "custom_fields": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 4
+                },
+                "limit": {
+                    "type": "integer",
+                    "format": "int64",
+                    "example": 200
+                }
+            }
+        },
+        "jsonapi.CustomFieldsResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CustomFieldResponseData"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/jsonapi.CustomFieldsMeta"
                 }
             }
         },
@@ -17057,6 +17599,19 @@
                 },
                 "meta": {
                     "$ref": "#/definitions/jsonapi.ItemTypesMeta"
+                }
+            }
+        },
+        "jsonapi.LinkedItemSummary": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "example": "Charger"
+                },
+                "trashed": {
+                    "type": "boolean",
+                    "example": false
                 }
             }
         },
@@ -19240,6 +19795,14 @@
                     "type": "number",
                     "x-nullable": "true"
                 },
+                "custom_fields": {
+                    "description": "CustomFields are the item's custom field values (#2803), keyed by\nfield ID; see CustomFieldValues for the read and write rules. They are\nrows of commodity_custom_field_values, not a column: the registries\nread them with the item and write them in the item's transaction,\nafter checking each one against its field.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.CustomFieldValuesSchema"
+                        }
+                    ]
+                },
                 "deleted_at": {
                     "description": "DeletedAt is when the item was moved to Trash, nil while it is live. A\ntrashed item keeps its id, asset number, history, loans, service\nrecords, maintenance schedules and attachments, and is left out of every\nordinary read of the registries until it is restored or purged (see\nregistry.CommodityRegistry). Server-managed: only the registry's trash\noperations write it; Create and Update ignore a caller's value.",
                     "type": "string",
@@ -19612,6 +20175,33 @@
                 "CurrencyMigrationStatusCompleted",
                 "CurrencyMigrationStatusFailed"
             ]
+        },
+        "models.CustomFieldOption": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string",
+                    "example": "a1b2c3d4"
+                },
+                "label": {
+                    "type": "string",
+                    "example": "Petrol"
+                }
+            }
+        },
+        "models.CustomFieldTemplate": {
+            "type": "object",
+            "properties": {
+                "default_value": {},
+                "item_type_id": {
+                    "type": "string",
+                    "example": "8f1c..."
+                }
+            }
+        },
+        "models.CustomFieldValuesSchema": {
+            "type": "object",
+            "additionalProperties": {}
         },
         "models.Export": {
             "type": "object",
@@ -20900,7 +21490,8 @@
                 "tags",
                 "comments",
                 "warranty_notes",
-                "status_note"
+                "status_note",
+                "custom_fields"
             ],
             "x-enum-varnames": [
                 "CommoditySearchFieldAssetID",
@@ -20914,12 +21505,17 @@
                 "CommoditySearchFieldTags",
                 "CommoditySearchFieldComments",
                 "CommoditySearchFieldWarrantyNotes",
-                "CommoditySearchFieldStatusNote"
+                "CommoditySearchFieldStatusNote",
+                "CommoditySearchFieldCustomFields"
             ]
         },
         "registry.CommoditySearchMatch": {
             "type": "object",
             "properties": {
+                "custom_field_id": {
+                    "description": "CustomFieldID is the custom field a custom_fields match was found\nin; empty for every other field.",
+                    "type": "string"
+                },
                 "field": {
                     "$ref": "#/definitions/registry.CommoditySearchField"
                 },

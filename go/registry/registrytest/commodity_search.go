@@ -104,7 +104,7 @@ func RunCommoditySearchContract(t *testing.T, newEnv func(t *testing.T) Commodit
 				// shared rule, or the match hints would come back empty.
 				terms := registry.SplitSearchTerms(opts.Search)
 				for _, cm := range got {
-					matches, ok := registry.MatchCommoditySearch(cm, terms, opts.SearchTagLabels)
+					matches, ok := registry.MatchCommoditySearch(cm, terms, opts.SearchTagLabels, opts.SearchCustomFields)
 					c.Check(ok, qt.IsTrue, qt.Commentf("%s is not explained by the search rule", cm.Name))
 					if tc.match != nil && len(got) == 1 {
 						c.Check(matches, qt.Contains, *tc.match, qt.Commentf("matches of %s", cm.Name))

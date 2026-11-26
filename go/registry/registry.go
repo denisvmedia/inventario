@@ -174,8 +174,18 @@ type CommodityListOptions struct {
 	// services/commodityquery fills it from TagRegistry.SlugsByLabel; a
 	// term without an entry matches tags by slug only.
 	SearchTagLabels map[string][]string
+	// SearchCustomFields says which custom field values a search term is
+	// matched against (#2803); see CustomFieldSearch. The zero value reads
+	// none.
+	SearchCustomFields CustomFieldSearch
 	// Tags narrows by the tags items carry; see CommodityTagFilter.
 	Tags CommodityTagFilter
+	// CustomFields keeps the items that pass every filter in the list
+	// (#2803); see CustomFieldFilter.
+	CustomFields []CustomFieldFilter
+	// CustomFieldSort, when set, orders by a custom field instead of
+	// SortField, in the direction of SortDesc; see CustomFieldSort.
+	CustomFieldSort *CustomFieldSort
 	// IncludeInactive controls whether non-`in_use` commodities AND
 	// drafts are included. The list page hides them by default; when
 	// the user toggles "Show inactive" the FE sends true. This is
@@ -371,6 +381,13 @@ func RestoredDraftFromContext(ctx context.Context, now time.Time) (RestoredDraft
 	return d, true
 }
 
+// CommodityName is an item's ID and name, and whether it is in Trash.
+type CommodityName struct {
+	ID      string `db:"id"`
+	Name    string `db:"name"`
+	Trashed bool   `db:"trashed"`
+}
+
 // CommodityRegistry stores items.
 //
 // Trash: an item moved to Trash keeps its row with deleted_at set
@@ -496,6 +513,12 @@ type CommodityRegistry interface {
 	// commodity fetch in listGroupLoans (issue #1512); the cover-resolver
 	// follow-up (#1451) is expected to reuse the same primitive.
 	GetMany(ctx context.Context, ids []string) ([]*models.Commodity, error)
+
+	// GetNames returns the name of each item among ids, live or in Trash,
+	// and whether it is in Trash, in one round trip and in unspecified
+	// order. An id with no item in scope is dropped, and a repeated id is
+	// listed once. It names the items that item link values point at.
+	GetNames(ctx context.Context, ids []string) ([]CommodityName, error)
 
 	// Enhanced search methods
 	// SearchByTags(ctx context.Context, tags []string, operator TagOperator) ([]*models.Commodity, error)
@@ -1834,6 +1857,64 @@ type ItemTypeRegistry interface {
 	// it created. Service registry only.
 	BackfillBuiltins(ctx context.Context) (int, error)
 }
+
+// CustomFieldUsage counts the items of a group that have a value for one
+// custom field.
+type CustomFieldUsage struct {
+	// Live counts the items outside Trash, drafts and inactive items
+	// included.
+	Live int
+	// Trashed counts the items in Trash.
+	Trashed int
+	// Options counts, for a select field, the items with each option ID,
+	// those in Trash included. Nil for other types.
+	Options map[string]int
+}
+
+// Total is the number of items, in Trash or not, that have a value.
+func (u CustomFieldUsage) Total() int {
+	return u.Live + u.Trashed
+}
+
+// CustomFieldRegistry is the group-scoped registry of custom field
+// definitions and of the item type templates that name them (#2803). The
+// values themselves belong to the items: CommodityRegistry reads and writes
+// them as models.Commodity.CustomFields.
+//
+// Create and Update normalize the definition
+// (models.CustomFieldDefinition.Normalize), validate it and fail with
+// ErrAlreadyExists when another field of the group has the same name key.
+// A template entry naming no item type of the group fails with
+// ErrInvalidInput. Update keeps the stored type and creation time; the
+// values of options it drops are deleted in the same transaction, and so are
+// template defaults that name them. Get and List return the definitions
+// with their templates; List orders them by name key, then ID.
+//
+// Delete deletes a field no item has a value of; a field that items, those
+// in Trash included, have a value of fails with ErrCustomFieldInUse and
+// nothing is deleted.
+type CustomFieldRegistry interface {
+	Registry[models.CustomFieldDefinition]
+
+	// GetByName returns the field whose name key equals the key of name,
+	// or ErrNotFound.
+	GetByName(ctx context.Context, name string) (*models.CustomFieldDefinition, error)
+
+	// Usage returns, per field ID, how many items of the group have a
+	// value for the field. A field without values is absent from the map.
+	Usage(ctx context.Context) (map[string]CustomFieldUsage, error)
+
+	// DeleteWithValues deletes the field with id together with its values
+	// and template entries, in one transaction, and returns how many items
+	// had a value. expected is how many items the caller confirmed to lose
+	// a value, or AnyValueCount; when another number of items has a value,
+	// it fails with ErrCustomFieldInUse and nothing is deleted.
+	DeleteWithValues(ctx context.Context, id string, expected int) (int, error)
+}
+
+// AnyValueCount lets CustomFieldRegistry.DeleteWithValues delete the values
+// of any number of items.
+const AnyValueCount = -1
 
 // CommodityReminderSendRegistry records which reminder emails the worker
 // has claimed. One row per (reminder, occurrence, lead time); the unique
@@ -3346,6 +3427,7 @@ type Set struct {
 	IntakeRegistry                 IntakeRegistry
 	SellerRegistry                 SellerRegistry
 	ItemTypeRegistry               ItemTypeRegistry
+	CustomFieldRegistry            CustomFieldRegistry
 	ThumbnailGenerationJobRegistry ThumbnailGenerationJobRegistry
 	UserConcurrencySlotRegistry    UserConcurrencySlotRegistry
 	OperationSlotRegistry          OperationSlotRegistry
@@ -3444,6 +3526,7 @@ func (s *Set) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.IntakeRegistry, validation.Required),
 		validation.Field(&s.SellerRegistry, validation.Required),
 		validation.Field(&s.ItemTypeRegistry, validation.Required),
+		validation.Field(&s.CustomFieldRegistry, validation.Required),
 		validation.Field(&s.TenantRegistry, validation.Required),
 		validation.Field(&s.UserRegistry, validation.Required),
 		validation.Field(&s.CommodityScanAuditRegistry, validation.Required),

@@ -2,6 +2,8 @@
 
 package export
 
+import "encoding/json"
+
 // This file defines the JSON document schemas written into the inner tar of a
 // signed `.inb` backup archive (issue #534). The same shapes are decoded on the
 // restore side (see backup/restore/types/types_inb.go) — keep the two in sync.
@@ -54,7 +56,12 @@ package export
 // linked entity type "draft". A 3.4 reader restores a 3.5 archive without the
 // drafts. It counts an error for the drafts member and one for each link to a
 // draft, and leaves out a file that only drafts use.
-const INBFormatVersion = "3.5"
+//
+// 3.6 adds the group's custom fields to the manifest (INBManifest.CustomFields)
+// and an item's custom field values (INBCommodity.CustomFields), both
+// optional. A draft's custom field values are archived like an item's. A 3.5
+// reader restores a 3.6 archive without them.
+const INBFormatVersion = "3.6"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -156,8 +163,36 @@ type INBManifest struct {
 	// ItemTypes are the group's item types (format 3.4): every type in a
 	// whole-group export, and the types the exported items have in a
 	// selected-items export.
-	ItemTypes  []INBItemType    `json:"itemTypes,omitempty"`
-	Statistics INBManifestStats `json:"statistics"`
+	ItemTypes []INBItemType `json:"itemTypes,omitempty"`
+	// CustomFields are the group's custom fields (format 3.6): every field
+	// in a whole-group export, and the fields the exported items have a
+	// value of in a selected-items export. Omitted when there is none.
+	CustomFields []INBCustomField `json:"customFields,omitempty"`
+	Statistics   INBManifestStats `json:"statistics"`
+}
+
+// INBCustomField is a custom field keyed by its immutable UUID, which the
+// keys of INBCommodity.CustomFields refer to. Type never changes. A select
+// field's options keep their IDs, which its values hold.
+type INBCustomField struct {
+	ID        string                   `json:"id"`
+	Name      string                   `json:"name"`
+	Type      string                   `json:"type"`
+	Options   []INBCustomFieldOption   `json:"options,omitempty"`
+	Templates []INBCustomFieldTemplate `json:"templates,omitempty"`
+}
+
+// INBCustomFieldOption is one choice of a select field.
+type INBCustomFieldOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// INBCustomFieldTemplate is an item type, by its slug, whose form shows the
+// field, with the value the form prefills (absent when there is none).
+type INBCustomFieldTemplate struct {
+	ItemType     string          `json:"itemType"`
+	DefaultValue json.RawMessage `json:"defaultValue,omitempty"`
 }
 
 // INBItemType is an item type keyed by its slug, which INBCommodity.Type
@@ -245,30 +280,34 @@ type INBArea struct {
 // emitted in the INBUnassignedDoc member (issue #1986). The three file-reference
 // arrays carry the commodity's attached images / invoices / manuals.
 type INBCommodity struct {
-	ID                     string   `json:"id"`
-	Name                   string   `json:"name"`
-	ShortName              string   `json:"shortName,omitempty"`
-	Brand                  string   `json:"brand,omitempty"`
-	Model                  string   `json:"model,omitempty"`
-	SellerID               string   `json:"sellerId,omitempty"`
-	Type                   string   `json:"type,omitempty"`
-	AreaID                 string   `json:"areaId"`
-	Count                  int      `json:"count"`
-	OriginalPrice          string   `json:"originalPrice,omitempty"`
-	OriginalPriceCurrency  string   `json:"originalPriceCurrency,omitempty"`
-	ConvertedOriginalPrice string   `json:"convertedOriginalPrice,omitempty"`
-	CurrentPrice           string   `json:"currentPrice,omitempty"`
-	SerialNumber           string   `json:"serialNumber,omitempty"`
-	ExtraSerialNumbers     []string `json:"extraSerialNumbers,omitempty"`
-	PartNumbers            []string `json:"partNumbers,omitempty"`
-	Tags                   []string `json:"tags,omitempty"`
-	Status                 string   `json:"status,omitempty"`
-	PurchaseDate           string   `json:"purchaseDate,omitempty"`
-	RegisteredDate         string   `json:"registeredDate,omitempty"`
-	LastModifiedDate       string   `json:"lastModifiedDate,omitempty"`
-	URLs                   []string `json:"urls,omitempty"`
-	Comments               string   `json:"comments,omitempty"`
-	Draft                  bool     `json:"draft"`
+	ID        string `json:"id"`
+	Name      string `json:"name"`
+	ShortName string `json:"shortName,omitempty"`
+	Brand     string `json:"brand,omitempty"`
+	Model     string `json:"model,omitempty"`
+	SellerID  string `json:"sellerId,omitempty"`
+	// CustomFields are the item's custom field values (format 3.6), keyed
+	// by the field's UUID, each in the form the API writes it, except that
+	// a link to another item holds that item's UUID.
+	CustomFields           map[string]json.RawMessage `json:"customFields,omitempty"`
+	Type                   string                     `json:"type,omitempty"`
+	AreaID                 string                     `json:"areaId"`
+	Count                  int                        `json:"count"`
+	OriginalPrice          string                     `json:"originalPrice,omitempty"`
+	OriginalPriceCurrency  string                     `json:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string                     `json:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string                     `json:"currentPrice,omitempty"`
+	SerialNumber           string                     `json:"serialNumber,omitempty"`
+	ExtraSerialNumbers     []string                   `json:"extraSerialNumbers,omitempty"`
+	PartNumbers            []string                   `json:"partNumbers,omitempty"`
+	Tags                   []string                   `json:"tags,omitempty"`
+	Status                 string                     `json:"status,omitempty"`
+	PurchaseDate           string                     `json:"purchaseDate,omitempty"`
+	RegisteredDate         string                     `json:"registeredDate,omitempty"`
+	LastModifiedDate       string                     `json:"lastModifiedDate,omitempty"`
+	URLs                   []string                   `json:"urls,omitempty"`
+	Comments               string                     `json:"comments,omitempty"`
+	Draft                  bool                       `json:"draft"`
 
 	// Extended commodity fields (#534 round-trip parity). Warranty (#1554),
 	// terminal-status metadata (#1611), acquisition provenance (#202), and the

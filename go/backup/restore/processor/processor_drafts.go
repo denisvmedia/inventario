@@ -182,6 +182,7 @@ func (w *inbWalker) restoreDraftValues(archived models.CommodityDraftValues) mod
 	maps.Copy(values, archived)
 	restoreDraftReference(values, "area_id", w.idMapping.Areas)
 	restoreDraftReference(values, "seller_id", w.sellerIDs)
+	w.restoreDraftCustomFields(values)
 	if _, isText := values["type"].(string); !isText {
 		delete(values, "type")
 	}

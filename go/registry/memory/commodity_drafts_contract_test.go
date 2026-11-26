@@ -49,6 +49,7 @@ func newMemoryDraftEnv(t *testing.T) registrytest.DraftEnv {
 		Commodities: set.CommodityRegistry,
 		Files:       set.FileRegistry,
 		Sellers:     set.SellerRegistry,
+		Fields:      set.CustomFieldRegistry,
 		AreaID:      area.GetID(),
 	}
 }

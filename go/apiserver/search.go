@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"errors"
 	"net/http"
 	"net/url"
 	"slices"
@@ -44,6 +45,7 @@ type searchAPI struct {
 // @Param no_photo query bool false "Commodities only: only items without a photo; cannot be combined with trashed"
 // @Param no_purchase_price query bool false "Commodities only: only items whose purchase price is unknown"
 // @Param no_purchase_date query bool false "Commodities only: only items whose purchase date is unknown"
+// @Param cf query []string false "Commodities only: custom field condition, as for GET /commodities" collectionFormat(multi)
 // @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Commodities only: filter by exact area ID"
 // @Param unassigned query bool false "Commodities only: only items with no area (ignored when area_id is set)"
@@ -53,7 +55,7 @@ type searchAPI struct {
 // @Param warranty_expires_before query string false "Commodities only: restrict to items whose warranty expires strictly before YYYY-MM-DD"
 // @Param lent_out query bool false "Commodities only: true = only items currently lent, false = only items not lent"
 // @Param trashed query bool false "Commodities only: true searches the items in Trash instead of the live ones (default false); cannot be combined with lent_out"
-// @Param sort query string false "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, prefix with '-' for descending"
+// @Param sort query string false "Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count, or cf.<field id>; prefix with '-' for descending"
 // @Success 200 {object} jsonapi.SearchResponse "Search results"
 // @Failure 400 {object} jsonapi.Errors "Missing q, unsupported parameter or invalid value"
 // @Router /g/{groupSlug}/search [get]
@@ -121,6 +123,10 @@ func (*searchAPI) searchCommodities(w http.ResponseWriter, r *http.Request, regi
 	}
 	result, err := commodityquery.List(r.Context(), registrySet, query, offset, limit)
 	if err != nil {
+		if _, ok := errors.AsType[*commodityquery.Error](err); ok {
+			queryParamError(w, r, err)
+			return
+		}
 		renderEntityError(w, r, err)
 		return
 	}

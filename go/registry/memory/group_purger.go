@@ -46,12 +46,20 @@ type GroupPurger struct {
 	// itemTypes is set by SetItemTypeFactory. The purge drops a group's
 	// types without the delete rules, which would keep the last one.
 	itemTypes *ItemTypeRegistryFactory
+	// customFields is set by SetCustomFieldFactory.
+	customFields *CustomFieldRegistryFactory
 }
 
 // SetItemTypeFactory attaches the item types the purge drops with the
 // group (#2802).
 func (r *GroupPurger) SetItemTypeFactory(itemTypes *ItemTypeRegistryFactory) {
 	r.itemTypes = itemTypes
+}
+
+// SetCustomFieldFactory attaches the custom fields the purge drops with the
+// group (#2803). Their values go with the items.
+func (r *GroupPurger) SetCustomFieldFactory(customFields *CustomFieldRegistryFactory) {
+	r.customFields = customFields
 }
 
 // NewGroupPurger wires a GroupPurger to the registry factories that own the
@@ -280,6 +288,15 @@ func (r *GroupPurger) PurgeGroupDependents(ctx context.Context, tenantID, groupI
 			if r.itemTypes != nil {
 				r.itemTypes.purgeWhere(func(t *models.ItemType) bool {
 					return t.TenantID == tenantID && t.GroupID == groupID
+				})
+			}
+			return nil
+		}},
+		// Custom fields (#2803), after the items that held their values.
+		{"custom_fields", func() error {
+			if r.customFields != nil {
+				r.customFields.purgeWhere(func(d *models.CustomFieldDefinition) bool {
+					return d.TenantID == tenantID && d.GroupID == groupID
 				})
 			}
 			return nil

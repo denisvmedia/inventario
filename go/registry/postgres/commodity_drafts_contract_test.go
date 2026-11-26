@@ -21,12 +21,15 @@ func newPostgresDraftEnv(t *testing.T) registrytest.DraftEnv {
 	area := createTestArea(c, fx.set, location.ID)
 	drafts, err := fx.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(fx.ctx)
 	c.Assert(err, qt.IsNil)
+	fields, err := fx.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(fx.ctx)
+	c.Assert(err, qt.IsNil)
 	return registrytest.DraftEnv{
 		Ctx:         fx.ctx,
 		Drafts:      drafts,
 		Commodities: fx.set.CommodityRegistry,
 		Files:       fx.set.FileRegistry,
 		Sellers:     fx.set.SellerRegistry,
+		Fields:      fields,
 		AreaID:      area.ID,
 	}
 }

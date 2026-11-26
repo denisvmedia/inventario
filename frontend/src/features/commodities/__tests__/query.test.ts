@@ -36,8 +36,10 @@ const FULL: CommodityQuery = {
   noPhoto: true,
   noPurchasePrice: true,
   noPurchaseDate: true,
+  customFields: ["f2:in:o2,o1", "f1:gte:10"],
   sort: "purchase_date",
   sortDesc: true,
+  customFieldSort: "",
   unreadable: {},
 }
 
@@ -49,6 +51,14 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
   it("round-trips every condition through the URL", () => {
     const params = writeCommodityQuery(new URLSearchParams(), FULL)
     expect(parseCommodityQuery(new URLSearchParams(params.toString()))).toEqual(FULL)
+  })
+
+  it("round-trips a custom field sort through the URL", () => {
+    const query = { ...DEFAULT_COMMODITY_QUERY, customFieldSort: "f1", sortDesc: true }
+    const params = writeCommodityQuery(new URLSearchParams(), query)
+    expect(params.get("sort")).toBe("-cf.f1")
+    expect(parseCommodityQuery(new URLSearchParams(params.toString()))).toEqual(query)
+    expect(parseCommodityQuery(new URLSearchParams("sort=cf.")).customFieldSort).toBe("")
   })
 
   it("leaves defaults out of the URL", () => {
@@ -283,6 +293,7 @@ describe("listOptionsToParams", () => {
       no_photo: ["true"],
       no_purchase_price: ["true"],
       no_purchase_date: ["true"],
+      cf: ["f1:gte:10", "f2:in:o1,o2"],
     })
   })
 
@@ -353,6 +364,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       statuses: [...FULL.statuses].sort(),
       warrantyStatuses: [...FULL.warrantyStatuses].sort(),
       tags: { ...FULL.tags, include: [...FULL.tags.include].sort() },
+      customFields: ["f1:gte:10", "f2:in:o1,o2"],
     })
   })
 
@@ -414,6 +426,21 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       expect(commodityListHref("home", q)).toBe("/g/home/commodities?no_purchase_date=1")
     })
 
+    // Go's canonical form escapes the colons and sorts the conditions and
+    // the options of an "in" condition.
+    it("reads custom field conditions and a custom field sort", () => {
+      expect(
+        unreadApiQueryParam("cf=f1%3Agte%3A10&cf=f2%3Ain%3Ao1%2Co2&cf=f3%3Aset&sort=-cf.f1")
+      ).toBeUndefined()
+      const q = commodityQueryFromApiQuery("cf=f1%3Agte%3A10&sort=-cf.f1")
+      expect(q.customFields).toEqual(["f1:gte:10"])
+      expect(q.customFieldSort).toBe("f1")
+      expect(q.sortDesc).toBe(true)
+      expect(listOptionsToParams(commodityQueryToListOptions(q)).getAll("cf")).toEqual([
+        "f1:gte:10",
+      ])
+    })
+
     it("names a parameter the list would drop", () => {
       expect(unreadApiQueryParam("item_type=abc&sort=name")).toBe("item_type")
     })
@@ -421,6 +448,7 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     it("names a value the list would read as something else", () => {
       expect(unreadApiQueryParam("sort=-unknown")).toBe("sort")
       expect(unreadApiQueryParam("sort=unknown")).toBe("sort")
+      expect(unreadApiQueryParam("sort=cf.")).toBe("sort")
     })
   })
 
@@ -448,6 +476,18 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
     expect(sameCommodityQuery(tags([], ["Power Tools"]), tags([], ["power-tools"]))).toBe(true)
     expect(sameCommodityQuery(tags(["fragile"]), tags(["fragile-2"]))).toBe(false)
     expect(sameCommodityQuery(tags(["fragile"]), tags([], ["fragile"]))).toBe(false)
+  })
+
+  // The server sorts the option ids of an "in" condition and drops repeats
+  // before it stores them, and drops a condition that repeats another.
+  it("compares select option sets as the server stores them", () => {
+    const cf = (...customFields: string[]) => ({ ...DEFAULT_COMMODITY_QUERY, customFields })
+    expect(sameCommodityQuery(cf("f2:in:o2,o1"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o2, o1,o2"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o1,o2", "f2:in:o2,o1"), cf("f2:in:o1,o2"))).toBe(true)
+    expect(sameCommodityQuery(cf("f2:in:o1"), cf("f2:in:o1,o2"))).toBe(false)
+    expect(commodityQueryToApiQuery(cf("f2:in:,"))).toContain("cf=f2%3Ain%3A%2C")
+    expect(commodityQueryToApiQuery(cf("f1:contains:b,a"))).toContain("cf=f1%3Acontains%3Ab%2Ca")
   })
 })
 

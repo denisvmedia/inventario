@@ -287,9 +287,10 @@ func (b *inbBuilder) writeFileMember(archivePath, blobKey string, size int64) (i
 }
 
 // writeManifest emits the manifest.json member from the accumulated stats and
-// the per-location index. It names the area-less commodities member (issue
-// #1986), the drafts member and the non-commodity files member (issue #2235)
-// only when the plan writes them, so a backup without them stays byte-stable.
+// the per-location index, the sellers, item types and custom fields. It names
+// the area-less commodities member (issue #1986), the drafts member and the
+// non-commodity files member (issue #2235) only when the plan writes them, so
+// a backup without them stays byte-stable.
 func (b *inbBuilder) writeManifest(plan *inbPlan) error {
 	var unassignedMember, draftsMember, filesMember string
 	if plan.unassigned.present {
@@ -318,6 +319,7 @@ func (b *inbBuilder) writeManifest(plan *inbPlan) error {
 		FilesFile:      filesMember,
 		Sellers:        plan.sellers,
 		ItemTypes:      plan.itemTypes,
+		CustomFields:   plan.customFields,
 		Statistics: INBManifestStats{
 			LocationCount:  b.stats.LocationCount,
 			AreaCount:      b.stats.AreaCount,

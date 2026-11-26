@@ -22,6 +22,11 @@ type CommodityScanResource struct {
 // note list.
 type CommodityScanAttributes struct {
 	Fields map[string]CommodityScanFieldGuess `json:"fields"`
+	// CustomFields are the values read for the group's custom fields
+	// (#2803), keyed by field ID, in the form an item write takes them: a
+	// string for text, long text, URL, date and a select field's option ID,
+	// a number, or a boolean. Absent when the scan read none.
+	CustomFields map[string]CommodityScanFieldGuess `json:"custom_fields,omitempty"`
 	// Items is present only when the source described more than one
 	// distinct product; one entry per product, most prominent first. The
 	// FE renders a chooser. Empty/absent for a single product.
@@ -34,7 +39,8 @@ type CommodityScanAttributes struct {
 // CommodityScanItem is one candidate product in a multi-product scan; its
 // fields mirror CommodityScanAttributes.Fields.
 type CommodityScanItem struct {
-	Fields map[string]CommodityScanFieldGuess `json:"fields"`
+	Fields       map[string]CommodityScanFieldGuess `json:"fields"`
+	CustomFields map[string]CommodityScanFieldGuess `json:"custom_fields,omitempty"`
 }
 
 // CommodityScanFieldGuess is the per-field extraction value plus a

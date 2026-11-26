@@ -24,8 +24,7 @@ func (r *Registry[_, P]) listAll() []P {
 		if !r.isItemVisible(pair.Value) {
 			continue
 		}
-		v := *pair.Value
-		items = append(items, &v)
+		items = append(items, copyOut(pair.Value))
 	}
 	return items
 }
@@ -88,8 +87,7 @@ func (r *CommodityRegistry) GetTrashed(_ context.Context, id string) (*models.Co
 	if !ok || !r.isItemVisible(c) || !c.IsTrashed() {
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
 	}
-	cp := *c
-	return &cp, nil
+	return copyOut(c), nil
 }
 
 // trashedItems returns copies of the visible trashed items that pass keep.
@@ -102,8 +100,7 @@ func (r *CommodityRegistry) trashedItems(keep func(*models.Commodity) bool) []*m
 		if c == nil || !c.IsTrashed() || !r.isItemVisible(c) || !keep(c) {
 			continue
 		}
-		cp := *c
-		out = append(out, &cp)
+		out = append(out, copyOut(c))
 	}
 	return out
 }
@@ -118,11 +115,11 @@ func (r *CommodityRegistry) liveAndTrashed() (live, trashed []*models.Commodity)
 		if c == nil || !r.isItemVisible(c) {
 			continue
 		}
-		cp := *c
+		cp := copyOut(c)
 		if c.IsTrashed() {
-			trashed = append(trashed, &cp)
+			trashed = append(trashed, cp)
 		} else {
-			live = append(live, &cp)
+			live = append(live, cp)
 		}
 	}
 	return live, trashed
@@ -178,8 +175,7 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 	if next.AreaID != nil && *next.AreaID != "" {
 		_ = r.areaRegistry.DeleteCommodity(ctx, *next.AreaID, id)
 	}
-	out := next
-	return &out, nil
+	return copyOut(&next), nil
 }
 
 // SetDraft sets or clears the draft mark of a live item. It holds the lock
@@ -191,17 +187,15 @@ func (r *CommodityRegistry) SetDraft(_ context.Context, id string, draft bool, c
 	if !ok || !r.isItemVisible(c) || c.IsTrashed() {
 		return nil, nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "commodity", "entity_id", id))
 	}
-	locked := *c
-	next := *c
+	next := copyOut(c)
 	next.Draft = draft
 	if check != nil {
-		if err := check(next); err != nil {
+		if err := check(*copyOut(next)); err != nil {
 			return nil, nil, err
 		}
 	}
-	r.items.Set(id, &next)
-	out := next
-	return &locked, &out, nil
+	r.items.Set(id, next)
+	return copyOut(c), copyOut(next), nil
 }
 
 // Restore makes a trashed item live again. An item whose area was deleted
@@ -242,20 +236,30 @@ func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Com
 	if areaExists {
 		_ = r.areaRegistry.AddCommodity(ctx, areaID, id)
 	}
-	out := next
-	return &out, nil
+	return copyOut(&next), nil
 }
 
-// PurgeTrashed deletes a trashed item's row.
+// PurgeTrashed deletes a trashed item's row, and the links other items have
+// to it.
 func (r *CommodityRegistry) PurgeTrashed(_ context.Context, id string) (bool, error) {
+	if !r.purgeTrashedRow(id) {
+		return false, nil
+	}
+	if r.customFields != nil {
+		r.customFields.dropLinksTo(id)
+	}
+	return true, nil
+}
+
+func (r *CommodityRegistry) purgeTrashedRow(id string) bool {
 	r.lock.Lock()
 	defer r.lock.Unlock()
 	c, ok := r.items.Get(id)
 	if !ok || !r.isItemVisible(c) || !c.IsTrashed() {
-		return false, nil
+		return false
 	}
 	r.items.Delete(id)
-	return true, nil
+	return true
 }
 
 // rewriteTrashedTags applies fn to the tags of every visible trashed item. Tag

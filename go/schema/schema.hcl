@@ -692,6 +692,143 @@ table "commodities" {
   }
 }
 
+table "commodity_custom_field_values" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant custom field value isolation"
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "commodity_id" {
+    type = TEXT
+  }
+  column "field_id" {
+    type = TEXT
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  column "value_text" {
+    type = TEXT
+    null = true
+  }
+  column "value_long_text" {
+    type = TEXT
+    null = true
+  }
+  column "value_number" {
+    type = NUMERIC
+    null = true
+  }
+  column "value_date" {
+    type = DATE
+    null = true
+  }
+  column "value_bool" {
+    type = BOOLEAN
+    null = true
+  }
+  column "value_select" {
+    type = TEXT
+    null = true
+  }
+  column "value_money" {
+    type = DECIMAL(15,2)
+    null = true
+  }
+  column "value_currency" {
+    type = TEXT
+    null = true
+  }
+  column "value_item_id" {
+    type = TEXT
+    null = true
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_custom_field_value_commodity" {
+    columns = [column.commodity_id]
+    ref_columns = [table.commodities.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_custom_field_value_field" {
+    columns = [column.field_id]
+    ref_columns = [table.custom_field_definitions.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_custom_field_value_item" {
+    columns = [column.value_item_id]
+    ref_columns = [table.commodities.column.id]
+    on_delete = "CASCADE"
+  }
+  index "idx_commodity_custom_field_values_commodity_field" {
+    unique = true
+    columns = [column.commodity_id, column.field_id]
+  }
+  index "idx_commodity_custom_field_values_field_bool" {
+    columns = [column.field_id, column.value_bool]
+  }
+  index "idx_commodity_custom_field_values_field_date" {
+    columns = [column.field_id, column.value_date]
+  }
+  index "idx_commodity_custom_field_values_field_item" {
+    columns = [column.field_id, column.value_item_id]
+  }
+  index "idx_commodity_custom_field_values_field_money" {
+    columns = [column.field_id, column.value_money]
+  }
+  index "idx_commodity_custom_field_values_field_number" {
+    columns = [column.field_id, column.value_number]
+  }
+  index "idx_commodity_custom_field_values_field_select" {
+    columns = [column.field_id, column.value_select]
+  }
+  index "idx_commodity_custom_field_values_field_text" {
+    columns = [column.field_id, column.value_text]
+  }
+  index "idx_commodity_custom_field_values_item" {
+    columns = [column.value_item_id]
+  }
+  index "idx_commodity_custom_field_values_long_text_trgm" {
+    type = "GIN"
+    ops = "gin_trgm_ops"
+    columns = [column.value_long_text]
+  }
+  index "idx_commodity_custom_field_values_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_commodity_custom_field_values_text_trgm" {
+    type = "GIN"
+    ops = "gin_trgm_ops"
+    columns = [column.value_text]
+  }
+  index "idx_commodity_custom_field_values_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "commodity_drafts" {
   row_security {
     enabled = true
@@ -1588,6 +1725,76 @@ table "currency_migrations" {
     columns = [column.tenant_id, column.group_id]
   }
   index "idx_currency_migrations_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "custom_field_definitions" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant custom field isolation"
+  }
+  column "name" {
+    type = TEXT
+  }
+  column "name_key" {
+    type = TEXT
+  }
+  column "type" {
+    type = TEXT
+  }
+  column "options" {
+    type = JSONB
+    null = true
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "updated_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_custom_field_definitions_group_name_key" {
+    unique = true
+    columns = [column.group_id, column.name_key]
+  }
+  index "idx_custom_field_definitions_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_custom_field_definitions_uuid" {
     unique = true
     columns = [column.uuid]
   }
@@ -2644,6 +2851,82 @@ table "intake_sources" {
     columns = [column.tenant_id, column.group_id]
   }
   index "idx_intake_sources_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
+table "item_type_custom_fields" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant item type template isolation"
+  }
+  column "item_type_id" {
+    type = TEXT
+  }
+  column "field_id" {
+    type = TEXT
+  }
+  column "default_value" {
+    type = JSONB
+    null = true
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "group_id" {
+    type = TEXT
+  }
+  column "created_by_user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_item_type_custom_field_type" {
+    columns = [column.item_type_id]
+    ref_columns = [table.item_types.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_item_type_custom_field_field" {
+    columns = [column.field_id]
+    ref_columns = [table.custom_field_definitions.column.id]
+    on_delete = "CASCADE"
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_group" {
+    columns = [column.group_id]
+    ref_columns = [table.location_groups.column.id]
+  }
+  foreign_key "fk_entity_created_by" {
+    columns = [column.created_by_user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_item_type_custom_fields_field" {
+    columns = [column.field_id]
+  }
+  index "idx_item_type_custom_fields_tenant_group" {
+    columns = [column.tenant_id, column.group_id]
+  }
+  index "idx_item_type_custom_fields_type_field" {
+    unique = true
+    columns = [column.item_type_id, column.field_id]
+  }
+  index "idx_item_type_custom_fields_uuid" {
     unique = true
     columns = [column.uuid]
   }
@@ -4784,6 +5067,24 @@ policy "commodity_isolation" {
   comment = "Ensures commodities can only be accessed and modified by their tenant and group with required contexts"
 }
 
+policy "commodity_custom_field_value_background_worker_access" {
+  on = table.commodity_custom_field_values
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all custom field values for processing"
+}
+
+policy "commodity_custom_field_value_isolation" {
+  on = table.commodity_custom_field_values
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures custom field values can only be accessed and modified by their tenant and group with required contexts"
+}
+
 policy "commodity_draft_background_worker_access" {
   on = table.commodity_drafts
   for = "ALL"
@@ -4964,6 +5265,24 @@ policy "currency_migration_isolation" {
   comment = "Ensures currency migration rows can only be accessed and modified by their tenant and group with required contexts"
 }
 
+policy "custom_field_definition_background_worker_access" {
+  on = table.custom_field_definitions
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all custom field definitions for processing"
+}
+
+policy "custom_field_definition_isolation" {
+  on = table.custom_field_definitions
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures custom field definitions can only be accessed and modified by their tenant and group with required contexts"
+}
+
 policy "export_background_worker_access" {
   on = table.exports
   for = "ALL"
@@ -5142,6 +5461,24 @@ policy "intake_source_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
   comment = "Ensures intake sources can only be accessed and modified by their tenant and group with required contexts"
+}
+
+policy "item_type_custom_field_background_worker_access" {
+  on = table.item_type_custom_fields
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows background workers to access all item type templates for processing"
+}
+
+policy "item_type_custom_field_isolation" {
+  on = table.item_type_custom_fields
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND group_id = get_current_group_id() AND get_current_group_id() IS NOT NULL AND get_current_group_id() != ''"
+  comment = "Ensures item type templates can only be accessed and modified by their tenant and group with required contexts"
 }
 
 policy "item_type_background_worker_access" {

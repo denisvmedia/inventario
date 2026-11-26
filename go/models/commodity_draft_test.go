@@ -23,6 +23,7 @@ func TestCommodityDraftValuesRule_AcceptsTheFormTypes(t *testing.T) {
 		"tags":                 []any{"tools", "garage"},
 		"urls":                 []any{},
 		"draft":                true,
+		"custom_fields":        map[string]any{"cf-1": map[string]any{"value": "AB 123", "currency": ""}},
 		"from_intake":          map[string]any{"any": "shape"},
 		"unknown_number_field": float64(3),
 	}
@@ -43,6 +44,7 @@ func TestCommodityDraftValuesRule_NamesTheFieldOfTheWrongType(t *testing.T) {
 		{name: "list field holding a string", key: "tags", value: "tools", code: "validation_draft_value_list"},
 		{name: "list field holding a number", key: "part_numbers", value: []any{"a", float64(2)}, code: "validation_draft_value_list"},
 		{name: "flag field holding a string", key: "draft", value: "true", code: "validation_draft_value_flag"},
+		{name: "custom fields holding a list", key: "custom_fields", value: []any{"cf-1"}, code: "validation_draft_value_object"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -96,4 +98,34 @@ func TestPromotionKeyRule(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMapDraftCustomFieldReference(t *testing.T) {
+	mapID := func(id string) string {
+		return map[string]string{"old": "new"}[id]
+	}
+	tests := []struct {
+		name  string
+		entry any
+		want  any
+	}{
+		{name: "an id", entry: "old", want: "new"},
+		{name: "an id it does not know", entry: "other", want: nil},
+		{name: "no id", entry: "", want: ""},
+		{name: "a form entry", entry: map[string]any{"value": "old", "currency": ""}, want: map[string]any{"value": "new", "currency": ""}},
+		{name: "a form entry it does not know", entry: map[string]any{"value": "other"}, want: nil},
+		{name: "an empty form entry", entry: map[string]any{"value": ""}, want: map[string]any{"value": ""}},
+		{name: "neither shape", entry: float64(3), want: nil},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			c.Assert(models.MapDraftCustomFieldReference(tt.entry, mapID), qt.DeepEquals, tt.want)
+		})
+	}
+
+	c := qt.New(t)
+	entry := map[string]any{"value": "old"}
+	models.MapDraftCustomFieldReference(entry, mapID)
+	c.Assert(entry["value"], qt.Equals, "old", qt.Commentf("the entry given is left as it was"))
 }

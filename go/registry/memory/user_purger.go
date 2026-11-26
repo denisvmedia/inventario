@@ -55,12 +55,27 @@ type UserPurger struct {
 	files         registry.FileRegistryFactory
 	savedViews    registry.SavedViewRegistryFactory
 	itemTypes     *ItemTypeRegistryFactory
+	customFields  *CustomFieldRegistryFactory
+}
+
+// groupConfiguration is a store of group configuration, whose rows a purged
+// user created are handed to another member of their group.
+type groupConfiguration interface {
+	groupsCreatedBy(tenantID, userID string) []string
+	reattributeCreator(tenantID, userID string, heirs map[string]string)
 }
 
 // SetItemTypeFactory wires the item type store, whose types the user created
 // are handed to another member of their group.
 func (r *UserPurger) SetItemTypeFactory(f *ItemTypeRegistryFactory) {
 	r.itemTypes = f
+}
+
+// SetCustomFieldFactory wires the custom field store, whose fields the user
+// created, template entries included, are handed to another member of their
+// group.
+func (r *UserPurger) SetCustomFieldFactory(f *CustomFieldRegistryFactory) {
+	r.customFields = f
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -129,10 +144,21 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"magic_link_tokens", func() error { return r.magicLink.DeleteByUserID(ctx, userID) }},
 		{"user_mfa_secrets", func() error { return r.mfaSecrets.DeleteByUser(ctx, tenantID, userID) }},
 		{"user_oauth_identities", func() error { return r.purgeOAuthIdentities(ctx, tenantID, userID) }},
-		// Item types the user created go to another member of their group,
-		// as on postgres; they are group configuration, not the user's
-		// content.
-		{"item_types", func() error { return r.reattributeItemTypes(ctx, tenantID, userID) }},
+		// Item types and custom fields the user created go to another member
+		// of their group, as on postgres; they are group configuration, not
+		// the user's content.
+		{"item_types", func() error {
+			if r.itemTypes == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.itemTypes, tenantID, userID)
+		}},
+		{"custom_fields", func() error {
+			if r.customFields == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.customFields, tenantID, userID)
+		}},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
@@ -369,30 +395,28 @@ func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID strin
 	return nil
 }
 
-// reattributeItemTypes gives each item type the user created to another
-// member of its group: the owner first, then an admin, then the member who
-// joined first. A type whose group has no other member keeps its creator.
-func (r *UserPurger) reattributeItemTypes(ctx context.Context, tenantID, userID string) error {
-	if r.itemTypes == nil {
-		return nil
-	}
+// reattributeGroupConfiguration gives each row of store the user created to
+// another member of its group: the owner first, then an admin, then the
+// member who joined first. A row whose group has no other member keeps its
+// creator.
+func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, store groupConfiguration, tenantID, userID string) error {
 	heirs := map[string]string{}
-	for _, groupID := range r.itemTypes.groupsCreatedBy(tenantID, userID) {
+	for _, groupID := range store.groupsCreatedBy(tenantID, userID) {
 		members, err := r.memberships.ListByGroup(ctx, groupID)
 		if err != nil {
 			return err
 		}
-		if heir := itemTypeHeir(members, userID); heir != "" {
+		if heir := groupConfigurationHeir(members, userID); heir != "" {
 			heirs[groupID] = heir
 		}
 	}
-	r.itemTypes.reattributeCreator(tenantID, userID, heirs)
+	store.reattributeCreator(tenantID, userID, heirs)
 	return nil
 }
 
-// itemTypeHeir picks the member who takes over the item types userID
+// groupConfigurationHeir picks the member who takes over the group configuration userID
 // created: the owner first, then an admin, then the member who joined first.
-func itemTypeHeir(members []*models.GroupMembership, userID string) string {
+func groupConfigurationHeir(members []*models.GroupMembership, userID string) string {
 	rank := func(role models.GroupRole) int {
 		switch role {
 		case models.GroupRoleOwner:

@@ -141,8 +141,8 @@ func TestItemTypes_SeededTypesBelongToGroupCreator_Memory(t *testing.T) {
 
 var _ registry.ItemTypeRegistry = (*memory.ItemTypeRegistry)(nil)
 
-// A member's item types in a shared group do not block the member's account
-// deletion: they stay with the group and go to its owner.
+// A member's item types and custom fields in a shared group do not block the
+// member's account deletion: they stay with the group and go to its owner.
 func TestItemTypes_MemberTypesGoToTheOwner_Memory(t *testing.T) {
 	c := qt.New(t)
 
@@ -174,15 +174,22 @@ func TestItemTypes_MemberTypesGoToTheOwner_Memory(t *testing.T) {
 	vehicle, err := types.Create(ctx, models.ItemType{Name: "Vehicle"})
 	c.Assert(err, qt.IsNil)
 	c.Assert(vehicle.CreatedByUserID, qt.Equals, "member")
+	fields := fs.CustomFieldRegistryFactory.MustCreateUserRegistry(ctx)
+	plate, err := fields.Create(ctx, models.CustomFieldDefinition{Name: "Plate", Type: models.CustomFieldTypeText})
+	c.Assert(err, qt.IsNil)
+	c.Assert(plate.CreatedByUserID, qt.Equals, "member")
 
 	owns, err := fs.UserContentOwnershipChecker.HasRetainedOwnedContent(t.Context(), "tenant-1", "member", nil)
 	c.Assert(err, qt.IsNil)
-	c.Check(owns, qt.IsFalse, qt.Commentf("item types are group configuration"))
+	c.Check(owns, qt.IsFalse, qt.Commentf("item types and custom fields are group configuration"))
 
 	c.Assert(fs.UserPurger.PurgeUserDependents(t.Context(), "tenant-1", "member"), qt.IsNil)
 	got, err := types.Get(ctx, vehicle.ID)
 	c.Assert(err, qt.IsNil)
 	c.Check(got.CreatedByUserID, qt.Equals, "owner")
+	gotField, err := fields.Get(ctx, plate.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(gotField.CreatedByUserID, qt.Equals, "owner")
 }
 
 // Without an owner, the types go to an admin before an earlier member; among

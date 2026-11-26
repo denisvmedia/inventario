@@ -38,8 +38,8 @@ A backup keeps an unknown price or purchase date unknown and a zero price zero, 
 
 1. Go to **Backup** and click **New export**.
 2. On the **What to export** step, choose a scope:
-   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them. It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file.
-   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them. Files attached to a location or area you selected come with it; standalone files and drafts are only included in a **Full database** export, since there's no parent to bring them along.
+   - **Full database** — everything except what is in the [Trash](../trash/): locations, areas, items, files, tags, sellers, item types, custom fields. "Files" here means *all* of them — the photos, invoices and manuals attached to an item, the files attached to a location or an area, and any standalone file that isn't attached to anything. It also includes the [drafts of new items](../items/#drafts-of-a-new-item) and the files saved with them. It does not include the batches of [files added for the AI scan](../items/#add-items-from-files), which are a work queue: the drafts made from them are in the backup, and a dropped file that nothing else uses is exported as a standalone file.
+   - **Selected items** — pick specific locations, areas, or items to include. Use the search box to find locations, then choose what to add. You have to pick at least one thing. The sellers and item types of the included items come with them, and so do the custom fields they have a value of. Files attached to a location or area you selected come with it; standalone files and drafts are only included in a **Full database** export, since there's no parent to bring them along.
 3. Decide whether to **Include attached files (photos, invoices, manuals)**. Despite the shorter label, this covers *every* file in scope — item attachments, files attached to a location or an area, and standalone files. Leave it on to bundle the actual files into the archive; turn it off for a smaller, metadata-only backup. A file attached to several items is stored in the archive once and comes back attached to each of them that the backup includes.
 4. Click **Next** to reach the **Confirm** step. Optionally add a **Description** to help you recognise the export later. If you leave it blank, Inventario names it for you (for example, "Backup · Full database · 2026-05-13 10:42 UTC").
 5. Review the summary and click **Create export**.
@@ -125,6 +125,31 @@ the group does not have under that key is matched by name, ignoring case and
 extra spaces, and created when no type has that name either. A type that
 already exists keeps its name and icon, whichever strategy you pick, and
 **Full replace** does not remove item types. A dry run creates no item types.
+
+### Custom fields
+
+A restore matches each custom field to the group's field it was backed up
+from, even when that field was renamed since, and otherwise to the group's
+field with the same name, ignoring case and extra spaces. It creates the fields
+the group does not have, with their options and the item types whose form
+shows them. A field that already exists keeps its name and its item types. A
+select field keeps its options and gets the backup's options it lacks. An
+option is matched the same way as a field, first to the option it was backed
+up from and then by label, so an option renamed since the backup still holds
+its values. When the group has a field of that name with a different
+type, the backup's values of that field are left out and the restore reports
+an error for it. The same happens when the field of that name is another field
+of the backup, renamed since: for example, after you delete "Model code" and
+rename "Serial" to "Model code", the backup's "Serial" values go to the renamed
+field and its "Model code" values are left out.
+
+A link to another item is restored when the linked item is in the backup or in
+the group, outside the Trash. A backup keeps a link to an item in the Trash,
+and a restore that cannot set a link reports an error for it. An item that
+already holds the link keeps it, without an error, while the linked item is
+still in the group's Trash. **Full replace**
+does not remove custom fields. A dry run creates no custom fields, but reports
+an error for each field the restore would refuse.
 
 ### Other options
 

@@ -115,6 +115,9 @@ export interface ListCommoditiesOptions {
   includeInactive?: boolean
   sort?: CommoditySortField
   sortDesc?: boolean
+  // Sorts by this custom field (#2803) instead of sort, in the direction of
+  // sortDesc. The API param is `sort=cf.<field id>`.
+  customFieldSort?: string
   // Warranty status filter (#1367). Multi: each entry is OR-ed at the
   // BE; the API param is `warranty_status` (repeatable). Allowed values
   // mirror models.WarrantyStatus on the BE — "active" | "expiring" |
@@ -146,6 +149,9 @@ export interface ListCommoditiesOptions {
   noPhoto?: boolean
   noPurchasePrice?: boolean
   noPurchaseDate?: boolean
+  // Custom field conditions (#2803), each "<field id>:<op>[:<value>]"; the
+  // BE AND-s them. The API param is `cf` (repeatable).
+  customFields?: string[]
   // true selects the items in Trash instead of the live ones. Not part of
   // the page URL: the items list shows live items only. Cannot be combined
   // with lentOut or noPhoto (the BE answers 400).
@@ -225,6 +231,7 @@ export function tagCountsOptions(options: ListCommoditiesOptions): ListCommoditi
     perPage: undefined,
     sort: undefined,
     sortDesc: undefined,
+    customFieldSort: undefined,
     tags: undefined,
     tagMode: undefined,
     tagsExclude: undefined,

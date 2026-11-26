@@ -106,7 +106,7 @@ func TestMatchCommoditySearch(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
-			got, ok := registry.MatchCommoditySearch(searchItem(), tc.terms, tc.labels)
+			got, ok := registry.MatchCommoditySearch(searchItem(), tc.terms, tc.labels, registry.CustomFieldSearch{})
 			c.Assert(ok, qt.Equals, tc.ok)
 			c.Assert(got, qt.DeepEquals, tc.want)
 		})
@@ -118,7 +118,7 @@ func TestMatchCommoditySearch_NoteExcerpt(t *testing.T) {
 	note := strings.Repeat("lorem ipsum ", 10) + "the RECEIPT is in the blue folder " + strings.Repeat("dolor sit ", 10)
 	item := &models.Commodity{Name: "Desk", Comments: note}
 
-	got, ok := registry.MatchCommoditySearch(item, []string{"receipt"}, nil)
+	got, ok := registry.MatchCommoditySearch(item, []string{"receipt"}, nil, registry.CustomFieldSearch{})
 	c.Assert(ok, qt.IsTrue)
 	c.Assert(got, qt.HasLen, 1)
 	c.Check(got[0].Field, qt.Equals, registry.CommoditySearchFieldComments)

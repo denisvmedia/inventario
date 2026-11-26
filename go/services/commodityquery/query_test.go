@@ -37,6 +37,7 @@ func TestParse_EveryParameter(t *testing.T) {
 		"tag_mode=any",
 		"tags_exclude=garage",
 		"no_photo=1", "no_purchase_price=true", "no_purchase_date=True",
+		"cf=f-1:set", "cf=f-2:contains:+a:b+", "cf=f-1:set",
 		"sort=-purchase_date",
 	}, "&"))
 	c.Assert(err, qt.IsNil)
@@ -62,8 +63,12 @@ func TestParse_EveryParameter(t *testing.T) {
 		NoPhoto:         true,
 		NoPurchasePrice: true,
 		NoPurchaseDate:  true,
-		SortField:       registry.CommoditySortPurchaseDate,
-		SortDesc:        true,
+		CustomFields: []commodityquery.CustomFieldCondition{
+			{FieldID: "f-1", Op: registry.CustomFieldOpSet},
+			{FieldID: "f-2", Op: registry.CustomFieldOpContains, Operand: "a:b"},
+		},
+		SortField: registry.CommoditySortPurchaseDate,
+		SortDesc:  true,
 	})
 }
 
@@ -96,6 +101,16 @@ func TestParse_Refuses(t *testing.T) {
 		{name: "no_purchase_price that is neither", query: "no_purchase_price=unknown", param: "no_purchase_price"},
 		{name: "no_purchase_date given twice", query: "no_purchase_date=1&no_purchase_date=0", param: "no_purchase_date"},
 		{name: "no_photo in the trash", query: "trashed=true&no_photo=true", param: "no_photo"},
+		{name: "a custom field condition without a comparison", query: "cf=f-1", param: "cf"},
+		{name: "a custom field condition without a field", query: "cf=:set", param: "cf"},
+		{name: "an unknown custom field comparison", query: "cf=f-1:like:x", param: "cf"},
+		{name: "set with a value", query: "cf=f-1:set:x", param: "cf"},
+		{name: "eq without a value", query: "cf=f-1:eq", param: "cf"},
+		{name: "a range over a word", query: "cf=f-1:gte:ten", param: "cf"},
+		{name: "a range over year zero", query: "cf=f-1:gte:0000-01-01", param: "cf"},
+		{name: "a custom field value with a NUL", query: "cf=f-1:contains:a%00b", param: "cf"},
+		{name: "a custom field value over the length limit", query: "cf=f-1:eq:" + strings.Repeat("a", commodityquery.MaxTextRunes+1), param: "cf"},
+		{name: "too many custom field conditions", query: manyConditions(commodityquery.MaxCustomFieldFilters + 1), param: "cf"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			c := qt.New(t)
@@ -227,8 +242,13 @@ func TestQuery_ValuesRoundTrip(t *testing.T) {
 			Tags: registry.CommodityTagFilter{
 				Include: []string{"b", "a"}, Mode: registry.TagMatchAny, Exclude: []string{"c"},
 			},
+			CustomFields: []commodityquery.CustomFieldCondition{
+				{FieldID: "f-2", Op: registry.CustomFieldOpIn, Operand: "a,b"},
+				{FieldID: "f-1", Op: registry.CustomFieldOpUnset},
+			},
 			SortField: registry.CommoditySortCurrentPrice,
 		}},
+		{name: "custom field sort", q: commodityquery.Query{IncludeInactive: true, SortField: "cf.f-1", SortDesc: true}},
 		{name: "untagged", q: commodityquery.Query{IncludeInactive: true, Tags: registry.CommodityTagFilter{Untagged: true}}},
 		{name: "trashed", q: commodityquery.Query{Text: "drill", IncludeInactive: true, Trashed: true}},
 		{name: "missing data", q: commodityquery.Query{NoPhoto: true, NoPurchasePrice: true, NoPurchaseDate: true}},
@@ -292,4 +312,12 @@ func TestParse_Trashed(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Check(q.Trashed, qt.IsFalse)
 	c.Check(q.LentOut, qt.DeepEquals, new(true))
+}
+
+func manyConditions(n int) string {
+	parts := make([]string, n)
+	for i := range parts {
+		parts[i] = fmt.Sprintf("cf=f-%d:set", i)
+	}
+	return strings.Join(parts, "&")
 }

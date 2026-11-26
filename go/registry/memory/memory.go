@@ -33,6 +33,7 @@ func NewFactorySet() *registry.FactorySet {
 	intakeFactory := NewIntakeRegistryFactory(fileFactory, commodityDraftFactory)
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
+	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)
@@ -77,6 +78,7 @@ func NewFactorySet() *registry.FactorySet {
 	fs.IntakeRegistryFactory = intakeFactory
 	fs.SellerRegistryFactory = sellerFactory
 	fs.ItemTypeRegistryFactory = itemTypeFactory
+	fs.CustomFieldRegistryFactory = customFieldFactory
 	fs.ExportRegistryFactory = exportFactory
 	fs.RestoreStepRegistryFactory = restoreStepFactory
 	fs.RestoreOperationRegistryFactory = restoreOperationFactory
@@ -178,6 +180,7 @@ func NewFactorySet() *registry.FactorySet {
 		fs.GroupMembershipRegistry,
 	)
 	groupPurger.SetItemTypeFactory(itemTypeFactory)
+	groupPurger.SetCustomFieldFactory(customFieldFactory)
 	fs.GroupPurger = groupPurger
 	// UserPurger (#2116): clears a single user's auth/identity rows during the
 	// admin user hard-delete (and, since #2147, the user's group_invites_audit
@@ -202,6 +205,7 @@ func NewFactorySet() *registry.FactorySet {
 		savedViewFactory,
 	)
 	userPurger.SetItemTypeFactory(itemTypeFactory)
+	userPurger.SetCustomFieldFactory(customFieldFactory)
 	fs.UserPurger = userPurger
 	// SystemStats (#843): the memory backend is dev/test only and its
 	// data registries are tenant/group-scoped behind the per-request
