@@ -46,7 +46,7 @@ type searchAPI struct {
 // @Param no_purchase_price query bool false "Commodities only: only items whose purchase price is unknown"
 // @Param no_purchase_date query bool false "Commodities only: only items whose purchase date is unknown"
 // @Param cf query []string false "Commodities only: custom field condition, as for GET /commodities" collectionFormat(multi)
-// @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR" collectionFormat(multi)
+// @Param status query []string false "Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR" collectionFormat(multi)
 // @Param area_id query string false "Commodities only: filter by exact area ID"
 // @Param unassigned query bool false "Commodities only: only items with no area (ignored when area_id is set)"
 // @Param seller_id query []string false "Commodities only: filter by seller ID; repeat for several (OR)" collectionFormat(multi)

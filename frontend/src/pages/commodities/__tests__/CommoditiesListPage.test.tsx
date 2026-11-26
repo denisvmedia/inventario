@@ -486,6 +486,42 @@ describe("<CommoditiesListPage />", () => {
     })
   })
 
+  it("filters by Donated and Stolen and shows their status pills", async () => {
+    const user = userEvent.setup()
+    const seen: string[][] = []
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      msw.get(`${window.location.origin}/api/v1/g/${SLUG}/commodities`, ({ request }) => {
+        seen.push(new URL(request.url).searchParams.getAll("status"))
+        return HttpResponse.json({
+          data: [
+            commodityRes("c1", { name: "Bike", status: "donated" }),
+            commodityRes("c2", { name: "Laptop", status: "stolen" }),
+          ],
+        })
+      })
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    expect(within(cards[0]).getByText("Donated")).toHaveClass("text-chart-3")
+    expect(within(cards[1]).getByText("Stolen")).toHaveClass("text-chart-4")
+
+    await user.click(screen.getByTestId("commodities-filter-status"))
+    const options = await screen.findAllByRole("menuitemcheckbox")
+    expect(options.map((o) => o.textContent)).toEqual([
+      "In Use",
+      "Sold",
+      "Lost",
+      "Disposed",
+      "Written Off",
+      "Donated",
+      "Stolen",
+    ])
+    await user.click(screen.getByRole("menuitemcheckbox", { name: "Stolen" }))
+    await waitFor(() => expect(seen.at(-1)).toEqual(["stolen"]))
+  })
+
   it("flips the sort field via the sort dropdown", async () => {
     const user = userEvent.setup()
     server.use(

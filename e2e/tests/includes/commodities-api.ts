@@ -162,7 +162,7 @@ export interface CreateCommodityParams {
   name: string
   shortName?: string
   type?: string
-  status?: 'in_use' | 'sold' | 'lost' | 'disposed' | 'written_off'
+  status?: 'in_use' | 'sold' | 'lost' | 'disposed' | 'written_off' | 'donated' | 'stolen'
   areaId: string
   count?: number
   originalPrice?: number

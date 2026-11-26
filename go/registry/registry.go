@@ -149,7 +149,7 @@ type CommodityListOptions struct {
 	// values match nothing. Empty = unrestricted.
 	Types []models.CommodityType
 	// Statuses restricts by the Status enum (in_use, sold, lost,
-	// disposed, written_off). Empty = unrestricted.
+	// disposed, written_off, donated, stolen). Empty = unrestricted.
 	Statuses []models.CommodityStatus
 	// AreaID, when non-empty, restricts to a single area. Use "" to
 	// disable the filter (rather than a sentinel like "*").

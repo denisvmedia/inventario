@@ -231,8 +231,10 @@
       "dateLabel": "Datum",
       "description": {
         "disposed": "Trvale odeberte tuto položku z inventáře.",
+        "donated": "Zaznamenejte darování této položky.",
         "lost": "Označte tuto položku jako ztracenou. Změnu lze později vrátit.",
         "sold": "Zaznamenejte prodej této položky včetně výnosu.",
+        "stolen": "Zaznamenejte krádež této položky, například pro policii nebo pojišťovnu.",
         "written_off": "Odepište tuto položku — obvykle pro pojištění nebo účetnictví."
       },
       "errors": {
@@ -245,8 +247,10 @@
       "noteLabel": "Poznámky (nepovinné)",
       "notePlaceholder": {
         "disposed": "Podrobnosti…",
+        "donated": "Darováno komu…",
         "lost": "Naposledy viděno na…",
         "sold": "Prodáno komu…",
+        "stolen": "Odkud byla ukradena…",
         "written_off": "Podrobnosti…"
       },
       "salePriceLabel": "Prodejní cena",
@@ -263,7 +267,7 @@
     },
     "terminalStatus": {
       "revert": "Vrátit do používání",
-      "revertConfirmDescription": "Tímto se položka vrátí do aktivního používání. Později ji můžete znovu označit jako prodanou, ztracenou, vyřazenou nebo odepsanou.",
+      "revertConfirmDescription": "Tímto se položka vrátí do aktivního používání. Její stav můžete později znovu změnit.",
       "revertConfirmTitle": "Vrátit do používání?",
       "salePrice": "Prodejní cena: {{value}}",
       "statusDate": "Datum: {{date}}"
@@ -789,9 +793,11 @@
   },
   "status": {
     "disposed": "Vyřazeno",
+    "donated": "Darováno",
     "in_use": "Používá se",
     "lost": "Ztraceno",
     "sold": "Prodáno",
+    "stolen": "Ukradeno",
     "written_off": "Odepsáno"
   },
   "toast": {
