@@ -9,7 +9,7 @@ Config: `frontend/.size-limit.json`. Three groups:
 | Group                                   | Limit (gzip) | Why                                                                                              |
 | --------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------ |
 | Initial JS (entry chunk — all eager code) | 230 KB       | First-paint cost. Headroom for items list (#1410) + widgets. |
-| CSS                                     | 21 KB        | Tailwind v4 + tokens. About 20.1 KB, including the responsive two-pane layout of the file edit page (#2814). |
+| CSS                                     | 22 KB        | Tailwind v4 + tokens. About 21.5 KB, including the responsive two-pane layout of the file edit page (#2814) and the phone full-screen dialog layout (#1627). |
 | Lazy real pages (Dashboard / NotFound / RootRedirect) | 6 KB | Code-split chunks. Today: ~3.7 KB after the dashboard widgets landed (#1408); was 3 KB while the page was a placeholder. |
 
 Run locally:
