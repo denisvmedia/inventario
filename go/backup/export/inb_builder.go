@@ -296,6 +296,13 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 		b.areaUUIDByDBID[area.ID] = area.UUID
 	}
 
+	// The delivered documents are read before the drafts. A delivery makes
+	// its draft before it records it on the document, so a draft a document
+	// read here names is already there for the drafts read.
+	if err := b.loadIntakeDocuments(scope); err != nil {
+		return err
+	}
+
 	// The drafts are read before the items, in a transaction of their own.
 	// A promotion that commits between the two reads then leaves the archive
 	// with both the draft and the item it became, which restores as a
@@ -328,10 +335,6 @@ func (b *inbBuilder) preload(scope *inbScope) error {
 	}
 
 	if err := b.loadItemTypes(); err != nil {
-		return err
-	}
-
-	if err := b.loadIntakeDocuments(scope); err != nil {
 		return err
 	}
 
