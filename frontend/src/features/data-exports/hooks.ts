@@ -14,14 +14,29 @@ import { dataExportsKeys } from "./keys"
 // download link without a reload. Building one takes seconds to minutes.
 const POLL_WHILE_BUILDING_MS = 5_000
 
+// A copy still unfinished this long after it was requested is stuck, for
+// instance with the worker down; the server queues a stalled build again
+// after an hour. The list stops polling for it and refetches when the window
+// regains focus.
+export const POLL_GIVE_UP_AFTER_MS = 2 * 60 * 60 * 1000
+
+// isWorthPolling reports whether an export may still change soon.
+export function isWorthPolling(e: PersonalDataExport, now: number): boolean {
+  if (!isInProgress(e.status)) return false
+  const requested = e.created_at ? Date.parse(e.created_at) : NaN
+  return Number.isNaN(requested) || now - requested < POLL_GIVE_UP_AFTER_MS
+}
+
 export function usePersonalDataExports() {
   return useQuery({
     queryKey: dataExportsKeys.list(),
     queryFn: ({ signal }) => listPersonalDataExports(signal),
-    refetchInterval: (query) =>
-      query.state.data?.exports?.some((e) => isInProgress(e.status))
+    refetchInterval: (query) => {
+      const now = Date.now()
+      return query.state.data?.exports?.some((e) => isWorthPolling(e, now))
         ? POLL_WHILE_BUILDING_MS
-        : false,
+        : false
+    },
   })
 }
 
@@ -49,8 +64,12 @@ function triggerBrowserDownload(url: string): void {
 }
 
 export function useDownloadPersonalDataExport() {
+  const qc = useQueryClient()
   return useMutation<string, Error, string>({
     mutationFn: (id) => fetchPersonalDataExportDownloadURL(id),
     onSuccess: (url) => triggerBrowserDownload(url),
+    // A copy that expired or went back to the queue since the list was
+    // loaded answers 404 or 409; the list shows its current state.
+    onError: () => qc.invalidateQueries({ queryKey: dataExportsKeys.all }),
   })
 }

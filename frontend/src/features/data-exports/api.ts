@@ -13,6 +13,10 @@ export type PersonalDataExportStatus = NonNullable<PersonalDataExport["status"]>
 
 export const DATA_EXPORT_RATE_LIMITED = "data_export.rate_limited"
 export const DATA_EXPORT_IMPERSONATION_FORBIDDEN = "data_export.impersonation_forbidden"
+// A copy that expired, or was deleted, since the list was loaded.
+export const DATA_EXPORT_NOT_FOUND = "data_export.not_found"
+// A copy that is not finished, for instance one queued again after a restart.
+export const DATA_EXPORT_NOT_READY = "data_export.not_ready"
 
 export async function listPersonalDataExports(
   signal?: AbortSignal

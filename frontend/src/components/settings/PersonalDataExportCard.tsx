@@ -1,13 +1,18 @@
+import { useEffect, useState } from "react"
 import { useTranslation } from "react-i18next"
+import type { TFunction } from "i18next"
 import { Download, Loader2 } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import {
   DATA_EXPORT_IMPERSONATION_FORBIDDEN,
+  DATA_EXPORT_NOT_FOUND,
+  DATA_EXPORT_NOT_READY,
   DATA_EXPORT_RATE_LIMITED,
   isInProgress,
   type PersonalDataExport,
+  type PersonalDataExportsList,
   type PersonalDataExportStatus,
 } from "@/features/data-exports/api"
 import {
@@ -33,6 +38,50 @@ const STATUS_VARIANT: Record<PersonalDataExportStatus, "secondary" | "outline" |
   failed: "destructive",
 }
 
+// setTimeout holds a 32-bit number of milliseconds.
+const MAX_TIMEOUT_MS = 2 ** 31 - 1
+
+function requestedAtText(e: PersonalDataExport): string {
+  return e.created_at
+    ? formatDateTime(e.created_at, { dateStyle: "medium", timeStyle: "short" })
+    : ""
+}
+
+// useHasPassed reports whether the time `at` has come, and re-renders when it
+// does. Without `at` it is false.
+function useHasPassed(at: string | undefined): boolean {
+  const [passed, setPassed] = useState<string | undefined>(undefined)
+  useEffect(() => {
+    if (!at) return
+    const delay = Date.parse(at) - Date.now()
+    if (Number.isNaN(delay) || delay > MAX_TIMEOUT_MS) return
+    const id = window.setTimeout(() => setPassed(at), Math.max(0, delay))
+    return () => window.clearTimeout(id)
+  }, [at])
+  return !!at && passed === at
+}
+
+// settledMessage is what a screen reader hears when a copy that was being
+// prepared becomes ready or fails between two loads of the list.
+function settledMessage(
+  before: PersonalDataExportsList | undefined,
+  after: PersonalDataExportsList | undefined,
+  t: TFunction
+): string {
+  if (!before || !after) return ""
+  const was = new Map((before.exports ?? []).map((e) => [e.id, e.status]))
+  let message = ""
+  for (const e of after.exports ?? []) {
+    if (!isInProgress(was.get(e.id)) || isInProgress(e.status)) continue
+    if (e.status === "completed") {
+      message = t("settings:account.dataExport.announceReady", { date: requestedAtText(e) })
+    } else if (e.status === "failed") {
+      message = t("settings:account.dataExport.announceFailed", { date: requestedAtText(e) })
+    }
+  }
+  return message
+}
+
 // PersonalDataExportCard is the "Download my data" part of Account settings
 // (#2177, GDPR Art. 20). It requests a copy of the user's own data, which the
 // export worker builds in the background, and lists the copies until they
@@ -47,9 +96,23 @@ export function PersonalDataExportCard() {
   const exports = listQuery.data?.exports ?? []
   const retentionDays = listQuery.data?.retention_days ?? DEFAULT_RETENTION_DAYS
   const nextRequestAt = listQuery.data?.next_request_at
-  // The server sends next_request_at only while the daily limit holds; the
-  // list refetches when the window regains focus.
-  const limited = !!nextRequestAt
+  // The server sends next_request_at only while the daily limit holds. When
+  // that time comes the button is enabled and the list loaded again.
+  const nextRequestPassed = useHasPassed(nextRequestAt)
+  const limited = !!nextRequestAt && !nextRequestPassed
+  const { refetch } = listQuery
+  useEffect(() => {
+    if (nextRequestPassed) void refetch()
+  }, [nextRequestPassed, refetch])
+
+  // A copy finishing while the user waits is announced, not only shown.
+  const [seenData, setSeenData] = useState(listQuery.data)
+  const [announcement, setAnnouncement] = useState("")
+  if (listQuery.data !== seenData) {
+    setSeenData(listQuery.data)
+    const message = settledMessage(seenData, listQuery.data, t)
+    if (message) setAnnouncement(message)
+  }
 
   async function handleRequest() {
     try {
@@ -121,6 +184,15 @@ export function PersonalDataExportCard() {
         </p>
       ) : null}
 
+      <p
+        className="sr-only"
+        role="status"
+        aria-live="polite"
+        data-testid="personal-data-export-announcement"
+      >
+        {announcement}
+      </p>
+
       {listQuery.isError ? (
         <p className="text-xs text-destructive" role="alert">
           {t("settings:account.dataExport.loadFailed")}
@@ -146,18 +218,24 @@ function PersonalDataExportRow({ item }: { item: PersonalDataExport }) {
   const toast = useAppToast()
   const downloadMutation = useDownloadPersonalDataExport()
   const status: PersonalDataExportStatus = item.status ?? "pending"
-  const requestedAt = item.created_at
-    ? formatDateTime(item.created_at, { dateStyle: "medium", timeStyle: "short" })
-    : ""
+  const requestedAt = requestedAtText(item)
 
   async function handleDownload() {
     if (!item.id) return
     try {
       await downloadMutation.mutateAsync(item.id)
     } catch (err) {
-      if (getServerErrorCode(err) === DATA_EXPORT_IMPERSONATION_FORBIDDEN) {
-        toast.error(t("settings:account.dataExport.impersonation"))
-        return
+      // The hook reloads the list on any failure; the message says why.
+      switch (getServerErrorCode(err)) {
+        case DATA_EXPORT_IMPERSONATION_FORBIDDEN:
+          toast.error(t("settings:account.dataExport.impersonation"))
+          return
+        case DATA_EXPORT_NOT_FOUND:
+          toast.error(t("settings:account.dataExport.downloadGone"))
+          return
+        case DATA_EXPORT_NOT_READY:
+          toast.error(t("settings:account.dataExport.downloadNotReady"))
+          return
       }
       toast.error(t("settings:account.dataExport.downloadFailed"))
     }

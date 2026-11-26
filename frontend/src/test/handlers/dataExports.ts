@@ -19,6 +19,20 @@ export function list(body: PersonalDataExportsList) {
   return [http.get(listPath(), () => HttpResponse.json({ retention_days: 7, ...body }))]
 }
 
+// listSequence answers the list with each body in turn, then keeps answering
+// with the last one, and counts the calls in onList.
+export function listSequence(bodies: PersonalDataExportsList[], onList?: () => void) {
+  let call = 0
+  return [
+    http.get(listPath(), () => {
+      onList?.()
+      const body = bodies[Math.min(call, bodies.length - 1)]
+      call++
+      return HttpResponse.json({ retention_days: 7, ...body })
+    }),
+  ]
+}
+
 export function requestCreated(created: PersonalDataExport, onRequest?: () => void) {
   return [
     http.post(listPath(), () => {
@@ -43,6 +57,16 @@ export function requestRateLimited(retryAt: string) {
         },
         { status: 429, headers: { "Retry-After": "3600" } }
       )
+    ),
+  ]
+}
+
+// downloadRefused answers the download-url request with a coded error, as
+// the server does for an expired copy (404) or an unfinished one (409).
+export function downloadRefused(id: string, status: 404 | 409, code: string) {
+  return [
+    http.post(apiUrl(`/users/me/data-exports/${id}/download-url`), () =>
+      HttpResponse.json({ errors: [{ status: String(status), code }] }, { status })
     ),
   ]
 }

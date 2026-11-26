@@ -24,11 +24,15 @@
       "title": "Danger zone"
     },
     "dataExport": {
+      "announceFailed": "Your copy requested {{date}} could not be prepared.",
+      "announceReady": "Your copy requested {{date}} is ready to download.",
       "description_one": "A copy of your profile, your settings and what you created in each group, with the files you uploaded, as a .tar.gz archive of JSON files. You can request one copy a day, and each copy is kept for {{count}} day. It is not a backup and cannot be restored into a group.",
       "description_other": "A copy of your profile, your settings and what you created in each group, with the files you uploaded, as a .tar.gz archive of JSON files. You can request one copy a day, and each copy is kept for {{count}} days. It is not a backup and cannot be restored into a group.",
       "download": "Download",
       "downloadFailed": "Couldn't start the download. Please try again.",
+      "downloadGone": "This copy is no longer available. The list now shows what is left.",
       "downloadLabel": "Download the copy requested {{date}}",
+      "downloadNotReady": "This copy is not ready yet. The list now shows its status.",
       "failed": "The copy could not be prepared. Request a new one when the daily limit allows.",
       "impersonation": "A copy of a user's data cannot be requested or downloaded while you impersonate them.",
       "loadFailed": "Couldn't load your copies. Reload the page to try again.",

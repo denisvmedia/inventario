@@ -163,6 +163,129 @@ describe("<PersonalDataExportCard />", () => {
     )
   })
 
+  it("reloads the list and says so when a copy expired before its download", async () => {
+    const listed = vi.fn()
+    server.use(
+      ...dataExportHandlers.listSequence([{ exports: [completed] }, { exports: [] }], listed),
+      ...dataExportHandlers.downloadRefused("e1", 404, "data_export.not_found")
+    )
+    const user = userEvent.setup()
+    renderCard()
+
+    const row = await screen.findByTestId("personal-data-export-row")
+    await user.click(within(row).getByTestId("personal-data-export-download"))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(
+        expect.stringContaining("no longer available"),
+        undefined
+      )
+    )
+    await waitFor(() =>
+      expect(screen.queryByTestId("personal-data-export-row")).not.toBeInTheDocument()
+    )
+    expect(listed).toHaveBeenCalledTimes(2)
+  })
+
+  it("reloads the list and says so when a copy is not ready for its download", async () => {
+    server.use(
+      ...dataExportHandlers.listSequence([
+        { exports: [completed] },
+        { exports: [{ ...completed, status: "pending", created_at: new Date().toISOString() }] },
+      ]),
+      ...dataExportHandlers.downloadRefused("e1", 409, "data_export.not_ready")
+    )
+    const user = userEvent.setup()
+    renderCard()
+
+    const row = await screen.findByTestId("personal-data-export-row")
+    await user.click(within(row).getByTestId("personal-data-export-download"))
+
+    await waitFor(() =>
+      expect(toast.error).toHaveBeenCalledWith(expect.stringContaining("not ready yet"), undefined)
+    )
+    await waitFor(() =>
+      expect(screen.getByTestId("personal-data-export-row")).toHaveAttribute(
+        "data-status",
+        "pending"
+      )
+    )
+  })
+
+  it("enables the request button when the next request is allowed", async () => {
+    const listed = vi.fn()
+    server.use(
+      ...dataExportHandlers.listSequence(
+        [
+          { exports: [completed], next_request_at: new Date(Date.now() + 700).toISOString() },
+          { exports: [completed] },
+        ],
+        listed
+      )
+    )
+    renderCard()
+
+    const button = await screen.findByTestId("personal-data-export-request")
+    await waitFor(() => expect(screen.getByTestId("personal-data-export-next")).toBeInTheDocument())
+    expect(button).toBeDisabled()
+
+    await waitFor(() => expect(button).toBeEnabled(), { timeout: 3_000 })
+    expect(screen.queryByTestId("personal-data-export-next")).not.toBeInTheDocument()
+    await waitFor(() => expect(listed).toHaveBeenCalledTimes(2))
+  })
+
+  it("announces a copy that becomes ready", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const preparing = {
+      id: "e5",
+      status: "in_progress" as const,
+      created_at: new Date().toISOString(),
+      expires_at: "2026-12-03T09:00:00Z",
+    }
+    server.use(
+      ...dataExportHandlers.listSequence([
+        { exports: [preparing] },
+        { exports: [{ ...preparing, status: "completed", size_bytes: 10 }] },
+      ])
+    )
+    renderCard()
+
+    const live = await screen.findByTestId("personal-data-export-announcement")
+    await screen.findByTestId("personal-data-export-row")
+    expect(live).toHaveAttribute("aria-live", "polite")
+    expect(live).toBeEmptyDOMElement()
+
+    await vi.advanceTimersByTimeAsync(5_000)
+    await waitFor(() => expect(live).toHaveTextContent("is ready to download"))
+  })
+
+  it("stops polling for a copy that has been unfinished for hours", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const listed = vi.fn()
+    server.use(
+      ...dataExportHandlers.listSequence(
+        [
+          {
+            exports: [
+              {
+                id: "e6",
+                status: "pending",
+                created_at: new Date(Date.now() - 3 * 3_600_000).toISOString(),
+                expires_at: "2026-12-03T09:00:00Z",
+              },
+            ],
+          },
+        ],
+        listed
+      )
+    )
+    renderCard()
+
+    await screen.findByTestId("personal-data-export-row")
+    await vi.advanceTimersByTimeAsync(15_000)
+    expect(listed).toHaveBeenCalledTimes(1)
+  })
+
   it("has no axe violations", async () => {
     server.use(...dataExportHandlers.list({ exports: [completed] }))
     const { container } = renderCard()

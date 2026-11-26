@@ -94,9 +94,14 @@ you a copy of your own data, in a form you can read or take to another
 service. Click **Request a copy**. Inventario prepares it in the background and
 sends you an email when it is ready; the email links back to this card, not to
 the file. While it is being prepared the copy shows as **Waiting** or
-**Preparing**, and the list updates on its own. When it is **Ready**, the row
-shows its size and the day it is deleted, and **Download** saves it as
-`inventario-personal-data-<date>.tar.gz`.
+**Preparing**, and the list updates on its own; if the server restarts while
+your copy is being prepared, it is prepared again. A copy still not ready two
+hours after the request is no longer checked on its own; come back to the page
+later to see it. When it is **Ready**, the
+row shows its size and the day it is deleted, and **Download** saves it as
+`inventario-personal-data-<date>.tar.gz`. A copy deleted since you opened the
+page disappears from the list when you click **Download**, with a message
+saying so.
 
 The copy has:
 
@@ -111,22 +116,25 @@ The copy has:
   supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
   saved views, and the history entries you made.
 
-Locations, areas, sellers and tags appear by name on your items. Other members
-appear only as ids, and text you typed is kept as you typed it. The files are
+Locations, areas, sellers, item types and tags appear by name on your items.
+A history entry holds only the fields you changed, with the values you set,
+not the values they replaced. Other members appear only as ids, and text you
+typed is kept as you typed it. A file whose contents are no longer in storage
+is listed without them and marked as missing. The files are
 JSON, packed into a `.tar.gz` archive that any archive tool can open; a
 `manifest.json` at the top says whose data it is and when it was made.
 
 A few rules apply:
 
 - You can request **one copy a day**. Until the next request is allowed, the
-  button is disabled and the card says when you can request again. This counts
-  a request that failed, too.
+  button is disabled and the card says when you can request again; at that
+  time the button is enabled again. This counts a request that failed, too.
 - Each copy is **deleted 7 days** after it is ready, whether you downloaded it
   or not. A copy that could not be prepared shows as **Failed** and is removed
   from the list 7 days after the request; request a new one when the daily
   limit allows.
-- Only you can see and download your copies. The download works in the browser
-  where you are signed in.
+- Only you can see and download your copies. The download works only in the
+  browser where you are signed in and clicked **Download**.
 - A copy is **not a backup**. It holds only your part of each group, so it
   cannot be restored, and the
   [restore upload](../backup-and-restore/#import-a-backup-file) refuses it.

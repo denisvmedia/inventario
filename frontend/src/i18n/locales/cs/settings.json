@@ -24,13 +24,17 @@
       "title": "Nebezpečná zóna"
     },
     "dataExport": {
+      "announceFailed": "Kopii vyžádanou {{date}} se nepodařilo připravit.",
+      "announceReady": "Kopie vyžádaná {{date}} je připravená ke stažení.",
       "description_few": "Kopie vašeho profilu, nastavení a všeho, co jste vytvořili v jednotlivých skupinách, včetně nahraných souborů, jako archiv .tar.gz se soubory JSON. Kopii si můžete vyžádat jednou denně a každá se uchovává {{count}} dny. Není to záloha a do skupiny ji obnovit nelze.",
       "description_many": "Kopie vašeho profilu, nastavení a všeho, co jste vytvořili v jednotlivých skupinách, včetně nahraných souborů, jako archiv .tar.gz se soubory JSON. Kopii si můžete vyžádat jednou denně a každá se uchovává {{count}} dne. Není to záloha a do skupiny ji obnovit nelze.",
       "description_one": "Kopie vašeho profilu, nastavení a všeho, co jste vytvořili v jednotlivých skupinách, včetně nahraných souborů, jako archiv .tar.gz se soubory JSON. Kopii si můžete vyžádat jednou denně a každá se uchovává {{count}} den. Není to záloha a do skupiny ji obnovit nelze.",
       "description_other": "Kopie vašeho profilu, nastavení a všeho, co jste vytvořili v jednotlivých skupinách, včetně nahraných souborů, jako archiv .tar.gz se soubory JSON. Kopii si můžete vyžádat jednou denně a každá se uchovává {{count}} dní. Není to záloha a do skupiny ji obnovit nelze.",
       "download": "Stáhnout",
       "downloadFailed": "Stahování se nepodařilo spustit. Zkuste to znovu.",
+      "downloadGone": "Tato kopie už není k dispozici. Seznam teď ukazuje, co zbývá.",
       "downloadLabel": "Stáhnout kopii vyžádanou {{date}}",
+      "downloadNotReady": "Tato kopie ještě není připravená. Seznam teď ukazuje její stav.",
       "failed": "Kopii se nepodařilo připravit. Vyžádejte si novou, až to denní limit dovolí.",
       "impersonation": "Při zastupování uživatele nelze kopii jeho dat vyžádat ani stáhnout.",
       "loadFailed": "Vaše kopie se nepodařilo načíst. Zkuste stránku načíst znovu.",
