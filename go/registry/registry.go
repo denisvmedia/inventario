@@ -1831,13 +1831,6 @@ type IntakeDocumentRegistry interface {
 	// sees the other.
 	RecordProgress(ctx context.Context, id string, progress IntakeDocumentProgress) (*models.IntakeDocument, error)
 
-	// ReplaceDelivery replaces the delivered values (SourceName, SourceURL
-	// and PayloadHash of doc) of a document that holds no file, session or
-	// draft yet: a delivery that failed before it made any of them does not
-	// stand against a corrected one. replaced is false, and the document is
-	// returned unchanged, when it holds one of them.
-	ReplaceDelivery(ctx context.Context, id string, doc models.IntakeDocument) (stored *models.IntakeDocument, replaced bool, err error)
-
 	// ListByDrafts returns the group's documents whose DraftID is one of
 	// draftIDs, oldest first.
 	ListByDrafts(ctx context.Context, draftIDs ...string) ([]*models.IntakeDocument, error)

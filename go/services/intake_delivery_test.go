@@ -340,11 +340,11 @@ func (f *intakeFixture) forgetDraft(c *qt.C, doc *models.IntakeDocument) {
 
 var errLostWrite = errors.New("the write was lost")
 
-// lossyDocuments is a document registry whose records of a file or of a
-// draft fail while asked to, as writes lost to the database would.
+// lossyDocuments is a document registry whose records of a file, a session
+// or a draft fail while asked to, as writes lost to the database would.
 type lossyDocuments struct {
 	registry.IntakeDocumentRegistryFactory
-	loseFile, loseDraft atomic.Bool
+	loseFile, loseSession, loseDraft atomic.Bool
 }
 
 func (f *lossyDocuments) CreateUserRegistry(ctx context.Context) (registry.IntakeDocumentRegistry, error) {
@@ -358,7 +358,9 @@ type lossyDocumentRegistry struct {
 }
 
 func (r *lossyDocumentRegistry) RecordProgress(ctx context.Context, id string, progress registry.IntakeDocumentProgress) (*models.IntakeDocument, error) {
-	if (progress.FileID != nil && r.f.loseFile.Load()) || (progress.DraftID != nil && r.f.loseDraft.Load()) {
+	if (progress.FileID != nil && r.f.loseFile.Load()) ||
+		(progress.SessionID != nil && r.f.loseSession.Load()) ||
+		(progress.DraftID != nil && r.f.loseDraft.Load()) {
 		return nil, errLostWrite
 	}
 	return r.IntakeDocumentRegistry.RecordProgress(ctx, id, progress)
@@ -464,26 +466,38 @@ func TestIntakeDeliver_SessionDeletedBeforeTheDraft(t *testing.T) {
 // TestIntakeDeliver_SessionOfALostRecord: a session carries the document's
 // identity, but the group lost the record of the delivery that made it. A
 // delivery of the document is refused, with the same values too, since what
-// the first one held is not known; nothing is stored.
+// the first one held is not known, and so is its repeat; nothing is stored.
+// Once the member deleted that session, the draft it made is the document's.
 func TestIntakeDeliver_SessionOfALostRecord(t *testing.T) {
-	c := qt.New(t)
-	f := newIntakeFixture(c)
-	blob := func(key string) *services.IntakeDeliveredFile {
-		return &services.IntakeDeliveredFile{BlobKey: key, Name: "invoice.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
-	}
-	first := f.deliver(c, paperlessDelivery("117"), blob("t/tenant-a/files/first.pdf"))
-	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
-	c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
-	files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
-
 	changed := paperlessDelivery("117")
 	changed.Title = "Another invoice"
-	for _, in := range []services.IntakeDelivery{changed, paperlessDelivery("117")} {
-		result, err := f.intake.Deliver(f.ctx, in, blob("t/tenant-a/files/again.pdf"))
-		c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
-		c.Assert(result.File, qt.IsNil)
-		c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
-		c.Assert(f.drafts(c), qt.HasLen, 1)
+	for name, in := range map[string]services.IntakeDelivery{"the first values": paperlessDelivery("117"), "other values": changed} {
+		t.Run(name, func(t *testing.T) {
+			c := qt.New(t)
+			f := newIntakeFixture(c)
+			blob := func(key string) *services.IntakeDeliveredFile {
+				return &services.IntakeDeliveredFile{BlobKey: key, Name: "invoice.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+			}
+			first := f.deliver(c, paperlessDelivery("117"), blob("t/tenant-a/files/first.pdf"))
+			docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+			c.Assert(docs.Delete(f.ctx, first.Document.ID), qt.IsNil)
+			files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
+
+			for range 2 {
+				result, err := f.intake.Deliver(f.ctx, in, blob("t/tenant-a/files/again.pdf"))
+				c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
+				c.Assert(result.File, qt.IsNil)
+				c.Assert(result.Document.DraftID, qt.IsNil)
+				c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 1)
+				c.Assert(f.drafts(c), qt.HasLen, 1)
+			}
+
+			c.Assert(f.intake.Delete(f.ctx, *first.Document.SessionID), qt.IsNil)
+			result := f.deliver(c, in, blob("t/tenant-a/files/again.pdf"))
+			c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
+			c.Assert(*result.Document.DraftID, qt.Equals, *first.Document.DraftID)
+			c.Assert(f.drafts(c), qt.HasLen, 1)
+		})
 	}
 }
 
@@ -509,31 +523,39 @@ func TestIntakeDeliver_FileNotRecorded(t *testing.T) {
 	c.Assert(f.drafts(c), qt.HasLen, 1)
 }
 
-// TestIntakeDeliver_CorrectedAfterAFailure: a delivery that failed before it
-// made a file, a session or a draft does not stand against a corrected one,
-// which takes its place.
-func TestIntakeDeliver_CorrectedAfterAFailure(t *testing.T) {
-	c := qt.New(t)
-	f := newIntakeFixture(c)
-	blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
-	lossy := f.lossyDocuments()
-	lossy.loseFile.Store(true)
-	_, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
-	lossy.loseFile.Store(false)
-	c.Assert(err, qt.ErrorIs, errLostWrite)
+// TestIntakeDeliver_ChangedAfterAFailure: a delivery that failed half way
+// stands as it was sent. Other values are refused also then, and make
+// nothing; the first values finish the delivery with them.
+func TestIntakeDeliver_ChangedAfterAFailure(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		lose func(*lossyDocuments) *atomic.Bool
+	}{
+		{"before the file was recorded", func(l *lossyDocuments) *atomic.Bool { return &l.loseFile }},
+		{"before the session was recorded", func(l *lossyDocuments) *atomic.Bool { return &l.loseSession }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			f := newIntakeFixture(c)
+			blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+			lose := tc.lose(f.lossyDocuments())
+			lose.Store(true)
+			_, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
+			lose.Store(false)
+			c.Assert(err, qt.ErrorIs, errLostWrite)
 
-	corrected := paperlessDelivery("117")
-	corrected.Title = "Invoice 117, corrected"
-	result := f.deliver(c, corrected, blob)
-	c.Assert(result.Created, qt.IsFalse)
-	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
-	drafts := f.drafts(c)
-	c.Assert(drafts, qt.HasLen, 1)
-	c.Assert(drafts[0].Values["name"], qt.Equals, "Invoice 117, corrected")
+			corrected := paperlessDelivery("117")
+			corrected.Title = "Invoice 117, corrected"
+			_, err = f.intake.Deliver(f.ctx, corrected, blob)
+			c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentChanged)
 
-	// Now the corrected delivery stands.
-	_, err = f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
-	c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentChanged)
+			result := f.deliver(c, paperlessDelivery("117"), blob)
+			c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
+			drafts := f.drafts(c)
+			c.Assert(drafts, qt.HasLen, 1)
+			c.Assert(drafts[0].Values["name"], qt.Equals, "Invoice 117")
+		})
+	}
 }
 
 // TestIntakeDeliver_Concurrent: deliveries of one document at once make one

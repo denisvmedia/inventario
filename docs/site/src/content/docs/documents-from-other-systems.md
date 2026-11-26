@@ -146,11 +146,11 @@ one draft at most:
   `intake.document_changed`, and nothing changes. Edit the draft or the item
   in Inventario instead. This is what happens when a Paperless-ngx workflow
   with a **Document Updated** trigger sends a document after you edited it
-  there. The one exception is a first delivery that failed before it stored
-  the document or made the draft: a corrected one takes its place.
+  there.
 - A delivery that failed half way, for example because the connection broke,
-  is finished by sending the document again, without a second draft or a
-  second copy of the file.
+  is finished by sending the document again with the same fields and file,
+  without a second draft or a second copy of the file. Other fields are
+  refused then too: the first delivery stands for the values it sent.
 - This holds after the draft was discarded, after the draft became an item,
   and after the item was deleted. To have a document make a new draft, send
   it with another `source_instance`.

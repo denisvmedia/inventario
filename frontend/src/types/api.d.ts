@@ -8336,7 +8336,7 @@ export type paths = {
          *     No AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.
          *     source_system, source_instance and document_id identify the document in the group.
          *     Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
-         *     Delivering it with other values is refused with 409 intake.document_changed and changes nothing, unless the first delivery failed before it stored a file or made a draft; then the new values take its place.
+         *     Delivering it with other values is refused with 409 intake.document_changed and changes nothing, also when the first delivery failed half way; sending the first values again finishes it.
          *     A delivery is refused with 409 intake.document_conflict when an intake session of the group carries the document but the group has no record of the delivery that made it.
          */
         post: {

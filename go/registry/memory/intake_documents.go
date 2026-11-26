@@ -269,30 +269,6 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 	return new(*doc), nil
 }
 
-func (r *IntakeDocumentRegistry) ReplaceDelivery(_ context.Context, id string, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
-	if err := r.requireGroup(); err != nil {
-		return nil, false, err
-	}
-	r.factory.writes.Lock()
-	defer r.factory.writes.Unlock()
-	r.lock.Lock()
-	defer r.lock.Unlock()
-	stored, ok := r.items.Get(id)
-	if !ok || stored.GroupID != r.groupID {
-		return nil, false, intakeDocumentNotFound(id)
-	}
-	if stored.FileID != nil || stored.SessionID != nil || stored.DraftID != nil {
-		return new(*stored), false, nil
-	}
-	replaced := new(*stored)
-	replaced.SourceName = doc.SourceName
-	replaced.SourceURL = doc.SourceURL
-	replaced.PayloadHash = doc.PayloadHash
-	replaced.UpdatedAt = time.Now().UTC()
-	r.items.Set(id, replaced)
-	return new(*replaced), true, nil
-}
-
 func (r *IntakeDocumentRegistry) ListByDrafts(_ context.Context, draftIDs ...string) ([]*models.IntakeDocument, error) {
 	return r.listBy(draftIDs, func(d *models.IntakeDocument) *string { return d.DraftID })
 }

@@ -283,42 +283,6 @@ func (r *IntakeDocumentRegistry) RecordProgress(ctx context.Context, id string, 
 	return &doc, nil
 }
 
-func (r *IntakeDocumentRegistry) ReplaceDelivery(ctx context.Context, id string, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
-	if err := r.requireGroup(); err != nil {
-		return nil, false, err
-	}
-	var (
-		stored   models.IntakeDocument
-		replaced bool
-	)
-	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		update := fmt.Sprintf(`
-			UPDATE %s SET source_name = $1, source_url = $2, payload_hash = $3, updated_at = $4
-			WHERE id = $5 AND group_id = $6 AND file_id IS NULL AND session_id IS NULL AND draft_id IS NULL
-			RETURNING *`, r.tableNames.IntakeDocuments())
-		err := tx.QueryRowxContext(ctx, update,
-			doc.SourceName, doc.SourceURL, doc.PayloadHash, time.Now().UTC(), id, r.groupID,
-		).StructScan(&stored)
-		if err == nil {
-			replaced = true
-			return nil
-		}
-		if !errors.Is(err, sql.ErrNoRows) {
-			return err
-		}
-		existing := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND group_id = $2`, r.tableNames.IntakeDocuments())
-		err = tx.QueryRowxContext(ctx, existing, id, r.groupID).StructScan(&stored)
-		if errors.Is(err, sql.ErrNoRows) {
-			return intakeDocumentNotFound(id)
-		}
-		return err
-	})
-	if err != nil {
-		return nil, false, errxtrace.Wrap("failed to replace the delivered values", err)
-	}
-	return &stored, replaced, nil
-}
-
 func (r *IntakeDocumentRegistry) ListByDrafts(ctx context.Context, draftIDs ...string) ([]*models.IntakeDocument, error) {
 	return r.listBy(ctx, "draft_id", draftIDs)
 }

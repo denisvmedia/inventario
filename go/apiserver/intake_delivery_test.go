@@ -447,8 +447,8 @@ func TestIntakeDelivery_WhoMayDeliver(t *testing.T) {
 
 // TestIntakeDelivery_SessionOfALostRecord: the group lost the record of the
 // first delivery, but its session still carries the document. A delivery of
-// the document is refused with its own code and no document to name, with
-// the first values too, and makes nothing.
+// the document is refused with its own code and no draft to name, with the
+// first values too, and so is its repeat; it makes nothing.
 func TestIntakeDelivery_SessionOfALostRecord(t *testing.T) {
 	c := qt.New(t)
 	env, token := newIntakeDeliveryEnv(c)
@@ -460,10 +460,8 @@ func TestIntakeDelivery_SessionOfALostRecord(t *testing.T) {
 	first := decodeIntakeDocument(c, rr)
 	c.Assert(env.groupRegistries().IntakeDocumentRegistry.Delete(env.groupCtx(), first.ID), qt.IsNil)
 
-	changed := paperlessForm("117")
-	changed.Set("title", "Another invoice")
-	for _, body := range []url.Values{changed, form} {
-		rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(body.Encode()))
+	for range 2 {
+		rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(form.Encode()))
 		c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf(rr.Body.String()))
 		c.Assert(errorCode(c, rr), qt.Equals, apiserver.IntakeDocumentConflictCode)
 		c.Assert(rr.Body.String(), qt.Not(qt.Contains), "draft_id")

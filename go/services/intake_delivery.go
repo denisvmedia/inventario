@@ -296,11 +296,11 @@ func (n normalizedDelivery) candidate() (models.IntakeCandidate, error) {
 // The document's identity is the source system, its instance and the
 // document id, unique in the group. A repeated delivery with the same values
 // and file is a replay: it returns the document and makes nothing. A delivery
-// with other values gets ErrIntakeDocumentChanged and changes nothing, unless
-// the first one failed before it made a file, a session or a draft; then the
-// new values take its place. The document record outlives the intake session
-// and the draft, so a replay after the member deleted the session, discarded
-// the draft or finished the item still makes nothing.
+// with other values gets ErrIntakeDocumentChanged and changes nothing, also
+// when the first one failed half way: the first values finish it. The
+// document record outlives the intake session and the draft, so a replay
+// after the member deleted the session, discarded the draft or finished the
+// item still makes nothing.
 //
 // Every step can be repeated: the file and the session are recorded on the
 // document once made, and the draft carries a client key that follows from
@@ -330,14 +330,7 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 	}
 	result := &IntakeDeliveryResult{Document: doc, Created: created}
 	if !created && doc.PayloadHash != delivered.PayloadHash {
-		stored, replaced, err := docs.ReplaceDelivery(ctx, doc.ID, delivered)
-		if err != nil {
-			return result, err
-		}
-		result.Document = stored
-		if !replaced {
-			return result, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
-		}
+		return result, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
 	}
 	if result.Document.DraftID == nil {
 		if err := s.finishDelivery(ctx, set, n, file, result); err != nil {
