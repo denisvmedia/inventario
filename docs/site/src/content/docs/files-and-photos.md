@@ -300,8 +300,8 @@ A few things to know:
   add the others separately afterwards. To get a draft for every product on a
   receipt at once, use [Add items from files](../items/#add-items-from-files).
 - A file you add with **Add items from files** also gets the tag of its kind
-  (**Invoice**, **Manual** or **Warranty**) and a readable title from the scan,
-  unless you set them yourself.
+  (**Invoice**, **Manual**, **Warranty** or **Photo**) and a readable title
+  from the scan, unless you renamed or tagged it yourself.
 - When a receipt or invoice names the seller, the item names your group's
   seller with that name. If your group has no such seller, the **Purchase**
   step offers to create it; nothing is created until you agree (see

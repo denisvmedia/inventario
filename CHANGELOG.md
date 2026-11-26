@@ -19,9 +19,10 @@ the section matching the tag and publishes it as the GitHub Release body. See
   confidence; the scan-level `document_type` stays and is derived from the
   files when the model gives none. **Add items from files** sets the
   suggestions on the files once they are scanned: the **Invoice** tag for an
-  invoice or a receipt, **Manual** or **Warranty** for the others, and the
-  title while it is still the file name. A title or a document tag you set
-  yourself is kept (#1626).
+  invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
+  others, and the title. Only a file that still has the title and the tags
+  of its upload changes, so a file you renamed or tagged keeps what you
+  gave it and a rescan does not change it again (#1626).
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
   (unique in the group, ignoring case) and a type that never changes: text,
   long text, number, money, date, yes/no, select, URL or a link to another
