@@ -28,9 +28,9 @@ func NewUserContentOwnershipChecker(fs *registry.FactorySet) *UserContentOwnersh
 	return &UserContentOwnershipChecker{fs: fs}
 }
 
-// HasRetainedOwnedContent walks each group-scoped content registry plus
-// location_groups and returns true on the first row the user owns in a retained
-// group. It performs no writes.
+// HasRetainedOwnedContent walks the ownedSources marked deletionPreCheck and
+// returns true on the first row the user owns in a retained group. It performs
+// no writes.
 func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error) {
 	if tenantID == "" {
 		return false, errxtrace.Wrap("tenantID required", registry.ErrFieldRequired)
@@ -44,71 +44,21 @@ func (r *UserContentOwnershipChecker) HasRetainedOwnedContent(ctx context.Contex
 		purged[id] = struct{}{}
 	}
 
-	fs := r.fs
-
-	type check struct {
-		name string
-		run  func() (bool, error)
-	}
-	checks := []check{
-		// Group-scoped content authored by the user (created_by_user_id) in a
-		// group outside the purged set. Every table embeds
-		// TenantGroupAwareEntityID, so the generic created-by matcher applies.
-		{"commodities", func() (bool, error) {
-			reg := fs.CommodityRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, serviceRows(reg, reg.List), createdByGroupAware[models.Commodity])
-		}},
-		{"files", func() (bool, error) {
-			reg := fs.FileRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, serviceRows(reg, reg.List), createdByGroupAware[models.FileEntity])
-		}},
-		{"areas", func() (bool, error) {
-			reg := fs.AreaRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Area])
-		}},
-		{"locations", func() (bool, error) {
-			reg := fs.LocationRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Location])
-		}},
-		{"exports", func() (bool, error) {
-			reg := fs.ExportRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Export])
-		}},
-		{"tags", func() (bool, error) {
-			reg := fs.TagRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Tag])
-		}},
-		{"sellers", func() (bool, error) {
-			reg := fs.SellerRegistryFactory.CreateServiceRegistry()
-			return ownsRetainedContent(ctx, tenantID, userID, purged, reg.List, createdByGroupAware[models.Seller])
-		}},
-		// location_groups the user CREATED that are not being purged. The group's
-		// own id is the exclusion key (it has no group_id), and the authorship
-		// column is `created_by`.
-		{"location_groups", func() (bool, error) {
-			groups, err := fs.LocationGroupRegistry.List(ctx)
-			if err != nil {
-				return false, err
-			}
-			for _, g := range groups {
-				if g == nil || g.GetTenantID() != tenantID || g.CreatedBy != userID {
-					continue
-				}
-				if _, isPurged := purged[g.ID]; isPurged {
-					continue
-				}
-				return true, nil
-			}
-			return false, nil
-		}},
-	}
-
-	for _, ch := range checks {
-		owns, err := ch.run()
-		if err != nil {
-			return false, errxtrace.Wrap("failed to check retained owned content in "+ch.name, err)
+	for _, src := range ownedSources(r.fs) {
+		if !src.deletionPreCheck {
+			continue
 		}
-		if owns {
+		rows, err := src.rows(ctx)
+		if err != nil {
+			return false, errxtrace.Wrap("failed to check retained owned content in "+string(src.kind), err)
+		}
+		for _, row := range rows {
+			if row.tenantID != tenantID || row.createdBy != userID {
+				continue
+			}
+			if _, isPurged := purged[row.groupID]; isPurged {
+				continue
+			}
 			return true, nil
 		}
 	}
@@ -125,7 +75,7 @@ type createdByEntry struct {
 
 // createdByGroupAware extracts (tenant, group, created_by) from any model whose
 // pointer satisfies models.TenantGroupAware (every TenantGroupAwareEntityID
-// embedder does). Used as the default extractor for ownsRetainedContent.
+// embedder does). Used as the extractor for the group-scoped ownedSources.
 func createdByGroupAware[T any](item *T) createdByEntry {
 	ga, ok := any(item).(models.TenantGroupAware)
 	if !ok {
@@ -136,34 +86,4 @@ func createdByGroupAware[T any](item *T) createdByEntry {
 		groupID:   ga.GetGroupID(),
 		createdBy: ga.GetCreatedByUserID(),
 	}
-}
-
-// ownsRetainedContent lists everything from a service-mode registry view and
-// reports whether any row is owned by userID (created_by_user_id) in this tenant
-// and in a group that is NOT being purged.
-func ownsRetainedContent[T any](
-	ctx context.Context,
-	tenantID, userID string,
-	purged map[string]struct{},
-	list func(context.Context) ([]*T, error),
-	extract func(*T) createdByEntry,
-) (bool, error) {
-	items, err := list(ctx)
-	if err != nil {
-		return false, err
-	}
-	for _, item := range items {
-		if item == nil {
-			continue
-		}
-		e := extract(item)
-		if e.tenantID != tenantID || e.createdBy != userID {
-			continue
-		}
-		if _, isPurged := purged[e.groupID]; isPurged {
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
 }

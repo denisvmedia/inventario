@@ -176,6 +176,7 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 ./inventario users update admin@acme.com --name="New Name"
 ./inventario users update admin@acme.com --active=false      # block / deactivate
 ./inventario users update admin@acme.com --password          # prompts securely
+./inventario users update new@acme.com --tenant=acme --upload-location=s3://bucket   # move to another tenant
 
 # Delete user with confirmation
 ./inventario users delete admin@acme.com
@@ -191,6 +192,20 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 > use `admin grant-system-admin` (see
 > [System Administrators](#system-administrators) below) — that privilege is
 > not a user-row field.
+
+> **Moving a user to another tenant:** `--tenant` moves only a user who
+> belongs to no group and owns or authored nothing in their tenant, typically
+> an account created in the wrong tenant. Otherwise the command refuses and
+> lists what blocks the move (for example "member of 2 groups, 14 items, 3
+> files"), and nothing changes. The target tenant must be active and must
+> have no user with the same email. `--dry-run` runs the same checks, the
+> photo storage included. A move signs
+> the user out everywhere (sessions and API tokens are deleted) and keeps
+> their password, second factor, linked sign-in accounts, language and other
+> settings. The profile photo is copied into the new tenant's storage, so pass
+> `--upload-location` (or `INVENTARIO_USERS_UPDATE_UPLOAD_LOCATION`) with the
+> server's upload location. Moving a user together with their content is not
+> supported.
 
 **Important**: User and tenant commands only work with PostgreSQL databases. Memory databases are not supported for persistent operations.
 

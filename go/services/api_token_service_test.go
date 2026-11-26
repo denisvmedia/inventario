@@ -265,14 +265,21 @@ func TestAPITokenService_AuthenticateFailures(t *testing.T) {
 			reason: services.APITokenReasonUserNotFound,
 		},
 		{
-			name: "owner moved to another tenant",
+			// A token whose tenant is not its owner's, as a token would be if
+			// its owner moved and the move had not deleted it.
+			name: "owner in another tenant",
 			setup: func(c *qt.C, env *apiTokenServiceEnv) (string, string) {
-				_, secret := env.mint(c, services.CreateAPITokenInput{})
-				u := *env.user
-				u.TenantID = "another-tenant"
-				_, err := env.fs.UserRegistry.Update(ctx, u)
+				gen, err := models.GenerateAPIToken()
 				c.Assert(err, qt.IsNil)
-				return secret, ""
+				_, err = env.fs.APITokenRegistry.Create(ctx, models.APIToken{
+					TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: "another-tenant", UserID: env.user.ID},
+					Name:                    "moved",
+					TokenHash:               gen.Hash,
+					TokenPrefix:             gen.DisplayPrefix,
+					Scope:                   models.APITokenScopeReadOnly,
+				})
+				c.Assert(err, qt.IsNil)
+				return gen.Token, ""
 			},
 			reason: services.APITokenReasonTenantMismatch,
 		},

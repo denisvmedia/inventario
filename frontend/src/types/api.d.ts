@@ -1093,6 +1093,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
                 422: {
                     headers: {
@@ -1382,6 +1391,15 @@ export type paths = {
                 };
                 /** @description Not Found - unknown user */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -19151,10 +19169,12 @@ export type components = {
              * @description AvatarPath is the blob key of the user's profile photo, or nil when they
              *     have none and the UI falls back to their initials (#1382).
              *
-             *     The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-             *     bust browser caches: replacing a photo writes a new key rather than
-             *     overwriting one, so nothing has to reason about cache headers to make the
-             *     new picture show up.
+             *     The key lives under the user's tenant and ends in a revision number and a
+             *     random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+             *     with a flat `avatars/<user>/...` key works the same). Replacing a
+             *     photo writes a new key rather than overwriting one, so nothing has to
+             *     reason about cache headers to make the new picture show up, and a tenant
+             *     move copies the photo to a new key under the new tenant.
              *
              *     Not user input: it is set by the avatar endpoints, which decide the key
              *     after validating and re-encoding what was uploaded. A client that could

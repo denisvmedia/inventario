@@ -634,6 +634,30 @@ when to add an entry and where it goes.
   they printed `setupJob.initData.adminEmail`, which that Secret's email
   overrides, and pointed to `setupJob.initData.adminPassword`, which an
   existing Secret does not use.
+- `inventario users update --tenant` moves a user only when they belong to no
+  group and own or authored nothing in their tenant, typically an account
+  created in the wrong tenant. Otherwise it refuses, lists what blocks the
+  move (for example "member of 2 groups, 14 items, 3 files") and changes
+  nothing; `--dry-run` runs the same check. A move signs the user out
+  everywhere: their sessions and API tokens are deleted. Their password,
+  second factor, linked sign-in accounts, language and other settings and
+  their login history move with them, and their profile photo is copied into
+  the new tenant's storage, which the new `--upload-location` flag names. A
+  user record written from a copy read before a move is refused instead of
+  putting the old tenant back; the back-office block and unblock endpoints
+  answer it with 409 and the code `user.tenant_changed`
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- `inventario db migrate data`, and with it the Helm chart's init-data job,
+  never moves a user between tenants. When the admin email exists only in
+  another tenant, the run warns, names that tenant and creates no admin. It
+  fails instead when the default tenant did not exist before the run, as on
+  a database restored under another tenant id
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- New profile photos are stored under their tenant's prefix,
+  `t/<tenant>/avatars/<user>/...`, instead of `avatars/<user>/...`. Photos
+  stored under `avatars/` keep working. A bucket lifecycle rule that matches
+  `avatars/` needs the new prefix too
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
 
 ## [0.2.2] - 2026-11-23
 

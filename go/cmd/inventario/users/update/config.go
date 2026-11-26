@@ -11,6 +11,11 @@ type Config struct {
 	Tenant   string `yaml:"tenant" env:"USER_TENANT" env-default:""`
 	Password bool   `yaml:"password" env:"USER_PASSWORD" env-default:"false"`
 
+	// UploadLocation points at the object store the server uses, so a tenant
+	// move can copy the user's profile photo into the new tenant's storage.
+	// When empty it falls back to the configured default upload location.
+	UploadLocation string `yaml:"upload_location" env:"UPLOAD_LOCATION" env-default:""`
+
 	// Command options
 	DryRun bool `yaml:"dry_run" env:"DRY_RUN" env-default:"false"`
 }

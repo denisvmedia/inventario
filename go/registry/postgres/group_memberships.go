@@ -110,6 +110,9 @@ func (r *GroupMembershipRegistry) Create(ctx context.Context, membership models.
 	reg := r.newSQLRegistry()
 
 	createdMembership, err := reg.Create(ctx, membership, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := r.lockMemberInTenant(ctx, tx, membership.TenantID, membership.MemberUserID); err != nil {
+			return err
+		}
 		// Check for duplicate membership
 		txReg := store.NewTxRegistry[models.GroupMembership](tx, r.tableNames.GroupMemberships())
 		for m, scanErr := range txReg.ScanByField(ctx, store.Pair("group_id", membership.GroupID)) {
@@ -293,6 +296,9 @@ func (r *GroupMembershipRegistry) CreateUnderCap(ctx context.Context, membership
 		); lockErr != nil {
 			return errxtrace.Wrap("failed to acquire membership cap lock", lockErr)
 		}
+		if err := r.lockMemberInTenant(ctx, tx, membership.TenantID, membership.MemberUserID); err != nil {
+			return err
+		}
 
 		var count int
 		query := fmt.Sprintf(`SELECT COUNT(*) FROM %s WHERE tenant_id = $1 AND member_user_id = $2`, r.tableNames.GroupMemberships())
@@ -333,6 +339,25 @@ func (r *GroupMembershipRegistry) CreateUnderCap(ctx context.Context, membership
 	createdID = created.ID
 	_ = createdID
 	return &created, false, nil
+}
+
+// lockMemberInTenant checks, inside the transaction that inserts a membership,
+// that the user is in the tenant the membership names, and holds FOR KEY SHARE
+// on the users row until the insert commits. A UserTenantMover moving the user
+// holds the row FOR UPDATE: this waits for it and then reads the row the move
+// committed, so a membership cannot be written for a user who has just left
+// the tenant.
+func (r *GroupMembershipRegistry) lockMemberInTenant(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	var one int
+	query := fmt.Sprintf("SELECT 1 FROM %s WHERE id = $1 AND tenant_id = $2 FOR KEY SHARE", r.tableNames.Users())
+	err := tx.QueryRowContext(ctx, query, userID, tenantID).Scan(&one)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs("user_id", userID, "tenant_id", tenantID))
+	}
+	if err != nil {
+		return errxtrace.Wrap("failed to check the member's tenant", err)
+	}
+	return nil
 }
 
 // errMembershipCapReached is the sentinel CreateUnderCap raises inside

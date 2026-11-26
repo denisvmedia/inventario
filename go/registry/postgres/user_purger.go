@@ -202,9 +202,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// would otherwise block the final DELETE FROM users with an FK violation
 		// (this is also the latent break in the admin Service.DeleteUser path).
 		// The user can appear as creator, as accepter, or both, so the DELETE
-		// matches either column. The table has no children, so order is free; it
-		// rides the tenant_id template as defense-in-depth.
-		if err := r.purgeGroupInvitesAudit(ctx, tx, tenantID, userID); err != nil {
+		// matches either column, in every tenant. The table has no children, so
+		// order is free.
+		if err := r.purgeGroupInvitesAudit(ctx, tx, userID); err != nil {
 			return err
 		}
 
@@ -378,19 +378,20 @@ func (r *UserPurger) purgeThumbnailChain(ctx context.Context, tx *sqlx.Tx, tenan
 // purgeGroupInvitesAudit removes every group_invites_audit row that names the
 // user as the invite creator (created_by) OR the accepter (used_by). Both are
 // NOT NULL FK -> users(id) NO ACTION, so they must be cleared before the
-// orchestration layer drops the users row. tenant_id is added as
-// defense-in-depth. Idempotent: a user who never touched an invite matches zero
-// rows.
-func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+// orchestration layer drops the users row. The rows are matched by user in
+// every tenant: a user moved to another tenant (#2179) leaves this audit trail
+// in the tenant they left. Idempotent: a user who never touched an invite
+// matches zero rows.
+func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tx *sqlx.Tx, userID string) error {
 	audit := string(r.tableNames.GroupInvitesAudit())
 	query := fmt.Sprintf(
-		"DELETE FROM %s WHERE tenant_id = $1 AND (created_by = $2 OR used_by = $2)", audit,
+		"DELETE FROM %s WHERE created_by = $1 OR used_by = $1", audit,
 	)
-	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, query, userID); err != nil {
 		return errxtrace.Wrap(
 			"failed to purge user group_invites_audit references",
 			err,
-			errx.Attrs("table", audit, "tenant_id", tenantID, "user_id", userID),
+			errx.Attrs("table", audit, "user_id", userID),
 		)
 	}
 	return nil

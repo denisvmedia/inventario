@@ -261,6 +261,7 @@ type FactorySet struct {
 	TenantPurger                          TenantPurger                  // TenantPurger hard-deletes every tenant-scoped dependent row during admin tenant hard-delete (#2115)
 	UserPurger                            UserPurger                    // UserPurger hard-deletes a user's auth/identity rows during admin user hard-delete (#2116)
 	UserContentOwnershipChecker           UserContentOwnershipChecker   // UserContentOwnershipChecker is the read-only pre-check for self-service account deletion (#2147)
+	UserTenantMover                       UserTenantMover               // UserTenantMover moves a user who owns nothing to another tenant (#2179)
 	WarrantyReminderRegistry              WarrantyReminderRegistry      // WarrantyReminderRegistry is the worker idempotency store; service-mode only
 	StorageQuotaReminderRegistry          StorageQuotaReminderRegistry  // StorageQuotaReminderRegistry is the storage quota warning worker idempotency store; service-mode only (#1585)
 	WeeklyDigestSendRegistry              WeeklyDigestSendRegistry      // WeeklyDigestSendRegistry is the weekly digest worker idempotency store; service-mode only (#1391)

@@ -494,7 +494,67 @@ func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := customFieldSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
+	if jsErr, ok := userTenantSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
 	return jsonapi.Error{}, false
+}
+
+// JSON:API codes of the user tenant guards (#2179).
+const (
+	// userTenantMoveBlockedCode: the user still belongs to a group or owns
+	// content in their tenant, so they cannot move to another one. meta
+	// carries "owned", the readable list, and one count per kind of row.
+	userTenantMoveBlockedCode = "user.tenant_move_blocked"
+	// userTenantChangedCode: the write named another tenant than the user is
+	// in, either because it tried to move the user or because the user moved
+	// since the copy it was built from was read.
+	userTenantChangedCode = "user.tenant_changed"
+	// userChangedDuringMoveCode: the user's profile photo changed while they
+	// were being moved; reading them again and retrying is safe.
+	userChangedDuringMoveCode = "user.changed_during_move"
+	// tenantNotActiveCode: the tenant a user would move into is suspended or
+	// inactive.
+	tenantNotActiveCode = "tenant.not_active"
+)
+
+// userTenantSentinelJSONAPIError maps the user tenant guards (#2179): a move
+// into a tenant that is not active is 422, the others are 409.
+func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
+	var code string
+	var meta map[string]any
+	switch {
+	case errors.Is(err, registry.ErrUserTenantMoveBlocked):
+		code = userTenantMoveBlockedCode
+		if blocked, ok := errors.AsType[*registry.UserTenantMoveBlockedError](err); ok {
+			meta = map[string]any{"owned": blocked.Owned.String()}
+			for _, entry := range blocked.Owned {
+				meta[string(entry.Kind)] = entry.Count
+			}
+		}
+	case errors.Is(err, registry.ErrUserTenantChanged):
+		code = userTenantChangedCode
+	case errors.Is(err, registry.ErrUserChangedDuringMove):
+		code = userChangedDuringMoveCode
+	case errors.Is(err, registry.ErrTenantNotActive):
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     http.StatusText(http.StatusUnprocessableEntity),
+			Code:           tenantNotActiveCode,
+		}, true
+	default:
+		return jsonapi.Error{}, false
+	}
+	return jsonapi.Error{
+		Err:            err,
+		UserError:      errormarshal.Marshal(err),
+		HTTPStatusCode: http.StatusConflict,
+		StatusText:     http.StatusText(http.StatusConflict),
+		Code:           code,
+		Meta:           meta,
+	}, true
 }
 
 func toJSONAPIError(err error) jsonapi.Error {

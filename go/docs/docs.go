@@ -875,6 +875,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
                         "schema": {
@@ -1092,6 +1098,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -21980,7 +21992,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar_path": {
-                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key ends in a revision number (` + "`" + `avatars/\u003cuser\u003e/3.jpg` + "`" + `) which exists to\nbust browser caches: replacing a photo writes a new key rather than\noverwriting one, so nothing has to reason about cache headers to make the\nnew picture show up.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
+                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key lives under the user's tenant and ends in a revision number and a\nrandom suffix (` + "`" + `t/\u003ctenant\u003e/avatars/\u003cuser\u003e/3-a1b2c3d4e5f6.jpg` + "`" + `; a photo\nwith a flat ` + "`" + `avatars/\u003cuser\u003e/...` + "`" + ` key works the same). Replacing a\nphoto writes a new key rather than overwriting one, so nothing has to\nreason about cache headers to make the new picture show up, and a tenant\nmove copies the photo to a new key under the new tenant.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
                     "type": "string"
                 },
                 "avatar_url": {
