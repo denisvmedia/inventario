@@ -347,6 +347,7 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 		{name: "an empty body", body: ``},
 		// 300 and 300.0 are one number; as document ids they would be two.
 		{name: "a document id that is not an integer", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":300.0}`, field: "document_id", code: "validation_intake_field_type"},
+		{name: "a document id written as -0", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":-0}`, field: "document_id", code: "validation_intake_field_type"},
 		{name: "a NUL in the title", body: `{"title":"Inv\u0000oice","source_system":"paperless-ngx","document_id":"117"}`, field: "title", code: "validation_intake_text"},
 	} {
 		c.Run(tc.name, func(c *qt.C) {

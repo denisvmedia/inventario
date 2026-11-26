@@ -360,7 +360,9 @@ func (f *intakeFieldReader) readJSON(body io.Reader) error {
 // written.
 var intakeIdentityFields = map[string]bool{"source_system": true, "source_instance": true, "document_id": true}
 
-var intakeIntegerPattern = regexp.MustCompile(`^-?(0|[1-9][0-9]*)$`)
+// intakeIntegerPattern leaves out -0, which is the number 0 written as
+// other text.
+var intakeIntegerPattern = regexp.MustCompile(`^(0|-?[1-9][0-9]*)$`)
 
 // intakeJSONError turns a JSON body over the size limit into 413 and any
 // other problem with it, including content after the object, into 422.
