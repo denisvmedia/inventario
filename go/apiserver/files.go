@@ -1060,7 +1060,7 @@ func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Re
 		_, err := thumbnailService.RequestThumbnailGeneration(r.Context(), fileID)
 		if err != nil {
 			// Log error but still serve placeholder
-			slog.Error("Failed to request thumbnail generation", "error", err, "file_id", fileID)
+			slog.ErrorContext(r.Context(), "Failed to request thumbnail generation", "error", err, "file_id", fileID)
 		}
 	}
 
@@ -1085,7 +1085,7 @@ func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Reques
 	}
 	data, err := assets.GetPlaceholderFile(filename)
 	if err != nil {
-		slog.Error("Failed to load placeholder image", "filename", filename, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to load placeholder image", "filename", filename, "error", err)
 		http.Error(w, "Placeholder not found", http.StatusNotFound)
 		return
 	}
@@ -1095,7 +1095,7 @@ func (api *filesAPI) servePlaceholderImage(w http.ResponseWriter, r *http.Reques
 
 	// Write the image data
 	if _, err := w.Write(data); err != nil {
-		slog.Error("Failed to write placeholder image", "filename", filename, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to write placeholder image", "filename", filename, "error", err)
 	}
 }
 
@@ -1160,7 +1160,7 @@ func (api *filesAPI) streamFileFromStorage(w http.ResponseWriter, r *http.Reques
 	}
 	if _, err := io.Copy(w, reader); err != nil {
 		// Log error but don't send response as headers are already sent
-		slog.Error("Failed to stream file", "error", err, "file_path", filePath)
+		slog.ErrorContext(r.Context(), "Failed to stream file", "error", err, "file_path", filePath)
 	}
 }
 

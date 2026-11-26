@@ -10,6 +10,7 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { stubImageLoading } from "@/test/image"
 import { renderWithProviders } from "@/test/render"
+import { featureFlagHandlers } from "@/test/handlers"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -119,8 +120,9 @@ describe("<ProfilePage />", () => {
     )
   })
 
-  it("links to /profile/edit and /plans", async () => {
+  it("links to /profile/edit and /plans when plans are on", async () => {
     server.use(
+      ...featureFlagHandlers.set({ plans: true }),
       msw.get(api("/auth/me"), () =>
         HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex" })
       ),
@@ -129,7 +131,28 @@ describe("<ProfilePage />", () => {
     renderProfile()
     await waitFor(() => expect(screen.getByTestId("profile-edit-link")).toBeInTheDocument())
     expect(screen.getByTestId("profile-edit-link")).toHaveAttribute("href", "/profile/edit")
-    expect(screen.getByTestId("profile-upgrade-link")).toHaveAttribute("href", "/plans")
+    expect(await screen.findByTestId("profile-upgrade-link")).toHaveAttribute("href", "/plans")
+    expect(screen.getByTestId("profile-plan-badge")).toHaveTextContent("Free plan")
+  })
+
+  // #1389: the plans feature is frozen; with the deployment flag off (the
+  // default) the profile shows no plan badge and no Upgrade link.
+  it("hides the plan badge and the Upgrade link when plans are off", async () => {
+    server.use(
+      ...featureFlagHandlers.set({ plans: false }),
+      msw.get(api("/auth/me"), () =>
+        HttpResponse.json({ id: "u1", email: "alex@example.com", name: "Alex" })
+      ),
+      msw.get(api("/groups"), () => HttpResponse.json({ data: [] }))
+    )
+    const { queryClient } = renderProfile()
+    await waitFor(() => expect(screen.getByTestId("profile-edit-link")).toBeInTheDocument())
+    await waitFor(() =>
+      expect(queryClient.getQueryState(["feature-flags"])?.status).toBe("success")
+    )
+    expect(screen.queryByTestId("profile-upgrade-link")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("profile-plan-badge")).not.toBeInTheDocument()
+    expect(screen.queryByText("Free plan")).not.toBeInTheDocument()
   })
 
   it("has no axe violations", async () => {

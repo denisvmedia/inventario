@@ -34,6 +34,7 @@ export * as searchHandlers from "./search"
 export * as savedViewHandlers from "./savedViews"
 export * as sellerHandlers from "./sellers"
 export * as dataExportHandlers from "./dataExports"
+export * as featureFlagHandlers from "./featureFlags"
 
 // Helper used across factories: every backend route lives under /api/v1/.
 // Re-exported so per-test handlers that aren't worth a factory can build

@@ -96,13 +96,13 @@ func NewGroupPurgeWorker(service *GroupPurgeService, opts ...GroupPurgeOption) *
 // service is nil.
 func (w *GroupPurgeWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("GroupPurgeWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "GroupPurgeWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Group purge worker started", "interval", w.purgeInterval)
+	slog.InfoContext(ctx, "Group purge worker started", "interval", w.purgeInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -141,13 +141,13 @@ func (w *GroupPurgeWorker) tick(ctx context.Context) {
 	}
 
 	if purged, failed, err := w.service.PurgeOnce(ctx); err != nil {
-		slog.Error("Group purge sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Group purge sweep failed", "error", err)
 	} else {
 		if purged > 0 {
 			groupsPurgedTotal.Add(float64(purged))
-			slog.Info("Group purge sweep completed", "groups_purged", purged, "groups_failed", failed)
+			slog.InfoContext(ctx, "Group purge sweep completed", "groups_purged", purged, "groups_failed", failed)
 		} else {
-			slog.Debug("Group purge sweep completed", "groups_purged", 0, "groups_failed", failed)
+			slog.DebugContext(ctx, "Group purge sweep completed", "groups_purged", 0, "groups_failed", failed)
 		}
 		if failed > 0 {
 			groupsPurgeFailuresTotal.Add(float64(failed))
@@ -155,11 +155,11 @@ func (w *GroupPurgeWorker) tick(ctx context.Context) {
 	}
 
 	if expired, err := w.service.CleanExpiredInvites(ctx); err != nil {
-		slog.Error("Expired invite cleanup failed", "error", err)
+		slog.ErrorContext(ctx, "Expired invite cleanup failed", "error", err)
 	} else if expired > 0 {
 		groupInvitesExpiredPurgedTotal.Add(float64(expired))
-		slog.Info("Expired invites cleaned up", "count", expired)
+		slog.InfoContext(ctx, "Expired invites cleaned up", "count", expired)
 	} else {
-		slog.Debug("Expired invites cleaned up", "count", 0)
+		slog.DebugContext(ctx, "Expired invites cleaned up", "count", 0)
 	}
 }

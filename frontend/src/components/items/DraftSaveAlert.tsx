@@ -9,8 +9,10 @@ export type DraftSaveState =
   | { kind: "idle" }
   | { kind: "saving" }
   // The save failed; the values stay in the form and on this device.
-  // failedFiles names the files that did not reach the draft.
-  | { kind: "error"; message: string; failedFiles: string[] }
+  // failedFiles names the files that did not reach the draft. forItem marks
+  // the save Add item runs before it promotes the draft (#1626): no item is
+  // made until every file is on the draft.
+  | { kind: "error"; message: string; failedFiles: string[]; forItem?: boolean }
   // The draft was saved elsewhere after this form loaded it.
   | { kind: "conflict" }
   // The draft became an item elsewhere; commodityId names it when known.
@@ -91,13 +93,25 @@ export function DraftSaveAlert({
     return (
       <Alert variant="destructive" data-testid="draft-save-error">
         <CloudOff className="size-4" aria-hidden="true" />
-        <AlertTitle>{t("commodities:drafts.saveFailedTitle")}</AlertTitle>
+        <AlertTitle>
+          {state.forItem
+            ? t("commodities:form.addFailedTitle")
+            : t("commodities:drafts.saveFailedTitle")}
+        </AlertTitle>
         <AlertDescription>
           <p>{state.message}</p>
           {state.failedFiles.length > 0 ? (
-            <p>{t("commodities:drafts.filesNotSaved", { names: state.failedFiles.join(", ") })}</p>
+            <p>
+              {state.forItem
+                ? t("commodities:form.filesNotUploaded", { names: state.failedFiles.join(", ") })
+                : t("commodities:drafts.filesNotSaved", { names: state.failedFiles.join(", ") })}
+            </p>
           ) : null}
-          <p>{t("commodities:drafts.keptOnDevice")}</p>
+          <p>
+            {state.forItem
+              ? t("commodities:form.addRetryHint")
+              : t("commodities:drafts.keptOnDevice")}
+          </p>
           <Button
             type="button"
             size="sm"

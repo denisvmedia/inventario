@@ -116,13 +116,13 @@ func NewLoginEventRetentionWorker(r registry.LoginEventRegistry, opts ...LoginEv
 // registry is nil.
 func (w *LoginEventRetentionWorker) Start(ctx context.Context) {
 	if w.registry == nil {
-		slog.Warn("LoginEventRetentionWorker: no registry configured, skipping startup")
+		slog.WarnContext(ctx, "LoginEventRetentionWorker: no registry configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Login event retention worker started", "retention", w.retention, "interval", w.sweepInterval)
+	slog.InfoContext(ctx, "Login event retention worker started", "retention", w.retention, "interval", w.sweepInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -166,10 +166,10 @@ func (w *LoginEventRetentionWorker) sweep(ctx context.Context) {
 	cutoff := now().Add(-w.retention)
 	deleted, err := w.registry.DeleteOlderThan(ctx, cutoff)
 	if err != nil {
-		slog.Error("Failed to delete old login events", "error", err)
+		slog.ErrorContext(ctx, "Failed to delete old login events", "error", err)
 		return
 	}
 	if deleted > 0 {
-		slog.Info("Pruned login_events", "deleted", deleted, "cutoff", cutoff)
+		slog.InfoContext(ctx, "Pruned login_events", "deleted", deleted, "cutoff", cutoff)
 	}
 }

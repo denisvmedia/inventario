@@ -65,6 +65,7 @@ import {
 } from "@/features/auth/hooks"
 import { makeDeleteAccountSchema, type DeleteAccountInput } from "@/features/auth/schemas"
 import { forgetCommoditiesViewMode } from "@/features/commodities/viewMode"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useKeyboardShortcutsDialog } from "@/features/shortcuts"
 import {
@@ -287,6 +288,8 @@ function AccountSection() {
   const { user } = useAuth()
   const { groups, currentGroup, isLoading } = useCurrentGroup()
   const [deleteOpen, setDeleteOpen] = useState(false)
+  // The plan badge shows only when the deployment has plans on (#1389).
+  const plansEnabled = useFeatureFlag("plans")
   const memberSince = user?.created_at
     ? formatDate(user.created_at, { style: "long" })
     : t("settings:account.memberSinceUnknown")
@@ -314,9 +317,15 @@ function AccountSection() {
           <div className="min-w-0 flex-1">
             <p className="truncate font-semibold">{user?.name ?? "—"}</p>
             <p className="truncate text-sm text-muted-foreground">{user?.email ?? "—"}</p>
-            <Badge variant="secondary" className="mt-1 text-xs">
-              {t("settings:profile.planFree")}
-            </Badge>
+            {plansEnabled ? (
+              <Badge
+                variant="secondary"
+                className="mt-1 text-xs"
+                data-testid="settings-account-plan-badge"
+              >
+                {t("settings:profile.planFree")}
+              </Badge>
+            ) : null}
           </div>
           <Button asChild variant="outline" size="sm">
             <Link

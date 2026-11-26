@@ -104,7 +104,7 @@ func (s *AsyncEmailService) Start(ctx context.Context) {
 		s.runRetryPromoter(ctx)
 	})
 
-	slog.Info("Email service workers started",
+	slog.InfoContext(ctx, "Email service workers started",
 		"workers", s.workers,
 		"max_retries", s.maxRetries,
 	)
@@ -364,7 +364,7 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 			if isContextShutdownError(err) {
 				return
 			}
-			slog.Error("Email worker dequeue failed", "worker_id", workerID, "error", err)
+			slog.ErrorContext(ctx, "Email worker dequeue failed", "worker_id", workerID, "error", err)
 			continue
 		}
 		if payload == nil {
@@ -373,7 +373,7 @@ func (s *AsyncEmailService) runWorker(ctx context.Context, workerID int) {
 
 		var job emailJob
 		if err := json.Unmarshal(payload, &job); err != nil {
-			slog.Error("Email worker failed to decode job payload; dropping job",
+			slog.ErrorContext(ctx, "Email worker failed to decode job payload; dropping job",
 				"worker_id", workerID,
 				"error", err,
 			)
@@ -394,7 +394,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 		// it as failed like the other drop paths below (retries exhausted,
 		// marshal error, ScheduleRetry error) — otherwise it undercounts.
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Email template rendering failed; dropping job",
+		slog.ErrorContext(ctx, "Email template rendering failed; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,
 			"template", job.TemplateType,
@@ -431,7 +431,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	metrics.ObserveEmailSend(time.Since(sendStart))
 	if err == nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusSent)
-		slog.Debug("Email sent",
+		slog.DebugContext(ctx, "Email sent",
 			"worker_id", workerID,
 			"job_id", job.ID,
 			"template", job.TemplateType,
@@ -443,7 +443,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	nextAttempt := job.Attempt + 1
 	if nextAttempt > s.maxRetries {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Email delivery failed after retries; dropping job",
+		slog.ErrorContext(ctx, "Email delivery failed after retries; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,
 			"template", job.TemplateType,
@@ -460,7 +460,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	retryPayload, marshalErr := json.Marshal(job)
 	if marshalErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Failed to encode email retry payload; dropping job",
+		slog.ErrorContext(ctx, "Failed to encode email retry payload; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,
 			"template", job.TemplateType,
@@ -474,7 +474,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 
 	if retryErr := s.queue.ScheduleRetry(ctx, retryPayload, readyAt); retryErr != nil {
 		metrics.RecordEmailProcessed(metrics.EmailStatusFailed)
-		slog.Error("Failed to schedule email retry; dropping job",
+		slog.ErrorContext(ctx, "Failed to schedule email retry; dropping job",
 			"worker_id", workerID,
 			"job_id", job.ID,
 			"template", job.TemplateType,
@@ -487,7 +487,7 @@ func (s *AsyncEmailService) processJob(ctx context.Context, job emailJob, worker
 	}
 
 	metrics.RecordEmailProcessed(metrics.EmailStatusRetried)
-	slog.Warn("Email delivery failed; retry scheduled",
+	slog.WarnContext(ctx, "Email delivery failed; retry scheduled",
 		"worker_id", workerID,
 		"job_id", job.ID,
 		"template", job.TemplateType,
@@ -529,11 +529,11 @@ func (s *AsyncEmailService) runRetryPromoter(ctx context.Context) {
 				if isContextShutdownError(err) {
 					return
 				}
-				slog.Error("Failed to promote due email retries", "error", err)
+				slog.ErrorContext(ctx, "Failed to promote due email retries", "error", err)
 				continue
 			}
 			if moved > 0 {
-				slog.Debug("Promoted due retry emails", "count", moved)
+				slog.DebugContext(ctx, "Promoted due retry emails", "count", moved)
 			}
 
 			// Reuse the existing ticker to refresh the queue-depth
@@ -543,7 +543,7 @@ func (s *AsyncEmailService) runRetryPromoter(ctx context.Context) {
 				if isContextShutdownError(depthErr) {
 					return
 				}
-				slog.Debug("Failed to read email queue depth", "error", depthErr)
+				slog.DebugContext(ctx, "Failed to read email queue depth", "error", depthErr)
 			} else {
 				metrics.SetEmailQueueDepth(depth)
 			}

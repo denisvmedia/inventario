@@ -733,7 +733,7 @@ func reconcileBlockTargetDrift(ctx context.Context, registrySet *registry.Set, u
 
 // createTestUsers creates test users.
 func createTestUsers(ctx context.Context, registrySet *registry.Set, tenant *models.Tenant, existingUser2 *models.User) (primary *models.User, secondary *models.User, err error) {
-	slog.Info("Creating test users", "tenant", tenant.Slug)
+	slog.InfoContext(ctx, "Creating test users", "tenant", tenant.Slug)
 
 	testUser1 := models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{

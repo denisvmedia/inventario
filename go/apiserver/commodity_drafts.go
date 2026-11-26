@@ -346,7 +346,7 @@ func (s staleDiscards) finish(r *http.Request) {
 	}
 	canWrite, _, err := s.groups.HasRoleAtLeast(r.Context(), group.ID, user.ID, models.GroupRoleUser)
 	if err != nil {
-		slog.Error("Failed to check the role for finishing stopped draft discards", "group_id", group.ID, "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to check the role for finishing stopped draft discards", "group_id", group.ID, "user_id", user.ID, "error", err)
 		return
 	}
 	if !canWrite {
@@ -354,10 +354,10 @@ func (s staleDiscards) finish(r *http.Request) {
 	}
 	finished, err := s.drafts.FinishStaleDiscards(context.WithoutCancel(r.Context()))
 	if err != nil {
-		slog.Error("Failed to finish stopped draft discards", "group_id", group.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to finish stopped draft discards", "group_id", group.ID, "error", err)
 	}
 	if finished > 0 {
-		slog.Info("Finished stopped draft discards", "group_id", group.ID, "count", finished)
+		slog.InfoContext(r.Context(), "Finished stopped draft discards", "group_id", group.ID, "count", finished)
 	}
 }
 

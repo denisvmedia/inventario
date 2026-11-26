@@ -475,6 +475,29 @@ when to add an entry and where it goes.
 
 ### Changed
 
+- Subscription plans are hidden. The feature is on hold, so the profile and
+  Preferences pages show no "Free plan" badge or Upgrade link, `/plans`
+  redirects to the group home, the group settings card is titled **Usage**
+  and shows the group's items, locations and file storage without limits,
+  and the admin tenant page has no Plan tile. `GET /g/{slug}/plan` reports
+  the unlimited plan whatever the tenant's `plan_id` is. No plan limit was
+  enforced before and none is now; the group storage quota does not depend
+  on plans. The server's operator can show plans again (see Operators)
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
+- **Add item** uploads the item's files to its draft before it creates the item,
+  and the dialog stays open while it runs; leaving the page during the uploads
+  stops them after the file in progress, and no item is created. Each file shows
+  whether it is uploading, uploaded or failed, and the button counts the
+  uploads. A failed upload creates no item: the dialog names the file and keeps
+  the form, and **Retry** uploads only the files still missing before it creates
+  the item. On a saved draft, a failed **Add item** leaves the draft's values as
+  they were saved. Each staged file has an editable title, the file name without
+  its extension by default. **Discard** in the Add item dialog, and closing the
+  batch intake dialog before its batch is queued, move the files they uploaded
+  to the Trash instead of leaving them as standalone files; **Discard** keeps a
+  draft the user saved since
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
   a cover set that way before shows the first photo instead. The No photo
@@ -540,6 +563,16 @@ when to add an entry and where it goes.
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 ### Fixed
+
+- A file added with tags in the Add item dialog keeps its title. The dialog
+  set the tags with `PUT /files/{id}`, which replaces the title as well, and
+  sent no title, so the file had none
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
+- A file title may have 255 characters in any language. The server counted
+  the limit in UTF-8 bytes, so a Czech or Russian title of more than about
+  127 letters was refused with 422
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - Settings saved on the server show up in the app again. The settings
   endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
@@ -626,6 +659,12 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
+  `features.plans`, Compose `ENABLE_PLANS` in `.env`) shows the subscription
+  plan surfaces that are now hidden by default. It is off by default, and
+  `GET /feature-flags` reports it as `plans`. With it on,
+  `GET /g/{slug}/plan` reports the tenant's plan again
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - The upgrade runs two more database migrations. One adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run the previous version fail every read of a group until
@@ -690,6 +729,19 @@ when to add an entry and where it goes.
   stored under `avatars/` keep working. A bucket lifecycle rule that matches
   `avatars/` needs the new prefix too
   ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- Every API response carries an `X-Request-ID` header, and the log lines the
+  server writes while handling that request carry the same value in a
+  `request_id` field (a top-level key with `INVENTARIO_LOG_FORMAT=json`), so
+  the id of a failed request finds its lines. The access log prints the same
+  id, and `audit_logs.request_id` stores it. An `X-Request-ID` sent by a proxy
+  or a client is kept when it is at most 128 characters of letters, digits and
+  `-_.:/+=`; any other value, and a missing header, gets a generated UUID.
+  Before, the server returned no header, printed any client value in the
+  access log as sent, and generated ids in chi's
+  `<hostname>/<random>-000001` form, which named the pod. CORS exposes the
+  header to the frontend. The conventions behind the field are in the new
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

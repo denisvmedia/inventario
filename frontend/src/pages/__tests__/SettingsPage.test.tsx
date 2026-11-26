@@ -18,6 +18,7 @@ import {
   type OnboardingTourControls,
 } from "@/hooks/useOnboardingTourControls"
 import { renderWithProviders } from "@/test/render"
+import { featureFlagHandlers } from "@/test/handlers"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -158,6 +159,25 @@ describe("<SettingsPage />", () => {
     renderSettings()
     expect(await screen.findByTestId("section-account")).toBeInTheDocument()
     expect(screen.queryByTestId("section-appearance")).not.toBeInTheDocument()
+  })
+
+  // #1389: the Free plan badge on the account card shows only when the
+  // deployment has plans on; the flag is off by default.
+  it("hides the plan badge on the account card when plans are off", async () => {
+    server.use(...featureFlagHandlers.set({ plans: false }), ...baseHandlers)
+    const { queryClient } = renderSettings()
+    expect(await screen.findByTestId("section-account")).toBeInTheDocument()
+    await waitFor(() =>
+      expect(queryClient.getQueryState(["feature-flags"])?.status).toBe("success")
+    )
+    expect(screen.queryByTestId("settings-account-plan-badge")).not.toBeInTheDocument()
+    expect(screen.queryByText("Free plan")).not.toBeInTheDocument()
+  })
+
+  it("shows the plan badge on the account card when plans are on", async () => {
+    server.use(...featureFlagHandlers.set({ plans: true }), ...baseHandlers)
+    renderSettings()
+    expect(await screen.findByTestId("settings-account-plan-badge")).toHaveTextContent("Free plan")
   })
 
   it("appearance section shows theme/density/locale controls", async () => {

@@ -2,6 +2,7 @@ import { setupServer } from "msw/node"
 
 import { defaults as customFieldDefaults } from "./handlers/customFields"
 import { defaults as dataExportDefaults } from "./handlers/dataExports"
+import { defaults as featureFlagDefaults } from "./handlers/featureFlags"
 import { documentDefaults as intakeDocumentDefaults } from "./handlers/intake"
 import { defaults as itemTypeDefaults } from "./handlers/itemTypes"
 
@@ -17,9 +18,12 @@ import { defaults as itemTypeDefaults } from "./handlers/itemTypes"
 // item came from (#2809), and the default answers that none did. GET
 // /users/me/data-exports is the fourth: Account settings lists the user's
 // personal data exports (#2177), and the default answers that there are none.
+// /feature-flags is the fifth: GroupProvider reads the plans flag (#1389),
+// and the default answers with every flag off.
 export const server = setupServer(
   ...itemTypeDefaults(),
   ...customFieldDefaults(),
   ...intakeDocumentDefaults(),
-  ...dataExportDefaults()
+  ...dataExportDefaults(),
+  ...featureFlagDefaults()
 )

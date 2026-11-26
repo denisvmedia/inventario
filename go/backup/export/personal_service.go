@@ -271,7 +271,7 @@ func (s *PersonalDataExportService) Process(ctx context.Context, id string) erro
 	if s.notifier != nil {
 		if err := s.notifier.PersonalDataExportReady(ctx, user, updated); err != nil {
 			// The archive is listed in Account settings either way.
-			slog.Warn("Failed to tell the user their personal data export is ready", "export_id", export.ID, "error", err)
+			slog.WarnContext(ctx, "Failed to tell the user their personal data export is ready", "export_id", export.ID, "error", err)
 		}
 	}
 	return nil
@@ -296,7 +296,7 @@ func (s *PersonalDataExportService) build(ctx context.Context, user *models.User
 	for attempt := 1; ; attempt++ {
 		size, stats, err := s.buildOnce(ctx, bucket, user, export, key)
 		if errors.Is(err, errPersonalFileVanished) && attempt < personalBuildAttempts {
-			slog.Info("A file was deleted during a personal data export build, starting over",
+			slog.InfoContext(ctx, "A file was deleted during a personal data export build, starting over",
 				"export_id", export.ID, "attempt", attempt, "error", err)
 			continue
 		}
