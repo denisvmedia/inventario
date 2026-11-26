@@ -18,20 +18,24 @@ when to add an entry and where it goes.
   a copy of the caller's own data: their profile, settings and group
   memberships, and in each group the items, files with their bytes, loans,
   maintenance schedules, service records, reminders, supply links, open
-  drafts, saved views and history entries they created. An item's location,
-  area and seller are given by name; other members appear only as ids, never
-  by name or email. The archive is a plain `tar.gz` of JSON documents and
-  files whose manifest has kind `personal_data_export`; it is not a group
-  backup, and the restore upload refuses one with 422
+  drafts, saved views and history entries they created. A history entry
+  holds only the fields it changed, with the values it set. An item's
+  location, area, seller, type and tags are given by name; other members
+  appear only as ids, never by name or email. A file whose bytes are no
+  longer in storage is listed as missing. The archive is a plain `tar.gz` of
+  JSON documents and files whose manifest has kind `personal_data_export`; it
+  is not a group backup, and the restore upload refuses one with 422
   `restore.personal_data_export`. The export worker builds it in the
-  background and emails the user when it is ready. One request is allowed per
+  background and emails the user when it is ready; a build cut short by a
+  restart is queued again and built once more. One request is allowed per
   day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
   archive is deleted after 7 days or with the account, only its owner can
   list and download it, an impersonation session can neither request nor
   download one, and each request and download is recorded in the audit log.
   `GET /users/me/data-exports` lists the exports and when the next request is
   allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
-  download link
+  download link that works only in the browser session that asked for it
+  (403 `data_export.session_required` without the session cookie)
   ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
