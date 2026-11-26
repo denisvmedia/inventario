@@ -129,8 +129,9 @@ type LocationGroupAttributes struct {
 	// CollectionSet, on create, adds the Collection set to the new group
 	// (#1607): its item types and custom fields, as POST
 	// /groups/{groupID}/collection-set does. It is not stored; the response
-	// meta says whether the set was added. Create only.
-	CollectionSet bool `json:"collection_set,omitempty"`
+	// meta says whether the set was added. Create only: an update with the
+	// attribute, true or false, is refused.
+	CollectionSet *bool `json:"collection_set,omitempty"`
 }
 
 type LocationGroupData struct {
@@ -166,7 +167,7 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 		validation.Field(&la.Description, validation.Length(0, 200)),
 		validation.Field(&la.HiddenSections),
 		validation.Field(&la.CollectionSet, validation.When(httpMethod != http.MethodPost,
-			validation.Empty.ErrorObject(validation.NewError("validation_create_only",
+			validation.Nil.ErrorObject(validation.NewError("validation_create_only",
 				"collection_set is accepted on create only; use /groups/{groupID}/collection-set")))),
 	)
 }

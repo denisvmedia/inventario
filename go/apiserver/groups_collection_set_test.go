@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,12 +59,15 @@ func removableIDs(view jsonapi.ItemSetView) (typeIDs, fieldIDs []string) {
 }
 
 // flakyFieldFactory hands out custom field registries that fail: Create
-// once createsLeft creates are spent (negative: never), and AddTemplates
-// with ErrNotFound while notFoundLeft lasts, as when a remove deletes the
-// field under an add.
+// once createsLeft creates are spent (negative: never), Create with
+// ErrAlreadyExists and nothing created while existsLeft lasts, as when a
+// field of the name is created and deleted again by someone else, and
+// AddTemplates with ErrNotFound while notFoundLeft lasts, as when a remove
+// deletes the field under an add.
 type flakyFieldFactory struct {
 	registry.CustomFieldRegistryFactory
 	createsLeft  int
+	existsLeft   int
 	notFoundLeft int
 }
 
@@ -83,6 +87,10 @@ type flakyFields struct {
 func (r *flakyFields) Create(ctx context.Context, def models.CustomFieldDefinition) (*models.CustomFieldDefinition, error) {
 	if r.f.createsLeft == 0 {
 		return nil, registry.ErrResourceLimitExceeded
+	}
+	if r.f.existsLeft > 0 {
+		r.f.existsLeft--
+		return nil, errxtrace.Wrap("custom field name is taken", registry.ErrAlreadyExists)
 	}
 	if r.f.createsLeft > 0 {
 		r.f.createsLeft--
@@ -296,6 +304,21 @@ func TestGroupsAPI_CollectionSet_AddRetriesWhenRowsChangeUnderIt(t *testing.T) {
 	c.Check(w.Body.String(), checkers.JSONPathEquals("$.errors[0].code"), "item_set.changed")
 }
 
+// A field the add finds taken by name, but gone when it looks it up, makes
+// the add run once more instead of failing.
+func TestGroupsAPI_CollectionSet_AddRetriesWhenATakenNameIsGone(t *testing.T) {
+	c := qt.New(t)
+	env := newGroupTestEnv(t, models.Currency("USD"))
+	flaky(env).existsLeft = 1
+
+	w := collectionSetRequest(env, http.MethodPost)
+	c.Assert(w.Code, qt.Equals, http.StatusOK, qt.Commentf("body: %s", w.Body.String()))
+	resp := decodeItemSet(c, w)
+	c.Check(resp.Data.Attributes.Complete, qt.IsTrue)
+	c.Check(resp.Meta.CreatedItemTypes, qt.Equals, len(models.CollectionSet.ItemTypes))
+	c.Check(resp.Meta.CreatedCustomFields, qt.Equals, len(models.CollectionSet.Fields))
+}
+
 // Every member sees the set with the group; only an admin or owner adds or
 // removes it.
 func TestGroupsAPI_CollectionSet_AdminOnly(t *testing.T) {
@@ -424,13 +447,17 @@ func TestGroupsAPI_CreateGroup_WithoutCollectionSet(t *testing.T) {
 }
 
 func TestGroupsAPI_UpdateGroup_RefusesCollectionSet(t *testing.T) {
-	c := qt.New(t)
-	env := newGroupTestEnv(t, models.Currency("USD"))
+	for _, value := range []bool{true, false} {
+		t.Run(fmt.Sprint(value), func(t *testing.T) {
+			c := qt.New(t)
+			env := newGroupTestEnv(t, models.Currency("USD"))
 
-	w := patchGroup(t, env, map[string]any{"name": "Renamed", "collection_set": true})
-	c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", w.Body.String()))
-	c.Check(w.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.attributes.collection_set.code"), "validation_create_only")
+			w := patchGroup(t, env, map[string]any{"name": "Renamed", "collection_set": value})
+			c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", w.Body.String()))
+			c.Check(w.Body.String(), checkers.JSONPathEquals("$.errors[0].error.errorCodes.attributes.collection_set.code"), "validation_create_only")
 
-	stored := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
-	c.Check(stored.Name, qt.Equals, "Test Group")
+			stored := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
+			c.Check(stored.Name, qt.Equals, "Test Group")
+		})
+	}
 }

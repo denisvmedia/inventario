@@ -494,7 +494,7 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	resp := jsonapi.NewLocationGroupResponse(group).WithStatusCode(http.StatusCreated)
-	if attrs.CollectionSet {
+	if attrs.CollectionSet != nil && *attrs.CollectionSet {
 		resp.Meta = &jsonapi.LocationGroupCreateMeta{CollectionSet: api.addCollectionSetToNewGroup(r, group)}
 	}
 	if err := render.Render(w, r, resp); err != nil {
