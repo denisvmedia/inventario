@@ -3,8 +3,8 @@
 # Why this exists:
 #   Before this, the only way to reach the ArgoCD UI from a tailnet member
 #   was `kubectl port-forward svc/argocd-server -n argocd 8080:80`, which
-#   requires the kubeconfig (and a chain of TLS overrides — see #1892's
-#   "vcluster kubeconfig" history). This Ingress hands the Tailscale Operator
+#   requires the kubeconfig (and, before #1892, a chain of TLS overrides).
+#   This Ingress hands the Tailscale Operator
 #   a hostname (`argocd-inv-vcl01`) to provision a tailnet device for, with a
 #   TS-issued Let's Encrypt cert; tailnet members can then bookmark
 #   `https://argocd-inv-vcl01.<tailnet>.ts.net/` without going through kubectl.

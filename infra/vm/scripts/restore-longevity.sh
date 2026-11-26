@@ -32,8 +32,8 @@ NS=inv-vcl01-longevity
 # `sudo env KUBECONFIG=...` (not a bare `sudo kubectl`) so the in-cluster
 # kubeconfig is passed explicitly regardless of root's default env — robust
 # against sudo's env_reset. velero defaults to the `velero` namespace.
-REMOTE_KUBECTL="sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml /usr/local/bin/kubectl"
-REMOTE_VELERO="sudo env KUBECONFIG=/var/lib/vcluster/kubeconfig.yaml /usr/local/bin/velero"
+REMOTE_KUBECTL="sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml /usr/local/bin/kubectl"
+REMOTE_VELERO="sudo env KUBECONFIG=/etc/rancher/k3s/k3s.yaml /usr/local/bin/velero"
 
 note() { printf '\n==> %s\n' "$*" >&2; }
 warn() { printf '\n[!] %s\n' "$*" >&2; }

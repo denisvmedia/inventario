@@ -6,7 +6,7 @@
 # does not need VM.
 #
 # Required laptop tools: ssh, scp, sops, age. Helm/kubectl are nice-to-have
-# (the installer ships them on the VM via vcluster standalone).
+# (k3s brings kubectl to the VM, and vm-install.sh installs a pinned helm).
 #
 # See infra/README.md for the operating guide.
 
@@ -19,7 +19,7 @@ SHELL := /bin/bash
 THIS_DIR := $(dir $(abspath $(lastword $(MAKEFILE_LIST))))
 
 VM ?=
-SVC ?= vcluster.service
+SVC ?= k3s.service
 
 REQUIRE_VM = @[ -n "$(VM)" ] || { echo "ERROR: VM is required, e.g. make $@ VM=user@host" >&2; exit 1; }
 
@@ -29,12 +29,12 @@ help:
 	@echo "Inventario preview-env infra targets (VM=user@host required except preflight)"
 	@echo ""
 	@echo "  bootstrap    Bring a clean Ubuntu 26.04 VM up to a working preview-env host."
-	@echo "  upgrade      Re-run bootstrap; idempotent. Use for vcluster/argocd version bumps."
+	@echo "  upgrade      Re-run bootstrap; idempotent. Use for k3s/argocd version bumps."
 	@echo "  recover      Alias for bootstrap; intended after total VM loss + 'ssh-copy-id'."
-	@echo "  destroy      Stop services and remove vcluster data dir. Tailnet membership preserved."
+	@echo "  destroy      Uninstall k3s and remove its data. Tailnet membership preserved."
 	@echo "  restore-longevity  Interactive Velero restore of inv-vcl01-longevity from an R2 backup (#1865)."
-	@echo "  status       Show vcluster+tailscaled state and kubectl get nodes,pods -A."
-	@echo "  logs         Tail journalctl for SVC (default: vcluster.service)."
+	@echo "  status       Show k3s+tailscaled state and kubectl get nodes,pods -A."
+	@echo "  logs         Tail journalctl for SVC (default: k3s.service)."
 	@echo "               Example: make logs VM=... SVC=tailscaled.service"
 	@echo "  shell        ssh into the VM."
 	@echo ""
@@ -76,7 +76,7 @@ status:
 	$(REQUIRE_VM)
 	@ssh "$(VM)" 'set -e; \
 	  printf "\n=== systemd units ===\n"; \
-	  systemctl is-active vcluster.service tailscaled.service || true; \
+	  systemctl is-active k3s.service tailscaled.service || true; \
 	  printf "\n=== tailscale ===\n"; \
 	  tailscale status --self=true --peers=false 2>/dev/null || true; \
 	  printf "\n=== kubectl get nodes ===\n"; \

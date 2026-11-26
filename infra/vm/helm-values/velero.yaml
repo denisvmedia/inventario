@@ -31,7 +31,7 @@ initContainers:
         name: plugins
 
 # File System Backup (kopia) is the ONLY viable data-backup path on this
-# single-node vcluster: its local-path PVCs have no CSI VolumeSnapshotClass, so
+# single-node k3s: its local-path PVCs have no CSI VolumeSnapshotClass, so
 # block/volume *snapshots* are impossible. The node-agent DaemonSet walks each
 # pod's volumes on the node and streams their contents into the kopia repo in
 # R2 instead. Required for the demo Postgres data dir + demo MinIO object store

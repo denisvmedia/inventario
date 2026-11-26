@@ -127,7 +127,7 @@ nodes for each Service/Ingress AND to bootstrap its own tailnet identity.
 
 1. Open <https://login.tailscale.com/admin/settings/oauth>
 2. Click **Generate OAuth client**.
-3. **Description**: `inventario-vcluster-operator`
+3. **Description**: `inventario-preview-operator`
 4. **Scopes** — tick BOTH (one alone is not enough):
    - **Devices → Core → Write** (Read is implied; operator creates ephemeral
      proxy devices).
@@ -295,8 +295,8 @@ Stash all three for "Filling the bundle".
 
 ### 5. Optional: Tailscale auth-key (for `make recover` on a fresh VM)
 
-vcluster-dev is already authenticated to your tailnet, so `make bootstrap`
-on this VM doesn't need an auth-key. But for the disaster-recovery scenario
+A VM that is already on your tailnet doesn't need an auth-key for
+`make bootstrap`. But for the disaster-recovery scenario
 (VM totally gone → spin up new VM → `make recover`), you'll need a reusable
 auth-key so `tailscale up` on the fresh VM can join the tailnet headless.
 
