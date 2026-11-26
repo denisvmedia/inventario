@@ -21661,6 +21661,10 @@ const docTemplate = `{
                 },
                 "theme": {
                     "type": "string"
+                },
+                "whatsNewLastSeenVersion": {
+                    "description": "WhatsNewLastSeenVersion is the newest release the user has seen on the\nWhat's new page. The app shows an unread dot while the build carries a\nnewer release, and writes the build's newest release here when the\npage opens. Kept on the server so it follows the user across devices.",
+                    "type": "string"
                 }
             }
         },
