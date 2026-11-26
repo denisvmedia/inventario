@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { Route } from "react-router-dom"
 import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { http, HttpResponse } from "msw"
 
 import { CommodityDetailPage } from "@/pages/commodities/CommodityDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
@@ -10,6 +11,7 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import {
+  apiUrl,
   areaHandlers,
   commodityHandlers,
   groupHandlers,
@@ -199,5 +201,85 @@ describe("<CommodityDetailPage /> in a group that hides sections (#1607)", () =>
     expect(screen.queryByTestId("maintenance-add")).not.toBeInTheDocument()
     // The item has no service record, so that tab stays out.
     expect(screen.queryByTestId("commodity-detail-tab-service")).not.toBeInTheDocument()
+  })
+
+  it("keeps the tab a link opens while its data loads", async () => {
+    let release = () => {}
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    serve(["loans"])
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/commodities/${ID}/loans`), async () => {
+        await gate
+        return HttpResponse.json({
+          data: [
+            {
+              id: "l1",
+              commodity_id: ID,
+              borrower_name: "Pavel",
+              lent_at: "2026-05-10",
+              due_back_at: null,
+              returned_at: null,
+            },
+          ],
+          meta: { loans: 1, total: 1 },
+        })
+      })
+    )
+    renderDetail("?tab=lend")
+    const lendTab = await screen.findByTestId("commodity-detail-tab-lend")
+    expect(lendTab).toHaveAttribute("aria-selected", "true")
+    expect(screen.queryByTestId("commodity-detail-details")).not.toBeInTheDocument()
+
+    release()
+    expect(await screen.findByTestId("lend-current")).toHaveTextContent("Pavel")
+    expect(screen.getByTestId("commodity-detail-tab-lend")).toHaveAttribute("aria-selected", "true")
+  })
+
+  it("keeps the tabs whose data could not be read", async () => {
+    serve(["loans", "maintenance"])
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/commodities/${ID}/loans`), () =>
+        HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      ),
+      http.get(apiUrl(`/g/${SLUG}/commodities/${ID}/maintenance`), () =>
+        HttpResponse.json({ errors: [{ status: "500" }] }, { status: 500 })
+      )
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-details")
+    // The service records loaded empty, so that tab goes; the others stay.
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodity-detail-tab-service")).not.toBeInTheDocument()
+    )
+    expect(screen.getByTestId("commodity-detail-tab-lend")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-tab-maintenance")).toBeInTheDocument()
+  })
+
+  it("still shows the service records an item has, without Send for service", async () => {
+    const user = userEvent.setup()
+    serve(
+      ["maintenance"],
+      {},
+      {
+        services: [
+          {
+            id: "svc-1",
+            commodity_id: ID,
+            provider_name: "Tool repair shop",
+            sent_at: "2026-03-01",
+            returned_at: "2026-03-10",
+          },
+        ],
+      }
+    )
+    renderDetail()
+    await screen.findByTestId("commodity-detail-details")
+    await user.click(await screen.findByTestId("commodity-detail-tab-service"))
+    expect(await screen.findByTestId("service-history-row-svc-1")).toHaveTextContent(
+      "Tool repair shop"
+    )
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
   })
 })

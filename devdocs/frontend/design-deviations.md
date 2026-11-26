@@ -48,7 +48,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 - **Issue/PR**: #1607
 - **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) always has the Warranty step; [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) always has the Warranty tab (L771); [`design-mocks/src/components/WarrantyBadge.tsx`](../../design-mocks/src/components/WarrantyBadge.tsx) shows "No warranty" for an item without one.
-- **Reality**: While the group hides warranties, the Add item / edit dialog leaves out the Warranty step (the stepper and the "Step N of M" counter count one step fewer) and the in-place edit form leaves out the Warranty section, unless the item already holds a warranty date or notes. The item page leaves out the Warranty, Lend, Service and Maintenance tabs of hidden sections when the item has no data in them, and opens Details for a link to such a tab; when the item has data, the tab stays and shows it, without the button that starts a new loan, service visit or schedule. The "No warranty" badge goes; a badge for a warranty the item has stays.
+- **Reality**: While the group hides warranties, the Add item / edit dialog leaves out the Warranty step (the stepper and the "Step N of M" counter count one step fewer) and the in-place edit form leaves out the Warranty section, unless the item already holds a warranty date or notes. The item page leaves out the Warranty, Lend, Service and Maintenance tabs of hidden sections once it has read the item's data and found none in them, and then opens Details for a link to such a tab; while the data loads, or when it cannot be read, the tab stays; when the item has data, the tab stays and shows it, without the button that starts a new loan, service visit or schedule. The "No warranty" badge goes; a badge for a warranty the item has stays.
 - **Why**: The owner decision removes a hidden section from the item form and the item's actions while existing data still shows. Hiding the "No warranty" badge is agent-suggested.
 - **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the "No warranty" badge agent-suggested, listed in the PR for the owner.
 - **Reversion plan**: Permanent while sections can be hidden.
@@ -575,6 +575,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage on the card.
 
 ### Locations & Areas
+
+#### 2026-11-26 — Area and location pages leave out warranty counts while the group hides warranties
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has three stat cells, Items, Active warranties and Value, in a `grid-cols-3` strip (L204–L207). The area tiles of [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) show an "expiring" badge when an area holds items whose warranty expires soon (L617–L633).
+- **Reality**: While the group hides warranties, the area page's stat strip has two cells, Items and Value, in a `grid-cols-2` strip, and the location page's area tiles show no expiring-warranty badge.
+- **Why**: The owner decision removes a hidden section from the group's pages; a warranty count is a warranty surface.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-24 — Area header: Print labels menu
 

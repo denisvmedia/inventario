@@ -232,6 +232,22 @@ interface CommodityFormDialogProps {
 // step 1 (Basics). Edit mode skips "ai" entirely.
 const FORM_STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
 type FormStepKey = (typeof FORM_STEPS)[number]
+const FORM_STEPS_WITHOUT_WARRANTY: readonly FormStepKey[] = FORM_STEPS.filter(
+  (s) => s !== "warranty"
+)
+
+// formStepsFor returns the form steps, without Warranty for a group that
+// hides warranties (#1607) and a form that holds none.
+function formStepsFor(withWarranty: boolean): readonly FormStepKey[] {
+  return withWarranty ? FORM_STEPS : FORM_STEPS_WITHOUT_WARRANTY
+}
+
+function holdsWarranty(values: {
+  warranty_expires_at?: string | null
+  warranty_notes?: string | null
+}): boolean {
+  return !!values.warranty_expires_at?.trim() || !!values.warranty_notes?.trim()
+}
 type StepKey = "ai" | FormStepKey
 
 // Per-step field allow-list — used by the Next button to validate only
@@ -353,16 +369,6 @@ export function CommodityFormDialog({
   const resumeId = serverMode ? (resumeDraftId ?? null) : null
   const initialStep: StepKey = mode === "create" && enableAiScan && !resumeId ? "ai" : "basics"
   const [step, setStep] = useState<StepKey>(initialStep)
-  // A group that hides warranties (#1607) leaves the Warranty step out,
-  // unless the item already holds a warranty. The warranty fields stay in
-  // the form values either way, so saving keeps what the item holds.
-  const showWarranties = useSectionVisible("warranties")
-  const holdsWarranty = !!initialValues?.warranty_expires_at || !!initialValues?.warranty_notes
-  const formSteps = useMemo<readonly FormStepKey[]>(
-    () =>
-      showWarranties || holdsWarranty ? FORM_STEPS : FORM_STEPS.filter((s) => s !== "warranty"),
-    [showWarranties, holdsWarranty]
-  )
   // Tracks which form steps the user has already landed on, so the
   // segmented stepper bar lets them click back-and-forth between
   // already-seen surfaces without forcing a strict forward walk.
@@ -501,13 +507,29 @@ export function CommodityFormDialog({
   // Draft mode: the "Save as draft" switch is on in a form that saves to
   // the server. Save draft is then offered on every step.
   const draftMode = serverMode && !!watch("draft")
+  // A group that hides warranties (#1607) leaves the Warranty step out
+  // while the form holds no warranty. A warranty the item has, one a
+  // resumed or restored draft brings and one typed in all keep the step,
+  // and once this opening of the dialog has held one the step stays, so
+  // clearing the date does not take the step away. The warranty fields
+  // stay in the form values either way, so saving keeps what they hold.
+  const showWarranties = useSectionVisible("warranties")
+  const [warrantySeen, setWarrantySeen] = useState(false)
+  const formSteps = formStepsFor(
+    showWarranties ||
+      warrantySeen ||
+      holdsWarranty({
+        warranty_expires_at: watch("warranty_expires_at"),
+        warranty_notes: watch("warranty_notes"),
+      })
+  )
 
   // The step a resumed draft opens on, checked against the schema as it is
   // when the draft opens. The schema follows the group's custom fields, and
   // their arrival or a refetch must not run the reset below again: that
   // would send the form back to its first step and drop the input.
   const resumeStepOf = useEffectEvent((values: CommodityFormInput, base: CommodityFormInput) =>
-    resumeStep(schema, values, base, formSteps)
+    resumeStep(schema, values, base, formStepsFor(showWarranties || holdsWarranty(values)))
   )
 
   // Reset to defaults whenever the dialog opens. In create mode we try
@@ -545,6 +567,7 @@ export function CommodityFormDialog({
       }
     }
     reset(starting)
+    setWarrantySeen(holdsWarranty(starting))
     carryFromRef.current = null
     shortNameEdited.current =
       mode === "edit" ||
@@ -647,6 +670,16 @@ export function CommodityFormDialog({
     if (!open || resumeId) return
     setVisitedSteps(new Set(openingVisitedSteps))
   }, [open, openingVisitedSteps, resumeId])
+
+  // Keep the Warranty step for the rest of this opening once the form has
+  // held a warranty (see showWarranties above).
+  useEffect(() => {
+    if (!open) return
+    const subscription = watch((values) => {
+      if (holdsWarranty(values)) setWarrantySeen(true)
+    })
+    return () => subscription.unsubscribe()
+  }, [open, watch])
 
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
@@ -1137,7 +1170,8 @@ export function CommodityFormDialog({
         setScannedSeller(values.seller)
       }
     }
-    if (values.warranty_expires_at !== undefined) {
+    // A group that hides warranties gets no warranty from a scan (#1607).
+    if (showWarranties && values.warranty_expires_at !== undefined) {
       apply("warranty_expires_at", values.warranty_expires_at)
     }
     if (values.original_price !== undefined) apply("original_price", values.original_price)
@@ -1458,6 +1492,7 @@ export function CommodityFormDialog({
                 onAccept={handleAiAccept}
                 onSkip={() => setStep("basics")}
                 anonymous={anonymous}
+                omitWarranty={!showWarranties}
               />
             ) : null}
             {!resumeLoading && step === "basics" ? (

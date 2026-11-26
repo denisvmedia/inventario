@@ -496,7 +496,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // data for it: an item with a warranty, a loan, a service record or a
   // maintenance schedule keeps the tab and shows that data, without the
   // action that starts a new one. The lists are read only while the
-  // section is hidden; the tabs read them anyway once opened.
+  // section is hidden; the tabs read them anyway once opened. A tab goes
+  // only once its data has loaded and holds nothing, so a link to the tab
+  // does not fall back to Details while the data loads, and a failed read
+  // does not hide data the item may have.
   const showWarranties = useSectionVisible("warranties")
   const showLoans = useSectionVisible("loans")
   const showMaintenance = useSectionVisible("maintenance")
@@ -506,12 +509,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     enabled: enabled && !showMaintenance,
   })
   const hiddenTabs = new Set<TabKey>()
-  if (!showWarranties && !commodity?.warranty_expires_at && !commodity?.warranty_notes) {
+  if (!showWarranties && commodity && !commodity.warranty_expires_at && !commodity.warranty_notes) {
     hiddenTabs.add("warranty")
   }
-  if (!showLoans && !heldLoans.data?.loans.length) hiddenTabs.add("lend")
-  if (!showMaintenance && !heldServices.data?.services.length) hiddenTabs.add("service")
-  if (!showMaintenance && !heldSchedules.data?.schedules.length) hiddenTabs.add("maintenance")
+  if (!showLoans && heldLoans.isSuccess && heldLoans.data.loans.length === 0) {
+    hiddenTabs.add("lend")
+  }
+  if (!showMaintenance && heldServices.isSuccess && heldServices.data.services.length === 0) {
+    hiddenTabs.add("service")
+  }
+  if (!showMaintenance && heldSchedules.isSuccess && heldSchedules.data.schedules.length === 0) {
+    hiddenTabs.add("maintenance")
+  }
   const tab: TabKey = hiddenTabs.has(requestedTab) ? "details" : requestedTab
 
   const areaName = useMemo(() => {

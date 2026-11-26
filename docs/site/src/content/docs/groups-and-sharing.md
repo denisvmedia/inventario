@@ -52,7 +52,7 @@ Not every inventory needs every part of Inventario: a group for a book collectio
 
 | Section | What hiding it removes |
 | --- | --- |
-| **Warranties** | The **Warranties** page, the warranty cards on the Dashboard, the **Warranty** step of the item form, and warranty reminder emails. |
+| **Warranties** | The **Warranties** page, the warranty cards on the Dashboard, the warranty counts on area and location pages, the **Warranty** step of the item form, and warranty reminder emails. |
 | **Maintenance and repairs** | The **Maintenance** and **In service** pages, adding a schedule or sending an item for service, and maintenance reminder emails. |
 | **Loans** | The **Lent out** page, lending an item out, and loan reminder emails. |
 | **Upcoming** | The **Upcoming** page. |

@@ -16,6 +16,8 @@ import { server } from "@/test/server"
 import {
   apiUrl,
   authHandlers,
+  commodityScanHandlers,
+  draftHandlers,
   groupHandlers,
   memberHandlers,
   sellerHandlers,
@@ -144,5 +146,112 @@ describe("<CommodityFormDialog /> in a group that hides sections (#1607)", () =>
       warranty_expires_at: "2030-01-31",
       warranty_notes: "Two years from the shop",
     })
+  })
+})
+
+// The Add item dialog in create mode, with server drafts, resuming draftId
+// when given.
+function renderCreate(draftId?: string) {
+  renderWithProviders({
+    withAuth: true,
+    initialPath: `/g/${SLUG}/x`,
+    routes: (
+      <Route
+        path="/g/:groupSlug/x"
+        element={
+          <GroupProvider>
+            <CommodityFormDialog
+              open
+              onOpenChange={() => {}}
+              mode="create"
+              areas={[{ id: "a1", name: "Garage", location_id: "l1" }]}
+              locations={[{ id: "l1", name: "Home" }]}
+              defaultCurrency="USD"
+              onSubmit={vi.fn().mockResolvedValue({ id: "new-item" })}
+              draftKey={`commodity-draft:${SLUG}:create`}
+              serverDrafts
+              resumeDraftId={draftId}
+            />
+          </GroupProvider>
+        }
+      />
+    ),
+  })
+}
+
+describe("<CommodityFormDialog /> create mode in a group that hides warranties (#1607)", () => {
+  beforeEach(() => {
+    window.localStorage.clear()
+    window.sessionStorage.clear()
+  })
+
+  it("keeps the Warranty step for a resumed draft that holds a warranty", async () => {
+    serveGroup(["warranties"])
+    const drafts = draftHandlers.backend(SLUG, [
+      {
+        id: "d1",
+        revision: 1,
+        values: {
+          name: "Drill set",
+          short_name: "Drills",
+          type: "other",
+          area_id: "a1",
+          count: 3,
+          warranty_expires_at: "2030-01-31",
+        },
+      },
+    ])
+    server.use(...drafts.handlers)
+    const user = userEvent.setup()
+    renderCreate("d1")
+
+    // A bundle cannot carry a warranty, so the draft opens on Basics with
+    // the quantity marked, as it does in a group that shows warranties.
+    const count = await screen.findByLabelText(/^Quantity/)
+    await waitFor(() => expect(count).toHaveValue(3))
+    await waitFor(() => expect(count).toHaveAttribute("aria-invalid", "true"))
+    expect(await stepNames()).toEqual(["Basics", "Purchase", "Warranty", "Extras", "Files"])
+
+    await user.clear(count)
+    await user.type(count, "1")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-purchase-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    expect(await screen.findByTestId("commodity-form-warranty-expires-at")).toHaveValue(
+      "2030-01-31"
+    )
+
+    // Clearing the date keeps the step for the rest of this opening.
+    await user.clear(screen.getByTestId("commodity-form-warranty-expires-at"))
+    expect(screen.getByTestId("commodity-form-warranty-step")).toBeInTheDocument()
+    expect(await stepNames()).toContain("Warranty")
+  })
+
+  it("leaves the warranty date out of a scan and keeps the step out", async () => {
+    serveGroup(["warranties"])
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: {
+          name: { value: "Cordless drill", confidence: 0.9 },
+          warranty_expires_at: { value: "2030-01-31", confidence: 0.9 },
+        },
+      })
+    )
+    const user = userEvent.setup()
+    renderCreate()
+
+    await user.upload(
+      await screen.findByTestId("commodity-form-ai-file-input"),
+      new File([new Uint8Array([0xff, 0xd8, 0xff])], "receipt.jpg", { type: "image/jpeg" })
+    )
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    expect(await screen.findByTestId("commodity-form-ai-row-name")).toBeInTheDocument()
+    expect(
+      screen.queryByTestId("commodity-form-ai-row-warranty_expires_at")
+    ).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    await screen.findByTestId("commodity-form-basics-step")
+    expect(await stepNames()).toEqual(["Basics", "Purchase", "Extras", "Files"])
   })
 })

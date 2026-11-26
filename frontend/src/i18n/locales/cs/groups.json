@@ -101,7 +101,7 @@
         "label": "Výpůjčky"
       },
       "maintenance": {
-        "description": "Stránky údržby a servisu, přidávání plánů údržby, odesílání položek do servisu a e-maily s připomínkami údržby.",
+        "description": "Stránky „Údržba“ a „V servisu“, přidávání plánů údržby, odesílání položek do servisu a e-maily s připomínkami údržby.",
         "label": "Údržba a opravy"
       },
       "saveError": "Sekce se nepodařilo uložit. Zkuste to znovu.",

@@ -494,3 +494,32 @@ describe("<AreaDetailPage />", () => {
     expect(await screen.findByTestId("area-detail-error")).toBeInTheDocument()
   })
 })
+
+describe("<AreaDetailPage /> in a group that hides warranties (#1607)", () => {
+  it("leaves out the active-warranties stat", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties"] }]),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Kitchen", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      http.get(apiUrl(`/g/${SLUG}/commodities`), () =>
+        HttpResponse.json(
+          commodityListBody([commodityResource("c1", { name: "Espresso", area_id: "a1" })])
+        )
+      ),
+      ...commodityHandlers.values(SLUG, {
+        areaTotals: [{ id: "a1", name: "Kitchen", value: 100 }],
+      }),
+      ...fileHandlers.list(SLUG, [])
+    )
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    const stats = await screen.findByTestId("area-detail-items-stats")
+    await waitFor(() => expect(stats).toHaveClass("grid-cols-2"))
+    expect(screen.queryByTestId("area-detail-items-active-warranties")).not.toBeInTheDocument()
+    expect(screen.getByTestId("area-detail-items-value")).toBeInTheDocument()
+  })
+})
