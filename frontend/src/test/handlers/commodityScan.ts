@@ -23,6 +23,13 @@ interface OkAttributes {
   // Multi-product scans (#1983): one entry per candidate. Omitted/empty for
   // the common single-item case.
   items?: Array<{ fields: Partial<Record<string, Field>> }>
+  // Per-file suggestions (#1626): index is the file's position in the
+  // request. Omitted when none.
+  files?: Array<{
+    index: number
+    document_type?: { value: string; confidence: number }
+    title?: { value: string; confidence: number }
+  }>
   warnings?: Array<{ code: string; field?: string; detail?: string }>
 }
 
@@ -38,6 +45,7 @@ export function ok(slug: string, attrs: OkAttributes) {
             // Omit items for the single-item case, mirroring the BE's
             // `omitempty` (and the slow() helper).
             ...(attrs.items ? { items: attrs.items } : {}),
+            ...(attrs.files ? { files: attrs.files } : {}),
             warnings: attrs.warnings ?? [],
           },
         },

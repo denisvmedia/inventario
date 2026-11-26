@@ -24,6 +24,19 @@ export interface StoredPendingFile {
   title?: string
   // Set once a server draft save uploaded the file (#2812).
   uploadedFileId?: string
+  // The tag and title an AI scan suggested for the file (#1626).
+  suggestion?: { tag?: string; title?: string }
+}
+
+// suggestionOf keeps a stored suggestion only in the shape the form writes;
+// anything else is dropped, not the whole entry.
+function suggestionOf(raw: unknown): StoredPendingFile["suggestion"] {
+  if (!raw || typeof raw !== "object") return undefined
+  const { tag, title } = raw as Record<string, unknown>
+  const out: NonNullable<StoredPendingFile["suggestion"]> = {}
+  if (typeof tag === "string") out.tag = tag
+  if (typeof title === "string") out.title = title
+  return out.tag !== undefined || out.title !== undefined ? out : undefined
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null
@@ -81,16 +94,22 @@ export async function loadPendingFiles(key: string): Promise<StoredPendingFile[]
     if (!Array.isArray(result)) return []
     // Defensive shape-check: only return entries that have all
     // expected fields. Old / malformed records get dropped.
-    return result.filter(
-      (entry): entry is StoredPendingFile =>
-        !!entry &&
-        typeof entry === "object" &&
-        typeof (entry as StoredPendingFile).id === "string" &&
-        (entry as StoredPendingFile).file instanceof File &&
-        Array.isArray((entry as StoredPendingFile).tags) &&
-        ["undefined", "string"].includes(typeof (entry as StoredPendingFile).title) &&
-        ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
-    )
+    return result
+      .filter(
+        (entry): entry is StoredPendingFile =>
+          !!entry &&
+          typeof entry === "object" &&
+          typeof (entry as StoredPendingFile).id === "string" &&
+          (entry as StoredPendingFile).file instanceof File &&
+          Array.isArray((entry as StoredPendingFile).tags) &&
+          ["undefined", "string"].includes(typeof (entry as StoredPendingFile).title) &&
+          ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
+      )
+      .map((entry) => {
+        const { suggestion, ...rest } = entry
+        const kept = suggestionOf(suggestion)
+        return kept ? { ...rest, suggestion: kept } : rest
+      })
   } catch (err) {
     console.warn("[pending-files] load failed", err)
     return []

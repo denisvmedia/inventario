@@ -59,7 +59,8 @@ import {
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
 
-import { categoryFromMime } from "@/features/files/constants"
+import { categoryFromMime, FILE_TAG_PILLS } from "@/features/files/constants"
+import { useTagPillLabel } from "@/features/files/labels"
 import {
   buildDefaults,
   capFileTitle,
@@ -103,12 +104,26 @@ import {
   type CustomFieldValues,
 } from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
-import { customFieldsRequest } from "@/features/customFields/values"
+import {
+  customFieldsRequest,
+  toFormValue,
+  type CustomFieldFormValues,
+} from "@/features/customFields/values"
 import {
   AiScanStep,
   type ScanAcceptedValues,
   type ScanAcceptMeta,
+  type ScanEnteredValues,
 } from "@/components/items/AiScanStep"
+import {
+  applyFileSuggestions,
+  hasSuggestedTitle,
+  suggestedTagOf,
+  type FileSuggestion,
+} from "@/features/commodities/fileSuggestions"
+import type { ScanFieldName } from "@/features/commodities/scanApi"
+import { useItemTypeLookup } from "@/features/itemTypes/hooks"
+import { tagKeys } from "@/features/tags/keys"
 import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { DraftSaveAlert, type DraftSaveState } from "@/components/items/DraftSaveAlert"
 import { suggestShortName } from "@/features/commodities/shortName"
@@ -148,6 +163,7 @@ import {
   detachFile,
   ordinaryLinks,
   trashUnlinkedFile,
+  updateFile,
   type ListedFile,
 } from "@/features/files/api"
 import { SellerField } from "@/components/sellers/SellerField"
@@ -350,6 +366,19 @@ function resumeStep(
   return { step: steps[Math.min(lastFilled + 1, steps.length - 1)], refused: false }
 }
 
+// mergeTags adds the scanned tags the form does not hold yet to its tags, in
+// their order; a tag that differs only in case is the same tag (#1626).
+function mergeTags(current: string[], scanned: string[]): string[] {
+  const seen = new Set(current.map((tag) => tag.toLowerCase()))
+  const out = [...current]
+  for (const tag of scanned) {
+    if (seen.has(tag.toLowerCase())) continue
+    seen.add(tag.toLowerCase())
+    out.push(tag)
+  }
+  return out
+}
+
 // uploadedLeftovers lists the files a server save uploaded for these staged
 // entries but did not attach (#1626).
 function uploadedLeftovers(entries: PendingFile[]): string[] {
@@ -466,6 +495,7 @@ export function CommodityFormDialog({
   // before the user agrees.
   const [scannedSeller, setScannedSeller] = useState("")
   const sellers = useSellers()
+  const itemTypes = useItemTypeLookup()
   const toast = useAppToast()
   // Direct queryClient invalidation rather than `useInvalidateFiles`
   // — the files-feature hook reads `useCurrentGroup`, but the
@@ -1218,6 +1248,33 @@ export function CommodityFormDialog({
     }
   }
 
+  // updateSavedFile saves a saved file's title and tags (#1626). PUT
+  // /files/{id} replaces the description too, so the file's own is sent
+  // back. The list is read again before it resolves, so the row shows what
+  // the server holds.
+  async function updateSavedFile(
+    row: ListedFile,
+    change: { title: string; tags: string[] }
+  ): Promise<boolean> {
+    try {
+      await updateFile(row.file.id, {
+        title: change.title,
+        description: row.file.description ?? "",
+        tags: change.tags,
+      })
+    } catch (err) {
+      toast.error(classifyServerError(err, t("commodities:drafts.updateFileFailed")).message)
+      return false
+    }
+    try {
+      await draftFilesQuery.refetch()
+    } catch {
+      // The row shows the change once the list loads.
+    }
+    void queryClient.invalidateQueries({ queryKey: fileKeys.group(activeSlug ?? "") })
+    return true
+  }
+
   const submit = async (values: CommodityFormInput) => {
     if (addingRef.current) return
     const opening = openingRef.current
@@ -1378,6 +1435,65 @@ export function CommodityFormDialog({
   const groupContext = useOptionalCurrentGroup()
   const activeSlug = groupContext?.currentGroup?.slug ?? null
 
+  // enteredScanValues lists what the form holds that the user entered, for
+  // the review of an AI scan (#1626): such a field shows both values and
+  // starts unticked, so a scan never replaces it unless the user ticks it.
+  // A value counts as entered when it differs from what a new, empty form
+  // holds; the group currency a new form starts with does not count, and
+  // neither does a custom field value equal to the default the item type's
+  // template puts there, nor a short name the form derived from the name.
+  // A value typed, accepted from an earlier scan, or brought by a resumed or
+  // restored draft counts, and so do an existing item's values in edit mode.
+  function enteredScanValues(): ScanEnteredValues {
+    const values = getValues()
+    const fields: ScanEnteredValues["fields"] = {}
+    const text = (key: ScanFieldName & keyof CommodityFormInput) => {
+      const v = values[key]
+      if (typeof v === "string" && v.trim() !== "") fields[key] = v.trim()
+    }
+    text("name")
+    if (shortNameEdited.current) text("short_name")
+    text("brand")
+    text("model")
+    text("serial_number")
+    text("purchase_date")
+    text("original_price")
+    text("comments")
+    if (showWarranties) text("warranty_expires_at")
+    if (values.type) fields.type = itemTypes.get(values.type)?.label ?? values.type
+    if (values.seller_id) {
+      fields.seller =
+        (sellers.data ?? []).find((s) => s.id === values.seller_id)?.name ?? values.seller_id
+    }
+    const currency = values.original_price_currency?.trim().toUpperCase() ?? ""
+    if (currency !== "" && currency !== defaultCurrency.trim().toUpperCase()) {
+      fields.original_price_currency = currency
+    }
+    const urls = (values.urls ?? []).map((u) => u.trim()).filter((u) => u !== "")
+    if (urls.length > 0) fields.urls = urls.join(", ")
+    if ((values.tags ?? []).length > 0) {
+      // The labels the Extras step showed, when the group's tags are loaded.
+      const catalog = queryClient.getQueryData<Array<{ slug?: string; label?: string }>>(
+        tagKeys.labels(activeSlug ?? "", "commodity")
+      )
+      const label = (slug: string) => catalog?.find((tag) => tag.slug === slug)?.label || slug
+      fields.tags = values.tags.map(label).join(", ")
+    }
+    const customFieldsEntered: CustomFieldFormValues = {}
+    const typeId = itemTypes.get(values.type)?.type?.id
+    for (const def of customFields) {
+      const value = values.custom_fields?.[def.id]
+      if (!value || value.value.trim() === "") continue
+      const template = typeId ? def.templates.find((t) => t.item_type_id === typeId) : undefined
+      if (template && template.default_value !== undefined && template.default_value !== null) {
+        const preset = toFormValue(template.default_value)
+        if (preset.value === value.value && preset.currency === value.currency) continue
+      }
+      customFieldsEntered[def.id] = value
+    }
+    return { fields, customFields: customFieldsEntered }
+  }
+
   // handleAiAccept consumes the user's accepted-fields subset (from
   // the AiScanStep review phase) and pushes each value into the RHF
   // form before advancing to Basics. setValue with shouldDirty:true so
@@ -1390,7 +1506,8 @@ export function CommodityFormDialog({
   function handleAiAccept(
     values: ScanAcceptedValues,
     _meta: ScanAcceptMeta,
-    sourceFiles: File[] = []
+    sourceFiles: File[] = [],
+    fileSuggestions: FileSuggestion[] = []
   ) {
     const apply = (
       name: keyof CommodityFormInput,
@@ -1437,7 +1554,8 @@ export function CommodityFormDialog({
       apply("urls", values.urls)
     }
     if (values.comments !== undefined) apply("comments", values.comments)
-    if (values.tags !== undefined) apply("tags", values.tags)
+    // Scanned tags join the form's tags, never replace them (#1626).
+    if (values.tags !== undefined) apply("tags", mergeTags(getValues("tags") ?? [], values.tags))
     if (values.custom_fields !== undefined) {
       apply("custom_fields", { ...(getValues("custom_fields") ?? {}), ...values.custom_fields })
     }
@@ -1449,8 +1567,12 @@ export function CommodityFormDialog({
     // new commodity id — and the anonymous flow's IDB mirror + FirstItem-
     // Resolver replay carry them across the login hand-off for free. The
     // user can still drop any of them from the Files step before saving.
+    // Each file then gets the tag and the title the scan suggests for it
+    // (#1626), unless the user set them; a file already staged gets them too.
     if (sourceFiles.length > 0) {
-      setPendingFiles((prev) => mergePendingFiles(prev, sourceFiles))
+      setPendingFiles((prev) =>
+        applyFileSuggestions(mergePendingFiles(prev, sourceFiles), fileSuggestions)
+      )
     }
     setStep("basics")
   }
@@ -1752,6 +1874,7 @@ export function CommodityFormDialog({
                 slug={activeSlug ?? ""}
                 defaultCurrency={defaultCurrency}
                 onAccept={handleAiAccept}
+                readEntered={enteredScanValues}
                 onSkip={() => setStep("basics")}
                 anonymous={anonymous}
                 omitWarranty={!showWarranties}
@@ -1829,6 +1952,7 @@ export function CommodityFormDialog({
                 busy={busy}
                 savedFiles={serverMode && serverDraft ? (draftFilesQuery.data ?? []) : []}
                 onRemoveSaved={removeSavedFile}
+                onUpdateSaved={updateSavedFile}
               />
             ) : null}
           </StepResizeWrapper>
@@ -2744,6 +2868,9 @@ interface FilesStepProps {
   // Files already saved with the server draft the form edits (#2812).
   savedFiles?: ListedFile[]
   onRemoveSaved?: (row: ListedFile) => void
+  // Saves a saved file's title and tags through the files API (#1626).
+  // Resolves whether it worked.
+  onUpdateSaved?: (row: ListedFile, change: { title: string; tags: string[] }) => Promise<boolean>
 }
 
 // FilesStep collects attachments locally; they reach the server when the
@@ -2760,6 +2887,7 @@ function FilesStep({
   busy = false,
   savedFiles = [],
   onRemoveSaved,
+  onUpdateSaved,
 }: FilesStepProps) {
   const { t } = useTranslation()
   // `useId` so the input/label association is stable but unique even
@@ -2842,7 +2970,9 @@ function FilesStep({
               <SavedFileRow
                 key={row.file.id}
                 row={row}
+                busy={busy}
                 onRemove={onRemoveSaved && !busy ? () => onRemoveSaved(row) : undefined}
+                onSave={onUpdateSaved ? (change) => onUpdateSaved(row, change) : undefined}
               />
             ))}
           </ul>
@@ -2867,32 +2997,131 @@ function FilesStep({
   )
 }
 
+// useFileTagLabel names a file tag: the group's label for it, or for one of
+// the curated tags the group has no tag for yet (a tag the scan suggests),
+// the pill's translated name.
+function useFileTagLabel(): (slug: string) => string {
+  const tagLabel = useTagLabel("file")
+  const pillLabel = useTagPillLabel()
+  return (slug) => {
+    const label = tagLabel(slug)
+    const pill = FILE_TAG_PILLS.find((p) => p.id === slug)
+    return label === slug && pill ? pillLabel(pill.id) : label
+  }
+}
+
+// The color of a curated file tag, for its suggestion chip.
+function fileTagColor(slug: string): string | undefined {
+  return FILE_TAG_PILLS.find((p) => p.id === slug)?.colorClass
+}
+
+interface SavedFileRowProps {
+  row: ListedFile
+  busy: boolean
+  onRemove?: () => void
+  // Saves the title and the tags; without it they are shown read-only.
+  onSave?: (change: { title: string; tags: string[] }) => Promise<boolean>
+}
+
 // SavedFileRow is a file the server draft already holds: it needs no
-// upload, and removing it takes it off the draft.
-function SavedFileRow({ row, onRemove }: { row: ListedFile; onRemove?: () => void }) {
+// upload, and removing it takes it off the draft. Its title and tags can be
+// changed here (#1626), so the ones batch intake gave it are seen and put
+// right before the item is added; a change is saved on the file at once, a
+// title when the field loses focus.
+function SavedFileRow({ row, busy, onRemove, onSave }: SavedFileRowProps) {
   const { t } = useTranslation()
+  const tagLabel = useFileTagLabel()
+  const titleId = useId()
   const name = `${row.file.path || row.file.title || ""}${row.file.ext ?? ""}`
+  const defaultTitle = row.file.path || row.file.title || ""
+  const serverTitle = row.file.title ?? ""
+  const serverTags = Array.isArray(row.file.tags) ? row.file.tags : []
+  // What the user changed and is not saved yet; null shows the file's value.
+  const [draftTitle, setDraftTitle] = useState<string | null>(null)
+  const [draftTags, setDraftTags] = useState<string[] | null>(null)
   const isImage = row.file.category === "images"
   const Icon = isImage ? ImageIcon : row.file.category === "documents" ? BookOpen : FileIcon
+  const readOnly = !onSave
+  const titleToSave = (raw: string) => capFileTitle(raw.trim()) || defaultTitle
+
+  async function commitTitle() {
+    if (draftTitle === null) return
+    const next = titleToSave(draftTitle)
+    if (next === serverTitle) {
+      setDraftTitle(null)
+      return
+    }
+    const typed = draftTitle
+    await onSave?.({ title: next, tags: draftTags ?? serverTags })
+    // Saved or not, the field shows the file's title again, unless the user
+    // typed on meanwhile.
+    setDraftTitle((current) => (current === typed ? null : current))
+  }
+
+  async function changeTags(next: string[]) {
+    setDraftTags(next)
+    await onSave?.({
+      title: draftTitle !== null ? titleToSave(draftTitle) : serverTitle,
+      tags: next,
+    })
+    setDraftTags((current) => (current === next ? null : current))
+  }
+
   return (
-    <li className="flex min-w-0 items-center gap-2 overflow-hidden rounded-lg border border-border bg-card px-3 py-2">
-      <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-        <Icon aria-hidden="true" className="size-3.5" />
+    <li
+      className="flex min-w-0 flex-col gap-1.5 overflow-hidden rounded-lg border border-border bg-card px-3 py-2"
+      data-testid={`draft-saved-file-${row.file.id}`}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <div className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+          <Icon aria-hidden="true" className="size-3.5" />
+        </div>
+        <p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
+        <span className="shrink-0 text-xs text-muted-foreground">
+          {formatBytes(row.file.size_bytes ?? 0)}
+        </span>
+        {onRemove ? (
+          <button
+            type="button"
+            aria-label={t("commodities:drafts.removeFile", { name })}
+            onClick={onRemove}
+            className="shrink-0 text-muted-foreground hover:text-foreground"
+          >
+            <X aria-hidden="true" className="size-3.5" />
+          </button>
+        ) : null}
       </div>
-      <p className="min-w-0 flex-1 truncate text-sm font-medium">{name}</p>
-      <span className="shrink-0 text-xs text-muted-foreground">
-        {formatBytes(row.file.size_bytes ?? 0)}
-      </span>
-      {onRemove ? (
-        <button
-          type="button"
-          aria-label={t("commodities:drafts.removeFile", { name })}
-          onClick={onRemove}
-          className="shrink-0 text-muted-foreground hover:text-foreground"
-        >
-          <X aria-hidden="true" className="size-3.5" />
-        </button>
-      ) : null}
+      <fieldset disabled={busy || readOnly} className="flex min-w-0 flex-col gap-1.5">
+        <Label htmlFor={titleId} className="sr-only">
+          {t("commodities:form.step.files.titleLabel", { name })}
+        </Label>
+        <Input
+          id={titleId}
+          value={draftTitle ?? serverTitle}
+          placeholder={defaultTitle}
+          onChange={(e) => setDraftTitle(capFileTitle(e.target.value))}
+          onBlur={() => void commitTitle()}
+          onKeyDown={(e) => {
+            // Enter saves the title instead of submitting the whole form.
+            if (e.key === "Enter") {
+              e.preventDefault()
+              void commitTitle()
+            }
+          }}
+          className="h-7 px-1.5 text-xs md:text-xs"
+          data-testid={`draft-saved-file-title-${row.file.id}`}
+        />
+        <TagsInput
+          values={draftTags ?? serverTags}
+          onChange={(next) => void changeTags(next)}
+          placeholder={t("commodities:form.step.files.tagsPlaceholder")}
+          testId={`draft-saved-file-tags-${row.file.id}`}
+          autocomplete
+          compact
+          kind="file"
+          labelOf={tagLabel}
+        />
+      </fieldset>
     </li>
   )
 }
@@ -2915,10 +3144,14 @@ function PendingFileRow({
   onTitleChange,
 }: PendingFileRowProps) {
   const { t } = useTranslation()
-  const tagLabel = useTagLabel("file")
+  const tagLabel = useFileTagLabel()
   const titleId = useId()
+  const suggestedTitleId = useId()
   const category = categoryFromMime(entry.file.type)
   const defaultTitle = defaultFileTitle(entry.file)
+  // What an AI scan put on the file and the user kept (#1626).
+  const suggestedTag = suggestedTagOf(entry)
+  const titleSuggested = hasSuggestedTitle(entry)
   // Pick a small visual cue per derived category. Stays consistent
   // with other surfaces' chart-* tinting (Photos = green status,
   // Documents = blue chart-3, Other = neutral muted).
@@ -3011,18 +3244,34 @@ function PendingFileRow({
         <Label htmlFor={titleId} className="sr-only">
           {t("commodities:form.step.files.titleLabel", { name: entry.file.name })}
         </Label>
-        <Input
-          id={titleId}
-          value={entry.title ?? defaultTitle}
-          placeholder={defaultTitle}
-          onChange={(e) => onTitleChange(capFileTitle(e.target.value))}
-          onKeyDown={(e) => {
-            // Enter in a file title would submit the whole form.
-            if (e.key === "Enter") e.preventDefault()
-          }}
-          className="h-7 px-1.5 text-xs md:text-xs"
-          data-testid={`commodity-files-title-${entry.id}`}
-        />
+        <div className="flex min-w-0 items-center gap-1.5">
+          {titleSuggested ? (
+            <>
+              <Sparkles
+                aria-hidden="true"
+                className="size-3.5 shrink-0 text-amber-500"
+                data-testid={`commodity-files-title-suggested-${entry.id}`}
+              />
+              <span id={suggestedTitleId} className="sr-only">
+                {t("commodities:form.step.files.suggestedTitle")}
+              </span>
+            </>
+          ) : null}
+          <Input
+            id={titleId}
+            value={entry.title ?? defaultTitle}
+            placeholder={defaultTitle}
+            aria-describedby={titleSuggested ? suggestedTitleId : undefined}
+            title={titleSuggested ? t("commodities:form.step.files.suggestedTitle") : undefined}
+            onChange={(e) => onTitleChange(capFileTitle(e.target.value))}
+            onKeyDown={(e) => {
+              // Enter in a file title would submit the whole form.
+              if (e.key === "Enter") e.preventDefault()
+            }}
+            className="h-7 min-w-0 flex-1 px-1.5 text-xs md:text-xs"
+            data-testid={`commodity-files-title-${entry.id}`}
+          />
+        </div>
         <TagsInput
           values={entry.tags}
           onChange={onTagsChange}
@@ -3032,6 +3281,9 @@ function PendingFileRow({
           compact
           kind="file"
           labelOf={tagLabel}
+          suggested={suggestedTag ? [suggestedTag] : undefined}
+          suggestedLabel={t("commodities:form.step.files.suggestedTag")}
+          chipClassName={(value) => (value === suggestedTag ? fileTagColor(value) : undefined)}
         />
       </fieldset>
     </li>
