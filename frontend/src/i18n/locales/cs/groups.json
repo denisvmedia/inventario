@@ -196,6 +196,10 @@
     "slugLabel": "Slug adresy URL",
     "subtitle": "Spravujte profil, členy a životní cyklus své skupiny.",
     "title": "Nastavení skupiny",
+    "usage": {
+      "errorGeneric": "Využití se nepodařilo načíst.",
+      "title": "Využití"
+    },
     "collectionSet": {
       "added": "Sada Sbírka přidána. Nové typy položek: {{types}}, nová vlastní pole: {{fields}}.",
       "add": "Přidat sadu",

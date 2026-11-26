@@ -466,6 +466,15 @@ when to add an entry and where it goes.
 
 ### Changed
 
+- Subscription plans are hidden. The feature is on hold, so the profile and
+  Preferences pages show no "Free plan" badge or Upgrade link, `/plans`
+  redirects to the group home, the group settings card is titled **Usage**
+  and shows the group's items, locations and file storage without limits,
+  and the admin tenant page has no Plan tile. `GET /g/{slug}/plan` reports
+  the unlimited plan whatever the tenant's `plan_id` is. No plan limit was
+  enforced before and none is now; the group storage quota does not depend
+  on plans. The server's operator can show plans again (see Operators)
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - **Add item** uploads the item's files to its draft before it creates the item,
   and the dialog stays open while it runs; leaving the page during the uploads
   stops them after the file in progress, and no item is created. Each file shows
@@ -641,6 +650,12 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
+  `features.plans`, Compose `ENABLE_PLANS` in `.env`) shows the subscription
+  plan surfaces that are now hidden by default. It is off by default, and
+  `GET /feature-flags` reports it as `plans`. With it on,
+  `GET /g/{slug}/plan` reports the tenant's plan again
+  ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
 - The upgrade runs one more database migration, which adds a `set_entry`
   column to `item_types` and `custom_field_definitions`. As with the
   `hidden_sections` column below, pods that still run the previous version
