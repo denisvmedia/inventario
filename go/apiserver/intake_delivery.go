@@ -92,7 +92,8 @@ func newIntakeDeliveryAPI(params Params) *intakeDeliveryAPI {
 // deliver creates a draft from a document in another system.
 // @Summary Deliver a document from another system
 // @Description Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.
-// @Description The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document. Swagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.
+// @Description The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document.
+// @Description Swagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.
 // @Description No AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.
 // @Description source_system, source_instance and document_id identify the document in the group.
 // @Description Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
