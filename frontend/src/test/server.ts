@@ -14,4 +14,8 @@ import { defaults as itemTypeDefaults } from "./handlers/itemTypes"
 // the item form and the item page read the group's fields (#2803). GET
 // /intake/documents is the third: the item page asks which other system each
 // item came from (#2809), and the default answers that none did.
-export const server = setupServer(...itemTypeDefaults(), ...customFieldDefaults(), ...intakeDocumentDefaults())
+export const server = setupServer(
+  ...itemTypeDefaults(),
+  ...customFieldDefaults(),
+  ...intakeDocumentDefaults()
+)
