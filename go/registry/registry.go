@@ -3228,6 +3228,56 @@ type APITokenRegistry interface {
 	TouchLastUsed(ctx context.Context, id string, at, staleBefore time.Time) (bool, error)
 }
 
+// PersonalDataExportRegistry stores personal data exports (#2177). It runs in
+// service mode: the export worker builds and expires the exports of every
+// user. Each method that reads one user's rows takes the user and filters by
+// it, so a guessed id of another user's export answers ErrNotFound.
+type PersonalDataExportRegistry interface {
+	// CreateUnlessRequestedSince inserts export unless the user made a request
+	// after since. It returns the inserted row, or nil and the user's
+	// newest request when that request is what stops the insert. The check
+	// and the insert are one step: two concurrent requests insert one row.
+	// ID, UUID, CreatedAt and Status are assigned here.
+	CreateUnlessRequestedSince(ctx context.Context, export models.PersonalDataExport, since time.Time) (created, blocking *models.PersonalDataExport, err error)
+
+	// Get returns an export by id, whoever owns it. Only the worker calls it.
+	Get(ctx context.Context, id string) (*models.PersonalDataExport, error)
+
+	// GetByUser returns the user's export by id, ErrNotFound for an id that
+	// is not one of theirs.
+	GetByUser(ctx context.Context, userID, id string) (*models.PersonalDataExport, error)
+
+	// ListByUserID returns the user's exports, newest first.
+	ListByUserID(ctx context.Context, userID string) ([]*models.PersonalDataExport, error)
+
+	// ListPending returns the pending exports of every user, oldest first.
+	ListPending(ctx context.Context) ([]*models.PersonalDataExport, error)
+
+	// ClaimPending moves an export from pending to in_progress, records
+	// startedAt as the start of its build, and reports whether this caller
+	// is the one that moved it. The condition is part of the write, so two
+	// workers racing for one row get one true.
+	ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error)
+
+	// RequeueStalled moves the exports whose build started before
+	// startedBefore and is still in_progress back to pending, and returns how
+	// many it moved. A build whose process dies records no result, and its
+	// row would otherwise stay in_progress until it expires.
+	RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error)
+
+	// Update writes the status, start, archive and statistics columns of an
+	// existing export. The owner, tenant and creation time never change.
+	Update(ctx context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error)
+
+	// ListExpired returns up to limit exports whose expiry is at or before
+	// now, oldest expiry first.
+	ListExpired(ctx context.Context, now time.Time, limit int) ([]*models.PersonalDataExport, error)
+
+	// Delete removes one export row. Deleting a row that is gone is not an
+	// error.
+	Delete(ctx context.Context, id string) error
+}
+
 // LoginEventRegistry stores the append-only login_events audit trail
 // (issue #1379). The registry runs under the background-worker role so
 // the unauthenticated login flow (where no tenant context is set in the

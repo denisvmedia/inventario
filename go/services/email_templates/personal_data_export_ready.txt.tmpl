@@ -1,0 +1,8 @@
+Hi {{.Name}},
+
+The copy of your data you asked for is ready. Download it from Account settings:
+{{.URL}}
+{{if .ExpiresAt}}
+The file is deleted on {{.ExpiresAt}}. You can ask for a new copy once a day.
+{{end}}
+If you did not ask for a copy of your data, change your password and sign out your other sessions in Account settings.

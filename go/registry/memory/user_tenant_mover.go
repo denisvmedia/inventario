@@ -128,6 +128,12 @@ func (m *UserTenantMover) movePerUserRows(ctx context.Context, move registry.Use
 		func() error { return m.purger.passwordReset.DeleteByUserID(ctx, userID) },
 		func() error { return m.purger.magicLink.DeleteByUserID(ctx, userID) },
 		func() error { return m.purger.purgeSavedViewPlacements(move.FromTenantID, userID) },
+		func() error {
+			if m.purger.personalDataExports == nil {
+				return nil
+			}
+			return m.purger.personalDataExports.DeleteByUserID(ctx, userID)
+		},
 	}
 	for _, step := range steps {
 		if err := step(); err != nil {

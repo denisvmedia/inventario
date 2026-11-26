@@ -3673,6 +3673,93 @@ table "password_resets" {
   }
 }
 
+table "personal_data_exports" {
+  row_security {
+    enabled = true
+    comment = "Enable RLS for multi-tenant personal data export isolation"
+  }
+  column "status" {
+    type = VARCHAR(16)
+    default = "pending"
+  }
+  column "blob_key" {
+    type = TEXT
+    default = ""
+  }
+  column "size_bytes" {
+    type = BIGINT
+    default = "0"
+  }
+  column "group_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "item_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "file_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "error_message" {
+    type = TEXT
+    default = ""
+  }
+  column "created_at" {
+    type = TIMESTAMP
+    default = sql("CURRENT_TIMESTAMP")
+  }
+  column "started_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "completed_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "expires_at" {
+    type = TIMESTAMP
+  }
+  column "tenant_id" {
+    type = TEXT
+  }
+  column "user_id" {
+    type = TEXT
+  }
+  column "id" {
+    type = TEXT
+  }
+  column "uuid" {
+    type = TEXT
+    default = sql("(gen_random_uuid())::text")
+  }
+  primary_key {
+    columns = [column.id]
+  }
+  foreign_key "fk_entity_tenant" {
+    columns = [column.tenant_id]
+    ref_columns = [table.tenants.column.id]
+  }
+  foreign_key "fk_entity_user" {
+    columns = [column.user_id]
+    ref_columns = [table.users.column.id]
+  }
+  index "idx_personal_data_exports_expires_at" {
+    columns = [column.expires_at]
+  }
+  index "idx_personal_data_exports_status" {
+    columns = [column.status]
+  }
+  index "idx_personal_data_exports_user_created" {
+    columns = [column.user_id, column.created_at]
+  }
+  index "idx_personal_data_exports_uuid" {
+    unique = true
+    columns = [column.uuid]
+  }
+}
+
 table "refresh_tokens" {
   row_security {
     enabled = true
@@ -5737,6 +5824,24 @@ policy "operation_slot_isolation" {
   using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
   check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
   comment = "Ensures operation slots can only be accessed and modified by their tenant and user with required contexts"
+}
+
+policy "personal_data_export_background_worker_access" {
+  on = table.personal_data_exports
+  for = "ALL"
+  to = ["inventario_background_worker"]
+  using = "true"
+  check = "true"
+  comment = "Allows the export worker to build and expire the personal data exports of every user"
+}
+
+policy "personal_data_export_isolation" {
+  on = table.personal_data_exports
+  for = "ALL"
+  to = ["inventario_app"]
+  using = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  check = "tenant_id = get_current_tenant_id() AND get_current_tenant_id() IS NOT NULL AND get_current_tenant_id() != '' AND user_id = get_current_user_id() AND get_current_user_id() IS NOT NULL AND get_current_user_id() != ''"
+  comment = "Ensures personal data exports can only be accessed by the owning user within their tenant"
 }
 
 policy "refresh_token_background_worker_access" {

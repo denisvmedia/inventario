@@ -11,6 +11,7 @@ import (
 	"github.com/jellydator/validation"
 
 	"go.5x5.cz/inventario/apiserver"
+	"go.5x5.cz/inventario/backup/export"
 	"go.5x5.cz/inventario/debug"
 	"go.5x5.cz/inventario/internal/aivision"
 	_ "go.5x5.cz/inventario/internal/aivision/anthropic" // register the anthropic provider via init()
@@ -209,6 +210,10 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	}
 	params.EmailService = emailLifecycle.Service
 	params.SupportEmail = strings.TrimSpace(cfg.SupportEmail)
+	// One service for the API and the export worker, so the worker sends
+	// the ready email through the same email service (#2177).
+	params.PersonalDataExports = export.NewPersonalDataExportService(factorySet, params.UploadLocation,
+		export.WithPersonalDataExportNotifier(services.NewPersonalDataExportNotifier(params.EmailService, factorySet.SettingsRegistryFactory, params.PublicURL)))
 
 	if err = wireCommodityScan(cfg, &params); err != nil {
 		slog.Error("Failed to wire commodity scan service", "error", err)

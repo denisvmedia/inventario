@@ -244,3 +244,11 @@ func TestKeysAlwaysCarryTenantNamespace(t *testing.T) {
 		}
 	}
 }
+
+func TestBuildPersonalDataExportBlobKey(t *testing.T) {
+	c := qt.New(t)
+	c.Assert(blobkeys.BuildPersonalDataExportBlobKey("tenant-a", "exp-1"), qt.Equals, "t/tenant-a/personal-exports/exp-1.tar.gz")
+	// The id cannot leave the tenant's folder.
+	c.Assert(blobkeys.BuildPersonalDataExportBlobKey("tenant-a", "../x"), qt.Equals, "t/tenant-a/personal-exports/__x.tar.gz")
+	c.Assert(blobkeys.HasTenantPrefix(blobkeys.BuildPersonalDataExportBlobKey("tenant-a", "exp-1")), qt.IsTrue)
+}
