@@ -190,9 +190,10 @@ it is enabled — before a single workflow reports. A patch bump that breaks the
 build would land unreviewed and untested (#1819).
 
 `master` is guarded by a repository ruleset, not by classic branch protection.
-The gate (`.github/scripts/required-checks-configured.sh`) reads only classic
-branch protection rules, so it does not see the ruleset's required checks, and
-the workflow posts a notice and leaves bot pull requests for a human.
+The gate (`.github/scripts/required-checks-configured.sh`) counts required
+checks from both, so patch updates auto-merge once the required checks pass.
+If a branch has no required checks, the workflow posts a notice and leaves the
+pull request for a human.
 
 `./scripts/set-branch-protection.sh` writes the required-check set into that
 ruleset, and `--show` prints the checks `master` requires. Choosing the

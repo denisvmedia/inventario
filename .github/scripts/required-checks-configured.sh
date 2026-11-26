@@ -4,13 +4,15 @@
 # otherwise. Never fails.
 #
 # This is what decides whether `gh pr merge --auto` means anything. --auto
-# defers to required checks, so on a branch with no protection rule the
-# required set is empty and --auto merges the moment it is enabled — before a
-# single workflow has reported (#1819).
+# defers to required checks, so on a branch with no required checks --auto
+# merges the moment it is enabled — before a single workflow has reported
+# (#1819).
 #
-# Unreadable is treated as "not configured". Reading a protection rule needs
-# more than the default token holds on some repos, and the safe answer to "I
-# cannot tell" is to leave the pull request for a human.
+# Required checks can come from a repository ruleset or from a classic branch
+# protection rule; master uses a ruleset. Both are counted.
+#
+# Unreadable is treated as "not configured". The safe answer to "I cannot
+# tell" is to leave the pull request for a human.
 #
 # Usage: required-checks-configured.sh <owner> <repo> <branch>
 set -uo pipefail
@@ -19,7 +21,15 @@ owner="${1:?owner required}"
 repo="${2:?repo required}"
 branch="${3:?branch required}"
 
-count="$(
+# Active rules for the branch, from every ruleset that targets it.
+ruleset_count="$(
+  gh api "repos/${owner}/${repo}/rules/branches/${branch}" \
+    --jq '[.[] | select(.type == "required_status_checks")
+              | .parameters.required_status_checks[]] | length' \
+    2>/dev/null
+)" || ruleset_count=""
+
+protection_count="$(
   gh api graphql \
     -f query='
       query($owner: String!, $repo: String!, $branch: String!) {
@@ -34,10 +44,12 @@ count="$(
     -F owner="$owner" -F repo="$repo" -F branch="$branch" \
     --jq '(.data.repository.ref.branchProtectionRule.requiredStatusCheckContexts // []) | length' \
     2>/dev/null
-)" || count=""
+)" || protection_count=""
 
-if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
-  echo "true"
-else
-  echo "false"
-fi
+for count in "$ruleset_count" "$protection_count"; do
+  if [ -n "$count" ] && [ "$count" -gt 0 ] 2>/dev/null; then
+    echo "true"
+    exit 0
+  fi
+done
+echo "false"
