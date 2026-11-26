@@ -36,10 +36,6 @@ var ErrIntakeDocumentConflict = errx.NewSentinel("another intake session carries
 // intakeDocumentTitleMaxRunes is the draft's limit on a title.
 const intakeDocumentTitleMaxRunes = 255
 
-// intakeSessionClientKeyPrefix starts the client key of the intake session a
-// delivery makes; the document id follows.
-const intakeSessionClientKeyPrefix = "external:"
-
 // IntakeDelivery is a document another system sends to the intake endpoint
 // (#2809), as the raw strings of the request. Empty means absent.
 type IntakeDelivery struct {
@@ -527,7 +523,7 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 		}
 		return session, err
 	}
-	clientKey := intakeSessionClientKeyPrefix + result.Document.ID
+	clientKey := models.IntakeDeliverySessionKeyPrefix + result.Document.ID
 	session, err := reg.GetSessionByClientKey(ctx, clientKey)
 	if !errors.Is(err, registry.ErrNotFound) {
 		return session, err
@@ -589,7 +585,7 @@ func ownsTheIdentity(ctx context.Context, reg registry.IntakeRegistry, doc *mode
 	case doc.SessionID != nil && *doc.SessionID == src.SessionID:
 		return nil
 	}
-	_, err = sessionOfSource(ctx, reg, src, intakeSessionClientKeyPrefix+doc.ID, doc)
+	_, err = sessionOfSource(ctx, reg, src, models.IntakeDeliverySessionKeyPrefix+doc.ID, doc)
 	return err
 }
 

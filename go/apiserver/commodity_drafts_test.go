@@ -240,6 +240,8 @@ func TestCommodityDraftsAPI_RejectsInvalidInput(t *testing.T) {
 		{name: "missing client key", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"values":{}}}}`},
 		{name: "wrong type", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodities","attributes":{"client_key":"k"}}}`},
 		{name: "client key with spaces", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"client_key":"a b"}}}`},
+		{name: "client key of a batch's draft", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"client_key":"intake:candidate-1"}}}`},
+		{name: "client key of a delivery's draft", method: http.MethodPost, path: "/drafts", body: `{"data":{"type":"commodity_drafts","attributes":{"client_key":"intake-doc:0a1b"}}}`},
 		{name: "save without revision", method: http.MethodPut, path: "/drafts/DRAFT", body: `{"data":{"type":"commodity_drafts","attributes":{"values":{}}}}`},
 		{name: "promote without revision", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}},"meta":{"promotion_key":"k"}}`},
 		{name: "promote without a promotion key", method: http.MethodPost, path: "/drafts/DRAFT/promote", body: `{"data":{"type":"commodities","attributes":{"name":"x","short_name":"x","type":"equipment","status":"in_use","count":1}},"meta":{"revision":1}}`},

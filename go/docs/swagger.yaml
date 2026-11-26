@@ -11222,7 +11222,8 @@ paths:
         are not validated as an item. client_key is the client's identity for the draft:
         a create with a key the group already has returns that draft with 200 instead of
         making another one, so a retry after a lost response is safe. A key whose draft
-        is being discarded answers 409 draft.discarded. Known fields of the item form
+        is being discarded answers 409 draft.discarded. A key starting with "intake:" or
+        "intake-doc:" is kept for the drafts intake makes (422 on client_key). Known fields of the item form
         must have the type the form uses (text, a number or numeric text, a list of
         text, true or false); a field of another type is refused with 422 on
         values.<field>. A type in values.type must be one of the group's item types
@@ -12539,7 +12540,8 @@ paths:
         is the client's identity for the batch: a key the group already has returns that
         session with 200, so a retry after a lost response does not queue the files
         twice. The replay does not compare the sources, so a client takes a new key for
-        every batch. Without an AI scan provider the request answers 503
+        every batch. A key starting with "external:" is kept for the batches documents
+        from other systems make (422 on client_key). Without an AI scan provider the request answers 503
         commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
       parameters:
       - description: Group slug

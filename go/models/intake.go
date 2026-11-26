@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/jellydator/validation"
@@ -472,7 +473,32 @@ const (
 	// IntakeDeliveredDraftKeyPrefix starts the key of a draft made for a
 	// document another system delivered.
 	IntakeDeliveredDraftKeyPrefix = "intake-doc:"
+	// IntakeDeliverySessionKeyPrefix starts the key of the session a
+	// delivery makes; the id of the document's record follows.
+	IntakeDeliverySessionKeyPrefix = "external:"
 )
+
+// MemberDraftClientKeyRule refuses a client key with the prefix of a draft
+// intake makes, so a draft made through the drafts API cannot take the key a
+// delivery or a batch uses for its draft.
+var MemberDraftClientKeyRule = reservedKeyPrefixRule(IntakeDraftKeyPrefix, IntakeDeliveredDraftKeyPrefix)
+
+// MemberSessionClientKeyRule refuses a client key with the prefix of the
+// session a delivery makes.
+var MemberSessionClientKeyRule = reservedKeyPrefixRule(IntakeDeliverySessionKeyPrefix)
+
+func reservedKeyPrefixRule(prefixes ...string) validation.Rule {
+	return validation.By(func(value any) error {
+		key, _ := value.(string)
+		for _, prefix := range prefixes {
+			if strings.HasPrefix(key, prefix) {
+				return validation.NewError("validation_client_key_reserved",
+					fmt.Sprintf("a client key cannot start with %q", prefix))
+			}
+		}
+		return nil
+	})
+}
 
 // IntakeDraftClientKey is the client key of the draft made for the candidate
 // with the given id.

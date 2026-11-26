@@ -669,3 +669,30 @@ func TestIntakeDeliver_OpenDraftOutlivesTheAccountThatDelivered(t *testing.T) {
 	c.Assert(*again.Document.DraftID, qt.Equals, *first.Document.DraftID)
 	c.Assert(f.drafts(c), qt.HasLen, 1)
 }
+
+// TestIntakeDeliver_SessionKeyIsReserved: a member cannot make a batch
+// under the key of the session a delivery makes, so a delivery that stopped
+// before it made its session never takes a member's batch for its own.
+func TestIntakeDeliver_SessionKeyIsReserved(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+	lossy := f.lossyDocuments()
+	lossy.loseFile.Store(true)
+	_, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
+	lossy.loseFile.Store(false)
+	c.Assert(err, qt.ErrorIs, errLostWrite)
+	doc := must.Must(must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx)).GetByExternalID(f.ctx, "paperless-ngx", "", "117"))
+
+	photo := f.photo(c, "member-photo")
+	_, _, err = f.intake.CreateSession(f.ctx, models.IntakeDeliverySessionKeyPrefix+doc.ID,
+		[]services.IntakeSourceRequest{{FileIDs: []string{photo.ID}}})
+	errs, ok := errorsAsValidation(err)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("got %v", err))
+	c.Assert(errs["client_key"], qt.IsNotNil)
+
+	result := f.deliver(c, paperlessDelivery("117"), blob)
+	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
+	session := must.Must(must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx)).Get(f.ctx, *result.Document.SessionID))
+	c.Assert(session.Origin, qt.Equals, models.IntakeOriginExternal)
+}

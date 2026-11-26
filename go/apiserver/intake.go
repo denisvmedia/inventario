@@ -216,7 +216,8 @@ func (api *intakeAPI) list(w http.ResponseWriter, r *http.Request) {
 // @Description is the client's identity for the batch: a key the group already has returns that
 // @Description session with 200, so a retry after a lost response does not queue the files
 // @Description twice. The replay does not compare the sources, so a client takes a new key for
-// @Description every batch. Without an AI scan provider the request answers 503
+// @Description every batch. A key starting with "external:" is kept for the batches documents
+// @Description from other systems make (422 on client_key). Without an AI scan provider the request answers 503
 // @Description commodity_scan.provider_disabled; a full queue answers 409 intake.queue_full.
 // @Tags intake
 // @Accept json-api
