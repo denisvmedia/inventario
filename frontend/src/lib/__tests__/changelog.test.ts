@@ -6,9 +6,11 @@ import {
   OPERATORS_SECTION,
   compareVersions,
   describeBuild,
+  hasUserChanges,
   parseChangelog,
   parseInline,
   selectReleases,
+  whatsNewMeta,
   type ChangelogRelease,
 } from "@/lib/changelog"
 
@@ -243,36 +245,132 @@ describe("selectReleases", () => {
   })
 })
 
-// The real file has to stay readable by the parser: a release whose
-// heading the parser misses would silently vanish from the page.
+describe("whatsNewMeta", () => {
+  const releases = parseChangelog(
+    `## [1.2.0] - 2026-12-03
+
+### Operators
+
+- A chart fix.
+
+## [1.1.0] - 2026-12-02
+
+### Fixed
+
+- A fix.
+
+## [1.0.0] - 2026-12-01
+
+First release.
+`,
+    { linkBase: BASE }
+  )
+
+  it("names the newest release and the newest one with more than Operators", () => {
+    expect(releases.map(hasUserChanges)).toEqual([false, true, true])
+    expect(whatsNewMeta(describeBuild("v1.2.0"), releases)).toEqual({
+      build: { kind: "release", version: "1.2.0" },
+      latestVersion: "1.2.0",
+      latestUserVersion: "1.1.0",
+    })
+  })
+
+  it("counts a release whose only text is a paragraph", () => {
+    expect(
+      whatsNewMeta(describeBuild("v1.0.0"), selectReleases(releases, describeBuild("v1.0.0")))
+    ).toEqual({
+      build: { kind: "release", version: "1.0.0" },
+      latestVersion: "1.0.0",
+      latestUserVersion: "1.0.0",
+    })
+  })
+
+  it("is empty without releases", () => {
+    expect(whatsNewMeta(describeBuild("dev"), [])).toEqual({
+      build: { kind: "development", label: "dev", base: null },
+      latestVersion: null,
+      latestUserVersion: null,
+    })
+  })
+})
+
+// The real file has to stay readable by the parser: a release whose heading
+// the parser misses would silently vanish from the page, and a section
+// heading it does not know would show under a heading nobody translated.
+// The checks read the lines themselves rather than the parser's output, so
+// they cover Unreleased too, which the parser skips. CI runs this file on
+// any change to CHANGELOG.md (the `changelog` filter), not only on frontend
+// changes.
 describe("CHANGELOG.md", () => {
   const markdown = fs.readFileSync(path.resolve(__dirname, "../../../../CHANGELOG.md"), "utf8")
+  const lines = markdown.split(/\r?\n/)
   const releases = parseChangelog(markdown, { linkBase: BASE })
-  const headings = markdown.split("\n").filter((l) => /^## \[\d/.test(l))
 
-  it("yields one dated release per version heading, newest first", () => {
-    expect(releases).toHaveLength(headings.length)
-    expect(releases.length).toBeGreaterThan(0)
-    for (const r of releases) expect(r.date).toMatch(/^\d{4}-\d{2}-\d{2}$/)
+  // `[Unreleased]`, or `[x.y.z] - YYYY-MM-DD` with an optional pre-release
+  // and no `+build` metadata, which the last-seen setting refuses.
+  const HEADING =
+    /^## \[(Unreleased|\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?)\](?: - (\d{4}-\d{2}-\d{2}))?$/
+  const KNOWN_SECTIONS = [
+    "Added",
+    "Changed",
+    "Deprecated",
+    "Removed",
+    "Fixed",
+    "Security",
+    OPERATORS_SECTION,
+  ]
+
+  // Every `## ` heading with the `### ` headings under it.
+  const blocks: Array<{ heading: string; sections: string[] }> = []
+  const orphanSections: string[] = []
+  for (const line of lines) {
+    if (line.startsWith("## ")) {
+      blocks.push({ heading: line, sections: [] })
+    } else if (line.startsWith("### ")) {
+      const block = blocks[blocks.length - 1]
+      if (block) block.sections.push(line.slice(4).trim())
+      else orphanSections.push(line)
+    }
+  }
+  const named = blocks.map((b) => ({ ...b, match: HEADING.exec(b.heading) }))
+  const versionBlocks = named.filter((b) => b.match && b.match[1] !== "Unreleased")
+
+  it("has release headings of the form [Unreleased] or [x.y.z] - YYYY-MM-DD", () => {
+    expect(blocks.length).toBeGreaterThan(0)
+    for (const b of named) {
+      expect(b.match, `not a release heading: ${b.heading}`).not.toBeNull()
+      if (b.match && b.match[1] !== "Unreleased") {
+        expect(b.match[2], `no date: ${b.heading}`).toBeDefined()
+        expect(Number.isNaN(Date.parse(b.match[2] ?? "")), `bad date: ${b.heading}`).toBe(false)
+      } else if (b.match) {
+        expect(b.match[2], `Unreleased has a date: ${b.heading}`).toBeUndefined()
+      }
+    }
+    expect(orphanSections, "section headings before the first release").toEqual([])
+  })
+
+  it("names each version once, newest first", () => {
+    const names = named.map((b) => b.match?.[1] ?? b.heading)
+    expect(new Set(names).size, `a release heading repeats: ${names.join(", ")}`).toBe(names.length)
+    const versionNames = versionBlocks.map((b) => b.match?.[1] ?? "")
+    expect([...versionNames].sort((a, b) => compareVersions(b, a))).toEqual(versionNames)
+  })
+
+  it("yields one release per version heading", () => {
+    expect(versions(releases)).toEqual(versionBlocks.map((b) => b.match?.[1]))
     expect(versions(selectReleases(releases, describeBuild("dev")))).toEqual(versions(releases))
   })
 
-  it("uses only the Keep a Changelog headings and Operators, Operators last", () => {
-    const known = [
-      "Added",
-      "Changed",
-      "Deprecated",
-      "Removed",
-      "Fixed",
-      "Security",
-      OPERATORS_SECTION,
-    ]
-    for (const r of releases) {
-      const titles = r.sections.map((s) => s.title)
-      for (const t of titles) expect(known, `${r.version}: ${t}`).toContain(t)
-      expect(new Set(titles).size, `${r.version}: a heading repeats`).toBe(titles.length)
-      const ops = titles.indexOf(OPERATORS_SECTION)
-      if (ops >= 0) expect(ops, `${r.version}: Operators is not last`).toBe(titles.length - 1)
+  it("uses only the Keep a Changelog headings and Operators, each once, Operators last", () => {
+    for (const b of blocks) {
+      for (const t of b.sections) expect(KNOWN_SECTIONS, `${b.heading}: ### ${t}`).toContain(t)
+      expect(new Set(b.sections).size, `${b.heading}: a section heading repeats`).toBe(
+        b.sections.length
+      )
+      const ops = b.sections.indexOf(OPERATORS_SECTION)
+      if (ops >= 0) {
+        expect(ops, `${b.heading}: Operators is not the last section`).toBe(b.sections.length - 1)
+      }
     }
   })
 })
