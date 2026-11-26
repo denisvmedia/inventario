@@ -136,6 +136,13 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// users NO ACTION; no other table references them.
 	func(t store.TableNames) string { return string(t.CommodityDrafts()) },
 
+	// Intake sessions (#2810). Candidates and sources cascade from their
+	// session; group_id and created_by_user_id are NO ACTION. Children go
+	// first.
+	func(t store.TableNames) string { return string(t.IntakeCandidates()) },
+	func(t store.TableNames) string { return string(t.IntakeSources()) },
+	func(t store.TableNames) string { return string(t.IntakeSessions()) },
+
 	// Currency-migration audit rows (#2095). migration_id ->
 	// currency_migrations CASCADE, commodity_id -> commodities SET NULL.
 	// Dropped before both currency_migrations and commodities.

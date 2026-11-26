@@ -31,8 +31,8 @@ const (
 	// cleanup today; pending-deletion group purge and expired-invite GC in
 	// follow-ups). replicaCount is expected to stay at 1.
 	WorkerHousekeeping WorkerID = "housekeeping"
-	// WorkerMedia bundles CPU/RAM-heavy media processing (thumbnails today,
-	// future image resize / OCR). Scales on the media-queue depth signal.
+	// WorkerMedia bundles media processing: thumbnails and the AI scans of
+	// batch intake. Scales on the media-queue depth signal.
 	WorkerMedia WorkerID = "media"
 )
 

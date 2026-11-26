@@ -19,6 +19,8 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"product line. Do NOT collapse them into one and do NOT pick just one — enumerate EVERY product on the document.\n" +
 	"EXCLUDE non-product lines: subtotals, taxes/VAT, shipping/postage, discounts, vouchers, fees, deposits, and totals.\n" +
 	"For each product, from a receipt/invoice read its own purchase price, currency, and purchase date; " +
+	"the price is the amount of that product line, NEVER the receipt total. " +
+	"When a line covers several identical units, set \"quantity\" to the number of units and keep the whole line amount in \"original_price\"; " +
 	"put the seller/vendor/store name into \"seller\", not into \"comments\".\n" +
 	"Classify \"type\" as EXACTLY one of the allowed values in the schema enum; omit it if none clearly fits.\n" +
 	"Keep \"short_name\" a concise label of at most 40 characters.\n" +
@@ -166,6 +168,7 @@ func ResponseSchema(req ScanRequest) map[string]any {
 		FieldNameComments:              fieldGuessString,
 		FieldNameTags:                  fieldGuessStringArray,
 		FieldNameDocumentType:          fieldGuessEnum(documentTypes),
+		FieldNameQuantity:              fieldGuessNumber,
 	}
 
 	warningSchema := map[string]any{
@@ -469,7 +472,7 @@ func decodeFieldMap(raw map[string]rawFieldGuess) (map[string]FieldGuess, []Warn
 // (nil, false) on any type mismatch.
 func decodeFieldValue(name string, raw json.RawMessage) (any, bool) {
 	switch name {
-	case FieldNameOriginalPrice:
+	case FieldNameOriginalPrice, FieldNameQuantity:
 		var n float64
 		if err := json.Unmarshal(raw, &n); err != nil {
 			return nil, false

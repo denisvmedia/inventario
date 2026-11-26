@@ -269,7 +269,8 @@
       "area": "Oblast",
       "commodity": "Položka",
       "location": "Lokace",
-      "draft": "Koncept"
+      "draft": "Koncept",
+      "intake": "Přidáno ze souborů"
     }
   }
 }

@@ -232,6 +232,7 @@ func DefaultResult() aivision.ScanResult {
 			// "invoice" would make the FE's pre-selection look right for the
 			// wrong reason.
 			aivision.FieldNameDocumentType: {Value: "other", Confidence: 0.40},
+			aivision.FieldNameQuantity:     {Value: float64(1), Confidence: 0.90},
 		},
 		Warnings: []aivision.Warning{
 			{Code: "low_confidence", Field: aivision.FieldNamePurchaseDate, Detail: "purchase date inferred from packaging design only"},
@@ -243,7 +244,9 @@ func DefaultResult() aivision.ScanResult {
 
 // MultiItemResult is the canned result the mock returns when the uploaded
 // filename looks like a receipt/invoice — a stand-in for a multi-line invoice
-// (two purchased products), so the item-chooser flow is demonstrable with the deterministic provider.
+// (three purchased products, the last a line of two identical units), so the
+// item-chooser and batch-intake flows are demonstrable with the deterministic
+// provider.
 // Per the real-provider contract, Fields mirrors the first (most prominent)
 // item. Dates are fixed so screenshots/e2e stay deterministic.
 func MultiItemResult() aivision.ScanResult {
@@ -269,11 +272,23 @@ func MultiItemResult() aivision.ScanResult {
 		aivision.FieldNameComments:              {Value: "Purchased from Sample Store s.r.o.", Confidence: 0.70},
 		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen"}, Confidence: 0.60},
 	}
+	// The cups are one line of two identical units: the amount is the
+	// line's, not a unit price and not the receipt total.
+	cups := map[string]aivision.FieldGuess{
+		aivision.FieldNameName:                  {Value: "Espresso Cups", Confidence: 0.84},
+		aivision.FieldNameType:                  {Value: "other", Confidence: 0.70},
+		aivision.FieldNameOriginalPrice:         {Value: 24.00, Confidence: 0.86},
+		aivision.FieldNameOriginalPriceCurrency: {Value: "EUR", Confidence: 0.90},
+		aivision.FieldNamePurchaseDate:          {Value: purchased, Confidence: 0.85},
+		aivision.FieldNameQuantity:              {Value: float64(2), Confidence: 0.80},
+		aivision.FieldNameTags:                  {Value: []string{"coffee", "kitchen"}, Confidence: 0.60},
+	}
 	return aivision.ScanResult{
 		Fields: espresso,
 		Items: []aivision.ScanItem{
 			{Fields: espresso},
 			{Fields: frother},
+			{Fields: cups},
 		},
 		UsedTokens: 0,
 		LatencyMS:  1,

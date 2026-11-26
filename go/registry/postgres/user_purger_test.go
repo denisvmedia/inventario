@@ -132,6 +132,35 @@ func TestUserPurger_Postgres_PurgesTheUsersDrafts(t *testing.T) {
 	c.Assert(kept.Links, qt.HasLen, 0)
 }
 
+// TestUserPurger_Postgres_PurgesTheUsersIntakeSessions covers #2810: the
+// intake sessions a user created go with the account, with their sources,
+// candidates and the links of their files. The files stay as standalone
+// files. created_by_user_id is a NOT NULL FK with NO ACTION on all three
+// tables, so a row left behind would block the final users delete.
+func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
+	c := qt.New(t)
+	fx := newFileLinkPGFixture(t)
+
+	intake, err := fx.factorySet.IntakeRegistryFactory.CreateUserRegistry(fx.ctx)
+	c.Assert(err, qt.IsNil)
+	receipt := fx.file(c, "receipt.pdf", 10)
+	session, _, err := intake.CreateSession(fx.ctx,
+		models.IntakeSession{ClientKey: "leaving", Origin: models.IntakeOriginUpload},
+		[]registry.IntakeSourceInput{{FileIDs: []string{receipt.ID}}}, 0)
+	c.Assert(err, qt.IsNil)
+	linked, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(linked.Links, qt.HasLen, 1)
+
+	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(context.Background(), fx.user.TenantID, fx.user.ID), qt.IsNil)
+
+	_, err = fx.factorySet.IntakeRegistryFactory.CreateServiceRegistry().Get(context.Background(), session.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+	kept, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(kept.Links, qt.HasLen, 0)
+}
+
 // TestUserPurger_Postgres_ClearsGroupInvitesAuditReferences is the #2147
 // regression: group_invites_audit.created_by and .used_by are NOT NULL FK ->
 // users(id) with NO ACTION, so a user whose group ever had a USED invite would

@@ -90,7 +90,17 @@ const draftValuesSchema = z.looseObject({
   urls: textList,
   draft: flag,
   custom_fields: customFields,
+  seller_name: text,
 })
+
+// draftSellerName is the seller a draft names without picking one of the
+// group's sellers: batch intake (#2810) stores a scanned seller the group
+// does not have under "seller_name", for the form to offer to create.
+export function draftSellerName(values: DraftValues): string {
+  const raw = (values as Record<string, unknown>).seller_name
+  if (typeof raw !== "string" || values.seller_id) return ""
+  return raw.trim()
+}
 
 // parseDraftValues returns the values of raw the form can use. It never
 // throws: anything that is not an object gives no values.

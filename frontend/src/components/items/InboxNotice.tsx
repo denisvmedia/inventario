@@ -6,17 +6,22 @@ import { Button } from "@/components/ui/button"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useInboxCount } from "@/features/inbox/hooks"
 import { useInboxSummary } from "@/features/inbox/summary"
+import type { InboxReason } from "@/features/inbox/api"
+
+const NOTICE_REASONS: readonly InboxReason[] = ["draft", "item_draft"]
 
 // InboxNotice is the Items page's way to the drafts (#2794). Server drafts
 // are not items, so the item filters cannot list them; the inbox lists them
 // together with the items still marked as draft, which the default list
-// hides. The notice renders nothing while neither kind exists.
+// hides. The notice renders nothing while neither kind exists. Batches of
+// files are in the inbox too, but the Items page lists them in its own card,
+// so the notice leaves them out.
 export function InboxNotice() {
   const { t } = useTranslation(["inbox"])
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const count = useInboxCount()
-  const summary = useInboxSummary(count.data)
+  const summary = useInboxSummary(count.data, NOTICE_REASONS)
   if (!slug || !summary) return null
   const drafts = count.data?.reasons.draft ?? 0
   const review = count.data?.reasons.item_draft ?? 0

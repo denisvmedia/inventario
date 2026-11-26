@@ -67,7 +67,7 @@ func TestInboxAPI_ListAndCount(t *testing.T) {
 	c.Check(inbox.Data[1].UpdatedAt, qt.IsNil)
 	c.Check(inbox.Meta, qt.DeepEquals, jsonapi.InboxMeta{
 		Entries: 2,
-		Counts:  jsonapi.InboxCounts{Total: 2, Reasons: map[string]int{"draft": 1, "item_draft": 1}},
+		Counts:  jsonapi.InboxCounts{Total: 2, Reasons: map[string]int{"draft": 1, "item_draft": 1, "intake": 0}},
 	})
 
 	rr = env.do(http.MethodGet, "/inbox?reason=item_draft", "")
@@ -97,6 +97,32 @@ func TestInboxAPI_ListAndCount(t *testing.T) {
 	rr = env.do(http.MethodGet, "/inbox/count", "")
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.total"), float64(0))
+}
+
+func TestInboxAPI_ListsABatchOfFiles(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := appctx.WithGroup(createTestUserContext(env.user.ID, env.user.TenantID), env.group)
+	session, _ := must.Must2(regs.IntakeRegistry.CreateSession(ctx, models.IntakeSession{ClientKey: "batch-1"},
+		[]registry.IntakeSourceInput{{}, {}}, 0))
+
+	rr := env.do(http.MethodGet, "/inbox?reason=intake", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	inbox := decodeInbox(c, rr.Body.Bytes())
+	c.Assert(inbox.Data, qt.HasLen, 1)
+	c.Check(inbox.Data[0].Kind, qt.Equals, "intake_session")
+	c.Check(inbox.Data[0].ID, qt.Equals, session.ID)
+	c.Check(inbox.Data[0].Reasons, qt.DeepEquals, []string{"intake"})
+	c.Assert(inbox.Data[0].Intake, qt.IsNotNil)
+	c.Check(inbox.Data[0].Intake.State, qt.Equals, models.IntakeSessionProcessing)
+	c.Check(inbox.Data[0].Intake.Summary.Pending, qt.Equals, 2)
+	c.Check(inbox.Meta.Counts.Reasons["intake"], qt.Equals, 1)
+
+	rr = env.do(http.MethodGet, "/inbox/count", "")
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.reasons.intake"), float64(1))
+	c.Check(rr.Body.String(), checkers.JSONPathEquals("$.data.total"), float64(1))
 }
 
 func TestInboxAPI_RefusesAnUnknownReason(t *testing.T) {

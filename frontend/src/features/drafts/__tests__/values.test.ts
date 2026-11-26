@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseDraftValues } from "@/features/drafts/values"
+import { draftSellerName, parseDraftValues } from "@/features/drafts/values"
 
 describe("parseDraftValues", () => {
   it("keeps the values the form can use", () => {
@@ -93,5 +93,19 @@ describe("parseDraftValues", () => {
     expect(parseDraftValues(null)).toEqual({})
     expect(parseDraftValues("Drill")).toEqual({})
     expect(parseDraftValues([1, 2])).toEqual({})
+  })
+})
+
+describe("draftSellerName", () => {
+  it("reads the seller a batch intake draft names", () => {
+    expect(draftSellerName(parseDraftValues({ seller_name: " Sample Store " }))).toBe(
+      "Sample Store"
+    )
+  })
+
+  it("gives nothing when a seller is picked or the name is not text", () => {
+    expect(draftSellerName(parseDraftValues({ seller_name: "Shop", seller_id: "s1" }))).toBe("")
+    expect(draftSellerName(parseDraftValues({ seller_name: 7 }))).toBe("")
+    expect(draftSellerName({})).toBe("")
   })
 })

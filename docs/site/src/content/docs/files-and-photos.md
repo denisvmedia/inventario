@@ -211,7 +211,10 @@ name opens that page. A file saved with a
 draft in the **Add item** dialog. The **×** next to a name removes that
 attachment and nothing else: the file stays attached everywhere else, and once
 nothing is left it stays on the Files page as **Not attached to anything**
-until you delete it.
+until you delete it. A file you dropped for
+[Add items from files](../items/#add-items-from-files) shows **Added from
+files** while its batch holds it. That entry has no **×**: the file is released
+when the batch is removed.
 
 The action row gives you:
 
@@ -294,7 +297,8 @@ A few things to know:
   to **Images**, PDFs to **Documents** — so you don't have to upload them again.
 - If AI finds **more than one product** (for example, on a multi-item receipt),
   it asks you to **Choose which item to add** and pre-fills that one — you can
-  add the others separately afterwards.
+  add the others separately afterwards. To get a draft for every product on a
+  receipt at once, use [Add items from files](../items/#add-items-from-files).
 - When a receipt or invoice names the seller, the item names your group's
   seller with that name. If your group has no such seller, the **Purchase**
   step offers to create it; nothing is created until you agree (see

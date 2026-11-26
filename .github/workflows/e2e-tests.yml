@@ -626,6 +626,12 @@ jobs:
           # the binary (it runs a privileged, RLS-bypassing operation); set
           # here only for this throwaway CI server, never in a real deployment.
           INVENTARIO_RUN_ENABLE_SEED_ENDPOINT: "true"
+          # The deterministic mock AI provider with no hourly limit, as in
+          # docker-compose.e2e.yaml for the Linux lanes. Batch intake (#2810)
+          # scans on the server, so its spec needs a provider that the
+          # browser cannot stand in for. No key, no spend.
+          INVENTARIO_RUN_AI_VISION_PROVIDER: "mock"
+          INVENTARIO_RUN_AI_VISION_RATE_LIMIT_PER_HOUR: "0"
         run: |
           mkdir -p /tmp/inventario-uploads
           nohup ./bin/inventario run > /tmp/inventario.log 2>&1 &
