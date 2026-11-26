@@ -35,6 +35,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Items / Commodities
 
+#### 2026-11-26 — Donated and Stolen item statuses
+
+- **Issue/PR**: #1607 / #2903
+- **Mock**: [`design-mocks/src/data/mock.ts`](../../design-mocks/src/data/mock.ts) has five statuses (`in_use`, `sold`, `lost`, `disposed`, `written_off`) in `CommodityStatus` (L10) and `COMMODITY_STATUS_CONFIG` (L589–L598); the Change Status row of [`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) lists Sold, Lost, Disposed and Written Off (L720).
+- **Reality**: Two more statuses, **Donated** and **Stolen**, follow Written Off everywhere a status is listed: the Change Status row on the item page, the status select of the item form, the Status filter on All Items and on an area's items, and the bulk **Set status** menu. Donated uses the `chart-3` color (blue) and Stolen `chart-4` (orange): as the text color of the Change Status button, and as text, `/30` border and `/10` background of the status pill on cards and rows and of the status card on the item page. They open the same date and note dialog as Lost, with their own description and note placeholder. Like the other statuses, they have no icon.
+- **Why**: Owner decision 5 on #1607 (2026-11-26) makes Donated and Stolen statuses of their own. The mock's status colors (green, amber, red, muted) are all in use, so the two take chart colors that the file category badges already use. In light mode the two colors fall short of the 4.5:1 that [accessibility.md](accessibility.md) asks for text: as pill text `chart-3` measures about 3.2:1 and `chart-4` about 2.2:1 (in dark mode 4.6:1 and 6.1:1), and Stolen's orange sits between Lost's red and Sold's amber. No existing token does better on both counts: blue is the only hue the statuses do not use, and `tag-blue`, the darkest blue, reaches 4.1:1 as pill text. The four existing status colors measure 1.9:1 to 3.2:1 as pill text in light mode too, so 4.5:1 for status pills needs new status tokens, a token change of its own. Appending Donated and Stolen after Written Off keeps the mock's order for the existing statuses. The order and the two colors are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the owner's decisions of 2026-11-26; the order and the colors agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the two statuses; otherwise permanent.
+
+#### 2026-11-26 — Item form, edit form and item page follow the group's hidden sections
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) always has the Warranty step; [`design-mocks/src/components/ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) always has the Warranty tab (L771); [`design-mocks/src/components/WarrantyBadge.tsx`](../../design-mocks/src/components/WarrantyBadge.tsx) shows "No warranty" for an item without one.
+- **Reality**: While the group hides warranties, the Add item / edit dialog leaves out the Warranty step (the stepper and the "Step N of M" counter count one step fewer) and the in-place edit form leaves out the Warranty section, unless the item already holds a warranty date or notes. The item page leaves out the Warranty, Lend, Service and Maintenance tabs of hidden sections once it has read the item's data and found none in them, and then opens Details for a link to such a tab; while the data loads, or when it cannot be read, the tab stays; when the item has data, the tab stays and shows it, without the button that starts a new loan, service visit or schedule. The "No warranty" badge goes; a badge for a warranty the item has stays.
+- **Why**: The owner decision removes a hidden section from the item form and the item's actions while existing data still shows. Hiding the "No warranty" badge is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the "No warranty" badge agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
+
 #### 2026-11-25 — Server drafts in the Add item dialog: Save draft on every step, draft alerts, close-confirm copy
 
 - **Issue/PR**: #2812 / #2861
@@ -502,6 +520,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Dashboard / Overview
 
+#### 2026-11-26 — Warranty cards leave the dashboard while warranties are hidden
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/DashboardView.tsx`](../../design-mocks/src/views/DashboardView.tsx) has four stat cards in `lg:grid-cols-4` (L112), two of them about warranties, then Expiring Warranties beside Recently Added (L133) and Warranty Health (L216).
+- **Reality**: While the group hides warranties, the two warranty stat cards go and the remaining two sit in `lg:grid-cols-2`; Expiring Warranties and Warranty Health go and Recently Added takes the full width. The ready-made saved view suggestions leave out "Expiring warranties" while warranties are hidden and "Lent out" while loans are hidden.
+- **Why**: The owner decision removes a hidden section from the dashboard. Filtering the saved view suggestions is agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the saved view suggestions agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
+
 #### 2026-11-25 — Needs attention card on the dashboard
 
 - **Issue/PR**: #2794 / PR #2867
@@ -548,6 +575,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Follow the mock once `inventario-design` shows valuation coverage on the card.
 
 ### Locations & Areas
+
+#### 2026-11-26 — Area and location pages leave out warranty counts while the group hides warranties
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/ItemsPanel.tsx`](../../design-mocks/src/components/ItemsPanel.tsx) has three stat cells, Items, Active warranties and Value, in a `grid-cols-3` strip (L204–L207). The area tiles of [`design-mocks/src/views/LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) show an "expiring" badge when an area holds items whose warranty expires soon (L617–L633).
+- **Reality**: While the group hides warranties, the area page's stat strip has two cells, Items and Value, in a `grid-cols-2` strip, and the location page's area tiles show no expiring-warranty badge.
+- **Why**: The owner decision removes a hidden section from the group's pages; a warranty count is a warranty surface.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-24 — Area header: Print labels menu
 
@@ -901,6 +937,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 ### Settings & Preferences
 
+#### 2026-11-26 — Sections card in the group settings
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no setting that hides parts of the app; its Notifications block (L118) is the nearest card with switches.
+- **Reality**: The group settings rail gains a **Sections** entry after Info (`LayoutList` icon), and `frontend/src/components/groups/SectionsCard.tsx` renders a bordered card with a title, a subtitle and one row per section (Warranties, Maintenance and repairs, Loans, Upcoming): label, a muted description of what hiding removes, and a `Switch` that is on while the section shows. Members without the admin role see the same rows with the switches disabled and a muted note. While a save is in flight the switches show the requested state. `?section=<id>` on the settings URL opens a rail entry directly, which the hidden-section notice uses. The Notifications card leaves out the warranty alert row while the group hides warranties.
+- **Why**: not present in mock. The owner decision asks for a per-group setting an admin changes for all members; the card follows the Notifications card anatomy. Read-only switches for other roles, the in-flight state, the `?section=` deep link and dropping the warranty alert row are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; read-only switches, the deep link and the warranty alert row agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the setting; otherwise permanent.
+
 #### 2026-11-25 — Storage card: Trash bucket and note
 
 - **Issue/PR**: #2799 / PR #2835
@@ -1037,6 +1082,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
 ### Navigation & App shell
+
+#### 2026-11-26 — Sidebar, command palette and routes follow the group's hidden sections
+
+- **Issue/PR**: #1607
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) always lists Warranties (L62) and the state entries such as Maintenance (L88); [`design-mocks/src/components/CommandPalette.tsx`](../../design-mocks/src/components/CommandPalette.tsx) always offers Warranties.
+- **Reality**: The sidebar leaves out Upcoming, Warranties, Maintenance, Lent out and In service while the active group hides the matching section, and the command palette leaves out Warranties. The pages behind them (`/warranties`, `/maintenance`, `/in-service`, `/lent`, `/upcoming`) are wrapped in `SectionRoute`, which keeps the URL and renders a notice in place of the page: the empty-state anatomy with an `EyeOff` icon, "<Section> is hidden in this group", a line saying the data is kept, a primary **Open group settings** button (to the Sections card) and an outline **Go to dashboard** button. The Upcoming page also drops the tabs and rows of hidden kinds.
+- **Why**: The owner decision removes a hidden section from the navigation. The notice instead of a redirect keeps a bookmark or an emailed link explaining itself; it follows the empty-state pattern in [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx). The notice and the Upcoming kind filtering are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1607 by the 2026-11-26 owner decision on hideable sections; the notice page and the Upcoming kind filtering agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Permanent while sections can be hidden.
 
 #### 2026-11-25 — Inbox entry with a count in the sidebar
 

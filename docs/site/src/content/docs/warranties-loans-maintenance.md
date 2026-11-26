@@ -9,6 +9,10 @@ Beyond *what* you own and *where* it lives, Inventario helps you stay on top of 
 
 This guide covers all of them. They share a pattern: a group-wide overview page in the sidebar for *seeing* what's coming up, and a place on each item for *editing* the details. The [Upcoming](#the-upcoming-page) page puts every dated entry from all of them in one list.
 
+:::note[A section is missing?]
+A group administrator can hide **Warranties**, **Maintenance and repairs**, **Loans**, and **Upcoming** for the whole group. A hidden section leaves the sidebar, the Dashboard, and the item pages, and its reminder emails stop; items keep the data they already hold. See [Hide sections the group doesn't use](../groups-and-sharing/#hide-sections-the-group-doesnt-use).
+:::
+
 ## Warranties
 
 A warranty is tracked as a single expiry date on an item, plus optional notes. Inventario uses that date to sort your items into status buckets and to send reminders before cover runs out.
@@ -153,7 +157,7 @@ Deleting an item moves it to the [Trash](../trash/) with its reminders: they sen
 Open **Upcoming** in the sidebar for one list of everything with a date coming up in the group, oldest first:
 
 - item reminders, on their next date;
-- warranty expiries;
+- warranty expiries of items in use;
 - loans due back, including overdue ones;
 - maintenance due, including overdue schedules.
 
@@ -169,6 +173,8 @@ Inventario sends reminder emails so you don't have to keep checking these pages:
 - **Loans** — a number of days before an item you've lent out is due back (7 unless you or your administrator chose another number), and once more when it is overdue.
 - **Maintenance** — 14, 7, and 1 day before each due date, unless you choose other days, and once more when a task is overdue.
 - **Item reminders** — on the days before the date that you chose for that reminder. They go to the person who created the reminder, as long as they are still a member of the group.
+
+No reminder emails go out for a section the group [hides](../groups-and-sharing/#hide-sections-the-group-doesnt-use). Item reminders keep coming whatever the group hides.
 
 Each email for a date is sent once. If Inventario was not running when a lead time came up, it sends a single email for the closest lead time that has been reached rather than one for each missed day. A longer lead time is not sent after a shorter one, so if you add 90 to your warranty lead times, an item that expires next week, or one that already had its 60-day email, gets no new email; an item 75 days away gets its 90-day email straight away.
 

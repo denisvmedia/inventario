@@ -99,8 +99,8 @@ import {
 
 // CHANGE-STATUS bar: terminal status transitions surfaced as quick
 // buttons on the detail surface (mock: "Change Status" section).
-// Mirror the mock's set sans `in_use`, since `in_use` is what we're
-// transitioning *from*. Order matches the mock's row.
+// Every status but `in_use`, which is what the item transitions *from*.
+// The mock's row stops at Written Off; Donated and Stolen follow it.
 const TERMINAL_STATUSES = TERMINAL_COMMODITY_STATUSES
 
 // Mock parity colour-only mapping for the CHANGE STATUS quick
@@ -115,6 +115,8 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
   lost: "text-status-expiring",
   disposed: "text-muted-foreground",
   written_off: "text-status-expired",
+  donated: "text-chart-3",
+  stolen: "text-chart-4",
 }
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
@@ -130,6 +132,10 @@ import { hasValue } from "@/features/customFields/values"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
+import { useLoansForCommodity } from "@/features/loans/hooks"
+import { useMaintenanceForCommodity } from "@/features/maintenance/hooks"
+import { useServicesForCommodity } from "@/features/services/hooks"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { useUndoItemDelete } from "@/features/trash/useUndoItemDelete"
 import {
@@ -290,7 +296,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // the right tab. `?tab=details` is the default — we strip the param
   // when switching back so the URL stays clean.
   const [searchParams, setSearchParams] = useSearchParams()
-  const tab = parseTab(searchParams.get("tab"))
+  const requestedTab = parseTab(searchParams.get("tab"))
   function setTab(next: TabKey) {
     const params = new URLSearchParams(searchParams)
     if (next === "details") params.delete("tab")
@@ -486,6 +492,37 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 
   const commodity = detail.data?.commodity
 
+  // A section the group hides (#1607) drops its tab, unless the item holds
+  // data for it: an item with a warranty, a loan, a service record or a
+  // maintenance schedule keeps the tab and shows that data, without the
+  // action that starts a new one. The lists are read only while the
+  // section is hidden; the tabs read them anyway once opened. A tab goes
+  // only once its data has loaded and holds nothing, so a link to the tab
+  // does not fall back to Details while the data loads, and a failed read
+  // does not hide data the item may have.
+  const showWarranties = useSectionVisible("warranties")
+  const showLoans = useSectionVisible("loans")
+  const showMaintenance = useSectionVisible("maintenance")
+  const heldLoans = useLoansForCommodity(id, { enabled: enabled && !showLoans })
+  const heldServices = useServicesForCommodity(id, { enabled: enabled && !showMaintenance })
+  const heldSchedules = useMaintenanceForCommodity(id, {
+    enabled: enabled && !showMaintenance,
+  })
+  const hiddenTabs = new Set<TabKey>()
+  if (!showWarranties && commodity && !commodity.warranty_expires_at && !commodity.warranty_notes) {
+    hiddenTabs.add("warranty")
+  }
+  if (!showLoans && heldLoans.isSuccess && heldLoans.data.loans.length === 0) {
+    hiddenTabs.add("lend")
+  }
+  if (!showMaintenance && heldServices.isSuccess && heldServices.data.services.length === 0) {
+    hiddenTabs.add("service")
+  }
+  if (!showMaintenance && heldSchedules.isSuccess && heldSchedules.data.schedules.length === 0) {
+    hiddenTabs.add("maintenance")
+  }
+  const tab: TabKey = hiddenTabs.has(requestedTab) ? "details" : requestedTab
+
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
     for (const a of areas.data ?? []) {
@@ -657,7 +694,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   // CHANGE STATUS quick action: drives the row's status transitions.
-  // Forward transitions (in_use → sold/lost/disposed/written_off) open
+  // Forward transitions (in_use → any terminal status) open
   // the StatusTransitionDialog (#1611) so the user can record the
   // status_date / status_note / sale_price triple the BE persists.
   // Revert (terminal → in_use) keeps the lighter useConfirm path and
@@ -1229,7 +1266,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             right-hand tabs clip past the panel edge. Page mode keeps
             the full strip untouched. */}
         {isSheet ? null : (
-          <Tabs value={tab} onChange={setTab} fileCount={fileCount} variant={variant} />
+          <Tabs
+            value={tab}
+            onChange={setTab}
+            fileCount={fileCount}
+            variant={variant}
+            hidden={hiddenTabs}
+          />
         )}
 
         {/* Tab content gets `mt-4` in sheet mode to mirror the
@@ -1327,12 +1370,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showLoans}
             />
           ) : tab === "service" ? (
             <ServiceTab
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showMaintenance}
             />
           ) : tab === "supplies" ? (
             <SuppliesTab key={id} commodityId={commodity?.id ?? id} />
@@ -1341,6 +1386,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
+              canStart={showMaintenance}
             />
           ) : (
             <FilesTab
@@ -1456,9 +1502,11 @@ interface TabsProps {
   // narrower panel; `"page"` keeps the existing left-clumped
   // layout that fits the wider canvas.
   variant?: "page" | "sheet"
+  // Tabs of sections the group hides, for an item without data in them.
+  hidden?: ReadonlySet<TabKey>
 }
 
-function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
+function Tabs({ value, onChange, fileCount = 0, variant = "page", hidden }: TabsProps) {
   const { t } = useTranslation()
   const isSheet = variant === "sheet"
   // Files tab gets a leading icon — mock parity (`<Paperclip
@@ -1505,40 +1553,42 @@ function Tabs({ value, onChange, fileCount = 0, variant = "page" }: TabsProps) {
       )}
       data-testid="commodity-detail-tabs"
     >
-      {tabs.map((tb) => {
-        const Icon = tb.icon
-        return (
-          <button
-            key={tb.key}
-            role="tab"
-            type="button"
-            aria-selected={value === tb.key}
-            onClick={() => onChange(tb.key)}
-            className={cn(
-              "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
-              // Sheet triggers grow to equal width + center their
-              // labels so the tab strip mirrors the mock's
-              // `flex-1 justify-center` `<TabsTrigger>` shape.
-              isSheet ? "flex-1 justify-center px-2" : "px-3",
-              value === tb.key
-                ? "border-primary text-foreground font-semibold"
-                : "border-transparent text-muted-foreground hover:text-foreground"
-            )}
-            data-testid={`commodity-detail-tab-${tb.key}`}
-          >
-            {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
-            {tb.label}
-            {tb.count && tb.count > 0 ? (
-              <span
-                className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
-                data-testid={`commodity-detail-tab-${tb.key}-count`}
-              >
-                {tb.count}
-              </span>
-            ) : null}
-          </button>
-        )
-      })}
+      {tabs
+        .filter((tb) => !hidden?.has(tb.key))
+        .map((tb) => {
+          const Icon = tb.icon
+          return (
+            <button
+              key={tb.key}
+              role="tab"
+              type="button"
+              aria-selected={value === tb.key}
+              onClick={() => onChange(tb.key)}
+              className={cn(
+                "inline-flex items-center gap-1.5 py-2 text-sm border-b-2 -mb-px transition-colors",
+                // Sheet triggers grow to equal width + center their
+                // labels so the tab strip mirrors the mock's
+                // `flex-1 justify-center` `<TabsTrigger>` shape.
+                isSheet ? "flex-1 justify-center px-2" : "px-3",
+                value === tb.key
+                  ? "border-primary text-foreground font-semibold"
+                  : "border-transparent text-muted-foreground hover:text-foreground"
+              )}
+              data-testid={`commodity-detail-tab-${tb.key}`}
+            >
+              {Icon ? <Icon className="size-3.5" aria-hidden="true" /> : null}
+              {tb.label}
+              {tb.count && tb.count > 0 ? (
+                <span
+                  className="flex size-4 items-center justify-center rounded-full bg-muted text-[10px] font-medium text-foreground"
+                  data-testid={`commodity-detail-tab-${tb.key}-count`}
+                >
+                  {tb.count}
+                </span>
+              ) : null}
+            </button>
+          )
+        })}
     </div>
   )
 }

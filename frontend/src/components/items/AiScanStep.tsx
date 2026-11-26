@@ -169,6 +169,9 @@ interface AiScanStepProps {
   // rewrite skipped) instead of the group-scoped one. Same response
   // shape; the review/accept UI is unchanged.
   anonymous?: boolean
+  // Leaves the warranty date out of what the scan offers, for a group
+  // that hides warranties (#1607).
+  omitWarranty?: boolean
 }
 
 // AiScanStep ports the full mock AI phase, with the dropzone wired
@@ -182,6 +185,7 @@ export function AiScanStep({
   onAccept,
   onSkip,
   anonymous = false,
+  omitWarranty = false,
 }: AiScanStepProps) {
   const { t } = useTranslation()
   const itemTypes = useItemTypeLookup()
@@ -321,11 +325,12 @@ export function AiScanStep({
       })
       // Sellers belong to a group, and the anonymous flow has none to put
       // the seller in, so the seller goes into the comments there.
-      const r = anonymous
+      const folded = anonymous
         ? sellerIntoComments(scanned, (name) =>
             t("commodities:form.step.ai.sellerComment", { name })
           )
         : scanned
+      const r = omitWarranty ? withoutWarranty(folded) : folded
       // Nothing usable came back (an unreadable document, or a model
       // truncation). Don't drop the user into a green-but-empty "review" —
       // keep them on the offer with a retry hint.
@@ -1341,6 +1346,20 @@ function errorCodeTitle(code: string | null, t: (k: string) => string): string |
       return t("commodities:form.step.ai.errors.providerError.title")
     default:
       return null
+  }
+}
+
+// withoutWarranty drops the warranty date from every candidate of a scan.
+function withoutWarranty(result: ScanResult): ScanResult {
+  const drop = (fields: ScanResultFields): ScanResultFields => {
+    const rest = { ...fields }
+    delete rest.warranty_expires_at
+    return rest
+  }
+  return {
+    ...result,
+    fields: drop(result.fields),
+    items: result.items.map((item) => ({ ...item, fields: drop(item.fields) })),
   }
 }
 

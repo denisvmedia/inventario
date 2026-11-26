@@ -1424,6 +1424,8 @@ definitions:
         - lost
         - disposed
         - written_off
+        - donated
+        - stolen
         example: disposed
         type: string
     type: object
@@ -3106,6 +3108,32 @@ definitions:
       password:
         type: string
     type: object
+  jsonapi.GroupHiddenSectionsAttributes:
+    properties:
+      hidden_sections:
+        description: |-
+          HiddenSections is the full list of sections to hide: warranties,
+          maintenance, loans, upcoming. An empty list shows every section.
+          Unknown sections are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
+    type: object
+  jsonapi.GroupHiddenSectionsData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsAttributes'
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.GroupHiddenSectionsRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsData'
+    type: object
   jsonapi.GroupInviteCreateAttrs:
     properties:
       email:
@@ -4036,6 +4064,16 @@ definitions:
           when nil. On update the handler rejects a change with 422 — a
           reprice-aware currency migration is tracked under #202.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its
+          members: warranties, maintenance, loans, upcoming. Optional. On
+          create, absent means the group hides nothing; on update, absent
+          leaves the list as it is and a list replaces it. Unknown sections
+          are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         type: string
       name:
@@ -5892,6 +5930,8 @@ definitions:
     - lost
     - disposed
     - written_off
+    - donated
+    - stolen
     type: string
     x-enum-varnames:
     - CommodityStatusInUse
@@ -5899,6 +5939,8 @@ definitions:
     - CommodityStatusLost
     - CommodityStatusDisposed
     - CommodityStatusWrittenOff
+    - CommodityStatusDonated
+    - CommodityStatusStolen
   models.CurrencyMigration:
     properties:
       commodity_count:
@@ -6361,6 +6403,18 @@ definitions:
     - GroupRoleUser
     - GroupRoleAdmin
     - GroupRoleOwner
+  models.GroupSection:
+    enum:
+    - warranties
+    - maintenance
+    - loans
+    - upcoming
+    type: string
+    x-enum-varnames:
+    - GroupSectionWarranties
+    - GroupSectionMaintenance
+    - GroupSectionLoans
+    - GroupSectionUpcoming
   models.IntakeCandidate:
     properties:
       accepted_fields:
@@ -6583,6 +6637,15 @@ definitions:
           groups valued in different currencies. Admins change it via the group's
           update endpoint; changing it triggers a reprice of the group's commodities.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its members
+          (see GroupSection). Empty for a group that hides nothing. Admins change
+          it through the group's update endpoints; every member reads it with the
+          group.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         description: |-
           Icon is an optional emoji from the curated set in
@@ -9382,8 +9445,8 @@ paths:
         name: type
         type: array
       - collectionFormat: multi
-        description: Filter by status (in_use, sold, lost, disposed, written_off);
-          repeat to OR
+        description: Filter by status (in_use, sold, lost, disposed, written_off,
+          donated, stolen); repeat to OR
         in: query
         items:
           type: string
@@ -13887,7 +13950,7 @@ paths:
         type: array
       - collectionFormat: multi
         description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
-          written_off); repeat to OR'
+          written_off, donated, stolen); repeat to OR'
         in: query
         items:
           type: string
@@ -15133,7 +15196,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: Creates a new location group with a random non-guessable slug.
-        The creator becomes the group admin.
+        The creator becomes the group admin. hidden_sections, when given, sets the
+        sections the new group hides.
       parameters:
       - description: Group data
         in: body
@@ -15229,9 +15293,9 @@ paths:
     patch:
       consumes:
       - application/vnd.api+json
-      description: 'Updates a location group''s name, icon, and description. The group_currency
-        field is set once at creation and cannot be changed here — see issue #202
-        for the currency-migration tool. Requires group admin role.'
+      description: |-
+        Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+        The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
       parameters:
       - description: Group ID
         in: path
@@ -15264,6 +15328,48 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update group
+      tags:
+      - groups
+  /groups/{groupID}/hidden-sections:
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+        An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+        Unknown sections are refused; duplicates are dropped. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Hidden sections
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.GroupHiddenSectionsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Set the group's hidden sections
       tags:
       - groups
   /groups/{groupID}/invites:

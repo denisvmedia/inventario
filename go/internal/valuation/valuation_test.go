@@ -303,6 +303,62 @@ func TestValuator_Calculate_UnknownPrices(t *testing.T) {
 	c.Assert(totals.ByLocation[location.ID], qt.CmpEquals(decimalCmp), totals.ByArea[area.ID])
 }
 
+// TestValuator_Calculate_Statuses checks that only an item in use counts
+// towards the totals: an item sold, lost, disposed, written off, donated or
+// stolen is no longer the group's.
+func TestValuator_Calculate_Statuses(t *testing.T) {
+	tests := []struct {
+		status models.CommodityStatus
+		counts bool
+	}{
+		{models.CommodityStatusInUse, true},
+		{models.CommodityStatusSold, false},
+		{models.CommodityStatusLost, false},
+		{models.CommodityStatusDisposed, false},
+		{models.CommodityStatusWrittenOff, false},
+		{models.CommodityStatusDonated, false},
+		{models.CommodityStatusStolen, false},
+	}
+	for _, tt := range tests {
+		t.Run(string(tt.status), func(t *testing.T) {
+			c := qt.New(t)
+			registrySet, ctx := setupEmptyGroup(c, "USD")
+			location := must.Must(registrySet.LocationRegistry.Create(ctx, models.Location{Name: "Home"}))
+			area := must.Must(registrySet.AreaRegistry.Create(ctx, models.Area{Name: "Hall", LocationID: location.ID}))
+
+			commodity := models.Commodity{
+				Name:                  "Bike",
+				ShortName:             "Bike",
+				AreaID:                new(area.ID),
+				Count:                 1,
+				Type:                  models.CommodityTypeOther,
+				OriginalPrice:         new(decimal.NewFromInt(300)),
+				OriginalPriceCurrency: "USD",
+				PurchaseDate:          models.ToPDate("2024-01-01"),
+				Status:                tt.status,
+			}
+			if tt.status != models.CommodityStatusInUse {
+				commodity.StatusDate = models.ToPDate("2026-11-26")
+			}
+			if tt.status == models.CommodityStatusSold {
+				commodity.SalePrice = new(decimal.NewFromInt(100))
+			}
+			c.Assert(commodity.ValidateWithContext(validationContext(ctx, "USD")), qt.IsNil)
+			must.Must(registrySet.CommodityRegistry.Create(ctx, commodity))
+
+			totals, err := valuation.NewValuator(ctx, registrySet).Calculate()
+			c.Assert(err, qt.IsNil)
+			if !tt.counts {
+				c.Assert(totals.Global, qt.CmpEquals(decimalCmp), valuation.Total{})
+				c.Assert(totals.ByArea, qt.HasLen, 0)
+				return
+			}
+			c.Assert(totals.Global, qt.CmpEquals(decimalCmp), valuation.Total{Value: decimal.NewFromInt(300), ValuedCount: 1})
+			c.Assert(totals.ByArea[area.ID], qt.CmpEquals(decimalCmp), totals.Global)
+		})
+	}
+}
+
 var decimalCmp = cmp.Comparer(func(a, b decimal.Decimal) bool { return a.Equal(b) })
 
 // setupEmptyGroup returns a registry set for a fresh group with no data.

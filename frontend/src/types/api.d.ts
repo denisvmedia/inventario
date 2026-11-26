@@ -4066,7 +4066,7 @@ export type paths = {
                     per_page?: number;
                     /** @description Filter by commodity type; repeat to OR */
                     type?: string[];
-                    /** @description Filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Filter by exact area ID */
                     area_id?: string;
@@ -10596,7 +10596,7 @@ export type paths = {
                     no_purchase_date?: boolean;
                     /** @description Commodities only: custom field condition, as for GET /commodities */
                     cf?: string[];
-                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
+                    /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off, donated, stolen); repeat to OR */
                     status?: string[];
                     /** @description Commodities only: filter by exact area ID */
                     area_id?: string;
@@ -12572,7 +12572,7 @@ export type paths = {
         put?: never;
         /**
          * Create a group
-         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin.
+         * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
          */
         post: {
             parameters: {
@@ -12733,7 +12733,8 @@ export type paths = {
         head?: never;
         /**
          * Update group
-         * @description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+         * @description Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+         *     The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
          */
         patch: {
             parameters: {
@@ -12785,6 +12786,82 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/groups/{groupID}/hidden-sections": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Set the group's hidden sections
+         * @description Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+         *     An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+         *     Unknown sections are refused; duplicates are dropped. Requires group admin role.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description Hidden sections */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.GroupHiddenSectionsRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.LocationGroupResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Validation error */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/groups/{groupID}/invites": {
@@ -15193,7 +15270,7 @@ export type components = {
              * @example disposed
              * @enum {string}
              */
-            value?: "in_use" | "lost" | "disposed" | "written_off";
+            value?: "in_use" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         };
         "jsonapi.CommodityBulkUpdateAttributes": {
             /** @example 37 */
@@ -16361,6 +16438,25 @@ export type components = {
             confirm_word?: string;
             password?: string;
         };
+        "jsonapi.GroupHiddenSectionsAttributes": {
+            /**
+             * @description HiddenSections is the full list of sections to hide: warranties,
+             *     maintenance, loans, upcoming. An empty list shows every section.
+             *     Unknown sections are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
+        };
+        "jsonapi.GroupHiddenSectionsData": {
+            attributes?: components["schemas"]["jsonapi.GroupHiddenSectionsAttributes"];
+            /**
+             * @example groups
+             * @enum {string}
+             */
+            type?: "groups";
+        };
+        "jsonapi.GroupHiddenSectionsRequest": {
+            data?: components["schemas"]["jsonapi.GroupHiddenSectionsData"];
+        };
         "jsonapi.GroupInviteCreateAttrs": {
             /** @example colleague@example.com */
             email?: string;
@@ -16999,6 +17095,14 @@ export type components = {
              *     reprice-aware currency migration is tracked under #202.
              */
             group_currency?: string;
+            /**
+             * @description HiddenSections lists the sections the group hides for all its
+             *     members: warranties, maintenance, loans, upcoming. Optional. On
+             *     create, absent means the group hides nothing; on update, absent
+             *     leaves the list as it is and a list replaces it. Unknown sections
+             *     are refused and duplicates dropped.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
             icon?: string;
             name?: string;
         };
@@ -18320,7 +18424,7 @@ export type components = {
             uuid?: string;
         };
         /** @enum {string} */
-        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off";
+        "models.CommodityStatus": "in_use" | "sold" | "lost" | "disposed" | "written_off" | "donated" | "stolen";
         "models.CurrencyMigration": {
             /** @description CommodityCount is the number of rows actually mutated by the worker. */
             commodity_count?: number;
@@ -18609,6 +18713,8 @@ export type components = {
         };
         /** @enum {string} */
         "models.GroupRole": "viewer" | "user" | "admin" | "owner";
+        /** @enum {string} */
+        "models.GroupSection": "warranties" | "maintenance" | "loans" | "upcoming";
         "models.IntakeCandidate": {
             accepted_fields?: string[];
             created_at?: string;
@@ -18737,6 +18843,13 @@ export type components = {
              *     update endpoint; changing it triggers a reprice of the group's commodities.
              */
             group_currency?: string;
+            /**
+             * @description HiddenSections lists the sections the group hides for all its members
+             *     (see GroupSection). Empty for a group that hides nothing. Admins change
+             *     it through the group's update endpoints; every member reads it with the
+             *     group.
+             */
+            hidden_sections?: components["schemas"]["models.GroupSection"][];
             /**
              * @description Icon is an optional emoji from the curated set in
              *     models.ValidGroupIcons. Empty string means "no icon". Issue #1255.

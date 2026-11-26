@@ -11,7 +11,7 @@ import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { groupHandlers, serviceHandlers } from "@/test/handlers"
+import { groupHandlers, loanHandlers, serviceHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
@@ -34,7 +34,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab() {
+function renderTab(canStart?: boolean) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -44,7 +44,7 @@ function renderTab() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <ServiceTab commodityId={COMMODITY_ID} />
+                <ServiceTab commodityId={COMMODITY_ID} canStart={canStart} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -225,5 +225,50 @@ describe("<ServiceTab />", () => {
       const results = await axe(baseElement)
       expect(results).toHaveNoViolations()
     })
+  })
+})
+
+describe("<ServiceTab /> while the group hides maintenance and repairs (#1607)", () => {
+  it("shows the service records without the Send button", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-2",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Bob's Repair Shop",
+          reason: "battery swap",
+          sent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+        },
+      ])
+    )
+    renderTab(false)
+    expect(await screen.findByTestId("service-history-row-svc-2")).toHaveTextContent(
+      "Bob's Repair Shop"
+    )
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+  })
+
+  it("does not ask to close a loan before a service the group no longer offers", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, []),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "l1",
+          commodity_id: COMMODITY_ID,
+          borrower_name: "Anna",
+          lent_at: "2026-03-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab(false)
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    await expect(
+      screen.findByTestId("service-blocked-by-loan", {}, { timeout: 500 })
+    ).rejects.toThrow()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
   })
 })

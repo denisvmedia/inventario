@@ -356,3 +356,28 @@ describe("<LocationDetailPage />", () => {
     await waitFor(() => expect(screen.queryByTestId("entity-drop-overlay")).not.toBeInTheDocument())
   })
 })
+
+describe("<LocationDetailPage /> in a group that hides warranties (#1607)", () => {
+  it("leaves out the warranty-expiring pill", async () => {
+    const soon = new Date()
+    soon.setDate(soon.getDate() + 30)
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties"] }]),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Main House" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Main House" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Kitchen", location_id: "loc1" })]),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", {
+          name: "Espresso",
+          area_id: "a1",
+          status: "in_use",
+          warranty_expires_at: soon.toISOString().slice(0, 10),
+        }),
+      ])
+    )
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    await waitFor(() => expect(within(tile).getByText("1 item")).toBeInTheDocument())
+    expect(within(tile).queryByTestId("location-detail-area-expiring")).not.toBeInTheDocument()
+  })
+})

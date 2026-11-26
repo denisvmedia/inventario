@@ -327,3 +327,35 @@ describe("<CommandPalette /> from the TopBar", () => {
     expect(await axe(palette)).toHaveNoViolations()
   })
 })
+
+describe("<CommandPalette /> in a group that hides sections (#1607)", () => {
+  function navigationOptions(palette: HTMLElement): string[] {
+    return within(palette)
+      .getAllByRole("option")
+      .map((option) => option.textContent ?? "")
+  }
+
+  it("offers Warranties while the group shows them", async () => {
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    expect(navigationOptions(palette)).toContain("Warranties")
+  })
+
+  it("leaves Warranties out while the group hides them", async () => {
+    useHandlers()
+    server.use(
+      ...groupHandlers.list([
+        { id: "g1", slug: "household", name: "Household", hidden_sections: ["warranties"] },
+        { id: "g2", slug: "office", name: "Office" },
+      ])
+    )
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    const options = navigationOptions(palette)
+    expect(options).toContain("Tags")
+    expect(options).not.toContain("Warranties")
+  })
+})

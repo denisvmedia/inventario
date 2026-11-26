@@ -149,6 +149,7 @@ func TestCommodityBulkUpdate_Refused(t *testing.T) {
 		{"an unknown type", map[string]any{"ids": []string{"a"}, "patch": map[string]any{"type": "spaceship"}}, http.StatusUnprocessableEntity, ""},
 		{"sold", map[string]any{"ids": []string{"a"}, "patch": map[string]any{"status": map[string]any{"value": "sold", "date": "2026-11-25"}}}, http.StatusUnprocessableEntity, ""},
 		{"leaving in use without a date", map[string]any{"ids": []string{"a"}, "patch": map[string]any{"status": map[string]any{"value": "lost"}}}, http.StatusUnprocessableEntity, ""},
+		{"stolen without a date", map[string]any{"ids": []string{"a"}, "patch": map[string]any{"status": map[string]any{"value": "stolen"}}}, http.StatusUnprocessableEntity, ""},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

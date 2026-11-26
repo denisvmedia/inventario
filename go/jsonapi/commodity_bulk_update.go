@@ -53,7 +53,7 @@ type BulkTagsPatch struct {
 // takes an optional Note of at most 1024 characters. sold is refused: it
 // needs a sale price of its own for each item.
 type CommodityBulkStatusPatch struct {
-	Value string `json:"value" example:"disposed" enums:"in_use,lost,disposed,written_off"`
+	Value string `json:"value" example:"disposed" enums:"in_use,lost,disposed,written_off,donated,stolen"`
 	Date  string `json:"date,omitempty" example:"2026-11-25"`
 	Note  string `json:"note,omitempty"`
 }
