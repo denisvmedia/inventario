@@ -383,3 +383,57 @@ func TestINBExport_PromotionBetweenTheReads(t *testing.T) {
 	states := must.Must(f.intake.DocumentStates(f.ctx, docs))
 	c.Assert(states[docs[0].ID], qt.Equals, models.IntakeDocumentItem)
 }
+
+// draftNotRecordedYet lists the documents as an export reads them while a
+// delivery has made the draft of document "1" and not recorded it yet.
+type draftNotRecordedYet struct {
+	registry.IntakeDocumentRegistryFactory
+}
+
+type draftNotRecordedYetRegistry struct {
+	registry.IntakeDocumentRegistry
+}
+
+func (d *draftNotRecordedYet) CreateUserRegistry(ctx context.Context) (registry.IntakeDocumentRegistry, error) {
+	reg, err := d.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
+	return &draftNotRecordedYetRegistry{IntakeDocumentRegistry: reg}, err
+}
+
+func (r *draftNotRecordedYetRegistry) List(ctx context.Context) ([]*models.IntakeDocument, error) {
+	docs, err := r.IntakeDocumentRegistry.List(ctx)
+	for i, doc := range docs {
+		if doc.ExternalDocumentID == "1" {
+			docs[i] = new(*doc)
+			docs[i].DraftID = nil
+		}
+	}
+	return docs, err
+}
+
+// A document exported before its delivery recorded the draft: the archive
+// carries the draft, the record names none. The delivery repeated after the
+// restore takes the restored draft and makes no session.
+func TestINBRoundTrip_DraftNotRecordedAtTheExport(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDeliveredFixture(c)
+	orig := f.fs.IntakeDocumentRegistryFactory
+	f.fs.IntakeDocumentRegistryFactory = &draftNotRecordedYet{orig}
+	blobKey, _ := f.runExport(c, signer)
+	f.fs.IntakeDocumentRegistryFactory = orig
+
+	final, err := restoreInb(c, f.inbFixture, signer, blobKey)
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Assert(f.documents(c)["1"].DraftID, qt.IsNil)
+	drafts := must.Must(must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx)).List(f.ctx))
+	c.Assert(drafts, qt.HasLen, 1)
+	sessions := must.Must(f.fs.IntakeRegistryFactory.CreateUserRegistry(f.ctx))
+	before := len(must.Must(sessions.List(f.ctx)))
+
+	result, err := f.intake.Deliver(f.ctx, delivery("1"), nil)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*result.Document.DraftID, qt.Equals, drafts[0].ID)
+	c.Assert(must.Must(sessions.List(f.ctx)), qt.HasLen, before)
+}

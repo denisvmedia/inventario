@@ -382,12 +382,18 @@ func dropDeliveredFile(ctx context.Context, set *registry.Set, stored *models.Fi
 // finishDelivery makes what the document does not have yet, the file of the
 // group, the intake session and the draft, and records each on it.
 func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) error {
-	if result.Document.SessionID != nil {
-		// A call made the session and may have made the draft before it
-		// stopped, also when the session is gone since.
-		if found, err := recordDraftByKey(ctx, set, result); found || err != nil {
+	// The draft may be there without the document naming it: a call made it
+	// and stopped before recording it, also when its session is gone since,
+	// or a restore brought the draft back without the session.
+	draft, err := set.CommodityDraftRegistry.GetByClientKey(ctx, result.Document.DraftClientKey())
+	switch {
+	case err == nil:
+		if err := ownsTheIdentity(ctx, set.IntakeRegistry, result.Document); err != nil {
 			return err
 		}
+		return recordDraft(ctx, set, result, draft.ID)
+	case !errors.Is(err, registry.ErrNotFound):
+		return err
 	}
 	session, err := s.deliverySession(ctx, set, n, file, result)
 	if errors.Is(err, errDeliverySessionGone) {
@@ -568,6 +574,23 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 		return sessionOfSource(ctx, reg, src, clientKey, doc)
 	}
 	return session, err
+}
+
+// ownsTheIdentity refuses the document when a session made for another
+// record carries its identity, as sessionOfSource does. The session the
+// document names is its own.
+func ownsTheIdentity(ctx context.Context, reg registry.IntakeRegistry, doc *models.IntakeDocument) error {
+	src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil
+	case err != nil:
+		return errxtrace.Wrap("failed to look up the source of the document", err)
+	case doc.SessionID != nil && *doc.SessionID == src.SessionID:
+		return nil
+	}
+	_, err = sessionOfSource(ctx, reg, src, intakeSessionClientKeyPrefix+doc.ID, doc)
+	return err
 }
 
 // sessionOfSource returns the session of a source that carries the
