@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -557,7 +558,7 @@ func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	}, true
 }
 
-func toJSONAPIError(err error) jsonapi.Error {
+func toJSONAPIError(ctx context.Context, err error) jsonapi.Error {
 	// Sentinel families extracted into early-return helpers so this switch
 	// stays under the gocyclo budget (admin guards #1745/#1747/#1750,
 	// account-deletion #2147). Each returns ok=false when err isn't one of
@@ -670,13 +671,13 @@ func toJSONAPIError(err error) jsonapi.Error {
 	case errors.Is(err, ErrInvalidUploadSlot):
 		return NewBadRequestError(err)
 	default:
-		slog.Error("internal server error", "error", err)
+		slog.ErrorContext(ctx, "internal server error", "error", err)
 		return NewInternalServerError(err)
 	}
 }
 
 func renderEntityError(w http.ResponseWriter, r *http.Request, err error) error {
-	jsErr := toJSONAPIError(err)
+	jsErr := toJSONAPIError(r.Context(), err)
 	// The default arm of toJSONAPIError maps any unrecognised error to a 500;
 	// report those (and any explicit 5xx) to Sentry (#844). Mapped 4xx — the
 	// common case — are expected business outcomes and are not captured. No-op

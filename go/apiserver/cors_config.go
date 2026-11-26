@@ -24,11 +24,14 @@ var defaultAllowedHeaders = []string{
 	"Content-Type",
 	"X-CSRF-Token",
 	"X-Auth-Check",
-	"X-Request-ID",
+	RequestIDHeader,
 }
 
 var defaultExposedHeaders = []string{
 	"X-CSRF-Token",
+	// So that a cross-origin frontend can show or report the id of a failed
+	// request, which is what lets a bug report be matched to its log lines.
+	RequestIDHeader,
 	"X-RateLimit-Limit",
 	"X-RateLimit-Remaining",
 	"X-RateLimit-Reset",

@@ -15,7 +15,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-extras/errx"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -457,7 +456,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 	if api.mfaService == nil || api.mfaRegistry == nil {
 		slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but MFA service not configured", "user_id", user.ID)
 		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa not configured"))
-		api.writeMFANotImplementedResponse(w, user.Email)
+		api.writeMFANotImplementedResponse(w, r, user.Email)
 		return false
 	}
 
@@ -466,7 +465,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 		if errors.Is(err, registry.ErrBackofficeMFASecretNotFound) {
 			slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but no enrollment row", "user_id", user.ID)
 			api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment missing"))
-			api.writeMFANotImplementedResponse(w, user.Email)
+			api.writeMFANotImplementedResponse(w, r, user.Email)
 			return false
 		}
 		slog.ErrorContext(r.Context(), "Backoffice login: MFA lookup failed", "user_id", user.ID, "error", err)
@@ -479,7 +478,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 		// treat it like a missing row: fail closed.
 		slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but enrollment row not enabled", "user_id", user.ID)
 		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment not enabled"))
-		api.writeMFANotImplementedResponse(w, user.Email)
+		api.writeMFANotImplementedResponse(w, r, user.Email)
 		return false
 	}
 
@@ -492,7 +491,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 		return false
 	}
 	api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, true, r, nil)
-	api.writeMFAChallengeResponse(w, user.Email, token, int(time.Until(expiresAt).Seconds()))
+	api.writeMFAChallengeResponse(w, r, user.Email, token, int(time.Until(expiresAt).Seconds()))
 	return false
 }
 
@@ -501,7 +500,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 // enrollment row exists (or the row is not yet enabled). The FE branches
 // on `code == backoffice.mfa_not_implemented` to render an explicit "MFA
 // is required on your account — contact platform admin" message.
-func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWriter, email string) {
+func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWriter, r *http.Request, email string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusNotImplemented)
 	if err := json.NewEncoder(w).Encode(BackofficeMFARequiredResponse{
@@ -509,14 +508,14 @@ func (api *BackofficeAuthAPI) writeMFANotImplementedResponse(w http.ResponseWrit
 		Email:       email,
 		Code:        backofficeMFANotImplementedCode,
 	}); err != nil {
-		slog.Error("Failed to encode backoffice MFA-not-implemented response", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to encode backoffice MFA-not-implemented response", "error", err)
 	}
 }
 
 // writeMFAChallengeResponse writes the 200 step-1 response carrying the
 // short-lived MFA token. The FE pivots to the code-entry surface and
 // POSTs the token + a TOTP/backup code back to /login/mfa.
-func (api *BackofficeAuthAPI) writeMFAChallengeResponse(w http.ResponseWriter, email, token string, expiresInSeconds int) {
+func (api *BackofficeAuthAPI) writeMFAChallengeResponse(w http.ResponseWriter, r *http.Request, email, token string, expiresInSeconds int) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
 	if err := json.NewEncoder(w).Encode(BackofficeMFARequiredResponse{
@@ -525,7 +524,7 @@ func (api *BackofficeAuthAPI) writeMFAChallengeResponse(w http.ResponseWriter, e
 		MFAToken:    token,
 		ExpiresIn:   expiresInSeconds,
 	}); err != nil {
-		slog.Error("Failed to encode backoffice MFA challenge response", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to encode backoffice MFA challenge response", "error", err)
 	}
 }
 
@@ -673,8 +672,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		slog.WarnContext(r.Context(), "Backoffice refresh token reuse detected",
 			"user_id", refreshToken.BackofficeUserID,
 			"token_id", refreshToken.ID,
-			"ip", clientIPTruncated(r),
-			"request_id", middleware.GetReqID(r.Context()))
+			"ip", clientIPTruncated(r))
 		api.logAuth(r.Context(), backofficeActionRefreshReuse, refreshToken.BackofficeUserID, false, r, nil)
 		clearBackofficeRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)

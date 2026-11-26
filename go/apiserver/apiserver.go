@@ -522,6 +522,10 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	})
 
 	r := chi.NewRouter()
+	// First, so that every line logged below it carries request_id and every
+	// response carries X-Request-ID, including a CORS preflight, a request
+	// the tenant-header guards refuse and a failed authentication.
+	r.Use(RequestIDMiddleware())
 	// CORS middleware — strict and explicit origin-based policy.
 	r.Use(NewCORSMiddleware(params.CORSConfig).Handler)
 
@@ -536,12 +540,6 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 	// through ctx.Done() that the request has timed out and further
 	// processing should be stopped.
 	r.Use(middleware.Timeout(60 * time.Second))
-	r.Use(middleware.RequestID)
-	// Copies the router's correlation id into appctx so code below the HTTP
-	// layer can read it without importing a router. The audit service uses it to
-	// stamp request_id on its rows, which is what makes a log line and an audit
-	// row provably the same request rather than merely adjacent (#2479).
-	r.Use(RequestIDContextMiddleware())
 	r.Use(middleware.Logger)
 	// RED metrics (#843): registered BEFORE Recoverer so it WRAPS it — the
 	// deferred status read then observes the 500 that Recoverer writes for a

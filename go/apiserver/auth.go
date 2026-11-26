@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -362,25 +361,25 @@ func (api *AuthAPI) login(w http.ResponseWriter, r *http.Request) {
 
 	// Reuse the already-computed claim from the freshly issued access token
 	// instead of performing a second best-effort admin-grant lookup here.
-	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
+	populateUserSystemAdminFlagFromAccessToken(r.Context(), accessTokenString, user)
 
 	writeLoginResponse(w, accessTokenString, csrfToken, user)
 }
 
-func populateUserSystemAdminFlagFromAccessToken(accessTokenString string, user *models.User) {
+func populateUserSystemAdminFlagFromAccessToken(ctx context.Context, accessTokenString string, user *models.User) {
 	if user == nil || accessTokenString == "" {
 		return
 	}
 
 	token, _, err := new(jwt.Parser).ParseUnverified(accessTokenString, jwt.MapClaims{})
 	if err != nil {
-		slog.Warn("Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
+		slog.WarnContext(ctx, "Failed to parse access token for user is_system_admin flag", "user_id", user.ID, "error", err)
 		return
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		slog.Warn("Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
+		slog.WarnContext(ctx, "Failed to read access token claims for user is_system_admin flag", "user_id", user.ID)
 		return
 	}
 
@@ -470,8 +469,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 		slog.WarnContext(r.Context(), "Refresh token reuse detected",
 			"user_id", refreshToken.UserID,
 			"token_id", refreshToken.ID,
-			"ip", clientIPTruncated(r),
-			"request_id", middleware.GetReqID(r.Context()))
+			"ip", clientIPTruncated(r))
 		uid := refreshToken.UserID
 		tid := refreshToken.TenantID
 		api.logAuth(r.Context(), "refresh_token_reuse_detected", &uid, &tid, false, r, nil)
@@ -571,7 +569,7 @@ func (api *AuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// Reuse the freshly-minted access-token claim instead of doing a
 	// second SystemAdminGrantRegistry.Exists lookup on the hot refresh
 	// path.
-	populateUserSystemAdminFlagFromAccessToken(accessTokenString, user)
+	populateUserSystemAdminFlagFromAccessToken(r.Context(), accessTokenString, user)
 
 	// Login, logout, MFA and reuse detection each leave a row; a successful
 	// rotation did not, so a session kept alive for weeks through rotation had
@@ -792,11 +790,11 @@ func (api *AuthAPI) revokeRefreshToken(ctx context.Context, rawToken string) {
 // shape under the new model) don't double-revoke a non-existent
 // refresh-token row. Returns true when the cookie is the legacy
 // marker shape so the caller skips its plain revoke path.
-func (api *AuthAPI) revokeImpersonationRefreshTokenIfMarker(cookieValue string) bool {
+func (api *AuthAPI) revokeImpersonationRefreshTokenIfMarker(ctx context.Context, cookieValue string) bool {
 	if !strings.HasPrefix(cookieValue, impersonationRefreshCookieMarker) {
 		return false
 	}
-	slog.Warn("Logout: ignoring legacy imp: marker cookie — cross-plane impersonation no longer plants it")
+	slog.WarnContext(ctx, "Logout: ignoring legacy imp: marker cookie — cross-plane impersonation no longer plants it")
 	return true
 }
 
@@ -835,7 +833,7 @@ func (api *AuthAPI) logout(w http.ResponseWriter, r *http.Request) {
 	// being hashed against the refresh-token registry — the marker is
 	// not a real token and would never resolve to a row.
 	if cookie, err := r.Cookie(refreshTokenCookieName); err == nil {
-		if !api.revokeImpersonationRefreshTokenIfMarker(cookie.Value) {
+		if !api.revokeImpersonationRefreshTokenIfMarker(r.Context(), cookie.Value) {
 			api.revokeRefreshToken(r.Context(), cookie.Value)
 		}
 	}
