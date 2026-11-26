@@ -65,13 +65,13 @@ func (h *groupPlanHandler) handleGroupPlan(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// TenantRegistry on the user-scoped Set is the same non-RLS instance
-	// as `FactorySet.TenantRegistry` (it has to be — every request needs
-	// to read its own tenant row to establish context, and an RLS-filtered
-	// TenantRegistry would chicken-and-egg). Reading by the request user's
-	// TenantID gives us exactly the row we want regardless.
 	plan := models.PlanUnlimited
 	if h.plansEnabled {
+		// TenantRegistry on the user-scoped Set is the same non-RLS instance
+		// as `FactorySet.TenantRegistry` (it has to be — every request needs
+		// to read its own tenant row to establish context, and an RLS-filtered
+		// TenantRegistry would chicken-and-egg). Reading by the request user's
+		// TenantID gives us exactly the row we want regardless.
 		tenant, err := registrySet.TenantRegistry.Get(ctx, user.TenantID)
 		if err != nil {
 			internalServerError(w, r, err)
