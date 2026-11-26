@@ -7,6 +7,13 @@
  *      it creates one item that carries the photo.
  *   2. A save whose response is lost is repeated by Retry and still makes
  *      one draft.
+ *   3. Add item uploads the files to the item's draft before it creates the
+ *      item (#1626): the item page shows them with the titles typed in the
+ *      dialog.
+ *   4. A failed upload adds no item; Retry uploads what is missing and
+ *      then adds the item with every file.
+ *   5. Discard after a failed Add item deletes the draft it made and moves
+ *      the files it uploaded to Trash.
  *
  * Names carry a suffix unique to the run, so rows from parallel specs in
  * the same group do not match.
@@ -50,19 +57,61 @@ async function listDrafts(
   return body.data;
 }
 
+async function itemFiles(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  itemId: string,
+): Promise<{ title: string; path: string; ext: string }[]> {
+  const resp = await request.get(
+    `/api/v1/g/${encodeURIComponent(slug)}/files?linked_entity_type=commodity&linked_entity_id=${encodeURIComponent(itemId)}`,
+    { headers: headers(auth) },
+  );
+  expect(resp.ok(), `GET /files → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as { data: { title: string; path: string; ext: string }[] };
+  return body.data;
+}
+
 async function itemFileCount(
   request: APIRequestContext,
   auth: ApiAuth,
   slug: string,
   itemId: string,
 ): Promise<number> {
-  const resp = await request.get(
-    `/api/v1/g/${encodeURIComponent(slug)}/files?linked_entity_type=commodity&linked_entity_id=${encodeURIComponent(itemId)}`,
-    { headers: headers(auth) },
+  return (await itemFiles(request, auth, slug, itemId)).length;
+}
+
+interface TrashedFileRow {
+  id: string;
+  attributes: { title: string };
+}
+
+async function trashedFiles(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+): Promise<TrashedFileRow[]> {
+  const resp = await request.get(`/api/v1/g/${encodeURIComponent(slug)}/trash/files?per_page=100`, {
+    headers: headers(auth),
+  });
+  expect(resp.ok(), `GET /trash/files → ${resp.status()}`).toBe(true);
+  const body = (await resp.json()) as { data: TrashedFileRow[] };
+  return body.data;
+}
+
+// pickType picks the item type on Basics.
+async function pickType(page: Page, name: RegExp) {
+  await page.locator("#commodity-type").click();
+  await page.getByRole("listbox").getByRole("option", { name }).click();
+}
+
+// itemIdFromUrl waits for the item page Add item lands on and returns the
+// item's id.
+async function itemIdFromUrl(page: Page): Promise<string> {
+  await page.waitForURL(
+    (url) => /\/commodities\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith("/new"),
   );
-  expect(resp.ok(), `GET /files → ${resp.status()}`).toBe(true);
-  const body = (await resp.json()) as { data: unknown[] };
-  return body.data.length;
+  return new URL(page.url()).pathname.split("/").pop() ?? "";
 }
 
 // openNewItemForm opens the Add item dialog on its Basics step.
@@ -154,10 +203,7 @@ test.describe("Server drafts (#2812)", () => {
       await page2.getByTestId("commodity-form-submit").click();
 
       // The item page replaces /commodities/new?draft=… once the item exists.
-      await page2.waitForURL(
-        (url) => /\/commodities\/[^/]+$/.test(url.pathname) && !url.pathname.endsWith("/new"),
-      );
-      const itemId = new URL(page2.url()).pathname.split("/").pop() ?? "";
+      const itemId = await itemIdFromUrl(page2);
       itemIds.push(itemId);
       expect(await itemFileCount(request, auth, slug, itemId)).toBe(1);
       expect((await listDrafts(request, auth, slug)).some((d) => d.id === draftId)).toBe(false);
@@ -190,5 +236,131 @@ test.describe("Server drafts (#2812)", () => {
     expect(dropped).toBe(true);
     const drafts = (await listDrafts(request, auth, slug)).filter((d) => d.title === name);
     expect(drafts).toHaveLength(1);
+  });
+
+  test("a new item gets its files, with their titles, through its draft", async ({
+    page,
+    request,
+  }) => {
+    const name = `Espresso machine ${run}`;
+    await openNewItemForm(page, slug);
+    await page.locator("#commodity-name").fill(name);
+    await pickType(page, /Equipment/i);
+    await walkToFiles(page);
+    await page
+      .locator('[data-testid="commodity-files-dropzone"] input[type="file"]')
+      .setInputFiles(["fixtures/files/image.jpg", "fixtures/files/manual.pdf"]);
+    const rows = page.getByTestId("commodity-files-pending");
+    await expect(rows).toHaveCount(2);
+    const title = page.getByLabel("Title of image.jpg");
+    await expect(title).toHaveValue("image");
+    await title.fill(`Front view ${run}`);
+    await page.getByTestId("commodity-form-submit").click();
+
+    const itemId = await itemIdFromUrl(page);
+    itemIds.push(itemId);
+    // The files were on the item before the dialog let go of it.
+    const files = await itemFiles(request, auth, slug, itemId);
+    expect(files.map((f) => f.title).sort()).toEqual([`Front view ${run}`, "manual"].sort());
+    expect((await listDrafts(request, auth, slug)).some((d) => d.title === name)).toBe(false);
+
+    await page.getByTestId("commodity-detail-tab-files").click();
+    await expect(page.getByTestId("commodity-detail-files")).toContainText(`Front view ${run}`);
+  });
+
+  test("a failed upload adds nothing, and Retry adds the item with every file", async ({
+    page,
+    request,
+  }) => {
+    const name = `Toaster ${run}`;
+    let failed = false;
+    // The first upload fails; the ones after it go through.
+    await page.route(`**/api/v1/g/${slug}/uploads/file`, async (route) => {
+      if (route.request().method() !== "POST" || failed) return route.continue();
+      failed = true;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/vnd.api+json",
+        body: JSON.stringify({ errors: [{ status: "500", title: "Internal Server Error" }] }),
+      });
+    });
+
+    await openNewItemForm(page, slug);
+    await page.locator("#commodity-name").fill(name);
+    await pickType(page, /Equipment/i);
+    await walkToFiles(page);
+    await page
+      .locator('[data-testid="commodity-files-dropzone"] input[type="file"]')
+      .setInputFiles(["fixtures/files/image.jpg", "fixtures/files/invoice.pdf"]);
+    await page.getByTestId("commodity-form-submit").click();
+
+    const alert = page.getByTestId("draft-save-error");
+    await expect(alert).toContainText("Item not added");
+    await expect(alert).toContainText("image.jpg");
+    const failedRow = page.locator('[data-testid="commodity-files-pending"][data-status="failed"]');
+    await expect(failedRow).toContainText("image.jpg");
+    await expect(page.getByTestId("draft-saved-files")).toContainText("invoice");
+    expect(page.url()).toContain("/commodities");
+    expect(failed).toBe(true);
+    // The item is not there yet: its values and the uploaded file wait on a
+    // draft.
+    const waiting = (await listDrafts(request, auth, slug)).filter((d) => d.title === name);
+    expect(waiting).toHaveLength(1);
+    expect(waiting[0].file_count).toBe(1);
+
+    await page.getByTestId("draft-save-retry").click();
+    const itemId = await itemIdFromUrl(page);
+    itemIds.push(itemId);
+    expect(await itemFileCount(request, auth, slug, itemId)).toBe(2);
+    expect((await listDrafts(request, auth, slug)).some((d) => d.title === name)).toBe(false);
+  });
+
+  test("Discard after a failed Add item moves its uploads to Trash", async ({ page, request }) => {
+    const name = `Kettle ${run}`;
+    let failed = false;
+    // The first attach fails: image.jpg is uploaded but on nothing, while
+    // invoice.pdf reaches the draft Add item made.
+    await page.route(`**/api/v1/g/${slug}/files/*/links`, async (route) => {
+      if (route.request().method() !== "POST" || failed) return route.continue();
+      failed = true;
+      await route.fulfill({
+        status: 500,
+        contentType: "application/vnd.api+json",
+        body: JSON.stringify({ errors: [{ status: "500", title: "Internal Server Error" }] }),
+      });
+    });
+
+    await openNewItemForm(page, slug);
+    await page.locator("#commodity-name").fill(name);
+    await pickType(page, /Equipment/i);
+    await walkToFiles(page);
+    await page
+      .locator('[data-testid="commodity-files-dropzone"] input[type="file"]')
+      .setInputFiles(["fixtures/files/image.jpg", "fixtures/files/invoice.pdf"]);
+    await page.getByLabel("Title of image.jpg").fill(`Front view ${run}`);
+    await page.getByLabel("Title of invoice.pdf").fill(`Invoice ${run}`);
+    await page.getByTestId("commodity-form-submit").click();
+    await expect(page.getByTestId("draft-save-error")).toContainText("image.jpg");
+    expect(failed).toBe(true);
+    expect((await listDrafts(request, auth, slug)).filter((d) => d.title === name)).toHaveLength(1);
+
+    await page.getByTestId("commodity-form-cancel").click();
+    await page.getByTestId("commodity-form-close-confirm-discard").click();
+    await expect(page.getByTestId("commodity-form-files-step")).toBeHidden();
+
+    const ours = async () =>
+      (await trashedFiles(request, auth, slug)).filter((f) => f.attributes.title.includes(run));
+    await expect
+      .poll(async () => (await ours()).map((f) => f.attributes.title).sort())
+      .toEqual([`Front view ${run}`, `Invoice ${run}`].sort());
+    expect((await listDrafts(request, auth, slug)).some((d) => d.title === name)).toBe(false);
+
+    for (const f of await ours()) {
+      await request
+        .delete(`/api/v1/g/${encodeURIComponent(slug)}/trash/files/${encodeURIComponent(f.id)}`, {
+          headers: headers(auth),
+        })
+        .catch(() => {});
+    }
   });
 });
