@@ -1651,6 +1651,15 @@ type IntakeCandidateReview struct {
 	Quantity       *int
 }
 
+// IntakeSweep is what one SweepStuckSources changed.
+type IntakeSweep struct {
+	// Changed counts the sources the sweep changed in any way.
+	Changed int
+	// Failed counts the sources among them that used their attempts and
+	// failed for good (#1307).
+	Failed int
+}
+
 // IntakeRegistry is the group-scoped registry of intake sessions with their
 // sources and detected products (#2810). The embedded Registry works on the
 // sessions; deleting a session deletes its sources, its candidates and the
@@ -1759,8 +1768,8 @@ type IntakeRegistry interface {
 	// (models.IntakeSource.CountedAttempts): then it fails with errorCode, so
 	// a file that kills its worker is not scanned forever. A source canceled
 	// during such a scan loses the claim, so a resume can queue it. It
-	// returns how many sources it changed.
-	SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error)
+	// returns how many sources it changed and how many of them failed.
+	SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (IntakeSweep, error)
 
 	// ClaimNextSource takes the pending source that has been due the
 	// longest, marks it scanning and counts an attempt. Two workers never
@@ -3485,6 +3494,49 @@ type TenantPurger interface {
 	// tenant after a partial failure must succeed and leave the database in
 	// the same state.
 	PurgeTenantDependents(ctx context.Context, tenantID string) error
+}
+
+// FailedJobScope narrows a failed-jobs query to one tenant, or to one group
+// of a tenant (#1307). The zero value reads every tenant: the system-admin
+// plane and the metrics use it.
+type FailedJobScope struct {
+	// TenantID limits the query to one tenant when set.
+	TenantID string
+	// GroupID limits the query to one group when set. It requires TenantID.
+	GroupID string
+}
+
+// FailedJobRegistry reads and acts on the jobs that failed for good, over
+// each job type's own table (#1307). There is no table of failed jobs: an
+// adapter per worker type knows which rows of its table are failed, how a
+// failed row is put back in the queue and how it is marked discarded.
+//
+// A discarded job keeps its row and its error; it only leaves the failed
+// list and the counts. Every method filters by the scope in its query, not
+// only through row-level security, so a group scope never reaches another
+// group's rows whichever database role runs it.
+type FailedJobRegistry interface {
+	// ListFailed returns the failed jobs of the type in the scope that are
+	// not discarded, newest failure first. A limit above zero caps the
+	// result.
+	ListFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, limit int) ([]*models.FailedJob, error)
+
+	// CountFailed counts the jobs ListFailed would return without a limit.
+	CountFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope) (int, error)
+
+	// GetFailed returns one failed job that is not discarded. ErrNotFound
+	// when the type has no such job in the scope.
+	GetFailed(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string) (*models.FailedJob, error)
+
+	// Retry puts a failed job back in its queue the way its type runs it
+	// again. ErrNotFound when the type has no failed, undiscarded job with
+	// the id in the scope; ErrFailedJobNotRetryable for a type whose jobs
+	// cannot be run again safely.
+	Retry(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
+
+	// Discard marks a failed job discarded at now. ErrNotFound when the
+	// type has no failed, undiscarded job with the id in the scope.
+	Discard(ctx context.Context, jobType models.WorkerType, scope FailedJobScope, id string, now time.Time) error
 }
 
 // UserPurger hard-deletes a single user's auth / identity rows (and orphans the

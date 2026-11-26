@@ -15,6 +15,16 @@
   "errors": {
     "generic": "Something went wrong"
   },
+  "failedJobs": {
+    "types": {
+      "currencyMigration": "Currency migration",
+      "export": "Export",
+      "import": "Import",
+      "intake": "Intake scan",
+      "restore": "Restore",
+      "thumbnail": "Thumbnail"
+    }
+  },
   "listError": {
     "description": "The request failed, so nothing is shown here. This does not mean the list is empty.",
     "title": "Couldn't load this list"

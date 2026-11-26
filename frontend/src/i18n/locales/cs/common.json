@@ -15,6 +15,16 @@
   "errors": {
     "generic": "Něco se pokazilo"
   },
+  "failedJobs": {
+    "types": {
+      "export": "Export",
+      "import": "Import",
+      "restore": "Obnovení",
+      "thumbnail": "Náhled",
+      "intake": "Načtení dokumentu",
+      "currencyMigration": "Převod měny"
+    }
+  },
   "listError": {
     "title": "Seznam se nepodařilo načíst",
     "description": "Požadavek selhal, proto se nic nezobrazuje. Neznamená to, že je seznam prázdný."

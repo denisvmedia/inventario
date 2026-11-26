@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils"
 const ADMIN_NAV = [
   { to: "/admin/tenants", labelKey: "nav.tenants" },
   { to: "/admin/groups", labelKey: "nav.groups" },
+  { to: "/admin/failed-jobs", labelKey: "nav.failedJobs" },
 ] as const
 
 // Resolves the current section label key for the breadcrumb tail. The

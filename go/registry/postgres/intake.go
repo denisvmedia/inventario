@@ -543,9 +543,11 @@ func (r *IntakeRegistry) ResumeSession(ctx context.Context, sessionID string, no
 		if err != nil {
 			return err
 		}
+		// A requeued source is no longer a failure an operator discarded:
+		// if it fails again, the failed jobs show it again (#1307).
 		requeue := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', updated_at = $2
+				wait_reason = '', error_code = '', discarded_at = NULL, updated_at = $2
 			WHERE session_id = $3 AND (status = $4 OR (status = $5 AND claimed_at IS NULL))`, r.tableNames.IntakeSources())
 		res, err = tx.ExecContext(ctx, requeue, string(models.IntakeSourcePending), now, sessionID,
 			string(models.IntakeSourceFailed), string(models.IntakeSourceCanceled))
@@ -610,7 +612,7 @@ func (r *IntakeRegistry) RescanSource(ctx context.Context, id string, now time.T
 		}
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, updated_at = $2
+				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, discarded_at = NULL, updated_at = $2
 			WHERE id = $3
 			RETURNING *`, r.tableNames.IntakeSources())
 		return tx.QueryRowxContext(ctx, update, string(models.IntakeSourcePending), now.UTC(), id).StructScan(&updated)
@@ -633,25 +635,26 @@ func (r *IntakeRegistry) CountQueued(ctx context.Context) (int, error) {
 	return n, nil
 }
 
-func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
+func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (registry.IntakeSweep, error) {
 	now, claimedBefore = now.UTC(), claimedBefore.UTC()
 	table := r.tableNames.IntakeSources()
-	var n int64
+	var n, failed int64
 	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		exec := func(query string, args ...any) error {
+		exec := func(query string, args ...any) (int64, error) {
 			res, err := tx.ExecContext(ctx, query, args...)
 			if err != nil {
-				return err
+				return 0, err
 			}
 			changed, err := res.RowsAffected()
 			n += changed
-			return err
+			return changed, err
 		}
 		if maxAttempts > 0 {
 			fail := fmt.Sprintf(`
 				UPDATE %s SET status = $1, claimed_at = NULL, wait_reason = '', error_code = $2, updated_at = $3
 				WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5) AND attempts - retry_base >= $6`, table)
-			if err := exec(fail, string(models.IntakeSourceFailed), errorCode, now,
+			var err error
+			if failed, err = exec(fail, string(models.IntakeSourceFailed), errorCode, now,
 				string(models.IntakeSourceScanning), claimedBefore, maxAttempts); err != nil {
 				return err
 			}
@@ -659,19 +662,20 @@ func (r *IntakeRegistry) SweepStuckSources(ctx context.Context, claimedBefore, n
 		requeue := fmt.Sprintf(`
 			UPDATE %s SET status = $1, next_attempt_at = $2, claimed_at = NULL, wait_reason = $3, updated_at = $2
 			WHERE status = $4 AND (claimed_at IS NULL OR claimed_at < $5)`, table)
-		if err := exec(requeue, string(models.IntakeSourcePending), now, models.IntakeWaitRetry,
+		if _, err := exec(requeue, string(models.IntakeSourcePending), now, models.IntakeWaitRetry,
 			string(models.IntakeSourceScanning), claimedBefore); err != nil {
 			return err
 		}
 		release := fmt.Sprintf(`
 			UPDATE %s SET claimed_at = NULL, updated_at = $1
 			WHERE status = $2 AND claimed_at < $3`, table)
-		return exec(release, now, string(models.IntakeSourceCanceled), claimedBefore)
+		_, err := exec(release, now, string(models.IntakeSourceCanceled), claimedBefore)
+		return err
 	})
 	if err != nil {
-		return 0, errxtrace.Wrap("failed to sweep stuck intake sources", err)
+		return registry.IntakeSweep{}, errxtrace.Wrap("failed to sweep stuck intake sources", err)
 	}
-	return int(n), nil
+	return registry.IntakeSweep{Changed: int(n), Failed: int(failed)}, nil
 }
 
 // ClaimNextSource takes the due source with SKIP LOCKED, so concurrent

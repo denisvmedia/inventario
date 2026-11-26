@@ -266,6 +266,29 @@ is distinct from `run workers`, which *starts* the worker process. See the
 canonical worker types, the equivalent admin REST API, and the
 `inventario_worker_paused` metric.
 
+#### Failed Background Jobs (#1307)
+
+List, retry and discard the background jobs that failed for good, across
+every tenant. A discarded job keeps its row and its error; it only leaves
+the failed list.
+
+```bash
+# List the failed jobs nobody retried or discarded, newest first
+./inventario jobs failed list --type export --tenant acme
+
+# Put a job back in its queue
+./inventario jobs failed retry --type thumbnail <job-id>
+
+# Discard a job (restores and currency migrations can only be discarded)
+./inventario jobs failed discard --type restore <job-id>
+```
+
+These commands require a PostgreSQL DSN. See the
+[System Admin Operations Runbook §10](devdocs/admin-runbook.md) for the job
+types, what a retry does for each, the admin REST API and the
+`inventario_jobs_dead_lettered_total` and `inventario_jobs_dead_letter_depth`
+metrics.
+
 #### Command Options
 
 **Tenant Commands:**

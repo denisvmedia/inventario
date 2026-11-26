@@ -18,6 +18,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promauto"
 	"github.com/shopspring/decimal"
 
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -391,6 +392,7 @@ func (w *CurrencyMigrationWorker) runSweep(ctx context.Context) {
 		}
 		currencyMigrationTotal.WithLabelValues("failed").Inc()
 		currencyMigrationRecoverySweepsTotal.Inc()
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeCurrencyMigration))
 		// Observe the stall window — the time the row spent in `running`
 		// before the sweep flipped it. This is deliberately a separate
 		// histogram from currencyMigrationDuration (TX2 commit timings)

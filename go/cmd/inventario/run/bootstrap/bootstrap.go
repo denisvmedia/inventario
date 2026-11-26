@@ -153,6 +153,9 @@ func Build(cfg *Config, dbConfig *shared.DatabaseConfig, mode Mode) (*RuntimeSet
 			factorySet.WorkerControlRegistry,
 			workerpause.WithRefreshInterval(durations.WorkerControlRefreshInterval),
 		)
+		// The processes that run workers are the ones that dead-letter jobs
+		// (#1307), so they export a zero series per type from the start.
+		initJobMetrics()
 	}
 
 	return rs, nil

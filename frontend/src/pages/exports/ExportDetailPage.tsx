@@ -190,7 +190,9 @@ export function ExportDetailPage() {
           value={exp.created_date ? formatDateTime(exp.created_date) : "—"}
         />
         <Stat
-          label={t("exports:detail.completedAt")}
+          label={
+            exp.status === "failed" ? t("exports:detail.failedAt") : t("exports:detail.completedAt")
+          }
           value={exp.completed_date ? formatDateTime(exp.completed_date) : "—"}
         />
         <Stat label={t("exports:detail.totalSize")} value={formatBytes(exp.file_size ?? 0)} />

@@ -495,6 +495,23 @@ when to add an entry and where it goes.
   estimated value now follows the dashboard: an item's current value, else
   its purchase price
   ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
+- Failed background jobs. Group admins and owners see the jobs of their
+  group that stopped after their last attempt (exports, imports, restores,
+  thumbnails, document scans and currency migrations) in **Group settings →
+  Data & storage**, with the error and a **Retry** button. A restore and a
+  currency migration cannot be retried; the card says to start a new one
+  instead. System admins get a **Failed jobs** page in the back office
+  with every tenant's failed jobs, type and tenant filters, **Retry** and
+  **Discard**; a support agent can retry, and only a platform admin can
+  discard. Discarding takes a job off the list but keeps its record and
+  error until the normal cleanup removes them. A file whose thumbnail failed
+  for good is no longer tried again on every view: it stays one failed job
+  until it is retried or discarded. Every retry and discard is written to
+  the audit log. The API gains `GET /g/{groupSlug}/failed-jobs`
+  and `POST /g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` for group
+  admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
+  `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 
 ### Changed
 
@@ -694,6 +711,26 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `inventario jobs failed list|retry|discard` lists, retries and discards
+  the background jobs that failed for good, across every tenant, and writes
+  each retry and discard to the audit log. Two metrics come with it:
+  `inventario_jobs_dead_lettered_total{type}`, counted by every process that
+  runs workers, and the `inventario_jobs_dead_letter_depth{type}` gauge of
+  jobs nobody retried or discarded, collected by the housekeeping worker
+  group (or `run all`) every `--business-metrics-interval`. The upgrade runs
+  one more database migration: it adds `discarded_at` to `exports`,
+  `restore_operations`, `thumbnail_generation_jobs`, `intake_sources` and
+  `currency_migrations`, `attempt_count` to `exports`, and an index on the
+  failed intake sources. During a rolling upgrade, pods that still run the
+  previous version can fail reads of those tables until they are replaced,
+  as with the `hidden_sections` column below
+  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). Jobs
+  that failed before the upgrade count toward the depth gauge from the first
+  collection, so an alert on a depth above zero fires on day one until they
+  are retried or discarded
+  ([#2946](https://github.com/denisvmedia/inventario/issues/2946)). See the
+  admin runbook §10
+  ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
 - `--enable-plans` / `INVENTARIO_RUN_ENABLE_PLANS=true` (Helm value
   `features.plans`, Compose `ENABLE_PLANS` in `.env`) shows the subscription
   plan surfaces that are now hidden by default. It is off by default, and

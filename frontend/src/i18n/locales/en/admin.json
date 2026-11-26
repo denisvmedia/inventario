@@ -1,4 +1,43 @@
 {
+  "failedJobs": {
+    "discard": "Discard",
+    "discardDialog": {
+      "body": "The job leaves the list of failed jobs and the failed-jobs gauge. Its record and its error stay until the normal cleanup removes them. This cannot be undone.",
+      "cancel": "Cancel",
+      "confirm": "Discard",
+      "title": "Discard this failed job?"
+    },
+    "discarded": "The job is discarded.",
+    "discardError": "Could not discard the job. Try again later.",
+    "discardLabel": "Discard {{title}}",
+    "empty": "No failed jobs.",
+    "emptyFiltered": "No failed jobs match these filters.",
+    "filter": {
+      "allTenants": "All tenants",
+      "allTypes": "All job types",
+      "tenantLabel": "Filter by tenant",
+      "typeLabel": "Filter by job type"
+    },
+    "gone": "This job is no longer failed. The list is up to date now.",
+    "loadError": "Could not load the failed jobs. Try again later.",
+    "loading": "Loading failed jobs…",
+    "notRetryable": "This kind of job cannot be retried. Discard it instead.",
+    "retried": "The job is back in the queue.",
+    "retry": "Retry",
+    "retryError": "Could not retry the job. Try again later.",
+    "retryLabel": "Retry {{title}}",
+    "roleRequired": "Only a platform admin can discard a failed job.",
+    "subtitle": "Background jobs of every tenant that failed for good and that nobody retried or discarded, newest first.",
+    "table": {
+      "actions": "Actions",
+      "attempts": "Attempts",
+      "error": "Error",
+      "failed": "Failed",
+      "job": "Job",
+      "tenant": "Tenant / group"
+    },
+    "title": "Failed jobs"
+  },
   "groupDetail": {
     "back": "Back to groups",
     "danger": {
@@ -110,6 +149,7 @@
     "breadcrumbRoot": "Admin"
   },
   "nav": {
+    "failedJobs": "Failed jobs",
     "groups": "Groups",
     "section": "Admin",
     "tenants": "Tenants"

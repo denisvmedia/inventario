@@ -364,10 +364,10 @@ func intakeContractStuckSweep(t *testing.T, env IntakeEnv) {
 
 	swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(-time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
-	c.Assert(swept, qt.Equals, 0, qt.Commentf("a recent claim is not stuck"))
+	c.Assert(swept, qt.Equals, registry.IntakeSweep{}, qt.Commentf("a recent claim is not stuck"))
 	swept, err = env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 	c.Assert(err, qt.IsNil)
-	c.Assert(swept, qt.Equals, 1)
+	c.Assert(swept, qt.Equals, registry.IntakeSweep{Changed: 1})
 	requeued, err := env.Intake.GetSource(env.Ctx, stuck.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(requeued.Status, qt.Equals, models.IntakeSourcePending)
@@ -398,7 +398,12 @@ func intakeContractStuckSweepLimit(t *testing.T, env IntakeEnv) {
 		c.Assert(claimed.Attempts, qt.Equals, attempt)
 		swept, err := env.Service.SweepStuckSources(env.Ctx, now.Add(time.Minute), now, intakeTestMaxAttempts, intakeTestStuckCode)
 		c.Assert(err, qt.IsNil)
-		c.Assert(swept, qt.Equals, 1)
+		c.Assert(swept.Changed, qt.Equals, 1)
+		wantFailed := 0
+		if attempt == intakeTestMaxAttempts {
+			wantFailed = 1
+		}
+		c.Assert(swept.Failed, qt.Equals, wantFailed, qt.Commentf("attempt %d", attempt))
 	}
 	failed, err := env.Intake.ListSources(env.Ctx, session.ID)
 	c.Assert(err, qt.IsNil)

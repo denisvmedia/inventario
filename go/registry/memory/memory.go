@@ -155,7 +155,17 @@ func NewFactorySet() *registry.FactorySet {
 	fs.WeeklyDigestSendRegistry = NewWeeklyDigestSendRegistry()
 	fs.MaintenanceReminderRegistry = NewMaintenanceReminderRegistry()
 	fs.CommodityReminderSendRegistry = NewCommodityReminderSendRegistry()
-	fs.CurrencyMigrationRegistryFactory = NewCurrencyMigrationRegistryFactory()
+	currencyMigrationFactory := NewCurrencyMigrationRegistryFactory()
+	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
+	// Failed jobs (#1307) read the job rows of these stores directly.
+	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{
+		Exports:            exportFactory,
+		Restores:           restoreOperationFactory,
+		Thumbnails:         thumbnailGenerationJobFactory,
+		Files:              fileFactory,
+		Intake:             intakeFactory,
+		CurrencyMigrations: currencyMigrationFactory,
+	})
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	groupPurger := NewGroupPurger(
 		locationFactory,

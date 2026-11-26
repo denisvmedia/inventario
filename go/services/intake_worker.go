@@ -13,6 +13,7 @@ import (
 	"gocloud.dev/gcerrors"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -204,10 +205,13 @@ func (w *IntakeWorker) Tick(ctx context.Context) int {
 	}
 	reg := w.factorySet.IntakeRegistryFactory.CreateServiceRegistry()
 	now := w.clock()
-	if n, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
+	if sweep, err := reg.SweepStuckSources(ctx, now.Add(-w.stuckAfter), now, intakeMaxAttempts, IntakeErrorProviderError); err != nil {
 		slog.ErrorContext(ctx, "Intake worker: failed to sweep stuck sources", "error", err)
-	} else if n > 0 {
-		slog.WarnContext(ctx, "Intake worker: requeued stuck sources", "count", n)
+	} else if sweep.Changed > 0 {
+		slog.WarnContext(ctx, "Intake worker: requeued stuck sources", "count", sweep.Changed, "failed", sweep.Failed)
+		for range sweep.Failed {
+			metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
+		}
 	}
 	processed := 0
 	for processed < w.perTick && !w.stopped(ctx) {
@@ -481,7 +485,11 @@ func (w *IntakeWorker) requeue(ctx context.Context, reg registry.IntakeRegistry,
 
 func (w *IntakeWorker) fail(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, code string, log *slog.Logger) {
 	log.InfoContext(ctx, "Intake worker: source failed", "code", code)
-	if err := reg.FailSource(ctx, src.ID, src.Attempts, code); err != nil && !errors.Is(err, registry.ErrIntakeSourceChanged) {
+	err := reg.FailSource(ctx, src.ID, src.Attempts, code)
+	switch {
+	case err == nil:
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeIntake))
+	case !errors.Is(err, registry.ErrIntakeSourceChanged):
 		log.ErrorContext(ctx, "Intake worker: failed to mark the source failed", "error", err)
 	}
 }

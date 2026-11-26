@@ -10,6 +10,7 @@ import (
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
 	"go.5x5.cz/inventario/appctx"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -48,9 +49,10 @@ func NewThumbnailGenerationService(factorySet *registry.FactorySet, uploadLocati
 // RequestThumbnailGeneration requests thumbnail generation for a file with resource limiting.
 //
 // It is called when a thumbnail of the file is missing. A pending or
-// processing job already covers that and is returned as it is. A failed job,
-// or a completed one, gets a new job: a completed job with a missing thumbnail
-// rendered fewer sizes than there are now, or its blobs are gone.
+// processing job already covers that and is returned as it is, and so is a
+// failed job nobody has retried or discarded (#1307). A discarded failure,
+// or a completed job, gets a new job: a completed job with a missing
+// thumbnail rendered fewer sizes than there are now, or its blobs are gone.
 func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Context, fileID string) (*models.ThumbnailGenerationJob, error) {
 	jobRegistry := s.factorySet.ThumbnailGenerationJobRegistryFactory.CreateServiceRegistry()
 
@@ -87,6 +89,13 @@ func (s *ThumbnailGenerationService) RequestThumbnailGeneration(ctx context.Cont
 
 	if existingJob != nil && existingJob.Status.InFlight() {
 		slog.DebugContext(ctx, "Thumbnail generation job already exists", "file_id", fileID, "job_id", existingJob.ID, "status", existingJob.Status)
+		return existingJob, nil
+	}
+	// A failure nobody has dealt with yet stays the file's job: another
+	// view does not start another one. Once it is discarded, the next view
+	// tries again (#1307).
+	if existingJob != nil && existingJob.AwaitsOperator() {
+		slog.DebugContext(ctx, "Thumbnail generation failed for good; not starting another job", "file_id", fileID, "job_id", existingJob.ID)
 		return existingJob, nil
 	}
 
@@ -299,6 +308,8 @@ func (s *ThumbnailGenerationService) markJobFailed(ctx context.Context, jobRegis
 	statusErr := jobRegistry.UpdateJobStatus(ctx, job.ID, status, errorMessage)
 	if statusErr != nil {
 		slog.ErrorContext(ctx, "Failed to update job status after failure", "job_id", job.ID, "error", statusErr)
+	} else if status == models.ThumbnailStatusFailed {
+		metrics.RecordJobDeadLettered(string(models.WorkerTypeThumbnail))
 	}
 
 	slog.ErrorContext(ctx, "Thumbnail generation job failed", "job_id", job.ID, "file_id", job.FileID, "attempt", job.AttemptCount, "max_attempts", job.MaxAttempts, "error", errorMessage)

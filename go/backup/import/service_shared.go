@@ -13,6 +13,7 @@ import (
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/internal/backupsign"
 	"go.5x5.cz/inventario/internal/blobkeys"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -63,7 +64,9 @@ func (s *ImportService) ProcessImport(ctx context.Context, exportID, sourceFileP
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to get export record: %v", err))
 	}
 
+	// Each run counts, a retry's too (#1307).
 	exportRecord.Status = models.ExportStatusInProgress
+	exportRecord.AttemptCount++
 	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
 		return s.markImportFailed(ctx, exportID, fmt.Sprintf("failed to update export status: %v", err))
 	}
@@ -214,6 +217,7 @@ func (s *ImportService) markImportFailed(ctx context.Context, exportID, errorMes
 	if _, err = expReg.Update(ctx, *exportRecord); err != nil {
 		return err
 	}
+	metrics.RecordJobDeadLettered(string(models.WorkerTypeImport))
 
 	return fmt.Errorf("%s", errorMessage)
 }

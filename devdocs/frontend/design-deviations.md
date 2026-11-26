@@ -1000,6 +1000,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2177 by the owner's decisions comment of 2026-11-26; the agent-suggested parts are listed in the PR for the owner.
 - **Reversion plan**: Follow the mock if `inventario-design` adds a personal data export surface; otherwise permanent.
 
+#### 2026-11-26 — Failed background jobs card in the group settings
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) has no list of background jobs; its Data card (L134–L156) holds the Members and Backup & Restore rows only.
+- **Reality**: For admins and owners, the Data & storage section ends with `frontend/src/components/groups/FailedJobsCard.tsx`, a bordered card with a title, a subtitle and a `divide-y` list of the group's failed jobs, newest first. Each row has an outline `Badge` with the job type, the job's title, a muted line with the failure time and the attempt count, the last error in the destructive color (up to three lines; an intake scan's error code reads as the sentence the Inbox uses), and an outline **Retry** button (`RotateCcw` icon) for a type that can run again, or a muted note that says what to do instead: start a new restore or a new currency change, which an operator can dismiss. Nothing failed shows the empty-state block with a `CircleCheck` icon. The card lists the 50 newest and says how many more there are. Members without the admin role do not get the card.
+- **Why**: not present in mock. The owner decision on #1307 gives group admins their group's failed jobs with a Retry button in the group settings; the card follows the Sections card anatomy and the empty-state block of the admin lists. The what-to-do-instead note is the owner's decision in the review of #2938. The 50-row cap with the count note and leaving the card out (rather than disabling it) for other roles are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the note by the review of 2026-11-26; the row cap and leaving the card out for other roles agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the card; otherwise permanent.
+
 #### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
 
 - **Issue/PR**: #1389 / #2923
@@ -1338,6 +1347,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If a future hero design reflows to give the totals card more horizontal room (full-width hero strip), or if Intl ever ships a "narrow currency" mode that's locale-aware and width-aware, drop the threshold and revert to `compact: true` everywhere on the hero. The `notation` option on `formatCurrency` stays — its existence is orthogonal to whether the dashboard uses it.
 
 ### Tables & Lists
+
+#### 2026-11-26 — Admin Failed jobs page
+
+- **Issue/PR**: #1307
+- **Mock**: [`design-mocks/src/views/admin/`](../../design-mocks/src/views/admin/) has no page for background jobs; the nearest list is [`GroupsView.tsx`](../../design-mocks/src/views/admin/GroupsView.tsx).
+- **Reality**: `frontend/src/pages/admin/AdminFailedJobsPage.tsx` at `/admin/failed-jobs`, reached from a third **Failed jobs** pill in the `AdminLayout` secondary nav. It follows `AdminGroupsPage`: the icon tile (`TriangleAlert`), title and subtitle, a row of two `Select` filters (job type, tenant), a bordered `Table` and `AdminPagination`. The columns are the job (type `Badge`, title, id in mono), the tenant with the group below it, the last error (muted, up to three lines), the failure time, the attempt count, and outline **Retry** (`RotateCcw`, only for a type that can run again) and **Discard** (`ArchiveX`, only for a `platform_admin`; a support agent may retry but not discard) buttons. Discard opens a `Dialog` that asks first and names the job in a muted bordered block: type `Badge`, title, tenant · group, id in mono. The filters and the page round-trip through `?type`, `?tenantID` and `?page`. With filters on, the empty state says that nothing matches them.
+- **Why**: not present in mock. The owner decision on #1307 gives system admins a Failed jobs page in the back office with type and tenant filters; the page reuses the admin list anatomy so it reads like its siblings. Discard for platform admins only and the job named in the dialog are the owner's decisions in the review of #2938. The discard confirmation, the job id in the row (the CLI takes it) and the filtered empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1307 by the owner's decisions of 2026-11-26, the role split and the named job by the review of 2026-11-26; the confirmation, the id and the filtered empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an admin jobs view; otherwise permanent.
 
 #### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
 

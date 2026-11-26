@@ -10,6 +10,7 @@
   "detail": {
     "binaryDataSize": "Размер вложений",
     "completedAt": "Завершено",
+    "failedAt": "Сбой",
     "counts": {
       "areas_one": "{{count}} зона",
       "areas_few": "{{count}} зоны",
