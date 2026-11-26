@@ -19,3 +19,21 @@ func UserPurgeTableNames() []string {
 func SQLInjectionPayloads() []string {
 	return append([]string(nil), sqlInjectionPayloads...)
 }
+
+// UserTenantMoveColumns exposes how a tenant move treats each user reference
+// it knows, as "table.column" keys: "owned" columns block the move, "deleted"
+// and "retenanted" ones are rows the move removes or carries along. A test
+// checks the lists against the live schema. It compiles only under `go test`.
+func UserTenantMoveColumns() map[string]string {
+	columns := make(map[string]string)
+	for _, t := range userOwnedTables {
+		columns[string(t.table(store.DefaultTableNames))+"."+t.userColumn] = "owned"
+	}
+	for _, nameFn := range userTenantMoveDeletes {
+		columns[string(nameFn(store.DefaultTableNames))+".user_id"] = "deleted"
+	}
+	for _, nameFn := range userTenantMoveRetenants {
+		columns[string(nameFn(store.DefaultTableNames))+".user_id"] = "retenanted"
+	}
+	return columns
+}

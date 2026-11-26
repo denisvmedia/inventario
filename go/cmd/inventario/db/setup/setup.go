@@ -229,76 +229,103 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 		return "", fmt.Errorf("admin password does not meet complexity requirements (min 8 chars with upper, lower, and a digit): %w", err)
 	}
 
-	// Check if admin user already exists
+	// Emails are unique per tenant, so the admin is looked up in the default
+	// tenant. Setup never moves a user between tenants: a move is allowed only
+	// for a user who belongs to no group and owns no content (#2179), and it
+	// needs the photo storage, so it is left to `inventario users update
+	// --tenant`. An admin found only in another tenant is reported instead of
+	// being moved, which on a restored database would strand them away from
+	// the restored data.
 	var existingUserID string
-	err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email = $1", opts.AdminEmail).Scan(&existingUserID)
-
-	if errors.Is(err, sql.ErrNoRows) {
-		// Create new admin user
-		adminUserID := uuid.New().String()
-
-		if opts.DryRun {
-			m.printf("  Would create admin user: %s (%s)\n", opts.AdminName, opts.AdminEmail)
-			result.UsersCreated = 1
-			return adminUserID, nil
-		}
-
-		// Create user with hashed password. users.user_id was a
-		// self-referencing legacy column dropped by the TenantAwareEntityID
-		// refactor (issue #1289 Gap B) — no need to populate it here.
-		user := models.User{
-			TenantAwareEntityID: models.TenantAwareEntityID{
-				EntityID: models.EntityID{ID: adminUserID},
-				TenantID: opts.DefaultTenantID,
-			},
-			Email:    opts.AdminEmail,
-			Name:     opts.AdminName,
-			IsActive: true,
-		}
-
-		err = user.SetPassword(opts.AdminPassword)
-		if err != nil {
-			return "", fmt.Errorf("failed to hash password: %w", err)
-		}
-
-		now := time.Now()
-		_, err = tx.ExecContext(ctx, `
-			INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
-			VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-			adminUserID, user.Email, user.PasswordHash, user.Name, user.IsActive,
-			user.TenantID, now, now)
-		if err != nil {
-			return "", fmt.Errorf("failed to create admin user: %w", err)
-		}
-
-		result.UsersCreated = 1
-		m.printf("  ✅ Created admin user: %s\n", opts.AdminName)
-		return adminUserID, nil
-	} else if err != nil {
+	err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email = $1 AND tenant_id = $2",
+		opts.AdminEmail, opts.DefaultTenantID).Scan(&existingUserID)
+	if err == nil {
+		m.printf("  Admin user already exists: %s\n", opts.AdminEmail)
+		return existingUserID, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("failed to check user existence: %w", err)
 	}
 
-	// User exists, update tenant_id if needed
-	if opts.DryRun {
-		m.printf("  Would update existing admin user: %s\n", opts.AdminEmail)
-		result.UsersUpdated = 1
-		return existingUserID, nil
+	var otherUserID, otherTenantID string
+	err = tx.QueryRowContext(ctx, "SELECT id, tenant_id FROM users WHERE email = $1 ORDER BY tenant_id = '' DESC, created_at LIMIT 1",
+		opts.AdminEmail).Scan(&otherUserID, &otherTenantID)
+	if err == nil && otherTenantID == "" {
+		// A user with no tenant at all is assigned, not moved.
+		return m.assignAdminToDefaultTenant(ctx, tx, opts, result, otherUserID)
+	}
+	if err == nil {
+		return "", fmt.Errorf(
+			"admin user %s exists in tenant %s, not in the default tenant %s; setup does not move users between tenants. "+
+				"Pass --default-tenant-id=%s, or move the user with `inventario users update %s --tenant=%s` "+
+				"(allowed only for a user with no groups and no content)",
+			opts.AdminEmail, otherTenantID, opts.DefaultTenantID, otherTenantID, opts.AdminEmail, opts.DefaultTenantID)
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", fmt.Errorf("failed to check user existence: %w", err)
 	}
 
-	// users.user_id column was dropped by issue #1289 Gap B — the row's id
-	// is authoritative, so we only need to keep tenant_id in sync here.
+	// Create new admin user
+	adminUserID := uuid.New().String()
+
+	if opts.DryRun {
+		m.printf("  Would create admin user: %s (%s)\n", opts.AdminName, opts.AdminEmail)
+		result.UsersCreated = 1
+		return adminUserID, nil
+	}
+
+	// Create user with hashed password. users.user_id was a
+	// self-referencing legacy column dropped by the TenantAwareEntityID
+	// refactor (issue #1289 Gap B) — no need to populate it here.
+	user := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{
+			EntityID: models.EntityID{ID: adminUserID},
+			TenantID: opts.DefaultTenantID,
+		},
+		Email:    opts.AdminEmail,
+		Name:     opts.AdminName,
+		IsActive: true,
+	}
+
+	err = user.SetPassword(opts.AdminPassword)
+	if err != nil {
+		return "", fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	now := time.Now()
 	_, err = tx.ExecContext(ctx, `
+		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+		adminUserID, user.Email, user.PasswordHash, user.Name, user.IsActive,
+		user.TenantID, now, now)
+	if err != nil {
+		return "", fmt.Errorf("failed to create admin user: %w", err)
+	}
+
+	result.UsersCreated = 1
+	m.printf("  ✅ Created admin user: %s\n", opts.AdminName)
+	return adminUserID, nil
+}
+
+// assignAdminToDefaultTenant puts an admin user that has no tenant into the
+// default tenant.
+func (m *DataSetupManager) assignAdminToDefaultTenant(ctx context.Context, tx *sql.Tx, opts SetupOptions, result *SetupResult, userID string) (string, error) {
+	if opts.DryRun {
+		m.printf("  Would assign existing admin user to the default tenant: %s\n", opts.AdminEmail)
+		result.UsersUpdated = 1
+		return userID, nil
+	}
+	_, err := tx.ExecContext(ctx, `
 		UPDATE users
 		SET tenant_id = $1, updated_at = $2
-		WHERE id = $3`,
-		opts.DefaultTenantID, time.Now(), existingUserID)
+		WHERE id = $3 AND tenant_id = ''`,
+		opts.DefaultTenantID, time.Now(), userID)
 	if err != nil {
-		return "", fmt.Errorf("failed to update admin user: %w", err)
+		return "", fmt.Errorf("failed to assign admin user to the default tenant: %w", err)
 	}
-
 	result.UsersUpdated = 1
-	m.printf("  ✅ Updated existing admin user: %s\n", opts.AdminEmail)
-	return existingUserID, nil
+	m.printf("  ✅ Assigned existing admin user to the default tenant: %s\n", opts.AdminEmail)
+	return userID, nil
 }
 
 // assignUsersToDefaultTenant assigns all users to the default tenant

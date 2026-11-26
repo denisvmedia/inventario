@@ -1093,6 +1093,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
                 422: {
                     headers: {
@@ -1382,6 +1391,15 @@ export type paths = {
                 };
                 /** @description Not Found - unknown user */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };

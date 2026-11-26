@@ -97,6 +97,62 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 	return &user, nil
 }
 
+// Update replaces the users row. Like postgres it refuses a write that names
+// another tenant than the row holds (registry.ErrUserTenantChanged): only
+// UserTenantMover moves a user between tenants.
+func (r *UserRegistry) Update(_ context.Context, user models.User) (*models.User, error) {
+	if user.GetID() == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
+	}
+
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	existing, ok := r.items.Get(user.ID)
+	if !ok {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User", "entity_id", user.ID))
+	}
+	if existing.TenantID != user.TenantID {
+		return nil, errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
+			"user_id", user.ID, "tenant_id", existing.TenantID, "requested_tenant_id", user.TenantID))
+	}
+	// The UUID is immutable, as in the base registry.
+	user.UUID = existing.UUID
+	r.items.Set(user.ID, new(user))
+	return new(user), nil
+}
+
+// moveToTenant rewrites the users row for UserTenantMover: the new tenant, no
+// default group and the given avatar path. It refuses a user who is no longer
+// in fromTenantID and an email another user of the target tenant has.
+func (r *UserRegistry) moveToTenant(move registry.UserTenantMove, now time.Time) (*models.User, error) {
+	r.lock.Lock()
+	defer r.lock.Unlock()
+
+	existing, ok := r.items.Get(move.UserID)
+	if !ok {
+		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User", "entity_id", move.UserID))
+	}
+	if existing.TenantID != move.FromTenantID {
+		return nil, errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
+			"user_id", move.UserID, "tenant_id", existing.TenantID, "expected_tenant_id", move.FromTenantID))
+	}
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		other := pair.Value
+		if other.ID != move.UserID && other.TenantID == move.ToTenantID && other.Email == existing.Email {
+			return nil, errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", existing.Email, "tenant_id", move.ToTenantID))
+		}
+	}
+
+	moved := *existing
+	moved.TenantID = move.ToTenantID
+	moved.DefaultGroupID = nil
+	moved.AvatarPath = move.AvatarPath
+	moved.UpdatedAt = now
+	r.items.Set(moved.ID, new(moved))
+	return new(moved), nil
+}
+
 // GetByEmail returns a user by email within a tenant
 func (r *UserRegistry) GetByEmail(ctx context.Context, tenantID, email string) (*models.User, error) {
 	users, err := r.List(ctx)

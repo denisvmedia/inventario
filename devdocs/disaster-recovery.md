@@ -100,9 +100,10 @@ Two things run against the restored data, and both are safe:
   backup is *part of what the drill is testing* — do not skip it.
 - **`migrate data`** creates the default tenant and the admin only when they
   are absent. On a restored database it finds them and leaves the password
-  alone; it only re-syncs the admin's `tenant_id`. So pass the same
+  alone. It never moves a user between tenants: an admin email it finds only
+  in another tenant fails the job, with that tenant named. So pass the same
   `setupJob.initData.*` values production uses — a *different* tenant id there
-  would move the admin into a tenant that holds none of the restored data.
+  stops the job instead of finding the restored admin.
 
 Leave `setupJob.initData.seedDatabase` at its default of `false`. Seeding demo
 data on top of a restore is how a rehearsal turns into a mess.

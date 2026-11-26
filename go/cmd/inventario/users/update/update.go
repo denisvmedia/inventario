@@ -2,6 +2,7 @@ package update
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -12,7 +13,11 @@ import (
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/internal/input"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
+	"go.5x5.cz/inventario/internal/defaults"
+	"go.5x5.cz/inventario/internal/filekit"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
+	"go.5x5.cz/inventario/services"
 	"go.5x5.cz/inventario/services/admin"
 )
 
@@ -40,6 +45,21 @@ active status, tenant assignment, and password. Only the fields you pass as
 flags are changed; any flag you omit leaves the corresponding column
 untouched.
 
+Moving a user to another tenant (--tenant) is allowed only for a user who
+belongs to no group and owns or authored nothing in their tenant: no items,
+files, locations, loans, history entries or any other content. The typical
+case is an account created in the wrong tenant. Otherwise the move is
+refused, nothing is changed, and the command lists what blocks it, for
+example "member of 2 groups, 14 items, 3 files". Moving a user together with
+their content is not supported.
+
+A move signs the user out everywhere: every session, refresh token and API
+token is deleted, so the user signs in again. The password, MFA, language and
+other settings, linked sign-in providers and login history move with the user.
+The profile photo is copied into the new tenant's storage, which is why the
+command needs the same --upload-location the server uses. A --dry-run with
+--tenant reports whether the move would be allowed.
+
 To grant or revoke platform-wide system-admin privileges use
 'inventario admin grant-system-admin' / 'revoke-system-admin' instead — that
 privilege lives in a dedicated table, not on the user row.
@@ -57,8 +77,8 @@ Examples:
   # Change the password (prompted securely)
   inventario users update user@example.com --password
 
-  # Move the user to a different tenant
-  inventario users update user@example.com --tenant=acme
+  # Move a user created in the wrong tenant (no groups, no content)
+  inventario users update user@example.com --tenant=acme --upload-location=s3://bucket
 
   # Dry run to preview changes
   inventario users update user@example.com --name="New Name" --dry-run`,
@@ -84,6 +104,8 @@ func (c *Command) registerFlags() {
 	c.Cmd().Flags().BoolVar(&c.config.Active, "active", c.config.Active, "Whether the user is active")
 	c.Cmd().Flags().StringVar(&c.config.Tenant, "tenant", c.config.Tenant, "New tenant ID or slug")
 	c.Cmd().Flags().BoolVar(&c.config.Password, "password", c.config.Password, "Change the password (prompted securely)")
+	c.Cmd().Flags().StringVar(&c.config.UploadLocation, "upload-location", c.config.UploadLocation,
+		"Object-store location of uploaded files; a tenant move copies the profile photo there (defaults to the configured upload location)")
 }
 
 // updateUser handles the user update process
@@ -158,24 +180,46 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	}
 	fmt.Fprintln(out)
 
-	// Loudly warn about the partial nature of a cross-tenant move: only the
-	// users row is reassigned, so the user's content and group memberships stay
-	// behind and become inaccessible. Printed for both dry-run and live runs so
-	// the operator sees it before deciding to proceed.
-	if c.Cmd().Flags().Changed("tenant") {
-		printCrossTenantWarning(out)
-	}
+	moving := req.TenantID != nil && *req.TenantID != originalUser.TenantID
 
 	// Handle dry run
 	if cfg.DryRun {
+		if moving {
+			if err := c.reportTenantMoveCheck(adminService, originalUser); err != nil {
+				return err
+			}
+		}
 		fmt.Fprintln(out, "💡 This is a dry run. To perform the actual update, run the command without --dry-run")
 		return nil
 	}
 
-	// Delegate to the service
+	return c.applyUpdate(cfg, adminService, idOrEmail, req, moving)
+}
+
+// applyUpdate runs a live update. A tenant move also needs the photo storage,
+// and a refused move prints what blocks it.
+//
+//revive:disable-next-line:flag-parameter // moving is derived from req and the stored user by the caller, which already has both.
+func (c *Command) applyUpdate(cfg *Config, adminService *admin.Service, idOrEmail string, req admin.UserUpdateRequest, moving bool) error {
+	out := c.Cmd().OutOrStdout()
+	if moving {
+		uploadLocation := strings.TrimSpace(cfg.UploadLocation)
+		if uploadLocation == "" {
+			uploadLocation = defaults.GetUploadLocation()
+		}
+		adminService.SetAvatarService(services.NewAvatarService(adminService.FactorySet(), filekit.NormalizeFileURL(uploadLocation)))
+	}
+
 	updatedUser, err := adminService.UpdateUser(context.Background(), idOrEmail, req)
+	if blocked, ok := errors.AsType[*registry.UserTenantMoveBlockedError](err); ok {
+		printTenantMoveBlocked(out, blocked.Owned)
+		return fmt.Errorf("failed to update user: %w", err)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to update user: %w", err)
+	}
+	if moving {
+		fmt.Fprintln(out, "The user was moved and signed out everywhere; they sign in again in the new tenant.")
 	}
 
 	fmt.Fprintln(out, "✅ User updated successfully!")
@@ -271,13 +315,30 @@ func (c *Command) collectPassword() (string, error) {
 	return passwordStr, nil
 }
 
-// printCrossTenantWarning emits a prominent warning that a --tenant move only
-// reassigns the users row, leaving the user's content and memberships behind.
-func printCrossTenantWarning(out io.Writer) {
-	fmt.Fprintln(out, "⚠️  WARNING: --tenant moves only the users row. The user's existing content")
-	fmt.Fprintln(out, "    (commodities, files, areas, locations, exports, tags) and group memberships")
-	fmt.Fprintln(out, "    stay in the original tenant and will become inaccessible to them.")
-	fmt.Fprintln(out, "    See https://github.com/denisvmedia/inventario/issues/2179")
+// reportTenantMoveCheck prints, for a dry run, whether the tenant move would
+// be allowed.
+func (c *Command) reportTenantMoveCheck(adminService *admin.Service, user *models.User) error {
+	out := c.Cmd().OutOrStdout()
+	owned, err := adminService.CountUserOwnedContent(context.Background(), user.ID)
+	if err != nil {
+		return fmt.Errorf("failed to check whether the user can move: %w", err)
+	}
+	if owned.IsEmpty() {
+		fmt.Fprintln(out, "Tenant move check: allowed (the user belongs to no group and owns no content).")
+		fmt.Fprintln(out)
+		return nil
+	}
+	printTenantMoveBlocked(out, owned)
+	return nil
+}
+
+// printTenantMoveBlocked lists what keeps the user in their tenant.
+func printTenantMoveBlocked(out io.Writer, owned registry.UserOwnedContent) {
+	fmt.Fprintln(out, "Tenant move refused. The user still has:")
+	for _, entry := range owned {
+		fmt.Fprintf(out, "  - %s\n", registry.UserOwnedContent{entry})
+	}
+	fmt.Fprintln(out, "A user moves to another tenant only once they belong to no group and own no content.")
 	fmt.Fprintln(out)
 }
 

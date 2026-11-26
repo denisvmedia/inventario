@@ -137,44 +137,70 @@ func TestDataSetupManager_SetupInitialDataset_CreateAdminUser(t *testing.T) {
 	c.Assert(user.TenantID, qt.Equals, opts.DefaultTenantID)
 }
 
-func TestDataSetupManager_SetupInitialDataset_UpdateExistingUser(t *testing.T) {
+// Setup never moves a user between tenants (#2179): an admin email found only
+// in another tenant fails the run, names the tenant, and nothing is written.
+func TestDataSetupManager_SetupInitialDataset_AdminInAnotherTenant(t *testing.T) {
 	c := qt.New(t)
 
 	db := setupTestDatabase(c)
 	defer db.Close()
 
-	// Create a temporary tenant first (since tenant_id is NOT NULL)
-	tempTenantID := "temp-tenant-" + uuid.New().String()
+	otherTenantID := "temp-tenant-" + uuid.New().String()
 	_, err := db.Exec(`
 		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
 		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
-		tempTenantID, "Temp Tenant", "temp-"+uuid.New().String(), time.Now(), time.Now())
+		otherTenantID, "Other Tenant", "temp-"+uuid.New().String(), time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
-	// Create existing user with temporary tenant_id (to simulate user that needs to be moved to default tenant)
 	existingUserID := uuid.New().String()
 	_, err = db.Exec(`
 		INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
 		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-		existingUserID, "existing@example.com", "hash", "Existing User", true, tempTenantID, time.Now(), time.Now())
+		existingUserID, "existing@example.com", "hash", "Existing User", true, otherTenantID, time.Now(), time.Now())
 	c.Assert(err, qt.IsNil)
 
-	var buf bytes.Buffer
-	manager := setup.NewDataSetupManager(db, &buf)
-	opts := setup.DefaultSetupOptions()
-	opts.AdminEmail = "existing@example.com" // Use existing user as admin
+	for _, dryRun := range []bool{true, false} {
+		var buf bytes.Buffer
+		manager := setup.NewDataSetupManager(db, &buf)
+		opts := setup.DefaultSetupOptions()
+		opts.AdminEmail = "existing@example.com"
+		opts.DryRun = dryRun
 
-	result, err := manager.SetupInitialDataset(context.Background(), opts)
-	c.Assert(err, qt.IsNil)
-	c.Assert(result, qt.IsNotNil)
-	c.Assert(result.UsersCreated, qt.Equals, 0) // No new user created
-	c.Assert(result.UsersUpdated, qt.Equals, 1) // Existing user updated
+		_, err = manager.SetupInitialDataset(context.Background(), opts)
+		c.Assert(err, qt.ErrorMatches, `.*exists in tenant `+otherTenantID+`.*does not move users between tenants.*`, qt.Commentf("dry run: %v", dryRun))
+	}
 
-	// Verify user was updated with tenant_id
 	var tenantID string
 	err = db.QueryRow("SELECT tenant_id FROM users WHERE id = $1", existingUserID).Scan(&tenantID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(tenantID, qt.Equals, opts.DefaultTenantID)
+	c.Assert(tenantID, qt.Equals, otherTenantID)
+	var defaultTenants int
+	err = db.QueryRow("SELECT COUNT(*) FROM tenants WHERE id = $1", setup.DefaultSetupOptions().DefaultTenantID).Scan(&defaultTenants)
+	c.Assert(err, qt.IsNil)
+	c.Assert(defaultTenants, qt.Equals, 0)
+}
+
+// An admin that already exists in the default tenant is reused, not created
+// again.
+func TestDataSetupManager_SetupInitialDataset_AdminInDefaultTenant(t *testing.T) {
+	c := qt.New(t)
+
+	db := setupTestDatabase(c)
+	defer db.Close()
+
+	opts := setup.DefaultSetupOptions()
+	opts.AdminEmail = "existing@example.com"
+	_, err := setup.NewDataSetupManager(db, nil).SetupInitialDataset(context.Background(), opts)
+	c.Assert(err, qt.IsNil)
+
+	result, err := setup.NewDataSetupManager(db, nil).SetupInitialDataset(context.Background(), opts)
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.UsersCreated, qt.Equals, 0)
+
+	var users int
+	err = db.QueryRow("SELECT COUNT(*) FROM users WHERE email = $1", opts.AdminEmail).Scan(&users)
+	c.Assert(err, qt.IsNil)
+	c.Assert(users, qt.Equals, 1)
 }
 
 func TestDataSetupManager_SetupInitialDataset_AssignUserIDsToEntities(t *testing.T) {

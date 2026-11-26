@@ -123,6 +123,7 @@ func TestCommand_Flags(t *testing.T) {
 		"active",
 		"tenant",
 		"password",
+		"upload-location",
 	}
 	for _, flagName := range expectedFlags {
 		flag := cobraCmd.Flags().Lookup(flagName)
@@ -164,7 +165,7 @@ func TestCommand_LiveUpdate_Mutates(t *testing.T) {
 }
 
 // TestCommand_LiveUpdate_MovesTenant verifies that a live --tenant update
-// actually reassigns the user's tenant_id (and prints the cross-tenant warning).
+// moves a user who belongs to no group and owns nothing.
 func TestCommand_LiveUpdate_MovesTenant(t *testing.T) {
 	c := qt.New(t)
 
@@ -179,14 +180,97 @@ func TestCommand_LiveUpdate_MovesTenant(t *testing.T) {
 	cobraCmd.SetArgs([]string{
 		"user@example.com",
 		"--tenant=other-tenant",
+		"--upload-location=mem://",
 	})
 
 	err := cobraCmd.Execute()
 	c.Assert(err, qt.IsNil)
-	c.Assert(out.String(), qt.Contains, "WARNING: --tenant moves only the users row")
+	c.Assert(out.String(), qt.Contains, "signed out everywhere")
 
 	moved := readUser(c, fs, userID)
 	c.Assert(moved.TenantID, qt.Equals, otherTenantID)
+}
+
+// TestCommand_LiveUpdate_TenantMoveRefused verifies that a user who belongs to
+// a group is not moved, that the other requested changes are not applied
+// either, and that the command lists what blocks the move.
+func TestCommand_LiveUpdate_TenantMoveRefused(t *testing.T) {
+	c := qt.New(t)
+
+	fs, userID := seededRegistry(c)
+	seedSecondTenant(c, fs, "other-tenant")
+	seedMembership(c, fs, userID)
+
+	cmd := update.New(&shared.DatabaseConfig{DBDSN: testDSN})
+	cobraCmd := cmd.Cmd()
+
+	var out bytes.Buffer
+	cobraCmd.SetOut(&out)
+	cobraCmd.SetArgs([]string{
+		"user@example.com",
+		"--tenant=other-tenant",
+		"--name=Should Not Persist",
+		"--upload-location=mem://",
+	})
+
+	err := cobraCmd.Execute()
+	c.Assert(err, qt.ErrorIs, registry.ErrUserTenantMoveBlocked)
+	c.Assert(out.String(), qt.Contains, "Tenant move refused")
+	c.Assert(out.String(), qt.Contains, "member of 1 group")
+
+	unchanged := readUser(c, fs, userID)
+	c.Assert(unchanged.TenantID, qt.Equals, "test-tenant")
+	c.Assert(unchanged.Name, qt.Equals, "Original Name")
+}
+
+// TestCommand_DryRun_ReportsTenantMoveCheck verifies that a dry run with
+// --tenant says whether the move would be allowed and changes nothing.
+func TestCommand_DryRun_ReportsTenantMoveCheck(t *testing.T) {
+	c := qt.New(t)
+
+	fs, userID := seededRegistry(c)
+	seedSecondTenant(c, fs, "other-tenant")
+	seedMembership(c, fs, userID)
+
+	cmd := update.New(&shared.DatabaseConfig{DBDSN: testDSN})
+	cobraCmd := cmd.Cmd()
+
+	var out bytes.Buffer
+	cobraCmd.SetOut(&out)
+	cobraCmd.SetArgs([]string{
+		"user@example.com",
+		"--tenant=other-tenant",
+		"--dry-run",
+	})
+
+	err := cobraCmd.Execute()
+	c.Assert(err, qt.IsNil)
+	c.Assert(out.String(), qt.Contains, "Tenant move refused")
+	c.Assert(out.String(), qt.Contains, "member of 1 group")
+
+	unchanged := readUser(c, fs, userID)
+	c.Assert(unchanged.TenantID, qt.Equals, "test-tenant")
+}
+
+// seedMembership puts the user into a new group of their tenant.
+func seedMembership(c *qt.C, fs *registry.FactorySet, userID string) {
+	ctx := context.Background()
+	group, err := fs.LocationGroupRegistry.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant"},
+		Name:                "Home",
+		Slug:                "home-" + userID,
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           userID,
+		GroupCurrency:       "USD",
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "test-tenant"},
+		GroupID:             group.ID,
+		MemberUserID:        userID,
+		Role:                models.GroupRoleOwner,
+	})
+	c.Assert(err, qt.IsNil)
 }
 
 // TestCommand_DryRun_MutatesNothing verifies the dry-run path reports the

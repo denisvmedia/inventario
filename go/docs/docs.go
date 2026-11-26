@@ -875,6 +875,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
                         "schema": {
@@ -1092,6 +1098,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
