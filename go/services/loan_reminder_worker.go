@@ -110,13 +110,13 @@ func NewLoanReminderWorker(service *LoanReminderService, opts ...LoanReminderOpt
 // Start launches the goroutine. No-op when no service is configured.
 func (w *LoanReminderWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("LoanReminderWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "LoanReminderWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Loan reminder worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Loan reminder worker started", "interval", w.interval)
 }
 
 // Stop signals the worker and waits for the goroutine to exit.
@@ -158,7 +158,7 @@ func (w *LoanReminderWorker) tick(ctx context.Context) {
 
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
-		slog.Error("Loan reminder sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Loan reminder sweep failed", "error", err)
 		return
 	}
 	if stats.Failed > 0 {
@@ -172,12 +172,12 @@ func (w *LoanReminderWorker) tick(ctx context.Context) {
 		}
 	}
 	if total := stats.Total(); total > 0 {
-		slog.Info("Loan reminder sweep completed",
+		slog.InfoContext(ctx, "Loan reminder sweep completed",
 			"reminders_sent", total,
 			"failed", stats.Failed,
 		)
 	} else {
-		slog.Debug("Loan reminder sweep completed",
+		slog.DebugContext(ctx, "Loan reminder sweep completed",
 			"reminders_sent", 0,
 			"failed", stats.Failed,
 		)

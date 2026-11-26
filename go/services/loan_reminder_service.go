@@ -149,7 +149,7 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		hidden, hideErr := sweep.sections.hides(ctx, l.GroupID, models.GroupSectionLoans)
 		if hideErr != nil {
 			failed++
-			slog.Error("loan reminder failed",
+			slog.ErrorContext(ctx, "loan reminder failed",
 				"loan_id", l.ID,
 				"commodity_id", l.CommodityID,
 				"kind", string(kind),
@@ -165,7 +165,7 @@ func (s *LoanReminderService) sweepKind(ctx context.Context, kind registry.LoanR
 		ok, processErr := s.processOne(ctx, loanReg, l, kind, now, sweep)
 		if processErr != nil {
 			failed++
-			slog.Error("loan reminder failed",
+			slog.ErrorContext(ctx, "loan reminder failed",
 				"loan_id", l.ID,
 				"commodity_id", l.CommodityID,
 				"kind", string(kind),
@@ -234,14 +234,14 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 			return false, errxtrace.Wrap("loan reminder: flip flag without recipient", err)
 		}
 		if flipped {
-			slog.Warn("loan reminder: no recipient on file; flag flipped",
+			slog.WarnContext(ctx, "loan reminder: no recipient on file; flag flipped",
 				"loan_id", l.ID,
 				"kind", string(kind),
 			)
 			if emitErr := s.emitAuditEvent(ctx, l, kind, ""); emitErr != nil {
 				// Non-fatal — the flag flip is the source of truth for
 				// idempotency. Log and move on.
-				slog.Warn("loan reminder: emit audit event failed (no recipient)",
+				slog.WarnContext(ctx, "loan reminder: emit audit event failed (no recipient)",
 					"loan_id", l.ID,
 					"error", emitErr,
 				)
@@ -258,7 +258,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 	// silence the recipient permanently for this loan even after they
 	// re-enable the category.
 	if prefsCache != nil && lender != nil && !prefsCache.IsEnabled(ctx, lender, notifications.CategoryLoanReminder, notifications.ChannelEmail) {
-		slog.Debug("loan reminder: lender opted out; skipping send and flag flip",
+		slog.DebugContext(ctx, "loan reminder: lender opted out; skipping send and flag flip",
 			"loan_id", l.ID,
 			"kind", string(kind),
 			"user_id", lender.ID,
@@ -277,7 +277,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		}
 		if flipped {
 			if emitErr := s.emitAuditEvent(ctx, l, kind, recipientEmail); emitErr != nil {
-				slog.Warn("loan reminder: emit audit event failed (stub mode)",
+				slog.WarnContext(ctx, "loan reminder: emit audit event failed (stub mode)",
 					"loan_id", l.ID,
 					"error", emitErr,
 				)
@@ -318,7 +318,7 @@ func (s *LoanReminderService) processOne(ctx context.Context, loanReg registry.C
 		return false, nil
 	}
 	if emitErr := s.emitAuditEvent(ctx, l, kind, recipientEmail); emitErr != nil {
-		slog.Warn("loan reminder: emit audit event failed",
+		slog.WarnContext(ctx, "loan reminder: emit audit event failed",
 			"loan_id", l.ID,
 			"kind", string(kind),
 			"error", emitErr,

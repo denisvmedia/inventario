@@ -225,7 +225,7 @@ func NewTooManyRequestsError(err error) jsonapi.Error {
 }
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
-	slog.Error("internal server error", "error", err)
+	slog.ErrorContext(r.Context(), "internal server error", "error", err)
 	// Report the unexpected 5xx to Sentry (#844). No-op when Sentry is disabled.
 	sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))

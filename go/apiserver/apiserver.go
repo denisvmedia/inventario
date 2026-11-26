@@ -488,7 +488,7 @@ func MetricsTokenMiddleware(token string) func(http.Handler) http.Handler {
 			// explicit length guard is only to keep the comparison's timing
 			// independent of where the first differing byte falls.
 			if len(got) != len(expected) || subtle.ConstantTimeCompare(got, expected) != 1 {
-				slog.Warn("Unauthorized /metrics access attempt",
+				slog.WarnContext(r.Context(), "Unauthorized /metrics access attempt",
 					"remote_addr", r.RemoteAddr,
 					"user_agent", r.UserAgent(),
 					"path", r.URL.Path,
@@ -1007,7 +1007,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			// Get user from context (set by JWTMiddleware)
 			user := appctx.UserFromContext(r.Context())
 			if user == nil {
-				slog.Error("RLS Security Violation: No user context found",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: No user context found",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"remote_addr", r.RemoteAddr,
@@ -1018,7 +1018,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user has required fields for RLS
 			if user.ID == "" {
-				slog.Error("RLS Security Violation: User ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: User ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_email", user.Email,
@@ -1028,7 +1028,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			}
 
 			if user.TenantID == "" {
-				slog.Error("RLS Security Violation: Tenant ID is empty",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Tenant ID is empty",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
@@ -1040,7 +1040,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 
 			// Validate user is active
 			if !user.IsActive {
-				slog.Error("RLS Security Violation: Inactive user attempted access",
+				slog.ErrorContext(r.Context(), "RLS Security Violation: Inactive user attempted access",
 					"method", r.Method,
 					"path", r.URL.Path,
 					"user_id", user.ID,
@@ -1051,7 +1051,7 @@ func RLSContextMiddleware(factorySet *registry.FactorySet) func(http.Handler) ht
 			}
 
 			// Log successful security validation for monitoring
-			slog.Debug("RLS Security: User context validated",
+			slog.DebugContext(r.Context(), "RLS Security: User context validated",
 				"user_id", user.ID,
 				"tenant_id", user.TenantID,
 				"user_email", user.Email,
@@ -1072,7 +1072,7 @@ func RegistrySetMiddleware(factorySet *registry.FactorySet) func(http.Handler) h
 			// Create user-aware registry set from factory set
 			registrySet, err := factorySet.CreateUserRegistrySet(r.Context())
 			if err != nil {
-				slog.Error("Failed to create user registry set", "error", err)
+				slog.ErrorContext(r.Context(), "Failed to create user registry set", "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}

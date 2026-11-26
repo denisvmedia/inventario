@@ -140,7 +140,7 @@ func (s *WeeklyDigestService) SendOnce(ctx context.Context, now time.Time) (Week
 		draft := drafts[userID]
 		switch sent, sendErr := s.deliver(ctx, draft, window, prefsCache); {
 		case sendErr != nil:
-			slog.Error("Weekly digest: failed to send",
+			slog.ErrorContext(ctx, "Weekly digest: failed to send",
 				"user_id", userID, "week_start", window.Start.Format(time.DateOnly), "error", sendErr)
 			stats.Failed++
 		case sent == digestSent:
@@ -175,7 +175,7 @@ func (s *WeeklyDigestService) buildDrafts(
 		}
 		members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, group.ID)
 		if err != nil {
-			slog.Error("Weekly digest: failed to list group members",
+			slog.ErrorContext(ctx, "Weekly digest: failed to list group members",
 				"group_id", group.ID, "error", err)
 			failed++
 			continue
@@ -327,7 +327,7 @@ func (s *WeeklyDigestService) deliver(ctx context.Context, draft *digestDraft, w
 		// Release this user's claim so the next tick can try again. Leaving it
 		// would turn a transient queue outage into a silently skipped week.
 		if relErr := s.factorySet.WeeklyDigestSendRegistry.ReleaseWeek(ctx, draft.user.ID, window.Start); relErr != nil {
-			slog.Error("Weekly digest: failed to release the claim after a send error",
+			slog.ErrorContext(ctx, "Weekly digest: failed to release the claim after a send error",
 				"user_id", draft.user.ID, "error", relErr)
 		}
 		return digestNothingToSay, errxtrace.Wrap("weekly digest: send email", err)

@@ -350,7 +350,7 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			// Fail-open: don't make auth unavailable due to limiter
 			// backend outages. Mirrors the tenant plane's stance.
-			slog.Error("Failed to check backoffice account lockout", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to check backoffice account lockout", "error", err)
 		} else if locked {
 			retryAfter := max(int(time.Until(resetAt).Seconds()), 0)
 			w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
@@ -368,7 +368,7 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 		// hash so the user-not-found path costs the same as a
 		// wrong-password path for an existing user.
 		_ = bcrypt.CompareHashAndPassword(backofficeDummyBcryptHash, []byte(req.Password))
-		slog.Warn("Backoffice login: user not found", "email", req.Email)
+		slog.WarnContext(r.Context(), "Backoffice login: user not found", "email", req.Email)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		api.logAuth(r.Context(), backofficeActionLoginFailed, "", false, r, new("user not found"))
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -385,7 +385,7 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// surface intentionally leaks nothing.
 	if !user.IsActive {
 		_ = bcrypt.CompareHashAndPassword(backofficeDummyBcryptHash, []byte(req.Password))
-		slog.Warn("Backoffice login: account disabled", "email", req.Email, "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Backoffice login: account disabled", "email", req.Email, "user_id", user.ID)
 		// NOTE: maybeRecordFailedLogin intentionally NOT called here —
 		// a disabled account cannot be unlocked by exhausting the
 		// per-email budget, so attempts against it must not count
@@ -398,7 +398,7 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := bcrypt.CompareHashAndPassword([]byte(user.PasswordHash), []byte(req.Password)); err != nil {
-		slog.Warn("Backoffice login: invalid password", "email", req.Email, "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Backoffice login: invalid password", "email", req.Email, "user_id", user.ID)
 		api.maybeRecordFailedLogin(r.Context(), req.Email)
 		api.logAuth(r.Context(), backofficeActionLoginFailed, user.ID, false, r, new("invalid password"))
 		http.Error(w, "Invalid credentials", http.StatusUnauthorized)
@@ -427,7 +427,7 @@ func (api *BackofficeAuthAPI) login(w http.ResponseWriter, r *http.Request) {
 	// plane.
 	if api.rateLimiter != nil {
 		if err := api.rateLimiter.ClearFailedLogins(r.Context(), req.Email); err != nil {
-			slog.Error("Failed to clear backoffice failed login counters", "error", err)
+			slog.ErrorContext(r.Context(), "Failed to clear backoffice failed login counters", "error", err)
 		}
 	}
 
@@ -455,7 +455,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 	// Treating "not configured" identically to "no enrollment row"
 	// keeps the FE response shape consistent for the ops contract.
 	if api.mfaService == nil || api.mfaRegistry == nil {
-		slog.Warn("Backoffice login: MFAEnforced=true but MFA service not configured", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but MFA service not configured", "user_id", user.ID)
 		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa not configured"))
 		api.writeMFANotImplementedResponse(w, user.Email)
 		return false
@@ -464,12 +464,12 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 	row, err := api.mfaRegistry.Get(r.Context(), user.ID)
 	if err != nil {
 		if errors.Is(err, registry.ErrBackofficeMFASecretNotFound) {
-			slog.Warn("Backoffice login: MFAEnforced=true but no enrollment row", "user_id", user.ID)
+			slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but no enrollment row", "user_id", user.ID)
 			api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment missing"))
 			api.writeMFANotImplementedResponse(w, user.Email)
 			return false
 		}
-		slog.Error("Backoffice login: MFA lookup failed", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Backoffice login: MFA lookup failed", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to check MFA enrollment", http.StatusInternalServerError)
 		return false
 	}
@@ -477,7 +477,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 		// A row with EnabledAt=null shouldn't happen in practice (the
 		// CLI stamps it atomically with insert), but if it does we
 		// treat it like a missing row: fail closed.
-		slog.Warn("Backoffice login: MFAEnforced=true but enrollment row not enabled", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Backoffice login: MFAEnforced=true but enrollment row not enabled", "user_id", user.ID)
 		api.logAuth(r.Context(), backofficeActionMFARequired, user.ID, false, r, new("mfa enrollment not enabled"))
 		api.writeMFANotImplementedResponse(w, user.Email)
 		return false
@@ -487,7 +487,7 @@ func (api *BackofficeAuthAPI) handleBackofficeMFAGate(w http.ResponseWriter, r *
 	// FE pivots to the code-entry surface.
 	token, expiresAt, err := api.issueBackofficeMFAToken(user)
 	if err != nil {
-		slog.Error("Backoffice login: failed to mint MFA challenge token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Backoffice login: failed to mint MFA challenge token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to issue MFA challenge", http.StatusInternalServerError)
 		return false
 	}
@@ -563,14 +563,14 @@ func mustGenerateDummyBcryptHash() []byte {
 func (api *BackofficeAuthAPI) mintAndRespondAfterAuth(w http.ResponseWriter, r *http.Request, user *models.BackofficeUser, action string) bool {
 	rti, rawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Failed to issue backoffice refresh token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue backoffice refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to create session", http.StatusInternalServerError)
 		return false
 	}
 
 	accessToken, _, err := api.issueAccessToken(user, rti)
 	if err != nil {
-		slog.Error("Failed to issue backoffice access token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue backoffice access token", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, rti)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return false
@@ -582,7 +582,7 @@ func (api *BackofficeAuthAPI) mintAndRespondAfterAuth(w http.ResponseWriter, r *
 	if err := api.backofficeUserRegistry.UpdateLastLogin(r.Context(), user.ID, now); err != nil {
 		// Best-effort — a failed last_login_at update must not fail
 		// the login.
-		slog.Error("Failed to stamp backoffice last_login_at", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to stamp backoffice last_login_at", "user_id", user.ID, "error", err)
 	} else {
 		user.LastLoginAt = &now
 	}
@@ -631,7 +631,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// (dev / tests) so the cookie's SameSite=Strict remains the sole guard.
 	if api.publicHost != "" {
 		if err := validateBackofficeRefreshOrigin(r, api.publicHost); err != nil {
-			slog.Warn("Backoffice refresh: Origin/Referer validation failed", "error", err)
+			slog.WarnContext(r.Context(), "Backoffice refresh: Origin/Referer validation failed", "error", err)
 			http.Error(w, "Invalid origin", http.StatusForbidden)
 			return
 		}
@@ -647,7 +647,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	refreshToken, err := api.refreshTokenRegistry.GetByHash(r.Context(), tokenHash)
 	if err != nil {
-		slog.Warn("Backoffice refresh: token not found")
+		slog.WarnContext(r.Context(), "Backoffice refresh: token not found")
 		clearBackofficeRefreshCookie(w, r)
 		http.Error(w, "Invalid refresh token", http.StatusUnauthorized)
 		return
@@ -667,10 +667,10 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// attacker nothing about which of the two fired.
 	if refreshToken.RevokedAt != nil {
 		if err := api.refreshTokenRegistry.RevokeByBackofficeUserID(r.Context(), refreshToken.BackofficeUserID); err != nil {
-			slog.Error("Failed to revoke all backoffice sessions on refresh-token reuse",
+			slog.ErrorContext(r.Context(), "Failed to revoke all backoffice sessions on refresh-token reuse",
 				"user_id", refreshToken.BackofficeUserID, "error", err)
 		}
-		slog.Warn("Backoffice refresh token reuse detected",
+		slog.WarnContext(r.Context(), "Backoffice refresh token reuse detected",
 			"user_id", refreshToken.BackofficeUserID,
 			"token_id", refreshToken.ID,
 			"ip", clientIPTruncated(r),
@@ -684,7 +684,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	if !refreshToken.IsValid() {
 		// Genuinely expired (RevokedAt == nil, past ExpiresAt): no theft
 		// signal, no cascade — just clear the cookie.
-		slog.Warn("Backoffice refresh: token expired", "token_id", refreshToken.ID)
+		slog.WarnContext(r.Context(), "Backoffice refresh: token expired", "token_id", refreshToken.ID)
 		clearBackofficeRefreshCookie(w, r)
 		http.Error(w, "Refresh token expired or revoked", http.StatusUnauthorized)
 		return
@@ -692,7 +692,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 
 	user, err := api.backofficeUserRegistry.Get(r.Context(), refreshToken.BackofficeUserID)
 	if err != nil || !user.IsActive {
-		slog.Warn("Backoffice refresh: user missing/inactive", "user_id", refreshToken.BackofficeUserID)
+		slog.WarnContext(r.Context(), "Backoffice refresh: user missing/inactive", "user_id", refreshToken.BackofficeUserID)
 		clearBackofficeRefreshCookie(w, r)
 		http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 		return
@@ -703,9 +703,9 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	if api.blacklistService != nil {
 		since, blacklisted, blErr := api.blacklistService.UserBlacklistedSince(r.Context(), backofficeBlacklistUserKey(user.ID))
 		if blErr != nil {
-			slog.Error("Failed to check backoffice user blacklist on refresh", "user_id", user.ID, "error", blErr)
+			slog.ErrorContext(r.Context(), "Failed to check backoffice user blacklist on refresh", "user_id", user.ID, "error", blErr)
 		} else if blacklisted && refreshToken.CreatedAt.Unix() <= since.Unix() {
-			slog.Warn("Backoffice refresh: blacklisted user attempted refresh", "user_id", user.ID)
+			slog.WarnContext(r.Context(), "Backoffice refresh: blacklisted user attempted refresh", "user_id", user.ID)
 			clearBackofficeRefreshCookie(w, r)
 			http.Error(w, "User not found or inactive", http.StatusUnauthorized)
 			return
@@ -719,14 +719,14 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// linkage points at the new row from the moment of mint.
 	newRTI, newRawRefreshToken, err := api.persistRefreshToken(r.Context(), r, user)
 	if err != nil {
-		slog.Error("Failed to issue rotated backoffice refresh token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue rotated backoffice refresh token", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to rotate session", http.StatusInternalServerError)
 		return
 	}
 
 	accessToken, _, err := api.issueAccessToken(user, newRTI)
 	if err != nil {
-		slog.Error("Failed to issue backoffice access token on refresh", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to issue backoffice access token on refresh", "user_id", user.ID, "error", err)
 		api.rollbackRefreshToken(r.Context(), user.ID, newRTI)
 		http.Error(w, "Failed to generate token", http.StatusInternalServerError)
 		return
@@ -740,7 +740,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// `cookie.Value`); a replay would race the next refresh and lose,
 	// at which point IsValid() rejects it on the now-revoked row.
 	if err := api.refreshTokenRegistry.Revoke(r.Context(), user.ID, refreshToken.ID); err != nil {
-		slog.Error("Failed to revoke consumed backoffice refresh token (rotation partially completed)",
+		slog.ErrorContext(r.Context(), "Failed to revoke consumed backoffice refresh token (rotation partially completed)",
 			"old_token_id", refreshToken.ID, "new_token_id", newRTI, "user_id", user.ID, "error", err)
 	}
 
@@ -749,7 +749,7 @@ func (api *BackofficeAuthAPI) refresh(w http.ResponseWriter, r *http.Request) {
 	// failure here doesn't break the response.
 	now := time.Now()
 	if err := api.refreshTokenRegistry.BumpLastUsedAt(r.Context(), user.ID, newRTI, now); err != nil {
-		slog.Error("Failed to bump backoffice refresh token last_used_at", "token_id", newRTI, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to bump backoffice refresh token last_used_at", "token_id", newRTI, "error", err)
 	}
 
 	api.setRefreshTokenCookie(w, r, newRawRefreshToken)
@@ -881,7 +881,7 @@ func (api *BackofficeAuthAPI) rollbackRefreshToken(ctx context.Context, userID, 
 		return
 	}
 	if err := api.refreshTokenRegistry.Revoke(ctx, userID, rowID); err != nil {
-		slog.Error("Failed to roll back backoffice refresh token after access mint failure",
+		slog.ErrorContext(ctx, "Failed to roll back backoffice refresh token after access mint failure",
 			"user_id", userID, "row_id", rowID, "error", err)
 	}
 }
@@ -897,7 +897,7 @@ func (api *BackofficeAuthAPI) revokeRefreshTokenByRaw(ctx context.Context, rawTo
 		return
 	}
 	if err := api.refreshTokenRegistry.Revoke(ctx, rt.BackofficeUserID, rt.ID); err != nil {
-		slog.Error("Failed to revoke backoffice refresh token", "token_id", rt.ID, "error", err)
+		slog.ErrorContext(ctx, "Failed to revoke backoffice refresh token", "token_id", rt.ID, "error", err)
 	}
 }
 
@@ -1010,7 +1010,7 @@ func (api *BackofficeAuthAPI) blacklistAccessToken(ctx context.Context, authHead
 		expiresAt = maxExpiry
 	}
 	if err := api.blacklistService.BlacklistToken(ctx, jti, expiresAt); err != nil {
-		slog.Error("Failed to blacklist backoffice access token", "error", err)
+		slog.ErrorContext(ctx, "Failed to blacklist backoffice access token", "error", err)
 	}
 }
 
@@ -1056,7 +1056,7 @@ func (api *BackofficeAuthAPI) maybeRecordFailedLogin(ctx context.Context, email 
 		return
 	}
 	if _, _, err := api.rateLimiter.RecordFailedLogin(ctx, email); err != nil {
-		slog.Error("Failed to record backoffice failed login", "error", err)
+		slog.ErrorContext(ctx, "Failed to record backoffice failed login", "error", err)
 	}
 }
 

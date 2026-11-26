@@ -40,7 +40,7 @@ func RequestIDContextMiddleware() func(http.Handler) http.Handler {
 				return
 			}
 			if !storableRequestID(id) {
-				slog.Debug("Ignoring an unusable client-supplied request id",
+				slog.DebugContext(r.Context(), "Ignoring an unusable client-supplied request id",
 					"length", len(id), "path", r.URL.Path)
 				next.ServeHTTP(w, r)
 				return

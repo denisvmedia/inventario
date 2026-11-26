@@ -92,7 +92,7 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 					http.Error(w, "Group not found", http.StatusNotFound)
 					return
 				}
-				slog.Error("GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
+				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: GetGroupBySlug failed", "slug", slug, "tenant_id", user.TenantID, "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -114,7 +114,7 @@ func GroupSlugResolverMiddleware(groupService *services.GroupService) func(http.
 
 			isMember, err := groupService.CheckGroupMembership(r.Context(), group.ID, user.ID)
 			if err != nil {
-				slog.Error("GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
+				slog.ErrorContext(r.Context(), "GroupSlugResolverMiddleware: CheckGroupMembership failed", "group_id", group.ID, "user_id", user.ID, "error", err)
 				http.Error(w, "Internal server error", http.StatusInternalServerError)
 				return
 			}
@@ -251,7 +251,7 @@ func requireGroupRole(groupService *services.GroupService, minRole models.GroupR
 				// Treat infrastructure failures as 500 — same posture as
 				// GroupSlugResolverMiddleware. Masking a DB outage as a
 				// 403 hides incidents and confuses oncall debugging.
-				slog.Error("requireGroupRole: role lookup failed",
+				slog.ErrorContext(r.Context(), "requireGroupRole: role lookup failed",
 					"group_id", group.ID,
 					"user_id", user.ID,
 					"min_role", minRole,
@@ -1042,7 +1042,7 @@ func (api *groupsAPI) buildInviteURL(r *http.Request, token string) string {
 		// buildPublicURL already logs the misconfiguration. Fall
 		// through to the request-derived path so a bad operator config
 		// doesn't break the feature outright.
-		slog.Warn("Falling back to request-derived invite URL due to invalid public_url",
+		slog.WarnContext(r.Context(), "Falling back to request-derived invite URL due to invalid public_url",
 			"public_url", api.publicBaseURL,
 			"error", err,
 		)
@@ -1090,7 +1090,7 @@ func (api *groupsAPI) sendInviteEmailBestEffort(ctx context.Context, invite *mod
 		inviteURL,
 		invite.ExpiresAt,
 	); err != nil {
-		slog.Warn("Failed to enqueue group invite email",
+		slog.WarnContext(ctx, "Failed to enqueue group invite email",
 			"invite_id", invite.ID,
 			"group_id", group.ID,
 			"to", to,

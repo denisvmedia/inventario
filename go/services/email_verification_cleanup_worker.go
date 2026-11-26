@@ -81,13 +81,13 @@ func NewEmailVerificationCleanupWorker(r registry.EmailVerificationRegistry, opt
 // Start launches the background cleanup goroutine. It is a no-op if the registry is nil.
 func (w *EmailVerificationCleanupWorker) Start(ctx context.Context) {
 	if w.registry == nil {
-		slog.Warn("EmailVerificationCleanupWorker: no registry configured, skipping startup")
+		slog.WarnContext(ctx, "EmailVerificationCleanupWorker: no registry configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.runCleanup(ctx)
 	})
-	slog.Info("Email verification cleanup worker started", "interval", w.cleanupInterval)
+	slog.InfoContext(ctx, "Email verification cleanup worker started", "interval", w.cleanupInterval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -124,8 +124,8 @@ func (w *EmailVerificationCleanupWorker) cleanupOnce(ctx context.Context) {
 	}
 
 	if err := w.registry.DeleteExpired(ctx); err != nil {
-		slog.Error("Failed to delete expired email verification tokens", "error", err)
+		slog.ErrorContext(ctx, "Failed to delete expired email verification tokens", "error", err)
 	} else {
-		slog.Debug("Expired email verification tokens cleaned up")
+		slog.DebugContext(ctx, "Expired email verification tokens cleaned up")
 	}
 }

@@ -125,7 +125,7 @@ func (w *RestoreWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	})
 
-	slog.Info("Restore worker started")
+	slog.InfoContext(ctx, "Restore worker started")
 }
 
 // Stop stops the restore worker
@@ -182,7 +182,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 	restoreOperations, err := w.registrySet.RestoreOperationRegistry.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get restore operations", "error", err)
+		slog.ErrorContext(ctx, "Failed to get restore operations", "error", err)
 		return
 	}
 
@@ -200,7 +200,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		// only looks at pending rows.
 		if !w.semaphore.TryAcquire(1) {
 			w.inFlight.Delete(restoreOp.ID)
-			slog.Warn("Failed to acquire semaphore for restore, another restore is in progress, skipping...")
+			slog.WarnContext(ctx, "Failed to acquire semaphore for restore, another restore is in progress, skipping...")
 			return
 		}
 
@@ -210,7 +210,7 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(restoreOp.ID)
-			slog.Error("Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
+			slog.ErrorContext(ctx, "Failed to claim restore operation", "restore_operation_id", restoreOp.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
@@ -230,13 +230,13 @@ func (w *RestoreWorker) processPendingRestores(ctx context.Context) {
 
 // processRestore processes a single restore request
 func (w *RestoreWorker) processRestore(ctx context.Context, restoreOperationID string) {
-	slog.Info("Processing restore operation", "restore_operation_id", restoreOperationID)
+	slog.InfoContext(ctx, "Processing restore operation", "restore_operation_id", restoreOperationID)
 
 	if err := w.restoreService.ProcessRestoreOperation(ctx, restoreOperationID, w.uploadLocation); err != nil {
-		slog.Error("Failed to process restore operation", "restore_operation_id", restoreOperationID, "error", err)
+		slog.ErrorContext(ctx, "Failed to process restore operation", "restore_operation_id", restoreOperationID, "error", err)
 		return
 	}
-	slog.Info("Successfully processed restore operation", "restore_operation_id", restoreOperationID)
+	slog.InfoContext(ctx, "Successfully processed restore operation", "restore_operation_id", restoreOperationID)
 }
 
 // HasRunningRestores checks if there are any restore operations currently
