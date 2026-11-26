@@ -150,7 +150,7 @@
         },
         "/admin/failed-jobs/{jobType}/{jobID}/discard": {
             "post": {
-                "description": "Marks the failed job discarded (#1307). It leaves the failed list and\nthe depth gauge but keeps its row and its error until the normal\ncleanup removes it. Every job type can be discarded. 404\n`failed_job.unknown_type` for an unknown type, 404\n`failed_job.not_found` when the job is not failed or was already\nretried or discarded.",
+                "description": "Marks the failed job discarded (#1307). It leaves the failed list and\nthe depth gauge but keeps its row and its error until the normal\ncleanup removes it. Every job type can be discarded. Needs the\nplatform_admin role: a support_agent gets 403 `admin.role_required`.\n404 `failed_job.unknown_type` for an unknown type, 404\n`failed_job.not_found` when the job is not failed or was already\nretried or discarded.",
                 "tags": [
                     "admin"
                 ],
@@ -190,7 +190,7 @@
                         }
                     },
                     "403": {
-                        "description": "Account disabled",
+                        "description": "Forbidden - account disabled, or not a platform_admin",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

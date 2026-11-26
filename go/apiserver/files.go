@@ -1056,7 +1056,9 @@ func (api *filesAPI) servePlaceholderThumbnail(w http.ResponseWriter, r *http.Re
 
 	// Unless a job is already on its way, request one. A completed job with
 	// a missing thumbnail predates this size (see RequestThumbnailGeneration).
-	if job == nil || !job.Status.InFlight() {
+	// A failure that awaits an operator is not tried again on every view
+	// (#1307): it is retried or discarded from the failed jobs.
+	if job == nil || (!job.Status.InFlight() && !job.AwaitsOperator()) {
 		_, err := thumbnailService.RequestThumbnailGeneration(r.Context(), fileID)
 		if err != nil {
 			// Log error but still serve placeholder

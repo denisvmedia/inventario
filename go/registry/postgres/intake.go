@@ -543,9 +543,11 @@ func (r *IntakeRegistry) ResumeSession(ctx context.Context, sessionID string, no
 		if err != nil {
 			return err
 		}
+		// A requeued source is no longer a failure an operator discarded:
+		// if it fails again, the failed jobs show it again (#1307).
 		requeue := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', updated_at = $2
+				wait_reason = '', error_code = '', discarded_at = NULL, updated_at = $2
 			WHERE session_id = $3 AND (status = $4 OR (status = $5 AND claimed_at IS NULL))`, r.tableNames.IntakeSources())
 		res, err = tx.ExecContext(ctx, requeue, string(models.IntakeSourcePending), now, sessionID,
 			string(models.IntakeSourceFailed), string(models.IntakeSourceCanceled))
@@ -610,7 +612,7 @@ func (r *IntakeRegistry) RescanSource(ctx context.Context, id string, now time.T
 		}
 		update := fmt.Sprintf(`
 			UPDATE %s SET status = $1, retry_base = attempts, next_attempt_at = $2, claimed_at = NULL,
-				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, updated_at = $2
+				wait_reason = '', error_code = '', warnings = '[]'::jsonb, scanned_at = NULL, discarded_at = NULL, updated_at = $2
 			WHERE id = $3
 			RETURNING *`, r.tableNames.IntakeSources())
 		return tx.QueryRowxContext(ctx, update, string(models.IntakeSourcePending), now.UTC(), id).StructScan(&updated)

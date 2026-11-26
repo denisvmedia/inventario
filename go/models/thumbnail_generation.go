@@ -110,6 +110,14 @@ type ThumbnailGenerationJobIndexes struct {
 	_ int
 }
 
+// AwaitsOperator reports whether the job failed for good and nobody has
+// retried or discarded it yet (#1307). While it does, viewing its file
+// starts no new job, so a file that cannot be thumbnailed stays one failed
+// job instead of one per view.
+func (t *ThumbnailGenerationJob) AwaitsOperator() bool {
+	return t.Status == ThumbnailStatusFailed && t.DiscardedAt == nil
+}
+
 func (*ThumbnailGenerationJob) Validate() error {
 	return ErrMustUseValidateWithContext
 }

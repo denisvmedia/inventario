@@ -68,7 +68,7 @@ func newFixture(c *qt.C) *fixture {
 		Description:   "Restore",
 		Status:        models.RestoreStatusFailed,
 		Options:       models.RestoreOptions{Strategy: "merge_add"},
-		ErrorMessage:  "conflicting ids",
+		ErrorMessage:  "conflicting\x1b[2J ids",
 		CreatedDate:   models.NewPTimestamp(failedAt.Add(-time.Hour)),
 		CompletedDate: models.NewPTimestamp(failedAt.Add(-time.Minute)),
 	})
@@ -104,6 +104,8 @@ func TestList(t *testing.T) {
 	c.Assert(out, qt.Contains, f.export)
 	c.Assert(out, qt.Contains, f.restore)
 	c.Assert(out, qt.Contains, "disk full on the volume", qt.Commentf("an error stays on its row"))
+	c.Assert(out, qt.Contains, "conflicting [2J ids")
+	c.Assert(out, qt.Not(qt.Contains), "\x1b", qt.Commentf("no control character reaches the terminal"))
 
 	out, err = run(c, testDSN, "failed", "list", "--type", "restore", "--tenant", "acme")
 	c.Assert(err, qt.IsNil)
@@ -146,6 +148,11 @@ func TestRetry(t *testing.T) {
 	c.Assert(err, qt.ErrorMatches, "--type is required")
 	_, err = run(c, testDSN, "failed", "retry", "--type", "nope", f.export)
 	c.Assert(err, qt.ErrorMatches, `unknown job type "nope".*`)
+	rows = f.auditRows(c, "admin.failed_job_retry")
+	c.Assert(rows, qt.HasLen, 3, qt.Commentf("an unknown type is refused and audited"))
+	c.Assert(rows[2].Success, qt.IsFalse)
+	c.Assert(*rows[2].EntityType, qt.Equals, "nope")
+	c.Assert(*rows[2].EntityID, qt.Equals, f.export)
 }
 
 func TestDiscard(t *testing.T) {

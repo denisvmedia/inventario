@@ -26,9 +26,9 @@ type failedJobAdapter struct {
 	table func(store.TableNames) store.TableName
 	// join is the FROM clause after "<table> j", empty when none.
 	join func(store.TableNames) string
-	// where holds the conditions that pick the type's rows of a shared
-	// table, such as exports against imports. Empty when none.
-	where string
+	// where holds the conditions that pick the type's rows of its table,
+	// such as exports against imports. Nil when none.
+	where func(store.TableNames) string
 	// columns selects the failedJobRow fields.
 	columns func(store.TableNames) string
 	// groupColumn is the column that holds the job's group.
@@ -69,7 +69,7 @@ const failedJobExportRetry = `status = 'pending', error_message = '', completed_
 var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 	models.WorkerTypeExport: {
 		table:       func(t store.TableNames) store.TableName { return t.Exports() },
-		where:       "j.type <> 'imported' AND j.deleted_at IS NULL",
+		where:       func(store.TableNames) string { return "j.type <> 'imported' AND j.deleted_at IS NULL" },
 		columns:     func(store.TableNames) string { return failedJobExportColumns },
 		groupColumn: "j.group_id",
 		retrySet:    failedJobExportRetry,
@@ -77,7 +77,7 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 	},
 	models.WorkerTypeImport: {
 		table:       func(t store.TableNames) store.TableName { return t.Exports() },
-		where:       "j.type = 'imported' AND j.deleted_at IS NULL",
+		where:       func(store.TableNames) string { return "j.type = 'imported' AND j.deleted_at IS NULL" },
 		columns:     func(store.TableNames) string { return failedJobExportColumns },
 		groupColumn: "j.group_id",
 		retrySet:    failedJobExportRetry,
@@ -98,6 +98,14 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		table: func(t store.TableNames) store.TableName { return t.ThumbnailGenerationJobs() },
 		join: func(t store.TableNames) string {
 			return fmt.Sprintf("LEFT JOIN %s f ON f.id = j.file_id", t.Files())
+		},
+		// Only the newest job of a file counts: an older failure of a file
+		// whose thumbnail was tried again since is history, not a job to
+		// act on. The order is GetJobByFileID's.
+		where: func(t store.TableNames) string {
+			return fmt.Sprintf(`NOT EXISTS (SELECT 1 FROM %s n WHERE n.file_id = j.file_id
+				AND (n.created_at > j.created_at OR (n.created_at = j.created_at AND n.id > j.id)))`,
+				t.ThumbnailGenerationJobs())
 		},
 		columns: func(store.TableNames) string {
 			return `j.id, j.tenant_id, COALESCE(f.group_id, '') AS group_id, j.user_id,
@@ -187,8 +195,8 @@ func (r *FailedJobRegistry) do(ctx context.Context, a failedJobAdapter, scope re
 // undiscarded jobs in the scope, with its arguments numbered from next.
 func (r *FailedJobRegistry) conditions(a failedJobAdapter, scope registry.FailedJobScope, next int) (string, []any) {
 	conds := []string{"j.status = 'failed'", "j.discarded_at IS NULL"}
-	if a.where != "" {
-		conds = append(conds, a.where)
+	if a.where != nil {
+		conds = append(conds, a.where(r.tableNames))
 	}
 	var args []any
 	if scope.TenantID != "" {

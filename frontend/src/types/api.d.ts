@@ -201,8 +201,9 @@ export type paths = {
          * Discard a failed background job (admin)
          * @description Marks the failed job discarded (#1307). It leaves the failed list and
          *     the depth gauge but keeps its row and its error until the normal
-         *     cleanup removes it. Every job type can be discarded. 404
-         *     `failed_job.unknown_type` for an unknown type, 404
+         *     cleanup removes it. Every job type can be discarded. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     404 `failed_job.unknown_type` for an unknown type, 404
          *     `failed_job.not_found` when the job is not failed or was already
          *     retried or discarded.
          */
@@ -236,7 +237,7 @@ export type paths = {
                         "*/*": components["schemas"]["jsonapi.Errors"];
                     };
                 };
-                /** @description Account disabled */
+                /** @description Forbidden - account disabled, or not a platform_admin */
                 403: {
                     headers: {
                         [name: string]: unknown;

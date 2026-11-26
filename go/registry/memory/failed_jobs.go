@@ -151,9 +151,20 @@ func newThumbnailFailedJobAdapter(jobs *ThumbnailGenerationJobRegistryFactory, f
 		}
 		return f.GroupID, fileTitle(f)
 	}
+	// newest reports whether no other job of j's file is newer. Only the
+	// newest job of a file counts, as in postgres. The caller holds the job
+	// store's lock.
+	newest := func(j *models.ThumbnailGenerationJob) bool {
+		for pair := base.items.Oldest(); pair != nil; pair = pair.Next() {
+			if other := pair.Value; other.FileID == j.FileID && newerThumbnailJob(other, j) {
+				return false
+			}
+		}
+		return true
+	}
 	match := func(scope registry.FailedJobScope, j *models.ThumbnailGenerationJob, groupID string) bool {
 		return j.Status == models.ThumbnailStatusFailed && j.DiscardedAt == nil &&
-			inFailedJobScope(scope, j.TenantID, groupID)
+			inFailedJobScope(scope, j.TenantID, groupID) && newest(j)
 	}
 	// Read the job's file before taking the job store's lock, so the two
 	// locks are never held together.
@@ -172,7 +183,7 @@ func newThumbnailFailedJobAdapter(jobs *ThumbnailGenerationJobRegistryFactory, f
 	return memoryFailedJobAdapter{
 		list: func(scope registry.FailedJobScope) []*models.FailedJob {
 			candidates := listFailedIn(base, func(j *models.ThumbnailGenerationJob) (*models.FailedJob, bool) {
-				if j.Status != models.ThumbnailStatusFailed || j.DiscardedAt != nil {
+				if j.Status != models.ThumbnailStatusFailed || j.DiscardedAt != nil || !newest(j) {
 					return nil, false
 				}
 				return &models.FailedJob{

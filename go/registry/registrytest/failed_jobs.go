@@ -51,6 +51,8 @@ func RunFailedJobContract(t *testing.T, newEnv func(t *testing.T) FailedJobEnv) 
 		{"discard keeps the row and its error", failedJobContractDiscard},
 		{"newest failure first and the limit", failedJobContractOrder},
 		{"an unknown type and a group without a tenant are refused", failedJobContractRefusals},
+		{"a discarded scan that is resumed or rescanned shows again when it fails", failedJobContractIntakeRequeue},
+		{"only the newest thumbnail job of a file counts", failedJobContractThumbnailNewest},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -121,8 +123,15 @@ func seedFailedJobs(c *qt.C, env FailedJobEnv, g FailedJobGroup, failedAt time.T
 		File:     &models.File{Path: "kitchen", OriginalPath: "files/kitchen.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
 	})
 	c.Assert(err, qt.IsNil)
+	hallway, err := set.FileRegistry.Create(ctx, models.FileEntity{
+		Title:    "Hallway photo",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		File:     &models.File{Path: "hallway", OriginalPath: "files/hallway.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
 	_, err = set.ThumbnailGenerationJobRegistry.Create(ctx, models.ThumbnailGenerationJob{
-		FileID:      photo.ID,
+		FileID:      hallway.ID,
 		Status:      models.ThumbnailStatusPending,
 		MaxAttempts: 3,
 		CreatedAt:   failedAt,
@@ -438,4 +447,93 @@ func failedJobContractRefusals(t *testing.T, env FailedJobEnv) {
 
 	_, err = env.Jobs.ListFailed(ctx, models.WorkerTypeExport, registry.FailedJobScope{GroupID: env.A.ID}, 0)
 	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+}
+
+// failIntakeSource claims the group's next due source and fails it, as the
+// scan worker does after the last attempt.
+func failIntakeSource(c *qt.C, env FailedJobEnv, g FailedJobGroup, want string) {
+	c.Helper()
+	source, err := env.IntakeService.ClaimNextSource(g.Ctx, time.Now().Add(time.Second))
+	c.Assert(err, qt.IsNil)
+	c.Assert(source.ID, qt.Equals, want)
+	c.Assert(env.IntakeService.FailSource(g.Ctx, source.ID, source.Attempts, "unreadable"), qt.IsNil)
+}
+
+func failedJobContractIntakeRequeue(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	now := time.Now().UTC().Truncate(time.Second)
+	g := env.A
+	id := seedFailedJobs(c, env, g, now.Add(-time.Hour))[models.WorkerTypeIntake]
+	scope := groupScope(env, g)
+	source, err := g.Set.IntakeRegistry.GetSource(g.Ctx, id)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(env.Jobs.Discard(context.Background(), models.WorkerTypeIntake, scope, id, now), qt.IsNil)
+	_, err = g.Set.IntakeRegistry.ResumeSession(g.Ctx, source.SessionID, now)
+	c.Assert(err, qt.IsNil)
+	failIntakeSource(c, env, g, id)
+	c.Assert(failedIDs(c, env, models.WorkerTypeIntake, scope), qt.DeepEquals, []string{id},
+		qt.Commentf("resuming the session clears the discard"))
+
+	c.Assert(env.Jobs.Discard(context.Background(), models.WorkerTypeIntake, scope, id, now), qt.IsNil)
+	_, err = g.Set.IntakeRegistry.RescanSource(g.Ctx, id, now)
+	c.Assert(err, qt.IsNil)
+	failIntakeSource(c, env, g, id)
+	c.Assert(failedIDs(c, env, models.WorkerTypeIntake, scope), qt.DeepEquals, []string{id},
+		qt.Commentf("a rescan clears the discard"))
+	n, err := env.Jobs.CountFailed(context.Background(), models.WorkerTypeIntake, registry.FailedJobScope{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+}
+
+func failedJobContractThumbnailNewest(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	g := env.A
+	base := time.Date(2026, 11, 20, 10, 0, 0, 0, time.UTC)
+	scope := groupScope(env, g)
+	newFile := func(name string) string {
+		f, err := g.Set.FileRegistry.Create(g.Ctx, models.FileEntity{
+			Title:    name,
+			Type:     models.FileTypeImage,
+			Category: models.FileCategoryImages,
+			File:     &models.File{Path: name, OriginalPath: "files/" + name + ".jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+		})
+		c.Assert(err, qt.IsNil)
+		return f.ID
+	}
+	newJob := func(fileID string, status models.ThumbnailGenerationStatus, at time.Time) string {
+		job, err := g.Set.ThumbnailGenerationJobRegistry.Create(g.Ctx, models.ThumbnailGenerationJob{
+			FileID:                fileID,
+			Status:                status,
+			AttemptCount:          3,
+			MaxAttempts:           3,
+			ErrorMessage:          "unsupported image",
+			ProcessingCompletedAt: new(at),
+			CreatedAt:             at,
+			UpdatedAt:             at,
+		})
+		c.Assert(err, qt.IsNil)
+		return job.ID
+	}
+
+	// A file failed twice: only the newer failure counts.
+	twice := newFile("twice")
+	older := newJob(twice, models.ThumbnailStatusFailed, base)
+	newer := newJob(twice, models.ThumbnailStatusFailed, base.Add(time.Hour))
+	// A file failed and was tried again since: the failure is history.
+	retried := newFile("retried")
+	stale := newJob(retried, models.ThumbnailStatusFailed, base)
+	newJob(retried, models.ThumbnailStatusPending, base.Add(time.Hour))
+
+	c.Assert(failedIDs(c, env, models.WorkerTypeThumbnail, scope), qt.DeepEquals, []string{newer})
+	n, err := env.Jobs.CountFailed(ctx, models.WorkerTypeThumbnail, registry.FailedJobScope{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+	for _, id := range []string{older, stale} {
+		_, err = env.Jobs.GetFailed(ctx, models.WorkerTypeThumbnail, scope, id)
+		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+		c.Assert(env.Jobs.Retry(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
+		c.Assert(env.Jobs.Discard(ctx, models.WorkerTypeThumbnail, scope, id, base), qt.ErrorIs, registry.ErrNotFound)
+	}
 }

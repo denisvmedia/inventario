@@ -557,9 +557,11 @@ func (r *IntakeRegistry) ResumeSession(_ context.Context, sessionID string, now 
 }
 
 // requeueIntakeSource puts a source back in the queue with a fresh allowance
-// of attempts.
+// of attempts. A requeued source is no longer a failure an operator
+// discarded: if it fails again, the failed jobs show it again (#1307).
 func requeueIntakeSource(src *models.IntakeSource, now time.Time) {
 	src.Status = models.IntakeSourcePending
+	src.DiscardedAt = nil
 	src.RetryBase = src.Attempts
 	src.NextAttemptAt = now
 	src.ClaimedAt = nil

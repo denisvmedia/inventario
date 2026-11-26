@@ -164,21 +164,37 @@ func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request) (models.Wo
 	}
 	t := models.WorkerType(raw)
 	if !models.IsFailedJobType(t) {
-		_ = codedBadRequestError(w, r, errors.New("unknown job type"), FailedJobUnknownTypeCode)
+		_ = codedBadRequestError(w, r, errUnknownFailedJobType, FailedJobUnknownTypeCode)
 		return "", false
 	}
 	return t, true
 }
 
-// resolveFailedJobPath reads the {jobType} and {jobID} path segments. ok is
-// false after it wrote a 404 for an unknown type.
-func resolveFailedJobPath(w http.ResponseWriter, r *http.Request) (models.WorkerType, string, bool) {
-	t := models.WorkerType(strings.TrimSpace(chi.URLParam(r, "jobType")))
-	if !models.IsFailedJobType(t) {
-		_ = codedNotFoundError(w, r, errors.New("unknown job type"), FailedJobUnknownTypeCode)
-		return "", "", false
+// errUnknownFailedJobType is the cause of a refused {jobType} segment, in
+// the response and in the audit row.
+var errUnknownFailedJobType = errors.New("unknown job type")
+
+// maxAuditedJobTypeLen caps the {jobType} segment an audit row records for a
+// refused request: the segment is whatever the caller sent.
+const maxAuditedJobTypeLen = 64
+
+// failedJobPath reads the {jobType} and {jobID} path segments. known is
+// false for a type that keeps no failed jobs; the type is then the segment
+// as sent, cut to maxAuditedJobTypeLen bytes, for the audit row.
+func failedJobPath(r *http.Request) (jobType models.WorkerType, jobID string, known bool) {
+	raw := strings.TrimSpace(chi.URLParam(r, "jobType"))
+	jobID = chi.URLParam(r, "jobID")
+	if t := models.WorkerType(raw); models.IsFailedJobType(t) {
+		return t, jobID, true
 	}
-	return t, chi.URLParam(r, "jobID"), true
+	if len(raw) > maxAuditedJobTypeLen {
+		raw = strings.ToValidUTF8(raw[:maxAuditedJobTypeLen], "")
+	}
+	return models.WorkerType(raw), jobID, false
+}
+
+func writeUnknownFailedJobType(w http.ResponseWriter, r *http.Request) {
+	_ = codedNotFoundError(w, r, errUnknownFailedJobType, FailedJobUnknownTypeCode)
 }
 
 // renderFailedJobActionError maps an error of a retry or discard to its
@@ -189,7 +205,7 @@ func renderFailedJobActionError(w http.ResponseWriter, r *http.Request, err erro
 	case errors.Is(err, registry.ErrNotFound):
 		_ = codedNotFoundError(w, r, errors.New("failed job not found"), FailedJobNotFoundCode)
 	case errors.Is(err, registry.ErrUnknownFailedJobType):
-		_ = codedNotFoundError(w, r, errors.New("unknown job type"), FailedJobUnknownTypeCode)
+		writeUnknownFailedJobType(w, r)
 	case errors.Is(err, registry.ErrFailedJobNotRetryable):
 		_ = codedConflictError(w, r, errors.New("this kind of job cannot be retried"), FailedJobNotRetryableCode, nil)
 	default:
@@ -238,15 +254,16 @@ type adminFailedJobsAPI struct {
 // @Failure 403 {object} jsonapi.Errors "Account disabled"
 // @Router /admin/failed-jobs [get]
 func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Request) {
-	jobType, ok := parseFailedJobTypeFilter(w, r)
-	if !ok {
-		return
-	}
 	q := r.URL.Query()
-	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 	// The tenant filter is `tenantID`: the admin subtree is exempt from
 	// the check that refuses a tenant in the query, as for /admin/groups.
 	tenantID := strings.TrimSpace(q.Get("tenantID"))
+	jobType, ok := parseFailedJobTypeFilter(w, r)
+	if !ok {
+		api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", errUnknownFailedJobType)
+		return
+	}
+	page, perPage := parsePagination(q.Get("page"), q.Get("per_page"))
 
 	result, err := api.service.List(r.Context(), services.FailedJobQuery{
 		Type:   jobType,
@@ -307,8 +324,9 @@ func (api *adminFailedJobsAPI) retryFailedJob(w http.ResponseWriter, r *http.Req
 // @Summary Discard a failed background job (admin)
 // @Description Marks the failed job discarded (#1307). It leaves the failed list and
 // @Description the depth gauge but keeps its row and its error until the normal
-// @Description cleanup removes it. Every job type can be discarded. 404
-// @Description `failed_job.unknown_type` for an unknown type, 404
+// @Description cleanup removes it. Every job type can be discarded. Needs the
+// @Description platform_admin role: a support_agent gets 403 `admin.role_required`.
+// @Description 404 `failed_job.unknown_type` for an unknown type, 404
 // @Description `failed_job.not_found` when the job is not failed or was already
 // @Description retried or discarded.
 // @Tags admin
@@ -316,7 +334,7 @@ func (api *adminFailedJobsAPI) retryFailedJob(w http.ResponseWriter, r *http.Req
 // @Param jobID path string true "Job ID"
 // @Success 204 "No Content"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
-// @Failure 403 {object} jsonapi.Errors "Account disabled"
+// @Failure 403 {object} jsonapi.Errors "Forbidden - account disabled, or not a platform_admin"
 // @Failure 404 {object} jsonapi.Errors "Not Found - unknown type or no such failed job"
 // @Router /admin/failed-jobs/{jobType}/{jobID}/discard [post]
 func (api *adminFailedJobsAPI) discardFailedJob(w http.ResponseWriter, r *http.Request) {
@@ -327,10 +345,12 @@ func (api *adminFailedJobsAPI) discardFailedJob(w http.ResponseWriter, r *http.R
 type failedJobAction func(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string) (*models.FailedJob, error)
 
 // act runs a retry or discard across tenants and audits it, also when it
-// fails, with the job's tenant when the job was found.
+// is refused, with the job's tenant when the job was found.
 func (api *adminFailedJobsAPI) act(w http.ResponseWriter, r *http.Request, action string, do failedJobAction) {
-	jobType, jobID, ok := resolveFailedJobPath(w, r)
-	if !ok {
+	jobType, jobID, known := failedJobPath(r)
+	if !known {
+		api.audit(r, action, "", string(jobType), jobID, errUnknownFailedJobType)
+		writeUnknownFailedJobType(w, r)
 		return
 	}
 	job, err := do(r.Context(), jobType, registry.FailedJobScope{}, jobID)
@@ -542,8 +562,10 @@ func (api *groupFailedJobsAPI) retry(w http.ResponseWriter, r *http.Request) {
 		_ = internalServerError(w, r, errors.New("group context required"))
 		return
 	}
-	jobType, jobID, ok := resolveFailedJobPath(w, r)
-	if !ok {
+	jobType, jobID, known := failedJobPath(r)
+	if !known {
+		api.audit(r, scope, string(jobType), jobID, errUnknownFailedJobType)
+		writeUnknownFailedJobType(w, r)
 		return
 	}
 	_, err := api.service.Retry(r.Context(), jobType, scope, jobID)

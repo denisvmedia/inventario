@@ -144,7 +144,9 @@ func TestAdminFailedJobs_ListsEveryTenant(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
 	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
 
-	c.Assert(env.auditRows(apiserver.AuditActionAdminFailedJobList), qt.HasLen, 3)
+	rows := env.auditRows(apiserver.AuditActionAdminFailedJobList)
+	c.Assert(rows, qt.HasLen, 4)
+	c.Assert(rows[3].Success, qt.IsFalse, qt.Commentf("a refused filter is audited too"))
 }
 
 func TestAdminFailedJobs_RetryAndDiscard(t *testing.T) {
@@ -191,6 +193,35 @@ func TestAdminFailedJobs_RetryAndDiscard(t *testing.T) {
 	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+"weekly-digest/x/discard", env.adminToken, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
 	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+	rows = env.auditRows(apiserver.AuditActionAdminFailedJobDiscard)
+	c.Assert(rows, qt.HasLen, 2, qt.Commentf("an unknown type is refused and audited"))
+	c.Assert(rows[1].Success, qt.IsFalse)
+	c.Assert(*rows[1].EntityType, qt.Equals, "weekly-digest")
+	c.Assert(*rows[1].EntityID, qt.Equals, "x")
+}
+
+// A support_agent may retry a failed job; discarding one needs the
+// platform_admin role (#1307).
+func TestAdminFailedJobs_SupportAgentRetriesButCannotDiscard(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	_, supportToken := withBackofficeOperator(t, env.params, models.BackofficeRoleSupportAgent)
+	base := "/api/v1/admin/failed-jobs/"
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs", supportToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+"export/"+env.exportA+"/retry", supportToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+	c.Assert(env.exportStatus(c, env.adminA, env.groupA, env.exportA).Status, qt.Equals, models.ExportStatusPending)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+"restore/"+env.restoreA+"/discard", supportToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusForbidden)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.AdminRoleRequiredCode)
+	c.Assert(env.auditRows(apiserver.AuditActionAdminFailedJobDiscard), qt.HasLen, 0)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+"restore/"+env.restoreA+"/discard", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent, qt.Commentf("a platform_admin discards"))
 }
 
 func TestAdminFailedJobs_DeniesTenantUser(t *testing.T) {
@@ -255,6 +286,14 @@ func TestGroupFailedJobs_Retry(t *testing.T) {
 	// plane has no such route.
 	rr = doJSONAPIRequest(t, env.handler, http.MethodPost, base+"restore/"+env.restoreA+"/discard", env.adminA.ID, nil)
 	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+
+	rr = doJSONAPIRequest(t, env.handler, http.MethodPost, base+"weekly-digest/x/retry", env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+	rows = env.auditRows(apiserver.AuditActionFailedJobRetry)
+	c.Assert(rows, qt.HasLen, 4, qt.Commentf("an unknown type is refused and audited"))
+	c.Assert(rows[3].Success, qt.IsFalse)
+	c.Assert(*rows[3].EntityType, qt.Equals, "weekly-digest")
 }
 
 func TestGroupFailedJobs_RefusesMembersAndOtherGroups(t *testing.T) {

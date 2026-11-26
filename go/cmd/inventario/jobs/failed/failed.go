@@ -8,6 +8,7 @@ import (
 	"io"
 	"strings"
 	"text/tabwriter"
+	"unicode"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/spf13/cobra"
@@ -15,6 +16,7 @@ import (
 	"go.5x5.cz/inventario/cmd/internal/command"
 	"go.5x5.cz/inventario/cmd/inventario/shared"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services/admin"
 )
 
@@ -160,8 +162,16 @@ func orDash(s string) string {
 	return s
 }
 
-// oneLine keeps a multi-line error on its table row.
+// oneLine keeps a multi-line error on its table row. Control characters,
+// an escape sequence's ESC among them, become spaces: a job's title and
+// error come from the job's data, and the terminal must not act on them.
 func oneLine(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 	return strings.Join(strings.Fields(s), " ")
 }
 
@@ -218,9 +228,8 @@ func (c *actionCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig,
 	if jobType == "" {
 		return errors.New("--type is required")
 	}
-	if !models.IsFailedJobType(models.WorkerType(jobType)) {
-		return fmt.Errorf("unknown job type %q; known types: %s", jobType, jobTypeList())
-	}
+	// An unknown type is refused by the service, which audits the refusal
+	// like any other (#1307).
 	svc, err := openService(dbConfig)
 	if err != nil {
 		return err
@@ -232,6 +241,9 @@ func (c *actionCommand) run(cmd *cobra.Command, dbConfig *shared.DatabaseConfig,
 		act, done = svc.DiscardFailedJob, "Discarded"
 	}
 	job, err := act(cmd.Context(), jobType, strings.TrimSpace(id))
+	if errors.Is(err, registry.ErrUnknownFailedJobType) {
+		return fmt.Errorf("unknown job type %q; known types: %s: %w", jobType, jobTypeList(), err)
+	}
 	if err != nil {
 		return errxtrace.Wrap("failed to "+c.verb+" the job", err)
 	}

@@ -385,11 +385,13 @@ func adminBackofficeRoutes(
 
 // adminFailedJobRoutes registers the failed-jobs routes (#1307) in the
 // RequireBackofficeAuth group. Retry and discard are audited; so is the
-// list, which reads tenant data across tenants.
+// list, which reads tenant data across tenants. A support_agent may list
+// and retry; a discard takes a failure off every list, so it needs
+// platform_admin.
 func adminFailedJobRoutes(r chi.Router, api *adminFailedJobsAPI) {
 	r.Get("/failed-jobs", api.listFailedJobs)
 	r.Post("/failed-jobs/{jobType}/{jobID}/retry", api.retryFailedJob)
-	r.Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
+	r.With(RequirePlatformAdmin).Post("/failed-jobs/{jobType}/{jobID}/discard", api.discardFailedJob)
 }
 
 // parseAdminSortAndOrder reconciles the dual sort conventions the

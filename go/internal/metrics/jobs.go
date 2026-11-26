@@ -44,6 +44,13 @@ func RecordJobDeadLettered(jobType string) {
 	jobsDeadLetteredTotal.WithLabelValues(jobType).Inc()
 }
 
+// JobsDeadLetteredFor returns the type's series of
+// inventario_jobs_dead_lettered_total, which the packages that mark jobs
+// failed read in their tests.
+func JobsDeadLetteredFor(jobType string) prometheus.Counter {
+	return jobsDeadLetteredTotal.WithLabelValues(jobType)
+}
+
 // JobDepthFunc returns the number of failed, undiscarded jobs per job type.
 type JobDepthFunc func(ctx context.Context) (map[string]int, error)
 
