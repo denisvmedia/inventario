@@ -351,12 +351,23 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 }
 
 // dropRefusedRecord deletes the record that a delivery refused as a conflict
-// made, so its values reserve nothing. It returns err.
+// made, so its values reserve nothing. A record another delivery of the same
+// values has used since is kept. It returns err.
 func dropRefusedRecord(ctx context.Context, docs registry.IntakeDocumentRegistry, result *IntakeDeliveryResult, err error) error {
-	if !result.Created || result.Document.FileID != nil || !errors.Is(err, ErrIntakeDocumentConflict) {
+	if !errors.Is(err, ErrIntakeDocumentConflict) || !result.Created || result.Document == nil || result.Document.FileID != nil {
 		return err
 	}
-	if delErr := docs.Delete(context.WithoutCancel(ctx), result.Document.ID); delErr != nil {
+	ctx = context.WithoutCancel(ctx)
+	current, getErr := docs.Get(ctx, result.Document.ID)
+	switch {
+	case errors.Is(getErr, registry.ErrNotFound):
+		return err
+	case getErr != nil:
+		return errors.Join(err, getErr)
+	case current.FileID != nil || current.SessionID != nil || current.DraftID != nil || current.CommodityID != nil:
+		return err
+	}
+	if delErr := docs.Delete(ctx, result.Document.ID); delErr != nil {
 		return errors.Join(err, delErr)
 	}
 	return err
@@ -596,9 +607,11 @@ func (s *IntakeService) newDeliverySession(ctx context.Context, set *registry.Se
 	// or its draft since this call read the document. It records the
 	// session before it makes the draft, so a draft found above comes with
 	// its session in this read.
-	if result.Document, err = set.IntakeDocumentRegistry.Get(ctx, result.Document.ID); err != nil {
+	current, err := set.IntakeDocumentRegistry.Get(ctx, result.Document.ID)
+	if err != nil {
 		return nil, err
 	}
+	result.Document = current
 	switch {
 	case result.Document.DraftID != nil:
 		return nil, errDeliveryFinished

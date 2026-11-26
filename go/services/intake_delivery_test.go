@@ -345,7 +345,7 @@ var errLostWrite = errors.New("the write was lost")
 // or a draft fail while asked to, as writes lost to the database would.
 type lossyDocuments struct {
 	registry.IntakeDocumentRegistryFactory
-	loseFile, loseSession, loseDraft atomic.Bool
+	loseFile, loseSession, loseDraft, loseGet atomic.Bool
 }
 
 func (f *lossyDocuments) CreateUserRegistry(ctx context.Context) (registry.IntakeDocumentRegistry, error) {
@@ -365,6 +365,33 @@ func (r *lossyDocumentRegistry) RecordProgress(ctx context.Context, id string, p
 		return nil, errLostWrite
 	}
 	return r.IntakeDocumentRegistry.RecordProgress(ctx, id, progress)
+}
+
+func (r *lossyDocumentRegistry) Get(ctx context.Context, id string) (*models.IntakeDocument, error) {
+	if r.f.loseGet.Load() {
+		return nil, errLostWrite
+	}
+	return r.IntakeDocumentRegistry.Get(ctx, id)
+}
+
+// TestIntakeDeliver_DocumentReadFails: the document cannot be read again
+// before the session is made. The delivery returns the error with the record
+// it made, and the repeat finishes the delivery.
+func TestIntakeDeliver_DocumentReadFails(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	lossy := f.lossyDocuments()
+	lossy.loseGet.Store(true)
+	result, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), nil)
+	lossy.loseGet.Store(false)
+	c.Assert(err, qt.ErrorIs, errLostWrite)
+	c.Assert(result.Document, qt.IsNotNil)
+	c.Assert(result.Document.SessionID, qt.IsNil)
+
+	repeat := f.deliver(c, paperlessDelivery("117"), nil)
+	c.Assert(repeat.Document.ID, qt.Equals, result.Document.ID)
+	c.Assert(repeat.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(f.drafts(c), qt.HasLen, 1)
 }
 
 func (f *intakeFixture) lossyDocuments() *lossyDocuments {
