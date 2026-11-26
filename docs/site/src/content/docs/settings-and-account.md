@@ -71,7 +71,9 @@ A couple of things to know:
   places, exports, tags or sellers), it needs to be removed first. This
   includes a tag or a seller you added there, even when other members use it on
   their own items. [Item types](../item-types/) you added to a shared group
-  stay with the group and pass to its owner, so they don't block deletion.
+  stay with the group and pass to its owner, so they don't block deletion. So
+  does the record of the [documents other systems sent](../documents-from-other-systems/)
+  with one of your API tokens.
   Item reminders you set in a shared group are deleted with your account,
   since they only ever emailed you. So are the
   [drafts of new items](../items/#drafts-of-a-new-item) you started there. A

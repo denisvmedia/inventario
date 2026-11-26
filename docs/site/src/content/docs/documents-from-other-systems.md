@@ -92,32 +92,37 @@ the answer is an error status, a refusal included, but not when the request
 timed out or could not connect: then it only logs the error. A large document
 on a slow link can take longer than five seconds, so check the inbox when
 Paperless-ngx logs a timeout, and send the document again if its draft is
-missing. Sending a document again is always safe, see
-[Sending a document again](#sending-a-document-again).
+missing. Sending a document again with the same fields makes no second
+draft, see [Sending a document again](#sending-a-document-again).
 
 ## Fields
 
 The endpoint takes the fields as a form (`application/x-www-form-urlencoded`),
 as a multipart form (`multipart/form-data`) with the document in a part named
-`file`, or as a flat JSON object without a document. Each field is sent at
-most once; an unknown field is refused, so a typo shows up in the other
-system's log instead of being dropped.
+`file`, or as a flat JSON object without a document. A field sent twice is
+refused, and so is an unknown field, so a typo shows up in the other system's
+log instead of being dropped. In JSON a field is a string; `document_id`,
+`source_system` and `source_instance` may also be whole numbers, which are
+read as their digits.
 
 | Field | Required | Format |
 | --- | --- | --- |
 | `title` | yes | Up to 255 characters. |
-| `source_system` | yes | The system's id: letters, digits, dots, dashes and underscores, starting with a letter or a digit, up to 255 characters, for example `paperless-ngx`. Letter case does not matter. |
-| `document_id` | yes | The document's id in that system, up to 255 characters. |
-| `source_instance` | no | Tells two installations of one system apart, for example `home` and `office`, up to 255 characters. Leave it out when you have one. |
+| `source_system` | yes | The system's id: letters, digits, dots, dashes and underscores, starting with a letter or a digit, up to 255 bytes, for example `paperless-ngx`. Letter case does not matter. |
+| `document_id` | yes | The document's id in that system, up to 255 bytes. |
+| `source_instance` | no | Tells two installations of one system apart, for example `home` and `office`, up to 255 bytes. Leave it out when you have one. |
 | `source_name` | no | How the system is shown, for example `Paperless-ngx`, up to 100 characters. Without it the inbox shows `source_system`. |
-| `source_url` | no | The document's address there: an absolute `http` or `https` address without a user name or password, up to 2048 characters. It is stored and shown, never opened by Inventario. |
+| `source_url` | no | The document's address there: an absolute `http` or `https` address without a user name or password, up to 2048 bytes. It is stored and shown, never opened by Inventario. |
 | `seller` | no | Up to 100 characters. |
 | `purchase_date` | no | `YYYY-MM-DD`, or a date and time in RFC 3339 form, of which the date is kept. |
-| `amount` | no | A number of zero or more with up to two decimals, for example `129.90`, optionally after a currency code (`EUR129.90`). |
+| `amount` | no | A number of zero or more with up to 13 digits before the decimal point and up to two after it, for example `129.90`, optionally after a currency code (`EUR129.90`). |
 | `currency` | no | A three-letter code such as `EUR`. When `amount` starts with a code, the two must agree. |
 | `file` | no | The document, in a multipart form only. Any file type the app accepts as an upload, up to the server's upload limit. |
 
-The fields other than the file may be 64 KiB together. A curl call that sends
+Every field is text without NUL characters. A byte is one character for the
+letters, digits and signs of plain ASCII; an accented letter takes two bytes
+or more. The fields other than the file may be 64 KiB together. A curl call
+that sends
 a document looks like this:
 
 ```sh
@@ -141,14 +146,21 @@ one draft at most:
   `intake.document_changed`, and nothing changes. Edit the draft or the item
   in Inventario instead. This is what happens when a Paperless-ngx workflow
   with a **Document Updated** trigger sends a document after you edited it
-  there.
+  there. The one exception is a first delivery that failed before it stored
+  the document or made the draft: a corrected one takes its place.
+- A delivery that failed half way, for example because the connection broke,
+  is finished by sending the document again, without a second draft or a
+  second copy of the file.
 - This holds after the draft was discarded, after the draft became an item,
   and after the item was deleted. To have a document make a new draft, send
   it with another `source_instance`.
 
-The answer's `state` says what became of the document: `draft` while its
-draft waits in the inbox, `item` once the draft became an item, and `removed`
-when the draft was discarded or the item deleted.
+The answer's `state` says what became of the document: `pending` while the
+delivery has not made its draft yet, `draft` while its draft waits in the
+inbox, `item` once the draft became an item, and `removed` when the draft was
+discarded or the item deleted. `removed` is also the state of a document whose
+batch was deleted from the inbox before its draft was made; sending it again
+does not bring it back.
 
 A **Full database** [backup](../backup-and-restore/) carries what Inventario
 remembers about the documents it received, so a document sent again after a
@@ -166,6 +178,7 @@ there for what each restore strategy does with it.
 | 403 | `api_token.group_not_allowed` | The token is limited to another group. |
 | 403 | | The token's account has the **Viewer** role in the group. |
 | 409 | `intake.document_changed` | The document was received before with other fields or another file. |
+| 409 | `intake.document_conflict` | A batch in the inbox carries the document, but the group has no record of the delivery that made it. Delete that batch, then send the document again. |
 | 413 | | The document or the fields are larger than allowed. |
 | 415 | | The body is not a form, a multipart form or JSON. |
 | 422 | | A field is missing, unknown, sent twice or malformed; the answer names it. |
