@@ -18,7 +18,11 @@ You can attach files — photos, receipts, manuals, warranty certificates,
 anything — and there are a few places to do it.
 
 **While adding an item**, use the **Files** step in the Add item dialog. Drop
-files onto the dropzone or click **Choose files** to browse.
+files onto the dropzone or click it to browse. Each file gets a title, which
+starts as the file name without its extension, and optional tags. **Add item**
+uploads the files before it creates the item and shows how each upload goes;
+if one fails, the item is not created until **Retry** uploads it. See
+[Files](../items/#files) on the Items page.
 
 ![The Add item dialog with a Files step for attaching photos and documents](../../assets/screenshots/add-item-dialog.png)
 
@@ -299,6 +303,9 @@ A few things to know:
   it asks you to **Choose which item to add** and pre-fills that one — you can
   add the others separately afterwards. To get a draft for every product on a
   receipt at once, use [Add items from files](../items/#add-items-from-files).
+- A file you add with **Add items from files** also gets the tag of its kind
+  (**Invoice**, **Manual**, **Warranty** or **Photo**) and a readable title
+  from the scan, unless you renamed or tagged it yourself.
 - When a receipt or invoice names the seller, the item names your group's
   seller with that name. If your group has no such seller, the **Purchase**
   step offers to create it; nothing is created until you agree (see

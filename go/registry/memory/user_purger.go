@@ -186,7 +186,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
-		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, tenantID, userID) }},
+		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, userID) }},
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
 		{"commodity_drafts", func() error { return r.purgeCommodityDrafts(ctx, tenantID, userID) }},
 		{"intake_sessions", func() error { return r.purgeIntakeSessions(ctx, tenantID, userID) }},
@@ -268,12 +268,13 @@ func (r *UserPurger) purgeOAuthIdentities(ctx context.Context, tenantID, userID 
 }
 
 // purgeGroupInvitesAudit deletes every group_invites_audit row that names the
-// user as the invite creator (CreatedBy) OR the accepter (UsedBy) within the
-// tenant. ListByTenant returns the tenant's rows; each match is deleted by id.
-// Mirrors the postgres DELETE so a user who ever created or used an invite can
-// be removed without tripping the NOT NULL FKs (#2147).
-func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, tenantID, userID string) error {
-	rows, err := r.inviteAudit.ListByTenant(ctx, tenantID)
+// user as the invite creator (CreatedBy) OR the accepter (UsedBy), in any
+// tenant: a user moved to another tenant (#2179) leaves this trail in the
+// tenant they left. Each match is deleted by id. Mirrors the postgres DELETE so
+// a user who ever created or used an invite can be removed without tripping
+// the NOT NULL FKs (#2147).
+func (r *UserPurger) purgeGroupInvitesAudit(ctx context.Context, userID string) error {
+	rows, err := r.inviteAudit.List(ctx)
 	if err != nil {
 		return err
 	}

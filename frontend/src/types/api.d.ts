@@ -1093,6 +1093,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Unprocessable Entity - self-block or admin-on-admin without force */
                 422: {
                     headers: {
@@ -1382,6 +1391,15 @@ export type paths = {
                 };
                 /** @description Not Found - unknown user */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - the user moved to another tenant meanwhile (user.tenant_changed) */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -15769,9 +15787,20 @@ export type components = {
             custom_fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Fields are the values read, keyed by field name. Its document_type
+             *     classifies the scan as a whole; files is the per-file source, and
+             *     document_type is derived from it when the model gives none.
+             */
             fields?: {
                 [key: string]: components["schemas"]["jsonapi.CommodityScanFieldGuess"];
             };
+            /**
+             * @description Files holds one suggestion per input file the model said something
+             *     usable about, ordered by index; a file without one has no entry.
+             *     Absent when there are none.
+             */
+            files?: components["schemas"]["jsonapi.CommodityScanFileGuess"][];
             /**
              * @description Items is present only when the source described more than one
              *     distinct product; one entry per product, most prominent first. The
@@ -15782,10 +15811,29 @@ export type components = {
             used_tokens?: number;
             warnings?: components["schemas"]["jsonapi.CommodityScanWarning"][];
         };
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            /** @example 0.9 */
+            confidence?: number;
+            /**
+             * @example invoice
+             * @enum {string}
+             */
+            value?: "invoice" | "receipt" | "manual" | "warranty" | "photo" | "other";
+        };
         "jsonapi.CommodityScanFieldGuess": {
             confidence?: number;
             /** @description Value is polymorphic — see the type-level doc comment. */
             value?: Record<string, never>;
+        };
+        "jsonapi.CommodityScanFileGuess": {
+            document_type?: components["schemas"]["jsonapi.CommodityScanDocumentTypeGuess"];
+            /**
+             * @description Index is the file's position among the photos parts of the request,
+             *     counted from 0. An empty part the server skipped still counts.
+             * @example 0
+             */
+            index: number;
+            title?: components["schemas"]["jsonapi.CommodityScanTitleGuess"];
         };
         "jsonapi.CommodityScanItem": {
             custom_fields?: {
@@ -15805,6 +15853,12 @@ export type components = {
         };
         "jsonapi.CommodityScanResponse": {
             data?: components["schemas"]["jsonapi.CommodityScanResource"];
+        };
+        "jsonapi.CommodityScanTitleGuess": {
+            /** @example 0.8 */
+            confidence?: number;
+            /** @example Bosch invoice, March 2024 */
+            value?: string;
         };
         "jsonapi.CommodityScanWarning": {
             /**
@@ -19115,10 +19169,12 @@ export type components = {
              * @description AvatarPath is the blob key of the user's profile photo, or nil when they
              *     have none and the UI falls back to their initials (#1382).
              *
-             *     The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-             *     bust browser caches: replacing a photo writes a new key rather than
-             *     overwriting one, so nothing has to reason about cache headers to make the
-             *     new picture show up.
+             *     The key lives under the user's tenant and ends in a revision number and a
+             *     random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+             *     with a flat `avatars/<user>/...` key works the same). Replacing a
+             *     photo writes a new key rather than overwriting one, so nothing has to
+             *     reason about cache headers to make the new picture show up, and a tenant
+             *     move copies the photo to a new key under the new tenant.
              *
              *     Not user input: it is set by the avatar endpoints, which decide the key
              *     after validating and re-encoding what was uploaded. A client that could

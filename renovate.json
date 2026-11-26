@@ -209,6 +209,16 @@
       "matchStrings": [
         "# renovate: datasource=(?<datasource>[a-z-]+) depName=(?<depName>\\S+)(?: registryUrl=(?<registryUrl>\\S+))?\\s+\\w+_VERSION=\"(?<currentValue>[^\"]+)\""
       ]
+    },
+    {
+      "customType": "regex",
+      "description": "The cluster-extras manifests are applied by bootstrap.sh, not by a tool Renovate knows, so their images are invisible to it. An `image:` line right under a `# renovate:` comment is bumped here, tag and digest together (#1946).",
+      "managerFilePatterns": [
+        "/^infra/vm/cluster-extras/[^/]+\\.yaml$/"
+      ],
+      "matchStrings": [
+        "# renovate: datasource=(?<datasource>docker) depName=(?<depName>\\S+)\\s+image: [^:\\s]+:(?<currentValue>[^@\\s]+)@(?<currentDigest>sha256:[a-f0-9]{64})"
+      ]
     }
   ]
 }

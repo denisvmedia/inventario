@@ -14,6 +14,17 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The AI scan suggests a type (invoice, receipt, manual, warranty, product
+  photo or other) and a short readable title for each file it reads, in the
+  language of the document. The scan response gains `files`, one entry per
+  file with its `index`, `document_type` and `title`, each with a
+  confidence; the scan-level `document_type` stays and is derived from the
+  files when the model gives none. **Add items from files** sets the
+  suggestions on the files once they are scanned: the **Invoice** tag for an
+  invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
+  others, and the title. Only a file that still has the title and the tags
+  of its upload changes, so a file you renamed or tagged keeps what you
+  gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date
@@ -436,6 +447,20 @@ when to add an entry and where it goes.
 
 ### Changed
 
+- **Add item** uploads the item's files to its draft before it creates the item,
+  and the dialog stays open while it runs; leaving the page during the uploads
+  stops them after the file in progress, and no item is created. Each file shows
+  whether it is uploading, uploaded or failed, and the button counts the
+  uploads. A failed upload creates no item: the dialog names the file and keeps
+  the form, and **Retry** uploads only the files still missing before it creates
+  the item. On a saved draft, a failed **Add item** leaves the draft's values as
+  they were saved. Each staged file has an editable title, the file name without
+  its extension by default. **Discard** in the Add item dialog, and closing the
+  batch intake dialog before its batch is queued, move the files they uploaded
+  to the Trash instead of leaving them as standalone files; **Discard** keeps a
+  draft the user saved since
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
 - On a phone (a screen narrower than 640px) the dialogs that hold a longer
   form fill the screen: adding and editing an item, locations, areas, custom
   fields, sellers, changing the group currency, adding items from files,
@@ -513,6 +538,16 @@ when to add an entry and where it goes.
   ([#2800](https://github.com/denisvmedia/inventario/issues/2800)).
 
 ### Fixed
+
+- A file added with tags in the Add item dialog keeps its title. The dialog
+  set the tags with `PUT /files/{id}`, which replaces the title as well, and
+  sent no title, so the file had none
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
+
+- A file title may have 255 characters in any language. The server counted
+  the limit in UTF-8 bytes, so a Czech or Russian title of more than about
+  127 letters was refused with 422
+  ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
 - Settings saved on the server show up in the app again. The settings
   endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
@@ -635,6 +670,30 @@ when to add an entry and where it goes.
   they printed `setupJob.initData.adminEmail`, which that Secret's email
   overrides, and pointed to `setupJob.initData.adminPassword`, which an
   existing Secret does not use.
+- `inventario users update --tenant` moves a user only when they belong to no
+  group and own or authored nothing in their tenant, typically an account
+  created in the wrong tenant. Otherwise it refuses, lists what blocks the
+  move (for example "member of 2 groups, 14 items, 3 files") and changes
+  nothing; `--dry-run` runs the same check. A move signs the user out
+  everywhere: their sessions and API tokens are deleted. Their password,
+  second factor, linked sign-in accounts, language and other settings and
+  their login history move with them, and their profile photo is copied into
+  the new tenant's storage, which the new `--upload-location` flag names. A
+  user record written from a copy read before a move is refused instead of
+  putting the old tenant back; the back-office block and unblock endpoints
+  answer it with 409 and the code `user.tenant_changed`
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- `inventario db migrate data`, and with it the Helm chart's init-data job,
+  never moves a user between tenants. When the admin email exists only in
+  another tenant, the run warns, names that tenant and creates no admin. It
+  fails instead when the default tenant did not exist before the run, as on
+  a database restored under another tenant id
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- New profile photos are stored under their tenant's prefix,
+  `t/<tenant>/avatars/<user>/...`, instead of `avatars/<user>/...`. Photos
+  stored under `avatars/` keep working. A bucket lifecycle rule that matches
+  `avatars/` needs the new prefix too
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
 
 ## [0.2.2] - 2026-11-23
 

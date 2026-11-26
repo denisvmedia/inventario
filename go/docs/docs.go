@@ -875,6 +875,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
                         "schema": {
@@ -1092,6 +1098,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -15482,9 +15494,17 @@ const docTemplate = `{
                     }
                 },
                 "fields": {
+                    "description": "Fields are the values read, keyed by field name. Its document_type\nclassifies the scan as a whole; files is the per-file source, and\ndocument_type is derived from it when the model gives none.",
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
+                "files": {
+                    "description": "Files holds one suggestion per input file the model said something\nusable about, ordered by index; a file without one has no entry.\nAbsent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFileGuess"
                     }
                 },
                 "items": {
@@ -15508,6 +15528,27 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.9
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "invoice",
+                        "receipt",
+                        "manual",
+                        "warranty",
+                        "photo",
+                        "other"
+                    ],
+                    "example": "invoice"
+                }
+            }
+        },
         "jsonapi.CommodityScanFieldGuess": {
             "type": "object",
             "properties": {
@@ -15517,6 +15558,25 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanFileGuess": {
+            "type": "object",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "document_type": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanDocumentTypeGuess"
+                },
+                "index": {
+                    "description": "Index is the file's position among the photos parts of the request,\ncounted from 0. An empty part the server skipped still counts.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "title": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanTitleGuess"
                 }
             }
         },
@@ -15557,6 +15617,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityScanResource"
+                }
+            }
+        },
+        "jsonapi.CommodityScanTitleGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.8
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "example": "Bosch invoice, March 2024"
                 }
             }
         },
@@ -21918,7 +21992,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar_path": {
-                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key ends in a revision number (` + "`" + `avatars/\u003cuser\u003e/3.jpg` + "`" + `) which exists to\nbust browser caches: replacing a photo writes a new key rather than\noverwriting one, so nothing has to reason about cache headers to make the\nnew picture show up.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
+                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key lives under the user's tenant and ends in a revision number and a\nrandom suffix (` + "`" + `t/\u003ctenant\u003e/avatars/\u003cuser\u003e/3-a1b2c3d4e5f6.jpg` + "`" + `; a photo\nwith a flat ` + "`" + `avatars/\u003cuser\u003e/...` + "`" + ` key works the same). Replacing a\nphoto writes a new key rather than overwriting one, so nothing has to\nreason about cache headers to make the new picture show up, and a tenant\nmove copies the photo to a new key under the new tenant.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
                     "type": "string"
                 },
                 "avatar_url": {

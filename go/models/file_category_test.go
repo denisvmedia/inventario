@@ -2,6 +2,7 @@ package models_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	qt "github.com/frankban/quicktest"
@@ -117,6 +118,36 @@ func TestFileEntity_ValidateWithContext_Category(t *testing.T) {
 			c.Assert(err, qt.IsNil, qt.Commentf("category %q should be accepted", cat))
 		}
 	})
+}
+
+// The title limit counts characters: a title in Czech or Russian takes
+// about two UTF-8 bytes per letter and is still held to 255 letters.
+func TestFileEntity_ValidateWithContext_TitleLength(t *testing.T) {
+	cases := []struct {
+		name  string
+		title string
+		ok    bool
+	}{
+		{name: "255 ASCII characters", title: strings.Repeat("t", 255), ok: true},
+		{name: "255 Cyrillic characters", title: strings.Repeat("ж", 255), ok: true},
+		{name: "255 Czech characters", title: strings.Repeat("ř", 255), ok: true},
+		{name: "256 ASCII characters", title: strings.Repeat("t", 256), ok: false},
+		{name: "256 Cyrillic characters", title: strings.Repeat("ж", 256), ok: false},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			fe := buildValidFileEntity()
+			fe.Title = tc.title
+			err := fe.ValidateWithContext(context.Background())
+			if tc.ok {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			c.Assert(err, qt.IsNotNil)
+			c.Assert(err.Error(), qt.Contains, "title")
+		})
+	}
 }
 
 func buildValidFileEntity() models.FileEntity {

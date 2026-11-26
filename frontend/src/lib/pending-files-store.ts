@@ -20,6 +20,8 @@ export interface StoredPendingFile {
   id: string
   file: File
   tags: string[]
+  // The title the user typed for the file (#1626).
+  title?: string
   // Set once a server draft save uploaded the file (#2812).
   uploadedFileId?: string
 }
@@ -86,6 +88,7 @@ export async function loadPendingFiles(key: string): Promise<StoredPendingFile[]
         typeof (entry as StoredPendingFile).id === "string" &&
         (entry as StoredPendingFile).file instanceof File &&
         Array.isArray((entry as StoredPendingFile).tags) &&
+        ["undefined", "string"].includes(typeof (entry as StoredPendingFile).title) &&
         ["undefined", "string"].includes(typeof (entry as StoredPendingFile).uploadedFileId)
     )
   } catch (err) {

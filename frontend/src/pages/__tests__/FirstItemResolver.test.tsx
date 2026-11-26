@@ -170,7 +170,12 @@ describe("<FirstItemResolver />", () => {
     stashMarker()
     stashDraft()
     filesStore.loadPendingFiles.mockResolvedValue([
-      { id: "p1", file: new File(["x"], "receipt.png", { type: "image/png" }), tags: ["receipt"] },
+      {
+        id: "p1",
+        file: new File(["x"], "receipt.png", { type: "image/png" }),
+        tags: ["receipt"],
+        title: "Shop receipt",
+      },
     ])
     server.use(...groupHandlers.list([household]))
     createdCommodity("household")
@@ -205,7 +210,7 @@ describe("<FirstItemResolver />", () => {
         meta: "images",
       })
     )
-    expect(updated.attributes?.tags).toEqual(["receipt"])
+    expect(updated.attributes).toEqual({ title: "Shop receipt", tags: ["receipt"] })
   })
 
   it("keeps the item when a file upload fails", async () => {
