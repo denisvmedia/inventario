@@ -21,6 +21,7 @@ import (
 	"gocloud.dev/blob"
 	_ "golang.org/x/image/webp" // registers the WebP decoder for image.Decode
 
+	"go.5x5.cz/inventario/internal/blobkeys"
 	"go.5x5.cz/inventario/internal/mimekit"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -42,10 +43,6 @@ const (
 	// is far past any camera a profile photo comes from and far below the size
 	// that hurts.
 	avatarMaxPixels = 64 << 20
-	// avatarPrefix is the key prefix avatars live under, kept away from the
-	// commodity file keys so a bucket listing is readable and a lifecycle rule
-	// can treat them differently.
-	avatarPrefix = "avatars"
 	// avatarContentType is what every stored avatar is, whatever arrived:
 	// decoding to an image and re-encoding normalises the format.
 	avatarContentType = "image/jpeg"
@@ -116,7 +113,7 @@ func (s *AvatarService) Store(ctx context.Context, userID string, src io.Reader)
 	if err != nil {
 		return "", err
 	}
-	key := avatarKey(userID, nextAvatarRevision(user.AvatarPath), suffix)
+	key := avatarKey(user.TenantID, userID, nextAvatarRevision(user.AvatarPath), suffix)
 	if err := s.write(ctx, key, encoded); err != nil {
 		return "", err
 	}
@@ -301,9 +298,9 @@ func isAnimatedWebP(raw []byte) bool {
 }
 
 // AvatarVersion returns the part of a stored key that changes with every
-// upload ("3-a1b2c3d4e5f6" for "avatars/<user>/3-a1b2c3d4e5f6.jpg"). Signed
-// avatar URLs carry it, so a replaced photo gets a new URL and a URL's bytes
-// never change.
+// upload ("3-a1b2c3d4e5f6" for "t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg").
+// Signed avatar URLs carry it, so a replaced photo gets a new URL and a URL's
+// bytes never change.
 func AvatarVersion(key string) string {
 	return strings.TrimSuffix(path.Base(key), avatarExt)
 }
@@ -330,14 +327,62 @@ func (s *AvatarService) write(ctx context.Context, key string, data []byte) erro
 }
 
 // DeleteStored removes a stored avatar object without touching any user row.
-// Account deletion calls it after the row is gone, with the key the row held.
-// A key outside the avatar prefix is ignored, so a caller cannot use this to
-// delete other objects in the bucket.
+// Account deletion calls it after the row is gone, with the key the row held,
+// and a tenant move calls it for the photo the user no longer points at. A key
+// that is not an avatar key is ignored, so a caller cannot use this to delete
+// other objects in the bucket.
 func (s *AvatarService) DeleteStored(ctx context.Context, key string) {
-	if !strings.HasPrefix(key, avatarPrefix+"/") {
+	if !blobkeys.IsAvatarBlobKey(key) {
 		return
 	}
 	s.deleteQuietly(ctx, key)
+}
+
+// CheckStored reports whether the stored avatar key is in this service's
+// upload location. It returns registry.ErrNotFound when the bucket opens but
+// has no such object, which is what a wrong upload location looks like.
+func (s *AvatarService) CheckStored(ctx context.Context, key string) error {
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return errxtrace.Wrap("failed to open bucket", err)
+	}
+	defer b.Close()
+	exists, err := b.Exists(ctx, key)
+	if err != nil {
+		return errxtrace.Wrap("failed to look up the avatar", err)
+	}
+	if !exists {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Avatar", "key", key))
+	}
+	return nil
+}
+
+// CopyToTenant copies the user's profile photo into tenantID's storage and
+// returns the new key, or nil when the user has no photo. It changes no user
+// row: the tenant move stores the key with the move, and the caller deletes
+// the copy when the move does not happen and the original when it does.
+func (s *AvatarService) CopyToTenant(ctx context.Context, user *models.User, tenantID string) (*string, error) {
+	if user == nil || user.AvatarPath == nil || *user.AvatarPath == "" {
+		return nil, nil
+	}
+	if tenantID == "" {
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "TenantID"))
+	}
+	suffix, err := avatarKeySuffix()
+	if err != nil {
+		return nil, err
+	}
+	key := avatarKey(tenantID, user.ID, nextAvatarRevision(user.AvatarPath), suffix)
+
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to open bucket", err)
+	}
+	defer b.Close()
+	if err := b.Copy(ctx, key, *user.AvatarPath, nil); err != nil {
+		return nil, errxtrace.Wrap("failed to copy the avatar", err)
+	}
+	return &key, nil
 }
 
 // deleteQuietly removes an object and logs nothing on failure beyond the error
@@ -352,9 +397,10 @@ func (s *AvatarService) deleteQuietly(ctx context.Context, key string) {
 	_ = b.Delete(ctx, key)
 }
 
-// avatarKey builds the stored key for a revision.
-func avatarKey(userID string, revision int, suffix string) string {
-	return path.Join(avatarPrefix, userID, strconv.Itoa(revision)+"-"+suffix+avatarExt)
+// avatarKey builds the stored key for a revision, in the storage of the
+// user's tenant.
+func avatarKey(tenantID, userID string, revision int, suffix string) string {
+	return blobkeys.BuildAvatarBlobKey(tenantID, userID, strconv.Itoa(revision)+"-"+suffix+avatarExt)
 }
 
 // avatarKeySuffix returns the per-upload component of a key.

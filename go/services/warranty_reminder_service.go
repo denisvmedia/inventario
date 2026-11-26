@@ -128,6 +128,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 	// per group per sweep. Every commodity within a year of expiry needs
 	// them now that each recipient picks their own lead times.
 	recipientsByGroup := map[string][]warrantyRecipient{}
+	sections := newSectionGate(s.factorySet)
 
 	for _, c := range commodities {
 		if c == nil || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
@@ -144,6 +145,18 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 				"commodity_id", c.ID,
 				"count", c.Count,
 			)
+			continue
+		}
+		hidden, hideErr := sections.hides(ctx, c.GroupID, models.GroupSectionWarranties)
+		if hideErr != nil {
+			stats.Failed++
+			slog.Error("warranty reminder failed",
+				"commodity_id", c.ID,
+				"error", hideErr,
+			)
+			continue
+		}
+		if hidden {
 			continue
 		}
 		thresholds, recipients, planErr := s.planCommodity(ctx, c, now, prefsCache, recipientsByGroup)

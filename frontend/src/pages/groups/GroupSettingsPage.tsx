@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type ReactNode } from "react"
 import { useForm, Controller } from "react-hook-form"
 import { zodResolver } from "@hookform/resolvers/zod"
 import { useTranslation } from "react-i18next"
-import { Link, Navigate, useNavigate, useParams } from "react-router-dom"
+import { Link, Navigate, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import {
   ArrowRight,
   ArrowRightLeft,
@@ -12,6 +12,7 @@ import {
   Download,
   History,
   Info,
+  LayoutList,
   LogOut,
   ShieldAlert,
   Trash2,
@@ -23,6 +24,7 @@ import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { NotificationsCard } from "@/components/groups/NotificationsCard"
 import { PlanCard } from "@/components/groups/PlanCard"
+import { SectionsCard } from "@/components/groups/SectionsCard"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Button } from "@/components/ui/button"
 import {
@@ -60,6 +62,7 @@ import {
   type DeleteGroupInput,
   type UpdateGroupInput,
 } from "@/features/group/schemas"
+import { isSectionHidden } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import { HttpError } from "@/lib/http"
 import { applyServerFieldErrors, shouldShowGenericError } from "@/lib/form-errors"
@@ -67,7 +70,7 @@ import { getServerErrorCode, parseServerError } from "@/lib/server-error"
 import { cn } from "@/lib/utils"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 
-type SectionId = "info" | "members" | "notifications" | "data" | "management"
+type SectionId = "info" | "sections" | "members" | "notifications" | "data" | "management"
 
 interface SectionMeta {
   id: SectionId
@@ -76,6 +79,7 @@ interface SectionMeta {
 
 const SECTIONS: SectionMeta[] = [
   { id: "info", icon: Info },
+  { id: "sections", icon: LayoutList },
   { id: "members", icon: Users },
   { id: "notifications", icon: Bell },
   { id: "data", icon: Database },
@@ -89,6 +93,8 @@ const SECTIONS: SectionMeta[] = [
 //                    + Plan & quota card, "Usage" when plans are off
 //                    (#1389; #1887: moved out of the page header so it
 //                    no longer renders everywhere)
+//   - Sections       the sections the group hides for all members
+//                    (#1607); admins switch them, others read them
 //   - Members        members link + leave-group panel
 //   - Notifications  per-group notification preference toggles
 //                    (#1887: pulled out of the page header into its
@@ -110,7 +116,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
   const { user } = useAuth()
   const groupQuery = useGroup(groupId)
   const membersQuery = useMembers(groupId)
-  const [active, setActive] = useState<SectionId>("info")
+  // `?section=` opens a sub-section directly; the notice on a hidden
+  // section's page links to `?section=sections`.
+  const [searchParams] = useSearchParams()
+  const [active, setActive] = useState<SectionId>(() => parseSectionId(searchParams.get("section")))
 
   const myMembership = useMemo(
     () => membersQuery.data?.find((m) => m.member_user_id === user?.id),
@@ -188,6 +197,11 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                 ownerName={ownerName}
               />
             ) : null}
+            {active === "sections" ? (
+              <div className="space-y-6" data-testid="group-section-sections">
+                <SectionsCard group={group} isAdmin={isAdmin} />
+              </div>
+            ) : null}
             {active === "members" ? (
               <MembersSection
                 groupId={groupId}
@@ -197,7 +211,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
               />
             ) : null}
             {active === "notifications" ? (
-              <NotificationsSection groupSlug={group.slug ?? null} />
+              <NotificationsSection
+                groupSlug={group.slug ?? null}
+                hideWarrantyAlerts={isSectionHidden(group, "warranties")}
+              />
             ) : null}
             {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
             {active === "management" ? (
@@ -208,6 +225,10 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
       </Page>
     </>
   )
+}
+
+function parseSectionId(raw: string | null): SectionId {
+  return SECTIONS.find((s) => s.id === raw)?.id ?? "info"
 }
 
 function GroupSettingsNav({
@@ -659,10 +680,16 @@ function MembersSection({
 // toggles when they navigate here. The card already carries its own
 // title + subtitle, so we drop the SectionTitle to avoid double
 // headings.
-function NotificationsSection({ groupSlug }: { groupSlug: string | null }) {
+function NotificationsSection({
+  groupSlug,
+  hideWarrantyAlerts,
+}: {
+  groupSlug: string | null
+  hideWarrantyAlerts: boolean
+}) {
   return (
     <div className="space-y-6" data-testid="group-section-notifications">
-      <NotificationsCard groupSlug={groupSlug} />
+      <NotificationsCard groupSlug={groupSlug} hideWarrantyAlerts={hideWarrantyAlerts} />
     </div>
   )
 }

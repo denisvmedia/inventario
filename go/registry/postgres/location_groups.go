@@ -507,3 +507,45 @@ func (r *LocationGroupRegistry) MarkPendingDeletionAdmin(ctx context.Context, gr
 	}
 	return detail, alreadyPending, nil
 }
+
+// SetHiddenSections writes hidden_sections and updated_at of an active group
+// in one statement, so the columns a concurrent rename or deletion writes
+// are not overwritten (see registry.LocationGroupRegistry.SetHiddenSections).
+func (r *LocationGroupRegistry) SetHiddenSections(ctx context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (*models.LocationGroup, bool, error) {
+	if groupID == "" {
+		return nil, false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
+	}
+
+	groupsTable := r.tableNames.LocationGroups()
+	var (
+		group   models.LocationGroup
+		applied bool
+	)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		update := fmt.Sprintf(
+			`UPDATE %s SET hidden_sections = $1, updated_at = $2 WHERE id = $3 AND status = $4 RETURNING *`,
+			groupsTable,
+		)
+		err := tx.GetContext(ctx, &group, update, sections.Normalize(), updatedAt, groupID, string(models.LocationGroupStatusActive))
+		if err == nil {
+			applied = true
+			return nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return errxtrace.Wrap("failed to set hidden sections", err)
+		}
+		// No active row: tell a group that is gone from one that is not active.
+		err = tx.GetContext(ctx, &group, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, groupsTable), groupID)
+		if errors.Is(err, sql.ErrNoRows) {
+			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "LocationGroup", "entity_id", groupID))
+		}
+		if err != nil {
+			return errxtrace.Wrap("failed to load location group", err)
+		}
+		return nil
+	})
+	if err != nil {
+		return nil, false, err
+	}
+	return &group, applied, nil
+}

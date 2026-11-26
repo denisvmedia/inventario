@@ -153,7 +153,24 @@ func (r *UserRegistry) Update(ctx context.Context, user models.User) (*models.Us
 
 	reg := r.newSQLRegistry()
 
-	err := reg.Update(ctx, user, nil)
+	// Update writes the whole row, tenant_id included. Only UserTenantMover
+	// moves a user between tenants, so a write that names another tenant than
+	// the row holds is refused: it either tries to move the user itself or was
+	// built from a copy read before a move, and would put the user back. FOR
+	// NO KEY UPDATE waits for a move in progress (the mover holds FOR UPDATE)
+	// without blocking the FOR KEY SHARE that inserts referencing the user take.
+	err := reg.Update(ctx, user, func(ctx context.Context, tx *sqlx.Tx) error {
+		var storedTenantID string
+		query := fmt.Sprintf("SELECT tenant_id FROM %s WHERE id = $1 FOR NO KEY UPDATE", r.tableNames.Users())
+		if err := tx.QueryRowContext(ctx, query, user.ID).Scan(&storedTenantID); err != nil {
+			return errxtrace.Wrap("failed to lock the user", err)
+		}
+		if storedTenantID != user.TenantID {
+			return errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
+				"user_id", user.ID, "tenant_id", storedTenantID, "requested_tenant_id", user.TenantID))
+		}
+		return nil
+	})
 	if err != nil {
 		if errors.Is(err, store.ErrNotFound) {
 			return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User", "entity_id", user.GetID()))

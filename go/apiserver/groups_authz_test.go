@@ -108,6 +108,9 @@ func (e *groupsAuthzEnv) adminRoutes() []struct {
 		body   any
 	}{
 		{"rename group", http.MethodPatch, "", map[string]any{"name": "Renamed"}},
+		{"set hidden sections", http.MethodPut, "/hidden-sections", map[string]any{
+			"data": map[string]any{"type": "groups", "attributes": map[string]any{"hidden_sections": []string{"warranties"}}},
+		}},
 		{"remove member", http.MethodDelete, "/members/" + e.memberUserID, nil},
 		{"change member role", http.MethodPatch, "/members/" + e.memberUserID, map[string]any{"role": "user"}},
 		{"create invite", http.MethodPost, "/invites", map[string]any{"email": "x@example.com", "role": "user"}},

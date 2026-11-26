@@ -22,6 +22,12 @@
     "successToast": "Group created.",
     "title": "Create a new group"
   },
+  "hiddenSection": {
+    "description": "A group admin turned this section off for all members. Its data is kept, and an admin can show the section again in the group settings.",
+    "goToDashboard": "Go to dashboard",
+    "openSettings": "Open group settings",
+    "title": "{{section}} is hidden in this group"
+  },
   "migration": {
     "banner": "Currency migration in progress for {{name}}.",
     "rateLabel": "1 {{from}} = {{rate}} {{to}}",
@@ -86,6 +92,28 @@
       "title": "Migrate currency"
     },
     "errorGeneric": "Couldn't save the group. Please try again.",
+    "hiddenSections": {
+      "adminOnly": "Only admins and owners can change which sections the group shows.",
+      "loans": {
+        "description": "The Lent out page, lending an item, and loan reminder emails.",
+        "label": "Loans"
+      },
+      "maintenance": {
+        "description": "The Maintenance and In service pages, adding schedules and sending items for service, and maintenance reminder emails.",
+        "label": "Maintenance and repairs"
+      },
+      "saveError": "Couldn't save the sections. Try again.",
+      "subtitle": "Hide the parts of Inventario this group does not use, for every member. Hiding a section keeps its data: an item that already has a warranty, a loan or maintenance still shows it, and you can show the section again at any time.",
+      "title": "Sections",
+      "upcoming": {
+        "description": "The Upcoming page, which lists the dates coming up across the group.",
+        "label": "Upcoming"
+      },
+      "warranties": {
+        "description": "The Warranties page and its dashboard cards, the Warranty step of the item form, and warranty reminder emails.",
+        "label": "Warranties"
+      }
+    },
     "iconLabel": "Icon",
     "leaveCta": "Leave group",
     "leaveDescription": "You will lose access to all data in this group.",
@@ -144,7 +172,8 @@
       "info": "Info",
       "management": "Management",
       "members": "Members",
-      "notifications": "Notifications"
+      "notifications": "Notifications",
+      "sections": "Sections"
     },
     "slugHelp": "Slugs are randomly generated at creation and immutable.",
     "slugLabel": "URL slug",

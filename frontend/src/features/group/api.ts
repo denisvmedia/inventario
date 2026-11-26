@@ -8,6 +8,7 @@ export type LocationGroup = Schema<"models.LocationGroup">
 export type GroupRole = Schema<"models.GroupRole">
 export type GroupMembership = Schema<"models.GroupMembership">
 export type GroupInvite = Schema<"models.GroupInvite">
+export type GroupSection = Schema<"models.GroupSection">
 // MembershipWithUser is the shape returned by the members list endpoint
 // after the #1533 expansion. The BE joins users so the FE can render
 // avatar / name / email in one round-trip; the legacy attribute set
@@ -115,6 +116,24 @@ export async function updateGroup(
   )
   if (!body.data?.attributes) {
     throw new Error("Update-group response missing data.attributes")
+  }
+  return { ...body.data.attributes, id: body.data.id }
+}
+
+// PUT /groups/{id}/hidden-sections replaces the sections the group hides
+// for all its members (#1607) and leaves the rest of the group as it is.
+// Admin or owner only; the server drops duplicates and refuses unknown
+// sections.
+export async function setHiddenSections(
+  groupId: string,
+  sections: readonly GroupSection[]
+): Promise<LocationGroup> {
+  const body = await http.put<GroupResponseEnvelope>(
+    `/groups/${encodeURIComponent(groupId)}/hidden-sections`,
+    { data: { type: "groups", attributes: { hidden_sections: sections } } }
+  )
+  if (!body.data?.attributes) {
+    throw new Error("Hidden-sections response missing data.attributes")
   }
   return { ...body.data.attributes, id: body.data.id }
 }

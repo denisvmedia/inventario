@@ -15,12 +15,14 @@ import {
   removeMember,
   resendInvite,
   revokeInvite,
+  setHiddenSections,
   updateGroup,
   type CreateGroupRequest,
   type CreateInviteRequest,
   type DeleteGroupRequest,
   type GroupInvite,
   type GroupRole,
+  type GroupSection,
   type LocationGroup,
   type MemberRow,
   type UpdateGroupRequest,
@@ -113,6 +115,27 @@ export function useUpdateGroup() {
     onSuccess: (group, { groupId }) => {
       queryClient.setQueryData(groupKeys.detail(groupId), group)
       queryClient.invalidateQueries({ queryKey: groupKeys.list() })
+    },
+  })
+}
+
+interface SetHiddenSectionsVars {
+  groupId: string
+  sections: readonly GroupSection[]
+}
+
+// The list query feeds the group context every page reads the setting
+// from, so it is refetched as well as the detail being replaced.
+export function useSetHiddenSections() {
+  const queryClient = useQueryClient()
+  return useMutation<LocationGroup, Error, SetHiddenSectionsVars>({
+    mutationFn: ({ groupId, sections }) => setHiddenSections(groupId, sections),
+    onSuccess: (group, { groupId }) => {
+      queryClient.setQueryData(groupKeys.detail(groupId), group)
+      queryClient.setQueryData<LocationGroup[]>(groupKeys.list(), (groups) =>
+        groups?.map((g) => (g.id === groupId ? { ...g, ...group, id: g.id } : g))
+      )
+      void queryClient.invalidateQueries({ queryKey: groupKeys.list() })
     },
   })
 }

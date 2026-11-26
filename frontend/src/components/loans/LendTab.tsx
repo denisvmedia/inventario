@@ -32,13 +32,16 @@ interface LendTabProps {
   // of the 12 bulbs is on loan?). The tab swaps its body for an
   // empty-state hint and disables the Lend CTA.
   commodityCount?: number
+  // False while the group hides loans (#1607): the tab still shows the
+  // item's loans, without the Lend button.
+  canStart?: boolean
 }
 
 // LendTab is the lend-out surface on the commodity detail page. It
 // renders the (at most one) currently-open loan as a card with a
 // "mark returned" affordance, plus a history list of closed loans for
 // audit context. The card is bordered amber when overdue.
-export function LendTab({ commodityId, commodityCount }: LendTabProps) {
+export function LendTab({ commodityId, commodityCount, canStart = true }: LendTabProps) {
   const { t } = useTranslation(["loans", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -150,7 +153,7 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
     <Card data-testid="commodity-detail-lend">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("loans:tab.title")}</CardTitle>
-        {!current && !openService && !isBundle ? (
+        {canStart && !current && !openService && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -172,7 +175,7 @@ export function LendTab({ commodityId, commodityCount }: LendTabProps) {
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {!current && openService && !isBundle ? (
+        {canStart && !current && openService && !isBundle ? (
           <Alert data-testid="lend-blocked-by-service">
             <AlertDescription>
               {t("loans:tab.blockedByService", { provider: openService.provider_name })}

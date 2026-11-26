@@ -173,12 +173,16 @@ const (
 	FileCategoryOther     FileCategory = "other"
 )
 
-// FileTagInvoice and FileTagManual carry the kind of a commodity document.
-// The bucket is `documents` for both; what distinguishes an invoice from a
-// manual is the tag, so neither needs a top-level bucket of its own (#1989).
+// FileTagInvoice, FileTagManual and FileTagWarranty carry the kind of a
+// commodity document. The bucket is `documents` for all of them; what
+// distinguishes an invoice from a manual is the tag, so none needs a
+// top-level bucket of its own (#1989). FileTagPhoto marks a picture of the
+// item itself, as opposed to a photographed document.
 const (
-	FileTagInvoice = "invoice"
-	FileTagManual  = "manual"
+	FileTagInvoice  = "invoice"
+	FileTagManual   = "manual"
+	FileTagWarranty = "warranty"
+	FileTagPhoto    = "photo"
 )
 
 // ValidFileCategories is the closed set accepted by validation and the

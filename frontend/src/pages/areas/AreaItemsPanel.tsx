@@ -57,6 +57,7 @@ import type { Commodity } from "@/features/commodities/api"
 import { primarySearchMatch, type CommoditySearchMatch } from "@/features/commodities/query"
 import { useTagLabel } from "@/features/tags/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import { formatPrice } from "@/features/commodities/price"
 import { formatCurrency } from "@/lib/intl"
 import { cn } from "@/lib/utils"
@@ -84,6 +85,8 @@ interface AreaItemsPanelProps {
 export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
   const { t } = useTranslation()
   const { currentGroup } = useCurrentGroup()
+  // A group that hides warranties (#1607) gets no warranty stat.
+  const showWarranties = useSectionVisible("warranties")
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
   const navigate = useNavigate()
@@ -304,23 +307,29 @@ export function AreaItemsPanel({ areaId }: AreaItemsPanelProps) {
 
   return (
     <section className="flex flex-col gap-4" data-testid="area-detail-items">
-      {/* Stats strip — 3 cells matching the mock's Level 3 ItemsPanel. */}
-      <div className="grid grid-cols-3 gap-3" data-testid="area-detail-items-stats">
+      {/* Stats strip — 3 cells matching the mock's Level 3 ItemsPanel,
+          2 while the group hides warranties. */}
+      <div
+        className={cn("grid gap-3", showWarranties ? "grid-cols-3" : "grid-cols-2")}
+        data-testid="area-detail-items-stats"
+      >
         <StatCell
           icon={Package}
           label={t("locations:areaDetail.items.statsItems")}
           value={String(total)}
           loading={list.isLoading}
         />
-        <StatCell
-          icon={ShieldCheck}
-          label={t("locations:areaDetail.items.statsActiveWarranties")}
-          value={activeWarrantiesLabel}
-          loading={list.isLoading}
-          valueClassName="text-status-active"
-          iconClassName="text-status-active"
-          testId="area-detail-items-active-warranties"
-        />
+        {showWarranties ? (
+          <StatCell
+            icon={ShieldCheck}
+            label={t("locations:areaDetail.items.statsActiveWarranties")}
+            value={activeWarrantiesLabel}
+            loading={list.isLoading}
+            valueClassName="text-status-active"
+            iconClassName="text-status-active"
+            testId="area-detail-items-active-warranties"
+          />
+        ) : null}
         <StatCell
           icon={TrendingUp}
           label={t("locations:areaDetail.items.statsValue")}

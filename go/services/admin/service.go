@@ -37,6 +37,24 @@ type Service struct {
 	// callers that never delete a tenant don't have to thread an upload
 	// location they don't need.
 	fileService *services.FileService
+	// avatars is optional. When set (via SetAvatarService), a tenant move
+	// copies the user's profile photo into the new tenant's storage. A move
+	// of a user who has a photo is refused while it is nil.
+	avatars *services.AvatarService
+}
+
+// NewServiceWithFactorySet returns a service over an already opened factory
+// set. NewService is the constructor the CLI uses; this one serves callers
+// that hold a FactorySet, such as tests against the memory backend.
+func NewServiceWithFactorySet(factorySet *registry.FactorySet) *Service {
+	return &Service{factorySet: factorySet}
+}
+
+// SetAvatarService wires the avatar service a tenant move copies the user's
+// profile photo with. Callers that may move users (the users update CLI, which
+// builds it from the --upload-location flag) must call this.
+func (s *Service) SetAvatarService(avatars *services.AvatarService) {
+	s.avatars = avatars
 }
 
 // SetFileService wires the optional file service used by DeleteTenant to
@@ -438,7 +456,15 @@ func (s *Service) ListUsers(ctx context.Context, req UserListRequest) (*UserList
 	}, nil
 }
 
-// UpdateUser updates a user
+// UpdateUser updates a user. Only the fields set in req change.
+//
+// A TenantID that differs from the user's tenant moves the user (#2179). The
+// move is allowed only for a user who has no group memberships and owns or
+// authored nothing in any tenant-scoped table; otherwise it returns a
+// *registry.UserTenantMoveBlockedError listing what blocks it, and nothing
+// changes, the other fields of req included. A move ends every session and
+// deletes the user's API tokens, keeps the password, MFA and settings, and
+// copies the profile photo into the new tenant's storage.
 func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpdateRequest) (*models.User, error) {
 	// Get existing user
 	user, err := s.GetUser(ctx, idOrEmail)
@@ -446,7 +472,53 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 		return nil, err
 	}
 
-	// Apply updates
+	// Apply and validate the field changes first, so an invalid request is
+	// refused before a move changes anything.
+	updated := *user
+	if err := applyUserFields(ctx, &updated, req); err != nil {
+		return nil, err
+	}
+
+	if req.TenantID != nil && *req.TenantID != user.TenantID {
+		moved, err := s.moveUserToTenant(ctx, user, *req.TenantID)
+		if err != nil {
+			return nil, err
+		}
+		// The move rewrote tenant_id, default_group_id, avatar_path and
+		// updated_at; the field changes go on top of that row.
+		updated.TenantID = moved.TenantID
+		updated.DefaultGroupID = moved.DefaultGroupID
+		updated.AvatarPath = moved.AvatarPath
+		updated.UpdatedAt = moved.UpdatedAt
+		if !hasUserFieldChanges(req) {
+			return moved, nil
+		}
+	}
+
+	// Update user
+	updatedUser, err := s.factorySet.UserRegistry.Update(ctx, updated)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user: %w", err)
+	}
+
+	// Deactivating the account or setting its password ends its personal API
+	// tokens (#2808), the same as the matching self-service and back-office
+	// actions do. Token authentication would refuse an inactive owner anyway;
+	// revoking makes it permanent, so reactivating the account later does not
+	// bring the tokens back. A tenant move deletes the tokens itself.
+	deactivated := req.IsActive != nil && !*req.IsActive
+	if (deactivated || req.Password != nil) && s.factorySet.APITokenRegistry != nil {
+		if _, err := s.factorySet.APITokenRegistry.RevokeAllByUserID(ctx, updatedUser.ID); err != nil {
+			return nil, fmt.Errorf("user updated, but revoking their API tokens failed: %w", err)
+		}
+	}
+
+	return updatedUser, nil
+}
+
+// applyUserFields applies the non-tenant fields of req to user and validates
+// the result.
+func applyUserFields(ctx context.Context, user *models.User, req UserUpdateRequest) error {
 	if req.Email != nil {
 		user.Email = *req.Email
 	}
@@ -456,39 +528,116 @@ func (s *Service) UpdateUser(ctx context.Context, idOrEmail string, req UserUpda
 	if req.IsActive != nil {
 		user.IsActive = *req.IsActive
 	}
-	if req.TenantID != nil {
-		user.SetTenantID(*req.TenantID)
-	}
 	if req.Password != nil {
 		if err := user.SetPassword(*req.Password); err != nil {
-			return nil, fmt.Errorf("failed to set password: %w", err)
+			return fmt.Errorf("failed to set password: %w", err)
 		}
 	}
-
-	// Validate updated user
 	if err := user.ValidateWithContext(ctx); err != nil {
-		return nil, fmt.Errorf("user validation failed: %w", err)
+		return fmt.Errorf("user validation failed: %w", err)
 	}
+	return nil
+}
 
-	// Update user
-	updatedUser, err := s.factorySet.UserRegistry.Update(ctx, *user)
+func hasUserFieldChanges(req UserUpdateRequest) bool {
+	return req.Email != nil || req.Name != nil || req.IsActive != nil || req.Password != nil
+}
+
+// CheckUserTenantMove runs the checks a move of the user to tenantID runs
+// before it writes anything, and changes nothing. It returns nil when the move
+// would go through, a *registry.UserTenantMoveBlockedError when the user still
+// belongs to a group or owns content, and otherwise the error the move would
+// stop with: the target tenant is missing or not active, its users already
+// have the email, or the profile photo is not in the avatar storage.
+func (s *Service) CheckUserTenantMove(ctx context.Context, idOrEmail, tenantID string) error {
+	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {
-		return nil, fmt.Errorf("failed to update user: %w", err)
+		return err
+	}
+	return s.checkTenantMove(ctx, user, tenantID)
+}
+
+func (s *Service) checkTenantMove(ctx context.Context, user *models.User, tenantID string) error {
+	mover := s.factorySet.UserTenantMover
+	if mover == nil {
+		return errxtrace.Wrap("user tenant mover is not configured", registry.ErrInvalidConfig)
+	}
+	target, err := s.factorySet.TenantRegistry.Get(ctx, tenantID)
+	if err != nil {
+		return errxtrace.Wrap("failed to find the target tenant", err)
+	}
+	if target.Status != models.TenantStatusActive {
+		return errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", tenantID, "status", target.Status))
+	}
+	switch other, err := s.factorySet.UserRegistry.GetByEmail(ctx, tenantID, user.Email); {
+	case err == nil && other.ID != user.ID:
+		return errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email, "tenant_id", tenantID))
+	case err != nil && !errors.Is(err, registry.ErrNotFound):
+		return errxtrace.Wrap("failed to check the email in the target tenant", err)
 	}
 
-	// Deactivating the account, setting its password or moving it to another
-	// tenant ends its personal API tokens (#2808), the same as the matching
-	// self-service and back-office actions do. Token authentication would
-	// refuse an inactive or moved owner anyway; revoking makes it permanent,
-	// so reactivating the account later does not bring the tokens back.
-	deactivated := req.IsActive != nil && !*req.IsActive
-	if (deactivated || req.Password != nil || req.TenantID != nil) && s.factorySet.APITokenRegistry != nil {
-		if _, err := s.factorySet.APITokenRegistry.RevokeAllByUserID(ctx, updatedUser.ID); err != nil {
-			return nil, fmt.Errorf("user updated, but revoking their API tokens failed: %w", err)
+	owned, err := mover.CountOwnedContent(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if !owned.IsEmpty() {
+		return &registry.UserTenantMoveBlockedError{Owned: owned}
+	}
+
+	if user.AvatarPath == nil || *user.AvatarPath == "" {
+		return nil
+	}
+	if s.avatars == nil {
+		return errxtrace.Wrap("the user has a profile photo, and no avatar storage is configured to copy it to the new tenant", registry.ErrInvalidConfig)
+	}
+	if err := s.avatars.CheckStored(ctx, *user.AvatarPath); err != nil {
+		return errxtrace.Wrap("the profile photo cannot be copied to the new tenant", err)
+	}
+	return nil
+}
+
+// moveUserToTenant moves user to tenantID through the registry's
+// UserTenantMover. It runs checkTenantMove first, so a move that would be
+// refused stops before the photo is copied; the mover checks again under its
+// lock. The photo copy is removed when the move does not happen and the
+// original after it does.
+func (s *Service) moveUserToTenant(ctx context.Context, user *models.User, tenantID string) (moved *models.User, err error) {
+	defer func() {
+		s.logAdminAction(ctx, "admin.move_user_tenant", &user.TenantID, user.ID, err)
+	}()
+
+	if err := s.checkTenantMove(ctx, user, tenantID); err != nil {
+		return nil, err
+	}
+
+	hasAvatar := user.AvatarPath != nil && *user.AvatarPath != ""
+	var avatarCopy *string
+	if hasAvatar {
+		if avatarCopy, err = s.avatars.CopyToTenant(ctx, user, tenantID); err != nil {
+			return nil, errxtrace.Wrap("failed to copy the profile photo to the new tenant", err)
 		}
 	}
 
-	return updatedUser, nil
+	moved, err = s.factorySet.UserTenantMover.MoveUserToTenant(ctx, registry.UserTenantMove{
+		UserID:         user.ID,
+		FromTenantID:   user.TenantID,
+		ToTenantID:     tenantID,
+		FromAvatarPath: user.AvatarPath,
+		AvatarPath:     avatarCopy,
+	})
+	if err != nil {
+		if avatarCopy != nil {
+			s.avatars.DeleteStored(ctx, *avatarCopy)
+		}
+		if _, blocked := errors.AsType[*registry.UserTenantMoveBlockedError](err); blocked {
+			return nil, err
+		}
+		return nil, errxtrace.Wrap("failed to move the user to another tenant", err)
+	}
+	if hasAvatar {
+		s.avatars.DeleteStored(ctx, *user.AvatarPath)
+	}
+	return moved, nil
 }
 
 // DeleteUser hard-deletes a user's account along with its auth / identity rows

@@ -1,8 +1,12 @@
 package aivision
 
 import (
+	"bytes"
+	"cmp"
 	"encoding/json"
 	"fmt"
+	"maps"
+	"slices"
 	"strings"
 )
 
@@ -29,6 +33,11 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 	"Suggest 2–5 short, lowercase \"tags\" describing each product (category, material, colour).\n" +
 	"If a warranty period or expiry is shown, set \"warranty_expires_at\" to the warranty END date (YYYY-MM-DD); " +
 	"if only a duration like \"2 years\" is given and the purchase date is known, add the duration to the purchase date.\n" +
+	"Each attached file is preceded by a text label \"File N\": N is the file's index, counted from 0 in the order the files are attached.\n" +
+	"Also return \"files\": ONE entry per attached file with its \"index\", its \"document_type\" and a \"title\". " +
+	"\"document_type\" is invoice, receipt, manual, warranty, photo (a picture of the product itself) or other. " +
+	"\"title\" is a short readable title for the file, in the language of the document, at most 120 characters, " +
+	"such as \"Bosch invoice, March 2024\".\n" +
 	"Return ONE JSON object that matches the requested schema EXACTLY. Do not include any prose, markdown, or extra keys.\n" +
 	"For each field, ALWAYS include a \"confidence\" score between 0.0 and 1.0 reflecting how sure you are.\n" +
 	"Omit fields you have NO evidence for rather than guessing — null/empty is preferred over hallucinated values."
@@ -40,6 +49,11 @@ const SystemPrompt = "You are an assistant that extracts structured product info
 func UserPromptHeader(req ScanRequest) string {
 	var b strings.Builder
 	b.WriteString("Extract the product information from the attached photo(s) and/or document(s).\n")
+	if n := len(req.Photos); n == 1 {
+		b.WriteString("There is 1 attached file, labeled File 0. Return one \"files\" entry for it.\n")
+	} else if n > 1 {
+		fmt.Fprintf(&b, "There are %d attached files, labeled File 0 to File %d. Return one \"files\" entry for each.\n", n, n-1)
+	}
 	if req.PreferredCurrencyCode != "" {
 		fmt.Fprintf(&b, "If a price is visible without a clear currency symbol, prefer currency code %q.\n", req.PreferredCurrencyCode)
 	}
@@ -146,12 +160,6 @@ func ResponseSchema(req ScanRequest) map[string]any {
 		commodityTypes = append(commodityTypes, t.Slug)
 	}
 
-	// documentTypes are the kinds a scanned document can be classified as.
-	// `invoice` and `manual` map to the tags of the same name; the rest are
-	// there so the model has somewhere honest to put a document that is
-	// neither, rather than forcing one of the two.
-	documentTypes := []string{"invoice", "manual", "receipt", "warranty", "other"}
-
 	fields := map[string]any{
 		FieldNameName:                  fieldGuessString,
 		FieldNameShortName:             fieldGuessStringMax(40),
@@ -167,7 +175,7 @@ func ResponseSchema(req ScanRequest) map[string]any {
 		FieldNameWarrantyExpiresAt:     fieldGuessString,
 		FieldNameComments:              fieldGuessString,
 		FieldNameTags:                  fieldGuessStringArray,
-		FieldNameDocumentType:          fieldGuessEnum(documentTypes),
+		FieldNameDocumentType:          fieldGuessEnum(ScanDocumentTypes),
 		FieldNameQuantity:              fieldGuessNumber,
 	}
 
@@ -215,9 +223,12 @@ func ResponseSchema(req ScanRequest) map[string]any {
 	// reliably gets every line of a multi-product invoice enumerated instead
 	// of the model picking just one. A single product is simply a 1-element
 	// array. The service derives the single-item `fields` from items[0].
+	// files is required too: one suggestion per attached file. The
+	// properties are ResponseProperties so the products come first.
 	return map[string]any{
 		"type": "object",
-		"properties": map[string]any{
+		"properties": ResponseProperties{
+			FieldNameFiles: filesSchema(len(req.Photos), fieldGuessEnum(FileDocumentTypes), fieldGuessStringMax(MaxFileTitleRunes)),
 			"items": map[string]any{
 				"type":     "array",
 				"minItems": 1,
@@ -236,15 +247,93 @@ func ResponseSchema(req ScanRequest) map[string]any {
 				"items": warningSchema,
 			},
 		},
-		"required":             []string{"items"},
+		"required":             []string{"items", FieldNameFiles},
 		"additionalProperties": false,
 	}
+}
+
+// ResponseProperties are the members of the response object. They marshal
+// in the order the model should write them: the products, then the file
+// suggestions, then the warnings, and any other member after those in name
+// order. A model writes its answer in the order of the schema, so the
+// product lines of a long receipt come before the file suggestions in the
+// output budget. A plain map would marshal "files" first.
+type ResponseProperties map[string]any
+
+// responsePropertyOrder ranks the members of ResponseProperties.
+var responsePropertyOrder = []string{"items", FieldNameFiles, "warnings"}
+
+// MarshalJSON writes the members in the order of responsePropertyOrder.
+func (p ResponseProperties) MarshalJSON() ([]byte, error) {
+	rank := func(name string) int {
+		if i := slices.Index(responsePropertyOrder, name); i >= 0 {
+			return i
+		}
+		return len(responsePropertyOrder)
+	}
+	names := slices.Collect(maps.Keys(p))
+	slices.SortFunc(names, func(a, b string) int {
+		return cmp.Or(cmp.Compare(rank(a), rank(b)), strings.Compare(a, b))
+	})
+	var buf bytes.Buffer
+	buf.WriteByte('{')
+	for i, name := range names {
+		if i > 0 {
+			buf.WriteByte(',')
+		}
+		key, err := json.Marshal(name)
+		if err != nil {
+			return nil, err
+		}
+		value, err := json.Marshal(p[name])
+		if err != nil {
+			return nil, err
+		}
+		buf.Write(key)
+		buf.WriteByte(':')
+		buf.Write(value)
+	}
+	buf.WriteByte('}')
+	return buf.Bytes(), nil
+}
+
+// filesSchema is the schema of the per-file suggestions: one entry per
+// attached file, each naming its file by index. When the request's file
+// count is known it bounds both the list and the index.
+func filesSchema(fileCount int, documentType, title map[string]any) map[string]any {
+	index := map[string]any{"type": "integer", "minimum": 0}
+	list := map[string]any{
+		"type": "array",
+		"description": "ONE entry per attached file. index is the N of the file's \"File N\" label, counted from 0 " +
+			"in the order the files are attached.",
+		"items": map[string]any{
+			"type": "object",
+			"properties": map[string]any{
+				"index":         index,
+				"document_type": documentType,
+				"title":         title,
+			},
+			"required":             []string{"index", "document_type", "title"},
+			"additionalProperties": false,
+		},
+	}
+	if fileCount > 0 {
+		index["maximum"] = fileCount - 1
+		list["minItems"] = fileCount
+		list["maxItems"] = fileCount
+	}
+	return list
 }
 
 // FieldNameCustomFields is the key of the custom field values in a response
 // item. It is not a FieldName: its value is an object of guesses keyed by
 // custom field key, see ScanResult.CustomFields.
 const FieldNameCustomFields = "custom_fields"
+
+// FieldNameFiles is the key of the per-file suggestions in a response, see
+// ScanResult.Files. A warning about a dropped file suggestion names it as
+// its field.
+const FieldNameFiles = "files"
 
 // customFieldValueSchema returns the guess schema of one custom field, or nil
 // for a type the model cannot fill.
@@ -297,9 +386,12 @@ func ResponseSchemaJSON(req ScanRequest) ([]byte, error) {
 // providers unmarshal upstream JSON into this struct, then ToScanResult
 // converts to the public ScanResult type.
 type rawScanResponse struct {
-	Fields   map[string]rawFieldGuess `json:"fields"`
-	Items    []json.RawMessage        `json:"items"`
-	Warnings []Warning                `json:"warnings"`
+	Fields map[string]rawFieldGuess `json:"fields"`
+	Items  []json.RawMessage        `json:"items"`
+	// Files stays raw so a malformed list costs the file suggestions only,
+	// never the scan.
+	Files    json.RawMessage `json:"files"`
+	Warnings []Warning       `json:"warnings"`
 }
 
 // decodeRawItem decodes one entry of the items[] array into a field map. It
@@ -394,10 +486,12 @@ type rawFieldGuess struct {
 }
 
 // ToScanResult parses the JSON returned by the upstream call into the
-// public ScanResult shape. Unknown field names are dropped (defence in
-// depth against schema drift); per-field type mismatches are demoted to
-// a "low_confidence" warning so the response is still usable.
-func ToScanResult(body []byte) (*ScanResult, error) {
+// public ScanResult shape. fileCount is the number of files the request
+// carried; see decodeFileGuesses for how the file suggestions are checked
+// against it. Unknown field names are dropped (defence in depth against
+// schema drift); per-field type mismatches are demoted to a
+// "low_confidence" warning so the response is still usable.
+func ToScanResult(body []byte, fileCount int) (*ScanResult, error) {
 	var raw rawScanResponse
 	if err := json.Unmarshal(body, &raw); err != nil {
 		return nil, fmt.Errorf("parse vision response: %w", err)
@@ -406,6 +500,9 @@ func ToScanResult(body []byte) (*ScanResult, error) {
 	out := &ScanResult{
 		Warnings: append([]Warning(nil), raw.Warnings...),
 	}
+	var fileWarnings []Warning
+	out.Files, fileWarnings = decodeFileGuesses(raw.Files, fileCount)
+	out.Warnings = append(out.Warnings, fileWarnings...)
 
 	// items is the model's primary output now (one entry per product). Decode
 	// each, dropping empties so a stray {} never renders a blank choice.
@@ -484,6 +581,8 @@ func decodeFieldValue(name string, raw json.RawMessage) (any, bool) {
 			return nil, false
 		}
 		return s, true
+	case FieldNameDocumentType:
+		return decodeEnum(raw, ScanDocumentTypes)
 	default:
 		var s string
 		if err := json.Unmarshal(raw, &s); err != nil {

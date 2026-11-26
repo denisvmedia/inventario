@@ -214,3 +214,92 @@ func TestOpenAIProvider_PDFFileBlock_DefaultFilename(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(string(body), qt.Contains, `"filename":"document.pdf"`)
 }
+
+// TestOpenAIProvider_LabelsEachFile: every file is preceded by its "File N"
+// label, so the model can name the file a suggestion is about.
+func TestOpenAIProvider_LabelsEachFile(t *testing.T) {
+	c := qt.New(t)
+
+	provider, err := openai.New(openai.Config{APIKey: "sk-test"})
+	c.Assert(err, qt.IsNil)
+
+	body, err := provider.MarshalTestPayload(aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "kettle.jpg", ContentType: "image/jpeg", Data: []byte("jpeg")},
+			{Filename: "invoice.pdf", ContentType: "application/pdf", Data: []byte("%PDF-1.7")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+
+	var payload struct {
+		Messages []struct {
+			Role    string `json:"role"`
+			Content []struct {
+				Type string `json:"type"`
+				Text string `json:"text"`
+			} `json:"content"`
+		} `json:"messages"`
+	}
+	c.Assert(json.Unmarshal(body, &payload), qt.IsNil)
+	c.Assert(payload.Messages, qt.HasLen, 2)
+	parts := payload.Messages[1].Content
+	c.Assert(parts, qt.HasLen, 5)
+	c.Check(parts[0].Text, qt.Contains, "labeled File 0 to File 1")
+	c.Check(parts[1].Text, qt.Equals, "File 0")
+	c.Check(parts[2].Type, qt.Equals, "image_url")
+	c.Check(parts[3].Text, qt.Equals, "File 1")
+	c.Check(parts[4].Type, qt.Equals, "file")
+}
+
+// TestOpenAIProvider_ParsesFileSuggestions: the per-file suggestions of the
+// message reach the result, checked against the files of the request.
+func TestOpenAIProvider_ParsesFileSuggestions(t *testing.T) {
+	c := qt.New(t)
+
+	inner, err := json.Marshal(map[string]any{
+		"items": []any{map[string]any{"name": map[string]any{"value": "Kettle", "confidence": 0.9}}},
+		"files": []any{
+			map[string]any{
+				"index":         1,
+				"document_type": map[string]any{"value": "photo", "confidence": 0.9},
+				"title":         map[string]any{"value": "Kettle on the counter", "confidence": 0.7},
+			},
+			map[string]any{
+				"index":         0,
+				"document_type": map[string]any{"value": "receipt", "confidence": 0.8},
+				"title":         map[string]any{"value": "Kaufland receipt, 2024", "confidence": 0.6},
+			},
+			map[string]any{"index": 1, "title": map[string]any{"value": "Twice", "confidence": 0.7}},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	raw, err := json.Marshal(map[string]any{"choices": []map[string]any{{"message": map[string]any{"content": string(inner)}}}})
+	c.Assert(err, qt.IsNil)
+	client, _ := newFakeClient(func(_ *http.Request) (*http.Response, error) {
+		return mustResponse(200, string(raw)), nil
+	})
+	provider, err := openai.New(openai.Config{APIKey: "sk-test", HTTPClient: client})
+	c.Assert(err, qt.IsNil)
+
+	result, err := provider.Scan(context.Background(), aivision.ScanRequest{
+		Photos: []aivision.PhotoInput{
+			{Filename: "receipt.jpg", ContentType: "image/jpeg", Data: []byte("a")},
+			{Filename: "kettle.jpg", ContentType: "image/jpeg", Data: []byte("b")},
+		},
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(result.Files, qt.DeepEquals, []aivision.FileGuess{
+		{
+			Index:        0,
+			DocumentType: &aivision.FieldGuess{Value: "receipt", Confidence: 0.8},
+			Title:        &aivision.FieldGuess{Value: "Kaufland receipt, 2024", Confidence: 0.6},
+		},
+		{
+			Index:        1,
+			DocumentType: &aivision.FieldGuess{Value: "photo", Confidence: 0.9},
+			Title:        &aivision.FieldGuess{Value: "Kettle on the counter", Confidence: 0.7},
+		},
+	})
+	c.Assert(result.Warnings, qt.HasLen, 1)
+	c.Check(result.Warnings[0].Field, qt.Equals, aivision.FieldNameFiles)
+}

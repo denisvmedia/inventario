@@ -394,3 +394,61 @@ func TestCommodityScanService_DropsAProductLeftWithNoGuess(t *testing.T) {
 	c.Check(out.Fields, qt.DeepEquals, car.Fields)
 	c.Check(out.Items, qt.DeepEquals, []aivision.ScanItem{car, vin})
 }
+
+// TestCommodityScanService_PassesFileSuggestionsThrough: both scan paths
+// return the provider's suggestion for each file and, when the provider gives
+// no scan-level document type, derive it from the files. The products are
+// left as they were.
+func TestCommodityScanService_PassesFileSuggestionsThrough(t *testing.T) {
+	svc := services.NewCommodityScanService(mock.New(), memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos:        5,
+		MaxPhotoBytes:    1024,
+		RateLimitPerHour: 100,
+	})
+	scans := map[string]func(services.ScanInput) (*aivision.ScanResult, error){
+		"member": func(in services.ScanInput) (*aivision.ScanResult, error) {
+			return svc.Scan(context.Background(), "tenant-1", "user-1", in)
+		},
+		"anonymous": func(in services.ScanInput) (*aivision.ScanResult, error) {
+			return svc.ScanAnonymous(context.Background(), in)
+		},
+	}
+	for name, scan := range scans {
+		t.Run(name, func(t *testing.T) {
+			c := qt.New(t)
+			photos := []services.ScanPhotoInput{jpegPhoto("kettle.jpg", 64), pdfDoc("receipt.pdf", 64)}
+			result, err := scan(newScanInput(photos...))
+			c.Assert(err, qt.IsNil)
+
+			c.Assert(result.Files, qt.DeepEquals, mock.FileGuessesFor([]aivision.PhotoInput{
+				{Filename: "kettle.jpg", ContentType: "image/jpeg"},
+				{Filename: "receipt.pdf", ContentType: aivision.PDFMediaType},
+			}))
+			c.Check(result.Fields[aivision.FieldNameDocumentType].Value, qt.Equals, aivision.DocumentTypeReceipt)
+			c.Assert(result.Items, qt.HasLen, len(mock.MultiItemResult().Items))
+			_, onItem := result.Items[0].Fields[aivision.FieldNameDocumentType]
+			c.Check(onItem, qt.IsFalse)
+		})
+	}
+}
+
+// TestCommodityScanService_KeepsTheProvidersDocumentType: a scan-level
+// document type from the provider wins over the files.
+func TestCommodityScanService_KeepsTheProvidersDocumentType(t *testing.T) {
+	c := qt.New(t)
+	provider := mock.New(mock.WithDefaultResult(aivision.ScanResult{
+		Fields: map[string]aivision.FieldGuess{
+			aivision.FieldNameName:         {Value: "Kettle", Confidence: 0.9},
+			aivision.FieldNameDocumentType: {Value: aivision.DocumentTypeManual, Confidence: 0.6},
+		},
+		Files: []aivision.FileGuess{{Index: 0, DocumentType: &aivision.FieldGuess{Value: aivision.DocumentTypeInvoice, Confidence: 0.9}}},
+	}))
+	svc := services.NewCommodityScanService(provider, memory.NewCommodityScanAuditRegistry(), services.CommodityScanConfig{
+		MaxPhotos: 5, MaxPhotoBytes: 1024, RateLimitPerHour: 100,
+	})
+
+	result, err := svc.Scan(context.Background(), "tenant-1", "user-1", newScanInput(pdfDoc("scan.pdf", 64)))
+	c.Assert(err, qt.IsNil)
+	c.Check(result.Fields[aivision.FieldNameDocumentType].Value, qt.Equals, aivision.DocumentTypeManual)
+	c.Check(result.Files, qt.HasLen, 1)
+}

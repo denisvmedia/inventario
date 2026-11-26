@@ -14,6 +14,17 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The AI scan suggests a type (invoice, receipt, manual, warranty, product
+  photo or other) and a short readable title for each file it reads, in the
+  language of the document. The scan response gains `files`, one entry per
+  file with its `index`, `document_type` and `title`, each with a
+  confidence; the scan-level `document_type` stays and is derived from the
+  files when the model gives none. **Add items from files** sets the
+  suggestions on the files once they are scanned: the **Invoice** tag for an
+  invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
+  others, and the title. Only a file that still has the title and the tags
+  of its upload changes, so a file you renamed or tagged keeps what you
+  gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date
@@ -23,6 +34,22 @@ when to add an entry and where it goes.
   inbox counts, the upcoming warranties, the location insurance report and
   every total; its single-item insurance report still opens from its page.
   Backups carry the new statuses, and older backups restore as before.
+- Hidden sections. A group admin or owner can hide Warranties, Maintenance
+  and repairs (with In service), Loans, and Upcoming for every member, from
+  the new **Sections** part of the group settings. A hidden section leaves
+  the sidebar, the command palette, the Dashboard, the item form and the
+  item's actions and tabs; a link to its page shows a notice with a way to
+  the settings. Items keep the data they hold and still show it, and no
+  write is refused. While a section is hidden, its reminder emails stop and
+  the weekly digest leaves its lines out; showing it again resumes them.
+  Existing groups hide nothing. The group resource gains `hidden_sections`
+  (`warranties`, `maintenance`, `loans`, `upcoming`), which every member
+  reads; `PUT /groups/{groupID}/hidden-sections` replaces the list and is
+  admin-only, and creating or updating a group takes `hidden_sections` too.
+  An unknown section is refused with 422 and the validation code
+  `validation_invalid_group_section` on `hidden_sections`; duplicates are
+  dropped. Like the group name and icon, the setting is not part of a backup
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
   (unique in the group, ignoring case) and a type that never changes: text,
   long text, number, money, date, yes/no, select, URL or a link to another
@@ -587,6 +614,15 @@ when to add an entry and where it goes.
   `GET /feature-flags` reports it as `plans`. With it on,
   `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
+- The upgrade runs one more database migration, which adds the
+  `hidden_sections` column to `location_groups`. During a rolling upgrade,
+  pods that still run the previous version fail every read of a group until
+  they are replaced, because they read all columns of the table and do not
+  know the new one. Expect group pages and group API calls served by those
+  pods to fail with 500 until the rollout finishes
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
+  of problem tracked in
+  [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
@@ -614,6 +650,30 @@ when to add an entry and where it goes.
   they printed `setupJob.initData.adminEmail`, which that Secret's email
   overrides, and pointed to `setupJob.initData.adminPassword`, which an
   existing Secret does not use.
+- `inventario users update --tenant` moves a user only when they belong to no
+  group and own or authored nothing in their tenant, typically an account
+  created in the wrong tenant. Otherwise it refuses, lists what blocks the
+  move (for example "member of 2 groups, 14 items, 3 files") and changes
+  nothing; `--dry-run` runs the same check. A move signs the user out
+  everywhere: their sessions and API tokens are deleted. Their password,
+  second factor, linked sign-in accounts, language and other settings and
+  their login history move with them, and their profile photo is copied into
+  the new tenant's storage, which the new `--upload-location` flag names. A
+  user record written from a copy read before a move is refused instead of
+  putting the old tenant back; the back-office block and unblock endpoints
+  answer it with 409 and the code `user.tenant_changed`
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- `inventario db migrate data`, and with it the Helm chart's init-data job,
+  never moves a user between tenants. When the admin email exists only in
+  another tenant, the run warns, names that tenant and creates no admin. It
+  fails instead when the default tenant did not exist before the run, as on
+  a database restored under another tenant id
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- New profile photos are stored under their tenant's prefix,
+  `t/<tenant>/avatars/<user>/...`, instead of `avatars/<user>/...`. Photos
+  stored under `avatars/` keep working. A bucket lifecycle rule that matches
+  `avatars/` needs the new prefix too
+  ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
 
 ## [0.2.2] - 2026-11-23
 
