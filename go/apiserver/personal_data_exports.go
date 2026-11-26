@@ -33,6 +33,7 @@ const (
 var (
 	errPersonalDataExportImpersonation = errx.NewSentinel("a personal data export cannot be requested or downloaded while impersonating a user")
 	errPersonalDataExportNotFound      = errx.NewSentinel("personal data export not found")
+	errPersonalDataExportNoSession     = errx.NewSentinel("a personal data export downloads only in the browser session that asks for it")
 )
 
 // PersonalDataExportView is a personal data export as Account settings lists
@@ -206,7 +207,9 @@ func (api *personalDataExportsAPI) requestPersonalDataExport(w http.ResponseWrit
 // @Summary Get a download URL for a personal data export
 // @Description Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only
 // @Description for a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one
-// @Description 409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden.
+// @Description 409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works
+// @Description only with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403
+// @Description data_export.session_required.
 // @Tags users-me
 // @Produce json
 // @Param id path string true "Personal data export ID"
@@ -239,7 +242,14 @@ func (api *personalDataExportsAPI) personalDataExportDownloadURL(w http.Response
 		_ = codedConflictError(w, r, export.ErrPersonalDataExportNotReady, "data_export.not_ready", nil)
 		return
 	}
-	url, expiresAt, err := api.signer.GeneratePersonalDataExportURL(e.ID, user.ID, services.ExtractSessionBinding(r))
+	// The URL is bound to the browser session; without its cookie the URL
+	// would work for anyone holding it until it expires.
+	binding := services.ExtractSessionBinding(r)
+	if binding == "" {
+		_ = codedForbiddenError(w, r, errPersonalDataExportNoSession, "data_export.session_required")
+		return
+	}
+	url, expiresAt, err := api.signer.GeneratePersonalDataExportURL(e.ID, user.ID, binding)
 	if err != nil {
 		_ = internalServerError(w, r, err)
 		return

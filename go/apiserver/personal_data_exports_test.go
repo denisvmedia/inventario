@@ -48,9 +48,20 @@ func requestPersonalDataExport(c *qt.C, env *apiTokenEnv) apiserver.PersonalData
 	return view
 }
 
+// browserSession is the refresh-token cookie of the test's browser session;
+// a download URL is bound to it.
+const browserSession = "browser-session"
+
 func downloadURL(c *qt.C, env *apiTokenEnv, id string) apiserver.PersonalDataExportDownloadURLResponse {
 	c.Helper()
-	rr := env.session(http.MethodPost, personalDataExportsPath+"/"+id+"/download-url", nil)
+	rr := env.do(apiTokenRequest{
+		method: http.MethodPost, path: personalDataExportsPath + "/" + id + "/download-url",
+		headers: map[string][]string{
+			"Authorization": {"Bearer " + createTestJWTToken(env.user.ID)},
+			"X-CSRF-Token":  {must.Must(env.csrf.GenerateToken(context.Background(), env.user.ID))},
+		},
+		cookies: []*http.Cookie{refreshCookie(browserSession)},
+	})
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf(rr.Body.String()))
 	var resp apiserver.PersonalDataExportDownloadURLResponse
 	c.Assert(json.Unmarshal(rr.Body.Bytes(), &resp), qt.IsNil)
@@ -87,8 +98,13 @@ func TestPersonalDataExports_RequestListAndDownload(t *testing.T) {
 	c.Assert(list.NextRequestAt, qt.IsNotNil)
 
 	signed := downloadURL(c, env, view.ID)
-	download := env.do(apiTokenRequest{method: http.MethodGet, path: signed.URL})
+	download := env.do(apiTokenRequest{method: http.MethodGet, path: signed.URL, cookies: []*http.Cookie{refreshCookie(browserSession)}})
 	c.Assert(download.Code, qt.Equals, http.StatusOK, qt.Commentf(download.Body.String()))
+
+	// Without the session's cookie, no URL is minted: it could not be bound.
+	unbound := env.session(http.MethodPost, personalDataExportsPath+"/"+view.ID+"/download-url", nil)
+	c.Assert(unbound.Code, qt.Equals, http.StatusForbidden)
+	c.Assert(errorCode(c, unbound), qt.Equals, "data_export.session_required")
 	c.Assert(download.Header().Get("Content-Type"), qt.Equals, "application/gzip")
 	c.Assert(download.Header().Get("Content-Disposition"), qt.Contains, "attachment")
 	gz, err := gzip.NewReader(download.Body)
@@ -170,12 +186,14 @@ func TestPersonalDataExports_OnlyTheOwnerReachesThem(t *testing.T) {
 	q := u.Query()
 	q.Set("uid", other.ID)
 	u.RawQuery = q.Encode()
-	tampered := env.do(apiTokenRequest{method: http.MethodGet, path: u.String()})
+	tampered := env.do(apiTokenRequest{method: http.MethodGet, path: u.String(), cookies: []*http.Cookie{refreshCookie(browserSession)}})
 	c.Assert(tampered.Code, qt.Equals, http.StatusUnauthorized)
 
 	// The URL is bound to the session it was minted for.
 	otherSession := env.do(apiTokenRequest{method: http.MethodGet, path: signed.URL, cookies: []*http.Cookie{refreshCookie("another-session")}})
 	c.Assert(otherSession.Code, qt.Equals, http.StatusUnauthorized)
+	noSession := env.do(apiTokenRequest{method: http.MethodGet, path: signed.URL})
+	c.Assert(noSession.Code, qt.Equals, http.StatusUnauthorized)
 }
 
 func TestPersonalDataExports_RefusedWhileImpersonating(t *testing.T) {

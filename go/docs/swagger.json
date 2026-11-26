@@ -12441,7 +12441,7 @@
         },
         "/users/me/data-exports/{id}/download-url": {
             "post": {
-                "description": "Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only\nfor a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one\n409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden.",
+                "description": "Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only\nfor a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one\n409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works\nonly with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403\ndata_export.session_required.",
                 "produces": [
                     "application/json"
                 ],
