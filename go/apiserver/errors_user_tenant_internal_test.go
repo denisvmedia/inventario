@@ -35,10 +35,22 @@ func TestToJSONAPIError_UserTenantMoveBlocked(t *testing.T) {
 	})
 }
 
-func TestToJSONAPIError_UserTenantChanged(t *testing.T) {
-	c := qt.New(t)
-
-	jsErr := toJSONAPIError(errxtrace.Classify(registry.ErrUserTenantChanged))
-	c.Assert(jsErr.HTTPStatusCode, qt.Equals, http.StatusConflict)
-	c.Assert(jsErr.Code, qt.Equals, "user.tenant_changed")
+func TestToJSONAPIError_UserTenantGuards(t *testing.T) {
+	tests := []struct {
+		err    error
+		status int
+		code   string
+	}{
+		{registry.ErrUserTenantChanged, http.StatusConflict, "user.tenant_changed"},
+		{registry.ErrUserChangedDuringMove, http.StatusConflict, "user.changed_during_move"},
+		{registry.ErrTenantNotActive, http.StatusUnprocessableEntity, "tenant.not_active"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.code, func(t *testing.T) {
+			c := qt.New(t)
+			jsErr := toJSONAPIError(errxtrace.Classify(tt.err))
+			c.Assert(jsErr.HTTPStatusCode, qt.Equals, tt.status)
+			c.Assert(jsErr.Code, qt.Equals, tt.code)
+		})
+	}
 }

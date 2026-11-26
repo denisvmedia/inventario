@@ -613,7 +613,9 @@ when to add an entry and where it goes.
   ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
 - `inventario db migrate data`, and with it the Helm chart's init-data job,
   never moves a user between tenants. When the admin email exists only in
-  another tenant, the run fails and names that tenant
+  another tenant, the run warns, names that tenant and creates no admin. It
+  fails instead when the default tenant did not exist before the run, as on
+  a database restored under another tenant id
   ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
 - New profile photos are stored under their tenant's prefix,
   `t/<tenant>/avatars/<user>/...`, instead of `avatars/<user>/...`. Photos

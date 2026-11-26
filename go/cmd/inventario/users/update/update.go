@@ -58,7 +58,9 @@ token is deleted, so the user signs in again. The password, MFA, language and
 other settings, linked sign-in providers and login history move with the user.
 The profile photo is copied into the new tenant's storage, which is why the
 command needs the same --upload-location the server uses. A --dry-run with
---tenant reports whether the move would be allowed.
+--tenant runs the checks the move runs before it writes: the target tenant
+exists and is active, no user there has the same email, the user owns nothing,
+and the photo is in the upload location.
 
 To grant or revoke platform-wide system-admin privileges use
 'inventario admin grant-system-admin' / 'revoke-system-admin' instead — that
@@ -181,35 +183,39 @@ func (c *Command) updateUser(cfg *Config, dbConfig *shared.DatabaseConfig, idOrE
 	fmt.Fprintln(out)
 
 	moving := req.TenantID != nil && *req.TenantID != originalUser.TenantID
+	if moving {
+		// A move copies the profile photo, so the dry run checks the same
+		// storage the live run copies from.
+		wireAvatarStorage(cfg, adminService)
+	}
 
 	// Handle dry run
 	if cfg.DryRun {
 		if moving {
-			if err := c.reportTenantMoveCheck(adminService, originalUser); err != nil {
-				return err
-			}
+			c.reportTenantMoveCheck(adminService, originalUser, *req.TenantID)
 		}
 		fmt.Fprintln(out, "💡 This is a dry run. To perform the actual update, run the command without --dry-run")
 		return nil
 	}
 
-	return c.applyUpdate(cfg, adminService, idOrEmail, req, moving)
+	return c.applyUpdate(adminService, idOrEmail, req, moving)
 }
 
-// applyUpdate runs a live update. A tenant move also needs the photo storage,
-// and a refused move prints what blocks it.
+// wireAvatarStorage gives the admin service the photo storage a tenant move
+// copies the profile photo in: --upload-location, or the default location.
+func wireAvatarStorage(cfg *Config, adminService *admin.Service) {
+	uploadLocation := strings.TrimSpace(cfg.UploadLocation)
+	if uploadLocation == "" {
+		uploadLocation = defaults.GetUploadLocation()
+	}
+	adminService.SetAvatarService(services.NewAvatarService(adminService.FactorySet(), filekit.NormalizeFileURL(uploadLocation)))
+}
+
+// applyUpdate runs a live update. A refused tenant move prints what blocks it.
 //
 //revive:disable-next-line:flag-parameter // moving is derived from req and the stored user by the caller, which already has both.
-func (c *Command) applyUpdate(cfg *Config, adminService *admin.Service, idOrEmail string, req admin.UserUpdateRequest, moving bool) error {
+func (c *Command) applyUpdate(adminService *admin.Service, idOrEmail string, req admin.UserUpdateRequest, moving bool) error {
 	out := c.Cmd().OutOrStdout()
-	if moving {
-		uploadLocation := strings.TrimSpace(cfg.UploadLocation)
-		if uploadLocation == "" {
-			uploadLocation = defaults.GetUploadLocation()
-		}
-		adminService.SetAvatarService(services.NewAvatarService(adminService.FactorySet(), filekit.NormalizeFileURL(uploadLocation)))
-	}
-
 	updatedUser, err := adminService.UpdateUser(context.Background(), idOrEmail, req)
 	if blocked, ok := errors.AsType[*registry.UserTenantMoveBlockedError](err); ok {
 		printTenantMoveBlocked(out, blocked.Owned)
@@ -316,20 +322,20 @@ func (c *Command) collectPassword() (string, error) {
 }
 
 // reportTenantMoveCheck prints, for a dry run, whether the tenant move would
-// be allowed.
-func (c *Command) reportTenantMoveCheck(adminService *admin.Service, user *models.User) error {
+// go through. It runs the checks the live move runs before it writes.
+func (c *Command) reportTenantMoveCheck(adminService *admin.Service, user *models.User, tenantID string) {
 	out := c.Cmd().OutOrStdout()
-	owned, err := adminService.CountUserOwnedContent(context.Background(), user.ID)
+	err := adminService.CheckUserTenantMove(context.Background(), user.ID, tenantID)
+	if blocked, ok := errors.AsType[*registry.UserTenantMoveBlockedError](err); ok {
+		printTenantMoveBlocked(out, blocked.Owned)
+		return
+	}
 	if err != nil {
-		return fmt.Errorf("failed to check whether the user can move: %w", err)
+		fmt.Fprintf(out, "Tenant move check: the move would fail: %v\n\n", err)
+		return
 	}
-	if owned.IsEmpty() {
-		fmt.Fprintln(out, "Tenant move check: allowed (the user belongs to no group and owns no content).")
-		fmt.Fprintln(out)
-		return nil
-	}
-	printTenantMoveBlocked(out, owned)
-	return nil
+	fmt.Fprintln(out, "Tenant move check: allowed (the user belongs to no group and owns no content).")
+	fmt.Fprintln(out)
 }
 
 // printTenantMoveBlocked lists what keeps the user in their tenant.

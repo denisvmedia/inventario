@@ -491,9 +491,16 @@ const (
 	// in, either because it tried to move the user or because the user moved
 	// since the copy it was built from was read.
 	userTenantChangedCode = "user.tenant_changed"
+	// userChangedDuringMoveCode: the user's profile photo changed while they
+	// were being moved; reading them again and retrying is safe.
+	userChangedDuringMoveCode = "user.changed_during_move"
+	// tenantNotActiveCode: the tenant a user would move into is suspended or
+	// inactive.
+	tenantNotActiveCode = "tenant.not_active"
 )
 
-// userTenantSentinelJSONAPIError maps the user tenant guards (#2179) to 409.
+// userTenantSentinelJSONAPIError maps the user tenant guards (#2179): a move
+// into a tenant that is not active is 422, the others are 409.
 func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	var code string
 	var meta map[string]any
@@ -508,6 +515,16 @@ func userTenantSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 		}
 	case errors.Is(err, registry.ErrUserTenantChanged):
 		code = userTenantChangedCode
+	case errors.Is(err, registry.ErrUserChangedDuringMove):
+		code = userChangedDuringMoveCode
+	case errors.Is(err, registry.ErrTenantNotActive):
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusUnprocessableEntity,
+			StatusText:     http.StatusText(http.StatusUnprocessableEntity),
+			Code:           tenantNotActiveCode,
+		}, true
 	default:
 		return jsonapi.Error{}, false
 	}

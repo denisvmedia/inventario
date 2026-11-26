@@ -133,12 +133,14 @@ func validateUserTenantMove(move registry.UserTenantMove) error {
 	return nil
 }
 
-// lockUser locks the users row and checks it is still in the source tenant. It
-// returns the user's email for the collision check.
+// lockUser locks the users row and checks it is still in the source tenant
+// with the photo the caller copied. It returns the user's email for the
+// collision check.
 func (m *UserTenantMover) lockUser(ctx context.Context, tx *sqlx.Tx, move registry.UserTenantMove) (string, error) {
 	var tenantID, email string
-	query := fmt.Sprintf("SELECT tenant_id, email FROM %s WHERE id = $1 FOR UPDATE", m.tableNames.Users())
-	err := tx.QueryRowContext(ctx, query, move.UserID).Scan(&tenantID, &email)
+	var avatarPath *string
+	query := fmt.Sprintf("SELECT tenant_id, email, avatar_path FROM %s WHERE id = $1 FOR UPDATE", m.tableNames.Users())
+	err := tx.QueryRowContext(ctx, query, move.UserID).Scan(&tenantID, &email, &avatarPath)
 	if errors.Is(err, sql.ErrNoRows) {
 		return "", errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "User", "entity_id", move.UserID))
 	}
@@ -149,19 +151,26 @@ func (m *UserTenantMover) lockUser(ctx context.Context, tx *sqlx.Tx, move regist
 		return "", errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
 			"user_id", move.UserID, "tenant_id", tenantID, "expected_tenant_id", move.FromTenantID))
 	}
+	if !move.PhotoUnchanged(avatarPath) {
+		return "", errxtrace.Classify(registry.ErrUserChangedDuringMove, errx.Attrs("user_id", move.UserID))
+	}
 	return email, nil
 }
 
-// checkTarget checks that the target tenant exists and has no other user with
-// the same email.
+// checkTarget checks that the target tenant exists, is active and has no other
+// user with the same email.
 func (m *UserTenantMover) checkTarget(ctx context.Context, tx *sqlx.Tx, move registry.UserTenantMove, email string) error {
-	var tenantExists bool
-	query := fmt.Sprintf("SELECT EXISTS (SELECT 1 FROM %s WHERE id = $1)", m.tableNames.Tenants())
-	if err := tx.QueryRowContext(ctx, query, move.ToTenantID).Scan(&tenantExists); err != nil {
+	var status models.TenantStatus
+	query := fmt.Sprintf("SELECT status FROM %s WHERE id = $1", m.tableNames.Tenants())
+	err := tx.QueryRowContext(ctx, query, move.ToTenantID).Scan(&status)
+	if errors.Is(err, sql.ErrNoRows) {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant", "entity_id", move.ToTenantID))
+	}
+	if err != nil {
 		return errxtrace.Wrap("failed to check the target tenant", err)
 	}
-	if !tenantExists {
-		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Tenant", "entity_id", move.ToTenantID))
+	if status != models.TenantStatusActive {
+		return errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", move.ToTenantID, "status", status))
 	}
 
 	var emailTaken bool
@@ -196,10 +205,19 @@ func (m *UserTenantMover) moveUserRows(ctx context.Context, tx *sqlx.Tx, move re
 		"UPDATE %s SET tenant_id = $1, default_group_id = NULL, avatar_path = $2, updated_at = $3 WHERE id = $4",
 		m.tableNames.Users())
 	if _, err := tx.ExecContext(ctx, query, move.ToTenantID, move.AvatarPath, time.Now().UTC(), move.UserID); err != nil {
+		// The email check above runs under the users row lock of this user
+		// only; another user with the same email can still be created in the
+		// target tenant before this commits. The unique index catches it.
+		if isUniqueViolationOn(err, usersTenantEmailIndex) {
+			return errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("tenant_id", move.ToTenantID))
+		}
 		return errxtrace.Wrap("failed to move the user", err)
 	}
 	return nil
 }
+
+// usersTenantEmailIndex is the unique index on users(tenant_id, email).
+const usersTenantEmailIndex = "users_tenant_email_idx"
 
 func (m *UserTenantMover) readUser(ctx context.Context, tx *sqlx.Tx, userID string) (*models.User, error) {
 	var user models.User

@@ -137,8 +137,10 @@ func TestDataSetupManager_SetupInitialDataset_CreateAdminUser(t *testing.T) {
 	c.Assert(user.TenantID, qt.Equals, opts.DefaultTenantID)
 }
 
-// Setup never moves a user between tenants (#2179): an admin email found only
-// in another tenant fails the run, names the tenant, and nothing is written.
+// Setup never moves a user between tenants (#2179). An admin email found only
+// in another tenant while the default tenant does not exist yet, as on a
+// database restored under another tenant ID, fails the run with the tenant
+// named, and nothing is written.
 func TestDataSetupManager_SetupInitialDataset_AdminInAnotherTenant(t *testing.T) {
 	c := qt.New(t)
 
@@ -167,7 +169,7 @@ func TestDataSetupManager_SetupInitialDataset_AdminInAnotherTenant(t *testing.T)
 		opts.DryRun = dryRun
 
 		_, err = manager.SetupInitialDataset(context.Background(), opts)
-		c.Assert(err, qt.ErrorMatches, `.*exists in tenant `+otherTenantID+`.*does not move users between tenants.*`, qt.Commentf("dry run: %v", dryRun))
+		c.Assert(err, qt.ErrorMatches, `.*exists in tenant `+otherTenantID+`, and the default tenant .* did not exist before this run.*`, qt.Commentf("dry run: %v", dryRun))
 	}
 
 	var tenantID string
@@ -178,6 +180,46 @@ func TestDataSetupManager_SetupInitialDataset_AdminInAnotherTenant(t *testing.T)
 	err = db.QueryRow("SELECT COUNT(*) FROM tenants WHERE id = $1", setup.DefaultSetupOptions().DefaultTenantID).Scan(&defaultTenants)
 	c.Assert(err, qt.IsNil)
 	c.Assert(defaultTenants, qt.Equals, 0)
+}
+
+// An admin an operator moved out of an existing default tenant stays where
+// they are: later runs warn, create no second admin and succeed, so the
+// init-data job keeps passing.
+func TestDataSetupManager_SetupInitialDataset_AdminMovedOutOfTheDefaultTenant(t *testing.T) {
+	c := qt.New(t)
+
+	db := setupTestDatabase(c)
+	defer db.Close()
+
+	opts := setup.DefaultSetupOptions()
+	opts.AdminEmail = "moved@example.com"
+	_, err := setup.NewDataSetupManager(db, nil).SetupInitialDataset(context.Background(), opts)
+	c.Assert(err, qt.IsNil)
+
+	otherTenantID := "temp-tenant-" + uuid.New().String()
+	_, err = db.Exec(`
+		INSERT INTO tenants (id, name, slug, domain, status, settings, created_at, updated_at)
+		VALUES ($1, $2, $3, NULL, 'active', '{}', $4, $5)`,
+		otherTenantID, "Other Tenant", "temp-"+uuid.New().String(), time.Now(), time.Now())
+	c.Assert(err, qt.IsNil)
+	_, err = db.Exec("UPDATE users SET tenant_id = $1 WHERE email = $2", otherTenantID, opts.AdminEmail)
+	c.Assert(err, qt.IsNil)
+
+	for _, dryRun := range []bool{true, false} {
+		var buf bytes.Buffer
+		opts.DryRun = dryRun
+		result, err := setup.NewDataSetupManager(db, &buf).SetupInitialDataset(context.Background(), opts)
+		c.Assert(err, qt.IsNil, qt.Commentf("dry run: %v", dryRun))
+		c.Assert(result.UsersCreated, qt.Equals, 0)
+		c.Assert(buf.String(), qt.Contains, "WARNING: admin user moved@example.com is in tenant "+otherTenantID)
+	}
+
+	var tenantID string
+	var users int
+	err = db.QueryRow("SELECT tenant_id, (SELECT COUNT(*) FROM users WHERE email = $1) FROM users WHERE email = $1", opts.AdminEmail).Scan(&tenantID, &users)
+	c.Assert(err, qt.IsNil)
+	c.Assert(tenantID, qt.Equals, otherTenantID)
+	c.Assert(users, qt.Equals, 1)
 }
 
 // An admin that already exists in the default tenant is reused, not created

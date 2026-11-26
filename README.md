@@ -197,7 +197,9 @@ Complete CRUD (Create, Read, Update, Delete) operations for users and tenants:
 > belongs to no group and owns or authored nothing in their tenant, typically
 > an account created in the wrong tenant. Otherwise the command refuses and
 > lists what blocks the move (for example "member of 2 groups, 14 items, 3
-> files"), and nothing changes; `--dry-run` runs the same check. A move signs
+> files"), and nothing changes. The target tenant must be active and must
+> have no user with the same email. `--dry-run` runs the same checks, the
+> photo storage included. A move signs
 > the user out everywhere (sessions and API tokens are deleted) and keeps
 > their password, second factor, linked sign-in accounts, language and other
 > settings. The profile photo is copied into the new tenant's storage, so pass

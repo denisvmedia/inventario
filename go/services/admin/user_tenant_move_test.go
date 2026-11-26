@@ -7,6 +7,7 @@ import (
 	"image"
 	"image/color"
 	"image/png"
+	"io"
 	"strings"
 	"testing"
 	"time"
@@ -135,6 +136,25 @@ func (e *moveEnv) blobExists(c *qt.C, key string) bool {
 	ok, err := b.Exists(e.ctx, key)
 	c.Assert(err, qt.IsNil)
 	return ok
+}
+
+// blobKeys lists the keys under prefix in the upload location.
+func (e *moveEnv) blobKeys(c *qt.C, prefix string) []string {
+	c.Helper()
+	b, err := blob.OpenBucket(e.ctx, e.location)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+	var keys []string
+	iter := b.List(&blob.ListOptions{Prefix: prefix})
+	for {
+		obj, err := iter.Next(e.ctx)
+		if errors.Is(err, io.EOF) {
+			break
+		}
+		c.Assert(err, qt.IsNil)
+		keys = append(keys, obj.Key)
+	}
+	return keys
 }
 
 // otherOwnersGroup is a group of the source tenant that someone else created
@@ -382,6 +402,7 @@ func TestService_UpdateUser_MoveToAMissingTenant(t *testing.T) {
 func TestService_UpdateUser_MoveRefusesATakenEmail(t *testing.T) {
 	c := qt.New(t)
 	env := newMoveEnv(c)
+	photo := env.storePhoto(c)
 	_, err := env.fs.UserRegistry.Create(env.ctx, models.User{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: env.to},
 		Email:               env.user.Email,
@@ -396,4 +417,66 @@ func TestService_UpdateUser_MoveRefusesATakenEmail(t *testing.T) {
 	stored, err := env.fs.UserRegistry.Get(env.ctx, env.user.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(stored.TenantID, qt.Equals, env.from)
+	c.Assert(*stored.AvatarPath, qt.Equals, photo)
+	c.Assert(env.blobExists(c, photo), qt.IsTrue)
+	c.Assert(env.blobKeys(c, "t/"+env.to+"/avatars/"), qt.HasLen, 0)
+}
+
+// A suspended or inactive tenant takes no users.
+func TestService_UpdateUser_MoveRefusesATenantThatIsNotActive(t *testing.T) {
+	c := qt.New(t)
+	env := newMoveEnv(c)
+	target, err := env.fs.TenantRegistry.Get(env.ctx, env.to)
+	c.Assert(err, qt.IsNil)
+	target.Status = models.TenantStatusSuspended
+	_, err = env.fs.TenantRegistry.Update(env.ctx, *target)
+	c.Assert(err, qt.IsNil)
+
+	_, err = env.svc.UpdateUser(env.ctx, env.user.ID, admin.UserUpdateRequest{TenantID: new(env.to)})
+	c.Assert(err, qt.ErrorIs, registry.ErrTenantNotActive)
+
+	stored, err := env.fs.UserRegistry.Get(env.ctx, env.user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.TenantID, qt.Equals, env.from)
+}
+
+// A photo the configured storage does not hold, as with a wrong
+// --upload-location, stops the move before anything changes. The dry-run check
+// reports the same.
+func TestService_UpdateUser_MoveRefusesAPhotoTheStorageDoesNotHold(t *testing.T) {
+	c := qt.New(t)
+	env := newMoveEnv(c)
+	env.storePhoto(c)
+	env.svc.SetAvatarService(services.NewAvatarService(env.fs, "file://"+c.TempDir()+"?create_dir=1"))
+
+	c.Assert(env.svc.CheckUserTenantMove(env.ctx, env.user.ID, env.to), qt.ErrorIs, registry.ErrNotFound)
+	_, err := env.svc.UpdateUser(env.ctx, env.user.ID, admin.UserUpdateRequest{TenantID: new(env.to)})
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	stored, err := env.fs.UserRegistry.Get(env.ctx, env.user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.TenantID, qt.Equals, env.from)
+	sessions, err := env.fs.RefreshTokenRegistry.GetByUserID(env.ctx, env.user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(sessions, qt.HasLen, 1)
+}
+
+// The check a dry run makes changes nothing and reports what the move would
+// stop at.
+func TestService_CheckUserTenantMove(t *testing.T) {
+	c := qt.New(t)
+	env := newMoveEnv(c)
+	env.storePhoto(c)
+
+	c.Assert(env.svc.CheckUserTenantMove(env.ctx, env.user.Email, env.to), qt.IsNil)
+	c.Assert(env.svc.CheckUserTenantMove(env.ctx, env.user.Email, "no-such-tenant"), qt.ErrorIs, registry.ErrNotFound)
+
+	env.seedCommodity(c, env.otherOwnersGroup(c))
+	err := env.svc.CheckUserTenantMove(env.ctx, env.user.Email, env.to)
+	c.Assert(err, qt.ErrorIs, registry.ErrUserTenantMoveBlocked)
+
+	stored, err := env.fs.UserRegistry.Get(env.ctx, env.user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.TenantID, qt.Equals, env.from)
+	c.Assert(env.blobKeys(c, "t/"+env.to+"/avatars/"), qt.HasLen, 0)
 }

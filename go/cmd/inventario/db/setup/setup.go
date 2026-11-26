@@ -106,7 +106,9 @@ func (m *DataSetupManager) SetupInitialDataset(ctx context.Context, opts SetupOp
 
 	// Step 4: Assign user_id to all entities
 	m.printf("Step 4: Assigning user IDs to entities...\n")
-	if err := m.assignUserIDsToEntities(ctx, tx, opts, adminUserID, result); err != nil {
+	if adminUserID == "" {
+		m.printf("  Skipped: there is no admin user in the default tenant to assign them to\n")
+	} else if err := m.assignUserIDsToEntities(ctx, tx, opts, adminUserID, result); err != nil {
 		return result, fmt.Errorf("failed to assign user IDs to entities: %w", err)
 	}
 
@@ -233,9 +235,8 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 	// tenant. Setup never moves a user between tenants: a move is allowed only
 	// for a user who belongs to no group and owns no content (#2179), and it
 	// needs the photo storage, so it is left to `inventario users update
-	// --tenant`. An admin found only in another tenant is reported instead of
-	// being moved, which on a restored database would strand them away from
-	// the restored data.
+	// --tenant`. An admin found only in another tenant is left where they are;
+	// see adminInAnotherTenant.
 	var existingUserID string
 	err := tx.QueryRowContext(ctx, "SELECT id FROM users WHERE email = $1 AND tenant_id = $2",
 		opts.AdminEmail, opts.DefaultTenantID).Scan(&existingUserID)
@@ -255,11 +256,7 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 		return m.assignAdminToDefaultTenant(ctx, tx, opts, result, otherUserID)
 	}
 	if err == nil {
-		return "", fmt.Errorf(
-			"admin user %s exists in tenant %s, not in the default tenant %s; setup does not move users between tenants. "+
-				"Pass --default-tenant-id=%s, or move the user with `inventario users update %s --tenant=%s` "+
-				"(allowed only for a user with no groups and no content)",
-			opts.AdminEmail, otherTenantID, opts.DefaultTenantID, otherTenantID, opts.AdminEmail, opts.DefaultTenantID)
+		return "", m.adminInAnotherTenant(opts, result, otherTenantID)
 	}
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", fmt.Errorf("failed to check user existence: %w", err)
@@ -305,6 +302,25 @@ func (m *DataSetupManager) createOrUpdateAdminUser(ctx context.Context, tx *sql.
 	result.UsersCreated = 1
 	m.printf("  ✅ Created admin user: %s\n", opts.AdminName)
 	return adminUserID, nil
+}
+
+// adminInAnotherTenant handles an admin email that exists only in another
+// tenant. When this run created the default tenant, the database most likely
+// holds restored data under another tenant ID than the one configured, and
+// carrying on would set up an empty default tenant next to it, so the run
+// fails. When the default tenant was already there, an operator moved the
+// admin on purpose: the run warns and goes on without creating or moving
+// anyone, and returns no admin ID.
+func (m *DataSetupManager) adminInAnotherTenant(opts SetupOptions, result *SetupResult, otherTenantID string) error {
+	if result.TenantsCreated > 0 {
+		return fmt.Errorf(
+			"admin user %s exists in tenant %s, and the default tenant %s did not exist before this run; "+
+				"setup does not move users between tenants",
+			opts.AdminEmail, otherTenantID, opts.DefaultTenantID)
+	}
+	m.printf("  WARNING: admin user %s is in tenant %s, not in the default tenant %s; "+
+		"setup leaves them there and creates no admin\n", opts.AdminEmail, otherTenantID, opts.DefaultTenantID)
+	return nil
 }
 
 // assignAdminToDefaultTenant puts an admin user that has no tenant into the

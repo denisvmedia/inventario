@@ -61,8 +61,12 @@ func (m *UserTenantMover) MoveUserToTenant(ctx context.Context, move registry.Us
 		return nil, errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
 			"user_id", move.UserID, "tenant_id", current.TenantID, "expected_tenant_id", move.FromTenantID))
 	}
-	if _, err := m.fs.TenantRegistry.Get(ctx, move.ToTenantID); err != nil {
+	target, err := m.fs.TenantRegistry.Get(ctx, move.ToTenantID)
+	if err != nil {
 		return nil, errxtrace.Wrap("failed to find the target tenant", err)
+	}
+	if target.Status != models.TenantStatusActive {
+		return nil, errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", move.ToTenantID, "status", target.Status))
 	}
 
 	counts, err := countOwnedContent(ctx, ownedSources(m.fs), move.UserID, func(src ownedSource) bool {

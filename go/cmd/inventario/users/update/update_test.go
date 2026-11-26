@@ -252,6 +252,40 @@ func TestCommand_DryRun_ReportsTenantMoveCheck(t *testing.T) {
 	c.Assert(unchanged.TenantID, qt.Equals, "test-tenant")
 }
 
+// TestCommand_DryRun_ChecksWhatTheMoveChecks verifies that a dry run stops at
+// what the live move would stop at, the photo storage included, and changes
+// nothing.
+func TestCommand_DryRun_ChecksWhatTheMoveChecks(t *testing.T) {
+	c := qt.New(t)
+
+	fs, userID := seededRegistry(c)
+	seedSecondTenant(c, fs, "other-tenant")
+	user := readUser(c, fs, userID)
+	user.AvatarPath = new("t/test-tenant/avatars/" + userID + "/1-abcdef012345.jpg")
+	_, err := fs.UserRegistry.Update(context.Background(), *user)
+	c.Assert(err, qt.IsNil)
+
+	cmd := update.New(&shared.DatabaseConfig{DBDSN: testDSN})
+	cobraCmd := cmd.Cmd()
+
+	var out bytes.Buffer
+	cobraCmd.SetOut(&out)
+	cobraCmd.SetArgs([]string{
+		"user@example.com",
+		"--tenant=other-tenant",
+		"--upload-location=mem://",
+		"--dry-run",
+	})
+
+	err = cobraCmd.Execute()
+	c.Assert(err, qt.IsNil)
+	c.Assert(out.String(), qt.Contains, "Tenant move check: the move would fail")
+	c.Assert(out.String(), qt.Contains, "profile photo")
+
+	unchanged := readUser(c, fs, userID)
+	c.Assert(unchanged.TenantID, qt.Equals, "test-tenant")
+}
+
 // seedMembership puts the user into a new group of their tenant.
 func seedMembership(c *qt.C, fs *registry.FactorySet, userID string) {
 	ctx := context.Background()

@@ -201,8 +201,8 @@ func TestUserTenantMover_Postgres_RefusesAGroupMember(t *testing.T) {
 	c.Assert(f.sessions(c, f.admin), qt.Equals, 1)
 }
 
-// Loans and item history carry no foreign key to users (#2882), so the count
-// reads them by column, not through the schema's references.
+// Loans and item history are not in the account-deletion pre-check (#2882),
+// but they tie the user to the tenant all the same, so the move counts them.
 func TestUserTenantMover_Postgres_RefusesALenderAndEditor(t *testing.T) {
 	c := qt.New(t)
 	f := newMoverPGFixture(t)
@@ -345,6 +345,105 @@ func TestUserTenantMover_Postgres_WaitsForAConcurrentMembership(t *testing.T) {
 	c.Assert(f.storedTenant(c, user), qt.Equals, f.from)
 }
 
+// A user who once accepted an invite leaves that audit row in the tenant they
+// left. Deleting their account later still works: the purge finds the row by
+// user in any tenant, so the final users delete is not blocked by its foreign
+// key.
+func TestUserPurger_Postgres_DeletesAMovedUserWithInviteAudit(t *testing.T) {
+	c := qt.New(t)
+	f := newMoverPGFixture(t)
+	user := f.newUser(c, "accepted-once@test-org.com")
+	now := time.Now()
+	_, err := f.fs.GroupInviteAuditRegistry.Create(appctx.WithUser(f.ctx, f.admin), models.GroupInviteAudit{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: f.from},
+		OriginalInviteID:    "orig-invite",
+		OriginalInviteUUID:  "orig-uuid",
+		OriginalGroupID:     "orig-group",
+		OriginalGroupSlug:   "orig-group-slug",
+		OriginalGroupName:   "Orig Group",
+		Token:               "token-accepted-once",
+		CreatedBy:           f.admin.ID,
+		UsedBy:              user.ID,
+		OriginalCreatedAt:   now.Add(-time.Hour),
+		OriginalExpiresAt:   now.Add(time.Hour),
+		UsedAt:              now,
+	})
+	c.Assert(err, qt.IsNil)
+
+	_, err = f.move(user)
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(f.fs.UserPurger.PurgeUserDependents(f.ctx, f.to, user.ID), qt.IsNil)
+	c.Assert(f.fs.UserRegistry.Delete(f.ctx, user.ID), qt.IsNil)
+}
+
+// A move refuses a user whose photo is not the one the caller read and copied,
+// so a photo uploaded meanwhile is neither lost nor left behind.
+func TestUserTenantMover_Postgres_RefusesAChangedPhoto(t *testing.T) {
+	c := qt.New(t)
+	f := newMoverPGFixture(t)
+	user := f.newUser(c, "new-photo@test-org.com")
+
+	_, err := f.fs.UserTenantMover.MoveUserToTenant(f.ctx, registry.UserTenantMove{
+		UserID: user.ID, FromTenantID: f.from, ToTenantID: f.to, FromAvatarPath: new("t/" + f.from + "/avatars/" + user.ID + "/1-abcdef012345.jpg"),
+	})
+	c.Assert(err, qt.ErrorIs, registry.ErrUserChangedDuringMove)
+	c.Assert(f.storedTenant(c, user), qt.Equals, f.from)
+}
+
+// A suspended tenant takes no users.
+func TestUserTenantMover_Postgres_RefusesATenantThatIsNotActive(t *testing.T) {
+	c := qt.New(t)
+	f := newMoverPGFixture(t)
+	user := f.newUser(c, "to-suspended@test-org.com")
+	target, err := f.fs.TenantRegistry.Get(f.ctx, f.to)
+	c.Assert(err, qt.IsNil)
+	target.Status = models.TenantStatusSuspended
+	_, err = f.fs.TenantRegistry.Update(f.ctx, *target)
+	c.Assert(err, qt.IsNil)
+
+	_, err = f.move(user)
+	c.Assert(err, qt.ErrorIs, registry.ErrTenantNotActive)
+	c.Assert(f.storedTenant(c, user), qt.Equals, f.from)
+}
+
+// A user with the same email created in the target tenant while the move runs
+// is not seen by the move's email check; the unique index catches it, and the
+// move reports the email as taken.
+func TestUserTenantMover_Postgres_EmailTakenWhileMoving(t *testing.T) {
+	c := qt.New(t)
+	f := newMoverPGFixture(t)
+	user := f.newUser(c, "racing-email@test-org.com")
+
+	inserted := make(chan struct{})
+	release := make(chan struct{})
+	insertDone := make(chan error, 1)
+	go func() {
+		insertDone <- store.DoAsBackgroundWorker(f.ctx, f.dbx, func(ctx context.Context, tx *sqlx.Tx) error {
+			_, err := tx.ExecContext(ctx, `
+				INSERT INTO users (id, email, password_hash, name, is_active, tenant_id, created_at, updated_at)
+				VALUES ($1, $2, 'hash', 'Same Email', true, $3, $4, $4)`,
+				uuid.New().String(), user.Email, f.to, time.Now())
+			close(inserted)
+			<-release
+			return err
+		})
+	}()
+	<-inserted
+
+	moveDone := make(chan error, 1)
+	go func() {
+		_, err := f.move(user)
+		moveDone <- err
+	}()
+	c.Assert(waitForBlockedLock(f.ctx, f.dbx), qt.IsTrue, qt.Commentf("the move never waited on the unique index"))
+	close(release)
+
+	c.Assert(<-insertDone, qt.IsNil)
+	c.Assert(<-moveDone, qt.ErrorIs, registry.ErrEmailAlreadyExists)
+	c.Assert(f.storedTenant(c, user), qt.Equals, f.from)
+}
+
 // waitForBlockedLock reports whether some backend is waiting for a lock within
 // a few seconds.
 func waitForBlockedLock(ctx context.Context, dbx *sqlx.DB) bool {
@@ -362,16 +461,30 @@ func waitForBlockedLock(ctx context.Context, dbx *sqlx.DB) bool {
 // userTenantMoveUnchanged are user references a move leaves as they are. Each
 // entry says why.
 var userTenantMoveUnchanged = map[string]string{
-	// The audit trail records what happened in the tenant it happened in.
+	// The audit trail records what happened in the tenant it happened in. The
+	// user purger deletes the invite audit rows by user in any tenant.
 	"audit_logs.user_id":             "audit trail",
 	"group_invites_audit.created_by": "audit trail",
 	"group_invites_audit.used_by":    "audit trail",
+	// Who moved an item or a file to Trash; the row belongs to the group.
+	"commodities.deleted_by": "trash attribution",
+	"files.deleted_by":       "trash attribution",
 	// An accepted invite is the record of a join, not content. A user who
 	// still belongs to the group is refused through their membership.
 	"group_invites.used_by": "record of a past join",
 	// The system administrator privilege has no tenant.
 	"system_admin_grants.user_id":    "not tenant-scoped",
 	"system_admin_grants.granted_by": "not tenant-scoped",
+}
+
+// userReferenceLookalikes match the column-name filter but do not name a user
+// of a tenant.
+var userReferenceLookalikes = map[string]string{
+	"audit_logs.impersonated_by":                     "a back-office operator",
+	"backoffice_refresh_tokens.backoffice_user_id":   "a back-office user",
+	"backoffice_user_mfa_secrets.backoffice_user_id": "a back-office user",
+	"user_oauth_identities.provider_user_id":         "the account id at the sign-in provider",
+	"worker_control.paused_by":                       "a back-office operator",
 }
 
 // Every column that names a user, by foreign key or by name, is either content
@@ -400,7 +513,7 @@ func TestUserTenantMove_CoversEveryUserReference(t *testing.T) {
 		FROM information_schema.columns
 		WHERE table_schema = current_schema()
 		  AND table_name <> 'users'
-		  AND column_name IN ('user_id', 'created_by_user_id', 'member_user_id', 'created_by', 'used_by')
+		  AND (column_name LIKE '%\_by' OR column_name LIKE '%user\_id')
 		ORDER BY 1`)
 	c.Assert(err, qt.IsNil)
 	defer rows.Close()
@@ -424,6 +537,9 @@ func TestUserTenantMove_CoversEveryUserReference(t *testing.T) {
 		if _, ok := userTenantMoveUnchanged[ref]; ok {
 			continue
 		}
+		if _, ok := userReferenceLookalikes[ref]; ok {
+			continue
+		}
 		missing = append(missing, ref)
 	}
 	sort.Strings(missing)
@@ -439,5 +555,8 @@ func TestUserTenantMove_CoversEveryUserReference(t *testing.T) {
 	}
 	for ref, reason := range userTenantMoveUnchanged {
 		c.Check(present[ref], qt.IsTrue, qt.Commentf("%s is left unchanged (%s) but is not in the schema", ref, reason))
+	}
+	for ref, reason := range userReferenceLookalikes {
+		c.Check(present[ref], qt.IsTrue, qt.Commentf("%s is excluded (%s) but is not in the schema", ref, reason))
 	}
 }

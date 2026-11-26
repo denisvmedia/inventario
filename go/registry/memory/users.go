@@ -124,7 +124,8 @@ func (r *UserRegistry) Update(_ context.Context, user models.User) (*models.User
 
 // moveToTenant rewrites the users row for UserTenantMover: the new tenant, no
 // default group and the given avatar path. It refuses a user who is no longer
-// in fromTenantID and an email another user of the target tenant has.
+// in move.FromTenantID or no longer has move.FromAvatarPath, and an email
+// another user of the target tenant has.
 func (r *UserRegistry) moveToTenant(move registry.UserTenantMove, now time.Time) (*models.User, error) {
 	r.lock.Lock()
 	defer r.lock.Unlock()
@@ -136,6 +137,9 @@ func (r *UserRegistry) moveToTenant(move registry.UserTenantMove, now time.Time)
 	if existing.TenantID != move.FromTenantID {
 		return nil, errxtrace.Classify(registry.ErrUserTenantChanged, errx.Attrs(
 			"user_id", move.UserID, "tenant_id", existing.TenantID, "expected_tenant_id", move.FromTenantID))
+	}
+	if !move.PhotoUnchanged(existing.AvatarPath) {
+		return nil, errxtrace.Classify(registry.ErrUserChangedDuringMove, errx.Attrs("user_id", move.UserID))
 	}
 	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
 		other := pair.Value

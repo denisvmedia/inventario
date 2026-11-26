@@ -113,3 +113,53 @@ func TestUserRegistry_Update_KeepsTheTenant(t *testing.T) {
 	_, err = fs.UserRegistry.Update(ctx, stale)
 	c.Assert(err, qt.ErrorIs, registry.ErrUserTenantChanged)
 }
+
+// A move refuses a user whose photo is not the one the caller read, so a photo
+// uploaded meanwhile is not lost.
+func TestUserTenantMover_RefusesAChangedPhoto(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	fs, user, to := newMoverFixture(c)
+
+	_, err := fs.UserTenantMover.MoveUserToTenant(ctx, registry.UserTenantMove{
+		UserID: user.ID, FromTenantID: user.TenantID, ToTenantID: to, FromAvatarPath: new("t/x/avatars/u/1-abcdef012345.jpg"),
+	})
+	c.Assert(err, qt.ErrorIs, registry.ErrUserChangedDuringMove)
+}
+
+func TestUserTenantMover_RefusesATenantThatIsNotActive(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	fs, user, to := newMoverFixture(c)
+	target, err := fs.TenantRegistry.Get(ctx, to)
+	c.Assert(err, qt.IsNil)
+	target.Status = models.TenantStatusInactive
+	_, err = fs.TenantRegistry.Update(ctx, *target)
+	c.Assert(err, qt.IsNil)
+
+	_, err = fs.UserTenantMover.MoveUserToTenant(ctx, registry.UserTenantMove{UserID: user.ID, FromTenantID: user.TenantID, ToTenantID: to})
+	c.Assert(err, qt.ErrorIs, registry.ErrTenantNotActive)
+}
+
+// The invite audit rows naming a moved user stay in the tenant they left; the
+// purge finds them there, so the account can still be deleted.
+func TestUserPurger_PurgesInviteAuditLeftInAnotherTenant(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	fs, user, to := newMoverFixture(c)
+	audit, err := fs.GroupInviteAuditRegistry.Create(ctx, models.GroupInviteAudit{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: user.TenantID},
+		OriginalInviteID:    "invite",
+		OriginalGroupID:     "group",
+		Token:               "token",
+		CreatedBy:           "someone-else",
+		UsedBy:              user.ID,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fs.UserTenantMover.MoveUserToTenant(ctx, registry.UserTenantMove{UserID: user.ID, FromTenantID: user.TenantID, ToTenantID: to})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(fs.UserPurger.PurgeUserDependents(ctx, to, user.ID), qt.IsNil)
+	_, err = fs.GroupInviteAuditRegistry.Get(ctx, audit.ID)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}

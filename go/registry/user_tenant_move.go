@@ -23,6 +23,16 @@ var (
 	// that would change users.tenant_id (only UserTenantMover may do that), or
 	// an update built from a copy read before the user moved.
 	ErrUserTenantChanged = errx.NewSentinel("the user's tenant is not the one the write expects")
+
+	// ErrUserChangedDuringMove is returned when the user's profile photo is not
+	// the one the caller read before a move, because a new one was uploaded or
+	// the old one removed meanwhile. The move would lose or strand that photo,
+	// so it is refused; reading the user again and retrying is safe.
+	ErrUserChangedDuringMove = errx.NewSentinel("the user changed while being moved; read them again and retry")
+
+	// ErrTenantNotActive is returned when a user would move into a tenant
+	// that is suspended or inactive.
+	ErrTenantNotActive = errx.NewSentinel("the target tenant is not active")
 )
 
 // OwnedContentKind names a kind of row that ties a user to their tenant: a
@@ -227,10 +237,27 @@ type UserTenantMove struct {
 	// refused with ErrUserTenantChanged when the users row holds another one.
 	FromTenantID string
 	ToTenantID   string
+	// FromAvatarPath is the avatar_path the caller read, the photo it copied.
+	// The move is refused with ErrUserChangedDuringMove when the users row
+	// holds another one.
+	FromAvatarPath *string
 	// AvatarPath is stored as the user's avatar_path with the move: the key
 	// of the profile photo copied into the new tenant's storage, or nil when
 	// the user has no photo.
 	AvatarPath *string
+}
+
+// PhotoUnchanged reports whether current, the avatar_path the users row holds,
+// is the photo the caller read. A missing and an empty path are the same.
+func (m UserTenantMove) PhotoUnchanged(current *string) bool {
+	return derefPath(current) == derefPath(m.FromAvatarPath)
+}
+
+func derefPath(p *string) string {
+	if p == nil {
+		return ""
+	}
+	return *p
 }
 
 // UserTenantMover moves a user to another tenant (#2179). A move is allowed
@@ -258,8 +285,10 @@ type UserTenantMover interface {
 	// group and move.AvatarPath. The password hash stays.
 	//
 	// It returns registry.ErrNotFound when the user or the target tenant does
-	// not exist, ErrUserTenantChanged when the user is no longer in
-	// move.FromTenantID, and ErrEmailAlreadyExists when the target tenant has
-	// another user with the same email.
+	// not exist, ErrTenantNotActive when the target tenant is not active,
+	// ErrUserTenantChanged when the user is no longer in move.FromTenantID,
+	// ErrUserChangedDuringMove when the photo is no longer
+	// move.FromAvatarPath, and ErrEmailAlreadyExists when the target tenant
+	// has another user with the same email.
 	MoveUserToTenant(ctx context.Context, move UserTenantMove) (*models.User, error)
 }

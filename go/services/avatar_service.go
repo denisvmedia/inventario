@@ -338,6 +338,25 @@ func (s *AvatarService) DeleteStored(ctx context.Context, key string) {
 	s.deleteQuietly(ctx, key)
 }
 
+// CheckStored reports whether the stored avatar key is in this service's
+// upload location. It returns registry.ErrNotFound when the bucket opens but
+// has no such object, which is what a wrong upload location looks like.
+func (s *AvatarService) CheckStored(ctx context.Context, key string) error {
+	b, err := blob.OpenBucket(ctx, s.uploadLocation)
+	if err != nil {
+		return errxtrace.Wrap("failed to open bucket", err)
+	}
+	defer b.Close()
+	exists, err := b.Exists(ctx, key)
+	if err != nil {
+		return errxtrace.Wrap("failed to look up the avatar", err)
+	}
+	if !exists {
+		return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "Avatar", "key", key))
+	}
+	return nil
+}
+
 // CopyToTenant copies the user's profile photo into tenantID's storage and
 // returns the new key, or nil when the user has no photo. It changes no user
 // row: the tenant move stores the key with the move, and the caller deletes

@@ -543,49 +543,74 @@ func hasUserFieldChanges(req UserUpdateRequest) bool {
 	return req.Email != nil || req.Name != nil || req.IsActive != nil || req.Password != nil
 }
 
-// CountUserOwnedContent reports what ties the user to their tenant: their
-// group memberships and the rows they created in every tenant-scoped table. A
-// tenant move is allowed only when it is empty.
-func (s *Service) CountUserOwnedContent(ctx context.Context, idOrEmail string) (registry.UserOwnedContent, error) {
-	if s.factorySet.UserTenantMover == nil {
-		return nil, errxtrace.Wrap("user tenant mover is not configured", registry.ErrInvalidConfig)
-	}
+// CheckUserTenantMove runs the checks a move of the user to tenantID runs
+// before it writes anything, and changes nothing. It returns nil when the move
+// would go through, a *registry.UserTenantMoveBlockedError when the user still
+// belongs to a group or owns content, and otherwise the error the move would
+// stop with: the target tenant is missing or not active, its users already
+// have the email, or the profile photo is not in the avatar storage.
+func (s *Service) CheckUserTenantMove(ctx context.Context, idOrEmail, tenantID string) error {
 	user, err := s.GetUser(ctx, idOrEmail)
 	if err != nil {
-		return nil, err
+		return err
 	}
-	return s.factorySet.UserTenantMover.CountOwnedContent(ctx, user.ID)
+	return s.checkTenantMove(ctx, user, tenantID)
+}
+
+func (s *Service) checkTenantMove(ctx context.Context, user *models.User, tenantID string) error {
+	mover := s.factorySet.UserTenantMover
+	if mover == nil {
+		return errxtrace.Wrap("user tenant mover is not configured", registry.ErrInvalidConfig)
+	}
+	target, err := s.factorySet.TenantRegistry.Get(ctx, tenantID)
+	if err != nil {
+		return errxtrace.Wrap("failed to find the target tenant", err)
+	}
+	if target.Status != models.TenantStatusActive {
+		return errxtrace.Classify(registry.ErrTenantNotActive, errx.Attrs("tenant_id", tenantID, "status", target.Status))
+	}
+	switch other, err := s.factorySet.UserRegistry.GetByEmail(ctx, tenantID, user.Email); {
+	case err == nil && other.ID != user.ID:
+		return errxtrace.Classify(registry.ErrEmailAlreadyExists, errx.Attrs("email", user.Email, "tenant_id", tenantID))
+	case err != nil && !errors.Is(err, registry.ErrNotFound):
+		return errxtrace.Wrap("failed to check the email in the target tenant", err)
+	}
+
+	owned, err := mover.CountOwnedContent(ctx, user.ID)
+	if err != nil {
+		return err
+	}
+	if !owned.IsEmpty() {
+		return &registry.UserTenantMoveBlockedError{Owned: owned}
+	}
+
+	if user.AvatarPath == nil || *user.AvatarPath == "" {
+		return nil
+	}
+	if s.avatars == nil {
+		return errxtrace.Wrap("the user has a profile photo, and no avatar storage is configured to copy it to the new tenant", registry.ErrInvalidConfig)
+	}
+	if err := s.avatars.CheckStored(ctx, *user.AvatarPath); err != nil {
+		return errxtrace.Wrap("the profile photo cannot be copied to the new tenant", err)
+	}
+	return nil
 }
 
 // moveUserToTenant moves user to tenantID through the registry's
-// UserTenantMover. It refuses early, before copying the photo, when the
-// user owns anything; the mover counts again under its lock. The photo copy
-// is removed when the move does not happen and the original after it does.
+// UserTenantMover. It runs checkTenantMove first, so a move that would be
+// refused stops before the photo is copied; the mover checks again under its
+// lock. The photo copy is removed when the move does not happen and the
+// original after it does.
 func (s *Service) moveUserToTenant(ctx context.Context, user *models.User, tenantID string) (moved *models.User, err error) {
 	defer func() {
 		s.logAdminAction(ctx, "admin.move_user_tenant", &user.TenantID, user.ID, err)
 	}()
 
-	mover := s.factorySet.UserTenantMover
-	if mover == nil {
-		return nil, errxtrace.Wrap("user tenant mover is not configured", registry.ErrInvalidConfig)
-	}
-	if _, err := s.factorySet.TenantRegistry.Get(ctx, tenantID); err != nil {
-		return nil, errxtrace.Wrap("failed to find the target tenant", err)
-	}
-
-	owned, err := mover.CountOwnedContent(ctx, user.ID)
-	if err != nil {
+	if err := s.checkTenantMove(ctx, user, tenantID); err != nil {
 		return nil, err
-	}
-	if !owned.IsEmpty() {
-		return nil, &registry.UserTenantMoveBlockedError{Owned: owned}
 	}
 
 	hasAvatar := user.AvatarPath != nil && *user.AvatarPath != ""
-	if hasAvatar && s.avatars == nil {
-		return nil, errxtrace.Wrap("the user has a profile photo, and no avatar storage is configured to copy it to the new tenant", registry.ErrInvalidConfig)
-	}
 	var avatarCopy *string
 	if hasAvatar {
 		if avatarCopy, err = s.avatars.CopyToTenant(ctx, user, tenantID); err != nil {
@@ -593,11 +618,12 @@ func (s *Service) moveUserToTenant(ctx context.Context, user *models.User, tenan
 		}
 	}
 
-	moved, err = mover.MoveUserToTenant(ctx, registry.UserTenantMove{
-		UserID:       user.ID,
-		FromTenantID: user.TenantID,
-		ToTenantID:   tenantID,
-		AvatarPath:   avatarCopy,
+	moved, err = s.factorySet.UserTenantMover.MoveUserToTenant(ctx, registry.UserTenantMove{
+		UserID:         user.ID,
+		FromTenantID:   user.TenantID,
+		ToTenantID:     tenantID,
+		FromAvatarPath: user.AvatarPath,
+		AvatarPath:     avatarCopy,
 	})
 	if err != nil {
 		if avatarCopy != nil {
