@@ -3246,12 +3246,19 @@ type PersonalDataExportRegistry interface {
 	// ListPending returns the pending exports of every user, oldest first.
 	ListPending(ctx context.Context) ([]*models.PersonalDataExport, error)
 
-	// ClaimPending moves an export from pending to in_progress and reports
-	// whether this caller is the one that moved it. The condition is part of
-	// the write, so two workers racing for one row get one true.
-	ClaimPending(ctx context.Context, id string) (bool, error)
+	// ClaimPending moves an export from pending to in_progress, records
+	// startedAt as the start of its build, and reports whether this caller
+	// is the one that moved it. The condition is part of the write, so two
+	// workers racing for one row get one true.
+	ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error)
 
-	// Update writes the status, archive and statistics columns of an
+	// RequeueStalled moves the exports whose build started before
+	// startedBefore and is still in_progress back to pending, and returns how
+	// many it moved. A build whose process dies records no result, and its
+	// row would otherwise stay in_progress until it expires.
+	RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error)
+
+	// Update writes the status, start, archive and statistics columns of an
 	// existing export. The owner, tenant and creation time never change.
 	Update(ctx context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error)
 

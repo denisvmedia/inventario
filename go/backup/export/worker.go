@@ -266,23 +266,7 @@ func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
 		return
 	}
 
-	now := time.Now()
-	if now.Sub(w.lastExpiry) >= personalExpireInterval {
-		w.lastExpiry = now
-		if n, err := w.personal.ExpireDue(ctx); err != nil {
-			slog.Error("Failed to delete expired personal data exports", "deleted", n, "error", err)
-		} else if n > 0 {
-			slog.Info("Deleted expired personal data exports", "deleted", n)
-		}
-	}
-	if now.Sub(w.lastOrphanSweep) >= personalSweepInterval {
-		w.lastOrphanSweep = now
-		if n, err := w.personal.SweepOrphanedArchives(ctx); err != nil {
-			slog.Error("Failed to sweep orphaned personal data export archives", "deleted", n, "error", err)
-		} else if n > 0 {
-			slog.Info("Deleted orphaned personal data export archives", "deleted", n)
-		}
-	}
+	w.personalHousekeeping(ctx, time.Now())
 
 	reg := w.factorySet.PersonalDataExportRegistry
 	pending, err := reg.ListPending(ctx)
@@ -300,7 +284,7 @@ func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
 			slog.Error("Failed to acquire semaphore", "error", err)
 			return
 		}
-		claimed, err := reg.ClaimPending(ctx, export.ID)
+		claimed, err := w.personal.Claim(ctx, export.ID)
 		if err != nil || !claimed {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(key)
@@ -319,5 +303,32 @@ func (w *ExportWorker) processPersonalDataExports(ctx context.Context) {
 			}
 			slog.Info("Successfully processed personal data export", "export_id", exportID)
 		}(export.ID)
+	}
+}
+
+// personalHousekeeping queues stalled builds again and deletes expired
+// exports every personalExpireInterval, and sweeps archives without a row
+// every personalSweepInterval.
+func (w *ExportWorker) personalHousekeeping(ctx context.Context, now time.Time) {
+	if now.Sub(w.lastExpiry) >= personalExpireInterval {
+		w.lastExpiry = now
+		if n, err := w.personal.RequeueStalled(ctx); err != nil {
+			slog.Error("Failed to queue stalled personal data exports again", "error", err)
+		} else if n > 0 {
+			slog.Warn("Queued stalled personal data exports again", "requeued", n)
+		}
+		if n, err := w.personal.ExpireDue(ctx); err != nil {
+			slog.Error("Failed to delete expired personal data exports", "deleted", n, "error", err)
+		} else if n > 0 {
+			slog.Info("Deleted expired personal data exports", "deleted", n)
+		}
+	}
+	if now.Sub(w.lastOrphanSweep) >= personalSweepInterval {
+		w.lastOrphanSweep = now
+		if n, err := w.personal.SweepOrphanedArchives(ctx); err != nil {
+			slog.Error("Failed to sweep orphaned personal data export archives", "deleted", n, "error", err)
+		} else if n > 0 {
+			slog.Info("Deleted orphaned personal data export archives", "deleted", n)
+		}
 	}
 }

@@ -167,21 +167,46 @@ func (r *PersonalDataExportRegistry) list(ctx context.Context, query string, arg
 	return exports, nil
 }
 
-func (r *PersonalDataExportRegistry) ClaimPending(ctx context.Context, id string) (bool, error) {
+func (r *PersonalDataExportRegistry) ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error) {
 	if id == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
 	var claimed bool
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
-		var err error
-		claimed, err = store.NewTxRegistry[models.PersonalDataExport](tx, r.tableNames.PersonalDataExports()).ClaimByStatus(ctx, id,
-			string(models.PersonalDataExportStatusPending), string(models.PersonalDataExportStatusInProgress))
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, started_at = $2 WHERE id = $3 AND status = $4`,
+			r.tableNames.PersonalDataExports())
+		res, err := tx.ExecContext(ctx, query, string(models.PersonalDataExportStatusInProgress), startedAt,
+			id, string(models.PersonalDataExportStatusPending))
+		if err != nil {
+			return err
+		}
+		n, err := res.RowsAffected()
+		claimed = n == 1
 		return err
 	})
 	if err != nil {
 		return false, errxtrace.Wrap("failed to claim pending personal data export", err)
 	}
 	return claimed, nil
+}
+
+func (r *PersonalDataExportRegistry) RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error) {
+	var moved int64
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`UPDATE %s SET status = $1, started_at = NULL WHERE status = $2 AND started_at < $3`,
+			r.tableNames.PersonalDataExports())
+		res, err := tx.ExecContext(ctx, query, string(models.PersonalDataExportStatusPending),
+			string(models.PersonalDataExportStatusInProgress), startedBefore)
+		if err != nil {
+			return err
+		}
+		moved, err = res.RowsAffected()
+		return err
+	})
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to queue stalled personal data exports again", err)
+	}
+	return int(moved), nil
 }
 
 func (r *PersonalDataExportRegistry) Update(ctx context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error) {
@@ -195,11 +220,11 @@ func (r *PersonalDataExportRegistry) Update(ctx context.Context, export models.P
 	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf(`UPDATE %s SET
 			status = $1, blob_key = $2, size_bytes = $3, group_count = $4, item_count = $5,
-			file_count = $6, error_message = $7, completed_at = $8, expires_at = $9
-			WHERE id = $10 RETURNING *`, r.tableNames.PersonalDataExports())
+			file_count = $6, error_message = $7, completed_at = $8, expires_at = $9, started_at = $10
+			WHERE id = $11 RETURNING *`, r.tableNames.PersonalDataExports())
 		err := tx.GetContext(ctx, &stored, query,
 			string(export.Status), export.BlobKey, export.SizeBytes, export.GroupCount, export.ItemCount,
-			export.FileCount, export.ErrorMessage, export.CompletedAt, export.ExpiresAt, export.ID)
+			export.FileCount, export.ErrorMessage, export.CompletedAt, export.ExpiresAt, export.StartedAt, export.ID)
 		if errors.Is(err, sql.ErrNoRows) {
 			return errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "PersonalDataExport", "entity_id", export.ID))
 		}

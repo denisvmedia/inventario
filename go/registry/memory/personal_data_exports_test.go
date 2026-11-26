@@ -95,10 +95,10 @@ func TestPersonalDataExportRegistryMemory_ClaimUpdateExpire(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(pending, qt.HasLen, 1)
 
-	claimed, err := r.ClaimPending(ctx, export.ID)
+	claimed, err := r.ClaimPending(ctx, export.ID, now)
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsTrue)
-	claimed, err = r.ClaimPending(ctx, export.ID)
+	claimed, err = r.ClaimPending(ctx, export.ID, now)
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsFalse)
 
@@ -126,4 +126,41 @@ func TestPersonalDataExportRegistryMemory_ClaimUpdateExpire(t *testing.T) {
 	c.Assert(r.Delete(ctx, export.ID), qt.IsNil)
 	_, err = r.Get(ctx, export.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A build that started before the cutoff and is still in progress goes back
+// to the queue; one that started after it stays.
+func TestPersonalDataExportRegistryMemory_RequeueStalled(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	r := memory.NewPersonalDataExportRegistry()
+	now := time.Now().UTC()
+
+	stalled, _, err := r.CreateUnlessRequestedSince(ctx, personalExportRequest("user-1", now), now.Add(-24*time.Hour))
+	c.Assert(err, qt.IsNil)
+	running, _, err := r.CreateUnlessRequestedSince(ctx, personalExportRequest("user-2", now), now.Add(-24*time.Hour))
+	c.Assert(err, qt.IsNil)
+	claimed, err := r.ClaimPending(ctx, stalled.ID, now.Add(-2*time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	claimed, err = r.ClaimPending(ctx, running.ID, now.Add(-time.Minute))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	moved, err := r.RequeueStalled(ctx, now.Add(-time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 1)
+
+	got, err := r.Get(ctx, stalled.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+	c.Assert(got.StartedAt, qt.IsNil)
+	got, err = r.Get(ctx, running.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusInProgress)
+
+	// The requeued export can be claimed again.
+	claimed, err = r.ClaimPending(ctx, stalled.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
 }

@@ -52,6 +52,12 @@ func (*PersonalDataExportRateLimitedError) Is(target error) bool {
 // it on the row; the grace keeps the sweep away from one being written.
 const personalOrphanGrace = time.Hour
 
+// personalStalledBuildAfter is how long a build may run before the worker
+// takes its process for dead and queues the export again. A build streams
+// the user's files from blob storage, so it is generous; a build still
+// running after it is built a second time to the same key.
+const personalStalledBuildAfter = time.Hour
+
 // personalExpireBatch is how many expired exports one pass deletes.
 const personalExpireBatch = 100
 
@@ -232,6 +238,12 @@ func (s *PersonalDataExportService) Process(ctx context.Context, id string) erro
 	key := blobkeys.BuildPersonalDataExportBlobKey(export.TenantID, export.ID)
 	size, stats, err := s.build(ctx, user, export, key)
 	if err != nil {
+		if ctx.Err() != nil {
+			// The worker is stopping, for a deploy or a shutdown. The build
+			// says nothing about the export, so it goes back to the queue and
+			// the next worker builds it.
+			return s.requeue(ctx, export, err)
+		}
 		return s.fail(ctx, export, err)
 	}
 
@@ -307,7 +319,40 @@ func (c *countingWriter) Write(p []byte) (int, error) {
 	return n, err
 }
 
+// Claim moves a pending export to in_progress for the caller, recording the
+// start of its build; see registry.PersonalDataExportRegistry.ClaimPending.
+func (s *PersonalDataExportService) Claim(ctx context.Context, id string) (bool, error) {
+	return s.factorySet.PersonalDataExportRegistry.ClaimPending(ctx, id, s.clock())
+}
+
+// RequeueStalled queues again the exports whose build started more than
+// personalStalledBuildAfter ago and recorded no result, which happens when
+// the process running it dies. The user still gets the copy they asked for,
+// and the daily limit stays used by that one request.
+func (s *PersonalDataExportService) RequeueStalled(ctx context.Context) (int, error) {
+	n, err := s.factorySet.PersonalDataExportRegistry.RequeueStalled(ctx, s.clock().Add(-personalStalledBuildAfter))
+	if err != nil {
+		return 0, errxtrace.Wrap("failed to queue stalled personal data exports again", err)
+	}
+	return n, nil
+}
+
+// requeue returns an interrupted build to the queue. It writes with a
+// context the stopping worker does not cancel.
+func (s *PersonalDataExportService) requeue(ctx context.Context, export *models.PersonalDataExport, cause error) error {
+	export.Status = models.PersonalDataExportStatusPending
+	export.StartedAt = nil
+	if _, err := s.factorySet.PersonalDataExportRegistry.Update(context.WithoutCancel(ctx), *export); err != nil {
+		return errxtrace.Wrap("failed to queue the interrupted personal data export again", errors.Join(cause, err))
+	}
+	return errxtrace.Wrap("personal data export interrupted, queued again", cause)
+}
+
+// fail records a failed build. It writes with a context the worker does not
+// cancel, so the row does not stay in_progress when the failure is the
+// worker stopping.
 func (s *PersonalDataExportService) fail(ctx context.Context, export *models.PersonalDataExport, cause error) error {
+	ctx = context.WithoutCancel(ctx)
 	export.Status = models.PersonalDataExportStatusFailed
 	export.ErrorMessage = cause.Error()
 	export.BlobKey = ""

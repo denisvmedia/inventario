@@ -448,6 +448,68 @@ func TestPersonalDataExport_IsRefusedAsABackup(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, inb.ErrPersonalDataExport)
 }
 
+// A build stopped by the worker shutting down goes back to the queue instead
+// of failing, and the next build finishes it.
+func TestPersonalDataExport_InterruptedBuildIsQueuedAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	stopping, cancel := context.WithCancel(f.ctx)
+	cancel()
+	c.Assert(svc.Process(stopping, requested.ID), qt.IsNotNil)
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
+	got, err = svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+}
+
+// A build whose process died stays in progress with no result; after an hour
+// the worker queues it again, so the user still gets the copy.
+func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	now = now.Add(30 * time.Minute)
+	moved, err := svc.RequeueStalled(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 0)
+
+	now = now.Add(time.Hour)
+	moved, err = svc.RequeueStalled(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 1)
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
+}
+
 func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {
 	c := qt.New(t)
 	f := newPersonalFixture(c)

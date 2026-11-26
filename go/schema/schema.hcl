@@ -3702,6 +3702,10 @@ table "personal_data_exports" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
   }
+  column "started_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "completed_at" {
     type = TIMESTAMP
     null = true
