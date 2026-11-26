@@ -25,6 +25,8 @@ func TestCommodityStatus_IsValid_HappyPaths(t *testing.T) {
 		{"Lost", models.CommodityStatusLost},
 		{"Disposed", models.CommodityStatusDisposed},
 		{"WrittenOff", models.CommodityStatusWrittenOff},
+		{"Donated", models.CommodityStatusDonated},
+		{"Stolen", models.CommodityStatusStolen},
 	}
 
 	for _, tc := range testCases {
@@ -347,6 +349,33 @@ func TestCommodity_ValidateWithContext_UnhappyPaths(t *testing.T) {
 				c.PurchaseDate = models.ToPDate("2026-01-01")
 				price := decimal.NewFromFloat(10)
 				c.SalePrice = &price
+				c.StatusDate = models.ToPDate("2026-05-17")
+			},
+			modifyContext: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+			errorContains: "sale_price",
+		},
+		{
+			// A sale price belongs to a sale, not to an item given away.
+			name: "sale_price forbidden when status is donated",
+			modifyCommodity: func(c *models.Commodity) {
+				c.Status = models.CommodityStatusDonated
+				c.PurchaseDate = models.ToPDate("2026-01-01")
+				c.SalePrice = new(decimal.NewFromFloat(10))
+				c.StatusDate = models.ToPDate("2026-05-17")
+			},
+			modifyContext: func(ctx context.Context) context.Context {
+				return validationctx.WithGroupCurrency(ctx, "USD")
+			},
+			errorContains: "sale_price",
+		},
+		{
+			name: "sale_price forbidden when status is stolen",
+			modifyCommodity: func(c *models.Commodity) {
+				c.Status = models.CommodityStatusStolen
+				c.PurchaseDate = models.ToPDate("2026-01-01")
+				c.SalePrice = new(decimal.NewFromFloat(10))
 				c.StatusDate = models.ToPDate("2026-05-17")
 			},
 			modifyContext: func(ctx context.Context) context.Context {

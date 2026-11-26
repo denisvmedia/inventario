@@ -220,6 +220,68 @@ func TestParseCommodityPatch_NormalizesTags(t *testing.T) {
 	c.Assert(patch.Status.Note, qt.Equals, "clear-out")
 }
 
+// Donated and stolen are terminal statuses like lost: a bulk change sets
+// them with a date and an optional note.
+func TestParseCommodityPatch_DonatedAndStolen(t *testing.T) {
+	for _, status := range []models.CommodityStatus{models.CommodityStatusDonated, models.CommodityStatusStolen} {
+		t.Run(string(status), func(t *testing.T) {
+			c := qt.New(t)
+			patch := parsePatch(c, services.CommodityPatchInput{
+				Status: &services.CommodityStatusInput{Value: string(status), Date: "2026-11-26", Note: "note"},
+			})
+			c.Assert(patch.Status.Status, qt.Equals, status)
+			c.Assert(string(*patch.Status.Date), qt.Equals, "2026-11-26")
+			c.Assert(patch.Status.Note, qt.Equals, "note")
+
+			f := newBulkFixture(c)
+			_, err := services.ParseCommodityPatch(f.ctx, f.set.ItemTypeRegistry, services.CommodityPatchInput{
+				Status: &services.CommodityStatusInput{Value: string(status)},
+			})
+			errs, ok := errors.AsType[validation.Errors](err)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+			c.Assert(errs["status_date"], qt.IsNotNil, qt.Commentf("errs = %v", errs))
+		})
+	}
+}
+
+func TestValidateCommodityStatusTransition(t *testing.T) {
+	date := models.ToPDate("2026-11-26")
+	price := new(decimal.NewFromInt(5))
+	tests := []struct {
+		name      string
+		prev      models.CommodityStatus
+		next      models.CommodityStatus
+		date      models.PDate
+		salePrice *decimal.Decimal
+		field     string
+	}{
+		{name: "donated with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusDonated, date: date},
+		{name: "stolen with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusStolen, date: date},
+		{name: "lost with a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusLost, date: date},
+		{name: "sold with a date and a price", prev: models.CommodityStatusInUse, next: models.CommodityStatusSold, date: date, salePrice: price},
+		{name: "donated without a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusDonated, field: "status_date"},
+		{name: "stolen without a date", prev: models.CommodityStatusInUse, next: models.CommodityStatusStolen, field: "status_date"},
+		{name: "sold without a price", prev: models.CommodityStatusInUse, next: models.CommodityStatusSold, date: date, field: "sale_price"},
+		// Only leaving in_use is checked here; the item rules cover the rest.
+		{name: "stolen back to in use", prev: models.CommodityStatusStolen, next: models.CommodityStatusInUse},
+		{name: "donated to stolen", prev: models.CommodityStatusDonated, next: models.CommodityStatusStolen},
+		{name: "staying in use", prev: models.CommodityStatusInUse, next: models.CommodityStatusInUse},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			err := services.ValidateCommodityStatusTransition(tt.prev, tt.next, tt.date, tt.salePrice)
+			if tt.field == "" {
+				c.Assert(err, qt.IsNil)
+				return
+			}
+			errs, ok := errors.AsType[validation.Errors](err)
+			c.Assert(ok, qt.IsTrue, qt.Commentf("err = %v", err))
+			c.Assert(errs[tt.field], qt.IsNotNil, qt.Commentf("errs = %v", errs))
+		})
+	}
+}
+
 func TestCommodityPatch_Apply(t *testing.T) {
 	sold := func(c *models.Commodity) {
 		c.Status = models.CommodityStatusSold

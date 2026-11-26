@@ -153,7 +153,7 @@ Deleting an item moves it to the [Trash](../trash/) with its reminders: they sen
 Open **Upcoming** in the sidebar for one list of everything with a date coming up in the group, oldest first:
 
 - item reminders, on their next date;
-- warranty expiries;
+- warranty expiries of items in use;
 - loans due back, including overdue ones;
 - maintenance due, including overdue schedules.
 
