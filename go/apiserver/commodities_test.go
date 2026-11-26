@@ -786,6 +786,60 @@ func TestCommodityUpdate_StatusTransition_LostKeepsSalePriceNil(t *testing.T) {
 	c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
 }
 
+// TestCommodityUpdate_StatusTransition_DonatedAndStolen marks an item donated
+// or stolen: the change needs a status date, keeps the note, and refuses a
+// sale price, which only a sold item has.
+func TestCommodityUpdate_StatusTransition_DonatedAndStolen(t *testing.T) {
+	salePrice := must.Must(decimal.NewFromString("10.00"))
+	tests := []struct {
+		name     string
+		status   models.CommodityStatus
+		override func(*models.Commodity)
+		code     int
+	}{
+		{"donated", models.CommodityStatusDonated, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.StatusNote = "Given to the school"
+		}, http.StatusOK},
+		{"stolen", models.CommodityStatusStolen, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.StatusNote = "Taken from the car"
+		}, http.StatusOK},
+		{"donated without a date", models.CommodityStatusDonated, func(*models.Commodity) {}, http.StatusUnprocessableEntity},
+		{"stolen without a date", models.CommodityStatusStolen, func(*models.Commodity) {}, http.StatusUnprocessableEntity},
+		{"donated with a sale price", models.CommodityStatusDonated, func(m *models.Commodity) {
+			m.StatusDate = models.ToPDate("2026-11-26")
+			m.SalePrice = &salePrice
+		}, http.StatusUnprocessableEntity},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			c := qt.New(t)
+			params, testUser, testGroup := newParams()
+			registrySet := getRegistrySetFromParams(params, testUser)
+			commodity := must.Must(registrySet.CommodityRegistry.List(context.Background()))[0]
+			c.Assert(commodity.Status, qt.Equals, models.CommodityStatusInUse)
+
+			body := commodityUpdateBody(c, commodity, func(m *models.Commodity) {
+				m.Status = tt.status
+				tt.override(m)
+			})
+			req := must.Must(http.NewRequest("PUT", "/api/v1/g/"+testGroup.Slug+"/commodities/"+commodity.ID, body))
+			addTestUserAuthHeader(req, testUser.ID)
+			rr := httptest.NewRecorder()
+			apiserver.APIServer(params, &mockRestoreWorker{hasRunningRestores: false}).ServeHTTP(rr, req)
+			c.Assert(rr.Code, qt.Equals, tt.code, qt.Commentf("body=%s", rr.Body.String()))
+			if tt.code != http.StatusOK {
+				return
+			}
+			resp := rr.Body.Bytes()
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status"), string(tt.status))
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.status_date"), "2026-11-26")
+			c.Check(resp, checkers.JSONPathEquals("$.data.attributes.sale_price"), nil)
+		})
+	}
+}
+
 // TestCommodityUpdate_StatusTransition_RevertClearsMetadata reverts a
 // terminal-status row back to in_use and asserts the three metadata
 // columns get cleared by the handler.

@@ -211,13 +211,18 @@ func TestSeedDataSurfaceCoverage(t *testing.T) {
 	c.Assert(warrantyBuckets[models.WarrantyStatusExpired] >= 1, qt.IsTrue, qt.Commentf("≥1 expired warranty"))
 	c.Assert(warrantyBuckets[models.WarrantyStatusNone] >= 1, qt.IsTrue, qt.Commentf("≥1 no-warranty row"))
 
-	// Status mix — at least one inactive variant so the Inactive
-	// toggle has filter content.
-	inactiveCount := statusMix[models.CommodityStatusSold] +
-		statusMix[models.CommodityStatusLost] +
-		statusMix[models.CommodityStatusDisposed] +
-		statusMix[models.CommodityStatusWrittenOff]
-	c.Assert(inactiveCount >= 1, qt.IsTrue, qt.Commentf("≥1 inactive (sold/lost/disposed/written_off)"))
+	// Status mix — at least one item in each status that leaves in use,
+	// so every status filter has content.
+	for _, status := range []models.CommodityStatus{
+		models.CommodityStatusSold,
+		models.CommodityStatusLost,
+		models.CommodityStatusDisposed,
+		models.CommodityStatusWrittenOff,
+		models.CommodityStatusDonated,
+		models.CommodityStatusStolen,
+	} {
+		c.Assert(statusMix[status] >= 1, qt.IsTrue, qt.Commentf("≥1 %s item", status))
+	}
 
 	// Tag catalogue.
 	tags, err := registrySet.TagRegistry.List(ctx)
