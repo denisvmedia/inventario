@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from "vitest"
-import { http as msw, HttpResponse } from "msw"
+import { delay, http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 
@@ -7,14 +7,13 @@ import { PlansRoute } from "@/components/routing/PlansRoute"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { featureFlagHandlers } from "@/test/handlers"
+import { FEATURE_FLAGS_FALLBACK } from "@/features/feature-flags/api"
+import { apiUrl, featureFlagHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-
-const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
 function LocationProbe({ testId = "loc" }: { testId?: string }) {
   const loc = useLocation()
@@ -48,25 +47,26 @@ function renderAt(path: string) {
   })
 }
 
-const userAndGroups = [
-  msw.get(api("/auth/me"), () => HttpResponse.json({ id: "u1", email: "alex@example.com" })),
-  msw.get(api("/groups"), () =>
-    HttpResponse.json({
-      data: [
-        {
-          id: "g1",
-          type: "groups",
-          attributes: { id: "g1", slug: "household", name: "Household" },
-        },
-        {
-          id: "g2",
-          type: "groups",
-          attributes: { id: "g2", slug: "office", name: "Office" },
-        },
-      ],
-    })
-  ),
-]
+const me = msw.get(apiUrl("/auth/me"), () =>
+  HttpResponse.json({ id: "u1", email: "alex@example.com" })
+)
+
+const groupsPayload = {
+  data: [
+    {
+      id: "g1",
+      type: "groups",
+      attributes: { id: "g1", slug: "household", name: "Household" },
+    },
+    {
+      id: "g2",
+      type: "groups",
+      attributes: { id: "g2", slug: "office", name: "Office" },
+    },
+  ],
+}
+
+const userAndGroups = [me, msw.get(apiUrl("/groups"), () => HttpResponse.json(groupsPayload))]
 
 beforeEach(() => {
   clearAuth()
@@ -100,5 +100,38 @@ describe("<PlansRoute /> (#1389)", () => {
       expect(screen.getByTestId("plans-loc").getAttribute("data-search")).toBe("?g=household")
     )
     expect(screen.queryByTestId("loc")).not.toBeInTheDocument()
+  })
+
+  // The two halves of the loading guard. Each test delays one request so
+  // the route renders while it is in flight; without that half of the
+  // guard the route would redirect on what it has so far.
+  it("stays on /plans while slow flags load when plans are on", async () => {
+    server.use(
+      ...userAndGroups,
+      msw.get(apiUrl("/feature-flags"), async () => {
+        await delay(300)
+        return HttpResponse.json({ ...FEATURE_FLAGS_FALLBACK, plans: true })
+      })
+    )
+    renderAt("/plans")
+    expect(await screen.findByTestId("coming-soon-page-plans")).toBeInTheDocument()
+    // A redirect would have unmounted /plans for good: the catch-all
+    // route's probe would be on screen and the page would not be.
+    expect(screen.queryByTestId("loc")).not.toBeInTheDocument()
+  })
+
+  it("redirects to the ?g= group when the groups load slowly and plans are off", async () => {
+    server.use(
+      ...featureFlagHandlers.set({ plans: false }),
+      me,
+      msw.get(apiUrl("/groups"), async () => {
+        await delay(300)
+        return HttpResponse.json(groupsPayload)
+      })
+    )
+    renderAt("/plans?g=office")
+    await waitFor(() =>
+      expect(screen.getByTestId("loc").getAttribute("data-pathname")).toBe("/g/office")
+    )
   })
 })
