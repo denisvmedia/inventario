@@ -1,6 +1,7 @@
 import * as React from "react"
 import { XIcon } from "lucide-react"
 import { Dialog as DialogPrimitive } from "radix-ui"
+import { useTranslation } from "react-i18next"
 
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
@@ -93,6 +94,7 @@ function DialogContent({
   showCloseButton?: boolean
   variant?: DialogContentVariant
 }) {
+  const { t } = useTranslation()
   const fullscreenMobile = variant === "fullscreen-mobile"
   const layout = React.useMemo(() => ({ variant, showCloseButton }), [variant, showCloseButton])
   return (
@@ -121,7 +123,7 @@ function DialogContent({
             )}
           >
             <XIcon />
-            <span className="sr-only">Close</span>
+            <span className="sr-only">{t("common:actions.close")}</span>
           </DialogPrimitive.Close>
         )}
       </DialogPrimitive.Content>
@@ -130,6 +132,7 @@ function DialogContent({
 }
 
 function DialogHeader({ className, children, ...props }: React.ComponentProps<"div">) {
+  const { t } = useTranslation()
   const { variant, showCloseButton } = React.useContext(DialogLayoutContext)
   const fullscreenMobile = variant === "fullscreen-mobile"
   return (
@@ -158,7 +161,7 @@ function DialogHeader({ className, children, ...props }: React.ComponentProps<"d
           )}
         >
           <XIcon />
-          <span className="sr-only">Close</span>
+          <span className="sr-only">{t("common:actions.close")}</span>
         </DialogPrimitive.Close>
       )}
     </div>
