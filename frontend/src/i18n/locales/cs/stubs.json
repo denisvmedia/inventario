@@ -53,10 +53,6 @@
     "warranties": {
       "description": "Sledujte záruční podmínky, expiraci a prodloužení u jednotlivých položek.",
       "title": "Záruky"
-    },
-    "whatsNew": {
-      "description": "Přehled všech vydaných změn v Inventario, od nejnovějších.",
-      "title": "Novinky"
     }
   },
   "verifyEmail": "Ověřit e-mail"

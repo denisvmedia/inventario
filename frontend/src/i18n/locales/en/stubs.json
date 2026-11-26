@@ -53,10 +53,6 @@
     "warranties": {
       "description": "Track per-item warranty terms, expiry, and renewals.",
       "title": "Warranties"
-    },
-    "whatsNew": {
-      "description": "Recap of every shipped change to Inventario, newest first.",
-      "title": "What's new"
     }
   },
   "verifyEmail": "Verify email"
