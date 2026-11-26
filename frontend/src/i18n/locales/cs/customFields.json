@@ -154,8 +154,8 @@
   },
   "templates": {
     "default": "Výchozí hodnota (nepovinné)",
-    "hint": "Formulář položky nabídne toto pole u položek zaškrtnutých typů a vyplní výchozí hodnotu, dokud položka nemá vlastní.",
-    "hintNoDefault": "Formulář položky nabídne toto pole u položek zaškrtnutých typů.",
+    "hint": "Když položce ve formuláři vyberete jeden ze zaškrtnutých typů, formulář nabídne toto pole a vyplní výchozí hodnotu, pokud pole ještě nemá hodnotu. Hodnota, kterou položka už má, zůstane.",
+    "hintNoDefault": "Když položce ve formuláři vyberete jeden ze zaškrtnutých typů, formulář nabídne toto pole.",
     "label": "Typy položek",
     "optionsFirst": "Nejdřív možnosti uložte, pak jednu vyberete jako výchozí."
   },
