@@ -351,11 +351,33 @@ The **Help & support** section gives you five quick links:
   what is missing.
 - **Keyboard shortcuts** — opens the full list of shortcuts (you can also press
   `?` anywhere in the app).
-- **What's new** — opens the releases page in a new tab. The badge next to it
-  shows the version you run, such as `v0.2`.
+- **What's new** — opens the [What's new](#whats-new) page. The badge next to
+  it shows the version you run, such as `v0.2`.
 - **Contact support / share feedback** — opens a form to ask a question, report
   a bug, or suggest a feature. The same form is your channel for reaching the
   team directly.
+
+### What's new
+
+The **What's new** page lists the releases of Inventario up to the one your
+server runs, newest first. Each release shows its date and its changes, grouped
+under headings such as **Added**, **Changed** and **Fixed**. The release notes
+are in English. Links in them open on GitHub in a new tab. You can also open the
+page directly at `/whats-new`.
+
+When your server has a release you haven't read about, a dot appears next to
+**What's new**, on the **Help & support** tab, and on **Help** in the sidebar.
+Opening the page clears it. Inventario remembers the newest release you have
+seen on your account, so the dot stays away on your other devices too. If you
+have never opened the page, the dot shows once.
+
+If your server runs a development build rather than a release, the page says so
+and lists the releases the build contains.
+
+System administrators also see an **Operators** section at the end of a
+release: changes to the Helm chart, command-line flags, environment variables
+and other things that matter to whoever runs the server. Other users don't see
+it. A release that changed only those things tells them so.
 
 ---
 

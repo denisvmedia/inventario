@@ -1036,6 +1036,24 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Permanent; reconcile if the upstream mock adds lead-time controls.
 
+#### 2026-11-26 — Help & Support "What's new" row opens the in-app page and carries an unread dot
+
+- **Issue/PR**: #1386 / PR (pending)
+- **Mock**: [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) `HelpSection` has a "What's new" row with a `v1.2` badge and no action (L458). Neither the row nor the section nav has an unread marker.
+- **Reality**: The row is a link to `/whats-new` in the same tab. While the build has a release newer than the user's `whats_new.last_seen_version` setting, a `size-2 rounded-full bg-primary` dot follows the version badge (`help-row-whatsNew-unread`) and the **Help & support** entry of the section nav (`settings-nav-help-unread`). Each dot carries sr-only text ", new release".
+- **Why**: The owner's decisions of 2026-11-26 on #1386: the row links to the in-app page, and a dot on the entry is the only notice of a new release. The nav dot marks the menu that leads to the row, so the notice is visible from any section. The dot follows the status dot of [`UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L188) in the primary color.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the dot on the section nav agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
+
+#### 2026-11-26 — What's new page
+
+- **Issue/PR**: #1386 / PR (pending)
+- **Mock**: No What's new page; the only What's new surface is the Help row in [`SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx).
+- **Reality**: `frontend/src/pages/WhatsNewPage.tsx` at `/whats-new` uses `Page width="narrow"` and `PageHeader`. Each release is a `Card`: the `CardTitle` is an `h2` "v0.2.2", the `CardDescription` the long date, and the `CardContent` lists each section under a small semibold `h3` with a disc list. Inline code uses the muted code chip of the typography showcase, bold stays bold, and links are primary-colored and open in a new tab. The Operators section renders only for system administrators, with a muted note "Shown to system administrators only."; a release with nothing else shows other users "This release changed only how the server is installed and run." A development build shows a default `Alert` with the `Info` icon above the list, and a build without releases shows a dashed empty box.
+- **Why**: not present in mock. The page, its content and the Operators rule are the owner's decisions of 2026-11-26 on #1386. The layout falls back to the `Card`, `Alert` and typography sections of [`UIShowcaseView.tsx`](../../design-mocks/src/views/UIShowcaseView.tsx) (inline code at L1339). The development-build alert, the Operators note, the "only how the server is installed" line and the empty state are agent-suggested.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26; the alert, the two notes and the empty state agent-suggested, listed in the PR for the owner.
+- **Reversion plan**: Follow the mock if `inventario-design` draws the page.
+
 ### Navigation & App shell
 
 #### 2026-11-25 — Inbox entry with a count in the sidebar
@@ -1172,6 +1190,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Why**: Not present in mock. The Upcoming page is the group-wide list the issue asks for; it sits next to the per-kind pages it merges.
 - **Approved by**: user (explicit) — pre-approved for #2805 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Reconcile when the upstream mock adds the entry.
+
+#### 2026-11-26 — Unread dot on the sidebar Help entry
+
+- **Issue/PR**: #1386 / PR (pending)
+- **Mock**: [`design-mocks/src/components/AppSidebar.tsx`](../../design-mocks/src/components/AppSidebar.tsx) has no Help entry, so it has no marker on one either. The app's footer Help row links to Settings → Help & support.
+- **Reality**: While the build has a release the user has not seen, the `SidebarMenuBadge` slot of **Help** shows the `size-2 rounded-full bg-primary` dot (`sidebar-help-unread`), and the link carries sr-only ", new release". It is the slot the Inbox count uses.
+- **Why**: Help leads to Settings → Help & support, where the What's new row is. The task for the owner's decisions of 2026-11-26 on #1386 asks for the dot on the entry and on the menu that leads to it.
+- **Approved by**: user (explicit) — pre-approved for #1386 by the owner's decisions of 2026-11-26
+- **Reversion plan**: Follow the mock if `inventario-design` draws an unread marker; otherwise permanent.
 
 ### i18n & Formatting
 

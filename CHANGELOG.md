@@ -53,6 +53,16 @@ when to add an entry and where it goes.
   then by name and type, and an option by the option, then by label,
   creating the missing ones
   ([#2803](https://github.com/denisvmedia/inventario/issues/2803)).
+- A **What's new** page at `/whats-new` lists the releases the running server
+  contains, newest first, each with its changes as this file has them. The
+  **What's new** row in **Settings → Help & support** opens it instead of the
+  GitHub Releases page. A dot on that row, on the **Help & support** tab and
+  on **Help** in the sidebar marks a release the user has not seen, and
+  opening the page clears it. The newest release a user has seen is a setting
+  on the server (`whats_new.last_seen_version`), so the dot follows the user
+  across devices. System administrators also see the **Operators** section of
+  each release
+  ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
 - Documents from other systems: `POST /g/{groupSlug}/intake` turns a document
   that another system such as Paperless-ngx sends into a draft in the inbox,
   with the document attached when it is sent, its address among the draft's
