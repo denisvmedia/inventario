@@ -486,4 +486,13 @@ to boot.
 Debug is genuinely verbose: it includes a line per registry read. Turn it on to
 answer a question, not as a standing setting.
 
+Every API response carries an `X-Request-ID` header, and the lines the server
+logs while handling that request carry the same value as `request_id` (the
+access log prints it in brackets at the start of the line). To find the lines
+of one failed request, take the header from the browser's network panel and
+search the log for it. An `X-Request-ID` set by a proxy in front of the server
+is kept when it is at most 128 characters of letters, digits and `-_.:/+=`;
+otherwise the server generates its own. The
+[logging guideline](devdocs/logging.md) has the details.
+
 For more detailed troubleshooting, check the application logs and PostgreSQL logs.

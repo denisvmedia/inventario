@@ -725,6 +725,19 @@ when to add an entry and where it goes.
   stored under `avatars/` keep working. A bucket lifecycle rule that matches
   `avatars/` needs the new prefix too
   ([#2179](https://github.com/denisvmedia/inventario/issues/2179)).
+- Every API response carries an `X-Request-ID` header, and the log lines the
+  server writes while handling that request carry the same value in a
+  `request_id` field (a top-level key with `INVENTARIO_LOG_FORMAT=json`), so
+  the id of a failed request finds its lines. The access log prints the same
+  id, and `audit_logs.request_id` stores it. An `X-Request-ID` sent by a proxy
+  or a client is kept when it is at most 128 characters of letters, digits and
+  `-_.:/+=`; any other value, and a missing header, gets a generated UUID.
+  Before, the server returned no header, printed any client value in the
+  access log as sent, and generated ids in chi's
+  `<hostname>/<random>-000001` form, which named the pod. CORS exposes the
+  header to the frontend. The conventions behind the field are in the new
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md)
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

@@ -28,7 +28,7 @@ func BackfillItemTypes(ctx context.Context, factorySet *registry.FactorySet, ret
 		seeded, err := reg.BackfillBuiltins(ctx)
 		if err == nil {
 			if seeded > 0 {
-				slog.Info("item type backfill complete",
+				slog.InfoContext(ctx, "item type backfill complete",
 					"item_types", seeded,
 					"duration_ms", time.Since(start).Milliseconds())
 			}
@@ -37,7 +37,7 @@ func BackfillItemTypes(ctx context.Context, factorySet *registry.FactorySet, ret
 		if ctx.Err() != nil {
 			return
 		}
-		slog.Warn("item type backfill failed; will retry",
+		slog.WarnContext(ctx, "item type backfill failed; will retry",
 			"error", err.Error(), "item_types", seeded, "retry_in", retryInterval.String())
 
 		timer := time.NewTimer(retryInterval)

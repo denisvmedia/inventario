@@ -108,7 +108,7 @@ func (w *ImportWorker) Start(ctx context.Context) {
 		w.run(ctx)
 	})
 
-	slog.Info("Import worker started")
+	slog.InfoContext(ctx, "Import worker started")
 }
 
 // Stop stops the import worker
@@ -166,7 +166,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 	expReg := w.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	exports, err := expReg.List(ctx)
 	if err != nil {
-		slog.Error("Failed to get exports", "error", err)
+		slog.ErrorContext(ctx, "Failed to get exports", "error", err)
 		return
 	}
 
@@ -186,7 +186,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to acquire semaphore", "error", err)
+			slog.ErrorContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 
@@ -196,7 +196,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 		if claimErr != nil {
 			w.semaphore.Release(1)
 			w.inFlight.Delete(export.ID)
-			slog.Error("Failed to claim import", "export_id", export.ID, "error", claimErr)
+			slog.ErrorContext(ctx, "Failed to claim import", "export_id", export.ID, "error", claimErr)
 			continue
 		}
 		if !claimed {
@@ -216,13 +216,13 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 
 // processImport processes a single import operation
 func (w *ImportWorker) processImport(ctx context.Context, exportID, sourceFilePath string) {
-	slog.Info("Processing import", "export_id", exportID)
+	slog.InfoContext(ctx, "Processing import", "export_id", exportID)
 
 	err := w.importService.ProcessImport(ctx, exportID, sourceFilePath)
 	if err != nil {
-		slog.Error("Failed to process import", "export_id", exportID, "error", err)
+		slog.ErrorContext(ctx, "Failed to process import", "export_id", exportID, "error", err)
 		return
 	}
 
-	slog.Info("Import processed successfully", "export_id", exportID)
+	slog.InfoContext(ctx, "Import processed successfully", "export_id", exportID)
 }

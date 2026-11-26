@@ -153,7 +153,7 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 	}
 
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
-		slog.Error("Failed to write audit log entry", "action", ev.Action, "error", err)
+		slog.ErrorContext(ctx, "Failed to write audit log entry", "action", ev.Action, "error", err)
 	}
 }
 
@@ -205,7 +205,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 	}
 
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
-		slog.Error("Failed to write admin audit log entry", "action", ev.Action, "error", err)
+		slog.ErrorContext(ctx, "Failed to write admin audit log entry", "action", ev.Action, "error", err)
 	}
 }
 

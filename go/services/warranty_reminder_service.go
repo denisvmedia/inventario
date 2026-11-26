@@ -141,7 +141,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 		// a "your bundle's warranty is expiring" reminder that the
 		// user can't act on without splitting the row first.
 		if c.Count > 1 {
-			slog.Warn("warranty reminder: skipping commodity with count > 1",
+			slog.WarnContext(ctx, "warranty reminder: skipping commodity with count > 1",
 				"commodity_id", c.ID,
 				"count", c.Count,
 			)
@@ -150,7 +150,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 		hidden, hideErr := sections.hides(ctx, c.GroupID, models.GroupSectionWarranties)
 		if hideErr != nil {
 			stats.Failed++
-			slog.Error("warranty reminder failed",
+			slog.ErrorContext(ctx, "warranty reminder failed",
 				"commodity_id", c.ID,
 				"error", hideErr,
 			)
@@ -162,7 +162,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 		thresholds, recipients, planErr := s.planCommodity(ctx, c, now, prefsCache, recipientsByGroup)
 		if planErr != nil {
 			stats.Failed++
-			slog.Error("warranty reminder failed",
+			slog.ErrorContext(ctx, "warranty reminder failed",
 				"commodity_id", c.ID,
 				"error", planErr,
 			)
@@ -172,7 +172,7 @@ func (s *WarrantyReminderService) RemindOnce(ctx context.Context, now time.Time)
 			ok, processErr := s.processOne(ctx, c, threshold, recipients, now, prefsCache)
 			if processErr != nil {
 				stats.Failed++
-				slog.Error("warranty reminder failed",
+				slog.ErrorContext(ctx, "warranty reminder failed",
 					"commodity_id", c.ID,
 					"threshold_days", threshold,
 					"error", processErr,
@@ -350,7 +350,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row", commitErr)
 		}
 		if ok {
-			slog.Info("warranty reminder row inserted (no email service configured)",
+			slog.InfoContext(ctx, "warranty reminder row inserted (no email service configured)",
 				"commodity_id", c.ID,
 				"threshold_days", int(threshold),
 			)
@@ -366,7 +366,7 @@ func (s *WarrantyReminderService) processOne(ctx context.Context, c *models.Comm
 			return false, errxtrace.Wrap("warranty reminder: insert idempotency row (no recipients)", commitErr)
 		}
 		if ok {
-			slog.Warn("warranty reminder: no recipients found for commodity",
+			slog.WarnContext(ctx, "warranty reminder: no recipients found for commodity",
 				"commodity_id", c.ID,
 				"group_id", c.GroupID,
 			)
@@ -451,7 +451,7 @@ func (s *WarrantyReminderService) fanOutToRecipients(
 		// registry isn't wired (test path), the answer matches the
 		// pre-#1648 IsEnabled.
 		if prefsCache != nil && !prefsCache.IsEnabledForGroup(ctx, r.user, c.TenantID, c.GroupID, notifications.CategoryWarrantyExpiry, notifications.ChannelEmail) {
-			slog.Debug("warranty reminder: recipient opted out",
+			slog.DebugContext(ctx, "warranty reminder: recipient opted out",
 				"commodity_id", c.ID,
 				"group_id", c.GroupID,
 				"to", r.email,
@@ -465,7 +465,7 @@ func (s *WarrantyReminderService) fanOutToRecipients(
 			if firstEnqueueErr == nil {
 				firstEnqueueErr = sendErr
 			}
-			slog.Error("warranty reminder: enqueue failed",
+			slog.ErrorContext(ctx, "warranty reminder: enqueue failed",
 				"commodity_id", c.ID,
 				"to", r.email,
 				"error", sendErr,

@@ -169,7 +169,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 			http.Error(w, "Invalid or expired reset token", http.StatusBadRequest)
 			return
 		}
-		slog.Error("Failed to look up password-reset token", "error", err)
+		slog.ErrorContext(r.Context(), "Failed to look up password-reset token", "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -184,7 +184,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 			http.Error(w, "User not found", http.StatusBadRequest)
 			return
 		}
-		slog.Error("Failed to look up user for password reset", "user_id", pr.UserID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to look up user for password reset", "user_id", pr.UserID, "error", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 		return
 	}
@@ -198,12 +198,12 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 		return
 	}
 	if err := user.SetPassword(req.NewPassword); err != nil {
-		slog.Error("Failed to hash new password", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to hash new password", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
 	if _, err := api.userRegistry.Update(r.Context(), *user); err != nil {
-		slog.Error("Failed to update user password", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to update user password", "user_id", user.ID, "error", err)
 		http.Error(w, "Failed to update password", http.StatusInternalServerError)
 		return
 	}
@@ -213,7 +213,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 	// The token is considered used-on-delete: once gone, GetByToken returns ErrNotFound.
 	// The audit log below records the successful use.
 	if err := api.passwordResetRegistry.DeleteByUserID(r.Context(), pr.UserID); err != nil {
-		slog.Warn("Failed to clean up password-reset tokens", "user_id", pr.UserID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to clean up password-reset tokens", "user_id", pr.UserID, "error", err)
 	}
 
 	// Invalidate all active refresh tokens so existing sessions are terminated.
@@ -221,7 +221,7 @@ func (api *PasswordResetAPI) handleResetPassword(w http.ResponseWriter, r *http.
 	api.sendPasswordChangedNotification(user)
 
 	api.logAuth(r, "password_reset", &user.ID, true, "")
-	slog.Info("Password reset successful", "user_id", user.ID, "email", user.Email)
+	slog.InfoContext(r.Context(), "Password reset successful", "user_id", user.ID, "email", user.Email)
 	writeJSON(w, http.StatusOK, map[string]string{"message": "Password reset successful. You can now log in with your new password."})
 }
 
@@ -232,12 +232,12 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 	}
 	// Invalidate all existing pending reset tokens before issuing a new one.
 	if err := api.passwordResetRegistry.DeleteByUserID(r.Context(), user.ID); err != nil {
-		slog.Warn("Failed to delete old password-reset tokens", "user_id", user.ID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to delete old password-reset tokens", "user_id", user.ID, "error", err)
 	}
 
 	token, err := models.GeneratePasswordResetToken()
 	if err != nil {
-		slog.Error("Failed to generate password-reset token", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to generate password-reset token", "user_id", user.ID, "error", err)
 		return
 	}
 	pr := models.PasswordReset{
@@ -248,18 +248,18 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		ExpiresAt: time.Now().Add(passwordResetExpiration),
 	}
 	if _, err := api.passwordResetRegistry.Create(r.Context(), pr); err != nil {
-		slog.Error("Failed to store password-reset record", "user_id", user.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to store password-reset record", "user_id", user.ID, "error", err)
 		return
 	}
 
 	resetQuery := url.Values{"token": {token}}
 	resetURL := "/reset-password?" + resetQuery.Encode()
 	if api.publicBaseURL == "" {
-		slog.Warn("Public base URL is not configured; using relative password reset URL", "user_id", user.ID)
+		slog.WarnContext(r.Context(), "Public base URL is not configured; using relative password reset URL", "user_id", user.ID)
 	} else {
 		resetURL, err = buildPublicURL(api.publicBaseURL, "/reset-password", resetQuery)
 		if err != nil {
-			slog.Error("Failed to build password reset URL", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to build password reset URL", "user_id", user.ID, "error", err)
 			return
 		}
 	}
@@ -272,7 +272,7 @@ func (api *PasswordResetAPI) sendPasswordReset(r *http.Request, user *models.Use
 		ctx, cancel := context.WithTimeout(emailCtx, detachedAuthEmailTimeout)
 		defer cancel()
 		if err := api.emailService.SendPasswordResetEmail(ctx, user.Email, user.Name, resetURL); err != nil {
-			slog.Error("Failed to send password-reset email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(r.Context(), "Failed to send password-reset email", "user_id", user.ID, "error", err)
 		}
 	}()
 }
@@ -295,14 +295,14 @@ func (api *PasswordResetAPI) sendPasswordChangedNotification(user *models.User) 
 func (api *PasswordResetAPI) invalidateUserSessions(ctx context.Context, userID string) {
 	if api.refreshTokenRegistry != nil {
 		if err := api.refreshTokenRegistry.RevokeByUserID(ctx, userID); err != nil {
-			slog.Warn("Failed to revoke refresh tokens for session invalidation", "user_id", userID, "error", err)
+			slog.WarnContext(ctx, "Failed to revoke refresh tokens for session invalidation", "user_id", userID, "error", err)
 		}
 	}
 
 	// Blacklist all active access tokens for the user to ensure immediate session invalidation.
 	if api.blacklistService != nil {
 		if err := api.blacklistService.BlacklistUserTokens(ctx, userID, 2*accessTokenExpiration); err != nil {
-			slog.Warn("Failed to blacklist user tokens for session invalidation", "user_id", userID, "error", err)
+			slog.WarnContext(ctx, "Failed to blacklist user tokens for session invalidation", "user_id", userID, "error", err)
 		}
 	}
 }

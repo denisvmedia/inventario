@@ -123,7 +123,7 @@ func (a *APITokenAuthenticator) serve(w http.ResponseWriter, r *http.Request, cr
 		if errors.Is(err, services.ErrAPITokenInvalid) {
 			// The reason stays in the log. The response is the same for an
 			// unknown, revoked or expired token and for an inactive owner.
-			slog.Warn("API token rejected",
+			slog.WarnContext(r.Context(), "API token rejected",
 				"reason", services.APITokenFailureReason(err),
 				"ip", ip,
 				"method", r.Method,
@@ -165,7 +165,7 @@ func (a *APITokenAuthenticator) allow(w http.ResponseWriter, r *http.Request, ip
 	}
 	res, err := a.limiter.Check(r.Context(), key)
 	if err != nil {
-		slog.Error("API token rate limiter error", "error", err, "scope", scope)
+		slog.ErrorContext(r.Context(), "API token rate limiter error", "error", err, "scope", scope)
 		return true
 	}
 	w.Header().Set("X-RateLimit-Limit", fmt.Sprintf("%d", res.Limit))
@@ -177,7 +177,7 @@ func (a *APITokenAuthenticator) allow(w http.ResponseWriter, r *http.Request, ip
 	retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 	w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 	metrics.RecordRateLimitRejection(metrics.RateLimitScopeGlobal)
-	slog.Warn("API token rate limit exceeded", "scope", scope, "ip", ip, "path", r.URL.Path, "retry_after_seconds", retryAfter)
+	slog.WarnContext(r.Context(), "API token rate limit exceeded", "scope", scope, "ip", ip, "path", r.URL.Path, "retry_after_seconds", retryAfter)
 	_ = codedTooManyRequestsError(w, r, errAPITokenRateLimited, apiTokenRateLimitedCode,
 		map[string]any{"retry_after_seconds": retryAfter})
 	return false
@@ -189,7 +189,7 @@ func (a *APITokenAuthenticator) allow(w http.ResponseWriter, r *http.Request, ip
 func (a *APITokenAuthenticator) recordUse(r *http.Request, token *models.APIToken, user *models.User) {
 	touched, err := a.service.RecordUse(r.Context(), token)
 	if err != nil {
-		slog.Error("Failed to record API token use", "token_id", token.ID, "error", err)
+		slog.ErrorContext(r.Context(), "Failed to record API token use", "token_id", token.ID, "error", err)
 		return
 	}
 	if !touched || a.audit == nil {

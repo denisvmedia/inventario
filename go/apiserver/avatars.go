@@ -257,7 +257,7 @@ func signedAvatarURL(r *http.Request, signer *services.FileSigningService, subje
 	}
 	signed, err := signer.GenerateAvatarURL(subject.ID, *subject.AvatarPath, viewerID, groupID, services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.Warn("Failed to sign an avatar URL", "subject_id", subject.ID, "viewer_id", viewerID, "error", err)
+		slog.WarnContext(r.Context(), "Failed to sign an avatar URL", "subject_id", subject.ID, "viewer_id", viewerID, "error", err)
 		return ""
 	}
 	return signed
@@ -322,7 +322,7 @@ func SignedAvatars(params Params) func(r chi.Router) {
 func (api *signedAvatarsAPI) handleGetSignedAvatar(w http.ResponseWriter, r *http.Request) {
 	claims, err := api.signer.ValidateAvatarURL(r.URL.Path, r.URL.Query(), services.ExtractSessionBinding(r))
 	if err != nil {
-		slog.Warn("Invalid signed avatar URL",
+		slog.WarnContext(r.Context(), "Invalid signed avatar URL",
 			"path", r.URL.Path, "error", err.Error(), "remote_addr", r.RemoteAddr)
 		http.Error(w, "Invalid or expired avatar URL", http.StatusUnauthorized)
 		return

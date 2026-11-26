@@ -122,13 +122,13 @@ func NewWarrantyReminderWorker(service *WarrantyReminderService, opts ...Warrant
 // Start launches the goroutine. No-op if no service is configured.
 func (w *WarrantyReminderWorker) Start(ctx context.Context) {
 	if w.service == nil {
-		slog.Warn("WarrantyReminderWorker: no service configured, skipping startup")
+		slog.WarnContext(ctx, "WarrantyReminderWorker: no service configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Warranty reminder worker started", "interval", w.interval)
+	slog.InfoContext(ctx, "Warranty reminder worker started", "interval", w.interval)
 }
 
 // Stop signals the worker and waits for the goroutine to exit.
@@ -173,7 +173,7 @@ func (w *WarrantyReminderWorker) tick(ctx context.Context) {
 
 	stats, err := w.service.RemindOnce(ctx, w.clock())
 	if err != nil {
-		slog.Error("Warranty reminder sweep failed", "error", err)
+		slog.ErrorContext(ctx, "Warranty reminder sweep failed", "error", err)
 		return
 	}
 	if stats.Failed > 0 {
@@ -187,12 +187,12 @@ func (w *WarrantyReminderWorker) tick(ctx context.Context) {
 		}
 	}
 	if total := stats.Sent(); total > 0 {
-		slog.Info("Warranty reminder sweep completed",
+		slog.InfoContext(ctx, "Warranty reminder sweep completed",
 			"reminders_sent", total,
 			"failed", stats.Failed,
 		)
 	} else {
-		slog.Debug("Warranty reminder sweep completed",
+		slog.DebugContext(ctx, "Warranty reminder sweep completed",
 			"reminders_sent", 0,
 			"failed", stats.Failed,
 		)

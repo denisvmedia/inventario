@@ -48,14 +48,14 @@ func RequireBackofficeAuth(jwtSecret []byte, backofficeUserRegistry registry.Bac
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			tokenString, err := extractTokenFromRequest(r)
 			if err != nil {
-				slog.Warn("Backoffice auth: missing/invalid Authorization header", "path", r.URL.Path)
+				slog.WarnContext(r.Context(), "Backoffice auth: missing/invalid Authorization header", "path", r.URL.Path)
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
 
 			claims, err := validateBackofficeJWT(r.Context(), tokenString, jwtSecret, blacklist)
 			if err != nil {
-				slog.Warn("Backoffice auth: token validation failed", "path", r.URL.Path, "error", err)
+				slog.WarnContext(r.Context(), "Backoffice auth: token validation failed", "path", r.URL.Path, "error", err)
 				http.Error(w, err.Error(), http.StatusUnauthorized)
 				return
 			}
@@ -65,19 +65,19 @@ func RequireBackofficeAuth(jwtSecret []byte, backofficeUserRegistry registry.Bac
 			// but re-check defensively before the lookup to keep the
 			// failure mode explicit if validation ever loosens.
 			if adminID == "" {
-				slog.Warn("Backoffice auth: token missing admin_id", "path", r.URL.Path)
+				slog.WarnContext(r.Context(), "Backoffice auth: token missing admin_id", "path", r.URL.Path)
 				http.Error(w, "invalid token", http.StatusUnauthorized)
 				return
 			}
 
 			user, err := backofficeUserRegistry.Get(r.Context(), adminID)
 			if err != nil {
-				slog.Warn("Backoffice auth: user not found", "admin_id", adminID, "error", err)
+				slog.WarnContext(r.Context(), "Backoffice auth: user not found", "admin_id", adminID, "error", err)
 				http.Error(w, "user not found", http.StatusUnauthorized)
 				return
 			}
 			if !user.IsActive {
-				slog.Warn("Backoffice auth: account disabled", "admin_id", adminID)
+				slog.WarnContext(r.Context(), "Backoffice auth: account disabled", "admin_id", adminID)
 				http.Error(w, "account disabled", http.StatusForbidden)
 				return
 			}
@@ -166,7 +166,7 @@ func checkBackofficeTokenBlacklist(ctx context.Context, claims jwt.MapClaims, bl
 	if jti, ok := claims["jti"].(string); ok && jti != "" {
 		blacklisted, err := blacklist.IsBlacklisted(ctx, jti)
 		if err != nil {
-			slog.Error("Failed to check backoffice token blacklist", "error", err)
+			slog.ErrorContext(ctx, "Failed to check backoffice token blacklist", "error", err)
 		} else if blacklisted {
 			return fmt.Errorf("token has been revoked")
 		}
@@ -175,7 +175,7 @@ func checkBackofficeTokenBlacklist(ctx context.Context, claims jwt.MapClaims, bl
 		key := backofficeBlacklistUserKey(adminID)
 		since, blacklisted, err := blacklist.UserBlacklistedSince(ctx, key)
 		if err != nil {
-			slog.Error("Failed to check backoffice user blacklist", "error", err)
+			slog.ErrorContext(ctx, "Failed to check backoffice user blacklist", "error", err)
 		} else if blacklisted {
 			return checkBackofficeUserBlacklistIat(claims, since)
 		}
@@ -211,13 +211,13 @@ func RequirePlatformAdmin(next http.Handler) http.Handler {
 			// RequireBackofficeAuth should have populated this. Reaching
 			// here means the middleware chain is wired wrong — fail
 			// closed with 401 rather than 403 so the operator notices.
-			slog.Warn("RequirePlatformAdmin: no back-office user in context — middleware chain misconfigured",
+			slog.WarnContext(r.Context(), "RequirePlatformAdmin: no back-office user in context — middleware chain misconfigured",
 				"path", r.URL.Path)
 			_ = unauthorizedError(w, r, ErrMissingUserContext)
 			return
 		}
 		if user.Role != models.BackofficeRolePlatformAdmin {
-			slog.Warn("RequirePlatformAdmin: access denied",
+			slog.WarnContext(r.Context(), "RequirePlatformAdmin: access denied",
 				"admin_id", user.ID,
 				"role", string(user.Role),
 				"path", r.URL.Path,
