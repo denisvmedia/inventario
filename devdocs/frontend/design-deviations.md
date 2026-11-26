@@ -854,7 +854,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
 
-- **Issue/PR**: #1389 / PR (pending)
+- **Issue/PR**: #1389 / #2923
 - **Mock**: [`design-mocks/src/views/UserProfileView.tsx`](../../design-mocks/src/views/UserProfileView.tsx) (L93–L97) shows an outline "Free plan" badge and an outline **Upgrade** button beside the avatar; the button opens [`PlansView.tsx`](../../design-mocks/src/views/PlansView.tsx).
 - **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/ProfilePage.tsx` renders neither the badge nor the Upgrade link; the avatar row keeps only the avatar. `/plans` (`components/routing/PlansRoute.tsx`) redirects to the group home (`/g/<slug>` for the group in `?g=`, otherwise `/`) instead of showing its coming-soon page. With the flag on, the profile matches the mock and `/plans` is the coming-soon page as before.
 - **Why**: The owner froze the plans feature; self-hosted installs must not show it. The redirect target (group home rather than the previous page) is agent-suggested: nothing links to `/plans` with the flag off, so a visit comes from an old link and usually has no previous page in the app.
@@ -912,7 +912,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-26 — Group settings "Plan & quota" card is a "Usage" card when plans are off
 
-- **Issue/PR**: #1389 / PR (pending)
+- **Issue/PR**: #1389 / #2923
 - **Mock**: [`design-mocks/src/views/GroupSettingsView.tsx`](../../design-mocks/src/views/GroupSettingsView.tsx) (L31–L79) shows the Plan card: a `Zap` tile, "Pro Plan" with an **Active** badge, "Owner: …", an outline **Upgrade** button, three chips in the "9 / 500" form, and an info banner about the owner's subscription. [`design-mocks/src/views/SettingsView.tsx`](../../design-mocks/src/views/SettingsView.tsx) (L138) puts a secondary "Free plan" badge under the name on the account card.
 - **Reality**: With the deployment flag `plans` off (the default), `frontend/src/components/groups/PlanCard.tsx` renders the same card anatomy with a `Gauge` tile, the title "Usage" and the three chips showing only the current count or size (no "/ limit"); the plan name, Active badge, owner line, Upgrade button and banner are not rendered. The card shows its skeleton until the feature flags have loaded, so it does not change shape. The account card on Preferences (`SettingsPage.tsx`) leaves out the "Free plan" badge. With the flag on, both match the mock as before.
 - **Why**: The owner froze the plans feature; self-hosted installs must not show it. Storage usage is not a plan feature and stays visible. The title "Usage" (the card also counts items and locations, so "Storage" would not fit), the `Gauge` icon and dropping the owner line are agent-suggested.
@@ -1206,7 +1206,7 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 
 #### 2026-11-26 — Admin tenant detail drops the Plan tile when plans are off
 
-- **Issue/PR**: #1389 / PR (pending)
+- **Issue/PR**: #1389 / #2923
 - **Mock**: [`design-mocks/src/views/admin/TenantDetailView.tsx`](../../design-mocks/src/views/admin/TenantDetailView.tsx) (L87) has a Plan stat among four tiles.
 - **Reality**: With the deployment flag `plans` off (the default), `frontend/src/pages/admin/AdminTenantDetailPage.tsx` renders three tiles (Users, Groups, Created) in a `sm:grid-cols-3` grid; with the flag on it renders the Plan tile with the raw `plan_id` as before (see "Tenant detail header has no Plan-name lookup"). The tenant list already has no Plan column ("Admin Tenants list drops the mock's `Plan` column").
 - **Why**: The owner froze the plans feature; self-hosted installs must not show it, the admin pages included.
