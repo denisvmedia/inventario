@@ -11,6 +11,7 @@ import (
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
 
+	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 )
@@ -95,9 +96,17 @@ func TestGroupsAPI_SetHiddenSections_Refuses(t *testing.T) {
 	tests := []struct {
 		name     string
 		sections any
+		path     string
+		code     string
 	}{
-		{name: "unknown section", sections: []string{"warranties", "files"}},
-		{name: "missing list", sections: nil},
+		{
+			name: "unknown section", sections: []string{"warranties", "files"},
+			path: "$.errors[0].error.errorCodes.attributes.hidden_sections.code", code: "validation_invalid_group_section",
+		},
+		{
+			name: "missing list", sections: nil,
+			path: "$.errors[0].error.errorCodes.attributes.code", code: "validation_required",
+		},
 		{name: "not a list", sections: "warranties"},
 	}
 	for _, tt := range tests {
@@ -107,6 +116,9 @@ func TestGroupsAPI_SetHiddenSections_Refuses(t *testing.T) {
 
 			w := putHiddenSections(t, env, tt.sections)
 			c.Assert(w.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body: %s", w.Body.String()))
+			if tt.code != "" {
+				c.Check(w.Body.String(), checkers.JSONPathEquals(tt.path), tt.code)
+			}
 
 			stored := must.Must(env.factorySet.LocationGroupRegistry.Get(context.Background(), env.group.ID))
 			c.Assert(stored.HiddenSections, qt.HasLen, 0)

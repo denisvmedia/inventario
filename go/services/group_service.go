@@ -312,25 +312,26 @@ func (s *GroupService) UpdateGroup(ctx context.Context, groupID, name, icon, des
 }
 
 // SetHiddenSections replaces the sections the group hides for all its
-// members and leaves every other field as it is. The list is checked
-// against models.AllGroupSections and stored without duplicates; an empty
-// list shows every section. Hiding a section keeps its data.
+// members. The list is checked against models.AllGroupSections and stored
+// without duplicates; an empty list shows every section. Hiding a section
+// keeps its data.
+//
+// It writes the list alone, so a rename or a deletion that commits meanwhile
+// is kept. A group that is not active gives ErrGroupNotActive.
 func (s *GroupService) SetHiddenSections(ctx context.Context, groupID string, sections ...models.GroupSection) (*models.LocationGroup, error) {
-	group, err := s.groupRegistry.Get(ctx, groupID)
+	var target models.LocationGroup
+	if err := WithHiddenSections(sections...)(&target); err != nil {
+		return nil, err
+	}
+
+	group, applied, err := s.groupRegistry.SetHiddenSections(ctx, groupID, target.HiddenSections, time.Now())
 	if err != nil {
 		return nil, err
 	}
-
-	if !group.IsActive() {
-		return nil, errxtrace.Classify(ErrGroupNotActive)
+	if !applied {
+		return nil, errxtrace.Classify(ErrGroupNotActive, errx.Attrs("group_id", groupID, "status", group.Status))
 	}
-
-	if err := WithHiddenSections(sections...)(group); err != nil {
-		return nil, err
-	}
-	group.UpdatedAt = time.Now()
-
-	return s.groupRegistry.Update(ctx, *group)
+	return group, nil
 }
 
 // InitiateGroupDeletion marks a group as pending_deletion.

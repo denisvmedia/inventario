@@ -34,8 +34,9 @@ when to add an entry and where it goes.
   Existing groups hide nothing. The group resource gains `hidden_sections`
   (`warranties`, `maintenance`, `loans`, `upcoming`), which every member
   reads; `PUT /groups/{groupID}/hidden-sections` replaces the list and is
-  admin-only, and creating or updating a group takes `hidden_sections` too. An unknown
-  section is refused with 422 `group.invalid_section`; duplicates are
+  admin-only, and creating or updating a group takes `hidden_sections` too.
+  An unknown section is refused with 422 and the validation code
+  `validation_invalid_group_section` on `hidden_sections`; duplicates are
   dropped. Like the group name and icon, the setting is not part of a backup
   ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - Custom fields. A group keeps up to 200 fields of its own, each with a name
@@ -586,6 +587,15 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- The upgrade runs one more database migration, which adds the
+  `hidden_sections` column to `location_groups`. During a rolling upgrade,
+  pods that still run the previous version fail every read of a group until
+  they are replaced, because they read all columns of the table and do not
+  know the new one. Expect group pages and group API calls served by those
+  pods to fail with 500 until the rollout finishes
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
+  of problem tracked in
+  [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
 - Sign-in with an OpenID Connect provider you run yourself, such as Authelia,
   Keycloak or Authentik. Set `OAUTH_OIDC_ISSUER_URL`, `OAUTH_OIDC_CLIENT_ID`,
   `OAUTH_OIDC_CLIENT_SECRET` and, for the button, `OAUTH_OIDC_DISPLAY_NAME`;
