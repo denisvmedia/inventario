@@ -146,6 +146,28 @@ describe("parseInline", () => {
     ])
   })
 
+  it("keeps balanced parentheses in a link destination", () => {
+    expect(parseInline("See [Foo](https://e.com/wiki/Foo_(bar)) now.", BASE)).toEqual([
+      { type: "text", text: "See " },
+      {
+        type: "link",
+        href: "https://e.com/wiki/Foo_(bar)",
+        children: [{ type: "text", text: "Foo" }],
+      },
+      { type: "text", text: " now." },
+    ])
+    // The usual case, a link inside parentheses, still ends at the first `)`.
+    expect(parseInline("(see [#12](https://e.com/pull/12)).", BASE)).toEqual([
+      { type: "text", text: "(see " },
+      { type: "link", href: "https://e.com/pull/12", children: [{ type: "text", text: "#12" }] },
+      { type: "text", text: ")." },
+    ])
+    // An unbalanced destination is not a link.
+    expect(parseInline("[x](https://e.com/a_(b", BASE)).toEqual([
+      { type: "text", text: "[x](https://e.com/a_(b" },
+    ])
+  })
+
   it("reads code inside a link label and bold text", () => {
     expect(parseInline("**See [`x`](https://e.com/x)**", BASE)).toEqual([
       {

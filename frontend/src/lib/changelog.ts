@@ -242,11 +242,27 @@ function readLink(
     }
   }
   if (depth !== 0 || source[i + 1] !== "(") return null
-  const close = source.indexOf(")", i + 2)
+  const close = closingParen(source, i + 2)
   if (close < 0) return null
   const href = source.slice(i + 2, close).trim()
   if (!href || /\s/.test(href)) return null
   return { label: source.slice(start + 1, i), href, end: close + 1 }
+}
+
+// closingParen finds the `)` that ends a link destination starting at
+// `from`. Parentheses inside the destination nest, as in
+// `https://en.wikipedia.org/wiki/Foo_(bar)`, the way CommonMark reads them.
+function closingParen(source: string, from: number): number {
+  let depth = 0
+  for (let i = from; i < source.length; i++) {
+    const ch = source[i]
+    if (ch === "(") depth++
+    if (ch === ")") {
+      if (depth === 0) return i
+      depth--
+    }
+  }
+  return -1
 }
 
 function resolveHref(href: string, linkBase: string): string | null {
