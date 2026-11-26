@@ -534,13 +534,10 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 		return session, err
 	}
 	doc := result.Document
-	// A session made for another record carries the identity: the record of
-	// an earlier delivery the group no longer has. What that delivery held
-	// is not known, so this one is refused rather than take it over.
-	_, err = reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+	src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
 	switch {
 	case err == nil:
-		return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", doc.ID))
+		return sessionOfSource(ctx, reg, src, clientKey, doc)
 	case !errors.Is(err, registry.ErrNotFound):
 		return nil, errxtrace.Wrap("failed to look up the source of the document", err)
 	}
@@ -570,10 +567,30 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 		}},
 		0)
 	if errors.Is(err, registry.ErrAlreadyExists) {
-		// Such a session appeared since the look-up.
-		return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", doc.ID))
+		// A source with the identity appeared since the look-up.
+		src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+		if err != nil {
+			return nil, errxtrace.Wrap("failed to look up the source of the document", err)
+		}
+		return sessionOfSource(ctx, reg, src, clientKey, doc)
 	}
 	return session, err
+}
+
+// sessionOfSource returns the session of a source that carries the
+// document's identity when a concurrent delivery of the document made it
+// under clientKey. A session made for another record is the one of an
+// earlier delivery whose record the group no longer has. What that delivery
+// held is not known, so this one is refused rather than take it over.
+func sessionOfSource(ctx context.Context, reg registry.IntakeRegistry, src *models.IntakeSource, clientKey string, doc *models.IntakeDocument) (*models.IntakeSession, error) {
+	session, err := reg.Get(ctx, src.SessionID)
+	switch {
+	case err == nil && session.ClientKey == clientKey:
+		return session, nil
+	case err != nil && !errors.Is(err, registry.ErrNotFound):
+		return nil, err
+	}
+	return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", doc.ID))
 }
 
 // deliveredDraftID returns the draft CreateDrafts made for the delivered

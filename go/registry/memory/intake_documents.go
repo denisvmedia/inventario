@@ -89,8 +89,10 @@ func (f *IntakeDocumentRegistryFactory) promoted(groupID, draftID, commodityID s
 	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		doc := pair.Value
 		if doc.GroupID == groupID && doc.DraftID != nil && *doc.DraftID == draftID {
-			doc.CommodityID = new(commodityID)
-			doc.UpdatedAt = now
+			cp := *doc
+			cp.CommodityID = new(commodityID)
+			cp.UpdatedAt = now
+			pair.Value = &cp
 		}
 	}
 }
@@ -126,7 +128,9 @@ func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID stri
 			continue
 		}
 		if heir := heirs[doc.GroupID]; heir != "" {
-			doc.CreatedByUserID = heir
+			cp := *doc
+			cp.CreatedByUserID = heir
+			pair.Value = &cp
 			continue
 		}
 		gone = append(gone, doc.ID)
@@ -232,10 +236,12 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 	defer r.factory.writes.Unlock()
 	r.lock.Lock()
 	defer r.lock.Unlock()
-	doc, ok := r.items.Get(id)
-	if !ok || doc.GroupID != r.groupID {
+	stored, ok := r.items.Get(id)
+	if !ok || stored.GroupID != r.groupID {
 		return nil, intakeDocumentNotFound(id)
 	}
+	// A copy takes the change: a reader may still hold the stored document.
+	doc := new(*stored)
 	setsDraft := doc.DraftID == nil && progress.DraftID != nil
 	changed := false
 	for _, f := range []struct {
@@ -258,6 +264,7 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 	if changed {
 		doc.UpdatedAt = time.Now().UTC()
 	}
+	r.items.Set(id, doc)
 	return new(*doc), nil
 }
 
@@ -276,11 +283,13 @@ func (r *IntakeDocumentRegistry) ReplaceDelivery(_ context.Context, id string, d
 	if stored.FileID != nil || stored.SessionID != nil || stored.DraftID != nil {
 		return new(*stored), false, nil
 	}
-	stored.SourceName = doc.SourceName
-	stored.SourceURL = doc.SourceURL
-	stored.PayloadHash = doc.PayloadHash
-	stored.UpdatedAt = time.Now().UTC()
-	return new(*stored), true, nil
+	replaced := new(*stored)
+	replaced.SourceName = doc.SourceName
+	replaced.SourceURL = doc.SourceURL
+	replaced.PayloadHash = doc.PayloadHash
+	replaced.UpdatedAt = time.Now().UTC()
+	r.items.Set(id, replaced)
+	return new(*replaced), true, nil
 }
 
 func (r *IntakeDocumentRegistry) ListByDrafts(_ context.Context, draftIDs ...string) ([]*models.IntakeDocument, error) {
