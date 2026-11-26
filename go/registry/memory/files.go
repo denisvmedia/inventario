@@ -727,6 +727,30 @@ func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (
 	return out, nil
 }
 
+// CommodityIDsWithPhotos returns the items of the group that have a photo
+// in the sense of FirstPhotos.
+func (r *FileRegistry) CommodityIDsWithPhotos(ctx context.Context) ([]string, error) {
+	files, err := r.List(ctx)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool)
+	var ids []string
+	for _, f := range files {
+		if f.Type != models.FileTypeImage || f.Category != models.FileCategoryImages {
+			continue
+		}
+		for _, l := range f.Links {
+			if l.EntityType != models.FileLinkCommodity || l.Meta != models.FileLinkMetaImages || seen[l.EntityID] {
+				continue
+			}
+			seen[l.EntityID] = true
+			ids = append(ids, l.EntityID)
+		}
+	}
+	return ids, nil
+}
+
 // itemInTrash reports whether the item with this id is in Trash.
 func (r *FileRegistry) itemInTrash(id string) bool {
 	if r.commodityFactory == nil {

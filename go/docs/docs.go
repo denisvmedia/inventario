@@ -3136,6 +3136,24 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
+                        "description": "Only items without a photo; cannot be combined with trashed",
+                        "name": "no_photo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only items whose purchase price is unknown; a known zero is a price",
+                        "name": "no_purchase_price",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only items whose purchase date is unknown",
+                        "name": "no_purchase_date",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
                         "description": "Include drafts and non-in_use commodities (default true; false hides them)",
                         "name": "include_inactive",
                         "in": "query"
@@ -3691,6 +3709,24 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "boolean",
+                        "description": "Only items without a photo; cannot be combined with trashed",
+                        "name": "no_photo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only items whose purchase price is unknown",
+                        "name": "no_purchase_price",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Only items whose purchase date is unknown",
+                        "name": "no_purchase_date",
+                        "in": "query"
+                    },
+                    {
                         "type": "string",
                         "description": "Accepted and ignored",
                         "name": "sort",
@@ -3884,7 +3920,7 @@ const docTemplate = `{
         },
         "/g/{groupSlug}/commodities/{commodityID}/cover": {
             "patch": {
-                "description": "Sets the explicit cover-photo override (issue #1451 option B)\nor clears it when ` + "`" + `attributes.file_id` + "`" + ` is null/empty. The\nfile must already be attached to this commodity and be an\nimage.",
+                "description": "Sets the explicit cover-photo override (issue #1451 option B)\nor clears it when ` + "`" + `attributes.file_id` + "`" + ` is null/empty. The\nfile must already be attached to this commodity among its\nphotos and be an image.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -3929,6 +3965,66 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity or file not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/commodities/{commodityID}/draft": {
+            "patch": {
+                "description": "Sets (` + "`" + `true` + "`" + `) or clears (` + "`" + `false` + "`" + `) the draft mark of an item\nand changes no other field. The item with the new mark must\npass the validation a full update runs.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "commodities"
+                ],
+                "summary": "Mark an item as draft or as reviewed",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Commodity ID",
+                        "name": "commodityID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "The draft mark",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.CommodityResponse"
+                        }
+                    },
+                    "404": {
+                        "description": "Commodity not found",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -6769,6 +6865,35 @@ const docTemplate = `{
                 }
             }
         },
+        "/g/{groupSlug}/inbox/checks": {
+            "get": {
+                "description": "The items of the group that lack one piece of information: no location, no\nphoto, an unknown purchase price, an unknown purchase date, no tags. Missing\ninformation is not unfinished work, so these items are not in the inbox and\nits counts do not include them. Each check carries its item query in the\nparameter names of GET /g/{groupSlug}/commodities and the total that list\nreports for it. The queries use the list's default view: items in use that\nare not marked as draft. An unknown value counts as missing whether or not\nthe item was reviewed with it; a known zero price is a price. Every member of\nthe group can read it.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "inbox"
+                ],
+                "summary": "Count the inbox's quality checks",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.InboxChecksResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/g/{groupSlug}/inbox/count": {
             "get": {
                 "description": "How many records of the group need attention, for the sidebar and the dashboard.\ntotal counts each record once, whatever its number of reasons; reasons counts,\nper reason, the records that have it. The counts cover only what the group holds,\nso they agree with GET /g/{groupSlug}/inbox. Stopped draft discards are finished\nfirst, as for GET /g/{groupSlug}/inbox.",
@@ -8745,6 +8870,24 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Commodities only: only items with no tags; cannot be combined with tags or tags_exclude",
                         "name": "no_tags",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: only items without a photo; cannot be combined with trashed",
+                        "name": "no_photo",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: only items whose purchase price is unknown",
+                        "name": "no_purchase_price",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Commodities only: only items whose purchase date is unknown",
+                        "name": "no_purchase_date",
                         "in": "query"
                     },
                     {
@@ -13971,6 +14114,37 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityDraftMarkRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequestData"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftMarkRequestAttributes": {
+            "type": "object",
+            "properties": {
+                "draft": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "jsonapi.CommodityDraftMarkRequestData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.CommodityDraftMarkRequestAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "commodity_draft_mark"
+                    ],
+                    "example": "commodity_draft_mark"
+                }
+            }
+        },
         "jsonapi.CommodityDraftPromoteMeta": {
             "type": "object",
             "required": [
@@ -16036,6 +16210,41 @@ const docTemplate = `{
                         "exports"
                     ],
                     "example": "exports"
+                }
+            }
+        },
+        "jsonapi.InboxCheck": {
+            "type": "object",
+            "properties": {
+                "count": {
+                    "type": "integer",
+                    "example": 4
+                },
+                "key": {
+                    "type": "string",
+                    "enum": [
+                        "no_location",
+                        "no_photo",
+                        "no_purchase_price",
+                        "no_purchase_date",
+                        "untagged"
+                    ],
+                    "example": "no_photo"
+                },
+                "query": {
+                    "type": "string",
+                    "example": "include_inactive=false\u0026no_photo=true"
+                }
+            }
+        },
+        "jsonapi.InboxChecksResponse": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.InboxCheck"
+                    }
                 }
             }
         },

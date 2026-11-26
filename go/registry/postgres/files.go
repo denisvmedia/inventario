@@ -403,6 +403,27 @@ func (r *FileRegistry) GetMany(ctx context.Context, ids []string) ([]*models.Fil
 	return files, nil
 }
 
+// CommodityIDsWithPhotos returns the items of the group that have a photo
+// in the sense of FirstPhotos. Row-level security keeps it to the group.
+func (r *FileRegistry) CommodityIDsWithPhotos(ctx context.Context) ([]string, error) {
+	var ids []string
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`
+			SELECT DISTINCT l.entity_id
+			FROM %s l
+			JOIN %s f ON f.id = l.file_id
+			WHERE l.entity_type = $1 AND l.meta = $2
+				AND f.deleted_at IS NULL AND f.type = $3 AND f.category = $4`,
+			r.tableNames.FileLinks(), r.tableNames.Files())
+		return tx.SelectContext(ctx, &ids, query,
+			models.FileLinkCommodity, models.FileLinkMetaImages, models.FileTypeImage, models.FileCategoryImages)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list items with photos", err)
+	}
+	return ids, nil
+}
+
 // FirstPhotos returns the oldest photo of each item among commodityIDs that
 // is not in Trash. DISTINCT ON keeps the first row per item in the ORDER BY, so the photo
 // filter runs before the pick and a non-photo cannot shadow a photo.

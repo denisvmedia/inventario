@@ -52,6 +52,28 @@ the section matching the tag and publishes it as the GitHub Release body. See
   `GET /inbox/count`
   ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
+- The Items page has a Missing filter for items without a photo, without a
+  purchase price or without a purchase date. An unknown price or date counts
+  as missing even after the item was reviewed with it; a price of 0 is a
+  price. The inbox's Missing details section lists these three next to No
+  location and No tags, each with the number of items its link shows, and
+  none of them adds to the inbox count. Saved views keep the new filters. The
+  item query API takes `no_photo`, `no_purchase_price` and
+  `no_purchase_date`, and `GET /inbox/checks` returns the counts
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
+- The items to review can be checked one after another. Review one by one
+  on the inbox opens the first of them, and an item opened from the inbox
+  shows a review bar: Mark as reviewed turns its draft switch off and opens
+  the next item, or returns to the inbox after the last one; Skip opens the
+  next item unchanged. Previous, Next and Save and next in the edit form walk
+  the same list. Continue on a draft opens the Add item dialog on the first
+  step that still needs input instead of Basics, with the field to correct
+  marked. Mark as reviewed, on the inbox and in the review bar, changes the
+  draft switch alone, so an edit of the item saved at the same moment is
+  kept; the new API is `PATCH /commodities/{id}/draft`
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
+
 - Save as draft in the Add item dialog saves the form and its files on the
   server as a draft of the group, so an item started on one device can be
   finished on another. Nothing is required to save a draft; a **Save draft**
@@ -337,6 +359,12 @@ the section matching the tag and publishes it as the GitHub Release body. See
   ([#2813](https://github.com/denisvmedia/inventario/issues/2813)).
 
 ### Changed
+
+- An item's cover photo is one of its photos: an image attached to the item
+  in another section of its Files tab can no longer be set as the cover, and
+  a cover set that way before shows the first photo instead. The No photo
+  filter counts the same photos
+  ([#2794](https://github.com/denisvmedia/inventario/issues/2794)).
 
 - The upgrade runs one more database migration. It writes the descriptions of
   the row-level security policies and of the RLS helper functions into the

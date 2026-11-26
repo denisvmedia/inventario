@@ -100,7 +100,7 @@ func listQueries() []listQuery {
 				Types:                 []models.CommodityType{models.CommodityType(v)},
 				Statuses:              []models.CommodityStatus{models.CommodityStatus(v)},
 				WarrantyExpiresBefore: v,
-			}, "commodities", "commodity_loans"))
+			}, testCommodityTables))
 		}},
 		{"files", func(v string) (string, []any) {
 			fileType := models.FileType(v)

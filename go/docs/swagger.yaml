@@ -1529,6 +1529,26 @@ definitions:
     - attributes
     - type
     type: object
+  jsonapi.CommodityDraftMarkRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CommodityDraftMarkRequestData'
+    type: object
+  jsonapi.CommodityDraftMarkRequestAttributes:
+    properties:
+      draft:
+        type: boolean
+    type: object
+  jsonapi.CommodityDraftMarkRequestData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CommodityDraftMarkRequestAttributes'
+      type:
+        enum:
+        - commodity_draft_mark
+        example: commodity_draft_mark
+        type: string
+    type: object
   jsonapi.CommodityDraftPromoteMeta:
     properties:
       promotion_key:
@@ -3002,6 +3022,31 @@ definitions:
         - exports
         example: exports
         type: string
+    type: object
+  jsonapi.InboxCheck:
+    properties:
+      count:
+        example: 4
+        type: integer
+      key:
+        enum:
+        - no_location
+        - no_photo
+        - no_purchase_price
+        - no_purchase_date
+        - untagged
+        example: no_photo
+        type: string
+      query:
+        example: include_inactive=false&no_photo=true
+        type: string
+    type: object
+  jsonapi.InboxChecksResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.InboxCheck'
+        type: array
     type: object
   jsonapi.InboxCountResponse:
     properties:
@@ -8990,6 +9035,19 @@ paths:
         in: query
         name: no_tags
         type: boolean
+      - description: Only items without a photo; cannot be combined with trashed
+        in: query
+        name: no_photo
+        type: boolean
+      - description: Only items whose purchase price is unknown; a known zero is a
+          price
+        in: query
+        name: no_purchase_price
+        type: boolean
+      - description: Only items whose purchase date is unknown
+        in: query
+        name: no_purchase_date
+        type: boolean
       - description: Include drafts and non-in_use commodities (default true; false
           hides them)
         in: query
@@ -9169,8 +9227,8 @@ paths:
       description: |-
         Sets the explicit cover-photo override (issue #1451 option B)
         or clears it when `attributes.file_id` is null/empty. The
-        file must already be attached to this commodity and be an
-        image.
+        file must already be attached to this commodity among its
+        photos and be an image.
       parameters:
       - description: Group slug
         in: path
@@ -9204,6 +9262,49 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Set or clear the commodity cover photo
+      tags:
+      - commodities
+  /g/{groupSlug}/commodities/{commodityID}/draft:
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Sets (`true`) or clears (`false`) the draft mark of an item
+        and changes no other field. The item with the new mark must
+        pass the validation a full update runs.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Commodity ID
+        in: path
+        name: commodityID
+        required: true
+        type: string
+      - description: The draft mark
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CommodityDraftMarkRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CommodityResponse'
+        "404":
+          description: Commodity not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Mark an item as draft or as reviewed
       tags:
       - commodities
   /g/{groupSlug}/commodities/{commodityID}/events:
@@ -10286,6 +10387,18 @@ paths:
       - description: Validated as for GET /commodities, then set aside for the counts
         in: query
         name: no_tags
+        type: boolean
+      - description: Only items without a photo; cannot be combined with trashed
+        in: query
+        name: no_photo
+        type: boolean
+      - description: Only items whose purchase price is unknown
+        in: query
+        name: no_purchase_price
+        type: boolean
+      - description: Only items whose purchase date is unknown
+        in: query
+        name: no_purchase_date
         type: boolean
       - description: Accepted and ignored
         in: query
@@ -11607,6 +11720,34 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: List the inbox
+      tags:
+      - inbox
+  /g/{groupSlug}/inbox/checks:
+    get:
+      description: |-
+        The items of the group that lack one piece of information: no location, no
+        photo, an unknown purchase price, an unknown purchase date, no tags. Missing
+        information is not unfinished work, so these items are not in the inbox and
+        its counts do not include them. Each check carries its item query in the
+        parameter names of GET /g/{groupSlug}/commodities and the total that list
+        reports for it. The queries use the list's default view: items in use that
+        are not marked as draft. An unknown value counts as missing whether or not
+        the item was reviewed with it; a known zero price is a price. Every member of
+        the group can read it.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.InboxChecksResponse'
+      summary: Count the inbox's quality checks
       tags:
       - inbox
   /g/{groupSlug}/inbox/count:
@@ -13008,6 +13149,19 @@ paths:
           with tags or tags_exclude'
         in: query
         name: no_tags
+        type: boolean
+      - description: 'Commodities only: only items without a photo; cannot be combined
+          with trashed'
+        in: query
+        name: no_photo
+        type: boolean
+      - description: 'Commodities only: only items whose purchase price is unknown'
+        in: query
+        name: no_purchase_price
+        type: boolean
+      - description: 'Commodities only: only items whose purchase date is unknown'
+        in: query
+        name: no_purchase_date
         type: boolean
       - collectionFormat: multi
         description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
