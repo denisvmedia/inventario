@@ -112,8 +112,12 @@ func newPersonalFixture(c *qt.C) *personalFixture {
 	// Alice lends Bob's toaster; Bob lends Alice's kettle.
 	f.createLoan(c, aliceCtx, f.bobItem.ID, "Neighbor Carol")
 	f.createLoan(c, bobCtx, f.aliceItem.ID, "Cousin Dan")
-	f.createEvent(c, aliceCtx, f.aliceItem.ID, "Alice's note")
-	f.createEvent(c, bobCtx, f.aliceItem.ID, "Bob's note")
+	// Alice edits the comments of an item; the entry records the other
+	// fields as they stood, some typed by Bob.
+	f.createEvent(c, aliceCtx, f.aliceItem.ID, "Alice's note",
+		models.CommodityEventPayload{"comments": "Comment Bob typed", "brand": "Brand Bob typed"},
+		models.CommodityEventPayload{"comments": "Comment Alice typed", "brand": "Brand Bob typed", "model": "K-2"})
+	f.createEvent(c, bobCtx, f.aliceItem.ID, "Bob's note", nil, nil)
 	return f
 }
 
@@ -168,7 +172,7 @@ func (f *personalFixture) createLoan(c *qt.C, ctx context.Context, itemID, borro
 	c.Assert(err, qt.IsNil)
 }
 
-func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note string) {
+func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note string, before, after models.CommodityEventPayload) {
 	c.Helper()
 	reg, err := f.fs.CommodityEventRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
@@ -176,6 +180,8 @@ func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note
 		CommodityID: itemID,
 		Kind:        models.CommodityEventKindUpdated,
 		OccurredAt:  time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC),
+		Before:      before,
+		After:       after,
 		Note:        note,
 	})
 	c.Assert(err, qt.IsNil)
@@ -271,12 +277,17 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 	c.Assert(doc.Loans[0].BorrowerName, qt.Equals, "Neighbor Carol")
 	c.Assert(doc.Loans[0].ItemID, qt.Equals, f.bobItem.UUID)
 
+	// Of Alice's entry, only what she changed, with the values she wrote.
 	c.Assert(doc.History, qt.HasLen, 1)
 	c.Assert(doc.History[0].Note, qt.Equals, "Alice's note")
+	c.Assert(doc.History[0].Changes, qt.DeepEquals, map[string]any{"comments": "Comment Alice typed", "model": "K-2"})
 
 	// Nothing of Bob's: not his rows, his bytes, his name or his email.
 	for name, data := range members {
-		for _, leak := range []string{"Bob Example", "bob@example.com", "bob-bytes", "Cousin Dan", "Bob's note", f.bobFile.UUID} {
+		for _, leak := range []string{
+			"Bob Example", "bob@example.com", "bob-bytes", "Cousin Dan", "Bob's note", f.bobFile.UUID,
+			"Comment Bob typed", "Brand Bob typed",
+		} {
 			c.Assert(string(data), qt.Not(qt.Contains), leak, qt.Commentf("%s holds %q", name, leak))
 		}
 	}

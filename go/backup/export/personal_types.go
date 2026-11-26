@@ -339,13 +339,15 @@ type PersonalSavedViewPlacement struct {
 	ShowOnDashboard bool   `json:"showOnDashboard"`
 }
 
-// PersonalHistoryEntry is an entry of an item's history the user made. Before
-// and After are the values the entry recorded, as stored.
+// PersonalHistoryEntry is an entry of an item's history the user made.
+// Changes holds the fields the entry changed, each with the value it set (null
+// for a value it removed): what the user wrote. The values the fields had
+// before, and the fields the entry recorded without changing them, are left
+// out, since other members may have typed them.
 type PersonalHistoryEntry struct {
 	PersonalItemRef
 	Kind       string         `json:"kind"`
 	OccurredAt string         `json:"occurredAt"`
-	Before     map[string]any `json:"before,omitempty"`
-	After      map[string]any `json:"after,omitempty"`
+	Changes    map[string]any `json:"changes,omitempty"`
 	Note       string         `json:"note,omitempty"`
 }
