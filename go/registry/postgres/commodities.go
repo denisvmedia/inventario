@@ -1236,8 +1236,12 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 		if err := scanOne(ctx, tx, &locked, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, table), id); err != nil {
 			return err
 		}
+		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &locked); err != nil {
+			return err
+		}
 		next := locked
 		next.Draft = draft
+		next.CustomFields = locked.CustomFields.Clone()
 		if check != nil {
 			if err := check(next); err != nil {
 				return err
@@ -1251,6 +1255,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 	}
 	next := locked
 	next.Draft = draft
+	next.CustomFields = locked.CustomFields.Clone()
 	return &locked, &next, nil
 }
 

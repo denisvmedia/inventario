@@ -35,7 +35,8 @@ type CustomFieldEnv struct {
 // value against its field, a null clears a value and a missing key keeps
 // it, links name another live item of the group, a dropped option or a
 // deleted field takes its values along, templates name the group's item
-// types, and the list filters, sorts and search by custom field values.
+// types, the draft mark, Trash and restore return the values they keep,
+// and the list filters, sorts and search by custom field values.
 func RunCustomFieldContract(t *testing.T, newEnv func(t *testing.T) CustomFieldEnv) {
 	t.Helper()
 
@@ -421,6 +422,43 @@ func runCustomFieldTemplateContract(t *testing.T, newEnv func(t *testing.T) Cust
 		read, err = env.CommoditiesA.Get(env.CtxA, van.ID)
 		c.Assert(err, qt.IsNil)
 		c.Check(read.CustomFields, qt.DeepEquals, models.CustomFieldValues{plate.ID: json.RawMessage(`"CD-2"`)})
+	})
+
+	t.Run("the draft mark, Trash and restore return the values and keep them", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+
+		plate := mustField(c, env.FieldsA, env.CtxA, "Plate", models.CustomFieldTypeText)
+		want := models.CustomFieldValues{plate.ID: json.RawMessage(`"AB-1"`)}
+		van := mustCustomFieldItem(c, env, "Van", models.CustomFieldValues{plate.ID: json.RawMessage(`"AB-1"`)})
+
+		var seen models.Commodity
+		before, after, err := env.CommoditiesA.SetDraft(env.CtxA, van.ID, true, func(next models.Commodity) error {
+			seen = next
+			return nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(seen.CustomFields, qt.DeepEquals, want)
+		c.Check(before.CustomFields, qt.DeepEquals, want)
+		c.Check(after.CustomFields, qt.DeepEquals, want)
+		seen.CustomFields[plate.ID][1] = 'S'
+		before.CustomFields[plate.ID][1] = 'X'
+		after.CustomFields[plate.ID][1] = 'Y'
+
+		trashed, err := env.CommoditiesA.Trash(env.CtxA, van.ID, "registrytest", time.Date(2026, 3, 1, 12, 0, 0, 0, time.UTC))
+		c.Assert(err, qt.IsNil)
+		c.Check(trashed.CustomFields, qt.DeepEquals, want)
+		trashed.CustomFields[plate.ID][1] = 'Z'
+
+		restored, err := env.CommoditiesA.Restore(env.CtxA, van.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(restored.CustomFields, qt.DeepEquals, want)
+		restored.CustomFields[plate.ID][1] = 'W'
+
+		read, err := env.CommoditiesA.Get(env.CtxA, van.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(read.Draft, qt.IsTrue)
+		c.Check(read.CustomFields, qt.DeepEquals, want)
 	})
 
 	t.Run("templates name the group's item types and are replaced or kept", func(t *testing.T) {
