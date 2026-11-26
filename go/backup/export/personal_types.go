@@ -73,18 +73,21 @@ type PersonalManifestGroup struct {
 
 // PersonalStatistics counts what the archive holds.
 type PersonalStatistics struct {
-	GroupCount               int   `json:"groupCount"`
-	ItemCount                int   `json:"itemCount"`
-	FileCount                int   `json:"fileCount"`
-	TotalFileSize            int64 `json:"totalFileSize"`
-	LoanCount                int   `json:"loanCount"`
-	MaintenanceScheduleCount int   `json:"maintenanceScheduleCount"`
-	ServiceRecordCount       int   `json:"serviceRecordCount"`
-	ReminderCount            int   `json:"reminderCount"`
-	SupplyLinkCount          int   `json:"supplyLinkCount"`
-	DraftCount               int   `json:"draftCount"`
-	SavedViewCount           int   `json:"savedViewCount"`
-	HistoryEntryCount        int   `json:"historyEntryCount"`
+	GroupCount    int   `json:"groupCount"`
+	ItemCount     int   `json:"itemCount"`
+	FileCount     int   `json:"fileCount"`
+	TotalFileSize int64 `json:"totalFileSize"`
+	// MissingFileCount counts the files listed without their bytes, which
+	// were no longer in storage; each is marked missing in its group's file.
+	MissingFileCount         int `json:"missingFileCount"`
+	LoanCount                int `json:"loanCount"`
+	MaintenanceScheduleCount int `json:"maintenanceScheduleCount"`
+	ServiceRecordCount       int `json:"serviceRecordCount"`
+	ReminderCount            int `json:"reminderCount"`
+	SupplyLinkCount          int `json:"supplyLinkCount"`
+	DraftCount               int `json:"draftCount"`
+	SavedViewCount           int `json:"savedViewCount"`
+	HistoryEntryCount        int `json:"historyEntryCount"`
 }
 
 // PersonalProfile is the profile.json of a personal data export.

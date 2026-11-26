@@ -12,6 +12,7 @@ import (
 	"path"
 	"slices"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -63,12 +64,32 @@ type plannedPersonalGroup struct {
 	files []plannedBlob
 }
 
+// errPersonalFileVanished reports a file whose bytes were deleted after the
+// build planned the archive. The manifest, written first, already lists the
+// file, so the build starts over and the new plan records the file as missing.
+var errPersonalFileVanished = errx.NewSentinel("file deleted while the archive was built")
+
+// personalAfterPlan, when set, runs between planning an archive and writing
+// it. Only tests set it, to delete a file inside that window.
+var personalAfterPlan atomic.Pointer[func()]
+
+// SetPersonalDataExportAfterPlanHookForTesting runs fn after each personal
+// data export build has planned its archive and before it writes the first
+// member. The hook is removed when t's test ends.
+func SetPersonalDataExportAfterPlanHookForTesting(t testingCleanup, fn func()) {
+	personalAfterPlan.Store(&fn)
+	t.Cleanup(func() { personalAfterPlan.Store(nil) })
+}
+
 // writePersonalDataExport writes the personal data export of user into w as
 // gzip(tar) and returns what it holds.
 func writePersonalDataExport(ctx context.Context, fs *registry.FactorySet, bucket *blob.Bucket, user *models.User, exportID string, createdAt time.Time, w io.Writer) (PersonalStatistics, error) {
 	b := &personalBuilder{fs: fs, bucket: bucket, user: user}
 	if err := b.plan(appctx.WithUser(ctx, user)); err != nil {
 		return PersonalStatistics{}, err
+	}
+	if hook := personalAfterPlan.Load(); hook != nil {
+		(*hook)()
 	}
 
 	gzw, err := gzip.NewWriterLevel(w, gzipLevel)
@@ -135,6 +156,9 @@ func writePersonalJSON(tw *tar.Writer, name string, v any) error {
 
 func (b *personalBuilder) writeBlob(ctx context.Context, tw *tar.Writer, f plannedBlob) error {
 	n, err := streamTarMember(ctx, tw, b.bucket, f.member, f.key, f.size)
+	if gcerrors.Code(err) == gcerrors.NotFound {
+		return errxtrace.Classify(errPersonalFileVanished, errx.Attrs("member", f.member))
+	}
 	if err != nil {
 		return err
 	}
@@ -729,6 +753,7 @@ func (b *personalBuilder) planFiles(ctx context.Context, l *groupLookups, planne
 			b.stats.TotalFileSize += size
 		} else {
 			pf.Missing = true
+			b.stats.MissingFileCount++
 		}
 		planned.doc.Files = append(planned.doc.Files, pf)
 	}

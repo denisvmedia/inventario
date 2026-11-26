@@ -279,6 +279,13 @@ func (s *PersonalDataExportService) Process(ctx context.Context, id string) erro
 
 // build writes the archive to key and returns its size. A build that fails
 // leaves nothing at key: the write is aborted by canceling its context.
+// personalBuildAttempts is how many times a build starts over because a file
+// was deleted while it ran.
+const personalBuildAttempts = 3
+
+// build writes the archive to key. A file deleted after the build planned the
+// archive makes it start over, so the manifest and the group files list the
+// file as missing instead of naming bytes the archive lacks.
 func (s *PersonalDataExportService) build(ctx context.Context, user *models.User, export *models.PersonalDataExport, key string) (int64, PersonalStatistics, error) {
 	bucket, err := blob.OpenBucket(ctx, s.uploadLocation)
 	if err != nil {
@@ -286,6 +293,18 @@ func (s *PersonalDataExportService) build(ctx context.Context, user *models.User
 	}
 	defer bucket.Close()
 
+	for attempt := 1; ; attempt++ {
+		size, stats, err := s.buildOnce(ctx, bucket, user, export, key)
+		if errors.Is(err, errPersonalFileVanished) && attempt < personalBuildAttempts {
+			slog.Info("A file was deleted during a personal data export build, starting over",
+				"export_id", export.ID, "attempt", attempt, "error", err)
+			continue
+		}
+		return size, stats, err
+	}
+}
+
+func (s *PersonalDataExportService) buildOnce(ctx context.Context, bucket *blob.Bucket, user *models.User, export *models.PersonalDataExport, key string) (int64, PersonalStatistics, error) {
 	writeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	writer, err := bucket.NewWriter(writeCtx, key, &blob.WriterOptions{

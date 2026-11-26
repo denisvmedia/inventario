@@ -9,6 +9,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -469,6 +470,41 @@ func TestPersonalDataExport_IsRefusedAsABackup(t *testing.T) {
 	c.Assert(inb.IsPersonalDataExport(archive[:min(len(archive), inb.SniffHeadSize)]), qt.IsTrue)
 	_, _, err = inb.ReadContainer(strings.NewReader(string(archive)), inb.DefaultLimits())
 	c.Assert(err, qt.ErrorIs, inb.ErrPersonalDataExport)
+}
+
+// A file deleted after the build planned the archive is not in it, and the
+// archive says so: the build starts over and lists the file as missing.
+func TestPersonalDataExport_FileDeletedDuringTheBuildIsListedAsMissing(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	var once sync.Once
+	export.SetPersonalDataExportAfterPlanHookForTesting(t, func() {
+		once.Do(func() {
+			bucket, err := blob.OpenBucket(f.ctx, f.uploadLocation)
+			c.Assert(err, qt.IsNil)
+			c.Assert(bucket.Delete(f.ctx, f.aliceFile.OriginalPath), qt.IsNil)
+			c.Assert(bucket.Close(), qt.IsNil)
+		})
+	})
+
+	e, names, members := buildExport(c, f, svc, f.alice)
+	c.Assert(e.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+	c.Assert(e.FileCount, qt.Equals, 0)
+
+	var manifest export.PersonalManifest
+	c.Assert(json.Unmarshal(members[export.PersonalManifestName], &manifest), qt.IsNil)
+	c.Assert(manifest.Statistics.FileCount, qt.Equals, 0)
+	c.Assert(manifest.Statistics.MissingFileCount, qt.Equals, 1)
+
+	var doc export.PersonalGroupDocument
+	c.Assert(json.Unmarshal(members[manifest.Groups[0].File], &doc), qt.IsNil)
+	c.Assert(doc.Files, qt.HasLen, 1)
+	c.Assert(doc.Files[0].Missing, qt.IsTrue)
+	c.Assert(doc.Files[0].Path, qt.Equals, "")
+	for _, name := range names {
+		c.Assert(name, qt.Not(qt.Contains), "/files/")
+	}
 }
 
 // A build stopped by the worker shutting down goes back to the queue instead
