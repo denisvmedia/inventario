@@ -189,17 +189,19 @@ branch with no protection rule that set is empty, so `--auto` merges the moment
 it is enabled — before a single workflow reports. A patch bump that breaks the
 build would land unreviewed and untested (#1819).
 
-So today the workflow posts a notice and leaves bot pull requests for a human.
-To turn auto-merge back on, configure required checks on `master`; the workflow
-picks that up on its own, with no change here.
+`master` is guarded by a repository ruleset, not by classic branch protection.
+The gate (`.github/scripts/required-checks-configured.sh`) reads only classic
+branch protection rules, so it does not see the ruleset's required checks, and
+the workflow posts a notice and leaves bot pull requests for a human.
 
-`./scripts/set-branch-protection.sh` applies the set, and `--show` / `--remove`
-read it back and undo it. Choosing the contexts is the part that needs care, so
-the reasoning lives in the script next to the list rather than in someone's
-shell history: a job skipped by its `if:` reports `skipped` and passes, but a
-workflow skipped by a workflow-level `paths:` filter creates no check run at
-all, and requiring one of those blocks every unrelated pull request forever.
-See #2569 for how the eleven contexts were verified.
+`./scripts/set-branch-protection.sh` writes the required-check set into that
+ruleset, and `--show` prints the checks `master` requires. Choosing the
+contexts is the part that needs care, so the reasoning lives in the script next
+to the list rather than in someone's shell history: a job skipped by its `if:`
+reports `skipped` and passes, but a workflow skipped by a workflow-level
+`paths:` filter creates no check run at all, and requiring one of those blocks
+every unrelated pull request forever. See #2569 for how the twelve contexts
+were verified.
 
 ## GitHub Actions are pinned to commit SHAs
 
