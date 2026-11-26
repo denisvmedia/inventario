@@ -40,12 +40,12 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 
 	bucket, err := blob.OpenBucket(ctx, uploadLocation)
 	if err != nil {
-		slog.Warn("storage backfill skipped: bucket unavailable", "error", err.Error())
+		slog.WarnContext(ctx, "storage backfill skipped: bucket unavailable", "error", err.Error())
 		return
 	}
 	defer func() {
 		if cerr := bucket.Close(); cerr != nil {
-			slog.Warn("storage backfill: failed to close bucket", "error", cerr.Error())
+			slog.WarnContext(ctx, "storage backfill: failed to close bucket", "error", cerr.Error())
 		}
 	}()
 
@@ -55,14 +55,14 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 	updated, failed := 0, 0
 	for {
 		if ctx.Err() != nil {
-			slog.Info("storage backfill cancelled",
+			slog.InfoContext(ctx, "storage backfill cancelled",
 				"updated", updated, "failed", failed)
 			return
 		}
 
 		batch, listErr := fileReg.ListPendingSizeBackfill(ctx, storageBackfillBatchSize)
 		if listErr != nil {
-			slog.Warn("storage backfill skipped: failed to list pending files",
+			slog.WarnContext(ctx, "storage backfill skipped: failed to list pending files",
 				"error", listErr.Error(), "updated", updated, "failed", failed)
 			return
 		}
@@ -79,7 +79,7 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 		updated += result.updated
 		failed += result.failed
 		if result.cancelled {
-			slog.Info("storage backfill cancelled",
+			slog.InfoContext(ctx, "storage backfill cancelled",
 				"updated", updated, "failed", failed)
 			return
 		}
@@ -92,7 +92,7 @@ func BackfillFileSizes(ctx context.Context, factorySet *registry.FactorySet, upl
 		}
 	}
 
-	slog.Info("storage backfill complete",
+	slog.InfoContext(ctx, "storage backfill complete",
 		"updated", updated, "failed", failed,
 		"duration_ms", time.Since(start).Milliseconds())
 }
@@ -129,7 +129,7 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 			// leave the row at 0 and continue. Don't fail the whole
 			// pass.
 			if !errors.Is(attrErr, context.Canceled) {
-				slog.Debug("storage backfill: missing blob",
+				slog.DebugContext(ctx, "storage backfill: missing blob",
 					"file_id", file.ID, "path", file.OriginalPath, "error", attrErr.Error())
 			}
 			res.failed++
@@ -138,7 +138,7 @@ func backfillBatch(ctx context.Context, fileReg backfillFileRegistry, bucket *bl
 
 		file.SizeBytes = attrs.Size
 		if _, updErr := fileReg.Update(ctx, *file); updErr != nil {
-			slog.Debug("storage backfill: update failed",
+			slog.DebugContext(ctx, "storage backfill: update failed",
 				"file_id", file.ID, "error", updErr.Error())
 			res.failed++
 			continue

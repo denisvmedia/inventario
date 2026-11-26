@@ -116,7 +116,7 @@ func (f *CommodityRegistryFactory) CreateServiceRegistry() registry.CommodityReg
 }
 
 func (r *CommodityRegistry) Get(ctx context.Context, id string) (*models.Commodity, error) {
-	slog.Debug("Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
+	slog.DebugContext(ctx, "Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
 	return r.get(ctx, id)
 }
 
@@ -1050,7 +1050,7 @@ func (r *CommodityRegistry) newSQLRegistry() *store.RLSGroupRepository[models.Co
 }
 
 func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodity, error) {
-	slog.Debug("Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
+	slog.DebugContext(ctx, "Getting commodity", "commodity_id", id, "created_by_user_id", r.createdByUserID, "tenant_id", r.tenantID, "service_mode", r.service)
 
 	var commodity models.Commodity
 	reg := r.newSQLRegistry()
@@ -1064,7 +1064,7 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 	})
 	if err != nil {
 		// Add debug logging for RLS issues
-		slog.Debug("Commodity not found - possible RLS issue",
+		slog.DebugContext(ctx, "Commodity not found - possible RLS issue",
 			"commodity_id", id,
 			"created_by_user_id", r.createdByUserID,
 			"tenant_id", r.tenantID,

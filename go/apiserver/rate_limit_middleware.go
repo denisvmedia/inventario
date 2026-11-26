@@ -86,7 +86,7 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter, trustedProxyN
 			res, err := limiter.Check(r.Context(), ip)
 			if err != nil {
 				// Fail-open: do not make API unavailable due to limiter backend outages.
-				slog.Error("Global rate limiter error", "error", err, "ip", ip)
+				slog.ErrorContext(r.Context(), "Global rate limiter error", "error", err, "ip", ip)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -99,7 +99,7 @@ func GlobalRateLimitMiddleware(limiter services.GlobalRateLimiter, trustedProxyN
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
 				metrics.RecordRateLimitRejection(metrics.RateLimitScopeGlobal)
-				slog.Warn("Global rate limit exceeded", "ip", ip, "path", r.URL.Path, "method", r.Method, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Global rate limit exceeded", "ip", ip, "path", r.URL.Path, "method", r.Method, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -175,7 +175,7 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 			res, err := limiter.CheckLoginAttempt(r.Context(), ip)
 			if err != nil {
 				// Fail-open: do not make auth unavailable due to limiter backend outages.
-				slog.Error("Auth rate limiter error", "error", err, "ip", ip)
+				slog.ErrorContext(r.Context(), "Auth rate limiter error", "error", err, "ip", ip)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -187,7 +187,7 @@ func AuthLoginRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Ha
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Login rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Login rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -217,7 +217,7 @@ func AuthRefreshRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.
 			res, err := limiter.CheckRefreshAttempt(r.Context(), ip)
 			if err != nil {
 				// Fail-open: do not make refresh unavailable due to limiter backend outages.
-				slog.Error("Auth refresh rate limiter error", "error", err, "ip", ip)
+				slog.ErrorContext(r.Context(), "Auth refresh rate limiter error", "error", err, "ip", ip)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -229,7 +229,7 @@ func AuthRefreshRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Refresh rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Refresh rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -250,7 +250,7 @@ func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http
 			ip := remoteAddrIP(r)
 			res, err := limiter.CheckRegistrationAttempt(r.Context(), ip)
 			if err != nil {
-				slog.Error("Registration rate limiter error", "error", err, "ip", ip)
+				slog.ErrorContext(r.Context(), "Registration rate limiter error", "error", err, "ip", ip)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -260,7 +260,7 @@ func RegistrationRateLimitMiddleware(limiter services.AuthRateLimiter) func(http
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Registration rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Registration rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -296,7 +296,7 @@ func FeedbackRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Han
 			}
 			res, err := limiter.CheckFeedbackAttempt(r.Context(), user.ID)
 			if err != nil {
-				slog.Error("Feedback rate limiter error", "error", err, "user_id", user.ID)
+				slog.ErrorContext(r.Context(), "Feedback rate limiter error", "error", err, "user_id", user.ID)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -306,7 +306,7 @@ func FeedbackRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.Han
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Feedback rate limit exceeded", "user_id", user.ID, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Feedback rate limit exceeded", "user_id", user.ID, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -369,7 +369,7 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 
 			res, err := limiter.CheckPasswordResetAttempt(r.Context(), email)
 			if err != nil {
-				slog.Error("Password-reset rate limiter error", "error", err, "email", email)
+				slog.ErrorContext(r.Context(), "Password-reset rate limiter error", "error", err, "email", email)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -379,7 +379,7 @@ func PasswordResetRateLimitMiddleware(limiter services.AuthRateLimiter) func(htt
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Password-reset rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Password-reset rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -443,7 +443,7 @@ func MagicLinkRequestRateLimitMiddleware(limiter services.AuthRateLimiter) func(
 
 			res, err := limiter.CheckMagicLinkAttempt(r.Context(), email)
 			if err != nil {
-				slog.Error("Magic-link rate limiter error", "error", err, "email", email)
+				slog.ErrorContext(r.Context(), "Magic-link rate limiter error", "error", err, "email", email)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -453,7 +453,7 @@ func MagicLinkRequestRateLimitMiddleware(limiter services.AuthRateLimiter) func(
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Magic-link rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Magic-link rate limit exceeded", "ip", remoteAddrIP(r), "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -489,11 +489,11 @@ func PublicScanRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.H
 			// 1) Global daily cap. Fail-open on backend error.
 			globalRes, err := limiter.CheckPublicScanGlobalCap(r.Context())
 			if err != nil {
-				slog.Error("Public-scan global rate limiter error", "error", err)
+				slog.ErrorContext(r.Context(), "Public-scan global rate limiter error", "error", err)
 			} else if !globalRes.Allowed {
 				retryAfter := max(int(time.Until(globalRes.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Public-scan global daily cap exceeded", "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Public-scan global daily cap exceeded", "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}
@@ -503,7 +503,7 @@ func PublicScanRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.H
 			ip := remoteAddrIP(r)
 			res, err := limiter.CheckPublicScanAttempt(r.Context(), ip)
 			if err != nil {
-				slog.Error("Public-scan rate limiter error", "error", err, "ip", ip)
+				slog.ErrorContext(r.Context(), "Public-scan rate limiter error", "error", err, "ip", ip)
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -513,7 +513,7 @@ func PublicScanRateLimitMiddleware(limiter services.AuthRateLimiter) func(http.H
 			if !res.Allowed {
 				retryAfter := max(int(time.Until(res.ResetAt).Seconds()), 0)
 				w.Header().Set("Retry-After", fmt.Sprintf("%d", retryAfter))
-				slog.Warn("Public-scan per-IP rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
+				slog.WarnContext(r.Context(), "Public-scan per-IP rate limit exceeded", "ip", ip, "retry_after_seconds", retryAfter)
 				http.Error(w, "Rate limit exceeded. Please try again later.", http.StatusTooManyRequests)
 				return
 			}

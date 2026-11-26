@@ -317,12 +317,15 @@ export interface IntakeUploadTarget {
   // during the uploads does not send the later requests to another group.
   uploadPath: string
   sessionsPath: string
+  // The group's files, for moving an upload the batch never took to Trash.
+  filesPath: string
 }
 
 export function intakeUploadTarget(): IntakeUploadTarget {
   return {
     uploadPath: groupScopedPath("/uploads/file"),
     sessionsPath: groupScopedPath("/intake/sessions"),
+    filesPath: groupScopedPath("/files"),
   }
 }
 

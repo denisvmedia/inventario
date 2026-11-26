@@ -1,6 +1,7 @@
 import { setupServer } from "msw/node"
 
 import { defaults as customFieldDefaults } from "./handlers/customFields"
+import { defaults as featureFlagDefaults } from "./handlers/featureFlags"
 import { documentDefaults as intakeDocumentDefaults } from "./handlers/intake"
 import { defaults as itemTypeDefaults } from "./handlers/itemTypes"
 
@@ -13,9 +14,12 @@ import { defaults as itemTypeDefaults } from "./handlers/itemTypes"
 // overrides it with `itemTypeHandlers.list`. GET /custom-fields is another:
 // the item form and the item page read the group's fields (#2803). GET
 // /intake/documents is the third: the item page asks which other system each
-// item came from (#2809), and the default answers that none did.
+// item came from (#2809), and the default answers that none did. GET
+// /feature-flags is the fourth: GroupProvider reads the plans flag (#1389),
+// and the default answers with every flag off.
 export const server = setupServer(
   ...itemTypeDefaults(),
   ...customFieldDefaults(),
-  ...intakeDocumentDefaults()
+  ...intakeDocumentDefaults(),
+  ...featureFlagDefaults()
 )

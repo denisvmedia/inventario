@@ -114,7 +114,7 @@ export function FirstItemResolver() {
         }
         // Upload + link the staged files. Per-file failures are tolerated
         // (the commodity already exists) — we log them but don't abort the
-        // success path, mirroring the dialog's fire-and-forget upload.
+        // success path, as the item form does for an item it edits.
         const files = await loadPendingFiles(pending.draftKey)
         if (files.length > 0) {
           await uploadPendingFiles(files, createdId, (entry, err) => {

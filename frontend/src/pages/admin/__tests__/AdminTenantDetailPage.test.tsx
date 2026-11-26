@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
@@ -12,7 +12,7 @@ import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { AdminTenantDetailPage } from "@/pages/admin/AdminTenantDetailPage"
-import { backofficeAuthHandlers } from "@/test/handlers"
+import { backofficeAuthHandlers, featureFlagHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -144,11 +144,35 @@ describe("AdminTenantDetailPage", () => {
     expect(screen.getByRole("heading", { name: "Northwind Estates" })).toBeInTheDocument()
     expect(screen.getByText("northwind")).toBeInTheDocument()
     expect(screen.getByText("northwind.example.com")).toBeInTheDocument()
-    expect(screen.getByText("business")).toBeInTheDocument()
 
     // Users tab is active by default — its row renders, scoped to t1.
     await waitFor(() => expect(screen.getByText("Ada Lovelace")).toBeInTheDocument())
     expect(screen.getByTestId("admin-tenant-users-table")).toBeInTheDocument()
+  })
+
+  // #1389: the Plan tile shows only when the deployment has plans on.
+  it("shows the Plan tile when plans are on", async () => {
+    server.use(...featureFlagHandlers.set({ plans: true }))
+    seedDetail({} as Seen)
+    renderPage()
+
+    const stats = await screen.findByTestId("admin-tenant-stats")
+    await waitFor(() => expect(within(stats).getByText("business")).toBeInTheDocument())
+    expect(within(stats).getByText("Plan")).toBeInTheDocument()
+  })
+
+  it("hides the Plan tile when plans are off", async () => {
+    server.use(...featureFlagHandlers.set({ plans: false }))
+    seedDetail({} as Seen)
+    const { queryClient } = renderPage()
+
+    const stats = await screen.findByTestId("admin-tenant-stats")
+    await waitFor(() =>
+      expect(queryClient.getQueryState(["feature-flags"])?.status).toBe("success")
+    )
+    expect(within(stats).getByText("Users")).toBeInTheDocument()
+    expect(within(stats).queryByText("Plan")).not.toBeInTheDocument()
+    expect(screen.queryByText("business")).not.toBeInTheDocument()
   })
 
   it("switches to the Groups tab, persists ?tab, and scopes the request to the tenant", async () => {

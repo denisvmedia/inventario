@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { http as msw, HttpResponse } from "msw"
 import { Route, useLocation } from "react-router-dom"
-import { screen, waitFor } from "@testing-library/react"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 
 import { GroupSettingsPage } from "@/pages/groups/GroupSettingsPage"
@@ -9,6 +9,7 @@ import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { featureFlagHandlers } from "@/test/handlers"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -285,7 +286,7 @@ describe("<GroupSettingsPage />", () => {
     expect(captured).toEqual({ confirm_word: "Household", password: "secret-pw" })
   })
 
-  it("renders the Plan card after the plan endpoint resolves", async () => {
+  it("renders the Plan card after the plan endpoint resolves when plans are on", async () => {
     // GroupSettings is mounted at `/groups/:groupId/settings` — a non-
     // group route. The PlanCard nevertheless reads from
     // GET /g/<slug>/plan; the slug is threaded through useGroupPlan
@@ -299,6 +300,7 @@ describe("<GroupSettingsPage />", () => {
     // wins, so the plan override has to come before baseHandlers'
     // default plan stub or the override never fires.
     server.use(
+      ...featureFlagHandlers.set({ plans: true }),
       msw.get(api("/g/household/plan"), ({ request }) => {
         captured = new URL(request.url).pathname
         return HttpResponse.json({
@@ -335,11 +337,50 @@ describe("<GroupSettingsPage />", () => {
     expect(screen.getByTestId("plan-card-chip-items")).toHaveTextContent("9 / 500")
     expect(screen.getByTestId("plan-card-chip-locations")).toHaveTextContent("2 / 20")
     expect(screen.getByTestId("plan-card-chip-storage")).toHaveTextContent("/ 1.0 GB")
+    expect(screen.getByTestId("plan-card-upgrade")).toBeInTheDocument()
 
     // The slug was actually inlined into the request URL — guards
     // against a future refactor that flips back to a bare `/plan`
     // path (which would 404 from this non-group route).
     expect(captured).toBe("/api/v1/g/household/plan")
+  })
+
+  // #1389: with plans off (the default) the card keeps the usage and drops
+  // everything that comes from a plan: name, Active badge, owner line,
+  // Upgrade button, limits and the subscription banner.
+  it("renders the Usage card without the plan when plans are off", async () => {
+    server.use(
+      ...featureFlagHandlers.set({ plans: false }),
+      msw.get(api("/g/household/plan"), () =>
+        HttpResponse.json({
+          plan: {
+            id: "unlimited",
+            name: "Unlimited",
+            max_items: null,
+            max_locations: null,
+            max_storage_bytes: null,
+            allows_restore: true,
+            allows_api_access: true,
+          },
+          usage: { items: 9, locations: 2, storage_bytes: 314_572_800 },
+        })
+      ),
+      ...baseHandlers,
+      adminMembership
+    )
+    renderSettings()
+
+    const card = await screen.findByTestId("usage-card")
+    expect(within(card).getByRole("heading", { name: "Usage" })).toBeInTheDocument()
+    expect(screen.getByTestId("usage-card-chip-items")).toHaveTextContent(/^Items9$/)
+    expect(screen.getByTestId("usage-card-chip-locations")).toHaveTextContent(/^Locations2$/)
+    expect(screen.getByTestId("usage-card-chip-storage")).toHaveTextContent("300 MB")
+    expect(screen.getByTestId("usage-card-chip-storage")).not.toHaveTextContent("/")
+
+    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card-name")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("plan-card-upgrade")).not.toBeInTheDocument()
+    expect(within(card).queryByText(/plan|unlimited|subscription|owner/i)).not.toBeInTheDocument()
   })
 
   it("surfaces the error state when the plan endpoint fails", async () => {
@@ -441,20 +482,21 @@ describe("<GroupSettingsPage />", () => {
     server.use(...baseHandlers, adminMembership)
     const user = userEvent.setup()
     renderSettings()
-    // Info is the default → Plan card mounts; Notifications does not.
-    expect(await screen.findByTestId("plan-card")).toBeInTheDocument()
+    // Info is the default → the card mounts (as Usage: plans are off by
+    // default, #1389); Notifications does not.
+    expect(await screen.findByTestId("usage-card")).toBeInTheDocument()
     expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
 
     // Members pane → neither card should be present.
     await user.click(screen.getByTestId("group-settings-nav-members"))
     await screen.findByTestId("group-section-members")
-    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("usage-card")).not.toBeInTheDocument()
     expect(screen.queryByTestId("notifications-card")).not.toBeInTheDocument()
 
-    // Notifications pane → Notifications mounts; Plan does not.
+    // Notifications pane → Notifications mounts; the usage card does not.
     await user.click(screen.getByTestId("group-settings-nav-notifications"))
     expect(await screen.findByTestId("notifications-card")).toBeInTheDocument()
-    expect(screen.queryByTestId("plan-card")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("usage-card")).not.toBeInTheDocument()
   })
 
   // #1616 — the Migrate Currency CTA must be hidden when the backend

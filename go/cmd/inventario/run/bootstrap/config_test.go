@@ -171,6 +171,38 @@ func TestConfig_FeatureCurrencyMigration_DisabledViaPrefixedEnv(t *testing.T) {
 	c.Assert(cfg.FeatureCurrencyMigration, qt.IsFalse)
 }
 
+// TestConfig_PlansEnabled pins that the plans feature (#1389) is off on a
+// fresh run and that INVENTARIO_RUN_ENABLE_PLANS turns it on.
+func TestConfig_PlansEnabled(t *testing.T) {
+	cases := []struct {
+		name string
+		env  string
+		want bool
+	}{
+		{name: "off without env or YAML", env: "", want: false},
+		{name: "on via the prefixed env var", env: "true", want: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+
+			restore := shared.GetConfigFile()
+			t.Cleanup(func() { shared.SetConfigFile(restore) })
+			shared.SetConfigFile(filepath.Join(t.TempDir(), "no-such-config.yaml"))
+
+			t.Setenv("INVENTARIO_RUN_ENABLE_PLANS", tc.env)
+			if tc.env == "" {
+				c.Assert(os.Unsetenv("INVENTARIO_RUN_ENABLE_PLANS"), qt.IsNil)
+			}
+
+			var cfg bootstrap.Config
+			shared.TryReadSection("run", &cfg)
+
+			c.Assert(cfg.PlansEnabled, qt.Equals, tc.want)
+		})
+	}
+}
+
 func TestConfigSetDefaults_WorkerTunablesPreserveExplicitValues(t *testing.T) {
 	c := qt.New(t)
 

@@ -193,6 +193,8 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	// off in production and is opted into only on dev / e2e / the init-data
 	// seed server.
 	params.SeedEndpointEnabled = cfg.SeedEndpointEnabled
+	// Plan surfaces (#1389). Off by default: the feature is frozen.
+	params.PlansEnabled = cfg.PlansEnabled
 	// /metrics bearer-token gate (#2102). Empty leaves /metrics open and the
 	// apiserver logs a one-time startup warning; a non-empty token requires
 	// "Authorization: Bearer <token>" on every scrape.

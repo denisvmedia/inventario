@@ -96,13 +96,13 @@ func NewTrashPurgeWorker(purger TrashPurger, opts ...TrashPurgeOption) *TrashPur
 // Start launches the background goroutine.
 func (w *TrashPurgeWorker) Start(ctx context.Context) {
 	if w.purger == nil {
-		slog.Warn("TrashPurgeWorker: no purger configured, skipping startup")
+		slog.WarnContext(ctx, "TrashPurgeWorker: no purger configured, skipping startup")
 		return
 	}
 	w.wg.Go(func() {
 		w.run(ctx)
 	})
-	slog.Info("Trash purge worker started", "retention", w.retention, "interval", w.interval)
+	slog.InfoContext(ctx, "Trash purge worker started", "retention", w.retention, "interval", w.interval)
 }
 
 // Stop signals the worker to stop and waits for it to finish.
@@ -153,7 +153,7 @@ func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 		totalItems += items
 		totalFiles += files
 		if err != nil {
-			slog.Error("Failed to purge expired Trash entries", "error", err, "cutoff", cutoff)
+			slog.ErrorContext(ctx, "Failed to purge expired Trash entries", "error", err, "cutoff", cutoff)
 			if items+files == 0 {
 				break
 			}
@@ -164,6 +164,6 @@ func (w *TrashPurgeWorker) Sweep(ctx context.Context) {
 		}
 	}
 	if totalItems > 0 || totalFiles > 0 {
-		slog.Info("Purged expired Trash entries", "items", totalItems, "files", totalFiles, "cutoff", cutoff)
+		slog.InfoContext(ctx, "Purged expired Trash entries", "items", totalItems, "files", totalFiles, "cutoff", cutoff)
 	}
 }

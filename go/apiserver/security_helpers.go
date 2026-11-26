@@ -199,21 +199,21 @@ func logSecurityViolationWithContext(r *http.Request, violationType, message str
 	// Log with appropriate level based on severity
 	switch severity {
 	case "critical":
-		slog.Error("CRITICAL security violation detected", logFields...)
+		slog.ErrorContext(r.Context(), "CRITICAL security violation detected", logFields...)
 	case "high":
-		slog.Error("HIGH security violation detected", logFields...)
+		slog.ErrorContext(r.Context(), "HIGH security violation detected", logFields...)
 	case "medium":
-		slog.Warn("Security violation detected", logFields...)
+		slog.WarnContext(r.Context(), "Security violation detected", logFields...)
 	case "low":
-		slog.Info("Security event detected", logFields...)
+		slog.InfoContext(r.Context(), "Security event detected", logFields...)
 	default:
-		slog.Warn("Security violation detected", logFields...)
+		slog.WarnContext(r.Context(), "Security violation detected", logFields...)
 	}
 
 	// Additional monitoring for critical violations
 	if severity == "critical" || severity == "high" {
 		// This could trigger alerts, rate limiting, or account suspension
-		slog.Error("Security alert triggered",
+		slog.ErrorContext(r.Context(), "Security alert triggered",
 			"alert_type", "security_violation",
 			"violation_type", violationType,
 			"user_id", userID,

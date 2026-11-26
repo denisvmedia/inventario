@@ -245,6 +245,10 @@ services:
       # go/cmd/inventario/shared/config.go). A YAML config key cannot turn it off
       # (false re-defaults to true) — the env var is the only off-switch (#1618).
       INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION: ${FEATURE_CURRENCY_MIGRATION:-true}
+      # Subscription plans are on hold and hidden by default (#1389). Set
+      # ENABLE_PLANS=true in .env to show the plan badge, the Upgrade link,
+      # the plan card and the /plans page again.
+      INVENTARIO_RUN_ENABLE_PLANS: ${ENABLE_PLANS:-false}
 
       # Error tracking (#844). Optional; an empty SENTRY_DSN disables Sentry and
       # no events are sent. NOTE: unlike every other run-section var above, the

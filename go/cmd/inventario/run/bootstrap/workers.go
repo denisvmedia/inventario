@@ -467,7 +467,7 @@ func buildWeeklyDigestURLBuilders(publicURL string) (appURLBuilder, settingsURLB
 // a nil source, but short-circuiting here keeps the log honest.
 func StartBusinessMetricsWorker(ctx context.Context, rs *RuntimeSetup, _ *Config) func() {
 	if rs.FactorySet.SystemStats == nil {
-		slog.Info("Business metrics collector disabled; no SystemStats source configured")
+		slog.InfoContext(ctx, "Business metrics collector disabled; no SystemStats source configured")
 		return func() {}
 	}
 
@@ -561,7 +561,7 @@ func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Co
 		// Name the variable an operator can ACTUALLY set: shared.ReadSection
 		// wraps the run section with an INVENTARIO_RUN_ env-prefix, so the bare
 		// `env:"FEATURE_CURRENCY_MIGRATION"` tag is never read on its own (#1618).
-		slog.Info("Currency migration worker disabled; set INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=true (or feature_currency_migration in config.yaml) to enable")
+		slog.InfoContext(ctx, "Currency migration worker disabled; set INVENTARIO_RUN_FEATURE_CURRENCY_MIGRATION=true (or feature_currency_migration in config.yaml) to enable")
 		return func() {}
 	}
 	pgFactory, ok := rs.FactorySet.CurrencyMigrationRegistryFactory.(*postgres.CurrencyMigrationRegistryFactory)
@@ -570,7 +570,7 @@ func StartCurrencyMigrationWorker(ctx context.Context, rs *RuntimeSetup, cfg *Co
 		// audit + advisory lock surface lives in the postgres package,
 		// so a non-postgres deployment cannot run TX2 — log loudly so
 		// operators don't think the worker silently succeeded.
-		slog.Warn("Currency migration worker: skipping startup, backend is not postgres")
+		slog.WarnContext(ctx, "Currency migration worker: skipping startup, backend is not postgres")
 		return func() {}
 	}
 
@@ -711,11 +711,11 @@ func StartFileLinkMove(ctx context.Context, rs *RuntimeSetup, _ *Config) func() 
 	cancelSync()
 	if err == nil {
 		if moved > 0 {
-			slog.Info("legacy file links moved", "files", moved)
+			slog.InfoContext(ctx, "legacy file links moved", "files", moved)
 		}
 		return func() {}
 	}
-	slog.Warn("legacy file link move failed at startup; retrying in the background",
+	slog.WarnContext(ctx, "legacy file link move failed at startup; retrying in the background",
 		"error", err.Error(), "files", moved)
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -749,11 +749,11 @@ func StartLegacyPriceBackfill(ctx context.Context, rs *RuntimeSetup, _ *Config) 
 	cancelSync()
 	if err == nil {
 		if rewritten > 0 {
-			slog.Info("legacy prices backfilled", "commodities", rewritten)
+			slog.InfoContext(ctx, "legacy prices backfilled", "commodities", rewritten)
 		}
 		return func() {}
 	}
-	slog.Warn("legacy price backfill failed at startup; retrying in the background",
+	slog.WarnContext(ctx, "legacy price backfill failed at startup; retrying in the background",
 		"error", err.Error(), "commodities", rewritten)
 
 	ctx, cancel := context.WithCancel(ctx)

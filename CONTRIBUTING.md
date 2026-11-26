@@ -34,7 +34,8 @@ process.
 
 For the full architecture and developer guidance, read [AGENTS.md](AGENTS.md).
 Before touching anything under `frontend/src/`, also read
-[`devdocs/frontend/README.md`](devdocs/frontend/README.md).
+[`devdocs/frontend/README.md`](devdocs/frontend/README.md). Before adding or
+changing a log line in `go/`, read [`devdocs/logging.md`](devdocs/logging.md).
 
 ## Prerequisites
 

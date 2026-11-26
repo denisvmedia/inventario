@@ -189,7 +189,7 @@ func (api *uploadsAPI) handleFileUpload(w http.ResponseWriter, r *http.Request) 
 	originalURL, thumbnails, err := api.fileSigningService.GenerateSignedURLsWithThumbnails(createdFile, user.ID, binding)
 	if err != nil {
 		// Log error but don't fail the upload - signed URLs are optional
-		slog.Error("Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
+		slog.ErrorContext(r.Context(), "Failed to generate signed URLs after upload", "error", err.Error(), "file_id", createdFile.ID)
 		// Return response without signed URLs
 		resp := jsonapi.NewFileResponse(createdFile).WithStatusCode(http.StatusCreated)
 		if err := render.Render(w, r, resp); err != nil {
@@ -573,14 +573,14 @@ func (api *uploadsAPI) generateThumbnailInline(ctx context.Context, file *models
 	err := api.fileService.GenerateThumbnails(ctx, file)
 	if err != nil {
 		// Log error but don't fail the upload - thumbnails are optional
-		slog.Error("Failed to generate thumbnail inline",
+		slog.ErrorContext(ctx, "Failed to generate thumbnail inline",
 			"error", err.Error(),
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID,
 			"user_id", userID)
 	} else {
-		slog.Info("Thumbnail generated inline successfully",
+		slog.InfoContext(ctx, "Thumbnail generated inline successfully",
 			"original_path", file.OriginalPath,
 			"mime_type", file.MIMEType,
 			"file_id", file.ID)

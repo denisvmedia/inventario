@@ -14,6 +14,7 @@ describe("useNavLabel", () => {
     ["common:nav.items", "All Items"],
     ["common:nav.warranties", "Warranties"],
     ["common:nav.tags", "Tags"],
+    ["common:nav.customFields", "Custom fields"],
     ["common:nav.files", "Files"],
     ["common:nav.members", "Members"],
     ["common:nav.backup", "Backup"],

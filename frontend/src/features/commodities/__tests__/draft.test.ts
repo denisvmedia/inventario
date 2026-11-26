@@ -2,8 +2,10 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildDefaults,
+  capFileTitle,
   fileSignature,
   mergePendingFiles,
+  pendingFileTitle,
   type PendingFile,
 } from "@/features/commodities/draft"
 import type { Commodity } from "@/features/commodities/api"
@@ -96,6 +98,30 @@ describe("fileSignature", () => {
     )
     expect(fileSignature(file("a.jpg", { bytes: 5 }))).not.toBe(
       fileSignature(file("a.jpg", { bytes: 6 }))
+    )
+  })
+})
+
+// The server holds a file title to 255 characters, counted as code points.
+describe("file titles", () => {
+  it("caps a title at 255 code points without splitting a character", () => {
+    const cyrillic = "ж".repeat(300)
+    expect(capFileTitle(cyrillic)).toBe("ж".repeat(255))
+    // Each emoji takes two UTF-16 units; the cut keeps whole emoji.
+    const emoji = "📦".repeat(300)
+    const capped = capFileTitle(emoji)
+    expect(Array.from(capped)).toHaveLength(255)
+    expect(capped).toBe("📦".repeat(255))
+    expect(capFileTitle("Receipt")).toBe("Receipt")
+  })
+
+  it("saves the typed title, or the file name without the extension", () => {
+    expect(pendingFileTitle({ ...pending("receipt.jpg"), title: "  Shop receipt " })).toBe(
+      "Shop receipt"
+    )
+    expect(pendingFileTitle({ ...pending("receipt.jpg"), title: "  " })).toBe("receipt")
+    expect(pendingFileTitle({ ...pending("receipt.jpg"), title: "ř".repeat(256) })).toBe(
+      "ř".repeat(255)
     )
   })
 })
