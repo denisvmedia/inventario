@@ -9,6 +9,7 @@ import (
 	"io"
 	"runtime"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -104,7 +105,12 @@ func newPersonalFixture(c *qt.C) *personalFixture {
 	area, err := areaReg.Create(aliceCtx, models.Area{Name: "Kitchen", LocationID: loc.ID})
 	c.Assert(err, qt.IsNil)
 
-	f.aliceItem = f.createItem(c, aliceCtx, "Alice's kettle", area.ID)
+	tagReg, err := f.fs.TagRegistryFactory.CreateUserRegistry(aliceCtx)
+	c.Assert(err, qt.IsNil)
+	_, err = tagReg.Create(aliceCtx, models.Tag{Kind: models.TagKindCommodity, Slug: "kitchen-gear", Label: "Kitchen gear", Color: models.TagColorBlue})
+	c.Assert(err, qt.IsNil)
+
+	f.aliceItem = f.createItem(c, aliceCtx, "Alice's kettle", area.ID, "kitchen-gear", "no-entry")
 	f.bobItem = f.createItem(c, bobCtx, "Bob's toaster", area.ID)
 	f.aliceFile = f.createFile(c, aliceCtx, f.alice, "manual", "alice-bytes", f.aliceItem.ID)
 	f.bobFile = f.createFile(c, bobCtx, f.bob, "receipt", "bob-bytes", f.bobItem.ID)
@@ -112,12 +118,16 @@ func newPersonalFixture(c *qt.C) *personalFixture {
 	// Alice lends Bob's toaster; Bob lends Alice's kettle.
 	f.createLoan(c, aliceCtx, f.bobItem.ID, "Neighbor Carol")
 	f.createLoan(c, bobCtx, f.aliceItem.ID, "Cousin Dan")
-	f.createEvent(c, aliceCtx, f.aliceItem.ID, "Alice's note")
-	f.createEvent(c, bobCtx, f.aliceItem.ID, "Bob's note")
+	// Alice edits the comments of an item; the entry records the other
+	// fields as they stood, some typed by Bob.
+	f.createEvent(c, aliceCtx, f.aliceItem.ID, "Alice's note",
+		models.CommodityEventPayload{"comments": "Comment Bob typed", "brand": "Brand Bob typed"},
+		models.CommodityEventPayload{"comments": "Comment Alice typed", "brand": "Brand Bob typed", "model": "K-2"})
+	f.createEvent(c, bobCtx, f.aliceItem.ID, "Bob's note", nil, nil)
 	return f
 }
 
-func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID string) *models.Commodity {
+func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID string, tags ...string) *models.Commodity {
 	c.Helper()
 	reg, err := f.fs.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
@@ -128,6 +138,7 @@ func (f *personalFixture) createItem(c *qt.C, ctx context.Context, name, areaID 
 		Count:     1,
 		Status:    models.CommodityStatusInUse,
 		Type:      "electronics",
+		Tags:      tags,
 	})
 	c.Assert(err, qt.IsNil)
 	return item
@@ -168,7 +179,7 @@ func (f *personalFixture) createLoan(c *qt.C, ctx context.Context, itemID, borro
 	c.Assert(err, qt.IsNil)
 }
 
-func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note string) {
+func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note string, before, after models.CommodityEventPayload) {
 	c.Helper()
 	reg, err := f.fs.CommodityEventRegistryFactory.CreateUserRegistry(ctx)
 	c.Assert(err, qt.IsNil)
@@ -176,6 +187,8 @@ func (f *personalFixture) createEvent(c *qt.C, ctx context.Context, itemID, note
 		CommodityID: itemID,
 		Kind:        models.CommodityEventKindUpdated,
 		OccurredAt:  time.Date(2026, 5, 2, 10, 0, 0, 0, time.UTC),
+		Before:      before,
+		After:       after,
 		Note:        note,
 	})
 	c.Assert(err, qt.IsNil)
@@ -259,6 +272,12 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 	c.Assert(doc.Items[0].Name, qt.Equals, "Alice's kettle")
 	c.Assert(doc.Items[0].Location, qt.Equals, "Main house")
 	c.Assert(doc.Items[0].Area, qt.Equals, "Kitchen")
+	// Type and tags by the names members see; a tag with no entry by its slug.
+	c.Assert(doc.Items[0].Type, qt.DeepEquals, &export.PersonalName{Name: "Electronics", Slug: "electronics"})
+	c.Assert(doc.Items[0].Tags, qt.DeepEquals, []export.PersonalName{
+		{Name: "Kitchen gear", Slug: "kitchen-gear"},
+		{Name: "no-entry", Slug: "no-entry"},
+	})
 
 	c.Assert(doc.Files, qt.HasLen, 1)
 	c.Assert(doc.Files[0].ID, qt.Equals, f.aliceFile.UUID)
@@ -271,12 +290,17 @@ func TestPersonalDataExport_HoldsOnlyTheSubjectsData(t *testing.T) {
 	c.Assert(doc.Loans[0].BorrowerName, qt.Equals, "Neighbor Carol")
 	c.Assert(doc.Loans[0].ItemID, qt.Equals, f.bobItem.UUID)
 
+	// Of Alice's entry, only what she changed, with the values she wrote.
 	c.Assert(doc.History, qt.HasLen, 1)
 	c.Assert(doc.History[0].Note, qt.Equals, "Alice's note")
+	c.Assert(doc.History[0].Changes, qt.DeepEquals, map[string]any{"comments": "Comment Alice typed", "model": "K-2"})
 
 	// Nothing of Bob's: not his rows, his bytes, his name or his email.
 	for name, data := range members {
-		for _, leak := range []string{"Bob Example", "bob@example.com", "bob-bytes", "Cousin Dan", "Bob's note", f.bobFile.UUID} {
+		for _, leak := range []string{
+			"Bob Example", "bob@example.com", "bob-bytes", "Cousin Dan", "Bob's note", f.bobFile.UUID,
+			"Comment Bob typed", "Brand Bob typed",
+		} {
 			c.Assert(string(data), qt.Not(qt.Contains), leak, qt.Commentf("%s holds %q", name, leak))
 		}
 	}
@@ -446,6 +470,103 @@ func TestPersonalDataExport_IsRefusedAsABackup(t *testing.T) {
 	c.Assert(inb.IsPersonalDataExport(archive[:min(len(archive), inb.SniffHeadSize)]), qt.IsTrue)
 	_, _, err = inb.ReadContainer(strings.NewReader(string(archive)), inb.DefaultLimits())
 	c.Assert(err, qt.ErrorIs, inb.ErrPersonalDataExport)
+}
+
+// A file deleted after the build planned the archive is not in it, and the
+// archive says so: the build starts over and lists the file as missing.
+func TestPersonalDataExport_FileDeletedDuringTheBuildIsListedAsMissing(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	var once sync.Once
+	export.SetPersonalDataExportAfterPlanHookForTesting(t, func() {
+		once.Do(func() {
+			bucket, err := blob.OpenBucket(f.ctx, f.uploadLocation)
+			c.Assert(err, qt.IsNil)
+			c.Assert(bucket.Delete(f.ctx, f.aliceFile.OriginalPath), qt.IsNil)
+			c.Assert(bucket.Close(), qt.IsNil)
+		})
+	})
+
+	e, names, members := buildExport(c, f, svc, f.alice)
+	c.Assert(e.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+	c.Assert(e.FileCount, qt.Equals, 0)
+
+	var manifest export.PersonalManifest
+	c.Assert(json.Unmarshal(members[export.PersonalManifestName], &manifest), qt.IsNil)
+	c.Assert(manifest.Statistics.FileCount, qt.Equals, 0)
+	c.Assert(manifest.Statistics.MissingFileCount, qt.Equals, 1)
+
+	var doc export.PersonalGroupDocument
+	c.Assert(json.Unmarshal(members[manifest.Groups[0].File], &doc), qt.IsNil)
+	c.Assert(doc.Files, qt.HasLen, 1)
+	c.Assert(doc.Files[0].Missing, qt.IsTrue)
+	c.Assert(doc.Files[0].Path, qt.Equals, "")
+	for _, name := range names {
+		c.Assert(name, qt.Not(qt.Contains), "/files/")
+	}
+}
+
+// A build stopped by the worker shutting down goes back to the queue instead
+// of failing, and the next build finishes it.
+func TestPersonalDataExport_InterruptedBuildIsQueuedAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	stopping, cancel := context.WithCancel(f.ctx)
+	cancel()
+	c.Assert(svc.Process(stopping, requested.ID), qt.IsNotNil)
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
+	got, err = svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+}
+
+// A build whose process died stays in progress with no result; after an hour
+// the worker queues it again, so the user still gets the copy.
+func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	now = now.Add(30 * time.Minute)
+	moved, err := svc.RequeueStalled(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 0)
+
+	now = now.Add(time.Hour)
+	moved, err = svc.RequeueStalled(f.ctx)
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 1)
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
 }
 
 func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {

@@ -167,7 +167,7 @@ func (p *Provider) Scan(ctx context.Context, req aivision.ScanRequest) (*aivisio
 		return nil, errxtrace.Classify(aivision.ErrProviderUnavailable)
 	}
 
-	result, err := parseResponse(respBody)
+	result, err := parseResponse(respBody, len(req.Photos))
 	if err != nil {
 		return nil, err
 	}
@@ -238,16 +238,17 @@ type anthropicUsage struct {
 }
 
 func (p *Provider) buildPayload(req aivision.ScanRequest) *anthropicRequest {
-	content := make([]contentBlock, 0, len(req.Photos)+1)
-	for _, photo := range req.Photos {
+	content := make([]contentBlock, 0, 2*len(req.Photos)+1)
+	for i, photo := range req.Photos {
 		// A PDF rides in a "document" block; an image rides in an
 		// "image" block. The base64 source payload is byte-identical
-		// either way (see sourceBlock).
+		// either way (see sourceBlock). The label before it names the
+		// file the per-file suggestion refers to.
 		blockType := "image"
 		if photo.IsPDF() {
 			blockType = "document"
 		}
-		content = append(content, contentBlock{
+		content = append(content, contentBlock{Type: "text", Text: aivision.FileLabel(i)}, contentBlock{
 			Type: blockType,
 			Source: &sourceBlock{
 				Type:      "base64",
@@ -281,7 +282,8 @@ func (p *Provider) buildPayload(req aivision.ScanRequest) *anthropicRequest {
 
 // parseResponse walks the response content blocks for the tool_use call
 // and converts the tool input JSON into the shared ScanResult shape.
-func parseResponse(body []byte) (*aivision.ScanResult, error) {
+// fileCount is the number of files the request carried.
+func parseResponse(body []byte, fileCount int) (*aivision.ScanResult, error) {
 	var resp anthropicResponse
 	if err := json.Unmarshal(body, &resp); err != nil {
 		return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
@@ -298,7 +300,7 @@ func parseResponse(body []byte) (*aivision.ScanResult, error) {
 		if block.Type != "tool_use" || len(block.Input) == 0 {
 			continue
 		}
-		result, err := aivision.ToScanResult(block.Input)
+		result, err := aivision.ToScanResult(block.Input, fileCount)
 		if err != nil {
 			return nil, errxtrace.Classify(aivision.ErrProviderBadResponse)
 		}

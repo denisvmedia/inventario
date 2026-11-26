@@ -47,6 +47,7 @@ import {
   useUpdateLocation,
 } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
@@ -75,6 +76,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug
+  // A group that hides warranties (#1607) gets no expiring-warranty pills.
+  const showWarranties = useSectionVisible("warranties")
 
   const location = useLocation(id, { enabled: !!currentGroup })
   const allLocations = useLocations({ enabled: !!currentGroup })
@@ -462,7 +465,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                 <ul className="grid gap-3 sm:grid-cols-2" data-testid="location-detail-areas-grid">
                   {myAreas.map((area) => {
                     const count = area.id ? (itemCounts.get(area.id) ?? 0) : 0
-                    const expiring = area.id ? (expiringCounts.get(area.id) ?? 0) : 0
+                    const expiring =
+                      showWarranties && area.id ? (expiringCounts.get(area.id) ?? 0) : 0
                     return (
                       <li key={area.id}>
                         <AreaTile

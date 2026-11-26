@@ -134,6 +134,7 @@ import { SellerField } from "@/components/sellers/SellerField"
 import { findSellerByName } from "@/features/sellers/api"
 import { useSellers } from "@/features/sellers/hooks"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { useSectionVisible } from "@/features/group/sections"
 import { cn } from "@/lib/utils"
 
 const NO_CUSTOM_FIELDS: readonly CustomField[] = []
@@ -231,6 +232,22 @@ interface CommodityFormDialogProps {
 // step 1 (Basics). Edit mode skips "ai" entirely.
 const FORM_STEPS = ["basics", "purchase", "warranty", "extras", "files"] as const
 type FormStepKey = (typeof FORM_STEPS)[number]
+const FORM_STEPS_WITHOUT_WARRANTY: readonly FormStepKey[] = FORM_STEPS.filter(
+  (s) => s !== "warranty"
+)
+
+// formStepsFor returns the form steps, without Warranty for a group that
+// hides warranties (#1607) and a form that holds none.
+function formStepsFor(withWarranty: boolean): readonly FormStepKey[] {
+  return withWarranty ? FORM_STEPS : FORM_STEPS_WITHOUT_WARRANTY
+}
+
+function holdsWarranty(values: {
+  warranty_expires_at?: string | null
+  warranty_notes?: string | null
+}): boolean {
+  return !!values.warranty_expires_at?.trim() || !!values.warranty_notes?.trim()
+}
 type StepKey = "ai" | FormStepKey
 
 // Per-step field allow-list — used by the Next button to validate only
@@ -280,22 +297,23 @@ const STEP_FIELDS: Record<StepKey, (keyof CommodityFormInput)[]> = {
 function resumeStep(
   schema: ReturnType<typeof buildCommoditySchema>,
   values: CommodityFormInput,
-  defaults: CommodityFormInput
+  defaults: CommodityFormInput,
+  steps: readonly FormStepKey[]
 ): { step: FormStepKey; refused: boolean } {
   const parsed = schema.safeParse(values)
   if (!parsed.success) {
     const failing = new Set(parsed.error.issues.map((issue) => String(issue.path[0])))
-    const invalid = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
+    const invalid = steps.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
     if (invalid) return { step: invalid, refused: true }
   }
   let lastFilled = -1
-  FORM_STEPS.forEach((s, i) => {
+  steps.forEach((s, i) => {
     const filled = STEP_FIELDS[s].some(
       (f) => f !== "draft" && JSON.stringify(values[f]) !== JSON.stringify(defaults[f])
     )
     if (filled) lastFilled = i
   })
-  return { step: FORM_STEPS[Math.min(lastFilled + 1, FORM_STEPS.length - 1)], refused: false }
+  return { step: steps[Math.min(lastFilled + 1, steps.length - 1)], refused: false }
 }
 
 // CommodityFormDialog hosts the multi-step Add Item / Edit form. Five
@@ -489,13 +507,29 @@ export function CommodityFormDialog({
   // Draft mode: the "Save as draft" switch is on in a form that saves to
   // the server. Save draft is then offered on every step.
   const draftMode = serverMode && !!watch("draft")
+  // A group that hides warranties (#1607) leaves the Warranty step out
+  // while the form holds no warranty. A warranty the item has, one a
+  // resumed or restored draft brings and one typed in all keep the step,
+  // and once this opening of the dialog has held one the step stays, so
+  // clearing the date does not take the step away. The warranty fields
+  // stay in the form values either way, so saving keeps what they hold.
+  const showWarranties = useSectionVisible("warranties")
+  const [warrantySeen, setWarrantySeen] = useState(false)
+  const formSteps = formStepsFor(
+    showWarranties ||
+      warrantySeen ||
+      holdsWarranty({
+        warranty_expires_at: watch("warranty_expires_at"),
+        warranty_notes: watch("warranty_notes"),
+      })
+  )
 
   // The step a resumed draft opens on, checked against the schema as it is
   // when the draft opens. The schema follows the group's custom fields, and
   // their arrival or a refetch must not run the reset below again: that
   // would send the form back to its first step and drop the input.
   const resumeStepOf = useEffectEvent((values: CommodityFormInput, base: CommodityFormInput) =>
-    resumeStep(schema, values, base)
+    resumeStep(schema, values, base, formStepsFor(showWarranties || holdsWarranty(values)))
   )
 
   // Reset to defaults whenever the dialog opens. In create mode we try
@@ -533,6 +567,7 @@ export function CommodityFormDialog({
       }
     }
     reset(starting)
+    setWarrantySeen(holdsWarranty(starting))
     carryFromRef.current = null
     shortNameEdited.current =
       mode === "edit" ||
@@ -636,6 +671,16 @@ export function CommodityFormDialog({
     setVisitedSteps(new Set(openingVisitedSteps))
   }, [open, openingVisitedSteps, resumeId])
 
+  // Keep the Warranty step for the rest of this opening once the form has
+  // held a warranty (see showWarranties above).
+  useEffect(() => {
+    if (!open) return
+    const subscription = watch((values) => {
+      if (holdsWarranty(values)) setWarrantySeen(true)
+    })
+    return () => subscription.unsubscribe()
+  }, [open, watch])
+
   // Auto-save the form to localStorage on every change while the dialog
   // is open in create mode. Debounced to a single rAF tick so a burst
   // of typing doesn't write to storage on every keystroke. A write still
@@ -694,8 +739,8 @@ export function CommodityFormDialog({
       setStep("basics")
       return
     }
-    const idx = FORM_STEPS.indexOf(step)
-    if (idx >= 0 && idx < FORM_STEPS.length - 1) setStep(FORM_STEPS[idx + 1])
+    const idx = formSteps.indexOf(step)
+    if (idx >= 0 && idx < formSteps.length - 1) setStep(formSteps[idx + 1])
   }
   function prevStep() {
     if (step === "ai") return
@@ -707,8 +752,8 @@ export function CommodityFormDialog({
       if (aiStepAvailable) setStep("ai")
       return
     }
-    const idx = FORM_STEPS.indexOf(step)
-    if (idx > 0) setStep(FORM_STEPS[idx - 1])
+    const idx = formSteps.indexOf(step)
+    if (idx > 0) setStep(formSteps[idx - 1])
   }
 
   // requestClose intercepts dismiss intents (Escape / click-outside
@@ -1039,7 +1084,7 @@ export function CommodityFormDialog({
         // Compound paths like `urls.0` need the root segment when
         // looking up which step owns the field.
         const firstFieldRoot = fieldResult.mapped[0].split(".")[0]
-        const targetStep = (FORM_STEPS as readonly string[]).find((s) =>
+        const targetStep = (formSteps as readonly string[]).find((s) =>
           STEP_FIELDS[s as StepKey].some((f) => f === firstFieldRoot)
         ) as StepKey | undefined
         if (targetStep && targetStep !== step) setStep(targetStep)
@@ -1067,7 +1112,7 @@ export function CommodityFormDialog({
   // first step that has an error.
   function onInvalid(invalid: Record<string, unknown>) {
     const failing = new Set(Object.keys(invalid))
-    const target = FORM_STEPS.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
+    const target = formSteps.find((s) => STEP_FIELDS[s].some((f) => failing.has(f)))
     if (target && target !== step) setStep(target)
   }
   const submitForm = () => void handleSubmit(submit, onInvalid)()
@@ -1125,7 +1170,8 @@ export function CommodityFormDialog({
         setScannedSeller(values.seller)
       }
     }
-    if (values.warranty_expires_at !== undefined) {
+    // A group that hides warranties gets no warranty from a scan (#1607).
+    if (showWarranties && values.warranty_expires_at !== undefined) {
       apply("warranty_expires_at", values.warranty_expires_at)
     }
     if (values.original_price !== undefined) apply("original_price", values.original_price)
@@ -1164,8 +1210,8 @@ export function CommodityFormDialog({
   // On the AI surface the form-step index is reported as -1 (not in
   // the form sequence yet) — Back is disabled, Next ("Fill manually")
   // is wired separately above.
-  const formStepIndex = step === "ai" ? -1 : FORM_STEPS.indexOf(step)
-  const isLastStep = formStepIndex === FORM_STEPS.length - 1
+  const formStepIndex = step === "ai" ? -1 : formSteps.indexOf(step)
+  const isLastStep = formStepIndex === formSteps.length - 1
   // #1554: a count > 1 row is a bundle of identical units and can't
   // carry warranty / loan / service. Watching the count value lets the
   // banner show up live as soon as the user types, and lets the
@@ -1228,7 +1274,7 @@ export function CommodityFormDialog({
               ? t("commodities:form.step.ai.description")
               : t("commodities:form.stepCounter", {
                   current: formStepIndex + 1,
-                  total: FORM_STEPS.length,
+                  total: formSteps.length,
                   label: t(`commodities:form.step.${step}.title`),
                 })}
           </DialogDescription>
@@ -1251,7 +1297,7 @@ export function CommodityFormDialog({
               className="flex items-center gap-1.5"
               aria-label={t("commodities:form.stepperLabel")}
             >
-              {FORM_STEPS.map((s, i) => {
+              {formSteps.map((s, i) => {
                 const isCurrent = step === s
                 const isVisited = visitedSteps.has(s)
                 const hasError = STEP_FIELDS[s].some((f) => f in errors)
@@ -1446,6 +1492,7 @@ export function CommodityFormDialog({
                 onAccept={handleAiAccept}
                 onSkip={() => setStep("basics")}
                 anonymous={anonymous}
+                omitWarranty={!showWarranties}
               />
             ) : null}
             {!resumeLoading && step === "basics" ? (

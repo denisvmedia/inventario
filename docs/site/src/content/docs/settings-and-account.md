@@ -185,7 +185,8 @@ on for:
 - how many items were added, how many were changed, and how many files were
   attached;
 - warranties expiring in the next 30 days and maintenance due in the next 14,
-  nearest first.
+  nearest first, unless the group
+  [hides that section](../groups-and-sharing/#hide-sections-the-group-doesnt-use).
 
 A few things worth knowing:
 

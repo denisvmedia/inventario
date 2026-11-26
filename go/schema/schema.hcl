@@ -3139,6 +3139,10 @@ table "location_groups" {
     type = TEXT
     default = "USD"
   }
+  column "hidden_sections" {
+    type = JSONB
+    default = sql("'[]'")
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
@@ -3697,6 +3701,10 @@ table "personal_data_exports" {
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
+  }
+  column "started_at" {
+    type = TIMESTAMP
+    null = true
   }
   column "completed_at" {
     type = TIMESTAMP

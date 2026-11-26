@@ -26,13 +26,16 @@ interface ServiceTabProps {
   // #1554: bundle commodities (count > 1) cannot be sent for service.
   // Mirror LendTab — render an empty-state hint and hide the CTA.
   commodityCount?: number
+  // False while the group hides maintenance and repairs (#1607): the tab
+  // still shows the item's service records, without the Send button.
+  canStart?: boolean
 }
 
 // ServiceTab is the in-service surface on commodity detail. Mirrors
 // LendTab structurally — at most one open service row + a history
 // list — but the copy and icons emphasise repair / workshop semantics
 // instead of borrower semantics.
-export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
+export function ServiceTab({ commodityId, commodityCount, canStart = true }: ServiceTabProps) {
   const { t } = useTranslation(["services", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -126,7 +129,7 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
     <Card data-testid="commodity-detail-service">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("services:tab.title")}</CardTitle>
-        {!current && !openLoan && !isBundle ? (
+        {canStart && !current && !openLoan && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -148,7 +151,7 @@ export function ServiceTab({ commodityId, commodityCount }: ServiceTabProps) {
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {!current && openLoan && !isBundle ? (
+        {canStart && !current && openLoan && !isBundle ? (
           <Alert data-testid="service-blocked-by-loan">
             <AlertDescription>
               {t("services:tab.blockedByLoan", { borrower: openLoan.borrower_name })}

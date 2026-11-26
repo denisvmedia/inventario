@@ -79,6 +79,11 @@ type PersonalDataExport struct {
 	ErrorMessage string `json:"-" db:"error_message"`
 	//ptah:schema:field name="created_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	CreatedAt time.Time `json:"created_at" db:"created_at"`
+	// StartedAt is when a worker claimed the export and began the build. A
+	// build that started long ago and recorded no result died with its
+	// process, and the worker queues it again.
+	//ptah:schema:field name="started_at" type="TIMESTAMP"
+	StartedAt *time.Time `json:"-" db:"started_at"`
 	//ptah:schema:field name="completed_at" type="TIMESTAMP"
 	CompletedAt *time.Time `json:"completed_at,omitempty" db:"completed_at"`
 	// ExpiresAt is when the export worker deletes the row and its archive.

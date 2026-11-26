@@ -1,8 +1,10 @@
 package export
 
 import (
+	"bytes"
 	"cmp"
 	"context"
+	"encoding/json"
 	"maps"
 	"slices"
 	"time"
@@ -355,11 +357,39 @@ func (b *personalBuilder) planHistory(ctx context.Context, l *groupLookups, doc 
 			PersonalItemRef: l.itemRef(r.CommodityID),
 			Kind:            string(r.Kind),
 			OccurredAt:      formatTime(r.OccurredAt),
-			Before:          map[string]any(r.Before),
-			After:           map[string]any(r.After),
+			Changes:         historyChanges(r.Before, r.After),
 			Note:            r.Note,
 		})
 	}
 	b.stats.HistoryEntryCount += len(doc.History)
 	return nil
+}
+
+// historyChanges returns the fields an entry changed with the values it set:
+// a field in after whose value differs from before, and a field only in
+// before, which the entry removed (nil). Values are compared as JSON, the
+// form they are stored in.
+func historyChanges(before, after models.CommodityEventPayload) map[string]any {
+	changes := make(map[string]any)
+	for k, v := range after {
+		if old, ok := before[k]; ok && sameJSON(old, v) {
+			continue
+		}
+		changes[k] = v
+	}
+	for k := range before {
+		if _, ok := after[k]; !ok {
+			changes[k] = nil
+		}
+	}
+	if len(changes) == 0 {
+		return nil
+	}
+	return changes
+}
+
+func sameJSON(a, b any) bool {
+	x, errX := json.Marshal(a)
+	y, errY := json.Marshal(b)
+	return errX == nil && errY == nil && bytes.Equal(x, y)
 }

@@ -10,6 +10,7 @@ import { GroupProvider } from "@/features/group/GroupContext"
 import { ProtectedRoute } from "@/components/routing/ProtectedRoute"
 import { RequireBackofficeAuth } from "@/components/routing/RequireBackofficeAuth"
 import { GroupRequiredRoute } from "@/components/routing/GroupRequiredRoute"
+import { SectionRoute } from "@/components/routing/SectionRoute"
 import { UngroupedRedirect } from "@/components/routing/UngroupedRedirect"
 import { ComingSoonPage } from "@/components/coming-soon"
 import { AdminShell } from "@/app/AdminShell"
@@ -433,9 +434,23 @@ export function AppRoutes() {
               <Route path="sellers" element={<SellersListPage />} />
               <Route path="item-types" element={<ItemTypesListPage />} />
               <Route path="custom-fields" element={<CustomFieldsListPage />} />
-              <Route path="lent" element={<LoansListPage />} />
+              <Route
+                path="lent"
+                element={
+                  <SectionRoute section="loans">
+                    <LoansListPage />
+                  </SectionRoute>
+                }
+              />
               <Route path="trash" element={<TrashPage />} />
-              <Route path="in-service" element={<ServicesListPage />} />
+              <Route
+                path="in-service"
+                element={
+                  <SectionRoute section="maintenance">
+                    <ServicesListPage />
+                  </SectionRoute>
+                }
+              />
               <Route path="members" element={<MembersPage />} />
               <Route path="exports" element={<ExportsListPage />} />
               <Route path="exports/new" element={<ExportNewPage />} />
@@ -447,13 +462,34 @@ export function AppRoutes() {
                   list view with All/Active/Expiring/Expired tabs. The
                   inline panels on commodities detail still surface
                   per-item status alongside this group-wide page. */}
-              <Route path="warranties" element={<WarrantiesListPage />} />
+              <Route
+                path="warranties"
+                element={
+                  <SectionRoute section="warranties">
+                    <WarrantiesListPage />
+                  </SectionRoute>
+                }
+              />
               {/* Maintenance reminders (#1368) — group-wide upcoming
                   maintenance, sorted by next_due_at. */}
-              <Route path="maintenance" element={<MaintenanceListPage />} />
+              <Route
+                path="maintenance"
+                element={
+                  <SectionRoute section="maintenance">
+                    <MaintenanceListPage />
+                  </SectionRoute>
+                }
+              />
               {/* Upcoming (#2805) — item reminders, warranty expiries, loan
                   and maintenance due dates in one date-ordered list. */}
-              <Route path="upcoming" element={<UpcomingPage />} />
+              <Route
+                path="upcoming"
+                element={
+                  <SectionRoute section="upcoming">
+                    <UpcomingPage />
+                  </SectionRoute>
+                }
+              />
               {/* Inbox (#2794): drafts and items marked as draft, the
                   group's unfinished work, with the step that clears each. */}
               <Route path="inbox" element={<InboxPage />} />

@@ -25,6 +25,7 @@ import {
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { isSectionHidden, type GroupSection } from "@/features/group/sections"
 import { UPCOMING_KINDS, type UpcomingItem, type UpcomingKind } from "@/features/reminders/api"
 import { useUpcoming } from "@/features/reminders/hooks"
 import { formatDate } from "@/lib/intl"
@@ -52,8 +53,17 @@ const KIND_TABS: Record<UpcomingKind, string | null> = {
   maintenance: "maintenance",
 }
 
-function parseKind(raw: string | null): KindFilter {
-  return (KIND_FILTERS as readonly string[]).includes(raw ?? "") ? (raw as KindFilter) : "all"
+// The group section each kind belongs to. A group that hides the section
+// (#1607) gets neither the kind's rows nor its tab.
+const KIND_SECTIONS: Record<UpcomingKind, GroupSection | null> = {
+  reminder: null,
+  warranty: "warranties",
+  loan: "loans",
+  maintenance: "maintenance",
+}
+
+function parseKind(raw: string | null, filters: readonly KindFilter[]): KindFilter {
+  return (filters as readonly string[]).includes(raw ?? "") ? (raw as KindFilter) : "all"
 }
 
 function parseWindow(raw: string | null): WindowDays {
@@ -70,10 +80,23 @@ export function UpcomingPage() {
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
   const [searchParams, setSearchParams] = useSearchParams()
-  const kind = parseKind(searchParams.get("kind"))
+  const kindShown = (k: UpcomingKind) => {
+    const section = KIND_SECTIONS[k]
+    return !section || !isSectionHidden(currentGroup, section)
+  }
+  const kindFilters = KIND_FILTERS.filter((k) => k === "all" || kindShown(k))
+  const kind = parseKind(searchParams.get("kind"), kindFilters)
   const windowDays = parseWindow(searchParams.get("days"))
   const upcoming = useUpcoming(windowDays)
-  const items = useMemo(() => upcoming.data?.items ?? [], [upcoming.data?.items])
+  const hidden = currentGroup?.hidden_sections
+  const items = useMemo(
+    () =>
+      (upcoming.data?.items ?? []).filter((it) => {
+        const section = it.kind ? KIND_SECTIONS[it.kind] : null
+        return !section || !hidden?.includes(section)
+      }),
+    [upcoming.data?.items, hidden]
+  )
 
   const counts = useMemo(() => {
     const out: Record<KindFilter, number> = {
@@ -133,7 +156,7 @@ export function UpcomingPage() {
         className="flex gap-1 overflow-x-auto border-b border-border"
         data-testid="upcoming-tabs"
       >
-        {KIND_FILTERS.map((k) => (
+        {kindFilters.map((k) => (
           <button
             key={k}
             role="tab"

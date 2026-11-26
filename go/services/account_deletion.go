@@ -134,7 +134,7 @@ func (s *AccountDeletionService) DeleteAccount(ctx context.Context, tenantID, us
 	}
 	// The same goes for the personal data export archives: their rows go in
 	// step 3, their blobs after step 4.
-	exportKeys, err := s.personalDataExportKeys(ctx, tenantID, userID)
+	exportKeys, err := s.personalDataExportKeys(ctx, userID)
 	if err != nil {
 		return err
 	}
@@ -203,7 +203,7 @@ func (s *AccountDeletionService) deletePersonalDataExportArchives(ctx context.Co
 // personalDataExportKeys returns the blob keys of the user's personal data
 // export archives (#2177), the deterministic key of every export whatever its
 // status: one being built when the account goes still writes there.
-func (s *AccountDeletionService) personalDataExportKeys(ctx context.Context, tenantID, userID string) ([]string, error) {
+func (s *AccountDeletionService) personalDataExportKeys(ctx context.Context, userID string) ([]string, error) {
 	if s.factorySet.PersonalDataExportRegistry == nil || s.purger.fileService == nil {
 		return nil, nil
 	}
@@ -213,7 +213,9 @@ func (s *AccountDeletionService) personalDataExportKeys(ctx context.Context, ten
 	}
 	keys := make([]string, 0, len(exports))
 	for _, e := range exports {
-		keys = append(keys, blobkeys.BuildPersonalDataExportBlobKey(tenantID, e.ID))
+		// The export's own tenant, not the caller's: a user moved to another
+		// tenant may still have an export from before the move.
+		keys = append(keys, blobkeys.BuildPersonalDataExportBlobKey(e.TenantID, e.ID))
 	}
 	return keys, nil
 }

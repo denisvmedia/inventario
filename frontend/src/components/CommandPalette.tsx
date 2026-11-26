@@ -37,6 +37,7 @@ import {
 import { commodityListHref, primarySearchMatch } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import type { LocationGroup } from "@/features/group/api"
+import { isSectionHidden, type GroupSection } from "@/features/group/sections"
 import type {
   AreaAttrs,
   CommodityAttrs,
@@ -72,6 +73,9 @@ interface PaletteEntry {
   // AppSidebar.NavEntry.
   to: (group: LocationGroup | null) => string | null
   icon: typeof Search
+  // The group section the entry belongs to; the entry leaves the palette
+  // while the active group hides it (#1607).
+  section?: GroupSection
 }
 
 const NAVIGATION: PaletteEntry[] = [
@@ -99,6 +103,7 @@ const NAVIGATION: PaletteEntry[] = [
     labelKey: "common:nav.warranties",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
+    section: "warranties",
   },
   {
     labelKey: "common:nav.tags",
@@ -621,7 +626,9 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
         ) : null}
 
         <CommandGroup heading={t("common:shell.commandGroupNavigation")}>
-          {NAVIGATION.map((entry) => (
+          {NAVIGATION.filter(
+            (entry) => !entry.section || !isSectionHidden(currentGroup, entry.section)
+          ).map((entry) => (
             <PaletteRow
               key={entry.labelKey}
               entry={entry}

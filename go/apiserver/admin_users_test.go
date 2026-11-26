@@ -17,6 +17,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -170,6 +171,52 @@ func TestAdminBlockUser_HappyPath(t *testing.T) {
 	// IsActive should be persisted false on the registry row.
 	reloaded := must.Must(env.params.FactorySet.UserRegistry.Get(context.Background(), target.ID))
 	c.Assert(reloaded.IsActive, qt.IsFalse)
+}
+
+// movesAfterRead is a user store whose Get moves the user to another tenant
+// right after reading them, the way a move running at the same time would.
+type movesAfterRead struct {
+	registry.UserRegistry
+	mover registry.UserTenantMover
+	to    string
+}
+
+func (r movesAfterRead) Get(ctx context.Context, id string) (*models.User, error) {
+	user, err := r.UserRegistry.Get(ctx, id)
+	if err != nil {
+		return nil, err
+	}
+	_, err = r.mover.MoveUserToTenant(ctx, registry.UserTenantMove{UserID: id, FromTenantID: user.TenantID, ToTenantID: r.to})
+	return user, err
+}
+
+// A block written from a copy read before the user moved to another tenant is
+// refused with 409 instead of writing the old tenant back.
+func TestAdminBlockUser_UserMovedMeanwhile(t *testing.T) {
+	c := qt.New(t)
+	params, tenantUser, _ := newParams()
+	_, token := WithBackofficeAdmin(t, params)
+	target := createTestUserDirect(c, params, tenantUser.TenantID, "mover@example.com", true, false)
+	other := must.Must(params.FactorySet.TenantRegistry.Create(context.Background(), models.Tenant{
+		Name: "Other", Slug: "other", Status: models.TenantStatusActive,
+	}))
+	users := params.FactorySet.UserRegistry
+	params.FactorySet.UserRegistry = movesAfterRead{
+		UserRegistry: users,
+		mover:        params.FactorySet.UserTenantMover,
+		to:           other.ID,
+	}
+	handler := apiserver.APIServer(params, &mockRestoreWorker{})
+
+	rr := doAdminJSONRequest(t, handler, http.MethodPost,
+		"/api/v1/admin/users/"+target.ID+"/block",
+		token, blockBody("policy violation", false))
+	c.Assert(rr.Code, qt.Equals, http.StatusConflict)
+	assertErrorCode(t, c, rr.Body.Bytes(), "user.tenant_changed")
+
+	stored := must.Must(users.Get(context.Background(), target.ID))
+	c.Assert(stored.TenantID, qt.Equals, other.ID)
+	c.Assert(stored.IsActive, qt.IsTrue)
 }
 
 func TestAdminBlockUser_Idempotent(t *testing.T) {

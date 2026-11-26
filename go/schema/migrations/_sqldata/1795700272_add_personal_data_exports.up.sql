@@ -1,5 +1,5 @@
 -- Migration generated from schema differences
--- Generated on: 2026-11-26T11:24:23+01:00
+-- Generated on: 2026-11-26T14:37:54+01:00
 -- Direction: UP
 -- +ptah lock_timeout=3s
 -- +ptah statement_timeout=30s
@@ -13,6 +13,7 @@ CREATE TABLE "personal_data_exports" (
   "file_count" INTEGER NOT NULL DEFAULT 0,
   "error_message" TEXT NOT NULL DEFAULT '',
   "created_at" TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  "started_at" TIMESTAMP,
   "completed_at" TIMESTAMP,
   "expires_at" TIMESTAMP NOT NULL,
   "tenant_id" TEXT NOT NULL,

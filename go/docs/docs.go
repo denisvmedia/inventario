@@ -875,6 +875,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Unprocessable Entity - self-block or admin-on-admin without force",
                         "schema": {
@@ -1092,6 +1098,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Not Found - unknown user",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - the user moved to another tenant meanwhile (user.tenant_changed)",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -11180,7 +11192,7 @@ const docTemplate = `{
                 }
             },
             "post": {
-                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin.",
+                "description": "Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11322,7 +11334,7 @@ const docTemplate = `{
                 }
             },
             "patch": {
-                "description": "Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
+                "description": "Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.\nThe group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -11348,6 +11360,65 @@ const docTemplate = `{
                         "required": true,
                         "schema": {
                             "$ref": "#/definitions/jsonapi.LocationGroupRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.LocationGroupResponse"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - not a group admin",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "Group not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "Validation error",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/groups/{groupID}/hidden-sections": {
+            "put": {
+                "description": "Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.\nAn empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.\nUnknown sections are refused; duplicates are dropped. Requires group admin role.",
+                "consumes": [
+                    "application/vnd.api+json"
+                ],
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "groups"
+                ],
+                "summary": "Set the group's hidden sections",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group ID",
+                        "name": "groupID",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Hidden sections",
+                        "name": "data",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.GroupHiddenSectionsRequest"
                         }
                     }
                 ],
@@ -12377,7 +12448,7 @@ const docTemplate = `{
         },
         "/users/me/data-exports/{id}/download-url": {
             "post": {
-                "description": "Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only\nfor a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one\n409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden.",
+                "description": "Returns a short-lived signed URL the browser downloads the archive from. Only the export's owner gets one, and only\nfor a finished export that has not expired: another user's export answers 404 data_export.not_found, an unfinished one\n409 data_export.not_ready. An impersonation session answers 403 data_export.impersonation_forbidden. The URL works\nonly with the refresh-token cookie of the session that asked for it, so a request without that cookie answers 403\ndata_export.session_required.",
                 "produces": [
                     "application/json"
                 ],
@@ -15689,9 +15760,17 @@ const docTemplate = `{
                     }
                 },
                 "fields": {
+                    "description": "Fields are the values read, keyed by field name. Its document_type\nclassifies the scan as a whole; files is the per-file source, and\ndocument_type is derived from it when the model gives none.",
                     "type": "object",
                     "additionalProperties": {
                         "$ref": "#/definitions/jsonapi.CommodityScanFieldGuess"
+                    }
+                },
+                "files": {
+                    "description": "Files holds one suggestion per input file the model said something\nusable about, ordered by index; a file without one has no entry.\nAbsent when there are none.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/jsonapi.CommodityScanFileGuess"
                     }
                 },
                 "items": {
@@ -15715,6 +15794,27 @@ const docTemplate = `{
                 }
             }
         },
+        "jsonapi.CommodityScanDocumentTypeGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.9
+                },
+                "value": {
+                    "type": "string",
+                    "enum": [
+                        "invoice",
+                        "receipt",
+                        "manual",
+                        "warranty",
+                        "photo",
+                        "other"
+                    ],
+                    "example": "invoice"
+                }
+            }
+        },
         "jsonapi.CommodityScanFieldGuess": {
             "type": "object",
             "properties": {
@@ -15724,6 +15824,25 @@ const docTemplate = `{
                 "value": {
                     "description": "Value is polymorphic — see the type-level doc comment.",
                     "type": "object"
+                }
+            }
+        },
+        "jsonapi.CommodityScanFileGuess": {
+            "type": "object",
+            "required": [
+                "index"
+            ],
+            "properties": {
+                "document_type": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanDocumentTypeGuess"
+                },
+                "index": {
+                    "description": "Index is the file's position among the photos parts of the request,\ncounted from 0. An empty part the server skipped still counts.",
+                    "type": "integer",
+                    "example": 0
+                },
+                "title": {
+                    "$ref": "#/definitions/jsonapi.CommodityScanTitleGuess"
                 }
             }
         },
@@ -15764,6 +15883,20 @@ const docTemplate = `{
             "properties": {
                 "data": {
                     "$ref": "#/definitions/jsonapi.CommodityScanResource"
+                }
+            }
+        },
+        "jsonapi.CommodityScanTitleGuess": {
+            "type": "object",
+            "properties": {
+                "confidence": {
+                    "type": "number",
+                    "example": 0.8
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 120,
+                    "example": "Bosch invoice, March 2024"
                 }
             }
         },
@@ -16999,6 +17132,41 @@ const docTemplate = `{
                 },
                 "password": {
                     "type": "string"
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsAttributes": {
+            "type": "object",
+            "properties": {
+                "hidden_sections": {
+                    "description": "HiddenSections is the full list of sections to hide: warranties,\nmaintenance, loans, upcoming. An empty list shows every section.\nUnknown sections are refused and duplicates dropped.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsData": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/jsonapi.GroupHiddenSectionsAttributes"
+                },
+                "type": {
+                    "type": "string",
+                    "enum": [
+                        "groups"
+                    ],
+                    "example": "groups"
+                }
+            }
+        },
+        "jsonapi.GroupHiddenSectionsRequest": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "$ref": "#/definitions/jsonapi.GroupHiddenSectionsData"
                 }
             }
         },
@@ -18310,6 +18478,13 @@ const docTemplate = `{
                 "group_currency": {
                     "description": "GroupCurrency is set once at group creation and is immutable after.\nOn create the handler validates the ISO code and defaults to USD\nwhen nil. On update the handler rejects a change with 422 — a\nreprice-aware currency migration is tracked under #202.",
                     "type": "string"
+                },
+                "hidden_sections": {
+                    "description": "HiddenSections lists the sections the group hides for all its\nmembers: warranties, maintenance, loans, upcoming. Optional. On\ncreate, absent means the group hides nothing; on update, absent\nleaves the list as it is and a list replaces it. Unknown sections\nare refused and duplicates dropped.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
                 },
                 "icon": {
                     "type": "string"
@@ -21250,6 +21425,21 @@ const docTemplate = `{
                 "GroupRoleOwner"
             ]
         },
+        "models.GroupSection": {
+            "type": "string",
+            "enum": [
+                "warranties",
+                "maintenance",
+                "loans",
+                "upcoming"
+            ],
+            "x-enum-varnames": [
+                "GroupSectionWarranties",
+                "GroupSectionMaintenance",
+                "GroupSectionLoans",
+                "GroupSectionUpcoming"
+            ]
+        },
         "models.IntakeCandidate": {
             "type": "object",
             "properties": {
@@ -21511,6 +21701,13 @@ const docTemplate = `{
                 "group_currency": {
                     "description": "GroupCurrency is the ISO-4217 code the group values its inventory in. It is\na property of the group (not the user) because a user can belong to\ngroups valued in different currencies. Admins change it via the group's\nupdate endpoint; changing it triggers a reprice of the group's commodities.",
                     "type": "string"
+                },
+                "hidden_sections": {
+                    "description": "HiddenSections lists the sections the group hides for all its members\n(see GroupSection). Empty for a group that hides nothing. Admins change\nit through the group's update endpoints; every member reads it with the\ngroup.",
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.GroupSection"
+                    }
                 },
                 "icon": {
                     "description": "Icon is an optional emoji from the curated set in\nmodels.ValidGroupIcons. Empty string means \"no icon\". Issue #1255.",
@@ -22076,7 +22273,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "avatar_path": {
-                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key ends in a revision number (` + "`" + `avatars/\u003cuser\u003e/3.jpg` + "`" + `) which exists to\nbust browser caches: replacing a photo writes a new key rather than\noverwriting one, so nothing has to reason about cache headers to make the\nnew picture show up.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
+                    "description": "AvatarPath is the blob key of the user's profile photo, or nil when they\nhave none and the UI falls back to their initials (#1382).\n\nThe key lives under the user's tenant and ends in a revision number and a\nrandom suffix (` + "`" + `t/\u003ctenant\u003e/avatars/\u003cuser\u003e/3-a1b2c3d4e5f6.jpg` + "`" + `; a photo\nwith a flat ` + "`" + `avatars/\u003cuser\u003e/...` + "`" + ` key works the same). Replacing a\nphoto writes a new key rather than overwriting one, so nothing has to\nreason about cache headers to make the new picture show up, and a tenant\nmove copies the photo to a new key under the new tenant.\n\nNot user input: it is set by the avatar endpoints, which decide the key\nafter validating and re-encoding what was uploaded. A client that could\nchoose it could point a user's avatar at any object in the bucket.",
                     "type": "string"
                 },
                 "avatar_url": {

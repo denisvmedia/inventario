@@ -146,10 +146,10 @@ func TestPersonalDataExportRegistryPostgres_ClaimUpdateExpire(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(pending, qt.HasLen, 1)
 
-	claimed, err := env.exports.ClaimPending(ctx, export.ID)
+	claimed, err := env.exports.ClaimPending(ctx, export.ID, now)
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsTrue)
-	claimed, err = env.exports.ClaimPending(ctx, export.ID)
+	claimed, err = env.exports.ClaimPending(ctx, export.ID, now)
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsFalse)
 
@@ -180,4 +180,39 @@ func TestPersonalDataExportRegistryPostgres_ClaimUpdateExpire(t *testing.T) {
 	c.Assert(env.exports.Delete(ctx, export.ID), qt.IsNil)
 	_, err = env.exports.Get(ctx, export.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+// A build that started before the cutoff and is still in progress goes back
+// to the queue; one that started after it stays.
+func TestPersonalDataExportRegistryPostgres_RequeueStalled(t *testing.T) {
+	c := qt.New(t)
+	env := newPersonalExportPGEnv(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Microsecond)
+
+	stalled, _ := env.request(c, env.user, now)
+	running, _ := env.request(c, env.other, now)
+	claimed, err := env.exports.ClaimPending(ctx, stalled.ID, now.Add(-2*time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	claimed, err = env.exports.ClaimPending(ctx, running.ID, now.Add(-time.Minute))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+
+	moved, err := env.exports.RequeueStalled(ctx, now.Add(-time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(moved, qt.Equals, 1)
+
+	got, err := env.exports.Get(ctx, stalled.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+	c.Assert(got.StartedAt, qt.IsNil)
+	got, err = env.exports.Get(ctx, running.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusInProgress)
+	c.Assert(got.StartedAt, qt.IsNotNil)
+
+	claimed, err = env.exports.ClaimPending(ctx, stalled.ID, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
 }

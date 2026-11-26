@@ -73,18 +73,21 @@ type PersonalManifestGroup struct {
 
 // PersonalStatistics counts what the archive holds.
 type PersonalStatistics struct {
-	GroupCount               int   `json:"groupCount"`
-	ItemCount                int   `json:"itemCount"`
-	FileCount                int   `json:"fileCount"`
-	TotalFileSize            int64 `json:"totalFileSize"`
-	LoanCount                int   `json:"loanCount"`
-	MaintenanceScheduleCount int   `json:"maintenanceScheduleCount"`
-	ServiceRecordCount       int   `json:"serviceRecordCount"`
-	ReminderCount            int   `json:"reminderCount"`
-	SupplyLinkCount          int   `json:"supplyLinkCount"`
-	DraftCount               int   `json:"draftCount"`
-	SavedViewCount           int   `json:"savedViewCount"`
-	HistoryEntryCount        int   `json:"historyEntryCount"`
+	GroupCount    int   `json:"groupCount"`
+	ItemCount     int   `json:"itemCount"`
+	FileCount     int   `json:"fileCount"`
+	TotalFileSize int64 `json:"totalFileSize"`
+	// MissingFileCount counts the files listed without their bytes, which
+	// were no longer in storage; each is marked missing in its group's file.
+	MissingFileCount         int `json:"missingFileCount"`
+	LoanCount                int `json:"loanCount"`
+	MaintenanceScheduleCount int `json:"maintenanceScheduleCount"`
+	ServiceRecordCount       int `json:"serviceRecordCount"`
+	ReminderCount            int `json:"reminderCount"`
+	SupplyLinkCount          int `json:"supplyLinkCount"`
+	DraftCount               int `json:"draftCount"`
+	SavedViewCount           int `json:"savedViewCount"`
+	HistoryEntryCount        int `json:"historyEntryCount"`
 }
 
 // PersonalProfile is the profile.json of a personal data export.
@@ -151,14 +154,15 @@ type PersonalGroup struct {
 }
 
 // PersonalItem is an item the user created, also one in the group's Trash.
-// Its location, area and seller are given by name.
+// Its location, area and seller are given by name, its type and tags by name
+// and slug.
 type PersonalItem struct {
 	ID                     string                `json:"id"`
 	Name                   string                `json:"name"`
 	ShortName              string                `json:"shortName,omitempty"`
 	Brand                  string                `json:"brand,omitempty"`
 	Model                  string                `json:"model,omitempty"`
-	Type                   string                `json:"type,omitempty"`
+	Type                   *PersonalName         `json:"type,omitempty"`
 	Location               string                `json:"location,omitempty"`
 	Area                   string                `json:"area,omitempty"`
 	Count                  int                   `json:"count"`
@@ -174,7 +178,7 @@ type PersonalItem struct {
 	SerialNumber           string                `json:"serialNumber,omitempty"`
 	ExtraSerialNumbers     []string              `json:"extraSerialNumbers,omitempty"`
 	PartNumbers            []string              `json:"partNumbers,omitempty"`
-	Tags                   []string              `json:"tags,omitempty"`
+	Tags                   []PersonalName        `json:"tags,omitempty"`
 	PurchaseDate           string                `json:"purchaseDate,omitempty"`
 	RegisteredDate         string                `json:"registeredDate,omitempty"`
 	LastModifiedDate       string                `json:"lastModifiedDate,omitempty"`
@@ -189,6 +193,14 @@ type PersonalItem struct {
 	CustomFields           []PersonalCustomValue `json:"customFields,omitempty"`
 	// InTrash marks an item in the group's Trash.
 	InTrash bool `json:"inTrash,omitempty"`
+}
+
+// PersonalName is one of the group's item types or tags: the name members see
+// and the slug the group stores. A tag the group has no entry for goes by its
+// slug.
+type PersonalName struct {
+	Name string `json:"name"`
+	Slug string `json:"slug"`
 }
 
 // PersonalCustomValue is the value of a custom field, by the field's name.
@@ -212,7 +224,7 @@ type PersonalFile struct {
 	MimeType    string             `json:"mimeType,omitempty"`
 	Type        string             `json:"type,omitempty"`
 	Category    string             `json:"category,omitempty"`
-	Tags        []string           `json:"tags,omitempty"`
+	Tags        []PersonalName     `json:"tags,omitempty"`
 	SizeBytes   int64              `json:"sizeBytes"`
 	Path        string             `json:"path,omitempty"`
 	Missing     bool               `json:"missing,omitempty"`
@@ -339,13 +351,15 @@ type PersonalSavedViewPlacement struct {
 	ShowOnDashboard bool   `json:"showOnDashboard"`
 }
 
-// PersonalHistoryEntry is an entry of an item's history the user made. Before
-// and After are the values the entry recorded, as stored.
+// PersonalHistoryEntry is an entry of an item's history the user made.
+// Changes holds the fields the entry changed, each with the value it set (null
+// for a value it removed): what the user wrote. The values the fields had
+// before, and the fields the entry recorded without changing them, are left
+// out, since other members may have typed them.
 type PersonalHistoryEntry struct {
 	PersonalItemRef
 	Kind       string         `json:"kind"`
 	OccurredAt string         `json:"occurredAt"`
-	Before     map[string]any `json:"before,omitempty"`
-	After      map[string]any `json:"after,omitempty"`
+	Changes    map[string]any `json:"changes,omitempty"`
 	Note       string         `json:"note,omitempty"`
 }

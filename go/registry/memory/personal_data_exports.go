@@ -138,7 +138,7 @@ func (r *PersonalDataExportRegistry) list(keep func(*models.PersonalDataExport) 
 	return out
 }
 
-func (r *PersonalDataExportRegistry) ClaimPending(_ context.Context, id string) (bool, error) {
+func (r *PersonalDataExportRegistry) ClaimPending(_ context.Context, id string, startedAt time.Time) (bool, error) {
 	if id == "" {
 		return false, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "ID"))
 	}
@@ -149,8 +149,25 @@ func (r *PersonalDataExportRegistry) ClaimPending(_ context.Context, id string) 
 		return false, nil
 	}
 	e.Status = models.PersonalDataExportStatusInProgress
+	e.StartedAt = new(startedAt)
 	r.exports[id] = e
 	return true, nil
+}
+
+func (r *PersonalDataExportRegistry) RequeueStalled(_ context.Context, startedBefore time.Time) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	moved := 0
+	for id, e := range r.exports {
+		if e.Status != models.PersonalDataExportStatusInProgress || e.StartedAt == nil || !e.StartedAt.Before(startedBefore) {
+			continue
+		}
+		e.Status = models.PersonalDataExportStatusPending
+		e.StartedAt = nil
+		r.exports[id] = e
+		moved++
+	}
+	return moved, nil
 }
 
 func (r *PersonalDataExportRegistry) Update(_ context.Context, export models.PersonalDataExport) (*models.PersonalDataExport, error) {
@@ -167,6 +184,7 @@ func (r *PersonalDataExportRegistry) Update(_ context.Context, export models.Per
 		return nil, errxtrace.Classify(registry.ErrNotFound, errx.Attrs("entity_type", "PersonalDataExport", "entity_id", export.ID))
 	}
 	stored.Status = export.Status
+	stored.StartedAt = export.StartedAt
 	stored.BlobKey = export.BlobKey
 	stored.SizeBytes = export.SizeBytes
 	stored.GroupCount = export.GroupCount
