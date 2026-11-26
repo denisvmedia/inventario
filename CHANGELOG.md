@@ -35,7 +35,12 @@ when to add an entry and where it goes.
   `GET /users/me/data-exports` lists the exports and when the next request is
   allowed; `POST /users/me/data-exports/{id}/download-url` returns a signed
   download link that works only in the browser session that asked for it
-  (403 `data_export.session_required` without the session cookie)
+  (403 `data_export.session_required` without the session cookie). In the
+  app, **Download my data** in Preferences → Account requests a copy, lists
+  the copies with their status, size and deletion date, and downloads a
+  finished one; the button stays disabled until the next request is allowed.
+  The delete-account dialog links to it, and the restore upload names a
+  personal data export when one is chosen
   ([#2177](https://github.com/denisvmedia/inventario/issues/2177)).
 - The AI scan suggests a type (invoice, receipt, manual, warranty, product
   photo or other) and a short readable title for each file it reads, in the
