@@ -351,6 +351,8 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 		{name: "a document id that is not an integer", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":300.0}`, field: "document_id", code: "validation_intake_field_type"},
 		{name: "a document id written as -0", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":-0}`, field: "document_id", code: "validation_intake_field_type"},
 		{name: "a NUL in the title", body: `{"title":"Inv\u0000oice","source_system":"paperless-ngx","document_id":"117"}`, field: "title", code: "validation_intake_text"},
+		// The decoder would read the byte as U+FFFD.
+		{name: "invalid UTF-8 in the document id", body: `{"title":"Invoice","source_system":"paperless-ngx","document_id":"117` + "\xff" + `"}`},
 	} {
 		c.Run(tc.name, func(c *qt.C) {
 			rr := env.raw(token, path, "application/json", []byte(tc.body))
@@ -366,6 +368,7 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 		})
 	}
 	c.Assert(env.openDrafts(), qt.HasLen, 0)
+	c.Assert(must.Must(env.groupRegistries().IntakeDocumentRegistry.List(env.groupCtx())), qt.HasLen, 0)
 
 	// A body past the size limit is refused as too large, even when what
 	// follows the object is only white space.
@@ -382,6 +385,11 @@ func TestIntakeDelivery_JSONBody(t *testing.T) {
 	rr = env.raw(token, path, "application/json", []byte(`{"title":"Invoice","source_system":"paperless-ngx","document_id":300}`))
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 	c.Assert(decodeIntakeDocument(c, rr).Attributes.ExternalDocumentID, qt.Equals, "300")
+
+	// U+FFFD sent as such is text like any other.
+	rr = env.raw(token, path, "application/json", []byte(`{"title":"Invoice","source_system":"paperless-ngx","document_id":"117\ufffd"}`))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
+	c.Assert(decodeIntakeDocument(c, rr).Attributes.ExternalDocumentID, qt.Equals, "117\ufffd")
 }
 
 // TestIntakeDelivery_TruncatedMultipart: a multipart body that stops before

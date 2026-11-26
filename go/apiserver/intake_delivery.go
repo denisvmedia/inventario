@@ -1,6 +1,7 @@
 package apiserver
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -10,6 +11,7 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/render"
 	"github.com/go-extras/errx"
@@ -57,6 +59,7 @@ var (
 	errIntakeAPITokenRequired = errx.NewDisplayable("the intake endpoint takes an API token")
 	errIntakeFieldsTooLarge   = errx.NewDisplayable("the delivery's fields exceed the size limit")
 	errIntakeJSONObject       = errx.NewDisplayable("the body must be one JSON object")
+	errIntakeJSONText         = errx.NewDisplayable("the body must be valid UTF-8")
 )
 
 // intakeDeliveryFields maps each field of a delivery to its place in
@@ -194,7 +197,16 @@ func (api *intakeDeliveryAPI) readDelivery(w http.ResponseWriter, r *http.Reques
 	fields := intakeFieldReader{}
 	switch mediaType {
 	case "application/json":
-		err = fields.readJSON(http.MaxBytesReader(w, r.Body, intakeDeliveryMaxFieldBytes))
+		// The decoder turns invalid UTF-8 into U+FFFD, which would make
+		// another document's identity of it, so the body is checked first.
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, intakeDeliveryMaxFieldBytes))
+		switch {
+		case err != nil:
+			return services.IntakeDelivery{}, nil, mapIntakeBodyError(err)
+		case !utf8.Valid(body):
+			return services.IntakeDelivery{}, nil, &uploadHTTPError{status: http.StatusUnprocessableEntity, err: errIntakeJSONText}
+		}
+		err = fields.readJSON(bytes.NewReader(body))
 		return fields.delivery, nil, err
 	case "application/x-www-form-urlencoded":
 		r.Body = http.MaxBytesReader(w, r.Body, intakeDeliveryMaxFieldBytes)
