@@ -110,8 +110,11 @@ In a **split** deployment the producers are split across processes:
 The failed-job metrics (#1307) follow the same split:
 `inventario_jobs_dead_lettered_total` is counted by each process that runs
 workers, so sum it, and `inventario_jobs_dead_letter_depth` is collected by the
-housekeeping worker group (or `run all`), so read it with `max()`. See the
-[admin runbook §10](../../devdocs/admin-runbook.md).
+housekeeping worker group (or `run all`), so read it with `max()`. The
+apiserver exports neither: it only queues jobs, and the workers mark them
+failed. Jobs that failed before the upgrade count toward the depth from the
+first collection, so an alert on a depth above zero fires until they are
+retried or discarded. See the [admin runbook §10](../../devdocs/admin-runbook.md).
 
 The business/email gauges also exist (at `0`) in the apiserver process because
 they are package-level, so a Prometheus that scrapes **only** the apiserver

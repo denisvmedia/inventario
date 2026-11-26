@@ -22,6 +22,7 @@
     },
     "createdAt": "Created",
     "errorMessage": "Error",
+    "failedAt": "Failed",
     "imported": "This export was imported from a backup file.",
     "includesFileData": "Includes attachments",
     "noDescription": "No description.",

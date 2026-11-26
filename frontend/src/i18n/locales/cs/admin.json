@@ -317,6 +317,7 @@
     "discarded": "Úloha je zahozena.",
     "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
     "notRetryable": "Tento druh úlohy nelze opakovat. Zahoďte ji.",
+    "roleRequired": "Neúspěšnou úlohu může zahodit jen správce platformy.",
     "retryError": "Úlohu se nepodařilo zopakovat. Zkuste to později.",
     "discardError": "Úlohu se nepodařilo zahodit. Zkuste to později.",
     "discardDialog": {

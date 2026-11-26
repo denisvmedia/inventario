@@ -36,9 +36,11 @@ import {
   useDiscardAdminFailedJob,
   useRetryAdminFailedJob,
 } from "@/features/admin/hooks"
+import { useOptionalBackofficeAuth } from "@/features/backoffice/auth/context"
 import { FAILED_JOB_ERROR_CODES, FAILED_JOB_TYPES } from "@/features/failed-jobs/api"
 import { failedJobTypeLabel } from "@/features/failed-jobs/labels"
 import { useAppToast } from "@/hooks/useAppToast"
+import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { formatDateTime } from "@/lib/intl"
 import { getServerErrorCode } from "@/lib/server-error"
 
@@ -46,6 +48,9 @@ import { AdminPagination } from "./AdminPagination"
 
 // Page size of the server-side paginated list; the BE caps per_page at 100.
 const PAGE_SIZE = 20
+
+// The BE refuses a discard by an operator without the platform_admin role.
+const ROLE_REQUIRED_CODE = "admin.role_required"
 
 // One page of tenants fills the tenant filter, as on AdminGroupsPage.
 const TENANT_FILTER_PER_PAGE = 100
@@ -66,11 +71,16 @@ function parseType(raw: string | null): string | undefined {
 // retried or discarded, newest failure first. The type filter, the tenant
 // filter and the page round-trip through the URL (?type, ?tenantID,
 // ?page). A job whose type can run again has Retry; every job has Discard,
-// which asks first. Both are written to the audit log by the BE.
+// which asks first and is for platform admins only: a support agent may
+// retry but not discard. Both are written to the audit log by the BE.
 export function AdminFailedJobsPage() {
   const { t } = useTranslation("admin")
   const toast = useAppToast()
   const [searchParams, setSearchParams] = useSearchParams()
+  // Until the operator's profile is in, Discard shows; the BE has the last
+  // word either way.
+  const operator = useOptionalBackofficeAuth()?.user
+  const canDiscard = !operator || operator.role === "platform_admin"
 
   const type = parseType(searchParams.get("type"))
   const tenantID = searchParams.get("tenantID") ?? ""
@@ -92,6 +102,8 @@ export function AdminFailedJobsPage() {
   const retry = useRetryAdminFailedJob()
   const discard = useDiscardAdminFailedJob()
   const [discarding, setDiscarding] = useState<AdminFailedJob | null>(null)
+  // The dialog keeps naming the job while it closes.
+  const discardSubject = useValueWhileOpen(discarding !== null, discarding)
 
   // A pinned tenant past the first page of tenants still shows in the
   // filter, named from the loaded rows when one carries it.
@@ -140,6 +152,7 @@ export function AdminFailedJobsPage() {
     const code = getServerErrorCode(err)
     if (code === FAILED_JOB_ERROR_CODES.notFound) toast.info(t("failedJobs.gone"))
     else if (code === FAILED_JOB_ERROR_CODES.notRetryable) toast.error(t("failedJobs.notRetryable"))
+    else if (code === ROLE_REQUIRED_CODE) toast.error(t("failedJobs.roleRequired"))
     else toast.error(t(fallbackKey))
   }
 
@@ -276,7 +289,7 @@ export function AdminFailedJobsPage() {
                         job={job}
                         disabled={busy}
                         onRetry={() => onRetry(job)}
-                        onDiscard={() => setDiscarding(job)}
+                        onDiscard={canDiscard ? () => setDiscarding(job) : undefined}
                       />
                     ))
                   )}
@@ -308,6 +321,7 @@ export function AdminFailedJobsPage() {
             <DialogTitle>{t("failedJobs.discardDialog.title")}</DialogTitle>
             <DialogDescription>{t("failedJobs.discardDialog.body")}</DialogDescription>
           </DialogHeader>
+          {discardSubject ? <DiscardSubject job={discardSubject} /> : null}
           <DialogFooter>
             <Button
               type="button"
@@ -333,6 +347,31 @@ export function AdminFailedJobsPage() {
   )
 }
 
+// DiscardSubject names the job the discard dialog is about: its type,
+// title, tenant and group, and its id.
+function DiscardSubject({ job }: { job: AdminFailedJob }) {
+  const { t } = useTranslation("admin")
+  const typeLabel = failedJobTypeLabel(t, job.job_type)
+  const where = [job.tenant_name || job.tenant_id, job.group_name || job.group_slug]
+    .filter(Boolean)
+    .join(" · ")
+  return (
+    <div
+      className="flex flex-col gap-1 rounded-lg border border-border bg-muted/40 px-3 py-2.5"
+      data-testid="admin-failed-job-discard-subject"
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <Badge variant="outline" className="h-5 shrink-0 text-xs font-medium">
+          {typeLabel}
+        </Badge>
+        <span className="truncate text-sm font-medium">{job.title || typeLabel}</span>
+      </div>
+      {where ? <span className="text-xs text-muted-foreground">{where}</span> : null}
+      <span className="font-mono text-xs text-muted-foreground">{job.id}</span>
+    </div>
+  )
+}
+
 function FailedJobRow({
   job,
   disabled,
@@ -342,7 +381,8 @@ function FailedJobRow({
   job: AdminFailedJob
   disabled: boolean
   onRetry: () => void
-  onDiscard: () => void
+  // Absent for an operator who may not discard.
+  onDiscard?: () => void
 }) {
   const { t } = useTranslation("admin")
   const typeLabel = failedJobTypeLabel(t, job.job_type)
@@ -397,19 +437,21 @@ function FailedJobRow({
               {t("failedJobs.retry")}
             </Button>
           ) : null}
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            className="gap-1.5"
-            onClick={onDiscard}
-            disabled={disabled}
-            aria-label={t("failedJobs.discardLabel", { title })}
-            data-testid="admin-failed-job-discard"
-          >
-            <ArchiveX className="size-3.5" aria-hidden="true" />
-            {t("failedJobs.discard")}
-          </Button>
+          {onDiscard ? (
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="gap-1.5"
+              onClick={onDiscard}
+              disabled={disabled}
+              aria-label={t("failedJobs.discardLabel", { title })}
+              data-testid="admin-failed-job-discard"
+            >
+              <ArchiveX className="size-3.5" aria-hidden="true" />
+              {t("failedJobs.discard")}
+            </Button>
+          ) : null}
         </div>
       </TableCell>
     </TableRow>

@@ -201,6 +201,8 @@
       "retry": "Opakovat",
       "retryLabel": "Opakovat {{title}}",
       "cannotRetry": "Nelze opakovat. Spusťte místo toho novou.",
+      "insteadRestore": "Nelze opakovat. Spusťte místo toho novou obnovu ze zálohy. Tuto může operátor skrýt.",
+      "insteadCurrencyMigration": "Nelze opakovat. Spusťte místo toho novou změnu měny. Tuto může operátor skrýt.",
       "retried": "Úloha je zpět ve frontě.",
       "gone": "Tato úloha už není neúspěšná. Seznam je nyní aktuální.",
       "notRetryable": "Tento druh úlohy nelze opakovat.",

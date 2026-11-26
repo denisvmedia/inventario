@@ -97,6 +97,26 @@ const restoreJob: FailedJob = {
   retryable: false,
 }
 
+const intakeJob: FailedJob = {
+  id: "s1",
+  job_type: "intake",
+  title: "receipt.pdf",
+  error: "file_unreadable",
+  attempts: 3,
+  failed_at: "2026-11-18T10:00:00Z",
+  retryable: true,
+}
+
+const currencyJob: FailedJob = {
+  id: "c1",
+  job_type: "currency-migration",
+  title: "USD → EUR",
+  error: "the worker stopped",
+  attempts: 1,
+  failed_at: "2026-11-17T10:00:00Z",
+  retryable: false,
+}
+
 beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
@@ -121,6 +141,28 @@ describe("<GroupSettingsPage /> failed jobs (#1307)", () => {
     expect(within(rows[1]).getByText("Restore")).toBeInTheDocument()
     expect(within(rows[1]).queryByTestId("failed-job-retry")).not.toBeInTheDocument()
     expect(within(rows[1]).getByTestId("failed-job-not-retryable")).toBeInTheDocument()
+  })
+
+  it("says what to do instead for a job that cannot be retried, and reads an intake error code", async () => {
+    const backend = failedJobHandlers.group("household", [restoreJob, intakeJob, currencyJob])
+    server.use(...baseHandlers("admin"), ...backend.handlers)
+    renderSettings()
+
+    const card = await screen.findByTestId("failed-jobs-card")
+    const rows = await within(card).findAllByTestId("failed-job-row")
+    expect(rows).toHaveLength(3)
+
+    expect(within(rows[0]).getByTestId("failed-job-not-retryable")).toHaveTextContent(
+      "Start a new restore from the backup instead. An operator can dismiss this one."
+    )
+    expect(within(rows[1]).getByTestId("failed-job-error")).toHaveTextContent(
+      "The file could not be read."
+    )
+    expect(within(rows[1]).getByTestId("failed-job-retry")).toBeInTheDocument()
+    expect(within(rows[2]).getByTestId("failed-job-not-retryable")).toHaveTextContent(
+      "Start a new currency change instead. An operator can dismiss this one."
+    )
+    expect(within(rows[2]).getByTestId("failed-job-error")).toHaveTextContent("the worker stopped")
   })
 
   it("retries a job and drops it from the list", async () => {

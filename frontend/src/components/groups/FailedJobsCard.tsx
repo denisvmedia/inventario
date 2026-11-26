@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import { CircleCheck, RotateCcw } from "lucide-react"
 import { useTranslation } from "react-i18next"
 
@@ -6,6 +7,7 @@ import { Button } from "@/components/ui/button"
 import { FAILED_JOB_ERROR_CODES, type FailedJob } from "@/features/failed-jobs/api"
 import { useGroupFailedJobs, useRetryGroupFailedJob } from "@/features/failed-jobs/hooks"
 import { failedJobTypeLabel } from "@/features/failed-jobs/labels"
+import { useIntakeSourceErrorText } from "@/features/intake/errors"
 import { useAppToast } from "@/hooks/useAppToast"
 import { formatDateTime } from "@/lib/intl"
 import { getServerErrorCode } from "@/lib/server-error"
@@ -23,9 +25,9 @@ interface FailedJobsCardProps {
 // FailedJobsCard lists the group's background jobs that failed for good
 // (#1307): exports, imports, restores, thumbnails, intake scans and
 // currency migrations. A group admin can put a job back in its queue; a
-// type that cannot run again says so instead. Discarding a job is left to
-// the system admin's Failed jobs page. Rendered for admins only: the
-// endpoint answers 403 to the other roles.
+// type that cannot run again says what to do instead. Discarding a job is
+// left to the system admin's Failed jobs page. Rendered for admins only:
+// the endpoint answers 403 to the other roles.
 export function FailedJobsCard({ groupSlug, className }: FailedJobsCardProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
@@ -105,10 +107,27 @@ interface FailedJobRowProps {
   onRetry: () => void
 }
 
+// notRetryableText says what to do about a job that cannot run again: a
+// restore and a currency migration are started anew, and an operator can
+// dismiss the failed one.
+function notRetryableText(t: TFunction, jobType: string | undefined): string {
+  switch (jobType) {
+    case "restore":
+      return t("groups:settings.failedJobs.insteadRestore")
+    case "currency-migration":
+      return t("groups:settings.failedJobs.insteadCurrencyMigration")
+    default:
+      return t("groups:settings.failedJobs.cannotRetry")
+  }
+}
+
 function FailedJobRow({ job, disabled, onRetry }: FailedJobRowProps) {
   const { t } = useTranslation()
+  const intakeErrorText = useIntakeSourceErrorText()
   const typeLabel = failedJobTypeLabel(t, job.job_type)
   const title = job.title || typeLabel
+  // An intake scan stores an error code; the others store a message.
+  const error = job.job_type === "intake" && job.error ? intakeErrorText(job.error) : job.error
   return (
     <li className="flex items-start justify-between gap-4 py-3.5" data-testid="failed-job-row">
       <div className="min-w-0 space-y-1">
@@ -125,9 +144,13 @@ function FailedJobRow({ job, disabled, onRetry }: FailedJobRowProps) {
           {job.failed_at && job.attempts ? " · " : null}
           {job.attempts ? t("groups:settings.failedJobs.attempts", { count: job.attempts }) : null}
         </p>
-        {job.error ? (
-          <p className="text-xs text-destructive break-words line-clamp-3" title={job.error}>
-            {job.error}
+        {error ? (
+          <p
+            className="text-xs text-destructive break-words line-clamp-3"
+            title={error}
+            data-testid="failed-job-error"
+          >
+            {error}
           </p>
         ) : null}
       </div>
@@ -147,10 +170,10 @@ function FailedJobRow({ job, disabled, onRetry }: FailedJobRowProps) {
         </Button>
       ) : (
         <p
-          className="max-w-44 shrink-0 text-right text-xs text-muted-foreground"
+          className="max-w-52 shrink-0 text-right text-xs text-muted-foreground"
           data-testid="failed-job-not-retryable"
         >
-          {t("groups:settings.failedJobs.cannotRetry")}
+          {notRetryableText(t, job.job_type)}
         </p>
       )}
     </li>

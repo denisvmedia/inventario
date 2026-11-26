@@ -26,6 +26,7 @@
     "retry": "Retry",
     "retryError": "Could not retry the job. Try again later.",
     "retryLabel": "Retry {{title}}",
+    "roleRequired": "Only a platform admin can discard a failed job.",
     "subtitle": "Background jobs of every tenant that failed for good and that nobody retried or discarded, newest first.",
     "table": {
       "actions": "Actions",

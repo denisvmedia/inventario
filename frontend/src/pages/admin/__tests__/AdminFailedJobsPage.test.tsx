@@ -187,6 +187,10 @@ describe("AdminFailedJobsPage", () => {
     await user.click(await screen.findByRole("button", { name: "Discard Restore from Monday" }))
     const dialog = await screen.findByTestId("admin-failed-job-discard-dialog")
     expect(backend.state.requests.some((r) => r.method === "POST")).toBe(false)
+    const subject = within(dialog).getByTestId("admin-failed-job-discard-subject")
+    expect(subject).toHaveTextContent("Restore from Monday")
+    expect(subject).toHaveTextContent("Globex · Office")
+    expect(subject).toHaveTextContent("r1")
 
     await user.click(within(dialog).getByTestId("admin-failed-job-discard-confirm"))
 
@@ -194,6 +198,19 @@ describe("AdminFailedJobsPage", () => {
     const post = backend.state.requests.find((r) => r.method === "POST")
     expect(post?.url.pathname).toBe("/api/v1/admin/failed-jobs/restore/r1/discard")
     expect(screen.queryByTestId("admin-failed-job-discard-dialog")).not.toBeInTheDocument()
+  })
+
+  it("lets a support agent retry but not discard", async () => {
+    server.use(...backofficeAuthHandlers.signedIn({ user: { role: "support_agent" } }))
+    seed()
+    renderPage()
+
+    const rows = await screen.findAllByTestId("admin-failed-job-row")
+    await waitFor(() =>
+      expect(within(rows[0]).queryByTestId("admin-failed-job-discard")).not.toBeInTheDocument()
+    )
+    expect(within(rows[0]).getByTestId("admin-failed-job-retry")).toBeInTheDocument()
+    expect(within(rows[1]).queryByTestId("admin-failed-job-discard")).not.toBeInTheDocument()
   })
 
   it("shows the empty state", async () => {

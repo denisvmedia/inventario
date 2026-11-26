@@ -10,6 +10,7 @@
   "detail": {
     "binaryDataSize": "Velikost příloh",
     "completedAt": "Dokončeno",
+    "failedAt": "Selhalo",
     "counts": {
       "areas_one": "{{count}} oblast",
       "areas_few": "{{count}} oblasti",
