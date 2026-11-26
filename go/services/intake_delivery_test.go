@@ -7,6 +7,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 	"github.com/go-extras/go-kit/must"
@@ -695,4 +696,26 @@ func TestIntakeDeliver_SessionKeyIsReserved(t *testing.T) {
 	c.Assert(result.State, qt.Equals, models.IntakeDocumentDraft)
 	session := must.Must(must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx)).Get(f.ctx, *result.Document.SessionID))
 	c.Assert(session.Origin, qt.Equals, models.IntakeOriginExternal)
+}
+
+// TestIntakeListDocuments_OldestFirst: documents found by their draft and by
+// their item come back as one list, oldest first.
+func TestIntakeListDocuments_OldestFirst(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	at := time.Date(2026, 3, 14, 12, 0, 0, 0, time.UTC)
+	newer, _, err := docs.CreateOrGet(f.ctx, models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: "2", PayloadHash: "h2", DraftID: new("draft-2"), CreatedAt: at.Add(time.Hour),
+	})
+	c.Assert(err, qt.IsNil)
+	older, _, err := docs.CreateOrGet(f.ctx, models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: "1", PayloadHash: "h1", CommodityID: new("item-1"), CreatedAt: at,
+	})
+	c.Assert(err, qt.IsNil)
+
+	got := must.Must(f.intake.ListDocuments(f.ctx, []string{"draft-2"}, []string{"item-1"}))
+	c.Assert(got, qt.HasLen, 2)
+	c.Assert(got[0].ID, qt.Equals, older.ID)
+	c.Assert(got[1].ID, qt.Equals, newer.ID)
 }

@@ -1,12 +1,14 @@
 package services
 
 import (
+	"cmp"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"regexp"
+	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -692,6 +694,9 @@ func (s *IntakeService) ListDocuments(ctx context.Context, draftIDs, commodityID
 			out = append(out, doc)
 		}
 	}
+	slices.SortFunc(out, func(x, y *models.IntakeDocument) int {
+		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.ID, y.ID))
+	})
 	return out, nil
 }
 
