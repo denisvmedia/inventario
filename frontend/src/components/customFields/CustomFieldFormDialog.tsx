@@ -196,7 +196,11 @@ export function CustomFieldFormDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-lg" data-testid="custom-field-form-dialog">
+      <DialogContent
+        variant="fullscreen-mobile"
+        className="sm:max-w-lg"
+        data-testid="custom-field-form-dialog"
+      >
         <DialogHeader>
           <DialogTitle>
             {isEdit ? t("customFields:dialog.editTitle") : t("customFields:dialog.createTitle")}

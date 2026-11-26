@@ -497,6 +497,18 @@ when to add an entry and where it goes.
   draft the user saved since
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
+- On a phone (a screen narrower than 640px) the dialogs that hold a longer
+  form fill the screen: adding and editing an item, locations, areas, custom
+  fields, sellers, changing the group currency, adding items from files,
+  uploading files, attaching an existing file, restoring a backup, lending
+  and loans, sending for service, maintenance schedules, reminders, API
+  tokens and feedback. The title and the close button stay at the top, the
+  buttons stay at the bottom, and the form scrolls between them.
+  Confirmations and short dialogs stay small cards. Wider screens keep the
+  centered dialog, which now scrolls when it is taller than the screen, as on
+  a phone held sideways
+  ([#1627](https://github.com/denisvmedia/inventario/issues/1627)).
+
 - An item's cover photo is one of its photos: an image attached to the item
   in another section of its Files tab can no longer be set as the cover, and
   a cover set that way before shows the first photo instead. The No photo

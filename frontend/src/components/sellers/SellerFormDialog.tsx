@@ -141,6 +141,7 @@ export function SellerFormDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent
+        variant="fullscreen-mobile"
         className="sm:max-w-lg"
         onCloseAutoFocus={onCloseAutoFocus}
         data-testid="seller-form-dialog"
