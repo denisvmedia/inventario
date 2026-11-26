@@ -14,6 +14,38 @@ when to add an entry and where it goes.
 
 ### Added
 
+- The Collection set. A group admin or owner can add it from **Sections** in
+  the group settings: it creates the item types Art, Books, Coins, Stamps,
+  Records, Watches and Cards and the custom fields Condition (Mint, Very
+  good, Good, Fair, Poor), Catalog reference, Edition or variant, Signed,
+  Provenance, Certificate of authenticity, Appraised value and Appraisal
+  date, each offered on every one of those types. The names are English. A
+  type or field the group already has under one of these names, ignoring
+  case, is used instead of a new one and never removed. Adding again creates
+  only what is missing, including a field of the set that is not offered on
+  all of its types yet, so the set shows as partly added until each field is
+  on each type; a set entry whose name another set row was renamed to is
+  shown as taken and not created again. Removing asks first, from a
+  status checked again when the confirmation opens, listing what is deleted
+  and what stays and why. It deletes only the types and fields the
+  confirmation listed that the set created and no item uses, Trash included,
+  names any it kept because they changed in between, and keeps the group's
+  last type only when the removal would leave it none. Links the set made to the group's own types and fields stay. The
+  create group page asks what the group is for: **Household items**, or
+  **Collection**, which creates the group with the set and with Warranties
+  hidden. `GET`, `POST` and `DELETE /groups/{groupID}/collection-set` read,
+  add and remove the set. `DELETE` takes the `item_type_ids` and
+  `custom_field_ids` to delete and reports `kept_item_types` and
+  `kept_custom_fields` in its meta, and `POST` answers 409 `item_set.changed`
+  when rows change under it twice. Adding and removing are admin-only and
+  recorded in the audit log with what they created or deleted; personal API
+  tokens may read the set. `POST /groups` takes `collection_set` and reports
+  the outcome in `meta.collection_set`; an update with `collection_set`, true
+  or false, is refused. Each field of `GET /collection-set` reports
+  `missing_templates`, the number of the set's types that do not offer it
+  yet; it is a count and names none of them. Backups record which types and fields
+  the set created, as INB format 3.8; older backups restore as before
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607)).
 - The **Add item** dialog uses what the AI scan suggests for each file:
   on the **Files** step a scanned file gets its **Invoice**, **Manual**,
   **Warranty** or **Photo** tag as a chip marked with a sparkle, and its
@@ -737,6 +769,15 @@ when to add an entry and where it goes.
   `GET /feature-flags` reports it as `plans`. With it on,
   `GET /g/{slug}/plan` reports the tenant's plan again
   ([#1389](https://github.com/denisvmedia/inventario/issues/1389)).
+- The upgrade runs one more database migration, which adds a `set_entry`
+  column to `item_types` and `custom_field_definitions`. As with the
+  `hidden_sections` column below, pods that still run the previous version
+  fail reads of item types and custom fields until they are replaced, so
+  item pages, item forms and the item types and custom fields pages served
+  by those pods fail with 500 until the rollout finishes
+  ([#1607](https://github.com/denisvmedia/inventario/issues/1607), the class
+  of problem tracked in
+  [#2873](https://github.com/denisvmedia/inventario/issues/2873)).
 - The upgrade runs two more database migrations. One adds the
   `hidden_sections` column to `location_groups`. During a rolling upgrade,
   pods that still run the previous version fail every read of a group until

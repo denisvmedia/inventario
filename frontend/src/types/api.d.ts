@@ -13083,6 +13083,7 @@ export type paths = {
         /**
          * Create a group
          * @description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
+         *     collection_set adds the Collection set to the new group in the same request; meta.collection_set says whether it was added. When it was not, the group exists and adding the set from the group settings finishes it.
          */
         post: {
             parameters: {
@@ -13296,6 +13297,194 @@ export type paths = {
                 };
             };
         };
+        trace?: never;
+    };
+    "/groups/{groupID}/collection-set": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get the group's Collection set
+         * @description Lists the item types and custom fields of the Collection set (#1607) and, for each, whether the group has it:
+         *     missing (adding the set creates it), added (the set created it) or own (a member's type or field of the same name, which the set uses and never deletes).
+         *     Each one the group has carries its item counts and whether removing the set deletes it, or why it stays. Requires group membership.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group member */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        /**
+         * Add the Collection set to the group
+         * @description Creates the item types Art, Books, Coins, Stamps, Records, Watches and Cards and the custom fields Condition, Catalog reference, Edition or variant, Signed, Provenance,
+         *     Certificate of authenticity, Appraised value and Appraisal date, and puts every field on the template of every one of those types.
+         *     A type or field the group already has under that name, ignoring case, is used instead of a new one. Adding again creates only what is missing, so a failed add is finished by repeating it.
+         *     The names are English; members rename them like any other. meta counts what the request created. Requires group admin role.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The group has 100 item types (item_type.limit), or its types or fields changed during the add twice (item_set.changed) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The group is being deleted (group.not_active), or has 200 custom fields (custom_field.limit_reached) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        /**
+         * Remove the Collection set from the group
+         * @description Deletes the item types and custom fields the body lists, as the confirmation showed them, of those the Collection set created that nothing uses: no item, in Trash or not, of the type, and no item with a value of the field.
+         *     A listed type or field that stopped being removable since stays and is named in meta.kept_item_types or meta.kept_custom_fields; one not listed is never deleted.
+         *     Types and fields a member made, and those items use, stay; so does the group's last type. Removing again deletes what has become unused since.
+         *     meta names what the request deleted and kept; the attributes show what stays and why. The template entries the set put on a member's own types and fields stay. Requires group admin role.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group ID */
+                    groupID: string;
+                };
+                cookie?: never;
+            };
+            /** @description The item types and custom fields to delete, by ID */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetRemoveRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.ItemSetResponse"];
+                    };
+                };
+                /** @description Forbidden - not a group admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": string;
+                    };
+                };
+                /** @description Group not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description The body is missing or invalid, or the group is being deleted (group.not_active) */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/groups/{groupID}/hidden-sections": {
@@ -17279,6 +17468,20 @@ export type components = {
             data?: components["schemas"]["models.FileEntity"][];
             meta?: components["schemas"]["jsonapi.FilesMeta"];
         };
+        "jsonapi.GroupCreateItemSetOutcome": {
+            /** @example true */
+            added?: boolean;
+            /**
+             * Format: int64
+             * @example 8
+             */
+            created_custom_fields?: number;
+            /**
+             * Format: int64
+             * @example 7
+             */
+            created_item_types?: number;
+        };
         "jsonapi.GroupDeleteRequest": {
             confirm_word?: string;
             password?: string;
@@ -17793,6 +17996,214 @@ export type components = {
         "jsonapi.InviteInfoResponse": {
             data?: components["schemas"]["jsonapi.InviteInfoData"];
         };
+        "jsonapi.ItemSetFieldView": {
+            /**
+             * @description CustomFieldID is the ID of the group's field; absent while missing or
+             *     taken.
+             * @example 5d2e...
+             */
+            custom_field_id?: string;
+            /**
+             * @description FieldType is the type of the group's field, or the set's type for a
+             *     missing one.
+             * @example select
+             */
+            field_type?: string;
+            /**
+             * Format: int64
+             * @description ItemCount and TrashedItemCount count the items with a value of the
+             *     field, outside Trash and in it.
+             * @example 0
+             */
+            item_count?: number;
+            /**
+             * @description KeepReason says why removing the set keeps a field the group has:
+             *     own or in_use (items have a value of it). Absent when the field is
+             *     removable or missing.
+             * @example in_use
+             * @enum {string}
+             */
+            keep_reason?: "own" | "in_use";
+            /**
+             * @description Key identifies the field within the set.
+             * @example condition
+             */
+            key?: string;
+            /**
+             * Format: int64
+             * @description MissingTemplates counts the set's types in the group that do not offer
+             *     the field. Adding the set offers it on them; until then the set is
+             *     not complete.
+             * @example 0
+             */
+            missing_templates?: number;
+            /**
+             * @description Name is the name of the group's field, which a member may have
+             *     changed, or the set's name for a field the group does not have.
+             * @example Condition
+             */
+            name?: string;
+            /**
+             * @description Removable is true when removing the set deletes the field.
+             * @example true
+             */
+            removable?: boolean;
+            /**
+             * @description State is missing, added, own or taken, as for an item type.
+             * @example added
+             * @enum {string}
+             */
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's field that has this field's name, for
+             *     a taken field.
+             * @example signed
+             */
+            taken_by?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            trashed_item_count?: number;
+        };
+        "jsonapi.ItemSetItemTypeView": {
+            /** @example coins */
+            icon?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            item_count?: number;
+            /**
+             * @description ItemTypeID is the ID of the group's type; absent while missing or
+             *     taken.
+             * @example 8f1c...
+             */
+            item_type_id?: string;
+            /**
+             * @description KeepReason says why removing the set keeps a type the group has:
+             *     own (a member made it), in_use (items have it, in Trash or not) or
+             *     last_type (a group keeps at least one type). Absent when the type is
+             *     removable or missing.
+             * @example in_use
+             * @enum {string}
+             */
+            keep_reason?: "own" | "in_use" | "last_type";
+            /**
+             * @description Key identifies the type within the set.
+             * @example coins
+             */
+            key?: string;
+            /**
+             * @description Name is the name of the group's type, which a member may have changed,
+             *     or the set's name for a type the group does not have.
+             * @example Coins
+             */
+            name?: string;
+            /**
+             * @description Removable is true when removing the set deletes the type.
+             * @example true
+             */
+            removable?: boolean;
+            /**
+             * @description State is missing when the group has no such type and adding the set
+             *     creates it, added when the set created the type, own when it is a
+             *     member's type of the same name, which the set uses and never deletes,
+             *     and taken when another type of the set was renamed to its name, so
+             *     adding cannot create it.
+             * @example added
+             * @enum {string}
+             */
+            state?: "missing" | "added" | "own" | "taken";
+            /**
+             * @description TakenBy is the key of the set's type that has this type's name, for a
+             *     taken type.
+             * @example coins
+             */
+            taken_by?: string;
+            /**
+             * Format: int64
+             * @example 0
+             */
+            trashed_item_count?: number;
+        };
+        "jsonapi.ItemSetMeta": {
+            /**
+             * Format: int64
+             * @description AddedTemplates counts the fields the add put on a type's template,
+             *     besides those of the fields it created.
+             * @example 0
+             */
+            added_templates?: number;
+            /**
+             * Format: int64
+             * @example 8
+             */
+            created_custom_fields?: number;
+            /**
+             * Format: int64
+             * @example 7
+             */
+            created_item_types?: number;
+            deleted_custom_fields?: string[];
+            /** @description DeletedItemTypes and DeletedCustomFields name what a remove deleted. */
+            deleted_item_types?: string[];
+            kept_custom_fields?: string[];
+            /**
+             * @description KeptItemTypes and KeptCustomFields name what the remove request
+             *     listed but kept: an item started to use it since the confirmation,
+             *     or it became the group's last type.
+             */
+            kept_item_types?: string[];
+        };
+        "jsonapi.ItemSetRemoveAttributes": {
+            custom_field_ids?: string[];
+            /**
+             * @description ItemTypeIDs and CustomFieldIDs name the rows the remove may delete,
+             *     by ID. It deletes those that are removable when it runs; one that
+             *     stopped being removable stays and is listed in meta, and an ID that
+             *     names no type or field of the set is ignored. Either list may be
+             *     empty.
+             */
+            item_type_ids?: string[];
+        };
+        "jsonapi.ItemSetRemoveData": {
+            attributes?: components["schemas"]["jsonapi.ItemSetRemoveAttributes"];
+            /**
+             * @example item_sets
+             * @enum {string}
+             */
+            type?: "item_sets";
+        };
+        "jsonapi.ItemSetRemoveRequest": {
+            data?: components["schemas"]["jsonapi.ItemSetRemoveData"];
+        };
+        "jsonapi.ItemSetResponse": {
+            data?: components["schemas"]["jsonapi.ItemSetResponseData"];
+            meta?: components["schemas"]["jsonapi.ItemSetMeta"];
+        };
+        "jsonapi.ItemSetResponseData": {
+            attributes?: components["schemas"]["jsonapi.ItemSetView"];
+            /** @example collection */
+            id?: string;
+            /**
+             * @example item_sets
+             * @enum {string}
+             */
+            type?: "item_sets";
+        };
+        "jsonapi.ItemSetView": {
+            /**
+             * @description Complete is true when adding the set has nothing left to do: the group
+             *     has every type and field of the set but those taken, and each of those
+             *     fields is offered on each of those types.
+             * @example true
+             */
+            complete?: boolean;
+            custom_fields?: components["schemas"]["jsonapi.ItemSetFieldView"][];
+            /** @description ItemTypes and CustomFields list the set's entries in the set's order. */
+            item_types?: components["schemas"]["jsonapi.ItemSetItemTypeView"][];
+        };
         "jsonapi.ItemTypeDeleteMeta": {
             /**
              * Format: int64
@@ -17927,6 +18338,14 @@ export type components = {
         };
         "jsonapi.LocationGroupAttributes": {
             /**
+             * @description CollectionSet, on create, adds the Collection set to the new group
+             *     (#1607): its item types and custom fields, as POST
+             *     /groups/{groupID}/collection-set does. It is not stored; the response
+             *     meta says whether the set was added. Create only: an update with the
+             *     attribute, true or false, is refused.
+             */
+            collection_set?: boolean;
+            /**
              * @description Description is the free-form one-line subtitle surfaced on the
              *     group settings page and the sidebar group-switcher (#1647).
              *     Optional; empty string means "no description". Capped at
@@ -17951,6 +18370,13 @@ export type components = {
             icon?: string;
             name?: string;
         };
+        "jsonapi.LocationGroupCreateMeta": {
+            /**
+             * @description CollectionSet reports on adding the Collection set, when the request
+             *     had collection_set.
+             */
+            collection_set?: components["schemas"]["jsonapi.GroupCreateItemSetOutcome"];
+        };
         "jsonapi.LocationGroupData": {
             attributes?: components["schemas"]["jsonapi.LocationGroupAttributes"];
             id?: string;
@@ -17965,6 +18391,11 @@ export type components = {
         };
         "jsonapi.LocationGroupResponse": {
             data?: components["schemas"]["jsonapi.LocationGroupResponseData"];
+            /**
+             * @description Meta is set on a create that asked for extras such as the Collection
+             *     set.
+             */
+            meta?: components["schemas"]["jsonapi.LocationGroupCreateMeta"];
         };
         "jsonapi.LocationGroupResponseData": {
             attributes?: components["schemas"]["models.LocationGroup"];

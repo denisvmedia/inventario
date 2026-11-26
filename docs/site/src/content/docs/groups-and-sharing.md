@@ -23,7 +23,10 @@ You can create as many groups as you need.
    - **Group name** — for example "Main residence".
    - **Icon** — optional; pick something to make the group easier to recognise in the sidebar.
    - **Group currency** — the currency this inventory's prices are tracked in (see [The group currency](#the-group-currency)).
+   - **What is the group for?** — **Household items** (the default) or **Collection**. A **Collection** group starts with the [Collection set](#add-the-collection-set) of item types and custom fields and with the **Warranties** section [hidden](#hide-sections-the-group-doesnt-use). You can change both later in the group settings.
 4. Click **Create group**. The new group opens straight away and becomes your active group. If it is your first group, the [product tour](../getting-started/) starts and shows you around the sidebar.
+
+If the group is created but the Collection set could not be added, a message says so. The group is there; open **Group settings → Sections** and click **Add the set**, or **Add what is missing** if part of it is there, to finish it.
 
 ## The group currency
 
@@ -67,6 +70,50 @@ Members with the **User** or **Viewer** role see the same switches but can't cha
 Hiding a section keeps its data. An item that already has a warranty date, a loan, or a maintenance schedule still shows it on its page, and the item form keeps the **Warranty** step for an item that has a warranty. You can still mark a loan returned or a task done; you can't start a new loan, schedule, or service visit until the section shows again. While a section is hidden, its reminder emails stop and the [weekly digest](../settings-and-account/#weekly-digest) leaves its lines out. When you show it again, reminders pick up from the dates as they are then, as described in [Reminder emails](../warranties-loans-maintenance/#reminder-emails).
 
 A link or a bookmark to a hidden page opens a notice that the section is hidden, with a link to the group settings.
+
+## Add the Collection set
+
+The **Collection set** fits a group that keeps a collection. Adding it creates these [item types](../item-types/):
+
+**Art**, **Books**, **Coins**, **Stamps**, **Records**, **Watches**, and **Cards**
+
+and these [custom fields](../custom-fields/), each offered on every one of those types:
+
+| Field | Type |
+| --- | --- |
+| **Condition** | Select: Mint, Very good, Good, Fair, Poor |
+| **Catalog reference** | Text, for a Krause, Scott, Discogs, or ISBN number and the like |
+| **Edition or variant** | Text |
+| **Signed** | Yes/no |
+| **Provenance** | Long text |
+| **Certificate of authenticity** | Yes/no |
+| **Appraised value** | Money |
+| **Appraisal date** | Date |
+
+The item's own **Serial number** stays as it is. The types and fields are created with English names; rename them, change their icons, or add options like any type or field you made yourself.
+
+To add the set:
+
+1. Open the group selector and choose **Group settings**, then open the **Sections** section.
+2. On the **Collection set** card, click **Add the set**.
+
+If the group already has a type or field with one of these names, in any mix of upper- and lowercase, the set uses it instead of creating a second one: such a type gets the set's fields, and such a field is offered on the set's types. Adding the set again creates only what is missing, so if adding stopped partway, for example because the group reached its limit of [item types](../item-types/#add-a-type) or custom fields, the card shows **Partly added** and **Add what is missing** finishes it. While the group is still at that limit, **Add what is missing** cannot create what is missing either: delete types or fields the group no longer needs to make room first. The card also shows **Partly added** while one of the set's fields is not offered on every one of its types, for example when the group already had all of them under these names; **Add what is missing** then offers each field on each type.
+
+The card names the state of each type and field: added by the set, the group's own, or not in the group. If you renamed one of the set's types or fields to the name of another one, for example **Coins** to **Stamps** after deleting **Stamps**, the card shows that name as not added: the renamed type or field stands for it, and adding the set does not create a second one of that name.
+
+To remove the set, click **Remove the set** on the same card. The confirmation checks the group again when it opens, then lists what will be deleted and what stays, with the reason:
+
+- a type or field the group had before the set, which the set never deletes;
+- a type that items have, or a field that items have a value of, counting items in the [Trash](../trash/);
+- the group's last item type, as a group always keeps one.
+
+The check counts saved items only, not [drafts](../items/#save-as-draft): a type or field that only a draft uses is listed for deletion, and the draft still refers to it after the removal ([#2939](https://github.com/denisvmedia/inventario/issues/2939)). Finish or check such drafts before you remove the set.
+
+Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
+
+A type or field the group had before the set keeps what the set linked to it. Such a type still offers the set's fields that stay, and such a field is still offered on the set's types that stay and on the group's own types the set linked it to. To undo a link, untick the type under **Item types** in the field's dialog (see [Custom fields](../custom-fields/#offer-a-field-on-item-types)). While the set's types are in the group, the card then shows **Partly added**, and **Add what is missing** would put the link back.
+
+Only an **Owner** or **Administrator** can add or remove the set. Other members see the card without the buttons. Each add and remove is recorded in the audit log of the server, with what it created or deleted. The people who run the server can read that log; group members don't see it.
 
 ## Failed background jobs
 

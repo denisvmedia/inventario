@@ -619,7 +619,7 @@ func (b *inbBuilder) manifestItemTypes(scope *inbScope) []INBItemType {
 		if !scope.wholeClass && !b.usedItemTypes[t.Slug] {
 			continue
 		}
-		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon})
+		out = append(out, INBItemType{Slug: string(t.Slug), Name: t.Name, Icon: t.Icon, SetEntry: string(t.SetEntry)})
 	}
 	return out
 }
@@ -770,7 +770,7 @@ func (b *inbBuilder) manifestCustomFields(scope *inbScope) []INBCustomField {
 		if !scope.wholeClass && !b.usedCustomFields[d.ID] {
 			continue
 		}
-		f := INBCustomField{ID: d.UUID, Name: d.Name, Type: string(d.Type)}
+		f := INBCustomField{ID: d.UUID, Name: d.Name, Type: string(d.Type), SetEntry: string(d.SetEntry)}
 		for _, o := range d.Options {
 			f.Options = append(f.Options, INBCustomFieldOption{ID: o.ID, Label: o.Label})
 		}

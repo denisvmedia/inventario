@@ -16,6 +16,10 @@ const CURRENCY_INVALID = "groups:validation.currencyInvalid"
 // client-side guard keeps the obvious typos from a 422 round-trip.
 const CURRENCY_RE = /^[A-Z]{3}$/
 
+// The kinds of group the create form offers, the default first.
+export const GROUP_KINDS = ["household", "collection"] as const
+export type GroupKind = (typeof GROUP_KINDS)[number]
+
 export const createGroupSchema = z.object({
   name: z.string().trim().min(1, NAME_REQUIRED).max(100, NAME_TOO_LONG),
   // Empty string = "no icon" per the BE contract. Anything else has to
@@ -28,6 +32,9 @@ export const createGroupSchema = z.object({
     .trim()
     .toUpperCase()
     .refine((v) => CURRENCY_RE.test(v), { message: CURRENCY_INVALID }),
+  // What the group is for (#1607). "collection" adds the Collection set and
+  // hides Warranties; both can be changed later in the group settings.
+  kind: z.enum(GROUP_KINDS),
 })
 export type CreateGroupInput = z.infer<typeof createGroupSchema>
 

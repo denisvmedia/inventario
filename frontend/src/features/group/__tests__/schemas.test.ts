@@ -5,25 +5,53 @@ import { createGroupSchema, deleteGroupSchema, updateGroupSchema } from "@/featu
 describe("group schemas", () => {
   it("createGroupSchema requires name + valid currency", () => {
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "USD" }).success
+      createGroupSchema.safeParse({
+        name: "Household",
+        icon: "",
+        group_currency: "USD",
+        kind: "household",
+      }).success
     ).toBe(true)
-    expect(createGroupSchema.safeParse({ name: "", icon: "", group_currency: "USD" }).success).toBe(
-      false
-    )
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "us" }).success
+      createGroupSchema.safeParse({ name: "", icon: "", group_currency: "USD", kind: "household" })
+        .success
+    ).toBe(false)
+    expect(
+      createGroupSchema.safeParse({
+        name: "Household",
+        icon: "",
+        group_currency: "us",
+        kind: "household",
+      }).success
     ).toBe(false)
   })
 
   it("createGroupSchema rejects unknown emoji icons", () => {
     // 🦄 isn't in the curated GROUP_ICONS list — it must be rejected.
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "🦄", group_currency: "USD" }).success
+      createGroupSchema.safeParse({
+        name: "Household",
+        icon: "🦄",
+        group_currency: "USD",
+        kind: "household",
+      }).success
     ).toBe(false)
     // The empty string is the explicit "no icon" sentinel.
     expect(
-      createGroupSchema.safeParse({ name: "Household", icon: "", group_currency: "USD" }).success
+      createGroupSchema.safeParse({
+        name: "Household",
+        icon: "",
+        group_currency: "USD",
+        kind: "household",
+      }).success
     ).toBe(true)
+  })
+
+  it("createGroupSchema takes a household or a collection group", () => {
+    const base = { name: "Coins", icon: "", group_currency: "EUR" }
+    expect(createGroupSchema.safeParse({ ...base, kind: "collection" }).success).toBe(true)
+    expect(createGroupSchema.safeParse({ ...base, kind: "museum" }).success).toBe(false)
+    expect(createGroupSchema.safeParse(base).success).toBe(false)
   })
 
   it("updateGroupSchema enforces name length cap", () => {
@@ -42,6 +70,7 @@ describe("group schemas", () => {
       name: "Household",
       icon: "",
       group_currency: " czk ",
+      kind: "household",
     })
     expect(result.success).toBe(true)
     if (result.success) {

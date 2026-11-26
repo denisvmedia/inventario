@@ -80,6 +80,16 @@ function groupBackend(role: "admin" | "user", hidden: GroupSection[] = []) {
       state.hidden = order.filter((s) => asked.includes(s))
       return HttpResponse.json({ data: { id: "g1", type: "groups", attributes: attrs() } })
     }),
+    // The Collection set card shares the pane; this group has none of it.
+    msw.get(api("/groups/g1/collection-set"), () =>
+      HttpResponse.json({
+        data: {
+          id: "collection",
+          type: "item_sets",
+          attributes: { complete: false, item_types: [], custom_fields: [] },
+        },
+      })
+    ),
     msw.get(api("/g/household/notifications"), () =>
       HttpResponse.json({ warranty_expiring_alerts: true, weekly_digest: false })
     ),

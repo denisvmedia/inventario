@@ -18,6 +18,11 @@ A new group starts with six **built-in** types: **Appliance**,
 Each member sees their names in their own language. A type you add keeps the
 name you gave it, in every language.
 
+A group admin can add the [Collection set](../groups-and-sharing/#add-the-collection-set)
+of types for collections: **Art**, **Books**, **Coins**, **Stamps**,
+**Records**, **Watches**, and **Cards**, created with English names. They are
+ordinary types you can rename, give another icon, or delete.
+
 ## Open the Item types page
 
 Click **Item types** in the **Group** section of the sidebar, or search for

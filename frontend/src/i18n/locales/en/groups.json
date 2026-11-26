@@ -1,6 +1,7 @@
 {
   "create": {
     "cancel": "Cancel",
+    "collectionSetFailed": "The group was created, but the Collection set was not added. Add it from Sections in the group settings.",
     "currencyAriaLabel": "Currency",
     "currencyHelp": "Set once at creation and immutable after — see #202 for the currency-migration tool.",
     "currencyLabel": "Group currency",
@@ -14,6 +15,18 @@
     "iconLabel": "Icon",
     "iconNone": "No icon",
     "iconPick": "Pick…",
+    "kindHelp": "You can change this later in the group settings.",
+    "kindLabel": "What is the group for?",
+    "kinds": {
+      "collection": {
+        "description": "Item types and fields for art, books, coins, stamps, records, watches and cards. Warranties are hidden.",
+        "label": "Collection"
+      },
+      "household": {
+        "description": "Appliances, electronics, furniture and the other things a home holds.",
+        "label": "Household items"
+      }
+    },
     "nameLabel": "Group name",
     "namePlaceholder": "Main residence",
     "submit": "Create group",
@@ -41,6 +54,64 @@
     "toastStartFailed": "Couldn't start the migration. Please try again."
   },
   "settings": {
+    "collectionSet": {
+      "add": "Add the set",
+      "added": "Collection set added. New item types: {{types}}, new custom fields: {{fields}}.",
+      "addError": "Couldn't add the set. Try again: adding again creates only what is missing.",
+      "addErrorFieldLimit": "The group has the most custom fields it can have. Delete some, then add the set again.",
+      "addErrorNotActive": "The group is being deleted.",
+      "addErrorTypeLimit": "The group has the most item types it can have. Delete or merge some, then add the set again.",
+      "adding": "Adding…",
+      "addMissing": "Add what is missing",
+      "adminOnly": "Only admins and owners can add or remove the set.",
+      "customFields": "Custom fields",
+      "itemTypes": "Item types",
+      "linksMissing": "Some of the set's fields are not offered on all of its types yet.",
+      "loadError": "Couldn't load the Collection set.",
+      "note": "Serial number stays a field of its own. A type or field the group already has under the same name is used instead of a new one. The names are in English; rename them like any other type or field.",
+      "removal": {
+        "checkFailed": "Could not check what items use. Close this and try again.",
+        "checking": "Checking what items use…",
+        "confirm": "Remove the set",
+        "description": "The types and fields the set created that nothing uses are deleted. The rest stays.",
+        "goes": "Deleted ({{total}})",
+        "keepFieldInUse_one": "{{count}} item has a value of this field, Trash included.",
+        "keepFieldInUse_other": "{{count}} items have a value of this field, Trash included.",
+        "keepLastType": "The group's last item type. A group keeps at least one.",
+        "keepOwnField": "The group's own field. The set uses it but did not create it.",
+        "keepOwnType": "The group's own type. The set uses it but did not create it.",
+        "keepTypeInUse_one": "{{count}} item has this type, Trash included.",
+        "keepTypeInUse_other": "{{count}} items have this type, Trash included.",
+        "kindField": "Custom field",
+        "kindType": "Item type",
+        "nothing": "Nothing can be deleted: every type and field of the set the group has stays, for the reasons below.",
+        "removing": "Removing…",
+        "stays": "Stays ({{total}})",
+        "title": "Remove the Collection set?"
+      },
+      "remove": "Remove the set",
+      "removed": "Deleted {{names}}.",
+      "removedKept_one": "Kept {{names}}: it changed after you opened the confirmation.",
+      "removedKept_other": "Kept {{names}}: they changed after you opened the confirmation.",
+      "removedNothing": "Nothing was deleted.",
+      "removeError": "Couldn't remove the set. Try again.",
+      "rowState": {
+        "added": "Added by the set",
+        "missing": "Not in the group",
+        "notOnTypes_one": "not offered on {{count}} of the set's types",
+        "notOnTypes_other": "not offered on {{count}} of the set's types",
+        "own": "The group's own",
+        "takenField": "Not added: another field of the set has this name",
+        "takenType": "Not added: another type of the set has this name"
+      },
+      "state": {
+        "complete": "Added",
+        "none": "Not added",
+        "partial": "Partly added"
+      },
+      "subtitle": "Item types and custom fields for collections: art, books, coins, stamps, records, watches and cards. Every field of the set shows on each of these types.",
+      "title": "Collection set"
+    },
     "currencyLabel": "Group currency",
     "dangerDescription": "Deleting this group permanently removes all locations, items, files, and exports. This cannot be undone.",
     "dangerTitle": "Danger zone",

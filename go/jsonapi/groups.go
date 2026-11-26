@@ -17,6 +17,9 @@ import (
 type LocationGroupResponse struct {
 	HTTPStatusCode int                        `json:"-"`
 	Data           *LocationGroupResponseData `json:"data"`
+	// Meta is set on a create that asked for extras such as the Collection
+	// set.
+	Meta *LocationGroupCreateMeta `json:"meta,omitempty"`
 }
 
 type LocationGroupResponseData struct {
@@ -123,6 +126,12 @@ type LocationGroupAttributes struct {
 	// leaves the list as it is and a list replaces it. Unknown sections
 	// are refused and duplicates dropped.
 	HiddenSections *models.GroupSections `json:"hidden_sections,omitempty"`
+	// CollectionSet, on create, adds the Collection set to the new group
+	// (#1607): its item types and custom fields, as POST
+	// /groups/{groupID}/collection-set does. It is not stored; the response
+	// meta says whether the set was added. Create only: an update with the
+	// attribute, true or false, is refused.
+	CollectionSet *bool `json:"collection_set,omitempty"`
 }
 
 type LocationGroupData struct {
@@ -151,11 +160,15 @@ func (la *LocationGroupAttributes) ValidateWithContext(ctx context.Context) erro
 	// GroupCurrency, if provided, is validated inside the update handler so a
 	// bad ISO code surfaces as 400 Bad Request rather than 422, matching the
 	// wire contract of the previous /settings endpoint.
+	httpMethod, _ := ctx.Value(httpMethodKey).(string)
 	return validation.ValidateStructWithContext(ctx, la,
 		validation.Field(&la.Name, validation.Required, validation.Length(1, 100)),
 		validation.Field(&la.Icon, validation.By(validateGroupIcon)),
 		validation.Field(&la.Description, validation.Length(0, 200)),
 		validation.Field(&la.HiddenSections),
+		validation.Field(&la.CollectionSet, validation.When(httpMethod != http.MethodPost,
+			validation.Nil.ErrorObject(validation.NewError("validation_create_only",
+				"collection_set is accepted on create only; use /groups/{groupID}/collection-set")))),
 	)
 }
 

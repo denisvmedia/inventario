@@ -66,7 +66,13 @@ import "encoding/json"
 // (INBIntakeDocumentsName), so a restored group still knows them and a
 // repeated delivery makes no second draft. A 3.6 reader restores a 3.7
 // archive without them and counts an error for the member.
-const INBFormatVersion = "3.7"
+//
+// 3.8 adds the entry of the item set (#1607) that created an item type or a
+// custom field (INBItemType.SetEntry and INBCustomField.SetEntry), so a
+// restored group can still remove the set. A 3.7 reader restores a 3.8
+// archive without them, and the restored types and fields count as the
+// group's own.
+const INBFormatVersion = "3.8"
 
 // INBManifestName is the inner-tar member holding the manifest document.
 const INBManifestName = "manifest.json"
@@ -196,6 +202,9 @@ type INBCustomField struct {
 	Type      string                   `json:"type"`
 	Options   []INBCustomFieldOption   `json:"options,omitempty"`
 	Templates []INBCustomFieldTemplate `json:"templates,omitempty"`
+	// SetEntry is the entry of the item set that created the field, absent
+	// for a field a member added (format 3.8).
+	SetEntry string `json:"setEntry,omitempty"`
 }
 
 // INBCustomFieldOption is one choice of a select field.
@@ -217,6 +226,9 @@ type INBItemType struct {
 	Slug string `json:"slug"`
 	Name string `json:"name,omitempty"`
 	Icon string `json:"icon,omitempty"`
+	// SetEntry is the entry of the item set that created the type, absent
+	// for any other type (format 3.8).
+	SetEntry string `json:"setEntry,omitempty"`
 }
 
 // INBSeller is a seller keyed by its immutable UUID, which

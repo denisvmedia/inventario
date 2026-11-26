@@ -32,6 +32,8 @@ type groupTestEnv struct {
 	factorySet *registry.FactorySet
 	user       *models.User
 	group      *models.LocationGroup
+	// audit records the audit events the handlers wrote.
+	audit *stubAuditLogger
 }
 
 func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
@@ -104,13 +106,15 @@ func newGroupTestEnv(t *testing.T, groupCurrency models.Currency) groupTestEnv {
 	r.Use(render.SetContentType(render.ContentTypeJSON))
 	r.Use(stampCtx)
 	r.Use(apiserver.RegistrySetMiddleware(factorySet))
-	r.Route("/groups", apiserver.Groups(apiserver.Params{FactorySet: factorySet}, groupService, nil))
+	audit := &stubAuditLogger{}
+	r.Route("/groups", apiserver.Groups(apiserver.Params{FactorySet: factorySet}, groupService, audit))
 
 	return groupTestEnv{
 		router:     r,
 		factorySet: factorySet,
 		user:       user,
 		group:      group,
+		audit:      audit,
 	}
 }
 

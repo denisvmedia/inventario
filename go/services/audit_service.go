@@ -34,6 +34,10 @@ type AuthEvent struct {
 	// is one (e.g. "api_token" and the token id). Optional.
 	EntityType *string
 	EntityID   *string
+	// Extra carries what the action did, for actions that change more
+	// than the entity (e.g. the rows removing an item set deleted). It is
+	// written like AdminEvent.Extra; keep it small. Optional.
+	Extra map[string]any
 }
 
 // AdminEvent carries the fields LogAdmin persists into an audit row.
@@ -144,6 +148,12 @@ func (s *AuditService) LogAuth(ctx context.Context, ev AuthEvent) {
 		entry.RequestID = requestIDFromRequest(ev.Request)
 	}
 
+	// An auth event carries no reason and is never forced: only its Extra
+	// goes into the breadcrumb.
+	if breadcrumb := auditBreadcrumb(AdminEvent{Action: ev.Action, Extra: ev.Extra}, entry.UserAgent); breadcrumb != "" {
+		entry.UserAgent = breadcrumb
+	}
+
 	if _, err := s.auditRegistry.Create(ctx, entry); err != nil {
 		slog.ErrorContext(ctx, "Failed to write audit log entry", "action", ev.Action, "error", err)
 	}
@@ -192,7 +202,7 @@ func (s *AuditService) LogAdmin(ctx context.Context, ev AdminEvent) {
 	// JSON blob in user_agent and tuck the real UA under "ua" so the
 	// row carries the full context — see AdminEvent doc-comment for
 	// the rationale.
-	if breadcrumb := adminAuditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
+	if breadcrumb := auditBreadcrumb(ev, entry.UserAgent); breadcrumb != "" {
 		entry.UserAgent = breadcrumb
 	}
 
@@ -214,12 +224,12 @@ const adminBreadcrumbReasonMaxLen = 500
 // rather than provided verbatim.
 const adminBreadcrumbTruncateMarker = "…"
 
-// adminAuditBreadcrumb returns a JSON-encoded breadcrumb if any of the
+// auditBreadcrumb returns a JSON-encoded breadcrumb if any of the
 // optional context fields are populated, or "" to signal that the
 // caller should keep the existing user_agent value (raw UA string).
 // Keeping the fall-through path explicit avoids retroactively rewriting
-// every existing admin.* audit row to a noisy {"ua":"..."} blob.
-func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
+// every existing audit row to a noisy {"ua":"..."} blob.
+func auditBreadcrumb(ev AdminEvent, rawUA string) string {
 	if ev.Reason == "" && !ev.Forced && len(ev.Extra) == 0 {
 		return ""
 	}
@@ -240,7 +250,7 @@ func adminAuditBreadcrumb(ev AdminEvent, rawUA string) string {
 		// breadcrumb payload contains an unsupported type — the
 		// alternative would silently drop the audit row, which is
 		// strictly worse than losing the breadcrumb context.
-		slog.Error("Failed to marshal admin audit breadcrumb", "action", ev.Action, "error", err)
+		slog.Error("Failed to marshal audit breadcrumb", "action", ev.Action, "error", err)
 		return ""
 	}
 	return string(encoded)
