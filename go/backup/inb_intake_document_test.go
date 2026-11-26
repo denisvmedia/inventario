@@ -449,3 +449,62 @@ func TestINBRoundTrip_DraftNotRecordedAtTheExport(t *testing.T) {
 	c.Assert(*result.Document.DraftID, qt.Equals, drafts[0].ID)
 	c.Assert(must.Must(sessions.List(f.ctx)), qt.HasLen, before)
 }
+
+// promoteBeforeInsert runs hook once, in the first CreateOrGet of a
+// delivered document, before the document is stored.
+type promoteBeforeInsert struct {
+	registry.IntakeDocumentRegistryFactory
+	once sync.Once
+	hook func()
+}
+
+type promoteBeforeInsertRegistry struct {
+	registry.IntakeDocumentRegistry
+	f *promoteBeforeInsert
+}
+
+func (p *promoteBeforeInsert) CreateUserRegistry(ctx context.Context) (registry.IntakeDocumentRegistry, error) {
+	reg, err := p.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
+	return &promoteBeforeInsertRegistry{IntakeDocumentRegistry: reg, f: p}, err
+}
+
+func (r *promoteBeforeInsertRegistry) CreateOrGet(ctx context.Context, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
+	r.f.once.Do(r.f.hook)
+	return r.IntakeDocumentRegistry.CreateOrGet(ctx, doc)
+}
+
+// A merge keeps the group's open draft, which becomes an item after the
+// restore read it and before it stored the document. The restored document
+// names the item.
+func TestINBRestore_MergeKeptDraftPromotedDuringTheRestore(t *testing.T) {
+	c := qt.New(t)
+	signer := testSigner(c)
+	f := newDeliveredFixture(c)
+	blobKey, _ := f.runExport(c, signer)
+	reg := must.Must(f.fs.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(reg.Delete(f.ctx, f.open.ID), qt.IsNil)
+
+	orig := f.fs.IntakeDocumentRegistryFactory
+	var item *models.Commodity
+	f.fs.IntakeDocumentRegistryFactory = &promoteBeforeInsert{IntakeDocumentRegistryFactory: orig, hook: func() {
+		draft := must.Must(must.Must(f.fs.CommodityDraftRegistryFactory.CreateUserRegistry(f.ctx)).Get(f.ctx, *f.open.DraftID))
+		var err error
+		item, _, err = services.NewCommodityDraftService(f.fs).Promote(f.ctx, draft.ID, draft.Revision, "promotion-during", models.Commodity{
+			Name: "Invoice 1", ShortName: "invoice", Type: models.CommodityTypeOther, Count: 1,
+			Status: models.CommodityStatusInUse, OriginalPriceCurrency: "USD", AreaID: new(f.areaID),
+		})
+		c.Assert(err, qt.IsNil)
+	}}
+	final, err := restoreInbWithOptions(c, f.inbFixture, signer, blobKey, models.RestoreOptions{Strategy: string(types.RestoreStrategyMergeAdd)})
+	f.fs.IntakeDocumentRegistryFactory = orig
+	c.Assert(err, qt.IsNil)
+	c.Assert(final.Status, qt.Equals, models.RestoreStatusCompleted, qt.Commentf("errors: %v", final.ErrorMessage))
+	c.Assert(item, qt.IsNotNil)
+
+	doc := f.documents(c)["1"]
+	c.Assert(doc.DraftID, qt.IsNotNil)
+	c.Assert(*doc.DraftID, qt.Equals, *f.open.DraftID)
+	c.Assert(doc.CommodityID, qt.IsNotNil)
+	c.Assert(*doc.CommodityID, qt.Equals, item.ID)
+	c.Assert(must.Must(f.intake.ListDocuments(f.ctx, nil, []string{item.ID})), qt.HasLen, 1)
+}

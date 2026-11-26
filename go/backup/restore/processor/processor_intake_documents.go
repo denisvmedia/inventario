@@ -94,8 +94,35 @@ func (w *inbWalker) applyIntakeDocument(a *types.INBIntakeDocument) (bool, error
 		return false, nil
 	}
 	w.proc.trackCreatedEntity(stored.ID)
+	if err := w.recordPromotedDraft(reg, stored); err != nil {
+		return false, errxtrace.Wrap("failed to record the item of a delivered document", err, errx.Attrs("intake_document_id", a.ID))
+	}
 	w.stats.CreatedCount++
 	return true, nil
+}
+
+// recordPromotedDraft names the item on a restored document whose draft
+// became one while the restore ran: a promotion records its item only on
+// the documents that are there when it commits.
+func (w *inbWalker) recordPromotedDraft(reg registry.IntakeDocumentRegistry, doc *models.IntakeDocument) error {
+	if doc.CommodityID != nil || doc.DraftID == nil || *doc.DraftID == "" || w.proc.factorySet.CommodityDraftRegistryFactory == nil {
+		return nil
+	}
+	drafts, err := w.proc.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(w.ctx)
+	if err != nil {
+		return err
+	}
+	draft, err := drafts.Get(w.ctx, *doc.DraftID)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	case draft.PromotedCommodityID == nil:
+		return nil
+	}
+	_, err = reg.RecordProgress(w.ctx, doc.ID, registry.IntakeDocumentProgress{CommodityID: draft.PromotedCommodityID})
+	return err
 }
 
 // mapIntakeDocumentWork points the document at the draft and the item the
