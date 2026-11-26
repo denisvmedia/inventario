@@ -5,14 +5,15 @@ import {
   describeBuild,
   parseChangelog,
   selectReleases,
-  type WhatsNewMeta,
-} from "../src/lib/changelog"
+  whatsNewMeta,
+} from "../src/lib/changelog.ts"
 
 // Build-time source of the What's new page (#1386). Reads the repository's
 // CHANGELOG.md, keeps the releases the build contains (see
 // `selectReleases`), and serves them as two virtual modules:
 //
-//   virtual:whats-new/meta      { build, latestVersion } for the unread dot,
+//   virtual:whats-new/meta      { build, latestVersion, latestUserVersion }
+//                               for the unread dot,
 //                               small enough for the entry chunk
 //   virtual:whats-new/releases  the parsed releases, imported only by the
 //                               lazy What's new page
@@ -71,8 +72,7 @@ export function whatsNewPlugin({ changelogPath, version }: WhatsNewPluginOptions
       this.addWatchFile(changelogPath)
       const { build, releases } = read()
       if (id === resolved.get(META_ID)) {
-        const meta: WhatsNewMeta = { build, latestVersion: releases[0]?.version ?? null }
-        return `export default ${JSON.stringify(meta)}`
+        return `export default ${JSON.stringify(whatsNewMeta(build, releases))}`
       }
       return `export default ${JSON.stringify(releases)}`
     },

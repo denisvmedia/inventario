@@ -2,8 +2,11 @@ import { beforeEach, describe, expect, it } from "vitest"
 import { Route } from "react-router-dom"
 import { render, screen, waitFor, within } from "@testing-library/react"
 import { axe } from "jest-axe"
+import { http, HttpResponse } from "msw"
+import type { ReactNode } from "react"
 import whatsNewMeta from "virtual:whats-new/meta"
 
+import { ImpersonationProvider } from "@/features/admin/impersonation/ImpersonationContext"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -11,7 +14,7 @@ import { parseChangelog, type WhatsNewMeta } from "@/lib/changelog"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { WhatsNewPage, WhatsNewView } from "@/pages/WhatsNewPage"
-import { authHandlers, groupHandlers, settingsHandlers } from "@/test/handlers"
+import { apiUrl, authHandlers, groupHandlers, settingsHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -46,16 +49,18 @@ First release.
 const RELEASE_BUILD: WhatsNewMeta = {
   build: { kind: "release", version: "0.3.0" },
   latestVersion: "0.3.0",
+  latestUserVersion: "0.3.0",
 }
 const DEV_BUILD: WhatsNewMeta = {
   build: { kind: "development", label: "edge", base: null },
   latestVersion: "0.3.0",
+  latestUserVersion: "0.3.0",
 }
 
 describe("<WhatsNewView />", () => {
   it("lists the releases newest first with their date and sections", () => {
     render(<WhatsNewView meta={RELEASE_BUILD} releases={RELEASES} showOperators={false} />)
-    const cards = within(screen.getByTestId("whats-new-releases")).getAllByRole("region")
+    const cards = within(screen.getByTestId("whats-new-releases")).getAllByRole("article")
     expect(cards.map((c) => within(c).getByRole("heading", { level: 2 }).textContent)).toEqual([
       "v0.3.0",
       "v0.2.2",
@@ -114,7 +119,7 @@ describe("<WhatsNewView />", () => {
   it("has an empty state without releases", () => {
     render(
       <WhatsNewView
-        meta={{ ...DEV_BUILD, latestVersion: null }}
+        meta={{ ...DEV_BUILD, latestVersion: null, latestUserVersion: null }}
         releases={[]}
         showOperators={false}
       />
@@ -139,8 +144,10 @@ describe("<WhatsNewPage />", () => {
     __resetHttpForTests()
   })
 
-  function renderPage() {
+  function renderPage({ impersonation = false } = {}) {
     setAccessToken("good-token")
+    const wrap = (page: ReactNode) =>
+      impersonation ? <ImpersonationProvider>{page}</ImpersonationProvider> : page
     return renderWithProviders({
       initialPath: "/whats-new?g=household",
       routes: (
@@ -148,15 +155,16 @@ describe("<WhatsNewPage />", () => {
           path="/whats-new"
           element={
             <AuthProvider>
-              <GroupProvider>
-                <WhatsNewPage />
-              </GroupProvider>
+              <GroupProvider>{wrap(<WhatsNewPage />)}</GroupProvider>
             </AuthProvider>
           }
         />
       ),
     })
   }
+
+  // Settle long enough for a PATCH the page should not send to show up.
+  const settle = () => new Promise((r) => setTimeout(r, 50))
 
   it("reads the releases of CHANGELOG.md and marks the newest as seen", async () => {
     // Tests run as a "dev" build, which keeps every released version.
@@ -184,8 +192,92 @@ describe("<WhatsNewPage />", () => {
     renderPage()
     await screen.findByTestId("whats-new-page")
     await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
-    await new Promise((r) => setTimeout(r, 50))
+    await settle()
     expect(fake.patches).toEqual([])
+  })
+
+  // The dot of a user who is not a system administrator is about the newest
+  // release with something they can read; a newer one with only Operators
+  // entries does not count. A system administrator's dot is about the
+  // newest release. CHANGELOG.md decides whether the two differ.
+  it("compares a user's last seen release against the newest one they can read", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderPage()
+    await screen.findByTestId("whats-new-page")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await settle()
+    expect(fake.patches).toEqual([])
+  })
+
+  it("compares a system administrator's last seen release against the newest one", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(
+      ...authHandlers.signedIn({ user: { is_system_admin: true } }),
+      ...groupHandlers.list(),
+      ...fake.handlers
+    )
+    renderPage()
+    await screen.findByTestId("whats-new-page")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    if (whatsNewMeta.latestVersion !== whatsNewMeta.latestUserVersion) {
+      await waitFor(() =>
+        expect(fake.patches).toEqual([
+          { field: "whats_new.last_seen_version", value: whatsNewMeta.latestVersion },
+        ])
+      )
+    } else {
+      await settle()
+      expect(fake.patches).toEqual([])
+    }
+  })
+
+  it("stores nothing while a system administrator impersonates the user", async () => {
+    const fake = settingsHandlers.backend("household")
+    let impersonationReads = 0
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...fake.handlers,
+      http.get(apiUrl("/admin/impersonation/current"), () => {
+        impersonationReads++
+        return HttpResponse.json({
+          active: true,
+          target_user: { id: "u1", name: "Denis", email: "denis@example.com" },
+          operator: { id: "a1", name: "Admin", email: "admin@example.com", role: "platform_admin" },
+          started_at: new Date().toISOString(),
+          expires_at: new Date(Date.now() + 20 * 60 * 1000).toISOString(),
+        })
+      })
+    )
+    renderPage({ impersonation: true })
+    await screen.findByTestId("whats-new-page")
+    await waitFor(() => {
+      expect(fake.reads).toBeGreaterThan(0)
+      expect(impersonationReads).toBeGreaterThan(0)
+    })
+    await settle()
+    expect(fake.patches).toEqual([])
+  })
+
+  it("stores the release once the session turns out not to be an impersonation", async () => {
+    const fake = settingsHandlers.backend("household")
+    server.use(
+      ...authHandlers.signedIn(),
+      ...groupHandlers.list(),
+      ...fake.handlers,
+      http.get(apiUrl("/admin/impersonation/current"), () => HttpResponse.json({ active: false }))
+    )
+    renderPage({ impersonation: true })
+    await waitFor(() =>
+      expect(fake.patches).toEqual([
+        { field: "whats_new.last_seen_version", value: whatsNewMeta.latestVersion },
+      ])
+    )
   })
 
   it("shows the Operators sections to a system administrator only", async () => {

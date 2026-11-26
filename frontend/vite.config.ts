@@ -3,7 +3,7 @@ import tailwindcss from "@tailwindcss/vite"
 import react from "@vitejs/plugin-react"
 import { defineConfig, type Plugin, type ProxyOptions } from "vite"
 
-import { whatsNewPlugin } from "./vite-plugins/whats-new"
+import { whatsNewPlugin } from "./vite-plugins/whats-new.ts"
 
 // The version the UI shows. The build passes the same string the Go binary
 // gets through -ldflags: the Dockerfile and docker.yml the image or PR
@@ -105,7 +105,10 @@ export default defineConfig({
     defangViteClientReload(),
     // The What's new page's release notes, from the repository's
     // CHANGELOG.md, cut at the version above (#1386).
-    whatsNewPlugin({ changelogPath: path.resolve(__dirname, "../CHANGELOG.md"), version: appVersion }),
+    whatsNewPlugin({
+      changelogPath: path.resolve(__dirname, "../CHANGELOG.md"),
+      version: appVersion,
+    }),
   ],
   // Inject the version into the `__APP_VERSION__` global that
   // `lib/app-version.ts` reads. We use a dedicated global instead of

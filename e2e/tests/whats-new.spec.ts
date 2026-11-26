@@ -68,7 +68,7 @@ authTest.describe("What's new (#1386)", () => {
         await expect(page.getByTestId("whats-new-page")).toBeVisible();
         const releases = page
           .getByTestId("whats-new-releases")
-          .getByRole("region");
+          .getByRole("article");
         await expect(releases.first()).toBeVisible();
         await expect(
           releases.first().getByRole("heading", { level: 2 }),

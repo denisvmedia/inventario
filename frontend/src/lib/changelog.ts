@@ -358,6 +358,30 @@ export function selectReleases(
 // from the release list so the list stays in the page's lazy chunk.
 export interface WhatsNewMeta {
   build: BuildStamp
-  // The newest release on the page, or null when there is none.
+  // The newest release on the page, or null when there is none. System
+  // administrators, who see every section, get the dot for it.
   latestVersion: string | null
+  // The newest release with something to read for a user who is not a
+  // system administrator, that is, with more than an Operators section.
+  // Those users get the dot for this one, so a release that changed only
+  // the deployment does not open to an empty card.
+  latestUserVersion: string | null
+}
+
+// hasUserChanges reports whether a release shows anything to a user who is
+// not a system administrator.
+export function hasUserChanges(release: ChangelogRelease): boolean {
+  return (
+    release.paragraphs.length > 0 || release.sections.some((s) => s.title !== OPERATORS_SECTION)
+  )
+}
+
+// whatsNewMeta builds the meta for `releases`, which `selectReleases` has
+// put newest first.
+export function whatsNewMeta(build: BuildStamp, releases: ChangelogRelease[]): WhatsNewMeta {
+  return {
+    build,
+    latestVersion: releases[0]?.version ?? null,
+    latestUserVersion: releases.find(hasUserChanges)?.version ?? null,
+  }
 }

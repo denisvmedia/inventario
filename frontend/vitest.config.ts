@@ -2,7 +2,7 @@ import path from "node:path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
-import { whatsNewPlugin } from "./vite-plugins/whats-new"
+import { whatsNewPlugin } from "./vite-plugins/whats-new.ts"
 
 // Test files that cannot share a module registry with the rest of the suite.
 //

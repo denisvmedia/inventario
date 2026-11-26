@@ -27,45 +27,47 @@ export function ReleaseNotes({
         )
         const headingId = `release-${release.version}`
         return (
-          <Card
+          <article
             key={release.version}
-            role="region"
             aria-labelledby={headingId}
             data-testid={`whats-new-release-${release.version}`}
-            className="gap-4"
           >
-            <CardHeader>
-              <CardTitle>
-                <h2 id={headingId} className="text-lg font-semibold tracking-tight">
-                  {t("settings:whatsNew.releaseTitle", { version: release.version })}
-                </h2>
-              </CardTitle>
-              {release.date ? (
-                <CardDescription>
-                  <time dateTime={release.date}>{formatDate(release.date, { style: "long" })}</time>
-                </CardDescription>
-              ) : null}
-            </CardHeader>
-            <CardContent className="space-y-5 text-sm leading-relaxed">
-              {release.paragraphs.map((p, i) => (
-                <p key={i}>
-                  <ChangelogText inlines={p} />
-                </p>
-              ))}
-              {sections.map((section) => (
-                <ReleaseSection
-                  key={section.title}
-                  section={section}
-                  label={sectionLabel(t, section.title)}
-                />
-              ))}
-              {sections.length === 0 && release.paragraphs.length === 0 ? (
-                <p className="text-muted-foreground" data-testid="whats-new-no-user-changes">
-                  {t("settings:whatsNew.noUserChanges")}
-                </p>
-              ) : null}
-            </CardContent>
-          </Card>
+            <Card className="gap-4">
+              <CardHeader>
+                <CardTitle>
+                  <h2 id={headingId} className="text-lg font-semibold tracking-tight">
+                    {t("settings:whatsNew.releaseTitle", { version: release.version })}
+                  </h2>
+                </CardTitle>
+                {release.date ? (
+                  <CardDescription>
+                    <time dateTime={release.date}>
+                      {formatDate(release.date, { style: "long" })}
+                    </time>
+                  </CardDescription>
+                ) : null}
+              </CardHeader>
+              <CardContent className="space-y-5 text-sm leading-relaxed">
+                {release.paragraphs.map((p, i) => (
+                  <p key={i}>
+                    <ChangelogText inlines={p} />
+                  </p>
+                ))}
+                {sections.map((section) => (
+                  <ReleaseSection
+                    key={section.title}
+                    section={section}
+                    label={sectionLabel(t, section.title)}
+                  />
+                ))}
+                {sections.length === 0 && release.paragraphs.length === 0 ? (
+                  <p className="text-muted-foreground" data-testid="whats-new-no-user-changes">
+                    {t("settings:whatsNew.noUserChanges")}
+                  </p>
+                ) : null}
+              </CardContent>
+            </Card>
+          </article>
         )
       })}
     </div>

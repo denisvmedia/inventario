@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { hasUnreadRelease } from "@/features/whats-new/unread"
+import { announcedRelease, hasUnreadRelease } from "@/features/whats-new/unread"
+import type { WhatsNewMeta } from "@/lib/changelog"
 
 describe("hasUnreadRelease", () => {
   it.each([
@@ -21,5 +22,25 @@ describe("hasUnreadRelease", () => {
     [null, "0.2.2", false],
   ] as const)("latest %s, last seen %s -> %s", (latest, lastSeen, dot) => {
     expect(hasUnreadRelease(latest, lastSeen)).toBe(dot)
+  })
+})
+
+describe("announcedRelease", () => {
+  // 0.2.2 changed only the deployment.
+  const meta: WhatsNewMeta = {
+    build: { kind: "release", version: "0.2.2" },
+    latestVersion: "0.2.2",
+    latestUserVersion: "0.2.1",
+  }
+
+  it("is the newest release for a system administrator", () => {
+    expect(announcedRelease(meta, true)).toBe("0.2.2")
+    expect(hasUnreadRelease(announcedRelease(meta, true), "0.2.1")).toBe(true)
+  })
+
+  it("skips a release with only Operators entries for anyone else", () => {
+    expect(announcedRelease(meta, false)).toBe("0.2.1")
+    expect(hasUnreadRelease(announcedRelease(meta, false), "0.2.1")).toBe(false)
+    expect(hasUnreadRelease(announcedRelease(meta, false), "0.2.0")).toBe(true)
   })
 })

@@ -301,6 +301,38 @@ describe("<AppSidebar /> — What's new dot (#1386)", () => {
     expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
   })
 
+  // CHANGELOG.md decides whether the newest release has anything besides
+  // Operators entries; the two tests below hold either way.
+  it("leaves out a newer release with only Operators entries for a user", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(), ...fake.handlers)
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    await new Promise((r) => setTimeout(r, 50))
+    expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+  })
+
+  it("counts every newer release for a system administrator", async () => {
+    const fake = settingsHandlers.backend("household", {
+      whatsNewLastSeenVersion: whatsNewMeta.latestUserVersion ?? undefined,
+    })
+    server.use(
+      ...authHandlers.signedIn({ user: { is_system_admin: true } }),
+      ...groupHandlers.list(),
+      ...fake.handlers
+    )
+    renderSidebar("/g/household")
+    await waitFor(() => expect(fake.reads).toBeGreaterThan(0))
+    if (whatsNewMeta.latestVersion !== whatsNewMeta.latestUserVersion) {
+      expect(await screen.findByTestId("sidebar-help-unread")).toBeInTheDocument()
+    } else {
+      await new Promise((r) => setTimeout(r, 50))
+      expect(screen.queryByTestId("sidebar-help-unread")).not.toBeInTheDocument()
+    }
+  })
+
   it("shows no dot once the newest release was seen", async () => {
     const fake = settingsHandlers.backend("household", {
       whatsNewLastSeenVersion: whatsNewMeta.latestVersion ?? undefined,
