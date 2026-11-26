@@ -14231,6 +14231,13 @@
                         "$ref": "#/definitions/jsonapi.CommodityCover"
                     }
                 },
+                "linked_items": {
+                    "description": "LinkedItems names, per item ID, the items the listed items' \"link to\nan item\" custom fields point at, with whether each is in Trash.\nOmitted when no listed item has such a value.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "$ref": "#/definitions/jsonapi.LinkedItemSummary"
+                    }
+                },
                 "matches": {
                     "description": "Matches maps commodity id → the fields the search text (`q`) was\nfound in, so the list can say why an item matched. Omitted when the\nrequest has no `q`.",
                     "type": "object",

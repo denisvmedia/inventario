@@ -718,7 +718,11 @@
       "types_one": "Typ položky tohoto pohledu byl smazán.",
       "types_few": "{{count}} typy položek tohoto pohledu byly smazány.",
       "types_many": "{{count}} typu položek tohoto pohledu bylo smazáno.",
-      "types_other": "{{count}} typů položek tohoto pohledu bylo smazáno."
+      "types_other": "{{count}} typů položek tohoto pohledu bylo smazáno.",
+      "customFields_one": "Vlastní pole tohoto pohledu bylo smazáno.",
+      "customFields_few": "{{count}} vlastní pole tohoto pohledu byla smazána.",
+      "customFields_many": "{{count}} vlastního pole tohoto pohledu bylo smazáno.",
+      "customFields_other": "{{count}} vlastních polí tohoto pohledu bylo smazáno."
     },
     "suggestions": {
       "add": "Přidat",
@@ -761,6 +765,7 @@
       "asset_id": "Inventární číslo",
       "brand": "Značka",
       "comments": "Poznámky",
+      "custom_fields": "Vlastní pole",
       "extra_serial_numbers": "Sériové číslo",
       "model": "Model",
       "name": "Název",

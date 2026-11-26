@@ -593,6 +593,9 @@ The **All Items** page lists every item in your group. Across the top you have:
 - **Seller** — show items bought from one or more [sellers](../sellers/). The
   menu appears once your group has a seller.
 - **Tags** — filter by tag. See [Filtering by tag](#filtering-by-tag).
+- **Fields** — filter by the values of your group's
+  [custom fields](../custom-fields/#find-items-by-their-custom-fields). The
+  menu appears once your group has a custom field.
 - **Warranty** — filter by warranty state (active, expiring, expired, or none).
 - **Lent out** — show only items currently lent out.
 - **No location** — show only items not placed in any area.
@@ -602,8 +605,9 @@ The **All Items** page lists every item in your group. Across the top you have:
   reviewed; a price of 0 is a price. The [inbox](../inbox/#missing-details)
   links these lists with their counts.
 - **Sort by** — **Name**, **Date added**, **Purchase date**, **Current value**,
-  **Original price**, or **Quantity**. Items with an unknown date or price
-  come last in either direction.
+  **Original price**, **Quantity**, or one of your group's custom fields.
+  Items with an unknown date, price or custom field value come last in either
+  direction.
 - **Clear filters** — reset everything back to the default view.
 - **Show inactive / Hide inactive** — include or hide items in an end status.
 
@@ -614,7 +618,8 @@ Three buttons at the right of the toolbar switch the layout:
   on a phone, up to six on a wide screen.
 - **Compact cards** — the same facts with a small photo beside the name, three
   cards per row at most.
-- **List** — a table with one row per item.
+- **List** — a table with one row per item. **Columns** adds up to four of
+  your group's custom fields to the table.
 
 When there are more than 24 items, **Items per page** under the list shows
 **24**, **48**, or **96** items per page. Inventario remembers the layout and
@@ -649,6 +654,8 @@ way:
 - A word matches a **tag** by its name, so a search for `fragile` finds items
   tagged "Fragile". Only item tags count; file tags don't.
 - A word that is an asset ID (`A-0042`, `#42`, `42`) also finds that item.
+- A word matches the text of a [custom field](../custom-fields/) and the option
+  of a select field.
 
 When an item matched on something other than its name, a line under the name
 says where, for example **Serial number: SN-1234**, **Model: SMV6ZCX42E**,
@@ -716,12 +723,13 @@ matches the view, and the **Views** menu offers **Save changes** (to update the
 view) and **Revert to saved** (to go back to it). **Close view** keeps the
 current filters and leaves the view.
 
-If a view refers to an area, a tag, a seller or an [item type](../item-types/)
-that was deleted, it still opens and still applies that condition, so it shows
-what still matches (often nothing, for a deleted area, seller or type). The
-**Views** button shows a warning, and the menu says what no longer exists; on
-the **Saved views** page the condition reads **Deleted area** or **Deleted
-seller**, or a tag or an item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
+If a view refers to an area, a tag, a seller, an [item type](../item-types/) or
+a [custom field](../custom-fields/) that was deleted, it still opens and still
+applies that condition, so it shows what still matches (often nothing, for a
+deleted area, seller, type or field). The **Views** button shows a warning, and
+the menu says what no longer exists; on the **Saved views** page the condition
+reads **Deleted area**, **Deleted seller** or **Deleted field**, or a tag or an
+item type is marked **(deleted)**. Renaming a tag's slug on the [Tags](../tags/) page updates the
 views that use it.
 
 **Manage views** in the **Views** menu, or the gear next to **Saved views** in

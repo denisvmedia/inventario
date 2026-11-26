@@ -1,4 +1,9 @@
 {
+  "columns": {
+    "button": "Columns",
+    "full": "The list shows at most {{max}} custom field columns.",
+    "title": "Custom field columns"
+  },
   "create": "New field",
   "delete": {
     "changed": "The field's values changed meanwhile. Check the new count and confirm again.",
@@ -51,6 +56,41 @@
     "tooLong": "The value is too long.",
     "url": "Enter a web address starting with http:// or https://."
   },
+  "filter": {
+    "add": "Add condition",
+    "anItem": "a linked item",
+    "button": "Fields",
+    "chip": {
+      "contains": "{{field}} contains “{{value}}”",
+      "eq": "{{field}} is {{value}}",
+      "gte": "{{field}} at least {{value}}",
+      "in": "{{field}}: {{value}}",
+      "lte": "{{field}} at most {{value}}",
+      "set": "{{field}} has a value",
+      "unset": "{{field}} has no value"
+    },
+    "deletedField": "Deleted field",
+    "deletedOption": "deleted option",
+    "field": "Field",
+    "full": "A list takes at most {{max}} conditions.",
+    "none": "No conditions yet.",
+    "op": "Comparison",
+    "ops": {
+      "contains": "contains",
+      "eq": "is",
+      "gte": "is at least",
+      "in": "is one of",
+      "lte": "is at most",
+      "set": "has a value",
+      "unset": "has no value"
+    },
+    "pickField": "Pick a field",
+    "pickValue": "Pick a value",
+    "remove": "Remove {{condition}}",
+    "someField": "Custom field",
+    "title": "Custom fields",
+    "value": "Value"
+  },
   "list": {
     "delete": "Delete {{name}}",
     "edit": "Edit {{name}}",
@@ -90,6 +130,16 @@
     "selectPlaceholder": "Pick an option",
     "title": "Custom fields",
     "yes": "Yes"
+  },
+  "sort": {
+    "label": "Custom fields"
+  },
+  "templates": {
+    "default": "Default (optional)",
+    "hint": "When an item is given one of the ticked types in the item form, the form offers this field and fills in the default if the field has no value yet. A value the item already has is kept.",
+    "hintNoDefault": "When an item is given one of the ticked types in the item form, the form offers this field.",
+    "label": "Item types",
+    "optionsFirst": "Save the options first to pick one as a default."
   },
   "title": "Custom fields",
   "toast": {

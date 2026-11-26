@@ -13,6 +13,9 @@ export interface CustomFieldValueProps {
   // Names of the items link fields point at (meta.linked_items).
   linkedItems?: Record<string, { name?: string; trashed?: boolean }>
   groupSlug?: string
+  // Text only, without links: for a value inside a link already (a row of
+  // the items list).
+  plain?: boolean
 }
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -20,8 +23,14 @@ function isRecord(v: unknown): v is Record<string, unknown> {
 }
 
 // CustomFieldValue shows one stored custom field value (#2803) on the item
-// page and the printed report, formatted for its type.
-export function CustomFieldValue({ field, raw, linkedItems, groupSlug }: CustomFieldValueProps) {
+// page, in the printed report and in the items list, formatted for its type.
+export function CustomFieldValue({
+  field,
+  raw,
+  linkedItems,
+  groupSlug,
+  plain,
+}: CustomFieldValueProps) {
   const { t } = useTranslation()
   switch (field.type) {
     case "boolean":
@@ -45,6 +54,7 @@ export function CustomFieldValue({ field, raw, linkedItems, groupSlug }: CustomF
     }
     case "url": {
       const href = String(raw)
+      if (plain) return <>{href}</>
       return (
         <a
           href={href}
@@ -63,7 +73,7 @@ export function CustomFieldValue({ field, raw, linkedItems, groupSlug }: CustomF
       return (
         <span className="inline-flex flex-wrap items-center gap-1.5">
           {/* An item in Trash has no page to open. */}
-          {groupSlug && item && !item.trashed ? (
+          {!plain && groupSlug && item && !item.trashed ? (
             <Link
               to={commodityHref(groupSlug, id)}
               className="hover:underline"

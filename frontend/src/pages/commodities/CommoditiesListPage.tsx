@@ -44,6 +44,9 @@ import {
 } from "@/components/ui/select"
 import { Separator } from "@/components/ui/separator"
 import { Skeleton } from "@/components/ui/skeleton"
+import { CustomFieldColumnsMenu } from "@/components/customFields/CustomFieldColumnsMenu"
+import { CustomFieldFilterMenu } from "@/components/customFields/CustomFieldFilterMenu"
+import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
 import { CommodityBulkActions } from "@/components/items/CommodityBulkActions"
 import {
   CommodityPhotoCard,
@@ -61,6 +64,10 @@ import { TagPill } from "@/components/tags/TagPill"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { useAreas } from "@/features/areas/hooks"
+import type { CustomField } from "@/features/customFields/api"
+import { useCustomFieldColumns } from "@/features/customFields/columns"
+import { isSortableField, sortsDescendingFirst } from "@/features/customFields/conditions"
+import { useCustomFields } from "@/features/customFields/hooks"
 import { useLocations } from "@/features/locations/hooks"
 import { brandModelText } from "@/features/commodities/brand"
 import { CommodityThumb } from "@/features/commodities/CommodityThumb"
@@ -81,7 +88,11 @@ import {
   useItemTypeLookup,
   type ItemTypeDisplay,
 } from "@/features/itemTypes/hooks"
-import type { Commodity, CreateCommodityRequest } from "@/features/commodities/api"
+import type {
+  Commodity,
+  CreateCommodityRequest,
+  LinkedItemSummary,
+} from "@/features/commodities/api"
 import {
   DEFAULT_COMMODITY_QUERY,
   hasCommodityFilters,
@@ -288,6 +299,9 @@ export function CommoditiesListPage() {
   const tagCounts = useCommodityTagCounts(listOptions, { enabled: listEnabled && tagMenuOpen })
   const areas = useAreas({ enabled })
   const sellers = useSellers()
+  // The group's custom fields, for the filter, the sort and the columns.
+  const customFields = useCustomFields()
+  const [columnIds, setColumnIds] = useCustomFieldColumns(slug ?? "")
   // Locations populate the create-dialog's Location → Area paired
   // selects. The schema only carries area_id; location_id is UI-only.
   const locationsQuery = useLocations({ enabled })
@@ -424,12 +438,24 @@ export function CommoditiesListPage() {
     // name, descending for dates / price — matching what users
     // typically expect).
     const isDateOrPrice = field !== "name" && field !== "count"
-    const desc = query.sort === field ? !query.sortDesc : isDateOrPrice
-    updateQuery({ sort: field, sortDesc: desc })
+    const same = query.sort === field && !query.customFieldSort
+    const desc = same ? !query.sortDesc : isDateOrPrice
+    updateQuery({ sort: field, sortDesc: desc, customFieldSort: "" })
+  }
+  // Sorts by a custom field, the same way: picking it again reverses the
+  // order.
+  function setCustomFieldSort(field: CustomField) {
+    const desc = query.customFieldSort === field.id ? !query.sortDesc : sortsDescendingFirst(field)
+    updateQuery({ sort: "name", sortDesc: desc, customFieldSort: field.id })
   }
   function clearFilters() {
     // The sort is not a filter and survives.
-    updateQuery({ ...DEFAULT_COMMODITY_QUERY, sort: query.sort, sortDesc: query.sortDesc })
+    updateQuery({
+      ...DEFAULT_COMMODITY_QUERY,
+      sort: query.sort,
+      sortDesc: query.sortDesc,
+      customFieldSort: query.customFieldSort,
+    })
     setSearchInput("")
   }
   function toggleInactive() {
@@ -500,6 +526,16 @@ export function CommoditiesListPage() {
       ? (getServerErrorMeta(list.error)?.parameter ?? "")
       : null
   const matches = list.data?.matches ?? {}
+  const linkedItems = list.data?.linkedItems
+  // The custom field columns of the list layout, in the order picked; a
+  // deleted field is no longer a column.
+  const columns = useMemo(
+    () =>
+      columnIds
+        .map((id) => customFields.data?.find((f) => f.id === id))
+        .filter((f): f is CustomField => !!f),
+    [columnIds, customFields.data]
+  )
 
   const areaName = useMemo(() => {
     const map = new Map<string, string>()
@@ -644,6 +680,20 @@ export function CommoditiesListPage() {
           onSetTagFilter={(tags) => updateQuery(withTagFilter(query, tags))}
           onTagMenuOpenChange={setTagMenuOpen}
           onSetSort={setSort}
+          customFields={customFields.data}
+          customFieldConditions={query.customFields}
+          onSetCustomFieldConditions={(conditions) => updateQuery({ customFields: conditions })}
+          customFieldSort={query.customFieldSort}
+          onSetCustomFieldSort={setCustomFieldSort}
+          columnsMenu={
+            viewMode === "list" && (customFields.data?.length ?? 0) > 0 ? (
+              <CustomFieldColumnsMenu
+                fields={customFields.data ?? []}
+                columns={columnIds}
+                onChange={setColumnIds}
+              />
+            ) : undefined
+          }
           onToggleInactive={toggleInactive}
           onClearFilters={clearFilters}
           onSetViewMode={setViewMode}
@@ -723,6 +773,8 @@ export function CommoditiesListPage() {
             onToggleSelected={(id) => selection.toggle(id, pageIds)}
             onToggleSelectAll={() => selection.togglePage(pageIds)}
             onPreview={openCommodityInSheet}
+            columns={columns}
+            linkedItems={linkedItems}
             areaName={areaName}
             typeIcon={typeIcon}
             tagLabel={tagLabel}
@@ -831,6 +883,15 @@ interface ToolbarProps {
   onSetTagFilter: (tags: CommodityTagFilter) => void
   onTagMenuOpenChange: (open: boolean) => void
   onSetSort: (f: CommoditySortOption) => void
+  // The group's custom fields; undefined while they load.
+  customFields: readonly CustomField[] | undefined
+  customFieldConditions: string[]
+  onSetCustomFieldConditions: (conditions: string[]) => void
+  // The id of the custom field the list is sorted by, or "".
+  customFieldSort: string
+  onSetCustomFieldSort: (field: CustomField) => void
+  // The custom field columns control, shown in the list layout.
+  columnsMenu?: ReactNode
   onToggleInactive: () => void
   onClearFilters: () => void
   onSetViewMode: (v: ViewMode) => void
@@ -897,6 +958,15 @@ function MissingFilterMenu({
 
 function Toolbar(props: ToolbarProps) {
   const { t } = useTranslation()
+  const sortableFields = (props.customFields ?? []).filter(isSortableField)
+  // A sort by a field the group no longer has falls back to name on the
+  // server; the menu says which field it was.
+  const sortFieldLabel = props.customFieldSort
+    ? (props.customFields?.find((f) => f.id === props.customFieldSort)?.name ??
+      (props.customFields
+        ? t("customFields:filter.deletedField")
+        : t("customFields:filter.someField")))
+    : ""
   return (
     <div className="flex flex-wrap items-center gap-2">
       <div className="relative flex-1 min-w-48 max-w-md">
@@ -1109,6 +1179,16 @@ function Toolbar(props: ToolbarProps) {
         onOpenChange={props.onTagMenuOpenChange}
       />
 
+      {/* Shown once the group has a custom field, or while the URL has a
+          condition (on a deleted field), so it can be removed. */}
+      {(props.customFields?.length ?? 0) > 0 || props.customFieldConditions.length > 0 ? (
+        <CustomFieldFilterMenu
+          fields={props.customFields}
+          conditions={props.customFieldConditions}
+          onChange={props.onSetCustomFieldConditions}
+        />
+      ) : null}
+
       <Button
         type="button"
         variant={props.lentOutOnly ? "default" : "outline"}
@@ -1141,7 +1221,11 @@ function Toolbar(props: ToolbarProps) {
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm" className="gap-1.5" data-testid="commodities-sort">
             <ArrowUpDown className="size-3.5" aria-hidden="true" />
-            {t(`commodities:sort.${props.sort}`)}
+            {props.customFieldSort ? (
+              <span className="max-w-32 truncate">{sortFieldLabel}</span>
+            ) : (
+              t(`commodities:sort.${props.sort}`)
+            )}
             {props.sortDesc ? (
               <span aria-hidden="true" className="text-xs">
                 ↓
@@ -1160,12 +1244,28 @@ function Toolbar(props: ToolbarProps) {
           {COMMODITY_SORT_OPTIONS.map((f) => (
             <DropdownMenuCheckboxItem
               key={f}
-              checked={props.sort === f}
+              checked={!props.customFieldSort && props.sort === f}
               onCheckedChange={() => props.onSetSort(f)}
             >
               {t(`commodities:sort.${f}`)}
             </DropdownMenuCheckboxItem>
           ))}
+          {sortableFields.length > 0 ? (
+            <>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t("customFields:sort.label")}</DropdownMenuLabel>
+              {sortableFields.map((f) => (
+                <DropdownMenuCheckboxItem
+                  key={f.id}
+                  checked={props.customFieldSort === f.id}
+                  onCheckedChange={() => props.onSetCustomFieldSort(f)}
+                  data-testid={`commodities-sort-cf-${f.id}`}
+                >
+                  <span className="truncate">{f.name}</span>
+                </DropdownMenuCheckboxItem>
+              ))}
+            </>
+          ) : null}
         </DropdownMenuContent>
       </DropdownMenu>
 
@@ -1198,6 +1298,7 @@ function Toolbar(props: ToolbarProps) {
       </Button>
 
       <div className="ml-auto flex items-center gap-1">
+        {props.columnsMenu}
         {props.savedViews}
         <Button
           variant={props.viewMode === "grid" ? "secondary" : "ghost"}
@@ -1608,6 +1709,10 @@ function CommodityGridCard({
 
 interface CommoditiesTableProps extends CommoditiesGridProps {
   onToggleSelectAll: () => void
+  // The custom fields shown as columns, in order.
+  columns: readonly CustomField[]
+  // Names of the items link values point at (meta.linked_items).
+  linkedItems?: Record<string, LinkedItemSummary>
 }
 
 function CommoditiesTable({
@@ -1625,6 +1730,8 @@ function CommoditiesTable({
   loanCounts,
   serviceCounts,
   matches,
+  columns,
+  linkedItems,
 }: CommoditiesTableProps) {
   const { t } = useTranslation()
   const allSelected = rows.length > 0 && rows.every((r) => selected.has(r.id ?? ""))
@@ -1644,6 +1751,15 @@ function CommoditiesTable({
         <span className="flex-1">{t("commodities:list.headerName")}</span>
         <span className="hidden sm:block w-32">{t("commodities:list.headerArea")}</span>
         <span className="hidden sm:block w-24">{t("commodities:list.headerStatus")}</span>
+        {columns.map((f) => (
+          <span
+            key={f.id}
+            className="hidden md:block w-28 truncate"
+            data-testid={`commodities-column-header-${f.id}`}
+          >
+            {f.name}
+          </span>
+        ))}
         <span className="w-24 text-right">{t("commodities:list.headerValue")}</span>
       </div>
       <ul>
@@ -1747,6 +1863,24 @@ function CommoditiesTable({
                     />
                   )}
                 </span>
+                {columns.map((f) => {
+                  const raw = (row.custom_fields as Record<string, unknown> | undefined)?.[f.id]
+                  return (
+                    <span
+                      key={f.id}
+                      className="pointer-events-none hidden md:block w-28 truncate text-xs text-muted-foreground"
+                      data-testid={`commodity-row-cf-${f.id}`}
+                    >
+                      {raw === undefined || raw === null ? (
+                        "—"
+                      ) : (
+                        // Plain text: the row is one link, so a value
+                        // cannot link on its own.
+                        <CustomFieldValue field={f} raw={raw} linkedItems={linkedItems} plain />
+                      )}
+                    </span>
+                  )
+                })}
                 <span className="pointer-events-none w-24 text-right text-sm font-medium">
                   {formatPrice(row.current_price, currency, "—", formatCurrency)}
                 </span>

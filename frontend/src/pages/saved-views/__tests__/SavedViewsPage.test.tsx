@@ -13,6 +13,7 @@ import { server } from "@/test/server"
 import {
   apiUrl,
   areaHandlers,
+  customFieldHandlers,
   groupHandlers,
   itemTypeHandlers,
   savedViewHandlers,
@@ -167,6 +168,41 @@ describe("<SavedViewsPage />", () => {
     )
     expect(within(row).getByText("Vehicle")).not.toHaveAttribute("data-stale")
     expect(within(row).getByText("Electronics")).not.toHaveAttribute("data-stale")
+    expect(within(row).getByText(/refer to something that was deleted/)).toBeInTheDocument()
+  })
+
+  it("spells out custom field conditions and the sort, and marks a deleted field", async () => {
+    server.use(
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({ id: "cf-plate", name: "Plate" }),
+        customFieldHandlers.field({
+          id: "cf-fuel",
+          name: "Fuel",
+          type: "select",
+          options: [{ id: "opt-diesel", label: "Diesel" }],
+        }),
+        customFieldHandlers.field({ id: "cf-odo", name: "Odometer", type: "number" }),
+      ]),
+      ...savedViewHandlers.list(SLUG, [
+        {
+          id: "sv7",
+          name: "Cars",
+          query:
+            "cf=cf-fuel%3Ain%3Aopt-diesel%2Copt-gone&cf=cf-gone%3Aset&cf=cf-odo%3Agte%3A1000&cf=cf-plate%3Acontains%3AAB&sort=-cf.cf-odo",
+        },
+      ]),
+      ...savedViewHandlers.counts(SLUG)
+    )
+    renderPage()
+
+    const row = await screen.findByTestId("saved-view-row")
+    await waitFor(() =>
+      expect(within(row).getByText("Deleted field")).toHaveAttribute("data-stale", "true")
+    )
+    expect(within(row).getByText("Plate contains “AB”")).not.toHaveAttribute("data-stale")
+    expect(within(row).getByText("Fuel: Diesel, deleted option")).toBeInTheDocument()
+    expect(within(row).getByText("Odometer at least 1000")).toBeInTheDocument()
+    expect(within(row).getByText("Sorted by Odometer, descending")).toBeInTheDocument()
     expect(within(row).getByText(/refer to something that was deleted/)).toBeInTheDocument()
   })
 

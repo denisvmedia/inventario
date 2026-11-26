@@ -31,6 +31,25 @@ export function hasValue(values: CustomFieldValues | undefined, id: string): boo
   return values !== undefined && id in values && values[id] !== null
 }
 
+// plainDecimal writes n with the digits String gives, without an exponent
+// (5e-7 as 0.0000005), since the form's number check takes none. A JSON
+// number reaches the form from a draft saved through the API or an AI scan
+// guess; the item API sends a decimal string.
+function plainDecimal(n: number): string {
+  const s = String(n)
+  const m = /^(-?)(\d)(?:\.(\d+))?e([+-]\d+)$/.exec(s)
+  if (!m) return s
+  const [, sign, lead, rest = "", expText] = m
+  const digits = lead + rest
+  const exp = Number(expText)
+  if (exp < 0) return `${sign}0.${"0".repeat(-exp - 1)}${digits}`
+  return sign + digits.padEnd(exp + 1, "0")
+}
+
+function formText(v: unknown): string {
+  return typeof v === "number" ? plainDecimal(v) : String(v)
+}
+
 // toFormValue reads one stored value into the form's text. The API form of
 // each type tells the types apart where it matters (money is an object,
 // yes/no a boolean), so the field's definition is not needed.
@@ -39,12 +58,12 @@ export function toFormValue(raw: unknown): CustomFieldFormValue {
   if (isRecord(raw)) {
     const amount = raw.amount
     return {
-      value: amount === null || amount === undefined ? "" : String(amount),
+      value: amount === null || amount === undefined ? "" : formText(amount),
       currency: typeof raw.currency === "string" ? raw.currency : "",
     }
   }
   if (typeof raw === "boolean") return { value: raw ? "true" : "false", currency: "" }
-  return { value: String(raw), currency: "" }
+  return { value: formText(raw), currency: "" }
 }
 
 // toFormValues reads an item's stored values. A value of a field this
@@ -146,4 +165,31 @@ export function validateFormValue(field: CustomField, v: CustomFieldFormValue): 
     default:
       return undefined
   }
+}
+
+// withTemplate applies the template of the item type with id itemTypeId to
+// an item form's entries: each field the template names is shown, and one
+// without a value gets the template's default. A value already in the form
+// is kept, and the fields of an earlier type stay. Undefined when nothing
+// changes.
+export function withTemplate(
+  fields: readonly CustomField[],
+  itemTypeId: string,
+  current: CustomFieldFormValues | undefined,
+  groupCurrency: string
+): CustomFieldFormValues | undefined {
+  let next: CustomFieldFormValues | undefined
+  for (const field of fields) {
+    const entry = field.templates.find((t) => t.item_type_id === itemTypeId)
+    if (!entry) continue
+    const have = current?.[field.id]
+    if (have && have.value.trim() !== "") continue
+    const hasDefault = entry.default_value !== undefined && entry.default_value !== null
+    if (have && !hasDefault) continue
+    next ??= { ...(current ?? {}) }
+    next[field.id] = hasDefault
+      ? toFormValue(entry.default_value)
+      : { value: "", currency: field.type === "money" ? groupCurrency : "" }
+  }
+  return next
 }

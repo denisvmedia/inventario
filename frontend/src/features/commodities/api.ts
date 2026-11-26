@@ -49,6 +49,7 @@ interface CommoditiesListResponse {
     covers?: Record<string, CoverPayload>
     matches?: Record<string, CommoditySearchMatch[]>
     selection_digest?: string
+    linked_items?: Record<string, LinkedItemSummary>
   }
 }
 
@@ -187,12 +188,17 @@ function envelope(attrs: Partial<Commodity>) {
 // every item the query matches, on every page, which a bulk action on "all
 // matching" sends back (CommoditySelection). It is empty when a bulk action
 // cannot take the query (no items, more than MAX_BULK_QUERY_ITEMS, Trash).
+//
+// `linkedItems` carries `meta.linked_items`: the names of the items the
+// listed items' "link to an item" custom fields point at, for the list's
+// custom field columns.
 export async function listCommodities(options: ListCommoditiesOptions = {}): Promise<{
   commodities: Commodity[]
   total: number
   covers: Record<string, CommodityCover>
   matches: Record<string, CommoditySearchMatch[]>
   selectionDigest: string
+  linkedItems: Record<string, LinkedItemSummary>
 }> {
   const qs = listOptionsToParams(options).toString()
   const path = qs ? `/commodities?${qs}` : "/commodities"
@@ -213,6 +219,7 @@ export async function listCommodities(options: ListCommoditiesOptions = {}): Pro
     covers,
     matches: body.meta?.matches ?? {},
     selectionDigest: body.meta?.selection_digest ?? "",
+    linkedItems: body.meta?.linked_items ?? {},
   }
 }
 

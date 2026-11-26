@@ -351,7 +351,7 @@ func (*customFieldsAPI) deleteCustomField(w http.ResponseWriter, r *http.Request
 // point at, live or in Trash, in one query. A link always names an item of
 // the group, because purging the item deletes the value.
 func linkedItemSummaries(ctx context.Context, set *registry.Set, commodities ...*models.Commodity) (map[string]jsonapi.LinkedItemSummary, error) {
-	if set == nil || set.CustomFieldRegistry == nil || !slices.ContainsFunc(commodities, func(c *models.Commodity) bool { return len(c.CustomFields) > 0 }) {
+	if set == nil || set.CustomFieldRegistry == nil || !anyCustomFieldValues(commodities) {
 		return nil, nil
 	}
 	defs, err := set.CustomFieldRegistry.List(ctx)
@@ -397,4 +397,15 @@ func CustomFields() func(r chi.Router) {
 			r.Delete("/", api.deleteCustomField)
 		})
 	}
+}
+
+// anyCustomFieldValues reports whether one of commodities has a custom field
+// value.
+func anyCustomFieldValues(commodities []*models.Commodity) bool {
+	for _, c := range commodities {
+		if c != nil && len(c.CustomFields) > 0 {
+			return true
+		}
+	}
+	return false
 }

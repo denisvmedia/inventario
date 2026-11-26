@@ -50,6 +50,7 @@ import {
   type ClassifiedServerError,
   classifyServerError,
   extractFieldErrorCodes,
+  getServerErrorCode,
 } from "@/lib/server-error"
 import { ServerErrorBanner } from "@/components/ServerErrorBanner"
 import { useQueryClient } from "@tanstack/react-query"
@@ -87,7 +88,11 @@ import type {
 } from "@/features/commodities/api"
 import { CustomFieldsEditor } from "@/components/customFields/CustomFieldsEditor"
 import { useCustomFieldsBinding } from "@/components/customFields/useCustomFieldsBinding"
-import type { CustomField, CustomFieldValues } from "@/features/customFields/api"
+import {
+  CUSTOM_FIELD_INVALID_VALUE,
+  type CustomField,
+  type CustomFieldValues,
+} from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
 import { customFieldsRequest } from "@/features/customFields/values"
 import {
@@ -1024,6 +1029,9 @@ export function CommodityFormDialog({
       // first failing field. Necessary even with FE schema mirrors —
       // BE rules can be stricter than what the FE schema models, and
       // we should never silently round-trip a 422.
+      // A refused custom field value often means a field or an option was
+      // deleted meanwhile; read the group's fields again.
+      if (getServerErrorCode(err) === CUSTOM_FIELD_INVALID_VALUE) void customFieldsQuery.refetch()
       const fieldResult = applyServerFieldErrors(err, setError, {
         fields: Object.values(STEP_FIELDS).flat(),
       })
@@ -1138,6 +1146,8 @@ export function CommodityFormDialog({
     if (values.custom_fields !== undefined) {
       apply("custom_fields", { ...(getValues("custom_fields") ?? {}), ...values.custom_fields })
     }
+    // The type read brings its template, after the values read so those win.
+    if (values.type !== undefined) customFieldsBinding.applyTemplate(values.type)
     // #1983 Part A: keep the photos / PDFs the user scanned. They join the
     // Files-step queue (deduped against anything already staged there), so
     // the existing post-create uploadPendingFiles() attaches them with the
@@ -1450,6 +1460,7 @@ export function CommodityFormDialog({
                 locations={locations}
                 showStatus={mode === "edit"}
                 showLocationPicker={mode === "edit"}
+                onTypeChange={customFieldsBinding.applyTemplate}
                 onShortNameInput={(value: string) => {
                   shortNameEdited.current = value.trim() !== ""
                 }}
@@ -1730,6 +1741,7 @@ function BasicsStep(props: any) {
     locations,
     showStatus,
     showLocationPicker,
+    onTypeChange,
     onShortNameInput,
   } = props
   return (
@@ -1826,7 +1838,10 @@ function BasicsStep(props: any) {
               <ItemTypeField
                 id="commodity-type"
                 value={field.value ?? ""}
-                onChange={field.onChange}
+                onChange={(slug: string) => {
+                  field.onChange(slug)
+                  onTypeChange?.(slug)
+                }}
                 ariaRequired
                 invalid={!!errors.type}
                 errorMessage={errors.type?.message}

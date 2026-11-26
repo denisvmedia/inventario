@@ -49,6 +49,7 @@ import type {
   TagAttrs,
 } from "@/features/search/api"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { useCustomFieldName } from "@/features/customFields/hooks"
 import { cn } from "@/lib/utils"
 
 // /g/:slug/search?q=... — global search across the active group's
@@ -583,12 +584,13 @@ function CommodityCard({
   tagLabel: (slug: string) => string
 }) {
   const { t } = useTranslation()
+  const customFieldName = useCustomFieldName()
   const title = resource.attributes.name ?? resource.id
   return (
     <CardShell
       href={groupSlug ? commodityHref(groupSlug, resource.id) : null}
       title={title}
-      subtitle={commoditySubtitle(t, resource.attributes, match, tagLabel)}
+      subtitle={commoditySubtitle(t, resource.attributes, match, tagLabel, customFieldName)}
       icon={<Package className="size-4 text-muted-foreground" aria-hidden="true" />}
       testId={`result-commodity-${resource.id}`}
       ariaLabel={t("search:resultCard.openItem")}
