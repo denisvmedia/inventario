@@ -20,6 +20,7 @@ export const inboxKeys = {
   list: (slug: string, opts?: InboxListOptions) =>
     [...inboxKeys.all(slug), "list", listKeySuffix(opts)] as const,
   count: (slug: string) => [...inboxKeys.all(slug), "count"] as const,
+  checks: (slug: string) => [...inboxKeys.all(slug), "checks"] as const,
 }
 
 // sameInboxList reports whether two list keys name pages of the same list:

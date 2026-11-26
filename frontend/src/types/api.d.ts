@@ -4084,6 +4084,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Only items with no tags; cannot be combined with tags or tags_exclude */
                     no_tags?: boolean;
+                    /** @description Only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Only items whose purchase price is unknown; a known zero is a price */
+                    no_purchase_price?: boolean;
+                    /** @description Only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Custom field condition as <field id>:<op>[:<value>], op one of set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field the group does not have matches no item */
                     cf?: string[];
                     /** @description Include drafts and non-in_use commodities (default true; false hides them) */
@@ -4628,6 +4634,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Validated as for GET /commodities, then set aside for the counts */
                     no_tags?: boolean;
+                    /** @description Only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Only items whose purchase price is unknown */
+                    no_purchase_price?: boolean;
+                    /** @description Only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Custom field condition, as for GET /commodities */
                     cf?: string[];
                     /** @description Accepted and ignored */
@@ -4860,8 +4872,8 @@ export type paths = {
          * Set or clear the commodity cover photo
          * @description Sets the explicit cover-photo override (issue #1451 option B)
          *     or clears it when `attributes.file_id` is null/empty. The
-         *     file must already be attached to this commodity and be an
-         *     image.
+         *     file must already be attached to this commodity among its
+         *     photos and be an image.
          */
         patch: {
             parameters: {
@@ -4892,6 +4904,75 @@ export type paths = {
                     };
                 };
                 /** @description Commodity or file not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description User-side request problem */
+                422: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        trace?: never;
+    };
+    "/g/{groupSlug}/commodities/{commodityID}/draft": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Mark an item as draft or as reviewed
+         * @description Sets (`true`) or clears (`false`) the draft mark of an item
+         *     and changes no other field. The item with the new mark must
+         *     pass the validation a full update runs.
+         */
+        patch: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Commodity ID */
+                    commodityID: string;
+                };
+                cookie?: never;
+            };
+            /** @description The draft mark */
+            requestBody: {
+                content: {
+                    "application/vnd.api+json": components["schemas"]["jsonapi.CommodityDraftMarkRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.CommodityResponse"];
+                    };
+                };
+                /** @description Commodity not found */
                 404: {
                     headers: {
                         [name: string]: unknown;
@@ -8142,6 +8223,56 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/inbox/checks": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Count the inbox's quality checks
+         * @description The items of the group that lack one piece of information: no location, no
+         *     photo, an unknown purchase price, an unknown purchase date, no tags. Missing
+         *     information is not unfinished work, so these items are not in the inbox and
+         *     its counts do not include them. Each check carries its item query in the
+         *     parameter names of GET /g/{groupSlug}/commodities and the total that list
+         *     reports for it. The queries use the list's default view: items in use that
+         *     are not marked as draft. An unknown value counts as missing whether or not
+         *     the item was reviewed with it; a known zero price is a price. Every member of
+         *     the group can read it.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.InboxChecksResponse"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/inbox/count": {
         parameters: {
             query?: never;
@@ -10262,6 +10393,12 @@ export type paths = {
                     tags_exclude?: string[];
                     /** @description Commodities only: only items with no tags; cannot be combined with tags or tags_exclude */
                     no_tags?: boolean;
+                    /** @description Commodities only: only items without a photo; cannot be combined with trashed */
+                    no_photo?: boolean;
+                    /** @description Commodities only: only items whose purchase price is unknown */
+                    no_purchase_price?: boolean;
+                    /** @description Commodities only: only items whose purchase date is unknown */
+                    no_purchase_date?: boolean;
                     /** @description Commodities only: custom field condition, as for GET /commodities */
                     cf?: string[];
                     /** @description Commodities only: filter by status (in_use, sold, lost, disposed, written_off); repeat to OR */
@@ -14924,6 +15061,20 @@ export type components = {
              */
             type: "commodity_drafts";
         };
+        "jsonapi.CommodityDraftMarkRequest": {
+            data?: components["schemas"]["jsonapi.CommodityDraftMarkRequestData"];
+        };
+        "jsonapi.CommodityDraftMarkRequestAttributes": {
+            draft?: boolean;
+        };
+        "jsonapi.CommodityDraftMarkRequestData": {
+            attributes?: components["schemas"]["jsonapi.CommodityDraftMarkRequestAttributes"];
+            /**
+             * @example commodity_draft_mark
+             * @enum {string}
+             */
+            type?: "commodity_draft_mark";
+        };
         "jsonapi.CommodityDraftPromoteMeta": {
             /** @example 6f1c2a9e-4b7d-4c1a-9f0e-2d3b5a7c8e10 */
             promotion_key: string;
@@ -16078,6 +16229,20 @@ export type components = {
              * @enum {string}
              */
             type?: "exports";
+        };
+        "jsonapi.InboxCheck": {
+            /** @example 4 */
+            count?: number;
+            /**
+             * @example no_photo
+             * @enum {string}
+             */
+            key?: "no_location" | "no_photo" | "no_purchase_price" | "no_purchase_date" | "untagged";
+            /** @example include_inactive=false&no_photo=true */
+            query?: string;
+        };
+        "jsonapi.InboxChecksResponse": {
+            data?: components["schemas"]["jsonapi.InboxCheck"][];
         };
         "jsonapi.InboxCountResponse": {
             data?: components["schemas"]["jsonapi.InboxCounts"];

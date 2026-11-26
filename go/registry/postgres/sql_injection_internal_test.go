@@ -123,7 +123,7 @@ func listQueries() []listQuery {
 					{FieldID: v, Type: models.CustomFieldTypeItemLink, Op: registry.CustomFieldOpEq, Text: v},
 					{FieldID: v, Type: models.CustomFieldTypeNumber, Op: registry.CustomFieldOpUnset},
 				},
-			}, commodityListTables{commodities: "commodities", loans: "commodity_loans", customFieldValues: "commodity_custom_field_values"}))
+			}, testCommodityTables))
 		}},
 		{"files", func(v string) (string, []any) {
 			fileType := models.FileType(v)

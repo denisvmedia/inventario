@@ -6,9 +6,11 @@ import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { INTAKE_POLL_MS } from "@/features/intake/hooks"
 
 import {
+  getInboxChecks,
   getInboxCount,
   listInbox,
   setCommodityDraft,
+  type InboxCheck,
   type InboxCounts,
   type InboxListOptions,
   type InboxPage,
@@ -47,14 +49,26 @@ export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryO
 }
 
 // The server's count of the inbox, for the sidebar and the dashboard. It
-// counts what the group holds, each record once.
+// counts what the group holds, each record once. It has no placeholder: the
+// key changes only with the group, and another group's count must not stand
+// in while this group's loads.
 export function useInboxCount({ enabled = true }: QueryOptions = {}) {
   const slug = useSlug()
   return useQuery<InboxCounts>({
     queryKey: inboxKeys.count(slug),
     queryFn: ({ signal }) => getInboxCount(signal),
     enabled: enabled && !!slug,
-    placeholderData: (prev) => prev,
+  })
+}
+
+// The quality checks next to the inbox, with the server's counts. Missing
+// details are not unfinished work, so these never add to useInboxCount.
+export function useInboxChecks({ enabled = true }: QueryOptions = {}) {
+  const slug = useSlug()
+  return useQuery<InboxCheck[]>({
+    queryKey: inboxKeys.checks(slug),
+    queryFn: ({ signal }) => getInboxChecks(signal),
+    enabled: enabled && !!slug,
   })
 }
 

@@ -33,6 +33,9 @@ const FULL: CommodityQuery = {
   warrantyStatuses: ["active", "expired"],
   lentOut: true,
   tags: { include: ["red", "garage"], mode: "any", exclude: ["broken"], untagged: false },
+  noPhoto: true,
+  noPurchasePrice: true,
+  noPurchaseDate: true,
   customFields: ["f2:in:o2,o1", "f1:gte:10"],
   sort: "purchase_date",
   sortDesc: true,
@@ -93,7 +96,8 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
   it("keeps an unreadable flag or tag mode, so the server can refuse it", () => {
     const q = parseCommodityQuery(
       new URLSearchParams(
-        "unassigned=invalid&inactive=maybe&lent_out=yes&no_tags=x&tags=red&tag_mode=some"
+        "unassigned=invalid&inactive=maybe&lent_out=yes&no_tags=x&tags=red&tag_mode=some" +
+          "&no_photo=perhaps&no_purchase_price=unknown&no_purchase_date=2"
       )
     )
     expect(q).toMatchObject({
@@ -101,12 +105,18 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
       includeInactive: false,
       lentOut: false,
       tags: { include: ["red"], mode: "all", exclude: [], untagged: false },
+      noPhoto: false,
+      noPurchasePrice: false,
+      noPurchaseDate: false,
       unreadable: {
         unassigned: "invalid",
         inactive: "maybe",
         lent_out: "yes",
         no_tags: "x",
         tag_mode: "some",
+        no_photo: "perhaps",
+        no_purchase_price: "unknown",
+        no_purchase_date: "2",
       },
     })
     // Written back as they were, so the URL keeps them.
@@ -117,9 +127,19 @@ describe("parseCommodityQuery / writeCommodityQuery", () => {
 
   it("reads booleans and tag modes the way the server does", () => {
     const q = parseCommodityQuery(
-      new URLSearchParams("unassigned=TRUE&inactive=0&lent_out=false&no_tags=&tag_mode=all")
+      new URLSearchParams(
+        "unassigned=TRUE&inactive=0&lent_out=false&no_tags=&tag_mode=all" +
+          "&no_photo=1&no_purchase_price=True&no_purchase_date=0"
+      )
     )
-    expect(q).toMatchObject({ unassigned: true, includeInactive: false, lentOut: false })
+    expect(q).toMatchObject({
+      unassigned: true,
+      includeInactive: false,
+      lentOut: false,
+      noPhoto: true,
+      noPurchasePrice: true,
+      noPurchaseDate: false,
+    })
     expect(q.tags.untagged).toBe(false)
     expect(q.unreadable).toEqual({})
   })
@@ -240,6 +260,9 @@ describe("hasCommodityFilters", () => {
         tags: { ...DEFAULT_COMMODITY_QUERY.tags, untagged: true },
       })
     ).toBe(true)
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, noPhoto: true })).toBe(true)
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, noPurchasePrice: true })).toBe(true)
+    expect(hasCommodityFilters({ ...DEFAULT_COMMODITY_QUERY, noPurchaseDate: true })).toBe(true)
     expect(hasCommodityFilters(FULL)).toBe(true)
   })
 })
@@ -267,6 +290,9 @@ describe("listOptionsToParams", () => {
       tags: ["garage,red"],
       tag_mode: ["any"],
       tags_exclude: ["broken"],
+      no_photo: ["true"],
+      no_purchase_price: ["true"],
+      no_purchase_date: ["true"],
       cf: ["f1:gte:10", "f2:in:o1,o2"],
     })
   })
@@ -383,6 +409,21 @@ describe("commodityQueryToApiQuery / commodityQueryFromApiQuery", () => {
       expect(unreadApiQueryParam("lent_out=true")).toBeUndefined()
       expect(unreadApiQueryParam("q=+drill+&sort=name")).toBeUndefined()
       expect(unreadApiQueryParam("sort=name&tags=red%2Cblue")).toBeUndefined()
+    })
+
+    it("reads the queries of the inbox's checks", () => {
+      for (const raw of [
+        "include_inactive=false&unassigned=true",
+        "include_inactive=false&no_photo=true",
+        "include_inactive=false&no_purchase_price=true",
+        "include_inactive=false&no_purchase_date=true",
+        "include_inactive=false&no_tags=true",
+      ]) {
+        expect(unreadApiQueryParam(raw)).toBeUndefined()
+      }
+      const q = commodityQueryFromApiQuery("include_inactive=false&no_purchase_date=true")
+      expect(q).toEqual({ ...DEFAULT_COMMODITY_QUERY, noPurchaseDate: true })
+      expect(commodityListHref("home", q)).toBe("/g/home/commodities?no_purchase_date=1")
     })
 
     // Go's canonical form escapes the colons and sorts the conditions and

@@ -41,6 +41,12 @@ export interface CommodityQuery {
   warrantyStatuses: string[]
   lentOut: boolean
   tags: CommodityTagFilter
+  // Items that lack a photo, a purchase price or a purchase date. An
+  // unknown value is missing whether or not the item was reviewed with it;
+  // a known zero price is a price.
+  noPhoto: boolean
+  noPurchasePrice: boolean
+  noPurchaseDate: boolean
   // Custom field conditions as the API spells them, "<field id>:<op>" or
   // "<field id>:<op>:<value>"; an item has to meet all of them. They are
   // kept as written, so a condition the server refuses comes back as a 400.
@@ -59,7 +65,15 @@ export interface CommodityQuery {
 
 // The page-URL parameters whose value is parsed into a boolean or a tag mode
 // rather than kept as written.
-export type UnreadableParam = "unassigned" | "inactive" | "lent_out" | "tag_mode" | "no_tags"
+export type UnreadableParam =
+  | "unassigned"
+  | "inactive"
+  | "lent_out"
+  | "tag_mode"
+  | "no_tags"
+  | "no_photo"
+  | "no_purchase_price"
+  | "no_purchase_date"
 export type UnreadableValues = Partial<Record<UnreadableParam, string>>
 
 // The API name of each of those parameters.
@@ -69,6 +83,9 @@ const UNREADABLE_API_PARAM: Record<UnreadableParam, string> = {
   lent_out: "lent_out",
   tag_mode: "tag_mode",
   no_tags: "no_tags",
+  no_photo: "no_photo",
+  no_purchase_price: "no_purchase_price",
+  no_purchase_date: "no_purchase_date",
 }
 
 export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
@@ -82,6 +99,9 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   warrantyStatuses: [],
   lentOut: false,
   tags: { include: [], mode: "all", exclude: [], untagged: false },
+  noPhoto: false,
+  noPurchasePrice: false,
+  noPurchaseDate: false,
   customFields: [],
   sort: "name",
   sortDesc: false,
@@ -105,6 +125,9 @@ const URL_PARAM = {
   tagMode: "tag_mode",
   tagsExclude: "tags_exclude",
   noTags: "no_tags",
+  noPhoto: "no_photo",
+  noPurchasePrice: "no_purchase_price",
+  noPurchaseDate: "no_purchase_date",
   customField: "cf",
   sort: "sort",
 } as const
@@ -198,6 +221,9 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
       exclude: commaList(params, URL_PARAM.tagsExclude),
       untagged: flag(params, URL_PARAM.noTags, unreadable),
     },
+    noPhoto: flag(params, URL_PARAM.noPhoto, unreadable),
+    noPurchasePrice: flag(params, URL_PARAM.noPurchasePrice, unreadable),
+    noPurchaseDate: flag(params, URL_PARAM.noPurchaseDate, unreadable),
     customFields: unique(
       params
         .getAll(URL_PARAM.customField)
@@ -235,6 +261,9 @@ export function writeCommodityQuery(
   if (query.tags.mode === "any") next.set(URL_PARAM.tagMode, "any")
   if (query.tags.exclude.length > 0) next.set(URL_PARAM.tagsExclude, query.tags.exclude.join(","))
   if (query.tags.untagged) next.set(URL_PARAM.noTags, "1")
+  if (query.noPhoto) next.set(URL_PARAM.noPhoto, "1")
+  if (query.noPurchasePrice) next.set(URL_PARAM.noPurchasePrice, "1")
+  if (query.noPurchaseDate) next.set(URL_PARAM.noPurchaseDate, "1")
   for (const v of query.customFields) next.append(URL_PARAM.customField, v)
   if (query.sort !== "name" || query.sortDesc || query.customFieldSort) {
     next.set(URL_PARAM.sort, sortValue(query))
@@ -332,6 +361,9 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.tags.include.length > 0 ||
     query.tags.exclude.length > 0 ||
     query.tags.untagged ||
+    query.noPhoto ||
+    query.noPurchasePrice ||
+    query.noPurchaseDate ||
     query.customFields.length > 0 ||
     unreadableEntries(query.unreadable).length > 0
   )
@@ -354,6 +386,9 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     tagMode: query.tags.include.length > 0 && query.tags.mode === "any" ? "any" : undefined,
     tagsExclude: query.tags.exclude.length > 0 ? query.tags.exclude : undefined,
     noTags: query.tags.untagged || undefined,
+    noPhoto: query.noPhoto || undefined,
+    noPurchasePrice: query.noPurchasePrice || undefined,
+    noPurchaseDate: query.noPurchaseDate || undefined,
     customFields: query.customFields.length > 0 ? query.customFields : undefined,
     sort: query.sort,
     sortDesc: query.sortDesc,
@@ -437,6 +472,9 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
     params.set("tags_exclude", sorted(opts.tagsExclude).join(","))
   }
   if (opts.noTags) params.set("no_tags", "true")
+  if (opts.noPhoto) params.set("no_photo", "true")
+  if (opts.noPurchasePrice) params.set("no_purchase_price", "true")
+  if (opts.noPurchaseDate) params.set("no_purchase_date", "true")
   for (const cond of new Set(sorted(opts.customFields?.map(canonicalCustomFieldCondition)))) {
     params.append("cf", cond)
   }

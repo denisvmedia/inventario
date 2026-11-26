@@ -143,12 +143,18 @@ export interface ListCommoditiesOptions {
   tagMode?: TagMatchMode
   tagsExclude?: string[]
   noTags?: boolean
+  // Missing-data filters (#2794): items without a photo, with an unknown
+  // purchase price, with an unknown purchase date. A known zero price is a
+  // price. noPhoto cannot be combined with trashed (the BE answers 400).
+  noPhoto?: boolean
+  noPurchasePrice?: boolean
+  noPurchaseDate?: boolean
   // Custom field conditions (#2803), each "<field id>:<op>[:<value>]"; the
   // BE AND-s them. The API param is `cf` (repeatable).
   customFields?: string[]
   // true selects the items in Trash instead of the live ones. Not part of
   // the page URL: the items list shows live items only. Cannot be combined
-  // with lentOut (the BE answers 400).
+  // with lentOut or noPhoto (the BE answers 400).
   trashed?: boolean
   // Values the page URL carried for a boolean filter or tag_mode that could
   // not be read, by API parameter name. Sent as written so the BE answers
@@ -340,6 +346,24 @@ export async function updateCommodity(id: string, req: UpdateCommodityRequest): 
 
 export async function deleteCommodity(id: string): Promise<void> {
   await http.del<void>(`/commodities/${encodeURIComponent(id)}`)
+}
+
+// Sets (true) or clears (false) the draft mark of an item and changes no
+// other field, so an edit saved in the meantime stays. The server refuses
+// the mark of an item that a full save would refuse, with the same field
+// errors.
+export async function setCommodityDraftMark(id: string, draft: boolean): Promise<Commodity> {
+  const req: Schema<"jsonapi.CommodityDraftMarkRequest"> = {
+    data: { type: "commodity_draft_mark", attributes: { draft } },
+  }
+  const body = await http.patch<CommodityResponseEnvelope>(
+    `/commodities/${encodeURIComponent(id)}/draft`,
+    req
+  )
+  if (!body.data?.attributes) {
+    throw new Error(`setCommodityDraftMark ${id} response missing data.attributes`)
+  }
+  return { ...body.data.attributes, id: body.data.id }
 }
 
 // Sets or clears the explicit cover-photo override for a commodity

@@ -253,6 +253,35 @@ func TestResolve_LentOutOnTheMemoryBackend(t *testing.T) {
 	c.Check(listNames(page), qt.DeepEquals, []string{"Bucket"})
 }
 
+func TestResolve_NoPhotoOnTheMemoryBackend(t *testing.T) {
+	c := qt.New(t)
+	ctx, set := newMemorySet(c)
+	pictured := seedItem(c, ctx, set, "Lamp")
+	seedItem(c, ctx, set, "Shelf")
+	_, err := set.FileRegistry.Create(ctx, models.FileEntity{
+		Title:    "lamp.jpg",
+		Type:     models.FileTypeImage,
+		Category: models.FileCategoryImages,
+		Links: []models.FileLink{{
+			EntityType: models.FileLinkCommodity, EntityID: pictured.ID, Meta: models.FileLinkMetaImages,
+		}},
+		File: &models.File{Path: "lamp", OriginalPath: "files/lamp.jpg", Ext: ".jpg", MIMEType: "image/jpeg"},
+	})
+	c.Assert(err, qt.IsNil)
+
+	q := commodityquery.Query{IncludeInactive: true, NoPhoto: true}
+	opts, err := commodityquery.Resolve(ctx, set, q)
+	c.Assert(err, qt.IsNil)
+	c.Check(opts.PhotoCommodityIDs, qt.DeepEquals, []string{pictured.ID})
+
+	page, err := commodityquery.List(ctx, set, q, 0, 10)
+	c.Assert(err, qt.IsNil)
+	c.Check(listNames(page), qt.DeepEquals, []string{"Shelf"})
+	counts, err := commodityquery.CountEach(ctx, set, []commodityquery.Query{q})
+	c.Assert(err, qt.IsNil)
+	c.Check(counts, qt.DeepEquals, []int{page.Total})
+}
+
 func TestExplain_SkipsItemsTheRuleDoesNotMatch(t *testing.T) {
 	c := qt.New(t)
 	red := &models.Commodity{Name: "Red drill"}

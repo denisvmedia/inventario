@@ -4,7 +4,7 @@
 // record, with every reason it is there for. The server merges the sources
 // and counts each record once, so the counter never comes from the length
 // of a page.
-import { getCommodity, updateCommodity, type Commodity } from "@/features/commodities/api"
+import { setCommodityDraftMark, type Commodity } from "@/features/commodities/api"
 import {
   toIntakeState,
   toIntakeSummary,
@@ -17,6 +17,7 @@ import type { Schema } from "@/types"
 type InboxEnvelope = Schema<"jsonapi.InboxResponse">
 type InboxCountEnvelope = Schema<"jsonapi.InboxCountResponse">
 type InboxCountsView = Schema<"jsonapi.InboxCounts">
+type InboxChecksEnvelope = Schema<"jsonapi.InboxChecksResponse">
 
 // The reasons this client knows how to show and act on, in display order.
 // An entry can carry a reason a newer server added; the page shows it
@@ -100,10 +101,28 @@ export async function getInboxCount(signal?: AbortSignal): Promise<InboxCounts> 
   return toCounts(body.data)
 }
 
-// setCommodityDraft marks an item as draft or clears the mark, keeping the
-// rest of the item as the server has it. The update replaces the item, so
-// the current values are read first.
-export async function setCommodityDraft(id: string, draft: boolean): Promise<Commodity> {
-  const { commodity } = await getCommodity(id)
-  return updateCommodity(id, { ...commodity, draft })
+// An optional quality check next to the inbox: the items that lack one
+// piece of information. It is not part of the inbox or its counts. query is
+// the check's item query in the API's parameter names; count is the total
+// the items list reports for it.
+export interface InboxCheck {
+  key: string
+  query: string
+  count: number
+}
+
+export async function getInboxChecks(signal?: AbortSignal): Promise<InboxCheck[]> {
+  const body = await http.get<InboxChecksEnvelope>("/inbox/checks", { signal })
+  return (body.data ?? []).map((c) => ({
+    key: c.key ?? "",
+    query: c.query ?? "",
+    count: c.count ?? 0,
+  }))
+}
+
+// setCommodityDraft marks an item as draft or clears the mark. The server
+// changes the mark alone, so an edit of the item saved at the same time
+// stays.
+export function setCommodityDraft(id: string, draft: boolean): Promise<Commodity> {
+  return setCommodityDraftMark(id, draft)
 }

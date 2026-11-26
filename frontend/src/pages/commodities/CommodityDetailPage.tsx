@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from "react"
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Link,
   useLocation,
@@ -7,6 +7,7 @@ import {
   useParams,
   useSearchParams,
 } from "react-router-dom"
+import { useQueryClient } from "@tanstack/react-query"
 import { useTranslation } from "react-i18next"
 import {
   ArrowLeft,
@@ -114,7 +115,7 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
 }
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type { Commodity } from "@/features/commodities/api"
+import type { Commodity, UpdateCommodityRequest } from "@/features/commodities/api"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { labelsPageHref } from "@/features/labels/links"
 import { useCurrentGroup } from "@/features/group/GroupContext"
@@ -125,6 +126,13 @@ import {
   commoditiesListSource,
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
+import { commodityKeys } from "@/features/commodities/keys"
+import { useMyGroupRole } from "@/features/group/roles"
+import { setCommodityDraft } from "@/features/inbox/api"
+import { useSetItemDraft } from "@/features/inbox/hooks"
+import { inboxReviewSource, isInboxReviewContext } from "@/features/inbox/listContext"
+import { reviewRefusal } from "@/features/inbox/reviewRefusal"
+import { InboxReviewBar } from "@/components/items/InboxReviewBar"
 import {
   commodityListHref,
   commoditySellerHref,
@@ -135,7 +143,8 @@ import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
-import { useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
+import { fetchRecordAfter, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
+import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatCurrency, formatDate } from "@/lib/intl"
 import {
   listContextHref,
@@ -246,12 +255,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const areas = useAreas({ enabled })
   const locations = useLocations({ enabled })
   const itemTypes = useItemTypeLookup()
-  const update = useUpdateCommodity(id)
+  const update = useUpdateCommodity()
   const remove = useDeleteCommodity()
   const undoDelete = useUndoItemDelete()
-  const setCover = useSetCommodityCover(id)
+  const setCover = useSetCommodityCover()
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const queryClient = useQueryClient()
+  const askConfirm = useConfirm()
   // The Files tab label gets a count badge driven by this query.
   // perPage=1 keeps the round-trip cheap — we only need `meta.total`.
   // Gated on `enabled && id` so it doesn't fire before the slug
@@ -280,12 +290,15 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // "Save and next" can land on the next item's form.
   const editMatch = useMatch({ path: "/g/:groupSlug/commodities/:id/edit", end: true })
   const editing = !!editMatch
+  // Each dialog of the page keeps the item it was opened on and writes to
+  // that item alone. Moving to another item, even one already loaded,
+  // closes it, so what was entered never lands on the wrong item.
+  //
   // The step-by-step dialog, opened from the edit form's "All fields" with
   // the values entered so far. Null while closed.
-  const [dialogDraft, setDialogDraft] = useState<Commodity | null>(null)
-  // The Details tab field being edited in place (#2795), if any, with the
-  // item it was opened on. Moving to another item, even one already loaded,
-  // closes it, so a draft never lands on the wrong item.
+  const [allFieldsOn, setAllFieldsOn] = useState<{ id: string; values: Commodity } | null>(null)
+  const dialogDraft = allFieldsOn?.id === id ? allFieldsOn.values : null
+  // The Details tab field being edited in place (#2795), if any.
   const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
   const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
   const setQuickEdit = (field: QuickEditField | null) =>
@@ -294,18 +307,39 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // the page-level drop catcher; the upload dialog reads them on open
   // and queues them in the select step. The button-triggered open
   // path leaves it empty so the user picks files inside the dialog.
-  const [uploadOpen, setUploadOpen] = useState(false)
+  const [uploadFor, setUploadFor] = useState<string | null>(null)
+  const uploadOpen = uploadFor === id
   const [pendingDropFiles, setPendingDropFiles] = useState<File[]>([])
   // #1611: forward-transition target gates the StatusTransitionDialog.
   // Null = dialog closed. Revert keeps the lighter useConfirm path
   // (no metadata to capture).
-  const [transitionTarget, setTransitionTarget] = useState<TerminalCommodityStatusValue | null>(
-    null
-  )
+  const [transitionOn, setTransitionOn] = useState<{
+    id: string
+    target: TerminalCommodityStatusValue
+  } | null>(null)
+  const transitionTarget = transitionOn?.id === id ? transitionOn.target : null
+  // An open dialog or confirm holds the review walk on the item: what it
+  // saves belongs to this item. Read after an await, where the render's
+  // own values are stale.
+  const dialogOpen = useRef(false)
+  const confirmOpen = useRef(false)
+  useEffect(() => {
+    dialogOpen.current =
+      quickEdit !== null || transitionTarget !== null || uploadOpen || dialogDraft !== null
+  }, [quickEdit, transitionTarget, uploadOpen, dialogDraft])
+  const holdsItem = () => dialogOpen.current || confirmOpen.current
+  async function confirm(options: Parameters<typeof askConfirm>[0]) {
+    confirmOpen.current = true
+    try {
+      return await askConfirm(options)
+    } finally {
+      confirmOpen.current = false
+    }
+  }
   const dropZone = useFileDropZone({
     onFiles: (files) => {
       setPendingDropFiles(files)
-      setUploadOpen(true)
+      setUploadFor(id)
     },
     // Don't catch new drags while the dialog is already open — its
     // own dropzone takes over so a second drop doesn't bounce through
@@ -317,7 +351,9 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // (lib/list-context.ts): Back returns to it, and Previous / Next / Save
   // and next walk it in its filters and order (hooks/useListNavigation.ts).
   // The list queries wait for the group, as the list page does, so both
-  // build the same query keys and share the cached pages.
+  // build the same query keys and share the cached pages. Opened from the
+  // inbox, it walks the items to review the same way, and the review bar
+  // marks each one as reviewed (features/inbox/listContext.ts).
   const location = useLocation()
   const groupReady = !!currentGroup?.slug
   const from = useMemo(
@@ -325,15 +361,26 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     [searchParams, slug]
   )
   const itemsList = from && slug && isCommoditiesListContext(from, slug) ? from : null
-  const source = useMemo(
-    () => (itemsList && groupReady && slug ? commoditiesListSource(itemsList, slug) : null),
-    [itemsList, groupReady, slug]
-  )
+  const reviewList = from && slug && isInboxReviewContext(from, slug) ? from : null
+  const walked = itemsList ?? reviewList
+  const source = useMemo(() => {
+    if (!groupReady || !slug) return null
+    if (itemsList) return commoditiesListSource(itemsList, slug)
+    if (reviewList) return inboxReviewSource(reviewList, slug)
+    return null
+  }, [itemsList, reviewList, groupReady, slug])
   const nav = useListNavigation({ source, currentId: id || undefined })
   // The list context to carry: on the list page that holds the item.
-  const currentContext = itemsList ? withListContextPage(itemsList, nav.page) : from
-  const contextAt = (page: number) =>
-    itemsList ? withListContextPage(itemsList, page) : currentContext
+  const currentContext = walked ? withListContextPage(walked, nav.page) : from
+  const contextAt = (page: number) => (walked ? withListContextPage(walked, page) : currentContext)
+  const role = useMyGroupRole()
+  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const setDraft = useSetItemDraft()
+  // A review and the item's own saves are not started together: a quick
+  // save sends the item as the page last read it, draft mark included, and
+  // would put the mark back if it landed after the review.
+  const itemSaving = update.isPending || setDraft.isPending
+  const guardLocation = useLocationGuard()
 
   // Navigates without leaving the sheet: the sheet's background (the list
   // behind it) moves along to the list page the context now points at.
@@ -379,6 +426,50 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   function goToNeighbor(target: ListNeighbor, edit: boolean) {
     const ctx = contextAt(target.page)
     go(itemHref(target.id, ctx, edit), ctx)
+  }
+  // Clears the draft mark of an item opened from the inbox, then moves to
+  // the next item to review, or back to the inbox after the last one. The
+  // next item is read from the list after the save: the one that followed
+  // this item while the list still holds it, else the one now in this
+  // item's place (hooks/useListNavigation.ts, fetchRecordAfter). A user who
+  // moved on while the save ran stays where they went, one who opened a
+  // dialog or a confirm stays on the item, and a list that could not be
+  // read is not taken for one that ended: the page stays on the item.
+  async function markReviewedAndNext(title: string) {
+    const walk = source
+    const offset = nav.position === null ? null : nav.position - 1
+    const followed = nav.next?.id ?? null
+    const backToList = currentContext
+    const stillHere = guardLocation()
+    try {
+      await setDraft.mutateAsync({ id, draft: false })
+    } catch (err) {
+      const problems = reviewRefusal(t, err)
+      if (problems) toast.error(t("inbox:reviewFailed"), { description: problems })
+      else toast.error(parseServerError(err, t("inbox:reviewFailed")))
+      return
+    }
+    toast.success(t("inbox:reviewed", { title }), {
+      action: {
+        label: t("inbox:undo"),
+        onClick: () => {
+          setCommodityDraft(id, true).then(
+            () => void queryClient.invalidateQueries({ queryKey: commodityKeys.group(slug ?? "") }),
+            (err: unknown) => toast.error(parseServerError(err, t("inbox:undoFailed")))
+          )
+        },
+      },
+    })
+    if (!walk || offset === null) return
+    let next: ListNeighbor | null
+    try {
+      next = await fetchRecordAfter(queryClient, walk, offset, { skipId: id, expected: followed })
+    } catch {
+      return
+    }
+    if (!stillHere() || holdsItem()) return
+    if (next) goToNeighbor(next, false)
+    else if (backToList) navigate(listContextHref(backToList))
   }
 
   const commodity = detail.data?.commodity
@@ -506,10 +597,11 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   const assetId = formatAssetId(commodity.asset_number)
 
   // Save from the step-by-step dialog: closes it and the edit form under it.
-  async function handleDialogSave(values: Parameters<typeof update.mutateAsync>[0]) {
-    await update.mutateAsync(values)
+  async function handleDialogSave(values: UpdateCommodityRequest) {
+    if (!allFieldsOn) return
+    await update.mutateAsync({ id: allFieldsOn.id, values })
     toast.success(t("commodities:toast.updated"))
-    setDialogDraft(null)
+    setAllFieldsOn(null)
     stopEditing()
   }
 
@@ -523,7 +615,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     if (!commodity) return false
     const savedOn = id
     try {
-      await update.mutateAsync({ ...commodity, ...patch })
+      await update.mutateAsync({ id: savedOn, values: { ...commodity, ...patch } })
       toast.success(t("commodities:toast.updated"))
       setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
       return true
@@ -535,6 +627,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
 
   async function handleDelete() {
     if (!commodity?.id) return
+    const deleting = commodity.id
     const ok = await confirm({
       title: t("commodities:delete.title", { name: commodity.name ?? "" }),
       description: t("commodities:delete.description"),
@@ -543,8 +636,8 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     })
     if (!ok) return
     try {
-      await remove.mutateAsync(commodity.id)
-      toast.success(t("commodities:toast.deleted"), { action: undoDelete([commodity.id]) })
+      await remove.mutateAsync(deleting)
+      toast.success(t("commodities:toast.deleted"), { action: undoDelete([deleting]) })
       navigate(listHref)
     } catch {
       toast.error(t("commodities:toast.deleteError"))
@@ -562,9 +655,10 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   async function handleStatusTransition(next: CommodityStatusValue) {
     if (!commodity) return
     if (next !== "in_use") {
-      setTransitionTarget(next)
+      setTransitionOn({ id, target: next })
       return
     }
+    const reverting = id
     const ok = await confirm({
       title: t("commodities:detail.terminalStatus.revertConfirmTitle"),
       description: t("commodities:detail.terminalStatus.revertConfirmDescription"),
@@ -574,11 +668,14 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     if (!ok) return
     try {
       await update.mutateAsync({
-        ...commodity,
-        status: next,
-        status_date: undefined,
-        status_note: "",
-        sale_price: undefined,
+        id: reverting,
+        values: {
+          ...commodity,
+          status: next,
+          status_date: undefined,
+          status_note: "",
+          sale_price: undefined,
+        },
       })
       toast.success(t("commodities:toast.statusUpdated"))
     } catch {
@@ -592,17 +689,22 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // included by the dialog only for `sold`; for other targets it
   // stays absent so the BE's per-row invariant holds.
   async function handleTransitionConfirm(payload: StatusTransitionPayload) {
-    if (!commodity || !transitionTarget) return
+    // The dialog is open only on the item it was opened on, so the item
+    // shown is the one it writes.
+    if (!commodity || !transitionOn || transitionOn.id !== id) return
     try {
       await update.mutateAsync({
-        ...commodity,
-        status: transitionTarget,
-        status_date: payload.status_date,
-        status_note: payload.status_note,
-        sale_price: payload.sale_price,
+        id: transitionOn.id,
+        values: {
+          ...commodity,
+          status: transitionOn.target,
+          status_date: payload.status_date,
+          status_note: payload.status_note,
+          sale_price: payload.sale_price,
+        },
       })
       toast.success(t("commodities:toast.statusUpdated"))
-      setTransitionTarget(null)
+      setTransitionOn(null)
     } catch (err) {
       toast.error(t("commodities:toast.statusUpdateError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
@@ -621,7 +723,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     <CommodityFormDialog
       open={dialogDraft !== null}
       onOpenChange={(open) => {
-        if (!open) setDialogDraft(null)
+        if (!open) setAllFieldsOn(null)
       }}
       mode="edit"
       initialValues={dialogDraft ?? commodity}
@@ -629,7 +731,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       locations={locations.data ?? []}
       defaultCurrency={currency}
       onSubmit={handleDialogSave}
-      isPending={update.isPending}
+      isPending={itemSaving}
     />
   )
 
@@ -650,13 +752,13 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             areas={areas.data ?? []}
             locations={locations.data ?? []}
             groupCurrency={groupCurrency}
-            onSubmit={(req) => update.mutateAsync(req)}
-            isPending={update.isPending}
+            onSubmit={(req) => update.mutateAsync({ id, values: req })}
+            isPending={itemSaving}
             nav={nav}
             hrefFor={(target) => itemHref(target.id, contextAt(target.page), true)}
             onExit={stopEditing}
             onGoTo={(target) => goToNeighbor(target, true)}
-            onAllFields={setDialogDraft}
+            onAllFields={(values) => setAllFieldsOn({ id, values })}
             // The mock's form is sized for the side panel; on the full page
             // it keeps a readable column.
             className={isSheet ? undefined : "mx-auto w-full max-w-2xl"}
@@ -731,7 +833,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               data-testid="commodity-detail-back"
             >
               <ArrowLeft className="size-3.5" aria-hidden="true" />
-              {t("commodities:detail.backToList")}
+              {reviewList ? t("inbox:walk.back") : t("commodities:detail.backToList")}
             </Link>
             {nav.active ? (
               <ListPager
@@ -747,6 +849,23 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           <p className="text-sm text-muted-foreground" data-testid="commodity-detail-not-in-list">
             {t("commodities:listNav.notInList")}
           </p>
+        ) : null}
+        {reviewList && canWrite && commodity.draft ? (
+          <InboxReviewBar
+            position={nav.position}
+            total={nav.total}
+            hasNext={!!nav.next}
+            pending={itemSaving || nav.loading}
+            disabled={migrationLock.locked || quickEdit !== null}
+            disabledReason={
+              migrationLock.locked ? t("errors:lockedDuringMigration") : t("inbox:walk.finishEdit")
+            }
+            onSkip={() => {
+              if (nav.next) goToNeighbor(nav.next, false)
+            }}
+            onReview={() => void markReviewedAndNext(commodity.name ?? "")}
+            className={isSheet ? "mt-3" : undefined}
+          />
         ) : null}
 
         {/* Header (mock parity: `<SheetHeader pt-6 pb-4 px-0>`). The
@@ -906,7 +1025,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             onClick={startEditing}
             data-testid="commodity-detail-edit"
             className="flex-1 gap-1.5"
-            disabled={migrationLock.locked}
+            disabled={migrationLock.locked || setDraft.isPending}
             title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
             aria-disabled={migrationLock.locked || undefined}
           >
@@ -1008,7 +1127,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                   className={cn("gap-1.5 text-xs h-7", STATUS_TRANSITION_TEXT_TONES[s])}
                   onClick={() => handleStatusTransition(s)}
                   data-testid={`commodity-detail-transition-${s}`}
-                  disabled={update.isPending || migrationLock.locked}
+                  disabled={itemSaving || migrationLock.locked}
                   title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
                   aria-disabled={migrationLock.locked || undefined}
                 >
@@ -1079,7 +1198,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
               size="sm"
               className="-mb-1 mt-1 h-6 px-1 text-xs text-foreground"
               onClick={() => handleStatusTransition("in_use")}
-              disabled={update.isPending || migrationLock.locked}
+              disabled={itemSaving || migrationLock.locked}
               title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
               aria-disabled={migrationLock.locked || undefined}
               data-testid="commodity-detail-revert-status"
@@ -1123,7 +1242,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 quickEdit={migrationLock.locked ? null : quickEdit}
                 onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
-                saving={update.isPending}
+                saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
               />
@@ -1154,12 +1273,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 quickEdit={migrationLock.locked ? null : quickEdit}
                 onQuickEdit={migrationLock.locked ? undefined : setQuickEdit}
                 onQuickSave={handleQuickSave}
-                saving={update.isPending}
+                saving={itemSaving}
                 areas={areas.data ?? []}
                 locations={locations.data ?? []}
               />
               {commodity.id ? (
-                <CommodityRemindersSection commodityId={commodity.id} className="my-6" />
+                // One instance per item, as the tabs below; the key differs
+                // from the Details tab's beside it.
+                <CommodityRemindersSection
+                  key={`reminders-${id}`}
+                  commodityId={commodity.id}
+                  className="my-6"
+                />
               ) : null}
               {commodity.id ? <CommodityHistoryTimeline commodityId={commodity.id} /> : null}
             </>
@@ -1175,28 +1300,35 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                 // visible once the dialog closes.
                 setTab("files")
                 setPendingDropFiles([])
-                setUploadOpen(true)
+                setUploadFor(id)
               }}
             />
           ) : tab === "lend" ? (
+            // The tabs write to the item from their own dialogs. One
+            // instance per item closes an open dialog when the page moves
+            // to another item, so it never writes to that one.
             <LendTab
+              key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
             />
           ) : tab === "service" ? (
             <ServiceTab
+              key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
             />
           ) : tab === "supplies" ? (
-            <SuppliesTab commodityId={commodity?.id ?? id} />
+            <SuppliesTab key={id} commodityId={commodity?.id ?? id} />
           ) : tab === "maintenance" ? (
             <MaintenanceTab
+              key={id}
               commodityId={commodity?.id ?? id}
               commodityCount={commodity?.count ?? undefined}
             />
           ) : (
             <FilesTab
+              key={id}
               commodityId={commodity?.id ?? id}
               commodityName={commodity?.name}
               coverState={{
@@ -1209,30 +1341,33 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
                     : undefined,
               }}
               onSetCover={(fileId) => {
-                setCover.mutate(fileId, {
-                  onSuccess: () => {
-                    toast.success(
-                      fileId
-                        ? t("commodities:cover.setSuccess", {
-                            defaultValue: "Cover photo updated.",
-                          })
-                        : t("commodities:cover.clearSuccess", {
-                            defaultValue: "Cover photo cleared.",
-                          })
-                    )
-                  },
-                  onError: () =>
-                    toast.error(
-                      t("commodities:cover.error", {
-                        defaultValue: "Couldn't update the cover photo.",
-                      })
-                    ),
-                })
+                setCover.mutate(
+                  { id, fileId },
+                  {
+                    onSuccess: () => {
+                      toast.success(
+                        fileId
+                          ? t("commodities:cover.setSuccess", {
+                              defaultValue: "Cover photo updated.",
+                            })
+                          : t("commodities:cover.clearSuccess", {
+                              defaultValue: "Cover photo cleared.",
+                            })
+                      )
+                    },
+                    onError: () =>
+                      toast.error(
+                        t("commodities:cover.error", {
+                          defaultValue: "Couldn't update the cover photo.",
+                        })
+                      ),
+                  }
+                )
               }}
               coverBusy={setCover.isPending}
               onAttachClick={() => {
                 setPendingDropFiles([])
-                setUploadOpen(true)
+                setUploadFor(id)
               }}
             />
           )}
@@ -1244,23 +1379,23 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       <StatusTransitionDialog
         open={transitionTarget !== null}
         onOpenChange={(o) => {
-          if (!o) setTransitionTarget(null)
+          if (!o) setTransitionOn(null)
         }}
         targetStatus={transitionTarget}
         purchaseCurrency={purchaseCurrency}
         onSubmit={handleTransitionConfirm}
-        isPending={update.isPending}
+        isPending={itemSaving}
       />
 
       <UploadFilesDialog
         open={uploadOpen}
         onOpenChange={(open) => {
-          setUploadOpen(open)
+          setUploadFor(open ? id : null)
           if (!open) setPendingDropFiles([])
         }}
         linkedEntity={{
           type: "commodity",
-          id: commodity?.id ?? id,
+          id: uploadFor ?? id,
           name: commodity?.name,
         }}
         initialFiles={pendingDropFiles}
@@ -1276,14 +1411,17 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         // produced a usable image.
         commodityHasCover={!!commodity?.cover}
         onSetCover={(fileId) => {
-          setCover.mutate(fileId, {
-            onError: () =>
-              toast.error(
-                t("commodities:cover.error", {
-                  defaultValue: "Couldn't update the cover photo.",
-                })
-              ),
-          })
+          setCover.mutate(
+            { id: uploadFor ?? id, fileId },
+            {
+              onError: () =>
+                toast.error(
+                  t("commodities:cover.error", {
+                    defaultValue: "Couldn't update the cover photo.",
+                  })
+                ),
+            }
+          )
         }}
       />
     </>

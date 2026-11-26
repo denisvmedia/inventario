@@ -208,12 +208,17 @@ func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fil
 }
 
 // explicitCoverFor returns the file an item names as its cover only when it
-// still belongs to this commodity and is a usable cover photo (see
-// isCoverEligible). Anything else (not found, wrong commodity, non-image,
-// non-images category) returns nil so the caller can fall back to the
-// first-photo path.
+// is still attached to this commodity among its photos (link meta images,
+// the attachments the No photo filter counts too) and is a usable cover
+// photo (see isCoverEligible). Anything else (not found, wrong commodity,
+// another bucket, non-image, non-images category) returns nil so the caller
+// can fall back to the first-photo path.
 func explicitCoverFor(file *models.FileEntity, commodityID string) *models.FileEntity {
-	if file == nil || file.LinkTo(models.FileLinkCommodity, commodityID) == nil {
+	if file == nil {
+		return nil
+	}
+	link := file.LinkTo(models.FileLinkCommodity, commodityID)
+	if link == nil || link.Meta != models.FileLinkMetaImages {
 		return nil
 	}
 	if !isCoverEligible(file) {

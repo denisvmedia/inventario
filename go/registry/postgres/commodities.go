@@ -48,6 +48,32 @@ var _ registry.NativeLentOutFilterer = (*CommodityRegistry)(nil)
 // the pre-resolve fetch and let the single query do the join.
 func (*CommodityRegistry) SupportsNativeLentOutFilter() {}
 
+var _ registry.NativePhotoFilterer = (*CommodityRegistry)(nil)
+
+// SupportsNativePhotoFilter marks this backend as resolving
+// CommodityListOptions.NoPhoto with the NOT EXISTS subquery of noPhotoExpr.
+func (*CommodityRegistry) SupportsNativePhotoFilter() {}
+
+// commodityTables names the tables the list queries read: the items, and
+// the loans, file links and custom field values their subqueries join.
+type commodityTables struct {
+	commodities       string
+	loans             string
+	fileLinks         string
+	files             string
+	customFieldValues string
+}
+
+func (r *CommodityRegistry) whereTables() commodityTables {
+	return commodityTables{
+		commodities:       string(r.tableNames.Commodities()),
+		loans:             string(r.tableNames.CommodityLoans()),
+		fileLinks:         string(r.tableNames.FileLinks()),
+		files:             string(r.tableNames.Files()),
+		customFieldValues: string(r.tableNames.CustomFieldValues()),
+	}
+}
+
 func NewCommodityRegistry(dbx *sqlx.DB) *CommodityRegistryFactory {
 	return NewCommodityRegistryWithTableNames(dbx, store.DefaultTableNames)
 }
@@ -366,7 +392,7 @@ func (r *CommodityRegistry) Count(ctx context.Context) (int, error) {
 // see registry.CommodityListOptions for the field-by-field semantics. The
 // total reflects the filtered count (post-WHERE, pre-LIMIT).
 func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int, opts registry.CommodityListOptions) ([]*models.Commodity, int, error) {
-	where := commodityWhere(opts, r.listTables())
+	where := commodityWhere(opts, r.whereTables())
 
 	var commodities []*models.Commodity
 	var total int
@@ -377,7 +403,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 			Select("*", totalCountColumn).
 			From(string(r.tableNames.Commodities()))
 		addWhere(dataSB, where)
-		applyCommodityOrder(dataSB, opts, r.listTables())
+		applyCommodityOrder(dataSB, opts, r.whereTables())
 		paginate(dataSB, offset, limit)
 		dataQuery, dataArgs := dataSB.Build()
 
@@ -430,7 +456,7 @@ func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.Commodity
 	if limit <= 0 {
 		return []string{}, nil
 	}
-	where := commodityWhere(opts, r.listTables())
+	where := commodityWhere(opts, r.whereTables())
 	ids := make([]string, 0)
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
@@ -454,7 +480,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 		return counts, nil
 	}
 	table := string(r.tableNames.Commodities())
-	tables := r.listTables()
+	tables := r.whereTables()
 	// One clock for the batch: the same warranty filter counts the same
 	// items whichever side of midnight its query is built.
 	now := time.Now()
@@ -493,7 +519,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 // WHERE clause is the list's, so the counts describe the same commodities.
 func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.CommodityListOptions) (registry.CommodityTagCounts, error) {
 	commodities := string(r.tableNames.Commodities())
-	where := commodityWhere(opts, r.listTables())
+	where := commodityWhere(opts, r.whereTables())
 	sb := commodityTagCountsSelect(commodities)
 	query, args := addWhere(sb, where).Build()
 
@@ -577,27 +603,14 @@ func commodityTagCountsSelect(commodities string) *sqlb.SelectBuilder {
 	return sb
 }
 
-// commodityListTables are the tables the list queries read. The names are
-// passed in so a TableNames override flows through to the correlated
-// subqueries' outer reference too — hard-coding "commodities.id" would
-// silently break the join on any non-default deployment.
-type commodityListTables struct {
-	commodities, loans, customFieldValues string
-}
-
-func (r *CommodityRegistry) listTables() commodityListTables {
-	return commodityListTables{
-		commodities:       string(r.tableNames.Commodities()),
-		loans:             string(r.tableNames.CommodityLoans()),
-		customFieldValues: string(r.tableNames.CustomFieldValues()),
-	}
-}
-
 // commodityWhere assembles the WHERE clause for the filtered list queries.
+// The table names are passed in so a TableNames override flows through to the
+// correlated subqueries' outer reference too — hard-coding "commodities.id"
+// would silently break the join on any non-default deployment.
 //
 // The count and the data query share one clause, so the total always describes
 // the page.
-func commodityWhere(opts registry.CommodityListOptions, tables commodityListTables) *sqlb.WhereClause {
+func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) *sqlb.WhereClause {
 	cond := sqlb.NewCond()
 	var exprs []string
 	add := func(expr string) {
@@ -655,6 +668,17 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityListTabl
 		))
 	}
 	add(lentOutExpr(opts.LentOut, tables.commodities, tables.loans))
+	if opts.NoPhoto {
+		add(noPhotoExpr(cond, tables))
+	}
+	if opts.NoPurchasePrice {
+		add(cond.IsNull("original_price"))
+	}
+	if opts.NoPurchaseDate {
+		// An empty string is the PDate zero value, the same defense as
+		// the warranty date above.
+		add(cond.Or(cond.IsNull("purchase_date"), cond.Equal("purchase_date", "")))
+	}
 
 	return andWhere(cond, exprs...)
 }
@@ -792,6 +816,21 @@ func lentOutExpr(lentOut *bool, commoditiesTable, loansTable string) string {
 	)
 }
 
+// noPhotoExpr keeps the items without a photo: no live image file linked in
+// the item's images bucket, the files FileRegistry.FirstPhotos picks a cover
+// from. Row-level security on the file tables keeps the subquery to the
+// caller's group.
+func noPhotoExpr(cond *sqlb.Cond, tables commodityTables) string {
+	return fmt.Sprintf(
+		"NOT EXISTS (SELECT 1 FROM %s l JOIN %s f ON f.id = l.file_id "+
+			"WHERE l.entity_id = %s.id AND l.entity_type = %s AND l.meta = %s "+
+			"AND f.deleted_at IS NULL AND f.type = %s AND f.category = %s)",
+		tables.fileLinks, tables.files, tables.commodities,
+		cond.Var(models.FileLinkCommodity), cond.Var(models.FileLinkMetaImages),
+		cond.Var(string(models.FileTypeImage)), cond.Var(string(models.FileCategoryImages)),
+	)
+}
+
 // buildCommodityOrder maps SortField to a SQL ORDER BY clause. The id tie
 // breaker keeps page boundaries stable when the primary key has duplicate
 // sort-field values (e.g. several commodities with the same name).
@@ -806,7 +845,7 @@ func lentOutExpr(lentOut *bool, commoditiesTable, loansTable string) string {
 //
 // A CustomFieldSort orders by the item's value for the field instead, items
 // without one last in both directions.
-func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOptions, tables commodityListTables) {
+func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOptions, tables commodityTables) {
 	if opts.CustomFieldSort != nil {
 		if expr := customFieldSortExpr(sb, *opts.CustomFieldSort, tables.commodities, tables.customFieldValues); expr != "" {
 			if opts.SortDesc {
@@ -1182,6 +1221,37 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 		return nil, errxtrace.Wrap("failed to trash commodity", err, errx.Attrs("commodity_id", id))
 	}
 	return &commodity, nil
+}
+
+// SetDraft sets or clears the draft mark of a live item, under the row lock
+// that Update takes too.
+func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool, check func(models.Commodity) error) (before, after *models.Commodity, err error) {
+	var locked models.Commodity
+	table := r.tableNames.Commodities()
+	reg := r.newSQLRegistry()
+	err = reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if err := lockLiveRow(ctx, tx, table, "commodity", id); err != nil {
+			return err
+		}
+		if err := scanOne(ctx, tx, &locked, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, table), id); err != nil {
+			return err
+		}
+		next := locked
+		next.Draft = draft
+		if check != nil {
+			if err := check(next); err != nil {
+				return err
+			}
+		}
+		_, err := tx.ExecContext(ctx, fmt.Sprintf(`UPDATE %s SET draft = $2 WHERE id = $1`, table), id, draft)
+		return err
+	})
+	if err != nil {
+		return nil, nil, errxtrace.Wrap("failed to set the draft mark", err, errx.Attrs("commodity_id", id))
+	}
+	next := locked
+	next.Draft = draft
+	return &locked, &next, nil
 }
 
 // Restore makes a trashed item live again.
