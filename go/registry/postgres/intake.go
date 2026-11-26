@@ -297,6 +297,28 @@ func (r *IntakeRegistry) ListSessions(ctx context.Context, offset, limit int) ([
 	return sessions, total, nil
 }
 
+func (r *IntakeRegistry) ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, err
+	}
+	sessions := []*models.IntakeSession{}
+	err := r.do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT s.* FROM %s s
+			WHERE EXISTS (SELECT 1 FROM %s src WHERE src.session_id = s.id AND src.status IN ($1, $2, $3))
+			   OR EXISTS (SELECT 1 FROM %s c WHERE c.session_id = s.id
+			              AND (c.outcome = $4 OR (c.selected AND c.outcome = $5)))
+			ORDER BY s.created_at DESC, s.id DESC`,
+			r.tableNames.IntakeSessions(), r.tableNames.IntakeSources(), r.tableNames.IntakeCandidates())
+		return selectInto(ctx, tx, &sessions, query,
+			string(models.IntakeSourcePending), string(models.IntakeSourceScanning), string(models.IntakeSourceFailed),
+			string(models.IntakeCandidatePending), string(models.IntakeCandidateFailed))
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list open intake sessions", err)
+	}
+	return sessions, nil
+}
+
 // selectInto runs a query in tx and appends a copy of every row to out.
 func selectInto[T any](ctx context.Context, tx *sqlx.Tx, out *[]*T, query string, args ...any) error {
 	rows, err := tx.QueryxContext(ctx, query, args...)

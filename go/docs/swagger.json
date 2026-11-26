@@ -6984,7 +6984,7 @@
         },
         "/g/{groupSlug}/inbox": {
             "get": {
-                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft) and items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity). Missing information\nsuch as no location, no photo or an unknown price does not put an item here.\nEntries are ordered by their first reason in the order draft, item_draft; drafts\nmost recently saved first, items most recently added first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it. When a member who can edit items reads it, the draft\ndiscards that stopped more than ten minutes ago are finished first, as for\nGET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.",
+                "description": "The records of the group that still need attention, one entry per record with\nevery reason it is there for. The default inbox holds unfinished work only: open\ndrafts of new items (reason draft, kind draft), items marked as draft, whose\nreview is not complete (reason item_draft, kind commodity), and batches of files\nthat are not finished (reason intake, kind intake_session): a file waits for its\nscan or could not be scanned, or a product waits for a decision or for its draft.\nA batch carries its progress in intake. Missing information such as no location,\nno photo or an unknown price does not put an item here. Entries are ordered by\ntheir first reason in the order draft, item_draft, intake; drafts most recently\nsaved first, items most recently added first, batches newest first. meta.entries counts\nthe entries the reason filter keeps; meta.counts describes the whole inbox and\ncounts each record once in total, whatever its number of reasons. Every member of\nthe group can read it. When a member who can edit items reads it, the draft\ndiscards that stopped more than ten minutes ago are finished first, as for\nGET /g/{groupSlug}/drafts: best effort, at most 10 per request, a failure is logged.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -7003,7 +7003,8 @@
                     {
                         "enum": [
                             "draft",
-                            "item_draft"
+                            "item_draft",
+                            "intake"
                         ],
                         "type": "string",
                         "description": "Keep the entries with this reason",
@@ -16600,7 +16601,7 @@
             "type": "object",
             "properties": {
                 "file_count": {
-                    "description": "FileCount is the number of live files attached to a draft; 0 for an\nitem.",
+                    "description": "FileCount is the number of live files attached to a draft or dropped\nin a batch; 0 for an item.",
                     "type": "integer",
                     "example": 1
                 },
@@ -16608,11 +16609,20 @@
                     "type": "string",
                     "example": "5f0c8a7e-3f43-4f1e-9a43-6a1fbb8f2c11"
                 },
+                "intake": {
+                    "description": "Intake is the progress of a batch of files, the same as on\n/intake/sessions; absent for other kinds.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/jsonapi.InboxIntake"
+                        }
+                    ]
+                },
                 "kind": {
                     "type": "string",
                     "enum": [
                         "draft",
-                        "commodity"
+                        "commodity",
+                        "intake_session"
                     ],
                     "example": "draft"
                 },
@@ -16623,7 +16633,8 @@
                         "type": "string",
                         "enum": [
                             "draft",
-                            "item_draft"
+                            "item_draft",
+                            "intake"
                         ]
                     },
                     "example": [
@@ -16635,9 +16646,30 @@
                     "example": "Cordless drill"
                 },
                 "updated_at": {
-                    "description": "UpdatedAt is when the record was last saved; drafts carry it, items\ndo not.",
+                    "description": "UpdatedAt is when the record was last saved; drafts carry it, items\ndo not. A batch of files carries when it was added.",
                     "type": "string",
                     "x-nullable": "true"
+                }
+            }
+        },
+        "jsonapi.InboxIntake": {
+            "type": "object",
+            "properties": {
+                "state": {
+                    "enum": [
+                        "processing",
+                        "review",
+                        "done"
+                    ],
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeSessionState"
+                        }
+                    ],
+                    "example": "review"
+                },
+                "summary": {
+                    "$ref": "#/definitions/models.IntakeSessionSummary"
                 }
             }
         },

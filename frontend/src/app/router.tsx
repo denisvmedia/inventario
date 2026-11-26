@@ -175,6 +175,9 @@ const MaintenanceListPage = lazy(() =>
     default: m.MaintenanceListPage,
   }))
 )
+const IntakeSessionPage = lazy(() =>
+  import("@/pages/intake/IntakeSessionPage").then((m) => ({ default: m.IntakeSessionPage }))
+)
 const SavedViewsPage = lazy(() =>
   import("@/pages/saved-views/SavedViewsPage").then((m) => ({ default: m.SavedViewsPage }))
 )
@@ -414,6 +417,8 @@ export function AppRoutes() {
               <Route path="commodities/:id" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/edit" element={<CommodityDetailPage />} />
               <Route path="commodities/:id/print" element={<CommodityPrintPage />} />
+              {/* Batch intake (#2810): the review of one batch of dropped files. */}
+              <Route path="intake/:id" element={<IntakeSessionPage />} />
               <Route path="labels" element={<LabelPrintPage />} />
               <Route path="files" element={<FilesListPage />} />
               <Route path="files/:id" element={<FilesListPage />} />

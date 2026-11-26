@@ -100,6 +100,7 @@ import {
   revisionConflict,
   type DraftValues,
 } from "@/features/drafts/api"
+import { draftSellerName } from "@/features/drafts/values"
 import {
   useDraft,
   useDraftFiles,
@@ -483,7 +484,9 @@ export function CommodityFormDialog({
     setRestoredUnsaved(serverMode && unsaved)
     setStep(initialStep)
     setServerError(null)
-    setScannedSeller("")
+    // A seller the scan of a batch read but the group lacks is offered on
+    // the Purchase step, as after a scan in this form.
+    setScannedSeller(openDraft ? draftSellerName(starting as DraftValues) : "")
     // Track whether reset() seeded values from a localStorage draft.
     // RHF uses the seeded values as the new "defaults" so isDirty
     // stays false — the Cancel → save-as-draft gate has to read this

@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import type { Commodity } from "@/features/commodities/api"
 import { commodityKeys } from "@/features/commodities/keys"
 import { useOptionalCurrentGroup } from "@/features/group/GroupContext"
+import { INTAKE_POLL_MS } from "@/features/intake/hooks"
 
 import {
   getInboxCount,
@@ -26,7 +27,9 @@ function useSlug(): string {
 
 // A page of the inbox. While the next page of the same reason loads, the
 // page before stays on screen; a page of another reason does not, since its
-// rows and their buttons do not belong under the newly selected tab.
+// rows and their buttons do not belong under the newly selected tab. While a
+// batch of files on the page is being scanned, the page is read again every
+// few seconds, so its progress moves without a reload.
 export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryOptions = {}) {
   const slug = useSlug()
   const queryKey = inboxKeys.list(slug, opts)
@@ -36,6 +39,10 @@ export function useInbox(opts: InboxListOptions = {}, { enabled = true }: QueryO
     enabled: enabled && !!slug,
     placeholderData: (prev, prevQuery) =>
       prevQuery && sameInboxList(prevQuery.queryKey, queryKey) ? prev : undefined,
+    refetchInterval: (query) =>
+      query.state.data?.entries.some((e) => e.intake?.state === "processing")
+        ? INTAKE_POLL_MS
+        : false,
   })
 }
 

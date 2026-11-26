@@ -1625,6 +1625,14 @@ type IntakeRegistry interface {
 	// with the total.
 	ListSessions(ctx context.Context, offset, limit int) ([]*models.IntakeSession, int, error)
 
+	// ListOpenSessions returns the group's open sessions, newest first: a
+	// source waits for its scan, is being scanned or failed, or a candidate
+	// has no outcome yet or is kept with a failed draft. It is the set
+	// models.IntakeSessionSummary.Open reports, read in one query for the
+	// inbox count. It needs a group: the service registry gets
+	// ErrFieldRequired rather than the sessions of every group.
+	ListOpenSessions(ctx context.Context) ([]*models.IntakeSession, error)
+
 	// ListSources returns the sources of the given sessions, ordered by
 	// session and position.
 	ListSources(ctx context.Context, sessionIDs ...string) ([]*models.IntakeSource, error)

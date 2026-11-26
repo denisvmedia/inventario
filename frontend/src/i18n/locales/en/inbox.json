@@ -4,10 +4,13 @@
     "title": "Needs attention: {{total}}"
   },
   "empty": {
-    "description": "Drafts you save and items still marked as draft wait here until you finish them.",
+    "description": "Drafts you save, items still marked as draft and batches of files you add wait here until you finish them.",
     "filteredTitle": "Nothing here for this reason",
     "title": "Nothing needs attention"
   },
+  "intakeActionLabel": "{{action}}: {{title}}",
+  "intakeTitle_one": "Batch of {{count}} file",
+  "intakeTitle_other": "Batch of {{count}} files",
   "itemDraftHint": "Check its details, then mark it as reviewed.",
   "markReviewed": "Mark as reviewed",
   "markReviewedLabel": "Mark as reviewed: {{title}}",
@@ -21,6 +24,7 @@
   "openItem": "Open item",
   "reason": {
     "draft": "Draft",
+    "intake": "Added from files",
     "itemDraft": "Marked as draft",
     "other": "Needs attention"
   },
@@ -32,6 +36,8 @@
   "summary": {
     "drafts_one": "{{count}} draft to finish",
     "drafts_other": "{{count}} drafts to finish",
+    "intake_one": "{{count}} batch of files to finish",
+    "intake_other": "{{count}} batches of files to finish",
     "review_one": "{{count}} item to review",
     "review_other": "{{count}} items to review"
   },
@@ -40,6 +46,8 @@
     "allCount": "All ({{n}})",
     "draft": "Drafts",
     "draftCount": "Drafts ({{n}})",
+    "intake": "From files",
+    "intakeCount": "From files ({{n}})",
     "itemDraft": "Items to review",
     "itemDraftCount": "Items to review ({{n}})"
   },

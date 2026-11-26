@@ -77,6 +77,10 @@ on **Review extracted details**:
   with the name filled in. If a seller with that name exists by then,
   the button offers to use it instead.
 
+[Add items from files](../items/#add-items-from-files) works the same way: a
+draft made from a receipt names your group's seller with that name, or shows
+the name on the draft's **Purchase** step with the **Create seller** button.
+
 When you draft an item from the public landing page, before you have an
 account and a group, there are no sellers yet: the scan adds a "Seller: …" line
 to the item's **Comments** instead.
