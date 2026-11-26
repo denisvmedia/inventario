@@ -239,10 +239,13 @@ function IntakeUploadForm({
         ? [{ fileIds: ids, oneItem: true }]
         : ids.map((id) => ({ fileIds: [id], oneItem: false }))
       const session = await createIntakeSession(dest, clientKey.current, sources)
-      // The batch holds these files now. One uploaded for a file that was
-      // left out since (the one-item switch takes fewer files) is not
-      // needed.
-      for (const id of ids) unqueued.current.delete(id)
+      // The batch holds the files the server names. A retry after a lost
+      // answer gets the batch the first attempt queued, without a file
+      // added since; that file, and one uploaded for a file left out since
+      // (the one-item switch takes fewer files), are not needed.
+      for (const src of session.sources) {
+        for (const file of src.files) unqueued.current.delete(file.id)
+      }
       const spare = [...unqueued.current]
       unqueued.current.clear()
       void trashUploads(queryClient, dest, spare)

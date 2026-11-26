@@ -259,6 +259,27 @@ describe("<IntakeUploadDialog /> uploads left behind", () => {
     expect(fake.trashed).toEqual([])
   })
 
+  it("moves a file added after a lost answer to Trash when the batch comes back without it", async () => {
+    const fake = intakeHandlers.backend(SLUG)
+    fake.loseCreate = true
+    server.use(...authHandlers.signedIn(), ...groupHandlers.list(groups), ...fake.handlers)
+    const user = userEvent.setup()
+    const { trashRead } = renderClosable([jpg("a.jpg")])
+    await user.click(await screen.findByTestId("intake-upload-submit"))
+    expect(await screen.findByTestId("intake-upload-error")).toBeInTheDocument()
+    // The batch was queued with a.jpg; b.jpg comes after, and the retry
+    // gets that batch back unchanged.
+    await user.upload(screen.getByTestId("intake-upload-input"), jpg("b.jpg"))
+    await user.click(screen.getByTestId("intake-upload-submit"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("intake-upload-dialog")).not.toBeInTheDocument()
+    )
+    await waitFor(trashRead)
+    expect(fake.sessions).toHaveLength(1)
+    expect(fake.sessions[0]?.sources.flatMap((src) => src.file_ids)).toEqual(["file-1"])
+    expect(fake.trashed).toEqual(["file-2"])
+  })
+
   it("stops when the dialog is closed during an upload and moves that upload to Trash", async () => {
     const fake = intakeHandlers.backend(SLUG)
     let release = () => {}
