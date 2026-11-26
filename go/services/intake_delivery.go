@@ -332,14 +332,7 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 	}
 	if result.Document.DraftID == nil {
 		if err := s.finishDelivery(ctx, set, n, file, result); err != nil {
-			if created && result.Document.FileID == nil && errors.Is(err, ErrIntakeDocumentConflict) {
-				// The refused delivery keeps no record, so its values
-				// reserve nothing.
-				if delErr := docs.Delete(context.WithoutCancel(ctx), doc.ID); delErr != nil {
-					err = errors.Join(err, delErr)
-				}
-			}
-			return result, err
+			return result, dropRefusedRecord(ctx, docs, result, err)
 		}
 	}
 	if err := recordPromotion(ctx, set, result); err != nil {
@@ -355,6 +348,18 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 		}
 	}
 	return result, nil
+}
+
+// dropRefusedRecord deletes the record that a delivery refused as a conflict
+// made, so its values reserve nothing. It returns err.
+func dropRefusedRecord(ctx context.Context, docs registry.IntakeDocumentRegistry, result *IntakeDeliveryResult, err error) error {
+	if !result.Created || result.Document.FileID != nil || !errors.Is(err, ErrIntakeDocumentConflict) {
+		return err
+	}
+	if delErr := docs.Delete(context.WithoutCancel(ctx), result.Document.ID); delErr != nil {
+		return errors.Join(err, delErr)
+	}
+	return err
 }
 
 // recordDeliveredFile stores the delivered file as a file of the group and
