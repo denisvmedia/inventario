@@ -237,6 +237,10 @@ func NewFactorySet() *registry.FactorySet {
 	// registries off the FactorySet, so it is wired after every fs.* field too.
 	fs.UserContentOwnershipChecker = NewUserContentOwnershipChecker(fs)
 
+	// UserTenantMover (#2179) counts with the same stores, so it is wired
+	// after every fs.* field too.
+	fs.UserTenantMover = NewUserTenantMover(fs, userReg, membershipReg, userPurger)
+
 	return fs
 }
 

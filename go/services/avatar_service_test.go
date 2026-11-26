@@ -107,7 +107,7 @@ func TestAvatarService_NormalisesWhatItStores(t *testing.T) {
 
 	key, err := f.svc.Store(context.Background(), f.userID, bytes.NewReader(pngBytes(c, 1200, 800)))
 	c.Assert(err, qt.IsNil)
-	c.Assert(strings.HasPrefix(key, "avatars/"+f.userID+"/1-"), qt.IsTrue, qt.Commentf("got %s", key))
+	c.Assert(strings.HasPrefix(key, "t/avatar-tenant/avatars/"+f.userID+"/1-"), qt.IsTrue, qt.Commentf("got %s", key))
 	c.Assert(strings.HasSuffix(key, ".jpg"), qt.IsTrue, qt.Commentf("got %s", key))
 	c.Assert(f.avatarPath(c), qt.IsNotNil)
 	c.Assert(*f.avatarPath(c), qt.Equals, key)
@@ -532,6 +532,60 @@ func TestAvatarService_DeleteStored(t *testing.T) {
 
 	f.svc.DeleteStored(context.Background(), key)
 	c.Assert(f.exists(c, key), qt.IsFalse)
+}
+
+// Photos uploaded before avatars were kept per tenant sit under a flat
+// avatars/ key; deleting one works the same, and a tenant's other objects are
+// left alone.
+func TestAvatarService_DeleteStored_KeyLayouts(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+
+	b, err := blob.OpenBucket(context.Background(), f.location)
+	c.Assert(err, qt.IsNil)
+	for _, key := range []string{"avatars/u1/1-abcdef012345.jpg", "t/avatar-tenant/files/other.txt"} {
+		c.Assert(b.WriteAll(context.Background(), key, []byte("x"), nil), qt.IsNil)
+	}
+	c.Assert(b.Close(), qt.IsNil)
+
+	f.svc.DeleteStored(context.Background(), "t/avatar-tenant/files/other.txt")
+	c.Assert(f.exists(c, "t/avatar-tenant/files/other.txt"), qt.IsTrue)
+
+	f.svc.DeleteStored(context.Background(), "avatars/u1/1-abcdef012345.jpg")
+	c.Assert(f.exists(c, "avatars/u1/1-abcdef012345.jpg"), qt.IsFalse)
+}
+
+// A tenant move copies the photo into the new tenant's storage under the next
+// revision, so its signed URL changes too, and leaves the original and the
+// user row to the caller.
+func TestAvatarService_CopyToTenant(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+	ctx := context.Background()
+
+	key, err := f.svc.Store(ctx, f.userID, bytes.NewReader(pngBytes(c, 100, 100)))
+	c.Assert(err, qt.IsNil)
+	user, err := f.factorySet.UserRegistry.Get(ctx, f.userID)
+	c.Assert(err, qt.IsNil)
+
+	copied, err := f.svc.CopyToTenant(ctx, user, "other-tenant")
+	c.Assert(err, qt.IsNil)
+	c.Assert(copied, qt.IsNotNil)
+	c.Assert(strings.HasPrefix(*copied, "t/other-tenant/avatars/"+f.userID+"/2-"), qt.IsTrue, qt.Commentf("got %s", *copied))
+	c.Assert(f.exists(c, *copied), qt.IsTrue)
+	c.Assert(f.exists(c, key), qt.IsTrue)
+	c.Assert(*f.avatarPath(c), qt.Equals, key)
+}
+
+func TestAvatarService_CopyToTenant_NoPhoto(t *testing.T) {
+	c := qt.New(t)
+	f := newAvatarFixture(c)
+	user, err := f.factorySet.UserRegistry.Get(context.Background(), f.userID)
+	c.Assert(err, qt.IsNil)
+
+	copied, err := f.svc.CopyToTenant(context.Background(), user, "other-tenant")
+	c.Assert(err, qt.IsNil)
+	c.Assert(copied, qt.IsNil)
 }
 
 func TestAvatarVersion(t *testing.T) {

@@ -3139,6 +3139,10 @@ table "location_groups" {
     type = TEXT
     default = "USD"
   }
+  column "hidden_sections" {
+    type = JSONB
+    default = sql("'[]'")
+  }
   column "created_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")

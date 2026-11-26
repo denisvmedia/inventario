@@ -67,6 +67,7 @@ import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useInboxCount } from "@/features/inbox/hooks"
 import { SidebarSavedViews } from "@/features/saved-views/SidebarSavedViews"
 import type { LocationGroup } from "@/features/group/api"
+import { isSectionHidden, type GroupSection } from "@/features/group/sections"
 
 interface NavEntry {
   // Full translation key (namespace-qualified, e.g. "common:nav.dashboard").
@@ -88,6 +89,9 @@ interface NavEntry {
   // A count shown at the end of the row. The inbox shows the server's
   // count of what it holds.
   badge?: "inbox"
+  // The group section the entry belongs to. The row leaves the sidebar
+  // while the active group hides that section (#1607).
+  section?: GroupSection
 }
 
 // Three sidebar groups mirror the legacy Vue + design-mock layout:
@@ -129,27 +133,32 @@ const INVENTORY: NavEntry[] = [
     labelKey: "common:nav.upcoming",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/upcoming` : null),
     icon: BellRing,
+    section: "upcoming",
   },
   {
     labelKey: "common:nav.warranties",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/warranties` : null),
     icon: ShieldCheck,
     tourKey: "nav-warranties",
+    section: "warranties",
   },
   {
     labelKey: "common:nav.maintenance",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/maintenance` : null),
     icon: CalendarClock,
+    section: "maintenance",
   },
   {
     labelKey: "common:nav.lent",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/lent` : null),
     icon: HandCoins,
+    section: "loans",
   },
   {
     labelKey: "common:nav.inService",
     to: (g) => (g?.slug ? `/g/${encodeURIComponent(g.slug)}/in-service` : null),
     icon: Wrench,
+    section: "maintenance",
   },
 ]
 
@@ -432,7 +441,9 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
             <SidebarGroupLabel>{t("common:nav.groupInventory")}</SidebarGroupLabel>
             <SidebarGroupContent>
               <SidebarMenu>
-                {INVENTORY.map((e) => (
+                {INVENTORY.filter(
+                  (e) => !e.section || !isSectionHidden(currentGroup, e.section)
+                ).map((e) => (
                   <NavRow
                     key={e.labelKey}
                     entry={e}

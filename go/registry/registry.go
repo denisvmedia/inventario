@@ -2694,6 +2694,15 @@ type LocationGroupRegistry interface {
 	// transition it returns (item, false, nil); on a missing group it returns
 	// (nil, false, ErrNotFound).
 	MarkPendingDeletionAdmin(ctx context.Context, groupID string) (item *AdminGroupDetail, alreadyPending bool, err error)
+
+	// SetHiddenSections replaces the sections an active group hides and
+	// sets updated_at, writing those two columns only, so a rename or a
+	// deletion that commits meanwhile is kept. The caller passes a
+	// validated, normalized list. It returns the stored group and
+	// applied=true. A group that is not active is left as it is: the call
+	// returns the group with applied=false. A missing group gives
+	// ErrNotFound.
+	SetHiddenSections(ctx context.Context, groupID string, sections models.GroupSections, updatedAt time.Time) (group *models.LocationGroup, applied bool, err error)
 }
 
 // AdminGroupSortField names the columns the admin group listing endpoint

@@ -202,8 +202,8 @@ type Warning struct {
 	// describes more than one distinct product; only the most prominent
 	// one was extracted).
 	Code string `json:"code"`
-	// Field is the affected ScanResult.Fields key, or "" when the
-	// warning is global.
+	// Field is the affected ScanResult.Fields key, FieldNameFiles for a
+	// file suggestion that was dropped, or "" when the warning is global.
 	Field string `json:"field,omitempty"`
 	// Detail is a short human-readable explanation. Localisation is
 	// the FE's responsibility — the provider returns English here.
@@ -236,6 +236,12 @@ type ScanResult struct {
 	// the common single-product case (the FE goes straight to review off
 	// Fields).
 	Items []ScanItem `json:"items,omitempty"`
+	// Files holds the suggestion for each input file: what kind of file it
+	// is and a readable title, ordered by FileGuess.Index with at most one
+	// entry per file. A file the model said nothing usable about has no
+	// entry. It is the per-file source of the scan-level document type
+	// (FieldNameDocumentType).
+	Files []FileGuess `json:"files,omitempty"`
 	// Warnings is the non-fatal note list. nil and empty are
 	// equivalent.
 	Warnings []Warning `json:"warnings,omitempty"`
@@ -259,6 +265,53 @@ type ScanItem struct {
 	// ScanResult.CustomFields.
 	CustomFields map[string]FieldGuess `json:"custom_fields,omitempty"`
 }
+
+// FileGuess is the suggestion for one input file of a scan.
+type FileGuess struct {
+	// Index is the file's position in ScanRequest.Photos, counted from 0.
+	Index int `json:"index"`
+	// DocumentType is what the file is, one of FileDocumentTypes: a string
+	// value with its confidence.
+	DocumentType *FieldGuess `json:"document_type,omitempty"`
+	// Title is a short readable title for the file, such as "Bosch
+	// invoice, March 2024", in the language of the document and at most
+	// MaxFileTitleRunes characters: a string value with its confidence.
+	Title *FieldGuess `json:"title,omitempty"`
+}
+
+// The kinds of file a scan tells apart. A photo is a picture of the product
+// itself; the others are documents.
+const (
+	DocumentTypeInvoice  = "invoice"
+	DocumentTypeReceipt  = "receipt"
+	DocumentTypeManual   = "manual"
+	DocumentTypeWarranty = "warranty"
+	DocumentTypePhoto    = "photo"
+	DocumentTypeOther    = "other"
+)
+
+// FileDocumentTypes are the values FileGuess.DocumentType takes.
+var FileDocumentTypes = []string{
+	DocumentTypeInvoice,
+	DocumentTypeReceipt,
+	DocumentTypeManual,
+	DocumentTypeWarranty,
+	DocumentTypePhoto,
+	DocumentTypeOther,
+}
+
+// ScanDocumentTypes are the values the scan-level FieldNameDocumentType
+// takes. It has no photo: a scan of product photos is "other" there.
+var ScanDocumentTypes = []string{
+	DocumentTypeInvoice,
+	DocumentTypeManual,
+	DocumentTypeReceipt,
+	DocumentTypeWarranty,
+	DocumentTypeOther,
+}
+
+// MaxFileTitleRunes caps a suggested file title.
+const MaxFileTitleRunes = 120
 
 // Sentinel errors returned by Provider implementations and the registry
 // constructor. Callers (CommodityScanService) classify these into HTTP
@@ -325,10 +378,13 @@ const (
 	FieldNameWarrantyExpiresAt     FieldName = "warranty_expires_at"
 	FieldNameComments              FieldName = "comments"
 	FieldNameTags                  FieldName = "tags"
-	// FieldNameDocumentType classifies a scanned document so the FE can
-	// pre-select the matching tag on attach. Commodity documents all share the
-	// `documents` bucket, and invoice-vs-manual is a tag (#1989), so this is
-	// what lets a scanned receipt arrive already tagged.
+	// FieldNameDocumentType classifies the scan as a whole, one of
+	// ScanDocumentTypes. ScanResult.Files is the per-file source: each file
+	// has its own document type there. When the model gives no scan-level
+	// value, ScanResult.FillDocumentType derives it from the files. Commodity
+	// documents all share the `documents` bucket, and invoice-vs-manual is a
+	// tag (#1989), so the document type is what lets a scanned receipt
+	// arrive already tagged.
 	FieldNameDocumentType FieldName = "document_type"
 	// FieldNameQuantity is the number of identical units one product line
 	// covers (#2810). The line's amount stays in original_price, so a line

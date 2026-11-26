@@ -344,6 +344,7 @@ func Groups(params Params, groupService *services.GroupService, auditService ser
 			r.Group(func(r chi.Router) {
 				r.Use(requireGroupAdmin(groupService))
 				r.Patch("/", api.updateGroup)
+				r.Put("/hidden-sections", api.setHiddenSections)
 				r.Delete("/members/{memberUserID}", api.removeMember)
 				r.Patch("/members/{memberUserID}", api.updateMemberRole)
 				r.Post("/invites", api.createInvite)
@@ -444,7 +445,7 @@ func (api *groupsAPI) listGroups(w http.ResponseWriter, r *http.Request) {
 
 // createGroup creates a new location group.
 // @Summary Create a group
-// @Description Creates a new location group with a random non-guessable slug. The creator becomes the group admin.
+// @Description Creates a new location group with a random non-guessable slug. The creator becomes the group admin. hidden_sections, when given, sets the sections the new group hides.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -476,7 +477,7 @@ func (api *groupsAPI) createGroup(w http.ResponseWriter, r *http.Request) {
 		groupCurrency = *attrs.GroupCurrency
 	}
 
-	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, attrs.Description, groupCurrency)
+	group, err := api.groupService.CreateGroup(r.Context(), user.TenantID, user.ID, attrs.Name, attrs.Icon, attrs.Description, groupCurrency, groupOptions(attrs)...)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -537,7 +538,8 @@ func (api *groupsAPI) getGroup(w http.ResponseWriter, r *http.Request) {
 
 // updateGroup updates a group's metadata.
 // @Summary Update group
-// @Description Updates a location group's name, icon, and description. The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
+// @Description Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+// @Description The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
 // @Tags groups
 // @Accept json-api
 // @Produce json-api
@@ -572,7 +574,58 @@ func (api *groupsAPI) updateGroup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon, attrs.Description)
+	updated, err := api.groupService.UpdateGroup(r.Context(), group.ID, attrs.Name, attrs.Icon, attrs.Description, groupOptions(attrs)...)
+	if err != nil {
+		renderEntityError(w, r, err)
+		return
+	}
+
+	resp := jsonapi.NewLocationGroupResponse(updated)
+	if err := render.Render(w, r, resp); err != nil {
+		internalServerError(w, r, err)
+		return
+	}
+}
+
+// groupOptions turns the optional settings of a create or update request
+// into service options. A setting the request leaves out is not touched.
+func groupOptions(attrs *jsonapi.LocationGroupAttributes) []services.GroupOption {
+	var opts []services.GroupOption
+	if attrs.HiddenSections != nil {
+		opts = append(opts, services.WithHiddenSections(*attrs.HiddenSections...))
+	}
+	return opts
+}
+
+// setHiddenSections replaces the sections a group hides for its members.
+// @Summary Set the group's hidden sections
+// @Description Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+// @Description An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+// @Description Unknown sections are refused; duplicates are dropped. Requires group admin role.
+// @Tags groups
+// @Accept json-api
+// @Produce json-api
+// @Param groupID path string true "Group ID"
+// @Param data body jsonapi.GroupHiddenSectionsRequest true "Hidden sections"
+// @Success 200 {object} jsonapi.LocationGroupResponse "OK"
+// @Failure 403 {string} string "Forbidden - not a group admin"
+// @Failure 404 {object} jsonapi.Errors "Group not found"
+// @Failure 422 {object} jsonapi.Errors "Validation error"
+// @Router /groups/{groupID}/hidden-sections [put].
+func (api *groupsAPI) setHiddenSections(w http.ResponseWriter, r *http.Request) {
+	group := groupFromContext(r.Context())
+	if group == nil {
+		unprocessableEntityError(w, r, nil)
+		return
+	}
+
+	var input jsonapi.GroupHiddenSectionsRequest
+	if err := render.Bind(r, &input); err != nil {
+		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	updated, err := api.groupService.SetHiddenSections(r.Context(), group.ID, input.Data.Attributes.HiddenSections...)
 	if err != nil {
 		renderEntityError(w, r, err)
 		return

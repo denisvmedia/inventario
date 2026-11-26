@@ -2224,7 +2224,19 @@ definitions:
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        description: |-
+          Fields are the values read, keyed by field name. Its document_type
+          classifies the scan as a whole; files is the per-file source, and
+          document_type is derived from it when the model gives none.
         type: object
+      files:
+        description: |-
+          Files holds one suggestion per input file the model said something
+          usable about, ordered by index; a file without one has no entry.
+          Absent when there are none.
+        items:
+          $ref: '#/definitions/jsonapi.CommodityScanFileGuess'
+        type: array
       items:
         description: |-
           Items is present only when the source described more than one
@@ -2242,6 +2254,22 @@ definitions:
           $ref: '#/definitions/jsonapi.CommodityScanWarning'
         type: array
     type: object
+  jsonapi.CommodityScanDocumentTypeGuess:
+    properties:
+      confidence:
+        example: 0.9
+        type: number
+      value:
+        enum:
+        - invoice
+        - receipt
+        - manual
+        - warranty
+        - photo
+        - other
+        example: invoice
+        type: string
+    type: object
   jsonapi.CommodityScanFieldGuess:
     properties:
       confidence:
@@ -2249,6 +2277,21 @@ definitions:
       value:
         description: Value is polymorphic — see the type-level doc comment.
         type: object
+    type: object
+  jsonapi.CommodityScanFileGuess:
+    properties:
+      document_type:
+        $ref: '#/definitions/jsonapi.CommodityScanDocumentTypeGuess'
+      index:
+        description: |-
+          Index is the file's position among the photos parts of the request,
+          counted from 0. An empty part the server skipped still counts.
+        example: 0
+        type: integer
+      title:
+        $ref: '#/definitions/jsonapi.CommodityScanTitleGuess'
+    required:
+    - index
     type: object
   jsonapi.CommodityScanItem:
     properties:
@@ -2275,6 +2318,16 @@ definitions:
     properties:
       data:
         $ref: '#/definitions/jsonapi.CommodityScanResource'
+    type: object
+  jsonapi.CommodityScanTitleGuess:
+    properties:
+      confidence:
+        example: 0.8
+        type: number
+      value:
+        example: Bosch invoice, March 2024
+        maxLength: 120
+        type: string
     type: object
   jsonapi.CommodityScanWarning:
     properties:
@@ -3163,6 +3216,32 @@ definitions:
         type: string
       password:
         type: string
+    type: object
+  jsonapi.GroupHiddenSectionsAttributes:
+    properties:
+      hidden_sections:
+        description: |-
+          HiddenSections is the full list of sections to hide: warranties,
+          maintenance, loans, upcoming. An empty list shows every section.
+          Unknown sections are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
+    type: object
+  jsonapi.GroupHiddenSectionsData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsAttributes'
+      type:
+        enum:
+        - groups
+        example: groups
+        type: string
+    type: object
+  jsonapi.GroupHiddenSectionsRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.GroupHiddenSectionsData'
     type: object
   jsonapi.GroupInviteCreateAttrs:
     properties:
@@ -4094,6 +4173,16 @@ definitions:
           when nil. On update the handler rejects a change with 422 — a
           reprice-aware currency migration is tracked under #202.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its
+          members: warranties, maintenance, loans, upcoming. Optional. On
+          create, absent means the group hides nothing; on update, absent
+          leaves the list as it is and a list replaces it. Unknown sections
+          are refused and duplicates dropped.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         type: string
       name:
@@ -6423,6 +6512,18 @@ definitions:
     - GroupRoleUser
     - GroupRoleAdmin
     - GroupRoleOwner
+  models.GroupSection:
+    enum:
+    - warranties
+    - maintenance
+    - loans
+    - upcoming
+    type: string
+    x-enum-varnames:
+    - GroupSectionWarranties
+    - GroupSectionMaintenance
+    - GroupSectionLoans
+    - GroupSectionUpcoming
   models.IntakeCandidate:
     properties:
       accepted_fields:
@@ -6645,6 +6746,15 @@ definitions:
           groups valued in different currencies. Admins change it via the group's
           update endpoint; changing it triggers a reprice of the group's commodities.
         type: string
+      hidden_sections:
+        description: |-
+          HiddenSections lists the sections the group hides for all its members
+          (see GroupSection). Empty for a group that hides nothing. Admins change
+          it through the group's update endpoints; every member reads it with the
+          group.
+        items:
+          $ref: '#/definitions/models.GroupSection'
+        type: array
       icon:
         description: |-
           Icon is an optional emoji from the curated set in
@@ -7125,10 +7235,12 @@ definitions:
           AvatarPath is the blob key of the user's profile photo, or nil when they
           have none and the UI falls back to their initials (#1382).
 
-          The key ends in a revision number (`avatars/<user>/3.jpg`) which exists to
-          bust browser caches: replacing a photo writes a new key rather than
-          overwriting one, so nothing has to reason about cache headers to make the
-          new picture show up.
+          The key lives under the user's tenant and ends in a revision number and a
+          random suffix (`t/<tenant>/avatars/<user>/3-a1b2c3d4e5f6.jpg`; a photo
+          with a flat `avatars/<user>/...` key works the same). Replacing a
+          photo writes a new key rather than overwriting one, so nothing has to
+          reason about cache headers to make the new picture show up, and a tenant
+          move copies the photo to a new key under the new tenant.
 
           Not user input: it is set by the avatar endpoints, which decide the key
           after validating and re-encoding what was uploaded. A client that could
@@ -7926,6 +8038,10 @@ paths:
           description: Not Found - unknown user
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the user moved to another tenant meanwhile (user.tenant_changed)
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: Unprocessable Entity - self-block or admin-on-admin without
             force
@@ -8086,6 +8202,10 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "404":
           description: Not Found - unknown user
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Conflict - the user moved to another tenant meanwhile (user.tenant_changed)
           schema:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
@@ -15261,7 +15381,8 @@ paths:
       consumes:
       - application/vnd.api+json
       description: Creates a new location group with a random non-guessable slug.
-        The creator becomes the group admin.
+        The creator becomes the group admin. hidden_sections, when given, sets the
+        sections the new group hides.
       parameters:
       - description: Group data
         in: body
@@ -15357,9 +15478,9 @@ paths:
     patch:
       consumes:
       - application/vnd.api+json
-      description: 'Updates a location group''s name, icon, and description. The group_currency
-        field is set once at creation and cannot be changed here — see issue #202
-        for the currency-migration tool. Requires group admin role.'
+      description: |-
+        Updates a location group's name, icon, and description, and its hidden sections when the request carries hidden_sections.
+        The group_currency field is set once at creation and cannot be changed here — see issue #202 for the currency-migration tool. Requires group admin role.
       parameters:
       - description: Group ID
         in: path
@@ -15392,6 +15513,48 @@ paths:
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update group
+      tags:
+      - groups
+  /groups/{groupID}/hidden-sections:
+    put:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Replaces the list of sections the group hides for all its members (warranties, maintenance, loans, upcoming) and leaves the rest of the group unchanged.
+        An empty list shows every section. Hiding a section keeps its data, and writes to that data are still accepted.
+        Unknown sections are refused; duplicates are dropped. Requires group admin role.
+      parameters:
+      - description: Group ID
+        in: path
+        name: groupID
+        required: true
+        type: string
+      - description: Hidden sections
+        in: body
+        name: data
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.GroupHiddenSectionsRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.LocationGroupResponse'
+        "403":
+          description: Forbidden - not a group admin
+          schema:
+            type: string
+        "404":
+          description: Group not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: Validation error
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Set the group's hidden sections
       tags:
       - groups
   /groups/{groupID}/invites:

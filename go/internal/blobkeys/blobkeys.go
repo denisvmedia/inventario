@@ -16,6 +16,7 @@
 //	t/<tenant>/restores/<blob-id>-<filename>    — uploaded archive for restore
 //	t/<tenant>/personal-exports/<id>.tar.gz     — personal data export
 //	t/<tenant>/seed-<uuid><ext>                 — demo / seed fixtures
+//	t/<tenant>/avatars/<user>/<rev>-<suffix>.jpg — profile photo (JPEG)
 //
 // Every <blob-id> is a server-minted UUID. That is a correctness
 // requirement, not a style choice: the key is the DELETE key, nothing
@@ -66,6 +67,9 @@ const RestoresSegment = "restores"
 // exports (#2177), the archives a user downloads with a copy of their own
 // data.
 const PersonalExportsSegment = "personal-exports"
+
+// AvatarsSegment is the per-tenant subfolder for profile photos.
+const AvatarsSegment = "avatars"
 
 // TenantPrefix returns the bucket-relative root for a single tenant —
 // `t/<tenant>/`. Callers that need to enumerate or sweep blobs for a
@@ -133,6 +137,31 @@ func BuildThumbnailBlobKey(tenantID, fileID, size string) string {
 		Prefix, tenantID, ThumbnailsSegment,
 		sanitizeSegment(fileID), sanitizeSegment(size),
 	)
+}
+
+// BuildAvatarBlobKey produces the canonical blob key for a profile photo:
+// `t/<tenant>/avatars/<user>/<name>`. name is the per-upload file name the
+// avatar service builds ("<revision>-<random suffix>.jpg"), so every upload
+// gets its own key.
+func BuildAvatarBlobKey(tenantID, userID, name string) string {
+	return fmt.Sprintf("%s%s/%s/%s/%s",
+		Prefix, tenantID, AvatarsSegment,
+		sanitizeSegment(userID), sanitizeSegment(name),
+	)
+}
+
+// IsAvatarBlobKey reports whether key is a profile photo key: the
+// tenant-prefixed layout BuildAvatarBlobKey produces, or the flat
+// `avatars/<user>/...` layout photos uploaded before it carry.
+func IsAvatarBlobKey(key string) bool {
+	if strings.HasPrefix(key, AvatarsSegment+"/") {
+		return true
+	}
+	if !HasTenantPrefix(key) {
+		return false
+	}
+	_, rest, found := strings.Cut(key[len(Prefix):], "/")
+	return found && strings.HasPrefix(rest, AvatarsSegment+"/")
 }
 
 // BuildExportBlobKey produces the canonical blob key for a generated

@@ -190,7 +190,7 @@ helm upgrade --install inventario ./helm/inventario \
 Two things move the database forward, and they are not the same:
 
 - **Schema migrations** — `inventario db migrate up`. Generated files, applied in order, tracked in the revision table.
-- **Data migrations** — `inventario db migrate data`. Idempotent: creates the default tenant and the initial admin if they are missing.
+- **Data migrations** — `inventario db migrate data`. Idempotent: creates the default tenant and the initial admin if they are missing. It never moves a user between tenants. When the admin email exists only in another tenant and the default tenant was already there, which is the case after an operator moved the admin with `inventario users update --tenant`, the job logs a warning naming that tenant and succeeds without creating an admin. When the default tenant did not exist before the run, as on a database restored under another tenant id, the job fails and names the tenant the admin is in.
 
 Both need the DB roles that `inventario db bootstrap` creates, and the `pg_trgm` extension it installs. `migrate up` checks for the extension up front and names it, rather than failing partway through the chain on `gin_trgm_ops`.
 

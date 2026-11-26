@@ -66,7 +66,9 @@ const intakeOneItemHint = "All attached files show the SAME single item from dif
 // scan service as the session's author, so the author's hourly scan limit
 // and the audit trail apply exactly as for a scan in the item form. The
 // outcome is stored once; a source is never scanned again unless a member
-// asks for a rescan or resumes a failed one.
+// asks for a rescan or resumes a failed one. Once the outcome is stored, the
+// scan's suggestion for each file, a document tag and a title, is applied to
+// the file where it takes nothing the member set (see intakeFileSuggestion).
 type IntakeWorker struct {
 	factorySet     *registry.FactorySet
 	scan           *CommodityScanService
@@ -245,7 +247,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	workCtx, cancel := context.WithTimeout(author.ctx, w.stuckAfter-intakeStuckMargin/2)
 	defer cancel()
 
-	photos, code, err := w.readFiles(workCtx, src)
+	files, code, err := w.readFiles(workCtx, src)
 	if err != nil {
 		log.Error("Intake worker: failed to read the source files", "error", err)
 		w.retryOrFail(ctx, reg, src, IntakeErrorFileUnreadable, log)
@@ -257,7 +259,7 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 	}
 
 	input := ScanInput{
-		Photos:                photos,
+		Photos:                files.photos,
 		PreferredCurrencyCode: string(author.group.GroupCurrency),
 		ItemTypes:             w.itemTypes(author.ctx, log),
 	}
@@ -291,6 +293,12 @@ func (w *IntakeWorker) process(ctx context.Context, reg registry.IntakeRegistry,
 		log.Error("Intake worker: failed to store the scan", "error", err)
 	default:
 		log.Info("Intake worker: source scanned", "candidates", len(candidates))
+		// The suggestions follow the stored scan only: a result dropped
+		// above leaves the files as they are. A file delivered from another
+		// system is never scanned, so it keeps the title it came with.
+		if !src.HasExternalIdentity() {
+			w.applyIntakeFileSuggestions(author.ctx, files.ids, result.Files, log)
+		}
 	}
 }
 
@@ -344,50 +352,59 @@ func (w *IntakeWorker) itemTypes(ctx context.Context, log *slog.Logger) []ScanIt
 	return nil
 }
 
+// intakeFiles are the files of a source as the scan gets them.
+type intakeFiles struct {
+	photos []ScanPhotoInput
+	// ids are the IDs of the files in the order of photos, which is the
+	// order the scan numbers them in.
+	ids []string
+}
+
 // readFiles reads the live files of the source. A code reports a problem
 // with the files themselves, which a retry cannot fix; an error one that
 // may pass.
-func (w *IntakeWorker) readFiles(ctx context.Context, src *models.IntakeSource) ([]ScanPhotoInput, string, error) {
+func (w *IntakeWorker) readFiles(ctx context.Context, src *models.IntakeSource) (intakeFiles, string, error) {
 	files, err := w.factorySet.FileRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	linked, err := files.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	if len(linked) == 0 {
-		return nil, IntakeErrorNoFiles, nil
+		return intakeFiles{}, IntakeErrorNoFiles, nil
 	}
 	cfg := w.scan.Config()
 	if cfg.MaxPhotos > 0 && len(linked) > cfg.MaxPhotos {
-		return nil, IntakeErrorTooManyFiles, nil
+		return intakeFiles{}, IntakeErrorTooManyFiles, nil
 	}
 	b, err := blob.OpenBucket(ctx, w.uploadLocation)
 	if err != nil {
-		return nil, "", err
+		return intakeFiles{}, "", err
 	}
 	defer b.Close()
 
-	photos := make([]ScanPhotoInput, 0, len(linked))
+	out := intakeFiles{photos: make([]ScanPhotoInput, 0, len(linked)), ids: make([]string, 0, len(linked))}
 	for _, file := range linked {
 		if file.File == nil || !AllowedMIMETypes[file.MIMEType] {
-			return nil, IntakeErrorUnsupportedFile, nil
+			return intakeFiles{}, IntakeErrorUnsupportedFile, nil
 		}
 		if cfg.MaxPhotoBytes > 0 && file.SizeBytes > int64(cfg.MaxPhotoBytes) {
-			return nil, IntakeErrorFileTooLarge, nil
+			return intakeFiles{}, IntakeErrorFileTooLarge, nil
 		}
 		data, code, err := readIntakeBlob(ctx, b, file.OriginalPath, cfg.MaxPhotoBytes)
 		if err != nil || code != "" {
-			return nil, code, err
+			return intakeFiles{}, code, err
 		}
-		photos = append(photos, ScanPhotoInput{
+		out.photos = append(out.photos, ScanPhotoInput{
 			Filename:    file.Path + file.Ext,
 			ContentType: file.MIMEType,
 			Data:        data,
 		})
+		out.ids = append(out.ids, file.ID)
 	}
-	return photos, "", nil
+	return out, "", nil
 }
 
 func readIntakeBlob(ctx context.Context, b *blob.Bucket, key string, maxBytes int) ([]byte, string, error) {

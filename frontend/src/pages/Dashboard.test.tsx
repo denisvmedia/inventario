@@ -475,3 +475,66 @@ describe("<DashboardPage /> — saved views", () => {
     expect(localStorage.getItem(`savedViews:suggestionsDismissed:${SLUG}`)).toBe("1")
   })
 })
+
+describe("<DashboardPage /> in a group that hides sections (#1607)", () => {
+  it("leaves out the warranty cards while the group hides warranties", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties", "loans"] }]),
+      ...commodityHandlers.list(SLUG, [
+        commodityResource("c1", { name: "Kettle", warranty_expires_at: "2099-01-01" }),
+      ]),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+
+    await waitFor(() =>
+      expect(screen.getByTestId("dashboard-commodities-count")).toHaveTextContent("1")
+    )
+    expect(screen.getByTestId("dashboard-total-value")).toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-active-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-expired-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-expiring-warranties")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("dashboard-warranty-health")).not.toBeInTheDocument()
+    expect(screen.getByText("Kettle")).toBeInTheDocument()
+
+    // No ready-made view built on a hidden section.
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).not.toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-lentOut")
+    ).not.toBeInTheDocument()
+    expect(within(card).getByTestId("dashboard-suggested-view-add-untagged")).toBeInTheDocument()
+  })
+
+  it("offers the Lent out view while only warranties are hidden", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties"] }]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(within(card).getByTestId("dashboard-suggested-view-add-lentOut")).toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).not.toBeInTheDocument()
+  })
+
+  it("offers the Expiring warranties view while only loans are hidden", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["loans"] }]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { globalTotal: 0 })
+    )
+    renderDashboard()
+    const card = await screen.findByTestId("dashboard-suggested-views")
+    expect(
+      within(card).getByTestId("dashboard-suggested-view-add-expiringWarranties")
+    ).toBeInTheDocument()
+    expect(
+      within(card).queryByTestId("dashboard-suggested-view-add-lentOut")
+    ).not.toBeInTheDocument()
+  })
+})

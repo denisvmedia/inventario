@@ -522,6 +522,9 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 	}
 
 	in.mapCustomFieldGuesses(result)
+	// A model that classifies the files one by one may leave out the
+	// scan-level document type older clients read; derive it then.
+	result.FillDocumentType()
 	audit.Status = models.CommodityScanStatusOK
 	audit.TokensUsed = clampInt32(result.UsedTokens)
 	// The provider may have a more accurate latency reading (e.g. it
@@ -592,6 +595,7 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 		return nil, errxtrace.Classify(ErrScanProviderError)
 	}
 	in.mapCustomFieldGuesses(result)
+	result.FillDocumentType()
 	return result, nil
 }
 

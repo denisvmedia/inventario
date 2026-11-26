@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event"
 import { Route } from "react-router-dom"
 import { beforeAll, beforeEach, describe, expect, it } from "vitest"
 
+import { SectionRoute } from "@/components/routing/SectionRoute"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { initI18n } from "@/i18n"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -120,5 +121,60 @@ describe("<UpcomingPage />", () => {
 
     await pickRadixSelect(user, /Period/i, { optionLabel: /Next 12 months/i })
     await waitFor(() => expect(days).toContain(365))
+  })
+})
+
+describe("<UpcomingPage /> in a group that hides sections (#1607)", () => {
+  function renderRoute() {
+    return renderWithProviders({
+      initialPath: `/g/${SLUG}/upcoming`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/upcoming"
+          element={
+            <GroupProvider>
+              <SectionRoute section="upcoming">
+                <UpcomingPage />
+              </SectionRoute>
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+  }
+
+  it("leaves out the dates of hidden sections and their tabs", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["warranties", "loans"] }]),
+      ...reminderHandlers.upcoming(SLUG, ITEMS)
+    )
+    renderRoute()
+
+    const list = await screen.findByTestId("upcoming-list")
+    await waitFor(() => expect(within(list).getAllByRole("listitem")).toHaveLength(1))
+    expect(list).toHaveTextContent("Car")
+    expect(screen.getByTestId("upcoming-tab-reminder")).toBeInTheDocument()
+    expect(screen.getByTestId("upcoming-tab-maintenance")).toBeInTheDocument()
+    expect(screen.queryByTestId("upcoming-tab-warranty")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("upcoming-tab-loan")).not.toBeInTheDocument()
+  })
+
+  it("shows a notice with a link to the group settings while the group hides Upcoming", async () => {
+    server.use(
+      ...groupHandlers.list([{ ...groupFixture[0], hidden_sections: ["upcoming"] }]),
+      ...reminderHandlers.upcoming(SLUG, ITEMS)
+    )
+    renderRoute()
+
+    const notice = await screen.findByTestId("hidden-section-notice")
+    expect(notice).toHaveAttribute("data-section", "upcoming")
+    expect(
+      within(notice).getByRole("heading", { name: "Upcoming is hidden in this group" })
+    ).toBeInTheDocument()
+    expect(within(notice).getByTestId("hidden-section-settings")).toHaveAttribute(
+      "href",
+      "/groups/g1/settings?section=sections"
+    )
+    expect(screen.queryByTestId("page-upcoming")).not.toBeInTheDocument()
   })
 })
