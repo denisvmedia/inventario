@@ -5,7 +5,10 @@ import { compareVersions, normalizeVersion } from "@/lib/changelog"
 // the page (no stored version) sees it once for the build's newest
 // release. A stored version newer than the build, as after a server
 // rollback, shows no dot.
-export function hasUnreadRelease(latest: string | null, lastSeen: string | null | undefined): boolean {
+export function hasUnreadRelease(
+  latest: string | null,
+  lastSeen: string | null | undefined
+): boolean {
   if (!latest) return false
   if (!lastSeen || !normalizeVersion(lastSeen)) return true
   return compareVersions(latest, lastSeen) > 0

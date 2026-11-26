@@ -52,7 +52,10 @@ const LINK_DEFINITION = /^\[[^\]]+\]:\s/
 
 // parseChangelog returns every released version in the file, in file order.
 // The Unreleased section and anything that is not a version are skipped.
-export function parseChangelog(markdown: string, options: ParseChangelogOptions): ChangelogRelease[] {
+export function parseChangelog(
+  markdown: string,
+  options: ParseChangelogOptions
+): ChangelogRelease[] {
   const releases: ChangelogRelease[] = []
   let release: ChangelogRelease | null = null
   let section: ChangelogSection | null = null
@@ -218,7 +221,10 @@ function findClosing(source: string, marker: string, from: number): number {
 
 // readLink reads `[label](href)` starting at `start`, allowing brackets
 // nested in the label and a code span that contains brackets.
-function readLink(source: string, start: number): { label: string; href: string; end: number } | null {
+function readLink(
+  source: string,
+  start: number
+): { label: string; href: string; end: number } | null {
   let depth = 0
   let i = start
   for (; i < source.length; i++) {
@@ -338,7 +344,10 @@ export function describeBuild(stamp: string): BuildStamp {
 // selectReleases keeps the releases the build contains, newest first: up to
 // and including the release a build was cut from, or every release for a
 // build that names none.
-export function selectReleases(releases: ChangelogRelease[], build: BuildStamp): ChangelogRelease[] {
+export function selectReleases(
+  releases: ChangelogRelease[],
+  build: BuildStamp
+): ChangelogRelease[] {
   const cutoff = build.kind === "release" ? build.version : build.base
   return releases
     .filter((r) => cutoff === null || compareVersions(r.version, cutoff) <= 0)

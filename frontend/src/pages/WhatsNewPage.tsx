@@ -42,7 +42,10 @@ export function WhatsNewView({
     <>
       <RouteTitle title={t("settings:whatsNew.title")} />
       <Page width="narrow" data-testid="whats-new-page">
-        <PageHeader title={t("settings:whatsNew.title")} subtitle={t("settings:whatsNew.subtitle")} />
+        <PageHeader
+          title={t("settings:whatsNew.title")}
+          subtitle={t("settings:whatsNew.subtitle")}
+        />
         {meta.build.kind === "development" ? (
           <Alert data-testid="whats-new-development-build">
             <Info aria-hidden="true" />

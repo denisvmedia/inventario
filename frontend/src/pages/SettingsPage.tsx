@@ -231,7 +231,9 @@ function SettingsNav({
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             {t(`settings:sections.${id}`)}
-            {id === "help" && whatsNewUnread ? <WhatsNewDot testId="settings-nav-help-unread" /> : null}
+            {id === "help" && whatsNewUnread ? (
+              <WhatsNewDot testId="settings-nav-help-unread" />
+            ) : null}
             {active === id ? (
               <ChevronRight className="ml-auto size-3.5" aria-hidden="true" />
             ) : null}

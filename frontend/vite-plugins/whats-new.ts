@@ -1,7 +1,12 @@
 import fs from "node:fs"
 import type { Plugin } from "vite"
 
-import { describeBuild, parseChangelog, selectReleases, type WhatsNewMeta } from "../src/lib/changelog"
+import {
+  describeBuild,
+  parseChangelog,
+  selectReleases,
+  type WhatsNewMeta,
+} from "../src/lib/changelog"
 
 // Build-time source of the What's new page (#1386). Reads the repository's
 // CHANGELOG.md, keeps the releases the build contains (see
@@ -48,7 +53,10 @@ export function whatsNewPlugin({ changelogPath, version }: WhatsNewPluginOptions
       )
     }
     const build = describeBuild(version)
-    const releases = selectReleases(parseChangelog(markdown, { linkBase: REPOSITORY_BLOB_URL }), build)
+    const releases = selectReleases(
+      parseChangelog(markdown, { linkBase: REPOSITORY_BLOB_URL }),
+      build
+    )
     return { build, releases }
   }
 

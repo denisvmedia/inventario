@@ -130,9 +130,7 @@ describe("parseChangelog", () => {
 
 describe("parseInline", () => {
   it("renders a link that is not http(s) as its text", () => {
-    expect(parseInline("[click](javascript:void)", BASE)).toEqual([
-      { type: "text", text: "click" },
-    ])
+    expect(parseInline("[click](javascript:void)", BASE)).toEqual([{ type: "text", text: "click" }])
     expect(parseInline("[mail](mailto:a@b.c)", BASE)).toEqual([{ type: "text", text: "mail" }])
   })
 
@@ -161,10 +159,24 @@ describe("parseInline", () => {
 
 describe("compareVersions", () => {
   it("orders by semantic-versioning precedence", () => {
-    const sorted = ["1.0.0", "0.10.0", "0.2.2", "1.0.0-rc.1", "1.0.0-rc.10", "1.0.0-beta", "0.2.10"].sort(
-      compareVersions
-    )
-    expect(sorted).toEqual(["0.2.2", "0.2.10", "0.10.0", "1.0.0-beta", "1.0.0-rc.1", "1.0.0-rc.10", "1.0.0"])
+    const sorted = [
+      "1.0.0",
+      "0.10.0",
+      "0.2.2",
+      "1.0.0-rc.1",
+      "1.0.0-rc.10",
+      "1.0.0-beta",
+      "0.2.10",
+    ].sort(compareVersions)
+    expect(sorted).toEqual([
+      "0.2.2",
+      "0.2.10",
+      "0.10.0",
+      "1.0.0-beta",
+      "1.0.0-rc.1",
+      "1.0.0-rc.10",
+      "1.0.0",
+    ])
   })
 
   it("accepts a leading v and ranks non-versions lowest", () => {
@@ -197,7 +209,10 @@ describe("selectReleases", () => {
   const releases = parseChangelog(FIXTURE, { linkBase: BASE })
 
   it("keeps the releases up to and including the build's version, newest first", () => {
-    expect(versions(selectReleases(releases, describeBuild("v1.0.0")))).toEqual(["1.0.0", "0.9.0-rc.1"])
+    expect(versions(selectReleases(releases, describeBuild("v1.0.0")))).toEqual([
+      "1.0.0",
+      "0.9.0-rc.1",
+    ])
     expect(versions(selectReleases(releases, describeBuild("v1.1.0")))).toEqual([
       "1.1.0",
       "1.0.0",
@@ -243,7 +258,15 @@ describe("CHANGELOG.md", () => {
   })
 
   it("uses only the Keep a Changelog headings and Operators, Operators last", () => {
-    const known = ["Added", "Changed", "Deprecated", "Removed", "Fixed", "Security", OPERATORS_SECTION]
+    const known = [
+      "Added",
+      "Changed",
+      "Deprecated",
+      "Removed",
+      "Fixed",
+      "Security",
+      OPERATORS_SECTION,
+    ]
     for (const r of releases) {
       const titles = r.sections.map((s) => s.title)
       for (const t of titles) expect(known, `${r.version}: ${t}`).toContain(t)

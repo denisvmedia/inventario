@@ -43,7 +43,10 @@ First release.
   { linkBase: "https://github.com/acme/app/blob/master/" }
 )
 
-const RELEASE_BUILD: WhatsNewMeta = { build: { kind: "release", version: "0.3.0" }, latestVersion: "0.3.0" }
+const RELEASE_BUILD: WhatsNewMeta = {
+  build: { kind: "release", version: "0.3.0" },
+  latestVersion: "0.3.0",
+}
 const DEV_BUILD: WhatsNewMeta = {
   build: { kind: "development", label: "edge", base: null },
   latestVersion: "0.3.0",
@@ -116,7 +119,9 @@ describe("<WhatsNewView />", () => {
         showOperators={false}
       />
     )
-    expect(screen.getByTestId("whats-new-empty")).toHaveTextContent("No release has been published yet.")
+    expect(screen.getByTestId("whats-new-empty")).toHaveTextContent(
+      "No release has been published yet."
+    )
   })
 
   it("has no axe violations", async () => {

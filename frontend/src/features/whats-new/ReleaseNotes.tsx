@@ -53,7 +53,11 @@ export function ReleaseNotes({
                 </p>
               ))}
               {sections.map((section) => (
-                <ReleaseSection key={section.title} section={section} label={sectionLabel(t, section.title)} />
+                <ReleaseSection
+                  key={section.title}
+                  section={section}
+                  label={sectionLabel(t, section.title)}
+                />
               ))}
               {sections.length === 0 && release.paragraphs.length === 0 ? (
                 <p className="text-muted-foreground" data-testid="whats-new-no-user-changes">
