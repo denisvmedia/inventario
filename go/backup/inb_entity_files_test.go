@@ -550,7 +550,8 @@ func TestINBRestore_SupportedFormatVersions(t *testing.T) {
 		{name: "3.3 archive", manifest: `{"version":"3.3"}`},
 		{name: "3.4 archive", manifest: `{"version":"3.4"}`},
 		{name: "3.5 archive", manifest: `{"version":"3.5"}`},
-		{name: "current 3.6 archive", manifest: `{"version":"3.6"}`},
+		{name: "3.6 archive", manifest: `{"version":"3.6"}`},
+		{name: "current 3.7 archive", manifest: `{"version":"3.7"}`},
 		{name: "future minor of a known major", manifest: `{"version":"3.9"}`},
 	}
 

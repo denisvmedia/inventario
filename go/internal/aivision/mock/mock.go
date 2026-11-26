@@ -133,14 +133,15 @@ func looksLikeInvoice(photos []aivision.PhotoInput) bool {
 // the wire) and avoids action-at-a-distance across calls.
 func cloneScanResult(src aivision.ScanResult) aivision.ScanResult {
 	dst := aivision.ScanResult{
-		UsedTokens: src.UsedTokens,
-		LatencyMS:  src.LatencyMS,
-		Fields:     cloneFieldMap(src.Fields),
+		UsedTokens:   src.UsedTokens,
+		LatencyMS:    src.LatencyMS,
+		Fields:       cloneFieldMap(src.Fields),
+		CustomFields: cloneFieldMap(src.CustomFields),
 	}
 	if src.Items != nil {
 		dst.Items = make([]aivision.ScanItem, len(src.Items))
 		for i, it := range src.Items {
-			dst.Items[i] = aivision.ScanItem{Fields: cloneFieldMap(it.Fields)}
+			dst.Items[i] = aivision.ScanItem{Fields: cloneFieldMap(it.Fields), CustomFields: cloneFieldMap(it.CustomFields)}
 		}
 	}
 	if src.Warnings != nil {

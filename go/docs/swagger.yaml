@@ -2114,6 +2114,15 @@ definitions:
     properties:
       cover:
         $ref: '#/definitions/jsonapi.CommodityCover'
+      linked_items:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.LinkedItemSummary'
+        description: |-
+          LinkedItems names, per item ID, the items the commodity's "link to
+          another item" custom fields point at (#2803), so a client can show a
+          link without fetching each item. A linked item in Trash is listed
+          with trashed=true.
+        type: object
     type: object
   jsonapi.CommodityRestoreMeta:
     properties:
@@ -2137,6 +2146,15 @@ definitions:
     type: object
   jsonapi.CommodityScanAttributes:
     properties:
+      custom_fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        description: |-
+          CustomFields are the values read for the group's custom fields
+          (#2803), keyed by field ID, in the form an item write takes them: a
+          string for text, long text, URL, date and a select field's option ID,
+          a number, or a boolean. Absent when the scan read none.
+        type: object
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
@@ -2168,6 +2186,10 @@ definitions:
     type: object
   jsonapi.CommodityScanItem:
     properties:
+      custom_fields:
+        additionalProperties:
+          $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
+        type: object
       fields:
         additionalProperties:
           $ref: '#/definitions/jsonapi.CommodityScanFieldGuess'
@@ -2575,6 +2597,169 @@ definitions:
         items:
           $ref: '#/definitions/jsonapi.CurrencyMigrationResponseData'
         type: array
+    type: object
+  jsonapi.CustomFieldDeleteMeta:
+    properties:
+      deleted_values:
+        example: 4
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CustomFieldDeleteResponse:
+    properties:
+      meta:
+        $ref: '#/definitions/jsonapi.CustomFieldDeleteMeta'
+    type: object
+  jsonapi.CustomFieldOptionView:
+    properties:
+      id:
+        example: a1b2c3d4
+        type: string
+      item_count:
+        example: 2
+        format: int64
+        type: integer
+      label:
+        example: Petrol
+        type: string
+    type: object
+  jsonapi.CustomFieldRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CustomFieldRequestDataWrapper'
+    type: object
+  jsonapi.CustomFieldRequestData:
+    properties:
+      name:
+        example: License plate
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/models.CustomFieldOption'
+        type: array
+      templates:
+        items:
+          $ref: '#/definitions/models.CustomFieldTemplate'
+        type: array
+      type:
+        example: text
+        type: string
+    type: object
+  jsonapi.CustomFieldRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CustomFieldRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - custom_fields
+        example: custom_fields
+        type: string
+    type: object
+  jsonapi.CustomFieldResponse:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CustomFieldResponseData'
+    type: object
+  jsonapi.CustomFieldResponseData:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CustomFieldView'
+      id:
+        type: string
+      type:
+        enum:
+        - custom_fields
+        example: custom_fields
+        type: string
+    type: object
+  jsonapi.CustomFieldUpdateRequest:
+    properties:
+      data:
+        $ref: '#/definitions/jsonapi.CustomFieldUpdateRequestDataWrapper'
+    type: object
+  jsonapi.CustomFieldUpdateRequestData:
+    properties:
+      name:
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/models.CustomFieldOption'
+        type: array
+      templates:
+        items:
+          $ref: '#/definitions/models.CustomFieldTemplate'
+        type: array
+      type:
+        type: string
+    type: object
+  jsonapi.CustomFieldUpdateRequestDataWrapper:
+    properties:
+      attributes:
+        $ref: '#/definitions/jsonapi.CustomFieldUpdateRequestData'
+      id:
+        type: string
+      type:
+        enum:
+        - custom_fields
+        example: custom_fields
+        type: string
+    type: object
+  jsonapi.CustomFieldView:
+    properties:
+      created_at:
+        type: string
+      item_count:
+        description: |-
+          ItemCount and TrashedItemCount are the items with a value of the
+          field. Deleting the field deletes those values.
+        example: 3
+        format: int64
+        type: integer
+      name:
+        example: License plate
+        type: string
+      options:
+        items:
+          $ref: '#/definitions/jsonapi.CustomFieldOptionView'
+        type: array
+      templates:
+        items:
+          $ref: '#/definitions/models.CustomFieldTemplate'
+        type: array
+      trashed_item_count:
+        example: 0
+        format: int64
+        type: integer
+      type:
+        description: |-
+          Type is one of text, long_text, number, money, date, boolean, select,
+          url, item_link. It never changes.
+        example: text
+        type: string
+      updated_at:
+        type: string
+    type: object
+  jsonapi.CustomFieldsMeta:
+    properties:
+      custom_fields:
+        example: 4
+        format: int64
+        type: integer
+      limit:
+        example: 200
+        format: int64
+        type: integer
+    type: object
+  jsonapi.CustomFieldsResponse:
+    properties:
+      data:
+        items:
+          $ref: '#/definitions/jsonapi.CustomFieldResponseData'
+        type: array
+      meta:
+        $ref: '#/definitions/jsonapi.CustomFieldsMeta'
     type: object
   jsonapi.EmptyTrashAttrs:
     properties:
@@ -3767,6 +3952,15 @@ definitions:
         type: array
       meta:
         $ref: '#/definitions/jsonapi.ItemTypesMeta'
+    type: object
+  jsonapi.LinkedItemSummary:
+    properties:
+      name:
+        example: Charger
+        type: string
+      trashed:
+        example: false
+        type: boolean
     type: object
   jsonapi.LoanCommodityRef:
     properties:
@@ -5379,6 +5573,15 @@ definitions:
           otherwise the purchase price in the group currency stands in.
         type: number
         x-nullable: "true"
+      custom_fields:
+        allOf:
+        - $ref: '#/definitions/models.CustomFieldValuesSchema'
+        description: |-
+          CustomFields are the item's custom field values (#2803), keyed by
+          field ID; see CustomFieldValues for the read and write rules. They are
+          rows of commodity_custom_field_values, not a column: the registries
+          read them with the item and write them in the item's transaction,
+          after checking each one against its field.
       deleted_at:
         description: |-
           DeletedAt is when the item was moved to Trash, nil while it is live. A
@@ -5766,6 +5969,25 @@ definitions:
     - CurrencyMigrationStatusRunning
     - CurrencyMigrationStatusCompleted
     - CurrencyMigrationStatusFailed
+  models.CustomFieldOption:
+    properties:
+      id:
+        example: a1b2c3d4
+        type: string
+      label:
+        example: Petrol
+        type: string
+    type: object
+  models.CustomFieldTemplate:
+    properties:
+      default_value: {}
+      item_type_id:
+        example: 8f1c...
+        type: string
+    type: object
+  models.CustomFieldValuesSchema:
+    additionalProperties: {}
+    type: object
   models.Export:
     properties:
       area_count:
@@ -6914,6 +7136,7 @@ definitions:
     - comments
     - warranty_notes
     - status_note
+    - custom_fields
     type: string
     x-enum-varnames:
     - CommoditySearchFieldAssetID
@@ -6928,8 +7151,14 @@ definitions:
     - CommoditySearchFieldComments
     - CommoditySearchFieldWarrantyNotes
     - CommoditySearchFieldStatusNote
+    - CommoditySearchFieldCustomFields
   registry.CommoditySearchMatch:
     properties:
+      custom_field_id:
+        description: |-
+          CustomFieldID is the custom field a custom_fields match was found
+          in; empty for every other field.
+        type: string
       field:
         $ref: '#/definitions/registry.CommoditySearchField'
       value:
@@ -9212,13 +9441,23 @@ paths:
         in: query
         name: no_purchase_date
         type: boolean
+      - collectionFormat: multi
+        description: Custom field condition as <field id>:<op>[:<value>], op one of
+          set, unset, eq, contains, gte, lte, in; repeat for several (AND). A field
+          the group does not have matches no item
+        in: query
+        items:
+          type: string
+        name: cf
+        type: array
       - description: Include drafts and non-in_use commodities (default true; false
           hides them)
         in: query
         name: include_inactive
         type: boolean
       - description: Sort field — name|registered_date|purchase_date|current_price|original_price|count,
-          prefix with '-' for descending
+          or cf.<field id> for a custom field (items without a value last); prefix
+          with '-' for descending
         in: query
         name: sort
         type: string
@@ -10564,6 +10803,13 @@ paths:
         in: query
         name: no_purchase_date
         type: boolean
+      - collectionFormat: multi
+        description: Custom field condition, as for GET /commodities
+        in: query
+        items:
+          type: string
+        name: cf
+        type: array
       - description: Accepted and ignored
         in: query
         name: sort
@@ -10747,6 +10993,192 @@ paths:
       summary: Preview a currency migration
       tags:
       - currency-migrations
+  /g/{groupSlug}/custom-fields:
+    get:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The custom fields of the group, by name. Each carries the number of items with a value of it and, separately, the number in Trash;
+        each option of a select field carries the number of items whose value it is. meta.limit is the most fields a group can have.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CustomFieldsResponse'
+      summary: List custom fields
+      tags:
+      - custom-fields
+    post:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        The name is required and unique in the group, ignoring case and runs of spaces. The type is fixed once the field exists.
+        A select field needs at least one option; the server gives each option its ID. templates lists the item types whose form shows the field, each with an optional default value.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Custom field object
+        in: body
+        name: customField
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CustomFieldRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "201":
+          description: Custom field created
+          schema:
+            $ref: '#/definitions/jsonapi.CustomFieldResponse'
+        "409":
+          description: Another custom field of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem, or the group has the most fields
+            it can have
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Create a custom field
+      tags:
+      - custom-fields
+  /g/{groupSlug}/custom-fields/{customFieldID}:
+    delete:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Deletes the field. A field that items have a value of, in Trash included, is refused with 409 custom_field.in_use and the counts in meta,
+        unless delete_values=true; then its values are deleted with it, in the same transaction.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Custom field ID
+        in: path
+        name: customFieldID
+        required: true
+        type: string
+      - description: Delete the field's values along with it
+        in: query
+        name: delete_values
+        type: boolean
+      - description: 'With delete_values=true: how many items the member confirmed
+          to lose a value. When another number of items has one, the delete is refused
+          with 409 custom_field.in_use and the counts in meta'
+        in: query
+        name: expected_values
+        type: integer
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: Deleted; meta.deleted_values counts the values removed
+          schema:
+            $ref: '#/definitions/jsonapi.CustomFieldDeleteResponse'
+        "404":
+          description: Custom field not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Items have a value of the field and delete_values was not true,
+            or expected_values is not how many items have one
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: delete_values is not a boolean, or expected_values is not a
+            whole number of at least 0
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Delete a custom field
+      tags:
+      - custom-fields
+    get:
+      consumes:
+      - application/vnd.api+json
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Custom field ID
+        in: path
+        name: customFieldID
+        required: true
+        type: string
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CustomFieldResponse'
+        "404":
+          description: Custom field not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Get a custom field
+      tags:
+      - custom-fields
+    patch:
+      consumes:
+      - application/vnd.api+json
+      description: |-
+        Attributes left out keep their value. Values, filters and list columns name the field by ID, so they keep working after a rename.
+        options replaces the list: an entry with an existing option's ID keeps that option and its values, an entry without an ID adds one, and an option left out is removed with its values.
+        templates replaces the template entries. The type cannot change: a different type is a 422 on type.
+      parameters:
+      - description: Group slug
+        in: path
+        name: groupSlug
+        required: true
+        type: string
+      - description: Custom field ID
+        in: path
+        name: customFieldID
+        required: true
+        type: string
+      - description: Custom field patch
+        in: body
+        name: customField
+        required: true
+        schema:
+          $ref: '#/definitions/jsonapi.CustomFieldUpdateRequest'
+      produces:
+      - application/vnd.api+json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/jsonapi.CustomFieldResponse'
+        "404":
+          description: Custom field not found
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: Another custom field of the group has this name
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+      summary: Update a custom field
+      tags:
+      - custom-fields
   /g/{groupSlug}/drafts:
     get:
       description: |-
@@ -13437,6 +13869,13 @@ paths:
         name: no_purchase_date
         type: boolean
       - collectionFormat: multi
+        description: 'Commodities only: custom field condition, as for GET /commodities'
+        in: query
+        items:
+          type: string
+        name: cf
+        type: array
+      - collectionFormat: multi
         description: 'Commodities only: filter by status (in_use, sold, lost, disposed,
           written_off); repeat to OR'
         in: query
@@ -13489,7 +13928,7 @@ paths:
         name: trashed
         type: boolean
       - description: 'Commodities only: sort field — name|registered_date|purchase_date|current_price|original_price|count,
-          prefix with ''-'' for descending'
+          or cf.<field id>; prefix with ''-'' for descending'
         in: query
         name: sort
         type: string

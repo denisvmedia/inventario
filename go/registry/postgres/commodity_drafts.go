@@ -412,6 +412,13 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		if err := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities()).Insert(ctx, commodity); err != nil {
 			return errxtrace.Wrap("failed to insert commodity", err)
 		}
+		// The custom field values are checked and written in this
+		// transaction too, so a refused value promotes nothing.
+		if len(commodity.CustomFields) > 0 {
+			if err := applyCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity, commodity.CustomFields); err != nil {
+				return err
+			}
+		}
 
 		// The new item's id is fresh, so no file can already link to it and
 		// the unique (file_id, entity_type, entity_id) index cannot trip.
@@ -443,6 +450,9 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		var stored models.Commodity
 		if err := store.NewTxRegistry[models.Commodity](tx, r.tableNames.Commodities()).ScanOneByField(ctx, store.Pair("id", commodity.ID), &stored); err != nil {
 			return errxtrace.Wrap("failed to read the new commodity", err)
+		}
+		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &stored); err != nil {
+			return err
 		}
 		item = &stored
 		return nil

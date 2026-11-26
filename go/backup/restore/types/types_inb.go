@@ -1,6 +1,7 @@
 package types
 
 import (
+	"encoding/json"
 	"path"
 	"strconv"
 	"strings"
@@ -42,7 +43,7 @@ const INBFilesMember = "files/_index.json"
 const INBDraftsMember = "files/_drafts.json"
 
 // INBIntakeDocumentsMember is the inner-tar member name of the delivered
-// documents (format 3.6). Kept in sync with
+// documents (format 3.7). Kept in sync with
 // backup/export.INBIntakeDocumentsName; also under `files/`.
 const INBIntakeDocumentsMember = "files/_intake_documents.json"
 
@@ -106,7 +107,7 @@ type INBManifest struct {
 	// FilesFile.
 	DraftsFile string `json:"draftsFile,omitempty"`
 	// IntakeDocumentsFile names the delivered documents member (format
-	// 3.6). Informational, like FilesFile.
+	// 3.7). Informational, like FilesFile.
 	IntakeDocumentsFile string `json:"intakeDocumentsFile,omitempty"`
 	// Sellers are the archived sellers (format 3.3), absent from older
 	// archives. Restore finds or creates each one before the first item.
@@ -114,8 +115,34 @@ type INBManifest struct {
 	// ItemTypes are the archived item types (format 3.4), absent from older
 	// archives. Restore maps each onto the destination group's types before
 	// the first item.
-	ItemTypes  []INBItemType    `json:"itemTypes,omitempty"`
-	Statistics INBManifestStats `json:"statistics"`
+	ItemTypes []INBItemType `json:"itemTypes,omitempty"`
+	// CustomFields are the archived custom fields (format 3.6), absent from
+	// older archives. Restore maps each onto a field of the destination
+	// group before the first item.
+	CustomFields []INBCustomField `json:"customFields,omitempty"`
+	Statistics   INBManifestStats `json:"statistics"`
+}
+
+// INBCustomField is an archived custom field keyed by its immutable UUID.
+// Mirrors backup/export.INBCustomField.
+type INBCustomField struct {
+	ID        string                   `json:"id"`
+	Name      string                   `json:"name"`
+	Type      string                   `json:"type"`
+	Options   []INBCustomFieldOption   `json:"options,omitempty"`
+	Templates []INBCustomFieldTemplate `json:"templates,omitempty"`
+}
+
+// INBCustomFieldOption mirrors backup/export.INBCustomFieldOption.
+type INBCustomFieldOption struct {
+	ID    string `json:"id"`
+	Label string `json:"label"`
+}
+
+// INBCustomFieldTemplate mirrors backup/export.INBCustomFieldTemplate.
+type INBCustomFieldTemplate struct {
+	ItemType     string          `json:"itemType"`
+	DefaultValue json.RawMessage `json:"defaultValue,omitempty"`
 }
 
 // INBItemType is an archived item type keyed by its slug, which
@@ -200,25 +227,29 @@ type INBCommodity struct {
 	Model     string `json:"model,omitempty"`
 	// SellerID is the archived seller's UUID; the processor resolves it
 	// through the manifest's sellers, so ConvertToCommodity leaves it out.
-	SellerID               string   `json:"sellerId,omitempty"`
-	Type                   string   `json:"type,omitempty"`
-	AreaID                 string   `json:"areaId"`
-	Count                  int      `json:"count"`
-	OriginalPrice          string   `json:"originalPrice,omitempty"`
-	OriginalPriceCurrency  string   `json:"originalPriceCurrency,omitempty"`
-	ConvertedOriginalPrice string   `json:"convertedOriginalPrice,omitempty"`
-	CurrentPrice           string   `json:"currentPrice,omitempty"`
-	SerialNumber           string   `json:"serialNumber,omitempty"`
-	ExtraSerialNumbers     []string `json:"extraSerialNumbers,omitempty"`
-	PartNumbers            []string `json:"partNumbers,omitempty"`
-	Tags                   []string `json:"tags,omitempty"`
-	Status                 string   `json:"status,omitempty"`
-	PurchaseDate           string   `json:"purchaseDate,omitempty"`
-	RegisteredDate         string   `json:"registeredDate,omitempty"`
-	LastModifiedDate       string   `json:"lastModifiedDate,omitempty"`
-	URLs                   []string `json:"urls,omitempty"`
-	Comments               string   `json:"comments,omitempty"`
-	Draft                  bool     `json:"draft"`
+	SellerID string `json:"sellerId,omitempty"`
+	// CustomFields are the archived custom field values keyed by the
+	// field's UUID; the processor maps them through the manifest's custom
+	// fields, so ConvertToCommodity leaves them out.
+	CustomFields           map[string]json.RawMessage `json:"customFields,omitempty"`
+	Type                   string                     `json:"type,omitempty"`
+	AreaID                 string                     `json:"areaId"`
+	Count                  int                        `json:"count"`
+	OriginalPrice          string                     `json:"originalPrice,omitempty"`
+	OriginalPriceCurrency  string                     `json:"originalPriceCurrency,omitempty"`
+	ConvertedOriginalPrice string                     `json:"convertedOriginalPrice,omitempty"`
+	CurrentPrice           string                     `json:"currentPrice,omitempty"`
+	SerialNumber           string                     `json:"serialNumber,omitempty"`
+	ExtraSerialNumbers     []string                   `json:"extraSerialNumbers,omitempty"`
+	PartNumbers            []string                   `json:"partNumbers,omitempty"`
+	Tags                   []string                   `json:"tags,omitempty"`
+	Status                 string                     `json:"status,omitempty"`
+	PurchaseDate           string                     `json:"purchaseDate,omitempty"`
+	RegisteredDate         string                     `json:"registeredDate,omitempty"`
+	LastModifiedDate       string                     `json:"lastModifiedDate,omitempty"`
+	URLs                   []string                   `json:"urls,omitempty"`
+	Comments               string                     `json:"comments,omitempty"`
+	Draft                  bool                       `json:"draft"`
 
 	// Extended commodity fields (#534 round-trip parity). MUST keep json tags
 	// identical to backup/export.INBCommodity. Warranty (#1554), terminal-status
@@ -312,7 +343,7 @@ func (d *INBDraft) Timestamps() (createdAt, updatedAt time.Time, err error) {
 	return createdAt, updatedAt, nil
 }
 
-// INBIntakeDocumentsDoc is the delivered documents document (format 3.6).
+// INBIntakeDocumentsDoc is the delivered documents document (format 3.7).
 // Mirrors backup/export.INBIntakeDocumentsDoc.
 type INBIntakeDocumentsDoc struct {
 	Documents []INBIntakeDocument `json:"documents"`

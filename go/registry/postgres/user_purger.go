@@ -162,13 +162,16 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			}
 		}
 
-		// Item types are group configuration, not the author's content: the
-		// ones the user created stay with their groups. Their NOT NULL
-		// created_by_user_id FK -> users(id) NO ACTION moves to another
-		// member, so it neither blocks the final delete nor the account
-		// deletion pre-check (which leaves item types out).
-		if err := r.reattributeItemTypes(ctx, tx, tenantID, userID); err != nil {
-			return err
+		// Item types, custom fields and their template entries are group
+		// configuration, not the author's content: the ones the user created
+		// stay with their groups. Their NOT NULL created_by_user_id FK ->
+		// users(id) NO ACTION moves to another member, so it neither blocks
+		// the final delete nor the account deletion pre-check (which leaves
+		// these tables out).
+		for _, nameFn := range groupConfigurationTables {
+			if err := r.reattributeGroupConfiguration(ctx, tx, nameFn(r.tableNames), tenantID, userID); err != nil {
+				return err
+			}
 		}
 		// The documents other systems delivered through the user's API
 		// tokens are group content too: the record keeps a replay from
@@ -427,44 +430,38 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 }
 
 // reattributeIntakeDocuments gives each document delivered through the
-// user's API tokens (#2809) to the member reattributeItemTypes picks. A
-// document whose group has no other member is deleted: its group is private
-// and leaves with the user.
+// user's API tokens (#2809) to the member reattributeGroupConfiguration
+// picks. A document whose group has no other member is deleted: its group is
+// private and leaves with the user.
 func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
-	docs := string(r.tableNames.IntakeDocuments())
-	memberships := string(r.tableNames.GroupMemberships())
-	handOver := fmt.Sprintf(`
-		UPDATE %[1]s d SET created_by_user_id = heir.member_user_id
-		FROM (
-			SELECT DISTINCT ON (group_id) group_id, member_user_id
-			FROM %[2]s
-			WHERE tenant_id = $1 AND member_user_id <> $2
-			ORDER BY group_id,
-				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
-				joined_at, member_user_id
-		) heir
-		WHERE d.tenant_id = $1 AND d.created_by_user_id = $2 AND d.group_id = heir.group_id`,
-		docs, memberships)
-	if _, err := tx.ExecContext(ctx, handOver, tenantID, userID); err != nil {
-		return errxtrace.Wrap("failed to hand over the user's delivered documents", err,
-			errx.Attrs("table", docs, "tenant_id", tenantID, "user_id", userID))
+	docs := r.tableNames.IntakeDocuments()
+	if err := r.reattributeGroupConfiguration(ctx, tx, docs, tenantID, userID); err != nil {
+		return err
 	}
 	rest := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", docs)
 	if _, err := tx.ExecContext(ctx, rest, tenantID, userID); err != nil {
 		return errxtrace.Wrap("failed to purge the user's delivered documents", err,
-			errx.Attrs("table", docs, "tenant_id", tenantID, "user_id", userID))
+			errx.Attrs("table", string(docs), "tenant_id", tenantID, "user_id", userID))
 	}
 	return nil
 }
 
-// reattributeItemTypes gives each item type the user created to another
-// member of its group: the owner first, then an admin, then the member who
-// joined first. It runs before the user's memberships are deleted, though
-// they are left out of the choice anyway. A type whose group has no other
-// member keeps its creator; such a group is private and is purged before the
-// user is.
-func (r *UserPurger) reattributeItemTypes(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
-	itemTypes := string(r.tableNames.ItemTypes())
+// groupConfigurationTables lists the group-scoped tables whose rows are
+// group configuration: the user purge hands the rows a user created to
+// another member of the group instead of counting them as the user's content.
+var groupConfigurationTables = []func(t store.TableNames) store.TableName{
+	func(t store.TableNames) store.TableName { return t.ItemTypes() },
+	func(t store.TableNames) store.TableName { return t.CustomFieldDefinitions() },
+	func(t store.TableNames) store.TableName { return t.ItemTypeCustomFields() },
+}
+
+// reattributeGroupConfiguration gives each row of table the user created to
+// another member of its group: the owner first, then an admin, then the
+// member who joined first. It runs before the user's memberships are deleted,
+// though they are left out of the choice anyway. A row whose group has no
+// other member keeps its creator; such a group is private and is purged
+// before the user is.
+func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, tx *sqlx.Tx, table store.TableName, tenantID, userID string) error {
 	memberships := string(r.tableNames.GroupMemberships())
 	query := fmt.Sprintf(`
 		UPDATE %[1]s t SET created_by_user_id = heir.member_user_id
@@ -477,12 +474,12 @@ func (r *UserPurger) reattributeItemTypes(ctx context.Context, tx *sqlx.Tx, tena
 				joined_at, member_user_id
 		) heir
 		WHERE t.tenant_id = $1 AND t.created_by_user_id = $2 AND t.group_id = heir.group_id`,
-		itemTypes, memberships)
+		string(table), memberships)
 	if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
 		return errxtrace.Wrap(
-			"failed to hand over the user's item types",
+			"failed to hand over the user's group configuration",
 			err,
-			errx.Attrs("table", itemTypes, "tenant_id", tenantID, "user_id", userID),
+			errx.Attrs("table", string(table), "tenant_id", tenantID, "user_id", userID),
 		)
 	}
 	return nil

@@ -36,6 +36,11 @@ const (
 	CommoditySearchFieldComments           CommoditySearchField = "comments"
 	CommoditySearchFieldWarrantyNotes      CommoditySearchField = "warranty_notes"
 	CommoditySearchFieldStatusNote         CommoditySearchField = "status_note"
+	// CommoditySearchFieldCustomFields is a custom field value (#2803):
+	// the text of a text, long text or URL field, or the label of a select
+	// option. A match on it names the field in CustomFieldID. It is matched
+	// on its own table, so it is in none of the lists below.
+	CommoditySearchFieldCustomFields CommoditySearchField = "custom_fields"
 )
 
 // CommoditySearchFields lists the text fields a search term is matched
@@ -85,6 +90,9 @@ var CommodityColumnSearchFields = []CommoditySearchField{
 type CommoditySearchMatch struct {
 	Field CommoditySearchField `json:"field"`
 	Value string               `json:"value"`
+	// CustomFieldID is the custom field a custom_fields match was found
+	// in; empty for every other field.
+	CustomFieldID string `json:"custom_field_id,omitempty"`
 }
 
 // SplitSearchTerms splits a free-text query into the terms that must all
@@ -147,12 +155,13 @@ func containsFold(s, term string) bool {
 //     a commodity tag whose label contains the term (see
 //     CommodityListOptions.SearchTagLabels);
 //   - the asset number, when the term reads as an asset ID
-//     (models.ParseAssetID: "A-0042", "42").
+//     (models.ParseAssetID: "A-0042", "42");
+//   - a custom field value, see CustomFieldSearch.
 //
 // It returns every field a term was found in (asset ID first, then the
-// order of CommoditySearchFields, each value once) and whether all terms
-// matched. No terms match everything and explain nothing.
-func MatchCommoditySearch(c *models.Commodity, terms []string, tagLabelSlugs map[string][]string) ([]CommoditySearchMatch, bool) {
+// order of CommoditySearchFields, then custom fields, each value once) and
+// whether all terms matched. No terms match everything and explain nothing.
+func MatchCommoditySearch(c *models.Commodity, terms []string, tagLabelSlugs map[string][]string, custom CustomFieldSearch) ([]CommoditySearchMatch, bool) {
 	if len(terms) == 0 {
 		return nil, true
 	}
@@ -169,7 +178,7 @@ func MatchCommoditySearch(c *models.Commodity, terms []string, tagLabelSlugs map
 	all := true
 	for _, term := range terms {
 		found := false
-		for _, m := range matchTerm(c, term, tagLabelSlugs[term]) {
+		for _, m := range matchTerm(c, term, tagLabelSlugs[term], custom) {
 			found = true
 			record(m)
 		}
@@ -189,14 +198,17 @@ func MatchCommoditySearch(c *models.Commodity, terms []string, tagLabelSlugs map
 // searchFieldRank orders matches: the asset ID first, then the text fields
 // in CommoditySearchFields order.
 func searchFieldRank(f CommoditySearchField) int {
-	if f == CommoditySearchFieldAssetID {
+	switch f {
+	case CommoditySearchFieldAssetID:
 		return -1
+	case CommoditySearchFieldCustomFields:
+		return len(CommoditySearchFields)
 	}
 	return slices.Index(CommoditySearchFields, f)
 }
 
 // matchTerm returns every field of c that term matches.
-func matchTerm(c *models.Commodity, term string, labelSlugs []string) []CommoditySearchMatch {
+func matchTerm(c *models.Commodity, term string, labelSlugs []string, custom CustomFieldSearch) []CommoditySearchMatch {
 	var out []CommoditySearchMatch
 	if n, ok := models.ParseAssetID(term); ok && c.AssetNumber != nil && *c.AssetNumber == n {
 		out = append(out, CommoditySearchMatch{Field: CommoditySearchFieldAssetID, Value: models.FormatAssetID(n)})
@@ -234,7 +246,7 @@ func matchTerm(c *models.Commodity, term string, labelSlugs []string) []Commodit
 	note(CommoditySearchFieldComments, c.Comments)
 	note(CommoditySearchFieldWarrantyNotes, c.WarrantyNotes)
 	note(CommoditySearchFieldStatusNote, c.StatusNote)
-	return out
+	return append(out, custom.match(c, term)...)
 }
 
 // searchExcerptRunes is the most a note excerpt shows on either side of the

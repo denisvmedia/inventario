@@ -209,6 +209,7 @@ func (r *TenantPurger) PurgeTenantDependents(ctx context.Context, tenantID strin
 			return purgeByTenant(ctx, tenantID, reg.List, reg.Delete, tenantAware[models.Seller])
 		}},
 		{"item_types", func() error { return r.purgeItemTypes(tenantID) }},
+		{"custom_fields", func() error { return r.purgeCustomFields(tenantID) }},
 		// Per-user/per-group notification overrides. The only delete handle is
 		// DeleteByGroup(tenant, group), so fan out across the tenant's groups
 		// (mirrors the postgres per-tenant DELETE).
@@ -350,6 +351,15 @@ func purgeByTenant[T any](
 func (r *TenantPurger) purgeItemTypes(tenantID string) error {
 	if f, ok := r.fs.ItemTypeRegistryFactory.(*ItemTypeRegistryFactory); ok {
 		f.purgeWhere(func(t *models.ItemType) bool { return t.TenantID == tenantID })
+	}
+	return nil
+}
+
+// purgeCustomFields drops the tenant's custom fields (#2803). Their values
+// went with the items.
+func (r *TenantPurger) purgeCustomFields(tenantID string) error {
+	if f, ok := r.fs.CustomFieldRegistryFactory.(*CustomFieldRegistryFactory); ok {
+		f.purgeWhere(func(d *models.CustomFieldDefinition) bool { return d.TenantID == tenantID })
 	}
 	return nil
 }

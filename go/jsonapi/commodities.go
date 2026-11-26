@@ -31,6 +31,17 @@ type CommodityResponseData struct {
 // on the list response so single-commodity callers see the same shape.
 type CommodityResponseMeta struct {
 	Cover *CommodityCover `json:"cover,omitempty"`
+	// LinkedItems names, per item ID, the items the commodity's "link to
+	// another item" custom fields point at (#2803), so a client can show a
+	// link without fetching each item. A linked item in Trash is listed
+	// with trashed=true.
+	LinkedItems map[string]LinkedItemSummary `json:"linked_items,omitempty"`
+}
+
+// LinkedItemSummary is an item a custom field value links to.
+type LinkedItemSummary struct {
+	Name    string `json:"name" example:"Charger"`
+	Trashed bool   `json:"trashed" example:"false"`
 }
 
 // CommodityCover is the resolved cover image for a commodity. `Source`
@@ -64,7 +75,28 @@ func (cr *CommodityResponse) WithCover(cover *CommodityCover) *CommodityResponse
 		return cr
 	}
 	tmp := *cr
-	tmp.Meta = &CommodityResponseMeta{Cover: cover}
+	meta := CommodityResponseMeta{}
+	if cr.Meta != nil {
+		meta = *cr.Meta
+	}
+	meta.Cover = cover
+	tmp.Meta = &meta
+	return &tmp
+}
+
+// WithLinkedItems attaches the summaries of the items the commodity's custom
+// fields link to. Returns a shallow copy; an empty map changes nothing.
+func (cr *CommodityResponse) WithLinkedItems(items map[string]LinkedItemSummary) *CommodityResponse {
+	if len(items) == 0 {
+		return cr
+	}
+	tmp := *cr
+	meta := CommodityResponseMeta{}
+	if cr.Meta != nil {
+		meta = *cr.Meta
+	}
+	meta.LinkedItems = items
+	tmp.Meta = &meta
 	return &tmp
 }
 

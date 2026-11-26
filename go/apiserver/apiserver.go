@@ -968,6 +968,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		r.With(contentWriteGate).Route("/tags", Tags(params))
 		r.With(contentWriteGate).Route("/sellers", Sellers())
 		r.With(contentWriteGate).Route("/item-types", ItemTypes())
+		r.With(contentWriteGate).Route("/custom-fields", CustomFields())
 		r.With(contentWriteGate).Route("/loans", GroupLoans(params))
 		r.With(contentWriteGate).Route("/services", GroupServices(params))
 		r.With(contentWriteGate).Route("/maintenance", GroupMaintenance(params))

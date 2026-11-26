@@ -47,8 +47,15 @@ export interface CommodityQuery {
   noPhoto: boolean
   noPurchasePrice: boolean
   noPurchaseDate: boolean
+  // Custom field conditions as the API spells them, "<field id>:<op>" or
+  // "<field id>:<op>:<value>"; an item has to meet all of them. They are
+  // kept as written, so a condition the server refuses comes back as a 400.
+  customFields: string[]
   sort: CommoditySortOption
   sortDesc: boolean
+  // The id of the custom field the list is sorted by, or "" to sort by
+  // sort. sortDesc applies to either.
+  customFieldSort: string
   // Values of a flag or of tag_mode that the page URL carries but the parser
   // cannot read, by page-URL parameter. They stay in the URL and reach the
   // server as written, so the request fails with query.invalid_parameter and
@@ -95,8 +102,10 @@ export const DEFAULT_COMMODITY_QUERY: CommodityQuery = {
   noPhoto: false,
   noPurchasePrice: false,
   noPurchaseDate: false,
+  customFields: [],
   sort: "name",
   sortDesc: false,
+  customFieldSort: "",
   unreadable: {},
 }
 
@@ -119,8 +128,21 @@ const URL_PARAM = {
   noPhoto: "no_photo",
   noPurchasePrice: "no_purchase_price",
   noPurchaseDate: "no_purchase_date",
+  customField: "cf",
   sort: "sort",
 } as const
+
+// The sort value of a custom field starts with this, followed by its id.
+const CUSTOM_FIELD_SORT_PREFIX = "cf."
+
+// The sort parameter value of query: a field name, or cf.<field id>,
+// prefixed with "-" when descending.
+function sortValue(query: Pick<CommodityQuery, "sort" | "sortDesc" | "customFieldSort">): string {
+  const field = query.customFieldSort
+    ? `${CUSTOM_FIELD_SORT_PREFIX}${query.customFieldSort}`
+    : query.sort
+  return query.sortDesc ? `-${field}` : field
+}
 
 // Every page-URL parameter the query owns. Anything else in the URL (page,
 // view, …) belongs to the page and is left alone by writeCommodityQuery.
@@ -178,6 +200,9 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
   const sortRaw = params.get(URL_PARAM.sort) ?? ""
   const sortDesc = sortRaw.startsWith("-")
   const sortField = (sortDesc ? sortRaw.slice(1) : sortRaw) as CommoditySortOption
+  const customFieldSort = sortField.startsWith(CUSTOM_FIELD_SORT_PREFIX)
+    ? sortField.slice(CUSTOM_FIELD_SORT_PREFIX.length).trim()
+    : ""
   const validSort = COMMODITY_SORT_OPTIONS.includes(sortField)
   const unreadable: UnreadableValues = {}
   return {
@@ -199,8 +224,15 @@ export function parseCommodityQuery(params: URLSearchParams): CommodityQuery {
     noPhoto: flag(params, URL_PARAM.noPhoto, unreadable),
     noPurchasePrice: flag(params, URL_PARAM.noPurchasePrice, unreadable),
     noPurchaseDate: flag(params, URL_PARAM.noPurchaseDate, unreadable),
+    customFields: unique(
+      params
+        .getAll(URL_PARAM.customField)
+        .map((v) => v.trim())
+        .filter(Boolean)
+    ),
     sort: validSort ? sortField : "name",
-    sortDesc: validSort && sortDesc,
+    sortDesc: (validSort || customFieldSort !== "") && sortDesc,
+    customFieldSort,
     unreadable,
   }
 }
@@ -232,8 +264,9 @@ export function writeCommodityQuery(
   if (query.noPhoto) next.set(URL_PARAM.noPhoto, "1")
   if (query.noPurchasePrice) next.set(URL_PARAM.noPurchasePrice, "1")
   if (query.noPurchaseDate) next.set(URL_PARAM.noPurchaseDate, "1")
-  if (query.sort !== "name" || query.sortDesc) {
-    next.set(URL_PARAM.sort, query.sortDesc ? `-${query.sort}` : query.sort)
+  for (const v of query.customFields) next.append(URL_PARAM.customField, v)
+  if (query.sort !== "name" || query.sortDesc || query.customFieldSort) {
+    next.set(URL_PARAM.sort, sortValue(query))
   }
   // An unreadable value is kept until the parameter is set to a readable one.
   for (const [name, raw] of unreadableEntries(query.unreadable)) {
@@ -331,6 +364,7 @@ export function hasCommodityFilters(query: CommodityQuery): boolean {
     query.noPhoto ||
     query.noPurchasePrice ||
     query.noPurchaseDate ||
+    query.customFields.length > 0 ||
     unreadableEntries(query.unreadable).length > 0
   )
 }
@@ -355,8 +389,10 @@ export function commodityQueryToListOptions(query: CommodityQuery): ListCommodit
     noPhoto: query.noPhoto || undefined,
     noPurchasePrice: query.noPurchasePrice || undefined,
     noPurchaseDate: query.noPurchaseDate || undefined,
+    customFields: query.customFields.length > 0 ? query.customFields : undefined,
     sort: query.sort,
     sortDesc: query.sortDesc,
+    customFieldSort: query.customFieldSort || undefined,
     unreadable: apiUnreadable(query.unreadable),
   }
 }
@@ -377,6 +413,22 @@ function apiUnreadable(values: UnreadableValues): Record<string, string> | undef
   return Object.fromEntries(entries.map(([name, raw]) => [UNREADABLE_API_PARAM[name], raw]))
 }
 
+// A custom field condition in the form a saved view stores it: the option
+// ids of an "in" condition trimmed, without repeats and sorted. Any other
+// condition, and an "in" without ids, is sent as written, so the server can
+// refuse it.
+function canonicalCustomFieldCondition(cond: string): string {
+  const [fieldId, op, ...rest] = cond.split(":")
+  if (op !== "in" || rest.length === 0) return cond
+  const ids = rest
+    .join(":")
+    .split(",")
+    .map((id) => id.trim())
+    .filter((id) => id !== "")
+  if (ids.length === 0) return cond
+  return `${fieldId}:in:${[...new Set(ids)].sort().join(",")}`
+}
+
 // The API wire format of the list options: the one place that names the
 // query parameters GET /commodities reads. Set-like lists are sorted, so
 // two option objects that select the same items produce the same string
@@ -395,7 +447,16 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   if (opts.includeInactive !== undefined) {
     params.set("include_inactive", opts.includeInactive ? "true" : "false")
   }
-  if (opts.sort) params.set("sort", opts.sortDesc ? `-${opts.sort}` : opts.sort)
+  if (opts.sort || opts.customFieldSort) {
+    params.set(
+      "sort",
+      sortValue({
+        sort: opts.sort ?? "name",
+        sortDesc: opts.sortDesc ?? false,
+        customFieldSort: opts.customFieldSort ?? "",
+      })
+    )
+  }
   for (const w of sorted(opts.warrantyStatuses)) params.append("warranty_status", w)
   if (opts.warrantyExpiresBefore?.trim()) {
     params.set("warranty_expires_before", opts.warrantyExpiresBefore.trim())
@@ -414,6 +475,9 @@ export function listOptionsToParams(opts: ListCommoditiesOptions): URLSearchPara
   if (opts.noPhoto) params.set("no_photo", "true")
   if (opts.noPurchasePrice) params.set("no_purchase_price", "true")
   if (opts.noPurchaseDate) params.set("no_purchase_date", "true")
+  for (const cond of new Set(sorted(opts.customFields?.map(canonicalCustomFieldCondition)))) {
+    params.append("cf", cond)
+  }
   if (opts.trashed) params.set("trashed", "true")
   // Sent as written, replacing the readable default written above, so the
   // server refuses the request instead of applying a filter the URL did not

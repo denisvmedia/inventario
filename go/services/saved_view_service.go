@@ -163,13 +163,49 @@ func entryFor(view *models.SavedView, placement models.SavedViewPlacement, actor
 }
 
 // canonicalQuery validates a query string for a saved view and returns its
-// canonical form. A leading "?" is accepted and dropped.
-func canonicalQuery(raw string) (string, error) {
+// canonical form. A leading "?" is accepted and dropped. Custom field
+// conditions are checked against the group's fields, so a stored query
+// always resolves.
+func (s *SavedViewService) canonicalQuery(ctx context.Context, raw string) (string, error) {
 	q, err := commodityquery.ParseSaved(strings.TrimPrefix(raw, "?"))
 	if err != nil {
 		return "", err
 	}
+	if len(q.CustomFields) > 0 {
+		defs, err := s.customFields(ctx)
+		if err != nil {
+			return "", err
+		}
+		if err := commodityquery.CheckCustomFields(q, defs); err != nil {
+			return "", err
+		}
+	}
 	return q.Encode(), nil
+}
+
+// patchQuery returns the canonical form of patch.Query, or "" when the patch
+// leaves the query as it is.
+func (s *SavedViewService) patchQuery(ctx context.Context, patch SavedViewPatch) (string, error) {
+	if patch.Query == nil {
+		return "", nil
+	}
+	return s.canonicalQuery(ctx, *patch.Query)
+}
+
+// customFields lists the custom fields of the group in ctx.
+func (s *SavedViewService) customFields(ctx context.Context) ([]*models.CustomFieldDefinition, error) {
+	if s.factorySet.CustomFieldRegistryFactory == nil {
+		return nil, nil
+	}
+	reg, err := s.factorySet.CustomFieldRegistryFactory.CreateUserRegistry(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to create custom field registry", err)
+	}
+	defs, err := reg.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list custom fields", err)
+	}
+	return defs, nil
 }
 
 // List returns the views the member sees, in order.
@@ -236,7 +272,7 @@ func checkShareLimit(t registry.SavedViewTally) error {
 // stored in canonical form. The limits are checked under the registry's write
 // lock, so two creates cannot both pass the last free slot.
 func (s *SavedViewService) Create(ctx context.Context, actor SavedViewActor, in SavedViewInput) (SavedViewEntry, error) {
-	query, err := canonicalQuery(in.Query)
+	query, err := s.canonicalQuery(ctx, in.Query)
 	if err != nil {
 		return SavedViewEntry{}, err
 	}
@@ -307,7 +343,11 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 				ShowOnDashboard: patch.ShowOnDashboard,
 			}
 		}
-		updated, err := updateSavedView(ctx, reg, actor, id, patch, placement)
+		query, err := s.patchQuery(ctx, patch)
+		if err != nil {
+			return SavedViewEntry{}, err
+		}
+		updated, err := updateSavedView(ctx, reg, actor, id, patch, query, placement)
 		if err != nil {
 			return SavedViewEntry{}, err
 		}
@@ -332,22 +372,17 @@ func (s *SavedViewService) Update(ctx context.Context, actor SavedViewActor, id 
 }
 
 // updateSavedView applies the view fields of patch under the registry's
-// write lock and returns the view as stored.
+// write lock and returns the view as stored. query is the canonical form of
+// patch.Query, when that is set.
 func updateSavedView(
 	ctx context.Context,
 	reg registry.SavedViewRegistry,
 	actor SavedViewActor,
 	id string,
 	patch SavedViewPatch,
+	query string,
 	placement *registry.SavedViewPlacementPatch,
 ) (*models.SavedView, error) {
-	var query string
-	if patch.Query != nil {
-		var err error
-		if query, err = canonicalQuery(*patch.Query); err != nil {
-			return nil, err
-		}
-	}
 	updated, err := reg.UpdateFunc(ctx, id, placement, func(view *models.SavedView, tally registry.SavedViewTally) error {
 		if !canEdit(view, actor) {
 			return errxtrace.Classify(ErrSavedViewForbidden, errx.Attrs("reason", "not_editable"))
@@ -454,6 +489,8 @@ func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[s
 	}
 	ids := make([]string, 0, len(placements))
 	queries := make([]commodityquery.Query, 0, len(placements))
+	var defs []*models.CustomFieldDefinition
+	defsRead := false
 	for _, v := range views {
 		p := placements[v.ID]
 		if !p.ShowInSidebar && !p.ShowOnDashboard {
@@ -465,6 +502,18 @@ func (s *SavedViewService) Counts(ctx context.Context, set *registry.Set) (map[s
 		q, err := commodityquery.ParseSaved(v.Query)
 		if err != nil {
 			continue
+		}
+		// One query that cannot resolve would fail the whole batch.
+		if len(q.CustomFields) > 0 {
+			if !defsRead {
+				if defs, err = s.customFields(ctx); err != nil {
+					return nil, err
+				}
+				defsRead = true
+			}
+			if commodityquery.CheckCustomFields(q, defs) != nil {
+				continue
+			}
 		}
 		ids = append(ids, v.ID)
 		queries = append(queries, q)

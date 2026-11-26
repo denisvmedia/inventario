@@ -248,6 +248,7 @@ func (api *commodityScanAPI) handleScan(w http.ResponseWriter, r *http.Request) 
 
 	in.PreferredCurrencyCode = preferredCurrencyFromContext(r.Context())
 	in.ItemTypes = scanItemTypesFromContext(r.Context())
+	in.CustomFields = scanCustomFieldsFromContext(r.Context())
 
 	// The constructor permits a nil service so the route can stay
 	// mounted in a "feature gated off" deployment; calling Scan on it
@@ -402,6 +403,30 @@ func scanItemTypesFromContext(ctx context.Context) []services.ScanItemType {
 	return services.ScanItemTypes(types)
 }
 
+// scanCustomFieldsFromContext lists the group's custom fields for the scan
+// prompt (#2803). When the list cannot be read the scan goes on without
+// them rather than failing.
+func scanCustomFieldsFromContext(ctx context.Context) []services.ScanCustomField {
+	regSet := RegistrySetFromContext(ctx)
+	if regSet == nil || regSet.CustomFieldRegistry == nil {
+		return nil
+	}
+	defs, err := regSet.CustomFieldRegistry.List(ctx)
+	if err != nil {
+		slog.Warn("commodity scan: custom fields unavailable, scanning without them", "error", err.Error())
+		return nil
+	}
+	out := make([]services.ScanCustomField, 0, len(defs))
+	for _, d := range defs {
+		f := services.ScanCustomField{ID: d.ID, Name: d.Name, Type: string(d.Type)}
+		for _, o := range d.Options {
+			f.Options = append(f.Options, services.ScanCustomFieldOption{ID: o.ID, Label: o.Label})
+		}
+		out = append(out, f)
+	}
+	return out
+}
+
 // errBadMultipart is the sentinel wrapper for multipart-parsing errors.
 // The handler maps it to 400 rather than 422 — the body was malformed,
 // not a business-rule violation.
@@ -531,16 +556,20 @@ type commodityScanResource struct {
 // optional value + confidence; absent fields mean "no signal". Items is
 // present only for a multi-product scan (the FE renders a chooser).
 type commodityScanResultDT struct {
-	Fields     map[string]commodityScanFieldDT `json:"fields"`
-	Items      []commodityScanItemDT           `json:"items,omitempty"`
-	Warnings   []aivision.Warning              `json:"warnings,omitempty"`
-	UsedTokens int                             `json:"used_tokens,omitempty"`
-	LatencyMS  int64                           `json:"latency_ms,omitempty"`
+	Fields map[string]commodityScanFieldDT `json:"fields"`
+	// CustomFields are the custom field values read, by field ID, in the
+	// form an item write takes (#2803).
+	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
+	Items        []commodityScanItemDT           `json:"items,omitempty"`
+	Warnings     []aivision.Warning              `json:"warnings,omitempty"`
+	UsedTokens   int                             `json:"used_tokens,omitempty"`
+	LatencyMS    int64                           `json:"latency_ms,omitempty"`
 }
 
 // commodityScanItemDT is one candidate product in a multi-product scan.
 type commodityScanItemDT struct {
-	Fields map[string]commodityScanFieldDT `json:"fields"`
+	Fields       map[string]commodityScanFieldDT `json:"fields"`
+	CustomFields map[string]commodityScanFieldDT `json:"custom_fields,omitempty"`
 }
 
 type commodityScanFieldDT struct {
@@ -563,15 +592,28 @@ func marshalScanFields(fields map[string]aivision.FieldGuess) map[string]commodi
 	return out
 }
 
+// marshalCustomFieldGuesses is marshalScanFields for the custom field
+// guesses; nil when there are none, so the key is left out.
+func marshalCustomFieldGuesses(fields map[string]aivision.FieldGuess) map[string]commodityScanFieldDT {
+	if len(fields) == 0 {
+		return nil
+	}
+	return marshalScanFields(fields)
+}
+
 func newCommodityScanResponse(r *aivision.ScanResult) *commodityScanResponse {
 	dt := commodityScanResultDT{
-		Fields:     marshalScanFields(r.Fields),
-		Warnings:   r.Warnings,
-		UsedTokens: r.UsedTokens,
-		LatencyMS:  r.LatencyMS,
+		Fields:       marshalScanFields(r.Fields),
+		CustomFields: marshalCustomFieldGuesses(r.CustomFields),
+		Warnings:     r.Warnings,
+		UsedTokens:   r.UsedTokens,
+		LatencyMS:    r.LatencyMS,
 	}
 	for _, it := range r.Items {
-		dt.Items = append(dt.Items, commodityScanItemDT{Fields: marshalScanFields(it.Fields)})
+		dt.Items = append(dt.Items, commodityScanItemDT{
+			Fields:       marshalScanFields(it.Fields),
+			CustomFields: marshalCustomFieldGuesses(it.CustomFields),
+		})
 	}
 	return &commodityScanResponse{
 		Data:       commodityScanResource{Type: "commodity_scan", Attributes: dt},

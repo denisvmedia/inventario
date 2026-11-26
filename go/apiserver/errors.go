@@ -472,6 +472,9 @@ func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := itemTypeSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
+	if jsErr, ok := customFieldSentinelJSONAPIError(err); ok {
+		return jsErr, true
+	}
 	return jsonapi.Error{}, false
 }
 
@@ -639,6 +642,17 @@ func queryParamError(w http.ResponseWriter, r *http.Request, err error) error {
 		jsErr.Meta = map[string]any{"parameter": qErr.Param, "reason": qErr.Reason}
 	}
 	return render.Render(w, r, jsonapi.NewErrors(jsErr))
+}
+
+// queryRunError renders the error of running an item query: a 400 when the
+// group's custom fields refuse a condition of it (a *commodityquery.Error),
+// a 500 otherwise.
+func queryRunError(w http.ResponseWriter, r *http.Request, err error) {
+	if _, ok := errors.AsType[*commodityquery.Error](err); ok {
+		queryParamError(w, r, err)
+		return
+	}
+	internalServerError(w, r, err)
 }
 
 func notFound(w http.ResponseWriter, r *http.Request) error {

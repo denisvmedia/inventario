@@ -328,7 +328,9 @@ func (l *RestoreOperationProcessor) applyInbPayload(
 		return err
 	}
 
-	return nil
+	// Item links last for the same reason: only now is every item the
+	// archive carries restored, so a link can name one that came after it.
+	return walker.applyPendingLinks()
 }
 
 // applyPendingCovers resolves each queued commodity → cover-photo reference and
@@ -365,6 +367,7 @@ func (w *inbWalker) applyPendingCovers() error {
 		}
 		coverID := coverFileDBID
 		commodity.CoverFileID = &coverID
+		commodity.CustomFields = nil // only the cover changes
 		if _, updErr := comReg.Update(w.ctx, *commodity); updErr != nil {
 			return errxtrace.Wrap("failed to patch commodity cover", updErr, errx.Attrs("commodity_id", pc.commodityUUID))
 		}
@@ -452,6 +455,11 @@ type inbWalker struct {
 	// carry.
 	sellerIDs map[string]string
 
+	// customFields maps an archived custom field's UUID to its destination
+	// field, filled from the manifest; pendingLinks are the item link values
+	// set after the walk, once every item they may name is restored.
+	customFields map[string]*restoredCustomField
+	pendingLinks []inbPendingLink
 	// draftIDs maps an archived draft's UUID to the restored draft's DB id.
 	// A link to an archived draft that is not in it (a draft a merge kept,
 	// one that failed to restore, one the archive does not carry) is left
@@ -481,7 +489,7 @@ func (w *inbWalker) handleMember(hdr *tar.Header, r io.Reader) error {
 		// Drafts document (format 3.5), also under `files/`.
 		return w.handleDraftsMember(hdr, r)
 	case hdr.Name == types.INBIntakeDocumentsMember:
-		// Delivered documents (format 3.6), also under `files/`.
+		// Delivered documents (format 3.7), also under `files/`.
 		return w.handleIntakeDocumentsMember(hdr, r)
 	case strings.HasPrefix(hdr.Name, "files/"):
 		return w.handleFileMember(hdr, r)
@@ -515,6 +523,9 @@ func (w *inbWalker) handleManifestMember(hdr *tar.Header, r io.Reader) error {
 	}
 	w.priceReading = types.PriceReadingFor(manifest.Version)
 	if err := w.restoreItemTypes(manifest.ItemTypes); err != nil {
+		return err
+	}
+	if err := w.restoreCustomFields(manifest.CustomFields); err != nil {
 		return err
 	}
 	return w.restoreSellers(manifest.Sellers)
@@ -726,6 +737,9 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if sellerID, ok := w.sellerIDs[c.SellerID]; ok && c.SellerID != "" {
 		commodity.SellerID = &sellerID
 	}
+	// Custom field values resolve through the manifest's custom fields only.
+	var links []inbPendingLink
+	commodity.CustomFields, links = w.restoredCustomFieldValues(c)
 
 	resolver, err := l.itemTypeResolver(w.ctx, w.options)
 	if err != nil {
@@ -790,6 +804,10 @@ func (w *inbWalker) applyCommodityModel(c *types.INBCommodity, actualAreaID *str
 	if w.commodityWasCreated(existingCommodity) {
 		w.queueCoverPatch(c)
 	}
+	// Item links go with the values: onto a created row, or an updated one.
+	if w.commodityWasCreated(existingCommodity) || w.commodityWasUpdated(existingCommodity) {
+		w.pendingLinks = append(w.pendingLinks, links...)
+	}
 
 	// Register file refs so the later file members know which commodity (and
 	// bucket) they belong to.
@@ -811,6 +829,12 @@ func (w *inbWalker) commodityWasCreated(existingCommodity *models.Commodity) boo
 		return true
 	}
 	return existingCommodity == nil
+}
+
+// commodityWasUpdated reports whether applyStrategyForCommodityModel just
+// wrote the archived fields onto an existing row (merge_update).
+func (w *inbWalker) commodityWasUpdated(existingCommodity *models.Commodity) bool {
+	return !w.options.DryRun && w.options.Strategy == types.RestoreStrategyMergeUpdate && existingCommodity != nil
 }
 
 // queueCoverPatch records the commodity's cover-photo cross-reference (#1451)

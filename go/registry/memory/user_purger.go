@@ -55,6 +55,7 @@ type UserPurger struct {
 	files         registry.FileRegistryFactory
 	savedViews    registry.SavedViewRegistryFactory
 	itemTypes     *ItemTypeRegistryFactory
+	customFields  *CustomFieldRegistryFactory
 	// intakeDocuments is set by SetIntakeDocumentFactory.
 	intakeDocuments *IntakeDocumentRegistryFactory
 }
@@ -66,10 +67,24 @@ func (r *UserPurger) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactor
 	r.intakeDocuments = docs
 }
 
+// groupConfiguration is a store of group configuration, whose rows a purged
+// user created are handed to another member of their group.
+type groupConfiguration interface {
+	groupsCreatedBy(tenantID, userID string) []string
+	reattributeCreator(tenantID, userID string, heirs map[string]string)
+}
+
 // SetItemTypeFactory wires the item type store, whose types the user created
 // are handed to another member of their group.
 func (r *UserPurger) SetItemTypeFactory(f *ItemTypeRegistryFactory) {
 	r.itemTypes = f
+}
+
+// SetCustomFieldFactory wires the custom field store, whose fields the user
+// created, template entries included, are handed to another member of their
+// group.
+func (r *UserPurger) SetCustomFieldFactory(f *CustomFieldRegistryFactory) {
+	r.customFields = f
 }
 
 // NewUserPurger wires a UserPurger to the registries that own the shared
@@ -138,11 +153,27 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"magic_link_tokens", func() error { return r.magicLink.DeleteByUserID(ctx, userID) }},
 		{"user_mfa_secrets", func() error { return r.mfaSecrets.DeleteByUser(ctx, tenantID, userID) }},
 		{"user_oauth_identities", func() error { return r.purgeOAuthIdentities(ctx, tenantID, userID) }},
-		// Item types the user created go to another member of their group,
-		// as on postgres; they are group configuration, not the user's
-		// content.
-		{"item_types", func() error { return r.reattributeItemTypes(ctx, tenantID, userID) }},
-		{"intake_documents", func() error { return r.reattributeIntakeDocuments(ctx, tenantID, userID) }},
+		// Item types and custom fields the user created go to another member
+		// of their group, as on postgres; they are group configuration, not
+		// the user's content.
+		{"item_types", func() error {
+			if r.itemTypes == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.itemTypes, tenantID, userID)
+		}},
+		{"custom_fields", func() error {
+			if r.customFields == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.customFields, tenantID, userID)
+		}},
+		{"intake_documents", func() error {
+			if r.intakeDocuments == nil {
+				return nil
+			}
+			return r.reattributeGroupConfiguration(ctx, r.intakeDocuments, tenantID, userID)
+		}},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
@@ -322,26 +353,6 @@ func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tenantID, userID s
 	return nil
 }
 
-// reattributeIntakeDocuments gives each document delivered through the
-// user's API tokens (#2809) to the member itemTypeHeir picks, as on
-// postgres. A document whose group has no other member is deleted.
-func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tenantID, userID string) error {
-	docs := r.intakeDocuments
-	if docs == nil {
-		return nil
-	}
-	heirs := map[string]string{}
-	for _, groupID := range docs.groupsCreatedBy(tenantID, userID) {
-		members, err := r.memberships.ListByGroup(ctx, groupID)
-		if err != nil {
-			return err
-		}
-		heirs[groupID] = itemTypeHeir(members, userID)
-	}
-	docs.reattributeCreator(tenantID, userID, heirs)
-	return nil
-}
-
 // purgeCommodityReminders deletes the item reminders the user created and
 // their send records (#2805), the same rows the postgres purger removes: a
 // reminder emails only its author, so it leaves with the account.
@@ -399,30 +410,28 @@ func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID strin
 	return nil
 }
 
-// reattributeItemTypes gives each item type the user created to another
-// member of its group: the owner first, then an admin, then the member who
-// joined first. A type whose group has no other member keeps its creator.
-func (r *UserPurger) reattributeItemTypes(ctx context.Context, tenantID, userID string) error {
-	if r.itemTypes == nil {
-		return nil
-	}
+// reattributeGroupConfiguration gives each row of store the user created to
+// another member of its group: the owner first, then an admin, then the
+// member who joined first. A row whose group has no other member keeps its
+// creator.
+func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, store groupConfiguration, tenantID, userID string) error {
 	heirs := map[string]string{}
-	for _, groupID := range r.itemTypes.groupsCreatedBy(tenantID, userID) {
+	for _, groupID := range store.groupsCreatedBy(tenantID, userID) {
 		members, err := r.memberships.ListByGroup(ctx, groupID)
 		if err != nil {
 			return err
 		}
-		if heir := itemTypeHeir(members, userID); heir != "" {
+		if heir := groupConfigurationHeir(members, userID); heir != "" {
 			heirs[groupID] = heir
 		}
 	}
-	r.itemTypes.reattributeCreator(tenantID, userID, heirs)
+	store.reattributeCreator(tenantID, userID, heirs)
 	return nil
 }
 
-// itemTypeHeir picks the member who takes over the item types userID
+// groupConfigurationHeir picks the member who takes over the group configuration userID
 // created: the owner first, then an admin, then the member who joined first.
-func itemTypeHeir(members []*models.GroupMembership, userID string) string {
+func groupConfigurationHeir(members []*models.GroupMembership, userID string) string {
 	rank := func(role models.GroupRole) int {
 		switch role {
 		case models.GroupRoleOwner:

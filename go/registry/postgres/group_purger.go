@@ -122,6 +122,12 @@ var purgeOrder = []func(t store.TableNames) string{
 	// deleting these rows before the group is harmless.
 	func(t store.TableNames) string { return string(t.CurrencyMigrations()) },
 
+	// Custom field values (#2803). commodity_id and value_item_id ->
+	// commodities CASCADE, field_id -> custom_field_definitions CASCADE, but
+	// group_id -> location_groups is NO ACTION. Dropped before commodities
+	// so the explicit DELETE keeps tenant + group scoping local.
+	func(t store.TableNames) string { return string(t.CustomFieldValues()) },
+
 	// Commodity sub-resources (#2095). All three FK to commodities ON DELETE
 	// CASCADE but group_id -> location_groups is NO ACTION. Dropped before
 	// commodities so the explicit DELETE keeps tenant + group scoping local
@@ -149,9 +155,15 @@ var purgeOrder = []func(t store.TableNames) string{
 	// Sellers (#2804). group_id -> location_groups is NO ACTION. Dropped
 	// after commodities, whose seller_id pointed at them.
 	func(t store.TableNames) string { return string(t.Sellers()) },
+	// Item type templates (#2803). Both parents cascade, group_id is NO
+	// ACTION; dropped before item types and custom fields.
+	func(t store.TableNames) string { return string(t.ItemTypeCustomFields()) },
 	// Item types (#2802). group_id -> location_groups is NO ACTION. Dropped
 	// after the commodities whose type named them.
 	func(t store.TableNames) string { return string(t.ItemTypes()) },
+	// Custom fields (#2803). group_id -> location_groups is NO ACTION.
+	// Dropped after their values and template entries.
+	func(t store.TableNames) string { return string(t.CustomFieldDefinitions()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups is NO ACTION, so they must be cleared explicitly

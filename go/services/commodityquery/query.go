@@ -97,12 +97,16 @@ type Query struct {
 	NoPhoto         bool
 	NoPurchasePrice bool
 	NoPurchaseDate  bool
+	// CustomFields keeps the items that pass every condition (#2803); see
+	// ParamCustomField.
+	CustomFields []CustomFieldCondition
 	// Trashed selects the items in Trash instead of the live ones. The
 	// loans of a trashed item are hidden, so LentOut cannot be combined
 	// with it.
 	Trashed bool
 	// SortField and SortDesc order the result. Sorting is not filtering:
 	// an unknown field falls back to name, see registry.CommoditySortField.
+	// "cf.<field ID>" sorts by a custom field, see CustomFieldSortPrefix.
 	SortField registry.CommoditySortField
 	SortDesc  bool
 }
@@ -139,7 +143,7 @@ var filterParams = []string{
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
 	ParamLentOut, ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
 	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate,
-	ParamTrashed, ParamSort,
+	ParamCustomField, ParamTrashed, ParamSort,
 }
 
 // FilterParams returns the name of every parameter Parse understands.
@@ -167,7 +171,7 @@ func Parse(values url.Values, reserved ...string) (Query, error) {
 	p := parser{values: values, reserved: reserved}
 
 	steps := []func(*Query) error{
-		p.text, p.types, p.statuses, p.area, p.sellers, p.flags, p.missing, p.warranty, p.tags, p.sort,
+		p.text, p.types, p.statuses, p.area, p.sellers, p.flags, p.missing, p.warranty, p.tags, p.customFields, p.sort,
 	}
 	for _, step := range steps {
 		if err := step(&q); err != nil {
@@ -521,6 +525,9 @@ func (q Query) Values() url.Values {
 	if len(q.Tags.Exclude) > 0 {
 		v.Set(ParamTagsExclude, strings.Join(q.Tags.Exclude, ","))
 	}
+	for _, cond := range q.CustomFields {
+		v.Add(ParamCustomField, cond.String())
+	}
 	for _, flag := range []struct {
 		param string
 		on    bool
@@ -547,7 +554,7 @@ func (q Query) Values() url.Values {
 }
 
 // ListOptions maps q onto the registry options without the resolved parts
-// (tag labels, open loans); Resolve adds those.
+// (tag labels, open loans, custom fields); Resolve adds those.
 func (q Query) ListOptions() registry.CommodityListOptions {
 	return registry.CommodityListOptions{
 		Types:                 q.Types,

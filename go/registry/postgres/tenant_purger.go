@@ -152,6 +152,11 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// Dropped before both currency_migrations and commodities.
 	func(t store.TableNames) string { return string(t.CurrencyMigrationAudit()) },
 
+	// Custom field values (#2803). commodity_id and value_item_id ->
+	// commodities CASCADE; explicit DELETE before commodities keeps tenant
+	// scoping local.
+	func(t store.TableNames) string { return string(t.CustomFieldValues()) },
+
 	// Commodity sub-resources (#2095). All FK commodities ON DELETE CASCADE;
 	// explicit DELETE before commodities keeps tenant scoping local.
 	func(t store.TableNames) string { return string(t.CommoditySupplyLinks()) },
@@ -183,9 +188,15 @@ var tenantPurgeOrder = []func(t store.TableNames) string{
 	// Sellers (#2804). tenant_id + group_id; the commodities that pointed at
 	// them are gone.
 	func(t store.TableNames) string { return string(t.Sellers()) },
+	// Item type templates (#2803). item_type_id and field_id CASCADE;
+	// dropped before item types and custom fields.
+	func(t store.TableNames) string { return string(t.ItemTypeCustomFields()) },
 	// Item types (#2802). tenant_id + group_id; the commodities whose type
 	// named them are gone.
 	func(t store.TableNames) string { return string(t.ItemTypes()) },
+	// Custom fields (#2803). tenant_id + group_id; their values and
+	// template entries are gone.
+	func(t store.TableNames) string { return string(t.CustomFieldDefinitions()) },
 
 	// Per-user/per-group notification overrides (#2095). group_id ->
 	// location_groups NO ACTION; cleared before location_groups.

@@ -310,6 +310,13 @@ type Commodity struct {
 	// tell "was never in an area" from "its area is gone" and say so.
 	//ptah:schema:field name="deleted_from_area_id" type="TEXT"
 	DeletedFromAreaID *string `json:"-" db:"deleted_from_area_id" userinput:"false" readonly:"true"`
+
+	// CustomFields are the item's custom field values (#2803), keyed by
+	// field ID; see CustomFieldValues for the read and write rules. They are
+	// rows of commodity_custom_field_values, not a column: the registries
+	// read them with the item and write them in the item's transaction,
+	// after checking each one against its field.
+	CustomFields CustomFieldValues `json:"custom_fields,omitempty" db:"-"`
 }
 
 // PurchasePriceInGroupCurrency returns the purchase price in the group

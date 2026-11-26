@@ -54,21 +54,23 @@ var _ registry.NativePhotoFilterer = (*CommodityRegistry)(nil)
 // CommodityListOptions.NoPhoto with the NOT EXISTS subquery of noPhotoExpr.
 func (*CommodityRegistry) SupportsNativePhotoFilter() {}
 
-// commodityTables names the tables the list's WHERE clause reads: the
-// items, and the loans and file links its subqueries join.
+// commodityTables names the tables the list queries read: the items, and
+// the loans, file links and custom field values their subqueries join.
 type commodityTables struct {
-	commodities string
-	loans       string
-	fileLinks   string
-	files       string
+	commodities       string
+	loans             string
+	fileLinks         string
+	files             string
+	customFieldValues string
 }
 
 func (r *CommodityRegistry) whereTables() commodityTables {
 	return commodityTables{
-		commodities: string(r.tableNames.Commodities()),
-		loans:       string(r.tableNames.CommodityLoans()),
-		fileLinks:   string(r.tableNames.FileLinks()),
-		files:       string(r.tableNames.Files()),
+		commodities:       string(r.tableNames.Commodities()),
+		loans:             string(r.tableNames.CommodityLoans()),
+		fileLinks:         string(r.tableNames.FileLinks()),
+		files:             string(r.tableNames.Files()),
+		customFieldValues: string(r.tableNames.CustomFieldValues()),
 	}
 }
 
@@ -124,8 +126,12 @@ func (r *CommodityRegistry) Create(ctx context.Context, commodity models.Commodi
 
 	reg := r.newSQLRegistry()
 
-	createdCommodity, err := reg.CreateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
+	customFields := commodity.CustomFields
+	createdCommodity, err := reg.CreateWithHooks(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
 		return prepareNewCommodityInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, row, requestedAssetNumber)
+	}, func(ctx context.Context, tx *sqlx.Tx, row *models.Commodity) error {
+		// The values reference the row, so they are written after it.
+		return writeCustomFieldValuesInTx(ctx, tx, r.tableNames, row, customFields)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to create commodity", err)
@@ -214,7 +220,10 @@ func (r *CommodityRegistry) GetByName(ctx context.Context, name string) (*models
 
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf("SELECT * FROM %s WHERE name = $1 AND %s LIMIT 1", r.tableNames.Commodities(), liveRow)
-		return scanOne(ctx, tx, &commodity, query, name)
+		if err := scanOne(ctx, tx, &commodity, query, name); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get commodity", err)
@@ -245,8 +254,10 @@ func (r *CommodityRegistry) List(ctx context.Context) ([]*models.Commodity, erro
 			}
 			commodities = append(commodities, &commodity)
 		}
-
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities", err)
@@ -287,12 +298,32 @@ func (r *CommodityRegistry) GetMany(ctx context.Context, ids []string) ([]*model
 			cp := commodity
 			commodities = append(commodities, &cp)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to batch-fetch commodities", err)
 	}
 	return commodities, nil
+}
+
+// GetNames returns the names of the items among ids, live or in Trash, in
+// one query.
+func (r *CommodityRegistry) GetNames(ctx context.Context, ids []string) ([]registry.CommodityName, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var names []registry.CommodityName
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		query := fmt.Sprintf(`SELECT id, name, deleted_at IS NOT NULL AS trashed FROM %s WHERE id = ANY($1)`, r.tableNames.Commodities())
+		return tx.SelectContext(ctx, &names, query, ids)
+	})
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to get commodity names", err)
+	}
+	return names, nil
 }
 
 // ListByGroup returns every commodity in (tenant_id, group_id), regardless
@@ -329,7 +360,10 @@ func (r *CommodityRegistry) ListByGroup(ctx context.Context, tenantID, groupID s
 			}
 			commodities = append(commodities, &commodity)
 		}
-		return rows.Err()
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list commodities by group", err)
@@ -369,7 +403,7 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 			Select("*", totalCountColumn).
 			From(string(r.tableNames.Commodities()))
 		addWhere(dataSB, where)
-		applyCommodityOrder(dataSB, opts)
+		applyCommodityOrder(dataSB, opts, r.whereTables())
 		paginate(dataSB, offset, limit)
 		dataQuery, dataArgs := dataSB.Build()
 
@@ -389,6 +423,9 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 			total = row.TotalCount
 		}
 		if err := rows.Err(); err != nil {
+			return err
+		}
+		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...); err != nil {
 			return err
 		}
 
@@ -443,6 +480,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 		return counts, nil
 	}
 	table := string(r.tableNames.Commodities())
+	tables := r.whereTables()
 	// One clock for the batch: the same warranty filter counts the same
 	// items whichever side of midnight its query is built.
 	now := time.Now()
@@ -458,7 +496,7 @@ func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.Commo
 			if o.WarrantyNow.IsZero() {
 				o.WarrantyNow = now
 			}
-			where := commodityWhere(o, r.whereTables())
+			where := commodityWhere(o, tables)
 			query, args := addWhere(newSelect().Select("COUNT(*)").From(table), where).Build()
 			n, err := countRows(ctx, tx, query, args...)
 			if err != nil {
@@ -611,9 +649,13 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) 
 		add(cond.In("seller_id", anyStrings(opts.SellerIDs)...))
 	}
 	for _, term := range registry.SplitSearchTerms(opts.Search) {
-		add(searchTermExpr(cond, term, opts.SearchTagLabels[term]))
+		custom := customFieldSearchExprs(cond, opts.SearchCustomFields, term, tables.commodities, tables.customFieldValues)
+		add(searchTermExpr(cond, term, opts.SearchTagLabels[term], custom...))
 	}
 	exprs = append(exprs, tagFilterExprs(cond, opts.Tags)...)
+	for _, f := range opts.CustomFields {
+		add(customFieldFilterExpr(cond, f, tables.commodities, tables.customFieldValues))
+	}
 	add(warrantyStatusExpr(cond, opts))
 	if opts.WarrantyExpiresBefore != "" {
 		// Same empty-string defense as the warranty-status branches —
@@ -650,8 +692,9 @@ func commodityWhere(opts registry.CommodityListOptions, tables commodityTables) 
 // registry.CommodityColumnSearchFields get an ILIKE each on their own
 // trigram-indexed column. A tag found by its label arrives as a pre-resolved
 // slug list, matched with ?| on the GIN-indexed tags column, and a term that
-// reads as an asset ID also matches the number.
-func searchTermExpr(cond *sqlb.Cond, term string, labelSlugs []string) string {
+// reads as an asset ID also matches the number. extra are further
+// alternatives, the custom field values the term is matched against.
+func searchTermExpr(cond *sqlb.Cond, term string, labelSlugs []string, extra ...string) string {
 	pattern := containsPattern(term)
 	alternatives := []string{"search_text ILIKE " + cond.Var(pattern)}
 	for _, field := range registry.CommodityColumnSearchFields {
@@ -663,6 +706,7 @@ func searchTermExpr(cond *sqlb.Cond, term string, labelSlugs []string) string {
 	if n, ok := models.ParseAssetID(term); ok {
 		alternatives = append(alternatives, cond.Equal("asset_number", n))
 	}
+	alternatives = append(alternatives, extra...)
 	return cond.Or(alternatives...)
 }
 
@@ -798,7 +842,20 @@ func noPhotoExpr(cond *sqlb.Cond, tables commodityTables) string {
 // seed pushing the catalogue to ~36 rows, a lowercase-starting user
 // commodity would otherwise jump to page 2 and out of any test's
 // default-viewport assertions.
-func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOptions) {
+//
+// A CustomFieldSort orders by the item's value for the field instead, items
+// without one last in both directions.
+func applyCommodityOrder(sb *sqlb.SelectBuilder, opts registry.CommodityListOptions, tables commodityTables) {
+	if opts.CustomFieldSort != nil {
+		if expr := customFieldSortExpr(sb, *opts.CustomFieldSort, tables.commodities, tables.customFieldValues); expr != "" {
+			if opts.SortDesc {
+				sb.OrderBy(expr + " DESC NULLS LAST").OrderByDesc("id")
+			} else {
+				sb.OrderBy(expr + " ASC NULLS LAST").OrderByAsc("id")
+			}
+			return
+		}
+	}
 	field := opts.SortField
 	if !field.IsValid() {
 		field = registry.CommoditySortName
@@ -876,7 +933,7 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 
 	reg := r.newSQLRegistry()
 
-	err := reg.UpdateWithPrepare(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, stored models.Commodity, row *models.Commodity) error {
+	err := reg.UpdateWithHooks(ctx, commodity, func(ctx context.Context, tx *sqlx.Tx, stored models.Commodity, row *models.Commodity) error {
 		// A trashed item is read-only until it is restored. stored was read
 		// without a lock, so the check is made again under one. The trash
 		// columns themselves belong to Trash and Restore.
@@ -922,6 +979,12 @@ func (r *CommodityRegistry) Update(ctx context.Context, commodity models.Commodi
 		// tag row before the JSONB column is rewritten by the surrounding
 		// Update query.
 		return ensureTagRowsInTx(ctx, tx, r.tableNames, r.tenantID, r.groupID, r.createdByUserID, models.TagKindCommodity, []string(commodity.Tags))
+	}, func(ctx context.Context, tx *sqlx.Tx, _ models.Commodity, row *models.Commodity) error {
+		if err := writeCustomFieldValuesInTx(ctx, tx, r.tableNames, row, commodity.CustomFields); err != nil {
+			return err
+		}
+		commodity.CustomFields = row.CustomFields
+		return nil
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to update commodity", err)
@@ -994,7 +1057,10 @@ func (r *CommodityRegistry) get(ctx context.Context, id string) (*models.Commodi
 
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND %s LIMIT 1", r.tableNames.Commodities(), liveRow)
-		return scanOne(ctx, tx, &commodity, query, id)
+		if err := scanOne(ctx, tx, &commodity, query, id); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity)
 	})
 	if err != nil {
 		// Add debug logging for RLS issues
@@ -1064,7 +1130,10 @@ func (r *CommodityRegistry) GetTrashed(ctx context.Context, id string) (*models.
 	reg := r.newSQLRegistry()
 	err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
 		query := fmt.Sprintf("SELECT * FROM %s WHERE id = $1 AND %s LIMIT 1", r.tableNames.Commodities(), trashedRow)
-		return scanOne(ctx, tx, &commodity, query, id)
+		if err := scanOne(ctx, tx, &commodity, query, id); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to get trashed commodity", err)
@@ -1090,6 +1159,9 @@ func (r *CommodityRegistry) ListTrashed(ctx context.Context, offset, limit int) 
 		for _, row := range rows {
 			commodities = append(commodities, &row.Commodity)
 			total = row.TotalCount
+		}
+		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...); err != nil {
+			return err
 		}
 		if total == totalUnknown {
 			total, err = countRows(ctx, tx, fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s", r.tableNames.Commodities(), trashedRow))
@@ -1119,7 +1191,10 @@ func (r *CommodityRegistry) ListTrashedBefore(ctx context.Context, cutoff time.T
 			r.tableNames.Commodities(), trashedRow)
 		var err error
 		commodities, err = scanAll[models.Commodity](ctx, tx, query, cutoff.UTC(), limit)
-		return err
+		if err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, commodities...)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to list expired trashed commodities", err)
@@ -1137,7 +1212,10 @@ func (r *CommodityRegistry) Trash(ctx context.Context, id, deletedBy string, at 
 			`UPDATE %s SET deleted_at = $2, deleted_by = $3, deleted_from_area_id = area_id
 			 WHERE id = $1 AND %s RETURNING *`,
 			r.tableNames.Commodities(), liveRow)
-		return scanOne(ctx, tx, &commodity, query, id, at.UTC(), deletedBy)
+		if err := scanOne(ctx, tx, &commodity, query, id, at.UTC(), deletedBy); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to trash commodity", err, errx.Attrs("commodity_id", id))
@@ -1158,8 +1236,12 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 		if err := scanOne(ctx, tx, &locked, fmt.Sprintf(`SELECT * FROM %s WHERE id = $1`, table), id); err != nil {
 			return err
 		}
+		if err := loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &locked); err != nil {
+			return err
+		}
 		next := locked
 		next.Draft = draft
+		next.CustomFields = locked.CustomFields.Clone()
 		if check != nil {
 			if err := check(next); err != nil {
 				return err
@@ -1173,6 +1255,7 @@ func (r *CommodityRegistry) SetDraft(ctx context.Context, id string, draft bool,
 	}
 	next := locked
 	next.Draft = draft
+	next.CustomFields = locked.CustomFields.Clone()
 	return &locked, &next, nil
 }
 
@@ -1185,7 +1268,10 @@ func (r *CommodityRegistry) Restore(ctx context.Context, id string) (*models.Com
 			`UPDATE %s SET deleted_at = NULL, deleted_by = NULL, deleted_from_area_id = NULL
 			 WHERE id = $1 AND %s RETURNING *`,
 			r.tableNames.Commodities(), trashedRow)
-		return scanOne(ctx, tx, &commodity, query, id)
+		if err := scanOne(ctx, tx, &commodity, query, id); err != nil {
+			return err
+		}
+		return loadCustomFieldValuesInTx(ctx, tx, r.tableNames, &commodity)
 	})
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to restore commodity", err, errx.Attrs("commodity_id", id))

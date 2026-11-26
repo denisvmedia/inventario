@@ -406,3 +406,36 @@ func TestCommodityDraftsAPI_PromoteChecksTheSeller(t *testing.T) {
 	rr = env.do(http.MethodPost, "/drafts/"+kept+"/promote", promoteBody("1", "Drill", shop.ID))
 	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("body=%s", rr.Body.String()))
 }
+
+func TestCommodityDraftsAPI_PromoteWritesCustomFields(t *testing.T) {
+	c := qt.New(t)
+	env := newTrashAPIEnv(c)
+	regs := getRegistrySetFromParams(env.params, env.user)
+	ctx := context.Background()
+	field := must.Must(regs.CustomFieldRegistry.Create(ctx, models.CustomFieldDefinition{Name: "Frame number", Type: models.CustomFieldTypeText}))
+
+	promoteBody := func(key, value string) string {
+		return `{"data":{"type":"commodities","attributes":{"name":"Bike","short_name":"Bike","type":"equipment","status":"in_use",` +
+			`"count":1,"original_price_currency":"USD","custom_fields":{"` + field.ID + `":` + value + `}}},` +
+			`"meta":{"revision":1,"promotion_key":"` + key + `"}}`
+	}
+	rr := env.do(http.MethodPost, "/drafts", draftCreateBody("bike", "Bike"))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	draftID := decodeDraft(c, rr.Body.Bytes()).Data.ID
+	itemsBefore := must.Must(regs.CommodityRegistry.Count(ctx))
+
+	// A value its field refuses is a 422 on the field and promotes nothing.
+	rr = env.do(http.MethodPost, "/drafts/"+draftID+"/promote", promoteBody("p-1", `42`))
+	c.Assert(rr.Code, qt.Equals, http.StatusUnprocessableEntity, qt.Commentf("body=%s", rr.Body.String()))
+	c.Check(rr.Body.String(), qt.Contains, "custom_field.invalid_value")
+	c.Assert(must.Must(regs.CommodityRegistry.Count(ctx)), qt.Equals, itemsBefore)
+	c.Assert(must.Must(regs.CommodityDraftRegistry.Get(ctx, draftID)).IsOpen(), qt.IsTrue)
+
+	rr = env.do(http.MethodPost, "/drafts/"+draftID+"/promote", promoteBody("p-2", `"FR-100"`))
+	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf("body=%s", rr.Body.String()))
+	var item jsonapi.CommodityResponse
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &item), qt.IsNil)
+	c.Check(string(item.Data.Attributes.CustomFields[field.ID]), qt.Equals, `"FR-100"`)
+	stored := must.Must(regs.CommodityRegistry.Get(ctx, item.Data.ID))
+	c.Check(string(stored.CustomFields[field.ID]), qt.Equals, `"FR-100"`)
+}

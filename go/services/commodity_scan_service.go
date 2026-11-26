@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log/slog"
 	"math"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -217,6 +218,119 @@ type ScanInput struct {
 	// ItemTypes are the group's item types the model classifies into.
 	// Empty means the built-in ones.
 	ItemTypes []ScanItemType
+	// CustomFields are the group's custom fields the model may fill
+	// (#2803).
+	CustomFields []ScanCustomField
+}
+
+// ScanCustomField is a custom field offered to the model.
+type ScanCustomField struct {
+	ID   string
+	Name string
+	// Type is a models.CustomFieldType value.
+	Type    string
+	Options []ScanCustomFieldOption
+}
+
+// ScanCustomFieldOption is one choice of a select field.
+type ScanCustomFieldOption struct {
+	ID    string
+	Label string
+}
+
+func (in ScanInput) customFieldOptions() []aivision.CustomFieldOption {
+	if len(in.CustomFields) == 0 {
+		return nil
+	}
+	out := make([]aivision.CustomFieldOption, 0, len(in.CustomFields))
+	for _, f := range in.CustomFields {
+		labels := make([]string, 0, len(f.Options))
+		for _, o := range f.Options {
+			labels = append(labels, o.Label)
+		}
+		out = append(out, aivision.CustomFieldOption{Key: f.ID, Name: f.Name, Type: f.Type, Options: labels})
+	}
+	return out
+}
+
+// mapCustomFieldGuesses keeps the custom field guesses of result that name a
+// field of in and turns a select field's label into its option ID, in the
+// primary guess and in every item. A guess for an unknown field or option,
+// or of the wrong kind, is dropped: the form fills only what it can use.
+// An item left with no guess at all is dropped too; when the primary guess
+// is then empty it becomes the first item left, and the items stay only
+// while they still offer a choice.
+func (in ScanInput) mapCustomFieldGuesses(result *aivision.ScanResult) {
+	if result == nil {
+		return
+	}
+	byID := make(map[string]ScanCustomField, len(in.CustomFields))
+	for _, f := range in.CustomFields {
+		byID[f.ID] = f
+	}
+	mapGuesses := func(guesses map[string]aivision.FieldGuess) map[string]aivision.FieldGuess {
+		out := make(map[string]aivision.FieldGuess, len(guesses))
+		for id, g := range guesses {
+			f, ok := byID[id]
+			if !ok {
+				continue
+			}
+			if v, ok := customFieldGuessValue(f, g.Value); ok {
+				out[id] = aivision.FieldGuess{Value: v, Confidence: g.Confidence}
+			}
+		}
+		if len(out) == 0 {
+			return nil
+		}
+		return out
+	}
+	result.CustomFields = mapGuesses(result.CustomFields)
+	items := make([]aivision.ScanItem, 0, len(result.Items))
+	for _, item := range result.Items {
+		item.CustomFields = mapGuesses(item.CustomFields)
+		if len(item.Fields) > 0 || len(item.CustomFields) > 0 {
+			items = append(items, item)
+		}
+	}
+	if len(items) == len(result.Items) {
+		result.Items = items
+		return
+	}
+	if len(result.Fields) == 0 && len(result.CustomFields) == 0 && len(items) > 0 {
+		result.Fields = items[0].Fields
+		result.CustomFields = items[0].CustomFields
+	}
+	if len(items) < 2 {
+		items = nil
+	}
+	result.Items = items
+}
+
+func customFieldGuessValue(f ScanCustomField, v any) (any, bool) {
+	switch f.Type {
+	case string(models.CustomFieldTypeNumber):
+		n, ok := v.(float64)
+		return n, ok
+	case string(models.CustomFieldTypeBoolean):
+		b, ok := v.(bool)
+		return b, ok
+	case string(models.CustomFieldTypeSelect):
+		label, ok := v.(string)
+		if !ok {
+			return nil, false
+		}
+		for _, o := range f.Options {
+			if strings.EqualFold(o.Label, label) {
+				return o.ID, true
+			}
+		}
+		return nil, false
+	case string(models.CustomFieldTypeText), string(models.CustomFieldTypeLongText),
+		string(models.CustomFieldTypeURL), string(models.CustomFieldTypeDate):
+		str, ok := v.(string)
+		return str, ok && str != ""
+	}
+	return nil, false
 }
 
 // ScanItemType is an item type offered to the model: the slug an item
@@ -354,6 +468,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 		HintFromUser:          in.HintFromUser,
 		PreferredCurrencyCode: in.PreferredCurrencyCode,
 		ItemTypes:             in.itemTypeOptions(),
+		CustomFields:          in.customFieldOptions(),
 	})
 	latencyMS := clampInt32FromInt64(int64(s.now().Sub(start) / time.Millisecond))
 
@@ -406,6 +521,7 @@ func (s *CommodityScanService) Scan(ctx context.Context, tenantID, userID string
 		return nil, errxtrace.Classify(ErrScanProviderError)
 	}
 
+	in.mapCustomFieldGuesses(result)
 	audit.Status = models.CommodityScanStatusOK
 	audit.TokensUsed = clampInt32(result.UsedTokens)
 	// The provider may have a more accurate latency reading (e.g. it
@@ -467,6 +583,7 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 		HintFromUser:          in.HintFromUser,
 		PreferredCurrencyCode: in.PreferredCurrencyCode,
 		ItemTypes:             in.itemTypeOptions(),
+		CustomFields:          in.customFieldOptions(),
 	})
 	if providerErr != nil {
 		return nil, classifyProviderErr(providerErr)
@@ -474,6 +591,7 @@ func (s *CommodityScanService) ScanAnonymous(ctx context.Context, in ScanInput) 
 	if result == nil {
 		return nil, errxtrace.Classify(ErrScanProviderError)
 	}
+	in.mapCustomFieldGuesses(result)
 	return result, nil
 }
 

@@ -2,6 +2,7 @@ package registrytest
 
 import (
 	"context"
+	"encoding/json"
 	"testing"
 	"time"
 
@@ -20,6 +21,7 @@ type DraftEnv struct {
 	Commodities registry.CommodityRegistry
 	Files       registry.FileRegistry
 	Sellers     registry.SellerRegistry
+	Fields      registry.CustomFieldRegistry
 	AreaID      string
 }
 
@@ -269,6 +271,35 @@ func RunCommodityDraftContract(t *testing.T, newEnv func(t *testing.T) DraftEnv)
 // discard, attaching files and the fate of a discarded draft's files.
 func runCommodityDraftLifecycleContract(t *testing.T, newEnv func(t *testing.T) DraftEnv) {
 	t.Helper()
+	t.Run("promote writes the item's custom field values", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		field, err := env.Fields.Create(env.Ctx, models.CustomFieldDefinition{Name: "Frame number", Type: models.CustomFieldTypeText})
+		c.Assert(err, qt.IsNil)
+		draft := createContractDraft(c, env, "key-1", "Bike")
+
+		// A value its field refuses promotes nothing.
+		refused := contractItem(env, "Bike")
+		refused.CustomFields = models.CustomFieldValues{field.ID: json.RawMessage(`42`)}
+		_, err = env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-1", refused)
+		c.Assert(err, qt.ErrorIs, registry.ErrInvalidCustomFieldValue)
+		got, err := env.Drafts.Get(env.Ctx, draft.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(got.IsOpen(), qt.IsTrue)
+		count, err := env.Commodities.Count(env.Ctx)
+		c.Assert(err, qt.IsNil)
+		c.Assert(count, qt.Equals, 0)
+
+		item := contractItem(env, "Bike")
+		item.CustomFields = models.CustomFieldValues{field.ID: json.RawMessage(`"FR-100"`)}
+		result, err := env.Drafts.Promote(env.Ctx, draft.ID, 1, "promotion-2", item)
+		c.Assert(err, qt.IsNil)
+		c.Assert(string(result.Commodity.CustomFields[field.ID]), qt.Equals, `"FR-100"`)
+		stored, err := env.Commodities.Get(env.Ctx, result.Commodity.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(string(stored.CustomFields[field.ID]), qt.Equals, `"FR-100"`)
+	})
+
 	t.Run("promote needs a promotion key", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)

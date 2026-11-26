@@ -115,7 +115,8 @@ func (f *IntakeDocumentRegistryFactory) groupsCreatedBy(tenantID, userID string)
 }
 
 // reattributeCreator gives the documents userID created in tenantID to
-// heirs[groupID], and deletes the ones whose group has no heir.
+// heirs[groupID], as the user purge does with group configuration, and
+// deletes the ones whose group has no heir: that group leaves with the user.
 func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
 	f.writes.Lock()
 	defer f.writes.Unlock()

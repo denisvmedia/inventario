@@ -21,10 +21,11 @@ import (
 // testCommodityTables are the default table names, as the SQL in these
 // tests spells them.
 var testCommodityTables = commodityTables{
-	commodities: "commodities",
-	loans:       "commodity_loans",
-	fileLinks:   "file_links",
-	files:       "files",
+	commodities:       "commodities",
+	loans:             "commodity_loans",
+	fileLinks:         "file_links",
+	files:             "files",
+	customFieldValues: "commodity_custom_field_values",
 }
 
 func TestCommodityListSQL(t *testing.T) {
@@ -259,7 +260,7 @@ func TestCommodityListSQL(t *testing.T) {
 			if where != nil {
 				sb.AddWhereClause(where)
 			}
-			applyCommodityOrder(sb, tc.opts)
+			applyCommodityOrder(sb, tc.opts, testCommodityTables)
 
 			got, args := sb.Build()
 			c.Check(got, qt.Equals, tc.want)

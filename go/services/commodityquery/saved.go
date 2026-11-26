@@ -2,6 +2,7 @@ package commodityquery
 
 import (
 	"slices"
+	"strings"
 
 	"go.5x5.cz/inventario/registry"
 )
@@ -14,7 +15,8 @@ var savedParams = []string{
 	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamLentOut,
 	ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
-	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate, ParamSort,
+	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate, ParamCustomField,
+	ParamSort,
 }
 
 // SavedParams returns the name of every parameter ParseSaved accepts.
@@ -49,9 +51,11 @@ func ParseSaved(rawQuery string) (Query, error) {
 
 // Encode returns the canonical query string of q: Values with every list
 // sorted, encoded with sorted keys. The lists are sets (an item matches any
-// of the types or sellers, carries all or any of the tags), so two queries that select
-// the same items with the same sort encode the same, whatever order their
-// parameters and list entries came in.
+// of the types or sellers, carries all or any of the tags, meets every
+// custom field condition), so two queries that select the same items with
+// the same sort encode the same, whatever order their parameters and list
+// entries came in. The option IDs of a custom field "in" condition are
+// sorted too.
 func (q Query) Encode() string {
 	canonical := q
 	canonical.Types = slices.Sorted(slices.Values(q.Types))
@@ -60,7 +64,35 @@ func (q Query) Encode() string {
 	canonical.WarrantyStatuses = slices.Sorted(slices.Values(q.WarrantyStatuses))
 	canonical.Tags.Include = slices.Sorted(slices.Values(q.Tags.Include))
 	canonical.Tags.Exclude = slices.Sorted(slices.Values(q.Tags.Exclude))
+	canonical.CustomFields = canonicalCustomFields(q.CustomFields)
 	return canonical.Values().Encode()
+}
+
+// canonicalCustomFields returns conds sorted by their cf value, with the
+// option IDs of an "in" condition sorted and without repeats, and without
+// the conditions that repeat another once that is done.
+func canonicalCustomFields(conds []CustomFieldCondition) []CustomFieldCondition {
+	if len(conds) == 0 {
+		return nil
+	}
+	out := make([]CustomFieldCondition, 0, len(conds))
+	for _, cond := range conds {
+		if cond.Op == registry.CustomFieldOpIn {
+			var ids []string
+			for id := range strings.SplitSeq(cond.Operand, ",") {
+				if id = strings.TrimSpace(id); id != "" {
+					ids = append(ids, id)
+				}
+			}
+			slices.Sort(ids)
+			cond.Operand = strings.Join(slices.Compact(ids), ",")
+		}
+		if !slices.Contains(out, cond) {
+			out = append(out, cond)
+		}
+	}
+	slices.SortFunc(out, func(a, b CustomFieldCondition) int { return strings.Compare(a.String(), b.String()) })
+	return out
 }
 
 // RenameTag replaces the tag slug from with to wherever q names it and

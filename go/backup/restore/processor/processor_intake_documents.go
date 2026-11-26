@@ -20,7 +20,7 @@ import (
 // member.
 const intakeDocumentsStep = "Delivered documents"
 
-// handleIntakeDocumentsMember decodes the delivered documents (format 3.6)
+// handleIntakeDocumentsMember decodes the delivered documents (format 3.7)
 // and recreates the record of each. It comes after the items and the drafts,
 // so the ones a document names are mapped.
 func (w *inbWalker) handleIntakeDocumentsMember(hdr *tar.Header, r io.Reader) error {

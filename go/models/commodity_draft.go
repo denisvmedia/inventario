@@ -5,6 +5,7 @@ import (
 	"database/sql/driver"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"strings"
 	"time"
 
@@ -104,6 +105,35 @@ func (v CommodityDraftValues) Title() string {
 	return name
 }
 
+// MapDraftCustomFieldReference returns an entry of a draft's custom_fields
+// with the id it holds replaced by mapID's result. The entry is the id
+// itself, as an item stores a select option or a linked item, or an object
+// whose "value" is the id, as the item form keeps it. An entry without an id
+// is returned as it is; nil means mapID knows no such id or the entry is
+// neither shape.
+func MapDraftCustomFieldReference(entry any, mapID func(string) string) any {
+	switch e := entry.(type) {
+	case string:
+		if e == "" {
+			return e
+		}
+		if id := mapID(e); id != "" {
+			return id
+		}
+	case map[string]any:
+		ref, _ := e["value"].(string)
+		if ref == "" {
+			return e
+		}
+		if id := mapID(ref); id != "" {
+			out := maps.Clone(e)
+			out["value"] = id
+			return out
+		}
+	}
+	return nil
+}
+
 // CommodityDraftValuesRule checks the size and the number of fields of the
 // values, and the type of each field the item form knows. The request
 // validation and the model share it.
@@ -133,6 +163,7 @@ const (
 	draftNumber
 	draftList
 	draftFlag
+	draftObject
 )
 
 // draftValueKinds lists the fields of the item form. A draft can hold other
@@ -163,6 +194,9 @@ var draftValueKinds = map[string]draftValueKind{
 	"tags":                     draftList,
 	"urls":                     draftList,
 	"draft":                    draftFlag,
+	// The custom field values by field id (#2803); each entry is the
+	// form's {value, currency} or a value as an item stores it.
+	"custom_fields": draftObject,
 }
 
 // checkDraftValueTypes returns the known fields whose value has the wrong
@@ -209,6 +243,10 @@ func checkDraftValueKind(kind draftValueKind, value any) error {
 	case draftFlag:
 		if _, ok := value.(bool); !ok {
 			return validation.NewError("validation_draft_value_flag", "must be true or false")
+		}
+	case draftObject:
+		if _, ok := value.(map[string]any); !ok {
+			return validation.NewError("validation_draft_value_object", "must be an object")
 		}
 	}
 	return nil
