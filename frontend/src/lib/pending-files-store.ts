@@ -12,6 +12,8 @@
 // failures shouldn't block submit (the user can still re-pick files
 // the old way).
 
+import type { PendingFileSuggestion } from "@/features/commodities/draft"
+
 const DB_NAME = "inventario-drafts"
 const STORE_NAME = "pending-files"
 const DB_VERSION = 1
@@ -24,19 +26,25 @@ export interface StoredPendingFile {
   title?: string
   // Set once a server draft save uploaded the file (#2812).
   uploadedFileId?: string
-  // The tag and title an AI scan suggested for the file (#1626).
-  suggestion?: { tag?: string; title?: string }
+  // The tag and title an AI scan suggested for the file, and the ones the
+  // user rejected (#1626).
+  suggestion?: PendingFileSuggestion
 }
 
 // suggestionOf keeps a stored suggestion only in the shape the form writes;
-// anything else is dropped, not the whole entry.
-function suggestionOf(raw: unknown): StoredPendingFile["suggestion"] {
+// a part of another shape is dropped, not the whole entry.
+function suggestionOf(raw: unknown): PendingFileSuggestion | undefined {
   if (!raw || typeof raw !== "object") return undefined
-  const { tag, title } = raw as Record<string, unknown>
-  const out: NonNullable<StoredPendingFile["suggestion"]> = {}
+  const { tag, title, rejectedTags, rejectedTitle } = raw as Record<string, unknown>
+  const out: PendingFileSuggestion = {}
   if (typeof tag === "string") out.tag = tag
   if (typeof title === "string") out.title = title
-  return out.tag !== undefined || out.title !== undefined ? out : undefined
+  if (Array.isArray(rejectedTags)) {
+    const tags = rejectedTags.filter((t): t is string => typeof t === "string")
+    if (tags.length > 0) out.rejectedTags = tags
+  }
+  if (typeof rejectedTitle === "string") out.rejectedTitle = rejectedTitle
+  return Object.keys(out).length > 0 ? out : undefined
 }
 
 let dbPromise: Promise<IDBDatabase> | null = null

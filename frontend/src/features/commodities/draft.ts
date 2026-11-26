@@ -42,16 +42,22 @@ export interface PendingFile {
   // The server file an earlier draft save uploaded for this entry (#2812),
   // so a retry attaches it instead of uploading the bytes again.
   uploadedFileId?: string
-  // What an AI scan put on the file (#1626): the tag of its document type,
-  // added to tags, and the title. The row marks them as suggestions while
-  // the file still has them, and a later scan does not add back a tag the
-  // user removed. See features/commodities/fileSuggestions.ts.
+  // What an AI scan put on the file (#1626), and what of it the user
+  // rejected. See features/commodities/fileSuggestions.ts.
   suggestion?: PendingFileSuggestion
 }
 
 export interface PendingFileSuggestion {
+  // The suggested tag, added to tags; marked as a suggestion while the file
+  // has it.
   tag?: string
+  // The suggested title, set as the title; marked while the title is it.
   title?: string
+  // Suggested tags the user removed. No later scan adds them again.
+  rejectedTags?: string[]
+  // A suggested title the user changed. Once set, no later scan sets the
+  // title, also when the user went back to the file name.
+  rejectedTitle?: string
 }
 
 // The longest title the server takes for a file, in characters (Unicode

@@ -119,14 +119,21 @@ describe("pending-files-store", () => {
       { ...entry("a.png", "x", ["invoice"]), suggestion: { tag: "invoice", title: "Receipt" } },
       { ...entry("b.png"), suggestion: { tag: 7, title: "Manual" } },
       { ...entry("c.png"), suggestion: "invoice" },
+      {
+        ...entry("d.png"),
+        suggestion: { rejectedTags: ["photo", 3, "invoice"], rejectedTitle: "Receipt" },
+      },
+      { ...entry("e.png"), suggestion: { rejectedTags: "photo", rejectedTitle: 1 } },
     ])
 
     const loaded = await loadPendingFiles("draft:suggestion")
-    // A malformed suggestion is dropped; the file stays.
+    // A malformed part of a suggestion is dropped; the file stays.
     expect(loaded.map((e) => [e.file.name, e.suggestion])).toEqual([
       ["a.png", { tag: "invoice", title: "Receipt" }],
       ["b.png", { title: "Manual" }],
       ["c.png", undefined],
+      ["d.png", { rejectedTags: ["photo", "invoice"], rejectedTitle: "Receipt" }],
+      ["e.png", undefined],
     ])
   })
 

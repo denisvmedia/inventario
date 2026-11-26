@@ -119,11 +119,14 @@ import {
   applyFileSuggestions,
   hasSuggestedTitle,
   suggestedTagOf,
+  withTags,
+  withTitle,
   type FileSuggestion,
 } from "@/features/commodities/fileSuggestions"
 import type { ScanFieldName } from "@/features/commodities/scanApi"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { tagKeys } from "@/features/tags/keys"
+import { normaliseSlug } from "@/features/tags/slug"
 import { BrandModelFields } from "@/components/items/BrandModelFields"
 import { DraftSaveAlert, type DraftSaveState } from "@/components/items/DraftSaveAlert"
 import { suggestShortName } from "@/features/commodities/shortName"
@@ -367,13 +370,16 @@ function resumeStep(
 }
 
 // mergeTags adds the scanned tags the form does not hold yet to its tags, in
-// their order; a tag that differs only in case is the same tag (#1626).
+// their order (#1626). The form holds slugs and the scan reads labels, so
+// both are compared by the slug the server makes of them: "Garden Tools"
+// is the tag garden-tools.
 function mergeTags(current: string[], scanned: string[]): string[] {
-  const seen = new Set(current.map((tag) => tag.toLowerCase()))
+  const seen = new Set(current.map(normaliseSlug))
   const out = [...current]
   for (const tag of scanned) {
-    if (seen.has(tag.toLowerCase())) continue
-    seen.add(tag.toLowerCase())
+    const slug = normaliseSlug(tag)
+    if (slug === "" || seen.has(slug)) continue
+    seen.add(slug)
     out.push(tag)
   }
   return out
@@ -1248,29 +1254,51 @@ export function CommodityFormDialog({
     }
   }
 
-  // updateSavedFile saves a saved file's title and tags (#1626). PUT
-  // /files/{id} replaces the description too, so the file's own is sent
-  // back. The list is read again before it resolves, so the row shows what
-  // the server holds.
-  async function updateSavedFile(
+  // updateSavedFile saves a saved file's title and tags (#1626). The saves
+  // of one file run one after the other, in the order the user made the
+  // changes: two quick edits would otherwise race, and the first PUT landing
+  // last would undo the second.
+  const savedFileSaves = useRef(new Map<string, Promise<boolean>>())
+  function updateSavedFile(
     row: ListedFile,
     change: { title: string; tags: string[] }
   ): Promise<boolean> {
+    const id = row.file.id
+    const before = savedFileSaves.current.get(id) ?? Promise.resolve(true)
+    const run = before.then(() => putSavedFile(row, change))
+    savedFileSaves.current.set(id, run)
+    void run.then(() => {
+      if (savedFileSaves.current.get(id) === run) savedFileSaves.current.delete(id)
+    })
+    return run
+  }
+
+  // putSavedFile sends one change of a saved file. PUT /files/{id} replaces
+  // the description too, so the file's own is sent back. The answer goes
+  // into the draft's file list, so the row shows what the server holds
+  // without reading the list again.
+  async function putSavedFile(
+    row: ListedFile,
+    change: { title: string; tags: string[] }
+  ): Promise<boolean> {
+    const key = draftKeys.files(activeSlug ?? "", serverDraft?.id ?? "")
+    const current =
+      queryClient.getQueryData<ListedFile[]>(key)?.find((r) => r.file.id === row.file.id)?.file ??
+      row.file
+    let saved: ListedFile["file"]
     try {
-      await updateFile(row.file.id, {
+      saved = await updateFile(row.file.id, {
         title: change.title,
-        description: row.file.description ?? "",
+        description: current.description ?? "",
         tags: change.tags,
       })
     } catch (err) {
       toast.error(classifyServerError(err, t("commodities:drafts.updateFileFailed")).message)
       return false
     }
-    try {
-      await draftFilesQuery.refetch()
-    } catch {
-      // The row shows the change once the list loads.
-    }
+    queryClient.setQueryData<ListedFile[]>(key, (rows) =>
+      rows?.map((r) => (r.file.id === saved.id ? { ...r, file: { ...r.file, ...saved } } : r))
+    )
     void queryClient.invalidateQueries({ queryKey: fileKeys.group(activeSlug ?? "") })
     return true
   }
@@ -1438,21 +1466,23 @@ export function CommodityFormDialog({
   // enteredScanValues lists what the form holds that the user entered, for
   // the review of an AI scan (#1626): such a field shows both values and
   // starts unticked, so a scan never replaces it unless the user ticks it.
-  // A value counts as entered when it differs from what a new, empty form
+  // In edit mode every value the form holds counts: the item has it saved.
+  // A new item's value counts when it differs from what a new, empty form
   // holds; the group currency a new form starts with does not count, and
   // neither does a custom field value equal to the default the item type's
   // template puts there, nor a short name the form derived from the name.
   // A value typed, accepted from an earlier scan, or brought by a resumed or
-  // restored draft counts, and so do an existing item's values in edit mode.
+  // restored draft counts.
   function enteredScanValues(): ScanEnteredValues {
     const values = getValues()
+    const editing = mode === "edit"
     const fields: ScanEnteredValues["fields"] = {}
     const text = (key: ScanFieldName & keyof CommodityFormInput) => {
       const v = values[key]
       if (typeof v === "string" && v.trim() !== "") fields[key] = v.trim()
     }
     text("name")
-    if (shortNameEdited.current) text("short_name")
+    if (editing || shortNameEdited.current) text("short_name")
     text("brand")
     text("model")
     text("serial_number")
@@ -1466,7 +1496,7 @@ export function CommodityFormDialog({
         (sellers.data ?? []).find((s) => s.id === values.seller_id)?.name ?? values.seller_id
     }
     const currency = values.original_price_currency?.trim().toUpperCase() ?? ""
-    if (currency !== "" && currency !== defaultCurrency.trim().toUpperCase()) {
+    if (currency !== "" && (editing || currency !== defaultCurrency.trim().toUpperCase())) {
       fields.original_price_currency = currency
     }
     const urls = (values.urls ?? []).map((u) => u.trim()).filter((u) => u !== "")
@@ -1484,7 +1514,8 @@ export function CommodityFormDialog({
     for (const def of customFields) {
       const value = values.custom_fields?.[def.id]
       if (!value || value.value.trim() === "") continue
-      const template = typeId ? def.templates.find((t) => t.item_type_id === typeId) : undefined
+      const template =
+        !editing && typeId ? def.templates.find((t) => t.item_type_id === typeId) : undefined
       if (template && template.default_value !== undefined && template.default_value !== null) {
         const preset = toFormValue(template.default_value)
         if (preset.value === value.value && preset.currency === value.currency) continue
@@ -2904,10 +2935,8 @@ function FilesStep({
     if (onRemovePending) onRemovePending(entry)
     else setPendingFiles((prev) => prev.filter((pending) => pending.id !== entry.id))
   }
-  function patch(id: string, change: Partial<Pick<PendingFile, "tags" | "title">>) {
-    setPendingFiles((prev) =>
-      prev.map((entry) => (entry.id === id ? { ...entry, ...change } : entry))
-    )
+  function patch(id: string, change: (entry: PendingFile) => PendingFile) {
+    setPendingFiles((prev) => prev.map((entry) => (entry.id === id ? change(entry) : entry)))
   }
   // A file a save is still placing is listed as staged, not twice.
   const staged = new Set(pendingFiles.flatMap((entry) => entry.uploadedFileId ?? []))
@@ -2985,8 +3014,8 @@ function FilesStep({
               status={statuses[entry.id]}
               busy={busy}
               onRemove={() => remove(entry)}
-              onTagsChange={(tags) => patch(entry.id, { tags })}
-              onTitleChange={(title) => patch(entry.id, { title })}
+              onTagsChange={(tags) => patch(entry.id, (e) => withTags(e, tags))}
+              onTitleChange={(title) => patch(entry.id, (e) => withTitle(e, title))}
             />
           ))}
         </ul>

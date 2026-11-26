@@ -84,8 +84,10 @@ photo of the product **Photo**. Remove the chip if the tag is wrong. A
 suggested title, such as "Bosch invoice, March 2024", replaces the file name
 in the title field and is marked with the same sparkle; type over it to change
 it. What you set yourself stays: a file you gave a title keeps it, a file
-that already has one of those four tags gets no other, and a tag you removed
-is not put back when you scan the file again.
+that already has one of those four tags gets no other, and a scan does not
+put back a tag you removed, however many scans suggested it. Once you change
+a suggested title, also back to the file name, later scans leave the title
+alone. A tag you add back by hand is yours and shows without the sparkle.
 
 A few things to know:
 
@@ -196,8 +198,9 @@ file once the file is scanned:
 What you set yourself stays. The scan changes a file only while the file is as
 the upload left it: its title is still the file name without the extension,
 and it has none of the **Invoice**, **Manual**, **Warranty** and **Photo**
-tags. A file you renamed or tagged before the scan finished keeps what you
-gave it, and gets neither suggestion. A suggestion the scan is unsure of is
+tags. A file you renamed, or gave one of those tags, before the scan finished
+keeps what you gave it, and gets neither suggestion; any other tag does not
+stop the suggestions. A suggestion the scan is unsure of is
 left out. A **Rescan** leaves a file alone once the scan has changed it. A
 file [another system sent](../documents-from-other-systems/) is not scanned,
 so it keeps the title it came with.

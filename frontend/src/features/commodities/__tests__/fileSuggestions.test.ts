@@ -7,6 +7,8 @@ import {
   fileSuggestionsFor,
   hasSuggestedTitle,
   suggestedTagOf,
+  withTags,
+  withTitle,
 } from "@/features/commodities/fileSuggestions"
 import type { ScanFileGuess } from "@/features/commodities/scanApi"
 
@@ -98,6 +100,47 @@ describe("applyFileSuggestions", () => {
     const removed = { ...first, tags: [] }
     const out = applyFileSuggestions([removed], [{ file: f, tag: "invoice" }])
     expect(out[0]).toBe(removed)
+  })
+
+  it("puts back none of the suggested tags the user removed, over several scans", () => {
+    const f = file("IMG_1.jpg")
+    const [photo] = applyFileSuggestions([entry(f)], [{ file: f, tag: "photo" }])
+    const noPhoto = withTags(photo, [])
+    const [invoice] = applyFileSuggestions([noPhoto], [{ file: f, tag: "invoice" }])
+    expect(invoice.tags).toEqual(["invoice"])
+    const neither = withTags(invoice, [])
+    expect(neither.suggestion?.rejectedTags).toEqual(["photo", "invoice"])
+    const out = applyFileSuggestions([neither], [{ file: f, tag: "photo" }])
+    expect(out[0]).toBe(neither)
+    expect(out[0].tags).toEqual([])
+  })
+
+  it("does not mark a removed suggested tag the user adds back as suggested", () => {
+    const f = file("IMG_1.jpg")
+    const [first] = applyFileSuggestions([entry(f)], [{ file: f, tag: "invoice" }])
+    expect(suggestedTagOf(first)).toBe("invoice")
+    const back = withTags(withTags(first, []), ["invoice"])
+    expect(back.tags).toEqual(["invoice"])
+    expect(suggestedTagOf(back)).toBeUndefined()
+  })
+
+  it("sets no title once the user changed the suggested one, even back to the file name", () => {
+    const f = file("IMG_1.jpg")
+    const [first] = applyFileSuggestions([entry(f)], [{ file: f, title: "Bosch invoice" }])
+    const reverted = withTitle(first, "IMG_1")
+    expect(hasSuggestedTitle(reverted)).toBe(false)
+    expect(reverted.suggestion?.rejectedTitle).toBe("Bosch invoice")
+    const out = applyFileSuggestions([reverted], [{ file: f, title: "Bosch receipt" }])
+    expect(out[0]).toBe(reverted)
+    expect(out[0].title).toBe("IMG_1")
+  })
+
+  it("keeps the suggested title marked while the user leaves it as it is", () => {
+    const f = file("IMG_1.jpg")
+    const [first] = applyFileSuggestions([entry(f)], [{ file: f, title: "Bosch invoice" }])
+    const same = withTitle(first, "Bosch invoice")
+    expect(hasSuggestedTitle(same)).toBe(true)
+    expect(same.suggestion?.rejectedTitle).toBeUndefined()
   })
 
   it("changes nothing on a second scan of a file the first one classified and named", () => {

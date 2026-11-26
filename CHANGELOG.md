@@ -17,9 +17,10 @@ when to add an entry and where it goes.
 - The **Add item** dialog uses what the AI scan suggests for each file:
   on the **Files** step a scanned file gets its **Invoice**, **Manual**,
   **Warranty** or **Photo** tag as a chip marked with a sparkle, and its
-  suggested title replaces the file name. A title the user typed, one of
-  those tags the user set, and a suggested tag the user removed stay as
-  they are, also when the file is scanned again. A scan no longer
+  suggested title replaces the file name. A title the user typed or a
+  suggested title the user changed, one of those tags the user set, and
+  every suggested tag the user removed stay as they are, also when the file
+  is scanned again. A scan no longer
   overwrites what the form holds: the review shows the user's value next to
   the scan's and leaves that field unticked, and ticked scanned tags are
   added to the form's tags. The files saved with a draft show their title
@@ -35,8 +36,8 @@ when to add an entry and where it goes.
   suggestions on the files once they are scanned: the **Invoice** tag for an
   invoice or a receipt, **Manual**, **Warranty** or **Photo** for the
   others, and the title. Only a file that still has the title and the tags
-  of its upload changes, so a file you renamed or tagged keeps what you
-  gave it and a rescan does not change it again (#1626).
+  of its upload changes, so a file you renamed or gave one of those tags
+  keeps what you gave it and a rescan does not change it again (#1626).
 - Two item statuses for every group: **Donated** and **Stolen**, next to
   Sold, Lost, Disposed and Written Off. They are set like the other end
   statuses, from the item page or the bulk **Set status** menu, with a date

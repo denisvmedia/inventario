@@ -306,8 +306,10 @@ A few things to know:
   add the others separately afterwards. To get a draft for every product on a
   receipt at once, use [Add items from files](../items/#add-items-from-files).
 - Each scanned file also gets the tag of its kind (**Invoice**, **Manual**,
-  **Warranty** or **Photo**) and a readable title from the scan, unless you
-  renamed or tagged it yourself. In the Add item dialog they show on the
+  **Warranty** or **Photo**) and a readable title from the scan. A file you
+  renamed keeps its title, and a file you gave one of those four tags gets no
+  other; any other tag you set does not stop the suggestion. In the Add item
+  dialog they show on the
   **Files** step with a sparkle, and you can remove or change them there (see
   [Fill with AI](../items/#fill-with-ai)). A file you add with
   **Add items from files** gets them once it is scanned.

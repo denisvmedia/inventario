@@ -1,11 +1,15 @@
-import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { screen, within } from "@testing-library/react"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { Route } from "react-router-dom"
+import { screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { http, HttpResponse } from "msw"
 
 import { CommodityFormDialog } from "@/components/items/CommodityFormDialog"
+import type { Commodity } from "@/features/commodities/api"
+import { GroupProvider } from "@/features/group/GroupContext"
+import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests, setCurrentGroupSlug } from "@/lib/group-context"
-import { apiUrl, commodityScanHandlers } from "@/test/handlers"
+import { apiUrl, commodityScanHandlers, customFieldHandlers, groupHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 
@@ -151,6 +155,69 @@ describe("<CommodityFormDialog /> scan suggestions for files (#1626)", () => {
     expect(chipsOf(rowOf("scan-17.pdf"))).toHaveLength(0)
   })
 
+  it("puts back none of the suggested tags the user removed, over several scans", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    const suggest = (value: string) => ({
+      fields: {},
+      files: [{ index: 0, document_type: { value, confidence: 0.9 } }],
+    })
+    const removeChip = async (label: RegExp) => {
+      await user.click(within(rowOf("scan-17.pdf")).getByRole("button", { name: label }))
+      expect(chipsOf(rowOf("scan-17.pdf"))).toHaveLength(0)
+    }
+    await scan(user, [receipt], { ...suggest("photo"), fields: COMPLETE })
+    await walkToFiles(user)
+    await removeChip(/^remove photo/i)
+
+    await backToScan(user)
+    await scan(user, [receipt], suggest("invoice"))
+    await user.click(screen.getByRole("button", { name: "Files" }))
+    expect(chipsOf(rowOf("scan-17.pdf"))[0]).toHaveTextContent("Invoice")
+    await removeChip(/^remove invoice/i)
+
+    await backToScan(user)
+    await scan(user, [receipt], suggest("photo"))
+    await user.click(screen.getByRole("button", { name: "Files" }))
+    expect(chipsOf(rowOf("scan-17.pdf"))).toHaveLength(0)
+  })
+
+  it("marks a removed suggested tag the user adds back by hand as the user's", async () => {
+    const user = userEvent.setup()
+    renderDialog()
+    await scan(user, [receipt], {
+      fields: COMPLETE,
+      files: [{ index: 0, document_type: { value: "invoice", confidence: 0.9 } }],
+    })
+    await walkToFiles(user)
+    const row = rowOf("scan-17.pdf")
+    await user.click(within(row).getByRole("button", { name: /^remove invoice/i }))
+    await user.type(within(row).getByTestId(/^commodity-files-tags-.*-input$/), "invoice{Enter}")
+    const chips = chipsOf(rowOf("scan-17.pdf"))
+    expect(chips).toHaveLength(1)
+    expect(chips[0]).not.toHaveAttribute("data-suggested")
+    expect(chips[0]).not.toHaveTextContent(/suggested by the AI scan/i)
+  })
+
+  it("does not set a title again once the user changed the suggested one back to the file name", async () => {
+    const files = [{ index: 0, title: { value: "Hardware store receipt", confidence: 0.9 } }]
+    const user = userEvent.setup()
+    renderDialog()
+    await scan(user, [receipt], { fields: COMPLETE, files })
+    await walkToFiles(user)
+    const row = rowOf("scan-17.pdf")
+    expect(titleOf(row)).toHaveValue("Hardware store receipt")
+    await user.clear(titleOf(row))
+    await user.type(titleOf(row), "scan-17")
+
+    await backToScan(user)
+    await scan(user, [receipt], { fields: {}, files })
+    await user.click(screen.getByRole("button", { name: "Files" }))
+    const again = rowOf("scan-17.pdf")
+    expect(titleOf(again)).toHaveValue("scan-17")
+    expect(within(again).queryByTestId(/^commodity-files-title-suggested-/)).toBeNull()
+  })
+
   it("keeps a tag and a title the user set when the file is scanned again", async () => {
     const user = userEvent.setup()
     renderDialog()
@@ -254,21 +321,121 @@ describe("<CommodityFormDialog /> scan over values the form holds (#1626)", () =
     const user = userEvent.setup()
     renderDialog()
     await scan(user, [photo], {
-      fields: { ...COMPLETE, tags: { value: ["tools"], confidence: 0.9 } },
+      fields: { ...COMPLETE, tags: { value: ["garden-tools"], confidence: 0.9 } },
     })
     await backToScan(user)
+    // The form holds the slug; the label the scan reads is the same tag.
     await scan(
       user,
       [photo],
-      { fields: { tags: { value: ["Tools", "garage"], confidence: 0.9 } } },
+      { fields: { tags: { value: ["Garden Tools", "garage"], confidence: 0.9 } } },
       ["tags"]
     )
     for (let i = 0; i < 3; i++) await user.click(screen.getByTestId("commodity-form-next"))
     await screen.findByTestId("commodity-tags-input")
     const chips = screen.getAllByTestId("commodity-tags-chip")
     expect(chips.map((c) => c.textContent)).toEqual([
-      expect.stringContaining("tools"),
+      expect.stringContaining("garden-tools"),
       expect.stringContaining("garage"),
     ])
+  })
+})
+
+describe("<CommodityFormDialog /> scan while editing an item (#1626)", () => {
+  afterEach(() => {
+    clearAuth()
+    __resetGroupContextForTests()
+  })
+
+  beforeEach(() => {
+    server.use(http.get(apiUrl(`/currencies`), () => HttpResponse.json(["USD", "EUR"])))
+  })
+
+  // An item in the group currency, with a custom field at the default its
+  // type gives it: in create mode neither would count as entered.
+  const existing = {
+    id: "c1",
+    name: "Bosch drill",
+    short_name: "Drill",
+    type: "equipment",
+    area_id: "a1",
+    status: "in_use",
+    count: 1,
+    draft: false,
+    purchase_date: "2024-03-01",
+    original_price: 99,
+    original_price_currency: "USD",
+    custom_fields: { "cf-plate": "ZZ" },
+  } as unknown as Commodity
+
+  it("counts the item's saved currency and a custom field at its type default as the user's", async () => {
+    // The item form reads the group's fields from the group in context.
+    setAccessToken("good-token")
+    server.use(
+      ...groupHandlers.list([{ id: "g1", slug: SLUG, name: "Household", group_currency: "USD" }]),
+      ...customFieldHandlers.list(SLUG, [
+        customFieldHandlers.field({
+          id: "cf-plate",
+          name: "Plate",
+          templates: [{ item_type_id: "type-equipment", default_value: "ZZ" }],
+        }),
+      ])
+    )
+    const onSubmit = vi.fn().mockResolvedValue(undefined)
+    renderWithProviders({
+      initialPath: `/g/${SLUG}/items`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/items"
+          element={
+            <GroupProvider>
+              <CommodityFormDialog
+                open
+                onOpenChange={() => {}}
+                mode="edit"
+                initialValues={existing}
+                areas={areas}
+                locations={locations}
+                defaultCurrency="USD"
+                onSubmit={onSubmit}
+              />
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    const user = userEvent.setup()
+    await screen.findByLabelText(/^Name$/i)
+    await user.click(screen.getByRole("button", { name: /^back$/i }))
+
+    server.use(
+      ...commodityScanHandlers.ok(SLUG, {
+        fields: { original_price_currency: { value: "EUR", confidence: 0.9 } },
+        custom_fields: { "cf-plate": { value: "AB 123", confidence: 0.9 } },
+      })
+    )
+    await user.upload(await screen.findByTestId("commodity-form-ai-file-input"), receipt)
+    await user.click(screen.getByTestId("commodity-form-ai-scan"))
+    await screen.findByTestId("commodity-form-ai-review")
+
+    expect(
+      screen.getByTestId("commodity-form-ai-row-original_price_currency-yours")
+    ).toHaveTextContent("USD")
+    expect(
+      screen.getByTestId("commodity-form-ai-row-original_price_currency-check")
+    ).not.toBeChecked()
+    expect(screen.getByTestId("commodity-form-ai-row-custom-cf-plate-yours")).toHaveTextContent(
+      "ZZ"
+    )
+    expect(screen.getByTestId("commodity-form-ai-row-custom-cf-plate-check")).not.toBeChecked()
+
+    await user.click(screen.getByTestId("commodity-form-ai-use-values"))
+    await screen.findByTestId("commodity-form-basics-step")
+    await user.click(screen.getByTestId("commodity-form-submit"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({
+      original_price_currency: "USD",
+      custom_fields: { "cf-plate": "ZZ" },
+    })
   })
 })

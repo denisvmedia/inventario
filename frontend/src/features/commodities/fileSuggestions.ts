@@ -75,8 +75,9 @@ export function hasDefaultTitle(entry: PendingFile): boolean {
 // for, found by the file itself. What the user set on a file stays:
 //
 //   - the tag is added to a file that has none of DOCUMENT_KIND_TAGS, unless
-//     the user removed the same suggestion from it before;
-//   - the title replaces only the default title.
+//     the user removed that tag after a scan suggested it;
+//   - the title replaces only the default title, and never on a file whose
+//     suggested title the user changed, even back to the file name.
 //
 // So a second scan adds nothing to a file the first one classified or named.
 // Returns the same array when nothing changes.
@@ -96,14 +97,15 @@ export function applyFileSuggestions(
     if (!s) return entry
     let updated = entry
     const classified = entry.tags.some((tag) => DOCUMENT_KIND_TAGS.includes(tag.toLowerCase()))
-    if (s.tag && !classified && entry.suggestion?.tag !== s.tag) {
+    if (s.tag && !classified && !rejectedTagsOf(entry).includes(s.tag)) {
+      const base = settled(entry)
       updated = {
-        ...updated,
-        tags: [...updated.tags, s.tag],
-        suggestion: { ...updated.suggestion, tag: s.tag },
+        ...base,
+        tags: [...base.tags, s.tag],
+        suggestion: { ...base.suggestion, tag: s.tag },
       }
     }
-    if (s.title && hasDefaultTitle(entry)) {
+    if (s.title && hasDefaultTitle(entry) && entry.suggestion?.rejectedTitle === undefined) {
       updated = {
         ...updated,
         title: s.title,
@@ -114,6 +116,45 @@ export function applyFileSuggestions(
     return updated
   })
   return changed ? next : entries
+}
+
+// withTags is the staged file with the tags the user set. Removing the tag a
+// scan suggested rejects it: no later scan suggests it for the file again,
+// and adding it back by hand makes it the user's tag, shown without the
+// suggestion's mark.
+export function withTags(entry: PendingFile, tags: string[]): PendingFile {
+  return settled({ ...entry, tags })
+}
+
+// withTitle is the staged file with the title the user typed. Changing the
+// title a scan suggested rejects it: no later scan sets a title on the file,
+// also when the user goes back to the file name.
+export function withTitle(entry: PendingFile, title: string): PendingFile {
+  const suggested = entry.suggestion?.title
+  if (suggested === undefined || title === suggested) return { ...entry, title }
+  const suggestion = { ...entry.suggestion, rejectedTitle: suggested }
+  delete suggestion.title
+  return { ...entry, title, suggestion }
+}
+
+// rejectedTagsOf lists the suggested tags the user removed from the file,
+// with the suggested tag the file no longer has.
+function rejectedTagsOf(entry: PendingFile): readonly string[] {
+  return settled(entry).suggestion?.rejectedTags ?? []
+}
+
+// settled records as rejected a suggested tag the file no longer has.
+// Returns the entry itself when there is nothing to record.
+function settled(entry: PendingFile): PendingFile {
+  const tag = entry.suggestion?.tag
+  if (tag === undefined || entry.tags.includes(tag)) return entry
+  const rejectedTags = entry.suggestion?.rejectedTags ?? []
+  const suggestion = {
+    ...entry.suggestion,
+    rejectedTags: rejectedTags.includes(tag) ? rejectedTags : [...rejectedTags, tag],
+  }
+  delete suggestion.tag
+  return { ...entry, suggestion }
 }
 
 // suggestedTagOf is the tag on the file that a scan suggested and the user
