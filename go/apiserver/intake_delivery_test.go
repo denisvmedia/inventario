@@ -408,11 +408,11 @@ func TestIntakeDelivery_WhoMayDeliver(t *testing.T) {
 	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
 }
 
-// TestIntakeDelivery_ChangedWithoutRecord: the group lost the record of the
-// first delivery, but its session still carries the document. A change is
-// refused with the same code and no document to name; the first values are
-// taken.
-func TestIntakeDelivery_ChangedWithoutRecord(t *testing.T) {
+// TestIntakeDelivery_SessionOfALostRecord: the group lost the record of the
+// first delivery, but its session still carries the document. A delivery of
+// the document is refused with its own code and no document to name, with
+// the first values too, and makes nothing.
+func TestIntakeDelivery_SessionOfALostRecord(t *testing.T) {
 	c := qt.New(t)
 	env, token := newIntakeDeliveryEnv(c)
 	path := env.groupPath(env.group, "/intake")
@@ -425,14 +425,11 @@ func TestIntakeDelivery_ChangedWithoutRecord(t *testing.T) {
 
 	changed := paperlessForm("117")
 	changed.Set("title", "Another invoice")
-	rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(changed.Encode()))
-	c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf(rr.Body.String()))
-	c.Assert(errorCode(c, rr), qt.Equals, apiserver.IntakeDocumentChangedCode)
-	c.Assert(rr.Body.String(), qt.Not(qt.Contains), "document_id")
-
-	rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(form.Encode()))
-	c.Assert(rr.Code, qt.Equals, http.StatusCreated, qt.Commentf(rr.Body.String()))
-	again := decodeIntakeDocument(c, rr)
-	c.Assert(*again.Attributes.DraftID, qt.Equals, *first.Attributes.DraftID)
-	c.Assert(env.openDrafts(), qt.HasLen, 1)
+	for _, body := range []url.Values{changed, form} {
+		rr = env.raw(token, path, "application/x-www-form-urlencoded", []byte(body.Encode()))
+		c.Assert(rr.Code, qt.Equals, http.StatusConflict, qt.Commentf(rr.Body.String()))
+		c.Assert(errorCode(c, rr), qt.Equals, apiserver.IntakeDocumentConflictCode)
+		c.Assert(rr.Body.String(), qt.Not(qt.Contains), "draft_id")
+		c.Assert(env.openDrafts(), qt.HasLen, 1)
+	}
 }

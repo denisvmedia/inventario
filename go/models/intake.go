@@ -2,7 +2,9 @@ package models
 
 import (
 	"context"
+	"crypto/sha256"
 	"database/sql/driver"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"slices"
@@ -465,6 +467,25 @@ func (c *IntakeCandidate) DraftClientKey() string {
 // with the given id.
 func IntakeDraftClientKey(candidateID string) string {
 	return "intake:" + candidateID
+}
+
+// IntakeDeliveredDraftClientKey is the client key of the draft made for a
+// document another system delivered (#2809), from the document's identity.
+// The product of a delivery is the only one of its source, and the key does
+// not change when the session is deleted and made again, so a repeat of the
+// delivery finds the draft without the session.
+func IntakeDeliveredDraftClientKey(system, instance, documentID string) string {
+	sum := sha256.Sum256([]byte(system + "\x00" + instance + "\x00" + documentID))
+	return "intake-doc:" + hex.EncodeToString(sum[:])
+}
+
+// DraftClientKey is the client key of the draft made for a product of the
+// source: one key per delivered document, one per product otherwise.
+func (s *IntakeSource) DraftClientKey(cand *IntakeCandidate) string {
+	if s.HasExternalIdentity() {
+		return IntakeDeliveredDraftClientKey(s.ExternalSystem, s.ExternalInstance, s.ExternalDocumentID)
+	}
+	return cand.DraftClientKey()
 }
 
 // IsUnfinished reports whether creating the drafts would still act on the

@@ -33,6 +33,9 @@ const (
 	// IntakeDocumentChangedCode: the group has the document from an earlier
 	// delivery with other values or another file. Nothing was changed.
 	IntakeDocumentChangedCode = "intake.document_changed"
+	// IntakeDocumentConflictCode: an intake session the group's record of the
+	// document did not make carries the document. Nothing was made.
+	IntakeDocumentConflictCode = "intake.document_conflict"
 	// IntakeSourceDeliveredCode: the source was delivered by another system
 	// and has nothing to scan.
 	IntakeSourceDeliveredCode = "intake.source_delivered"
@@ -88,11 +91,12 @@ func newIntakeDeliveryAPI(params Params) *intakeDeliveryAPI {
 // deliver creates a draft from a document in another system.
 // @Summary Deliver a document from another system
 // @Description Creates a draft in the group's inbox from a document kept in another system, such as an invoice in Paperless-ngx (#2809). The request needs an API token that may write and a role in the group that can edit items.
-// @Description The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document.
+// @Description The fields come as a flat JSON object, as form fields, or as the fields of a multipart form whose part "file" carries the document. Swagger 2.0 cannot describe a body and form fields together, so the fields are listed once, as the JSON body; a form field has the same name.
 // @Description No AI scan runs: the draft holds the values sent, and what is left out stays unknown. The source URL is stored and shown on the draft, never fetched.
 // @Description source_system, source_instance and document_id identify the document in the group.
 // @Description Delivering it again with the same values and file returns the document it made (200) and makes nothing, also after its draft was discarded or became an item.
-// @Description Delivering it with other values is refused with 409 intake.document_changed and changes nothing.
+// @Description Delivering it with other values is refused with 409 intake.document_changed and changes nothing, unless the first delivery failed before it stored a file or made a draft; then the new values take its place.
+// @Description A delivery is refused with 409 intake.document_conflict when an intake session of the group carries the document but the group has no record of the delivery that made it.
 // @Tags intake
 // @Accept json
 // @Accept x-www-form-urlencoded
@@ -104,7 +108,7 @@ func newIntakeDeliveryAPI(params Params) *intakeDeliveryAPI {
 // @Success 200 {object} jsonapi.IntakeDocumentResponse "The document was delivered before; nothing was made"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized"
 // @Failure 403 {object} jsonapi.Errors "No API token, a read-only token, a token for another group, or a role that cannot edit items"
-// @Failure 409 {object} jsonapi.Errors "intake.document_changed: the document was delivered before with other values"
+// @Failure 409 {object} jsonapi.Errors "intake.document_changed: the document was delivered before with other values; intake.document_conflict: an intake session carries the document without a record of its delivery"
 // @Failure 413 {object} jsonapi.Errors "The file or the fields are too large"
 // @Failure 415 {object} jsonapi.Errors "Unsupported Media Type"
 // @Failure 422 {object} jsonapi.Errors "A field is missing, unknown or malformed"
@@ -380,6 +384,10 @@ func renderIntakeDeliveryReadError(w http.ResponseWriter, r *http.Request, err e
 }
 
 func renderIntakeDeliveryError(w http.ResponseWriter, r *http.Request, result *services.IntakeDeliveryResult, err error) {
+	if errors.Is(err, services.ErrIntakeDocumentConflict) {
+		_ = codedConflictError(w, r, err, IntakeDocumentConflictCode, nil)
+		return
+	}
 	if errors.Is(err, services.ErrIntakeDocumentChanged) {
 		// The group may have no record of the first delivery to name.
 		var meta map[string]any

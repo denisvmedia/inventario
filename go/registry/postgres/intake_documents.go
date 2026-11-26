@@ -265,12 +265,12 @@ func (r *IntakeDocumentRegistry) RecordProgress(ctx context.Context, id string, 
 				file_id = COALESCE(file_id, $1),
 				session_id = COALESCE(session_id, $2),
 				draft_id = COALESCE(draft_id, $3),
-				commodity_id = COALESCE(commodity_id, CASE WHEN draft_id IS NULL THEN $4::text END),
-				updated_at = $5
-			WHERE id = $6 AND group_id = $7
+				commodity_id = COALESCE(commodity_id, $4, CASE WHEN draft_id IS NULL THEN $5::text END),
+				updated_at = $6
+			WHERE id = $7 AND group_id = $8
 			RETURNING *`, r.tableNames.IntakeDocuments())
 		err := tx.QueryRowxContext(ctx, query,
-			progress.FileID, progress.SessionID, progress.DraftID, promotedItem, time.Now().UTC(), id, r.groupID,
+			progress.FileID, progress.SessionID, progress.DraftID, progress.CommodityID, promotedItem, time.Now().UTC(), id, r.groupID,
 		).StructScan(&doc)
 		if errors.Is(err, sql.ErrNoRows) {
 			return intakeDocumentNotFound(id)
@@ -281,6 +281,42 @@ func (r *IntakeDocumentRegistry) RecordProgress(ctx context.Context, id string, 
 		return nil, errxtrace.Wrap("failed to record intake document progress", err)
 	}
 	return &doc, nil
+}
+
+func (r *IntakeDocumentRegistry) ReplaceDelivery(ctx context.Context, id string, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, false, err
+	}
+	var (
+		stored   models.IntakeDocument
+		replaced bool
+	)
+	err := r.newSQLRegistry().Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		update := fmt.Sprintf(`
+			UPDATE %s SET source_name = $1, source_url = $2, payload_hash = $3, updated_at = $4
+			WHERE id = $5 AND group_id = $6 AND file_id IS NULL AND session_id IS NULL AND draft_id IS NULL
+			RETURNING *`, r.tableNames.IntakeDocuments())
+		err := tx.QueryRowxContext(ctx, update,
+			doc.SourceName, doc.SourceURL, doc.PayloadHash, time.Now().UTC(), id, r.groupID,
+		).StructScan(&stored)
+		if err == nil {
+			replaced = true
+			return nil
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		existing := fmt.Sprintf(`SELECT * FROM %s WHERE id = $1 AND group_id = $2`, r.tableNames.IntakeDocuments())
+		err = tx.QueryRowxContext(ctx, existing, id, r.groupID).StructScan(&stored)
+		if errors.Is(err, sql.ErrNoRows) {
+			return intakeDocumentNotFound(id)
+		}
+		return err
+	})
+	if err != nil {
+		return nil, false, errxtrace.Wrap("failed to replace the delivered values", err)
+	}
+	return &stored, replaced, nil
 }
 
 func (r *IntakeDocumentRegistry) ListByDrafts(ctx context.Context, draftIDs ...string) ([]*models.IntakeDocument, error) {

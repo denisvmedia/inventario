@@ -119,6 +119,12 @@ type IntakeDocument struct {
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
 }
 
+// DraftClientKey is the client key of the draft the delivery makes, the
+// same as IntakeSource.DraftClientKey gives the delivered source.
+func (d *IntakeDocument) DraftClientKey() string {
+	return IntakeDeliveredDraftClientKey(d.ExternalSystem, d.ExternalInstance, d.ExternalDocumentID)
+}
+
 // IntakeDocumentIndexes defines the postgres indexes for intake_documents.
 type IntakeDocumentIndexes struct {
 	// Unique index for the immutable UUID.

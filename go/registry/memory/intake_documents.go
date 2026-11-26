@@ -236,6 +236,7 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 	if !ok || doc.GroupID != r.groupID {
 		return nil, intakeDocumentNotFound(id)
 	}
+	setsDraft := doc.DraftID == nil && progress.DraftID != nil
 	changed := false
 	for _, f := range []struct {
 		dst **string
@@ -244,19 +245,42 @@ func (r *IntakeDocumentRegistry) RecordProgress(_ context.Context, id string, pr
 		{&doc.FileID, progress.FileID},
 		{&doc.SessionID, progress.SessionID},
 		{&doc.DraftID, progress.DraftID},
+		{&doc.CommodityID, progress.CommodityID},
 	} {
 		if *f.dst == nil && f.src != nil {
 			*f.dst = new(*f.src)
 			changed = true
 		}
 	}
-	if changed && promotedItem != nil && doc.CommodityID == nil && *doc.DraftID == *progress.DraftID {
+	if setsDraft && promotedItem != nil && doc.CommodityID == nil {
 		doc.CommodityID = new(*promotedItem)
 	}
 	if changed {
 		doc.UpdatedAt = time.Now().UTC()
 	}
 	return new(*doc), nil
+}
+
+func (r *IntakeDocumentRegistry) ReplaceDelivery(_ context.Context, id string, doc models.IntakeDocument) (*models.IntakeDocument, bool, error) {
+	if err := r.requireGroup(); err != nil {
+		return nil, false, err
+	}
+	r.factory.writes.Lock()
+	defer r.factory.writes.Unlock()
+	r.lock.Lock()
+	defer r.lock.Unlock()
+	stored, ok := r.items.Get(id)
+	if !ok || stored.GroupID != r.groupID {
+		return nil, false, intakeDocumentNotFound(id)
+	}
+	if stored.FileID != nil || stored.SessionID != nil || stored.DraftID != nil {
+		return new(*stored), false, nil
+	}
+	stored.SourceName = doc.SourceName
+	stored.SourceURL = doc.SourceURL
+	stored.PayloadHash = doc.PayloadHash
+	stored.UpdatedAt = time.Now().UTC()
+	return new(*stored), true, nil
 }
 
 func (r *IntakeDocumentRegistry) ListByDrafts(_ context.Context, draftIDs ...string) ([]*models.IntakeDocument, error) {

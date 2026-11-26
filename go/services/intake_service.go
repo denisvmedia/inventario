@@ -432,11 +432,13 @@ func (s *IntakeService) ReviewCandidate(ctx context.Context, sessionID, candidat
 // from it.
 //
 // Every step can be repeated: the draft of a product is found by the client
-// key "intake:<candidate id>", a link that exists is kept, and a product that
-// has its draft is not touched again. A second call, from another device or
-// after a lost response, therefore makes nothing twice, and a call after a
-// partial failure finishes only what is left. A product whose draft cannot
-// be made is marked failed with a code and the others go on.
+// key "intake:<candidate id>", or for a delivered document by the key
+// IntakeSource.DraftClientKey gives it, a link that exists is kept, and a
+// product that has its draft is not touched again. A second call, from
+// another device or after a lost response, therefore makes nothing twice,
+// and a call after a partial failure finishes only what is left. A product
+// whose draft cannot be made is marked failed with a code and the others go
+// on.
 func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*IntakeDraftsResult, error) {
 	reg, err := s.intake(ctx)
 	if err != nil {
@@ -459,10 +461,12 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 		return nil, errxtrace.Wrap("failed to create registry set", err)
 	}
 	sourceFiles := map[string][]*models.FileEntity{}
+	scanned := map[string]*models.IntakeSource{}
 	for _, src := range sources {
 		if src.Status != models.IntakeSourceScanned {
 			continue
 		}
+		scanned[src.ID] = src
 		if sourceFiles[src.ID], err = set.FileRegistry.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID); err != nil {
 			return nil, err
 		}
@@ -471,11 +475,11 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 
 	result := &IntakeDraftsResult{}
 	for _, cand := range candidates {
-		files, scanned := sourceFiles[cand.SourceID]
-		if !scanned {
+		src := scanned[cand.SourceID]
+		if src == nil {
 			continue
 		}
-		if err := s.finishCandidate(ctx, reg, set, input, cand, files, result); err != nil {
+		if err := s.finishCandidate(ctx, reg, set, input, src, cand, sourceFiles[src.ID], result); err != nil {
 			return nil, err
 		}
 	}
@@ -495,7 +499,7 @@ func (s *IntakeService) CreateDrafts(ctx context.Context, sessionID string) (*In
 // made for it is discarded: the new scan offers the product again, and
 // keeping the draft would give it a second one.
 func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.IntakeRegistry, set *registry.Set, input intakeDraftInput,
-	cand *models.IntakeCandidate, files []*models.FileEntity, result *IntakeDraftsResult,
+	src *models.IntakeSource, cand *models.IntakeCandidate, files []*models.FileEntity, result *IntakeDraftsResult,
 ) error {
 	if !cand.Selected && cand.Outcome != models.IntakeCandidateCreated {
 		if cand.Outcome != models.IntakeCandidateSkipped {
@@ -509,7 +513,7 @@ func (s *IntakeService) finishCandidate(ctx context.Context, reg registry.Intake
 	if !cand.IsUnfinished() {
 		return nil
 	}
-	made, err := s.createDraft(ctx, set, input, cand, files)
+	made, err := s.createDraft(ctx, set, input, src.DraftClientKey(cand), cand, files)
 	if err != nil {
 		return err
 	}
@@ -569,12 +573,12 @@ type madeDraft struct {
 // createDraft makes or finds the draft of a candidate and links the source
 // files to it. It returns a failure code for a problem with this candidate
 // only, and an error for one that stops the whole call.
-func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, cand *models.IntakeCandidate, files []*models.FileEntity) (madeDraft, error) {
+func (s *IntakeService) createDraft(ctx context.Context, set *registry.Set, input intakeDraftInput, key string, cand *models.IntakeCandidate, files []*models.FileEntity) (madeDraft, error) {
 	values, err := intakeDraftValues(ctx, input, cand)
 	if err != nil {
 		return madeDraft{}, err
 	}
-	draft, created, err := s.drafts.Create(ctx, cand.DraftClientKey(), values)
+	draft, created, err := s.drafts.Create(ctx, key, values)
 	switch {
 	case errors.Is(err, registry.ErrDraftDiscarded):
 		return madeDraft{failure: IntakeDraftDiscarded}, nil
@@ -732,8 +736,7 @@ func (s *IntakeService) recordMadeDrafts(ctx context.Context, reg registry.Intak
 	return nil
 }
 
-// Delete deletes the session. Drafts made from it stay, and a document
-// another system delivered in it keeps the way to its draft. Its files that
+// Delete deletes the session. Drafts made from it stay. Its files that
 // nothing else uses go to Trash, where they can be restored until the
 // retention runs out; a file a draft or an item uses only loses the link to
 // the session.
@@ -754,9 +757,6 @@ func (s *IntakeService) Delete(ctx context.Context, sessionID string) error {
 	if err != nil {
 		return err
 	}
-	if err := s.recordDeliveredDrafts(ctx, reg, session.ID, sources); err != nil {
-		return err
-	}
 	files, err := s.files(ctx)
 	if err != nil {
 		return err
@@ -774,68 +774,4 @@ func (s *IntakeService) Delete(ctx context.Context, sessionID string) error {
 		}
 	}
 	return reg.Delete(ctx, session.ID)
-}
-
-// recordDeliveredDrafts records on each document another system delivered in
-// the session (#2809) the draft made for it, before the session and its
-// products go: a delivery that stopped before it recorded its draft could
-// not find it afterwards. A document without a draft gets an empty one, so
-// a repeat of the delivery makes nothing once its session is deleted.
-func (s *IntakeService) recordDeliveredDrafts(ctx context.Context, reg registry.IntakeRegistry, sessionID string, sources []*models.IntakeSource) error {
-	docs, err := s.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return errxtrace.Wrap("failed to create intake document registry", err)
-	}
-	for _, src := range sources {
-		if !src.HasExternalIdentity() {
-			continue
-		}
-		doc, err := docs.GetByExternalID(ctx, src.ExternalSystem, src.ExternalInstance, src.ExternalDocumentID)
-		if errors.Is(err, registry.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return err
-		}
-		if doc.DraftID != nil {
-			continue
-		}
-		draftID, err := s.draftOfSource(ctx, reg, sessionID, src.ID)
-		if err != nil {
-			return err
-		}
-		if _, err := docs.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{DraftID: &draftID}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-// draftOfSource returns the draft made for a product of the source, or ""
-// when there is none.
-func (s *IntakeService) draftOfSource(ctx context.Context, reg registry.IntakeRegistry, sessionID, sourceID string) (string, error) {
-	candidates, err := reg.ListCandidates(ctx, sessionID)
-	if err != nil {
-		return "", err
-	}
-	drafts, err := s.factorySet.CommodityDraftRegistryFactory.CreateUserRegistry(ctx)
-	if err != nil {
-		return "", errxtrace.Wrap("failed to create draft registry", err)
-	}
-	for _, cand := range candidates {
-		if cand.SourceID != sourceID {
-			continue
-		}
-		if cand.DraftID != nil {
-			return *cand.DraftID, nil
-		}
-		draft, err := drafts.GetByClientKey(ctx, cand.DraftClientKey())
-		switch {
-		case err == nil:
-			return draft.ID, nil
-		case !errors.Is(err, registry.ErrNotFound):
-			return "", err
-		}
-	}
-	return "", nil
 }

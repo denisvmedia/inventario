@@ -41,6 +41,7 @@ func RunIntakeDocumentContract(t *testing.T, newEnv func(t *testing.T) IntakeDoc
 		{"documents list by draft and by item", intakeDocumentContractLists},
 		{"a promotion records the item", intakeDocumentContractPromotion},
 		{"recording a promoted draft records its item", intakeDocumentContractPromotedFirst},
+		{"a delivery that made nothing can be replaced", intakeDocumentContractReplaceDelivery},
 		{"the service registry is refused", intakeDocumentContractNeedsGroup},
 		{"restored timestamps are kept", intakeDocumentContractTimestamps},
 	}
@@ -155,6 +156,53 @@ func intakeDocumentContractProgress(t *testing.T, env IntakeDocumentEnv) {
 	c.Assert(*got.DraftID, qt.Equals, "draft-1")
 
 	_, err = env.Documents.RecordProgress(env.Ctx, "missing", registry.IntakeDocumentProgress{DraftID: new("draft-1")})
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	got, err = env.Documents.RecordProgress(env.Ctx, doc.ID, registry.IntakeDocumentProgress{CommodityID: new("item-1")})
+	c.Assert(err, qt.IsNil)
+	c.Assert(*got.CommodityID, qt.Equals, "item-1")
+	got, err = env.Documents.RecordProgress(env.Ctx, doc.ID, registry.IntakeDocumentProgress{CommodityID: new("item-2")})
+	c.Assert(err, qt.IsNil)
+	c.Assert(*got.CommodityID, qt.Equals, "item-1")
+}
+
+func intakeDocumentContractReplaceDelivery(t *testing.T, env IntakeDocumentEnv) {
+	c := qt.New(t)
+	doc, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("7"))
+	c.Assert(err, qt.IsNil)
+	corrected := contractIntakeDocument("7")
+	corrected.SourceName = "Paperless"
+	corrected.SourceURL = "https://paperless.example/documents/7/details/"
+	corrected.PayloadHash = "hash-corrected"
+
+	got, replaced, err := env.Documents.ReplaceDelivery(env.Ctx, doc.ID, corrected)
+	c.Assert(err, qt.IsNil)
+	c.Assert(replaced, qt.IsTrue)
+	c.Assert(got.ID, qt.Equals, doc.ID)
+	c.Assert(got.PayloadHash, qt.Equals, "hash-corrected")
+	c.Assert(got.SourceName, qt.Equals, "Paperless")
+	c.Assert(got.SourceURL, qt.Equals, "https://paperless.example/documents/7/details/")
+	stored, err := env.Documents.Get(env.Ctx, doc.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.PayloadHash, qt.Equals, "hash-corrected")
+
+	// Once the delivery holds a file, a session or a draft it stands.
+	for i, progress := range []registry.IntakeDocumentProgress{
+		{FileID: new("file-1")},
+		{SessionID: new("session-1")},
+		{DraftID: new("draft-1")},
+	} {
+		held, _, err := env.Documents.CreateOrGet(env.Ctx, contractIntakeDocument("held-"+string(rune('a'+i))))
+		c.Assert(err, qt.IsNil)
+		_, err = env.Documents.RecordProgress(env.Ctx, held.ID, progress)
+		c.Assert(err, qt.IsNil)
+		got, replaced, err := env.Documents.ReplaceDelivery(env.Ctx, held.ID, corrected)
+		c.Assert(err, qt.IsNil)
+		c.Assert(replaced, qt.IsFalse)
+		c.Assert(got.PayloadHash, qt.Equals, held.PayloadHash)
+	}
+
+	_, _, err = env.Documents.ReplaceDelivery(env.Ctx, "missing", corrected)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 

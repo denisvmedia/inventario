@@ -1,14 +1,12 @@
 package services
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"regexp"
-	"slices"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -29,6 +27,11 @@ import (
 // The first delivery stands: the draft or item it made is not changed, and no
 // second draft is made.
 var ErrIntakeDocumentChanged = errx.NewSentinel("the document was delivered before with different values")
+
+// ErrIntakeDocumentConflict is returned when an intake session the group's
+// record of the document did not make carries the document: the record of
+// the delivery that made it is gone. Nothing is made.
+var ErrIntakeDocumentConflict = errx.NewSentinel("another intake session carries the document")
 
 // intakeDocumentTitleMaxRunes is the draft's limit on a title.
 const intakeDocumentTitleMaxRunes = 255
@@ -102,13 +105,18 @@ type normalizedDelivery struct {
 var intakeSourceSystemPattern = regexp.MustCompile(`^[a-z0-9][a-z0-9._-]*$`)
 
 // intakeAmountPattern is an amount with an optional ISO currency code in
-// front, the form Paperless-ngx gives a monetary field ("EUR12.30").
-var intakeAmountPattern = regexp.MustCompile(`^([A-Za-z]{3})?(\d+(?:\.\d{1,2})?)$`)
+// front, the form Paperless-ngx gives a monetary field ("EUR12.30"). The 13
+// digits before the point are what an item's price holds; the draft carries
+// the amount as a float64, which keeps 15 digits exactly.
+var intakeAmountPattern = regexp.MustCompile(`^([A-Za-z]{3})?(\d{1,13}(?:\.\d{1,2})?)$`)
 
 // normalizeIntakeDelivery checks the delivery and puts it in canonical form.
 // A malformed value is refused rather than dropped, so the other system sees
 // the mistake in its log.
 func normalizeIntakeDelivery(in IntakeDelivery, file *IntakeDeliveredFile) (normalizedDelivery, error) {
+	if err := checkIntakeText(in); err != nil {
+		return normalizedDelivery{}, err
+	}
 	n := normalizedDelivery{
 		Title:          strings.TrimSpace(in.Title),
 		SourceSystem:   strings.ToLower(strings.TrimSpace(in.SourceSystem)),
@@ -172,6 +180,32 @@ func normalizeIntakeDelivery(in IntakeDelivery, file *IntakeDeliveredFile) (norm
 	return n, nil
 }
 
+// checkIntakeText refuses a field that is not UTF-8 text or that holds a NUL
+// character, which the database cannot store.
+func checkIntakeText(in IntakeDelivery) error {
+	errs := validation.Errors{}
+	for name, value := range map[string]string{
+		"title":           in.Title,
+		"source_system":   in.SourceSystem,
+		"source_instance": in.SourceInstance,
+		"document_id":     in.DocumentID,
+		"source_url":      in.SourceURL,
+		"source_name":     in.SourceName,
+		"seller":          in.Seller,
+		"purchase_date":   in.PurchaseDate,
+		"amount":          in.Amount,
+		"currency":        in.Currency,
+	} {
+		if !utf8.ValidString(value) || strings.ContainsRune(value, 0) {
+			errs[name] = validation.NewError("validation_intake_text", "must be UTF-8 text without NUL characters")
+		}
+	}
+	if len(errs) > 0 {
+		return errs
+	}
+	return nil
+}
+
 // normalizeIntakeDate accepts a date as YYYY-MM-DD or as the date part of an
 // RFC 3339 time, and returns it as YYYY-MM-DD.
 func normalizeIntakeDate(raw string) (string, error) {
@@ -196,7 +230,8 @@ func normalizeIntakeAmount(raw string) (amount, code string, err error) {
 	if s == "" {
 		return "", "", nil
 	}
-	invalid := validation.NewError("validation_intake_amount", "must be a non-negative number with at most two decimals, optionally after a currency code")
+	invalid := validation.NewError("validation_intake_amount",
+		"must be a non-negative number with at most 13 digits before the point and two after it, optionally after a currency code")
 	m := intakeAmountPattern.FindStringSubmatch(s)
 	if m == nil {
 		return "", "", invalid
@@ -261,14 +296,16 @@ func (n normalizedDelivery) candidate() (models.IntakeCandidate, error) {
 // The document's identity is the source system, its instance and the
 // document id, unique in the group. A repeated delivery with the same values
 // and file is a replay: it returns the document and makes nothing. A delivery
-// with other values gets ErrIntakeDocumentChanged and changes nothing. The
-// document record outlives the intake session and the draft, so a replay
-// after the member deleted the session, discarded the draft or finished the
-// item still makes nothing.
+// with other values gets ErrIntakeDocumentChanged and changes nothing, unless
+// the first one failed before it made a file, a session or a draft; then the
+// new values take its place. The document record outlives the intake session
+// and the draft, so a replay after the member deleted the session, discarded
+// the draft or finished the item still makes nothing.
 //
-// Every step can be repeated: the file, the session and the draft are each
-// recorded on the document once made, so a replay after a failure half way
-// finishes the work without doing any of it twice.
+// Every step can be repeated: the file and the session are recorded on the
+// document once made, and the draft carries a client key that follows from
+// the document's identity, so a replay after a failure half way finishes the
+// work without doing any of it twice.
 func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *IntakeDeliveredFile) (*IntakeDeliveryResult, error) {
 	n, err := normalizeIntakeDelivery(in, file)
 	if err != nil {
@@ -279,25 +316,36 @@ func (s *IntakeService) Deliver(ctx context.Context, in IntakeDelivery, file *In
 		return nil, errxtrace.Wrap("failed to create registry set", err)
 	}
 	docs := set.IntakeDocumentRegistry
-	doc, created, err := docs.CreateOrGet(ctx, models.IntakeDocument{
+	delivered := models.IntakeDocument{
 		ExternalSystem:     n.SourceSystem,
 		ExternalInstance:   n.SourceInstance,
 		ExternalDocumentID: n.DocumentID,
 		SourceName:         n.SourceName,
 		SourceURL:          n.SourceURL,
 		PayloadHash:        n.fingerprint(),
-	})
+	}
+	doc, created, err := docs.CreateOrGet(ctx, delivered)
 	if err != nil {
 		return nil, err
 	}
 	result := &IntakeDeliveryResult{Document: doc, Created: created}
-	if !created && doc.PayloadHash != n.fingerprint() {
-		return result, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
+	if !created && doc.PayloadHash != delivered.PayloadHash {
+		stored, replaced, err := docs.ReplaceDelivery(ctx, doc.ID, delivered)
+		if err != nil {
+			return result, err
+		}
+		result.Document = stored
+		if !replaced {
+			return result, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
+		}
 	}
-	if doc.DraftID == nil {
+	if result.Document.DraftID == nil {
 		if err := s.finishDelivery(ctx, set, n, file, result); err != nil {
 			return result, err
 		}
+	}
+	if err := recordPromotion(ctx, set, result); err != nil {
+		return result, err
 	}
 	if result.State, err = s.documentState(ctx, set, result.Document); err != nil {
 		return result, err
@@ -341,19 +389,24 @@ func dropDeliveredFile(ctx context.Context, set *registry.Set, stored *models.Fi
 // finishDelivery makes what the document does not have yet, the file of the
 // group, the intake session and the draft, and records each on it.
 func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) error {
-	docs := set.IntakeDocumentRegistry
+	if result.Document.SessionID != nil {
+		// A call made the session and may have made the draft before it
+		// stopped, also when the session is gone since.
+		if found, err := recordDraftByKey(ctx, set, result); found || err != nil {
+			return err
+		}
+	}
 	session, err := s.deliverySession(ctx, set, n, file, result)
 	if errors.Is(err, errDeliverySessionGone) {
-		// The session was deleted before the document recorded a draft. A
-		// draft made from it stays, and a new session would make a second
-		// one, so the delivery is done without a draft the document names.
-		result.Document, err = docs.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{DraftID: new("")})
-		return err
+		// The session was deleted before its draft was made. A new session
+		// would bring back what the member deleted, so the delivery is done
+		// without a draft.
+		return recordDraft(ctx, set, result, "")
 	}
 	if err != nil {
 		return err
 	}
-	doc, err := docs.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{SessionID: &session.ID})
+	doc, err := set.IntakeDocumentRegistry.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{SessionID: &session.ID})
 	if err != nil {
 		return err
 	}
@@ -364,12 +417,63 @@ func (s *IntakeService) finishDelivery(ctx context.Context, set *registry.Set, n
 		return err
 	}
 	draftID, err := deliveredDraftID(made)
-	if err != nil || draftID == "" {
+	switch {
+	case err != nil:
+		return err
+	case draftID != "":
+		return recordDraft(ctx, set, result, draftID)
+	}
+	// The draft with the document's key is being discarded.
+	_, err = recordDraftByKey(ctx, set, result)
+	return err
+}
+
+// recordDraft records the draft on the document. A failed write leaves
+// result as it was.
+func recordDraft(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult, draftID string) error {
+	doc, err := set.IntakeDocumentRegistry.RecordProgress(ctx, result.Document.ID, registry.IntakeDocumentProgress{DraftID: &draftID})
+	if err != nil {
 		return err
 	}
-	if result.Document, err = docs.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{DraftID: &draftID}); err != nil {
+	result.Document = doc
+	return nil
+}
+
+// recordDraftByKey records the draft that carries the document's client
+// key, whatever its state, and reports whether there is one.
+func recordDraftByKey(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult) (bool, error) {
+	draft, err := set.CommodityDraftRegistry.GetByClientKey(ctx, result.Document.DraftClientKey())
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return false, nil
+	case err != nil:
+		return false, err
+	}
+	return true, recordDraft(ctx, set, result, draft.ID)
+}
+
+// recordPromotion records the item the document's draft became when the
+// document does not name it yet: the promotion ran before the document
+// recorded the draft.
+func recordPromotion(ctx context.Context, set *registry.Set, result *IntakeDeliveryResult) error {
+	doc := result.Document
+	if doc.CommodityID != nil || doc.DraftID == nil || *doc.DraftID == "" {
+		return nil
+	}
+	draft, err := set.CommodityDraftRegistry.Get(ctx, *doc.DraftID)
+	switch {
+	case errors.Is(err, registry.ErrNotFound):
+		return nil
+	case err != nil:
+		return err
+	case draft.PromotedCommodityID == nil:
+		return nil
+	}
+	stored, err := set.IntakeDocumentRegistry.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{CommodityID: draft.PromotedCommodityID})
+	if err != nil {
 		return err
 	}
+	result.Document = stored
 	return nil
 }
 
@@ -410,11 +514,11 @@ func (s *IntakeService) storeDeliveredFile(ctx context.Context, set *registry.Se
 var errDeliverySessionGone = errx.NewSentinel("the intake session of the delivery was deleted")
 
 // deliverySession returns the intake session that carries the delivery: the
-// one recorded on the document, the one a call that stopped before recording
-// it made under the document's key, or the session of an earlier delivery of
-// the document. Without one it stores the file and makes the session, whose
-// one source is already scanned: it carries the external identity, the
-// delivered file and the product the delivery describes.
+// one recorded on the document, or the one a call that stopped before
+// recording it made under the document's key. Without one it stores the file
+// and makes the session, whose one source is already scanned: it carries the
+// external identity, the delivered file and the product the delivery
+// describes.
 func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, n normalizedDelivery, file *IntakeDeliveredFile, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
 	reg := set.IntakeRegistry
 	if id := result.Document.SessionID; id != nil {
@@ -429,25 +533,31 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 	if !errors.Is(err, registry.ErrNotFound) {
 		return session, err
 	}
-	if session, err := s.earlierSession(ctx, set, n, result); session != nil || err != nil {
-		return session, err
+	doc := result.Document
+	// A session made for another record carries the identity: the record of
+	// an earlier delivery the group no longer has. What that delivery held
+	// is not known, so this one is refused rather than take it over.
+	_, err = reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
+	switch {
+	case err == nil:
+		return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", doc.ID))
+	case !errors.Is(err, registry.ErrNotFound):
+		return nil, errxtrace.Wrap("failed to look up the source of the document", err)
 	}
-	if file != nil && result.Document.FileID == nil {
+	if file != nil && doc.FileID == nil {
 		if err := s.recordDeliveredFile(ctx, set, n, file, result); err != nil {
 			return nil, err
 		}
+		doc = result.Document
 	}
 	cand, err := n.candidate()
 	if err != nil {
 		return nil, err
 	}
-	doc := result.Document
 	var fileIDs []string
 	if doc.FileID != nil {
 		fileIDs = []string{*doc.FileID}
 	}
-	// A source with the identity that appeared since the look-up fails the
-	// call with ErrAlreadyExists; a repeat finds it as the earlier delivery.
 	session, _, err = reg.CreateSession(ctx,
 		models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginExternal},
 		[]registry.IntakeSourceInput{{
@@ -459,112 +569,11 @@ func (s *IntakeService) deliverySession(ctx context.Context, set *registry.Set, 
 			Delivered:          &registry.IntakeScan{Candidates: []models.IntakeCandidate{cand}},
 		}},
 		0)
+	if errors.Is(err, registry.ErrAlreadyExists) {
+		// Such a session appeared since the look-up.
+		return nil, errxtrace.Classify(ErrIntakeDocumentConflict, errx.Attrs("entity_id", doc.ID))
+	}
 	return session, err
-}
-
-// earlierSession returns the session of an earlier delivery of the document
-// whose record the group no longer has: a source in it carries the
-// document's identity under another document's key. It is the document's
-// session when it holds the delivered values and file, and the document
-// records its file. With other values or another file the first delivery
-// stands: the delivery is refused as changed, and a record this call made is
-// dropped, so a repeat of the first delivery still finds the session.
-func (s *IntakeService) earlierSession(ctx context.Context, set *registry.Set, n normalizedDelivery, result *IntakeDeliveryResult) (*models.IntakeSession, error) {
-	reg := set.IntakeRegistry
-	doc := result.Document
-	src, err := reg.GetSourceByExternalID(ctx, doc.ExternalSystem, doc.ExternalInstance, doc.ExternalDocumentID)
-	if errors.Is(err, registry.ErrNotFound) {
-		return nil, nil
-	}
-	if err != nil {
-		return nil, errxtrace.Wrap("failed to look up the earlier delivery of the document", err)
-	}
-	fileID, same, err := sourceHolds(ctx, set, src, n)
-	if err != nil {
-		return nil, err
-	}
-	if !same {
-		if result.Created {
-			if err := set.IntakeDocumentRegistry.Delete(ctx, doc.ID); err != nil {
-				return nil, errxtrace.Wrap("failed to drop the record of a changed delivery", err)
-			}
-			result.Document = nil
-		}
-		return nil, errxtrace.Classify(ErrIntakeDocumentChanged, errx.Attrs("entity_id", doc.ID))
-	}
-	if fileID != "" {
-		if result.Document, err = set.IntakeDocumentRegistry.RecordProgress(ctx, doc.ID, registry.IntakeDocumentProgress{FileID: &fileID}); err != nil {
-			return nil, err
-		}
-	}
-	return reg.Get(ctx, src.SessionID)
-}
-
-// sourceHolds reports whether a delivered source holds the values and the
-// file of the delivery n, and returns the id of its file.
-func sourceHolds(ctx context.Context, set *registry.Set, src *models.IntakeSource, n normalizedDelivery) (fileID string, same bool, err error) {
-	files, err := set.FileRegistry.ListByLinkedEntity(ctx, models.FileLinkIntake, src.ID)
-	if err != nil {
-		return "", false, err
-	}
-	want := []string{}
-	if n.FileSHA256 != "" {
-		want = append(want, n.FileSHA256)
-	}
-	held := []string{}
-	for _, f := range files {
-		if f.File != nil {
-			held = append(held, f.File.SHA256)
-			fileID = f.ID
-		}
-	}
-	if !slices.Equal(held, want) {
-		return "", false, nil
-	}
-	candidates, err := set.IntakeRegistry.ListCandidates(ctx, src.SessionID)
-	if err != nil {
-		return "", false, err
-	}
-	delivered, err := n.candidate()
-	if err != nil {
-		return "", false, err
-	}
-	var fields []models.IntakeFields
-	for _, cand := range candidates {
-		if cand.SourceID == src.ID {
-			fields = append(fields, cand.Fields)
-		}
-	}
-	if len(fields) != 1 {
-		return "", false, nil
-	}
-	same, err = sameJSON(fields[0], delivered.Fields)
-	return fileID, same, err
-}
-
-// sameJSON reports whether a and b encode to the same JSON once decoded, so
-// values that took a trip through the database compare equal to fresh ones.
-func sameJSON(a, b any) (bool, error) {
-	canonical := func(v any) ([]byte, error) {
-		raw, err := json.Marshal(v)
-		if err != nil {
-			return nil, err
-		}
-		var decoded any
-		if err := json.Unmarshal(raw, &decoded); err != nil {
-			return nil, err
-		}
-		return json.Marshal(decoded)
-	}
-	ca, err := canonical(a)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to encode the held values", err)
-	}
-	cb, err := canonical(b)
-	if err != nil {
-		return false, errxtrace.Wrap("failed to encode the delivered values", err)
-	}
-	return bytes.Equal(ca, cb), nil
 }
 
 // deliveredDraftID returns the draft CreateDrafts made for the delivered
@@ -584,32 +593,35 @@ func deliveredDraftID(made *IntakeDraftsResult) (string, error) {
 	return "", nil
 }
 
-// documentState says what became of the document's draft.
+// documentState says what became of the document's draft. A promoted draft
+// gives the item it became also when the document does not name it.
 func (s *IntakeService) documentState(ctx context.Context, set *registry.Set, doc *models.IntakeDocument) (models.IntakeDocumentState, error) {
-	if doc.CommodityID != nil {
-		_, err := set.CommodityRegistry.Get(ctx, *doc.CommodityID)
+	commodityID := doc.CommodityID
+	if commodityID == nil {
+		if doc.DraftID == nil {
+			return models.IntakeDocumentPending, nil
+		}
+		draft, err := set.CommodityDraftRegistry.Get(ctx, *doc.DraftID)
 		switch {
-		case err == nil:
-			return models.IntakeDocumentItem, nil
 		case errors.Is(err, registry.ErrNotFound):
 			return models.IntakeDocumentRemoved, nil
-		default:
+		case err != nil:
 			return "", err
+		case draft.Status == models.CommodityDraftOpen:
+			return models.IntakeDocumentDraft, nil
+		case draft.PromotedCommodityID == nil:
+			return models.IntakeDocumentRemoved, nil
 		}
+		commodityID = draft.PromotedCommodityID
 	}
-	if doc.DraftID == nil {
-		return models.IntakeDocumentPending, nil
-	}
-	draft, err := set.CommodityDraftRegistry.Get(ctx, *doc.DraftID)
+	_, err := set.CommodityRegistry.Get(ctx, *commodityID)
 	switch {
+	case err == nil:
+		return models.IntakeDocumentItem, nil
 	case errors.Is(err, registry.ErrNotFound):
 		return models.IntakeDocumentRemoved, nil
-	case err != nil:
-		return "", err
-	case draft.Status == models.CommodityDraftOpen:
-		return models.IntakeDocumentDraft, nil
 	default:
-		return models.IntakeDocumentRemoved, nil
+		return "", err
 	}
 }
 
