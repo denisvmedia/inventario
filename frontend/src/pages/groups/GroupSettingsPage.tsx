@@ -86,8 +86,9 @@ const SECTIONS: SectionMeta[] = [
 // sub-sections behind a left rail (mirrors the user Preferences pattern
 // at /settings):
 //   - Info           identity (name, icon, slug, currency + migrate)
-//                    + Plan & quota card (#1887: moved out of the
-//                    page header so it no longer renders everywhere)
+//                    + Plan & quota card, "Usage" when plans are off
+//                    (#1389; #1887: moved out of the page header so it
+//                    no longer renders everywhere)
 //   - Members        members link + leave-group panel
 //   - Notifications  per-group notification preference toggles
 //                    (#1887: pulled out of the page header into its
@@ -358,8 +359,9 @@ function InfoSection({
     return (
       <div className="space-y-6" data-testid="group-section-info">
         <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
-        {/* Plan & quota lives in Info (#1887). It's read-only identity,
-            not an admin-gated action, so non-admins see it too. */}
+        {/* Plan & quota lives in Info (#1887); with plans off it is the
+            Usage card (#1389). It's read-only, not an admin-gated action,
+            so non-admins see it too. */}
         <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
         <div className="rounded-xl border border-border bg-muted/30 p-5 text-sm text-muted-foreground">
           {t("members:adminOnlyHelp")}
@@ -372,8 +374,9 @@ function InfoSection({
     <div className="space-y-6" data-testid="group-section-info">
       <SectionTitle>{t("groups:settings.sections.info")}</SectionTitle>
 
-      {/* Plan & quota (#1389). Lives at the top of Info (#1887) so it
-          no longer renders on every settings sub-page. */}
+      {/* Plan & quota (#1389), the Usage card when plans are off. Lives
+          at the top of Info (#1887) so it no longer renders on every
+          settings sub-page. */}
       <PlanCard groupSlug={groupSlug} ownerName={ownerName} />
 
       <form

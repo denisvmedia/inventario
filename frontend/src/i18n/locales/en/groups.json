@@ -149,7 +149,11 @@
     "slugHelp": "Slugs are randomly generated at creation and immutable.",
     "slugLabel": "URL slug",
     "subtitle": "Manage your group's profile, members, and lifecycle.",
-    "title": "Group settings"
+    "title": "Group settings",
+    "usage": {
+      "errorGeneric": "Couldn't load usage.",
+      "title": "Usage"
+    }
   },
   "validation": {
     "confirmWordMismatch": "The group name doesn't match",

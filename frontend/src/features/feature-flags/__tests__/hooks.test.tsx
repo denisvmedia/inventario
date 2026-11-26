@@ -47,6 +47,26 @@ describe("useFeatureFlag", () => {
     await waitFor(() => expect(result.current).toBe(true))
   })
 
+  it("reads the plans flag (#1389), off when the server omits it", async () => {
+    server.use(
+      msw.get(apiUrl("/feature-flags"), () => HttpResponse.json({ currency_migration: true }))
+    )
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(
+      () => ({ flags: useFeatureFlags(), plans: useFeatureFlag("plans") }),
+      { wrapper: Wrapper }
+    )
+    await waitFor(() => expect(result.current.flags.isSuccess).toBe(true))
+    expect(result.current.plans).toBeFalsy()
+  })
+
+  it("returns the plans flag when the deployment turns plans on", async () => {
+    server.use(msw.get(apiUrl("/feature-flags"), () => HttpResponse.json({ plans: true })))
+    const { Wrapper } = makeWrapper()
+    const { result } = renderHook(() => useFeatureFlag("plans"), { wrapper: Wrapper })
+    await waitFor(() => expect(result.current).toBe(true))
+  })
+
   it("falls back to the off state while the request is in flight", () => {
     // No handler registered — request stays pending. The fail-closed
     // default (#1616 design) is exactly what gated entry points rely on:

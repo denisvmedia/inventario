@@ -1,10 +1,11 @@
 import { useTranslation } from "react-i18next"
-import { FileText, Info, MapPin, Package, Zap } from "lucide-react"
+import { FileText, Gauge, Info, MapPin, Package, Zap } from "lucide-react"
 
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Skeleton } from "@/components/ui/skeleton"
+import { useFeatureFlags } from "@/features/feature-flags/hooks"
 import { type Plan, type PlanUsage } from "@/features/plan/api"
 import { useGroupPlan } from "@/features/plan/hooks"
 import { cn } from "@/lib/utils"
@@ -19,6 +20,12 @@ import { cn } from "@/lib/utils"
 // Resolves the plan + per-group usage via `useGroupPlan(slug)`; ownerName
 // is passed in from the parent so the card stays decoupled from the
 // members query (the parent already fetches members for other reasons).
+//
+// The plan part shows only when the deployment has plans turned on
+// (#1389): the feature is frozen and off by default. With it off the card
+// is "Usage" — the three chips without limits, and no plan name, owner
+// line, Upgrade button or subscription banner. The card waits for the
+// feature flags so it does not change shape once they land.
 interface PlanCardProps {
   groupSlug: string | null
   ownerName: string | null
@@ -28,6 +35,9 @@ interface PlanCardProps {
 export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
   const { t } = useTranslation()
   const planQuery = useGroupPlan(groupSlug)
+  // Fail closed: a failed flags request leaves plans hidden.
+  const flagsQuery = useFeatureFlags()
+  const plansEnabled = flagsQuery.data?.plans === true
 
   // Order matters: when the request fails, React Query keeps `data`
   // undefined, so an `isLoading || !data` check would mask the error
@@ -36,17 +46,25 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
   if (planQuery.isError) {
     return (
       <Alert variant="destructive" className={className} data-testid="plan-card-error">
-        <AlertDescription>{t("groups:settings.plan.errorGeneric")}</AlertDescription>
+        <AlertDescription>
+          {plansEnabled
+            ? t("groups:settings.plan.errorGeneric")
+            : t("groups:settings.usage.errorGeneric")}
+        </AlertDescription>
       </Alert>
     )
   }
-  if (!planQuery.data) {
+  if (!planQuery.data || flagsQuery.isPending) {
     return <PlanCardSkeleton className={className} />
   }
 
   const { plan, usage } = planQuery.data
   if (!plan || !usage) {
     return <PlanCardSkeleton className={className} />
+  }
+
+  if (!plansEnabled) {
+    return <UsageCard usage={usage} className={className} />
   }
 
   return (
@@ -101,14 +119,14 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
           icon={Package}
           label={t("groups:settings.plan.chips.items")}
           value={usage.items ?? 0}
-          limit={plan.max_items}
+          limit={plan.max_items ?? null}
           testId="plan-card-chip-items"
         />
         <UsageChip
           icon={MapPin}
           label={t("groups:settings.plan.chips.locations")}
           value={usage.locations ?? 0}
-          limit={plan.max_locations}
+          limit={plan.max_locations ?? null}
           testId="plan-card-chip-locations"
         />
         <UsageChip
@@ -130,6 +148,47 @@ export function PlanCard({ groupSlug, ownerName, className }: PlanCardProps) {
   )
 }
 
+// UsageCard is the card without plans: what the group holds, with no
+// limits, since limits come from a plan.
+function UsageCard({ usage, className }: { usage: PlanUsage; className?: string }) {
+  const { t } = useTranslation()
+  return (
+    <div
+      className={cn("rounded-xl border border-border bg-card p-6 space-y-4", className)}
+      data-testid="usage-card"
+    >
+      <div className="flex items-center gap-3 min-w-0">
+        <div className="flex size-9 items-center justify-center rounded-lg bg-accent/20 shrink-0">
+          <Gauge className="size-4 text-accent-foreground" aria-hidden="true" />
+        </div>
+        {/* h3 for the same reason as the plan card's title (#1887). */}
+        <h3 className="text-base font-semibold truncate">{t("groups:settings.usage.title")}</h3>
+      </div>
+
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+        <UsageChip
+          icon={Package}
+          label={t("groups:settings.plan.chips.items")}
+          value={usage.items ?? 0}
+          testId="usage-card-chip-items"
+        />
+        <UsageChip
+          icon={MapPin}
+          label={t("groups:settings.plan.chips.locations")}
+          value={usage.locations ?? 0}
+          testId="usage-card-chip-locations"
+        />
+        <UsageChip
+          icon={FileText}
+          label={t("groups:settings.plan.chips.storage")}
+          value={formatBytes(usage.storage_bytes ?? 0)}
+          testId="usage-card-chip-storage"
+        />
+      </div>
+    </div>
+  )
+}
+
 interface UsageChipProps {
   icon: typeof Package
   label: string
@@ -139,7 +198,8 @@ interface UsageChipProps {
   value: number | string
   // null = "Unlimited" — both for plans that uncap the resource and for
   // the storage chip when `max_storage_bytes` is null in the API payload.
-  limit: number | string | null | undefined
+  // Left out (the usage card without plans) = no limit part at all.
+  limit?: number | string | null
   testId: string
 }
 
@@ -152,10 +212,15 @@ function UsageChip({ icon: Icon, label, value, limit, testId }: UsageChipProps) 
         <p className="text-xs text-muted-foreground font-medium">{label}</p>
       </div>
       <p className="text-sm font-semibold">
-        {value}{" "}
-        <span className="text-muted-foreground font-normal">
-          / {limit ?? t("groups:settings.plan.chips.unlimited")}
-        </span>
+        {value}
+        {limit !== undefined ? (
+          <>
+            {" "}
+            <span className="text-muted-foreground font-normal">
+              / {limit ?? t("groups:settings.plan.chips.unlimited")}
+            </span>
+          </>
+        ) : null}
       </p>
     </div>
   )

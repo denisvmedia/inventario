@@ -19,6 +19,7 @@ export const FEATURE_FLAGS_FALLBACK: FeatureFlags = {
   currency_migration: false,
   magic_link_login: false,
   public_scan: false,
+  plans: false,
 }
 
 export async function getFeatureFlags(signal?: AbortSignal): Promise<FeatureFlags> {
