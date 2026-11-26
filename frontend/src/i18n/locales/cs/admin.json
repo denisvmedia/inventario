@@ -121,6 +121,64 @@
     "previousLabel": "Předchozí",
     "showing": "Zobrazeno {{from}}–{{to}} z {{total}}"
   },
+  "tenantActions": {
+    "cancel": "Zrušit",
+    "create": {
+      "action": "Nový tenant",
+      "body": "Tenant začíná jako aktivní s uzavřenou registrací.",
+      "submit": "Vytvořit tenanta",
+      "success": "Tenant {{name}} byl vytvořen.",
+      "title": "Nový tenant"
+    },
+    "danger": {
+      "button": "Smazat tenanta",
+      "description": "Smazat tohoto tenanta včetně jeho uživatelů, skupin, položek a souborů. Tuto akci nelze vrátit.",
+      "title": "Nebezpečná zóna"
+    },
+    "delete": {
+      "body": "Tím se trvale smaže tenant a vše, co obsahuje: jeho uživatelé, skupiny, položky a soubory. Tuto akci nelze vrátit.",
+      "confirmLabel": "Pro potvrzení zadejte slug tenanta:",
+      "submit": "Smazat tenanta",
+      "success": "Tenant {{name}} byl smazán.",
+      "title": "Smazat {{name}}?"
+    },
+    "edit": {
+      "action": "Upravit",
+      "body": "Změňte název, slug nebo vlastní doménu tenanta {{name}}.",
+      "submit": "Uložit změny",
+      "success": "Tenant {{name}} byl upraven.",
+      "title": "Upravit tenanta"
+    },
+    "errors": {
+      "confirmationMismatch": "Zadaný slug neodpovídá slugu tenanta.",
+      "domainTaken": "Tuto doménu již používá jiný tenant.",
+      "generic": "Něco se pokazilo. Zkuste to prosím znovu.",
+      "reasonRequired": "Důvod je povinný.",
+      "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
+      "roleRequired": "Tenanty může měnit pouze správce platformy.",
+      "servesThisHost": "Back office je otevřený na adrese tohoto tenanta, takže jeho pozastavení nebo smazání by back office zablokovalo. Použijte místo toho CLI inventario tenants.",
+      "slugTaken": "Tento slug již používá jiný tenant."
+    },
+    "reactivate": {
+      "action": "Obnovit",
+      "body": "Uživatelé tenanta se mohou znovu přihlásit. Relace ukončené pozastavením zůstávají ukončené, takže se všichni přihlásí znovu.",
+      "submit": "Obnovit tenanta",
+      "success": "Tenant {{name}} byl obnoven.",
+      "title": "Obnovit {{name}}?"
+    },
+    "reason": {
+      "counter": "{{current}}/{{max}}",
+      "label": "Důvod",
+      "placeholder": "Proč se tato akce provádí?"
+    },
+    "suspend": {
+      "action": "Pozastavit",
+      "body": "Všichni uživatelé tohoto tenanta budou okamžitě odhlášeni a nebudou se moci přihlásit ani používat API tokeny, dokud tenant nebude obnoven. Data tenanta zůstávají zachována.",
+      "submit": "Pozastavit tenanta",
+      "success": "Tenant {{name}} byl pozastaven.",
+      "title": "Pozastavit {{name}}?"
+    }
+  },
   "tenantDetail": {
     "back": "Zpět na tenanty",
     "fallbackName": "Tenant",
@@ -186,6 +244,29 @@
       }
     }
   },
+  "tenantForm": {
+    "domain": {
+      "hint": "Nepovinné. Holý název hostitele bez schématu a portu.",
+      "label": "Vlastní doména"
+    },
+    "name": {
+      "label": "Název"
+    },
+    "slug": {
+      "hintCreate": "Nepovinné. Pokud zůstane prázdný, vygeneruje se z názvu.",
+      "hintEdit": "Malá písmena, číslice a pomlčky, nejvýše 50 znaků.",
+      "label": "Slug"
+    },
+    "validation": {
+      "domainFormat": "Zadejte holý název hostitele malými písmeny, například inventory.example.com.",
+      "domainTooLong": "Doména může mít nejvýše 255 znaků.",
+      "nameRequired": "Název je povinný.",
+      "nameTooLong": "Název může mít nejvýše 100 znaků.",
+      "slugFormat": "Používejte pouze malá písmena, číslice a pomlčky.",
+      "slugRequired": "Slug je povinný.",
+      "slugTooLong": "Slug může mít nejvýše 50 znaků."
+    }
+  },
   "tenants": {
     "empty": "Žádné tenanty neodpovídají hledání.",
     "loadError": "Nepodařilo se načíst tenanty. Zkuste to prosím znovu.",
@@ -234,7 +315,8 @@
       "reasonTooLong": "Důvod je příliš dlouhý. Zkraťte jej pod 500 znaků.",
       "selfBlocked": "Nemůžete zablokovat svůj vlastní účet.",
       "targetBlocked": "Tento účet je zablokovaný. Před vystupováním jako tento uživatel jej odblokujte.",
-      "targetIsAdmin": "Za systémové administrátory nelze vystupovat."
+      "targetIsAdmin": "Za systémové administrátory nelze vystupovat.",
+      "tenantNotActive": "Tenant tohoto uživatele není aktivní, takže za uživatele nelze vystupovat."
     },
     "fallbackName": "Uživatel",
     "groups": {

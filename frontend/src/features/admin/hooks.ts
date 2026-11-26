@@ -8,6 +8,8 @@ import { hardRedirect } from "@/lib/navigation"
 import {
   addAdminGroupMember,
   blockAdminUser,
+  createAdminTenant,
+  deleteAdminTenant,
   endImpersonation,
   getAdminGroup,
   getAdminTenant,
@@ -17,18 +19,24 @@ import {
   listAdminGroups,
   listAdminTenants,
   listAdminTenantUsers,
+  reactivateAdminTenant,
   removeAdminGroupMember,
   softDeleteAdminGroup,
   startImpersonation,
+  suspendAdminTenant,
   unblockAdminUser,
   updateAdminGroupMemberRole,
+  updateAdminTenant,
   type AdminAddMemberRequest,
   type AdminBlockRequest,
   type AdminGroupDetail,
   type AdminGroupMember,
   type AdminGroupsResult,
   type AdminTenant,
+  type AdminTenantCreateRequest,
   type AdminTenantsResult,
+  type AdminTenantStatusRequest,
+  type AdminTenantUpdateRequest,
   type AdminTenantUsersResult,
   type AdminUnblockRequest,
   type AdminUserDetail,
@@ -87,6 +95,89 @@ export function useAdminTenant(tenantId: string, { enabled = true }: QueryOption
     queryKey: adminKeys.tenantDetail(tenantId),
     queryFn: ({ signal }) => getAdminTenant(tenantId, signal),
     enabled: enabled && isBackofficeAuthed && !!tenantId,
+  })
+}
+
+// useIsPlatformAdmin reports whether the signed-in operator holds the
+// platform_admin role. Tenant writes require it (a support_agent gets 403
+// `admin.role_required`), so the pages hide those actions from everyone
+// else rather than offer a button that can only fail.
+export function useIsPlatformAdmin(): boolean {
+  const ctx = useOptionalBackofficeAuth()
+  return ctx?.user?.role === "platform_admin"
+}
+
+// Writes a tenant row a mutation returned into the detail cache and marks
+// the tenant lists stale. Only the list keys are invalidated: invalidating
+// the detail key as well would refetch it under an active observer and race
+// the setQueryData (see useDeleteAdminGroup).
+function storeTenant(qc: ReturnType<typeof useQueryClient>, tenant: AdminTenant) {
+  if (tenant.id) {
+    qc.setQueryData(adminKeys.tenantDetail(tenant.id), tenant)
+  }
+  qc.invalidateQueries({ queryKey: [...adminKeys.tenants(), "list"] })
+}
+
+// Creates a tenant from the Tenants page. Errors surface to the caller so
+// the dialog can place field errors and the 409 slug / domain codes.
+export function useCreateAdminTenant() {
+  const qc = useQueryClient()
+  return useMutation<AdminTenant, Error, AdminTenantCreateRequest>({
+    mutationFn: (payload) => createAdminTenant(payload),
+    onSuccess: (tenant) => storeTenant(qc, tenant),
+  })
+}
+
+// Edits a tenant's name, slug or domain from the Tenant detail page.
+export function useUpdateAdminTenant(tenantId: string) {
+  const qc = useQueryClient()
+  return useMutation<AdminTenant, Error, AdminTenantUpdateRequest>({
+    mutationFn: (payload) => updateAdminTenant(tenantId, payload),
+    onSuccess: (tenant) => storeTenant(qc, tenant),
+  })
+}
+
+// Suspending or reactivating a tenant changes its row and, for a
+// suspension, ends every session of its users, so the per-user admin
+// details (which carry the session count) are marked stale too.
+function useTenantStatusMutation(
+  tenantId: string,
+  call: (tenantId: string, payload: AdminTenantStatusRequest) => Promise<AdminTenant>
+) {
+  const qc = useQueryClient()
+  return useMutation<AdminTenant, Error, AdminTenantStatusRequest>({
+    mutationFn: (payload) => call(tenantId, payload),
+    onSuccess: (tenant) => {
+      storeTenant(qc, tenant)
+      qc.invalidateQueries({ queryKey: adminKeys.users() })
+    },
+  })
+}
+
+// Suspends a tenant. Typed 422 codes reach the caller's dialog.
+export function useSuspendAdminTenant(tenantId: string) {
+  return useTenantStatusMutation(tenantId, suspendAdminTenant)
+}
+
+// Reactivates a suspended or inactive tenant.
+export function useReactivateAdminTenant(tenantId: string) {
+  return useTenantStatusMutation(tenantId, reactivateAdminTenant)
+}
+
+// Deletes a tenant and everything in it. The mutation variable carries the
+// slug the operator typed, which the BE checks. On success the detail entry
+// is dropped (the page navigates away) and the tenant, user and group lists
+// are marked stale: the tenant's users and groups are gone with it.
+export function useDeleteAdminTenant(tenantId: string) {
+  const qc = useQueryClient()
+  return useMutation<void, Error, string>({
+    mutationFn: (confirmSlug) => deleteAdminTenant(tenantId, confirmSlug),
+    onSuccess: () => {
+      qc.removeQueries({ queryKey: adminKeys.tenantDetail(tenantId) })
+      qc.invalidateQueries({ queryKey: [...adminKeys.tenants(), "list"] })
+      qc.invalidateQueries({ queryKey: adminKeys.groups() })
+      qc.invalidateQueries({ queryKey: adminKeys.users() })
+    },
   })
 }
 

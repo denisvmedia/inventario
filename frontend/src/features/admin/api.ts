@@ -23,6 +23,21 @@ import type { AdminGroupsParams, AdminTenantsParams, AdminTenantUsersParams } fr
 // endpoint (GET /admin/tenants/{id}) returns the very same shape.
 export type AdminTenant = Schema<"jsonapi.AdminTenantListItem">
 
+// A tenant's lifecycle status: active | suspended | inactive.
+export type TenantStatus = NonNullable<AdminTenant["status"]>
+
+// Body for POST /admin/tenants. Only `name` is required: the BE generates
+// the slug from it when `slug` is empty and defaults `status` to active.
+export type AdminTenantCreateRequest = Schema<"apiserver.AdminTenantCreateRequest">
+
+// Body for PATCH /admin/tenants/{id}. Every field is optional and only the
+// ones sent change; an empty `domain` removes the custom domain.
+export type AdminTenantUpdateRequest = Schema<"apiserver.AdminTenantUpdateRequest">
+
+// Body for POST /admin/tenants/{id}/suspend and /reactivate. `reason` is
+// required, 1 to 500 characters.
+export type AdminTenantStatusRequest = Schema<"apiserver.AdminTenantStatusRequest">
+
 // A user row as returned by GET /admin/tenants/{id}/users — carries the
 // computed group_membership_count alongside identity + activity.
 export type AdminTenantUser = Schema<"jsonapi.AdminUserListItem">
@@ -168,6 +183,77 @@ export async function getAdminTenant(tenantId: string, signal?: AbortSignal): Pr
     throw new Error(`Admin tenant response for "${tenantId}" is missing its payload`)
   }
   return body.data
+}
+
+// Every tenant write answers with the tenant's detail row, the shape
+// getAdminTenant returns. A 2xx without one is a malformed response.
+function tenantFromWrite(body: AdminTenantResponse, what: string): AdminTenant {
+  if (!body.data || !body.data.id) {
+    throw new Error(`Admin tenant ${what} response is missing its payload`)
+  }
+  return body.data
+}
+
+// Creates a tenant (POST /admin/tenants, 201). Codes the caller branches
+// on: 409 `tenant.slug_taken` and `tenant.domain_taken`; a 422 carries
+// field errors under data.attributes (name, slug, domain, status).
+export async function createAdminTenant(payload: AdminTenantCreateRequest): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>("/admin/tenants", payload)
+  return tenantFromWrite(body, "create")
+}
+
+// Updates a tenant's name, slug, domain or status (PATCH
+// /admin/tenants/{id}). Same error codes as createAdminTenant, plus 422
+// `admin.tenant.serves_this_host` for a status change away from active on
+// the tenant that serves the back office's host.
+export async function updateAdminTenant(
+  tenantId: string,
+  payload: AdminTenantUpdateRequest
+): Promise<AdminTenant> {
+  const body = await http.patch<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}`,
+    payload
+  )
+  return tenantFromWrite(body, "update")
+}
+
+// Suspends a tenant (POST /admin/tenants/{id}/suspend): its users cannot
+// sign in and their sessions end. Typed 422 codes:
+// `admin.tenant.reason_required`, `admin.tenant.reason_too_long`,
+// `admin.tenant.serves_this_host`.
+export async function suspendAdminTenant(
+  tenantId: string,
+  payload: AdminTenantStatusRequest
+): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/suspend`,
+    payload
+  )
+  return tenantFromWrite(body, "suspend")
+}
+
+// Reactivates a suspended or inactive tenant (POST
+// /admin/tenants/{id}/reactivate). Shares the reason codes with suspend.
+export async function reactivateAdminTenant(
+  tenantId: string,
+  payload: AdminTenantStatusRequest
+): Promise<AdminTenant> {
+  const body = await http.post<AdminTenantResponse>(
+    `/admin/tenants/${encodeURIComponent(tenantId)}/reactivate`,
+    payload
+  )
+  return tenantFromWrite(body, "reactivate")
+}
+
+// Deletes a tenant and everything in it (DELETE /admin/tenants/{id}, 204).
+// `confirmSlug` is the slug the operator typed; the BE compares it with the
+// tenant's exactly, as `inventario tenants delete` does, and answers 422
+// `admin.tenant.confirmation_mismatch` when it differs. 422
+// `admin.tenant.serves_this_host` refuses the tenant behind the back
+// office's own host.
+export async function deleteAdminTenant(tenantId: string, confirmSlug: string): Promise<void> {
+  const query = new URLSearchParams({ confirm_slug: confirmSlug })
+  await http.del<null>(`/admin/tenants/${encodeURIComponent(tenantId)}?${query.toString()}`)
 }
 
 // Lists the users belonging to one tenant. Pagination + free-text search
