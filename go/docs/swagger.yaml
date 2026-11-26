@@ -330,6 +330,14 @@ definitions:
           rather than the auth-gated /system endpoint. When false the FE hides
           the affordance and the /auth/magic-link routes return 404.
         type: boolean
+      plans:
+        description: |-
+          Plans mirrors Params.PlansEnabled (#1389). The plans feature is
+          frozen, so the flag is off by default. When false the FE hides every
+          plan surface (plan badge, Upgrade links, the /plans page, the plan
+          part of the group settings card and the plan in the admin tenant
+          pages) and GET /g/{groupSlug}/plan reports the unlimited plan.
+        type: boolean
       public_scan:
         description: |-
           PublicScan mirrors Params.PublicScanEnabled. The entry point is the
@@ -13599,9 +13607,9 @@ paths:
       - groups
   /g/{groupSlug}/plan:
     get:
-      description: 'Tenant plan (caps + gates) + current group usage (items, locations,
-        storage). Plan resolved from tenants.plan_id; unknown ids degrade to unlimited.
-        Powers the GroupSettings Plan card (#1389 / #1537).'
+      description: Tenant plan (caps + gates) + current group usage (items, locations,
+        storage). Plan resolved from tenants.plan_id; unknown ids give unlimited,
+        as does any id while the plans feature flag is off (#1389).
       parameters:
       - description: Group slug
         in: path

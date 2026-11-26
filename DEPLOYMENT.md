@@ -163,6 +163,13 @@ export INVENTARIO_RUN_PUBLIC_URL="https://inventario.example.com"   # used in em
 # export INVENTARIO_RUN_WEEKLY_DIGEST_INTERVAL="1h"
 # export INVENTARIO_RUN_WEEKLY_DIGEST_SEND_HOUR_UTC="9"
 
+# Subscription plans (#1389). The plans feature is frozen, so the UI hides
+# every plan surface by default: the plan badge and Upgrade links, the /plans
+# page, the plan part of the group settings card and the plan in the admin
+# tenant pages. Nothing enforces plan limits whether this is on or off, and
+# storage quotas do not come from plans. Same as `--enable-plans`.
+# export INVENTARIO_RUN_ENABLE_PLANS="false"
+
 # Object storage instead of a local directory. A non-AWS S3 endpoint needs
 # `endpoint` and `use_path_style=true` alongside `region`; credentials come from
 # AWS_ACCESS_KEY_ID / AWS_SECRET_ACCESS_KEY rather than the URL. See DOCKER.md,

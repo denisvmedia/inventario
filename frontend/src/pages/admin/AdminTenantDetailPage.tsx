@@ -23,9 +23,11 @@ import {
 } from "@/components/ui/table"
 import { RouteTitle } from "@/components/routing/RouteTitle"
 import { useAdminGroups, useAdminTenant, useAdminTenantUsers } from "@/features/admin/hooks"
+import { useFeatureFlag } from "@/features/feature-flags/hooks"
 import { useDebouncedValue } from "@/hooks/useDebouncedValue"
 import { HttpError } from "@/lib/http"
 import { formatDate, formatDateTime } from "@/lib/intl"
+import { cn } from "@/lib/utils"
 
 import { AccountStateBadge, GroupStatusBadge, TenantStatusBadge } from "./admin-shared"
 import { AdminPagination } from "./AdminPagination"
@@ -48,8 +50,8 @@ function parsePage(raw: string | null): number {
 }
 
 // AdminTenantDetailPage is /admin/tenants/:tenantId — a read-only tenant
-// header (name, slug, domain, status, plan, user/group counts) plus a
-// Users tab and a Groups tab. Tab selection, per-tab search / filter and
+// header (name, slug, domain, status, plan when plans are on, user/group
+// counts) plus a Users tab and a Groups tab. Tab selection, per-tab search / filter and
 // pagination all round-trip through the URL query string so a copied
 // link reproduces the exact view.
 //
@@ -177,8 +179,12 @@ function TenantHeaderCard({
   tenant: NonNullable<ReturnType<typeof useAdminTenant>["data"]>
 }) {
   const { t } = useTranslation("admin")
+  // The Plan tile shows only when the deployment has plans on (#1389).
+  const plansEnabled = useFeatureFlag("plans") === true
   const stats = [
-    { label: t("tenantDetail.header.plan"), value: tenant.plan_id || "—" },
+    ...(plansEnabled
+      ? [{ label: t("tenantDetail.header.plan"), value: tenant.plan_id || "—" }]
+      : []),
     { label: t("tenantDetail.header.users"), value: String(tenant.user_count ?? 0) },
     { label: t("tenantDetail.header.groups"), value: String(tenant.group_count ?? 0) },
     {
@@ -212,7 +218,13 @@ function TenantHeaderCard({
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div
+        className={cn(
+          "mt-5 grid grid-cols-2 gap-3",
+          plansEnabled ? "sm:grid-cols-4" : "sm:grid-cols-3"
+        )}
+        data-testid="admin-tenant-stats"
+      >
         {stats.map((s) => (
           <div key={s.label} className="rounded-lg border border-border bg-muted/40 px-3 py-2.5">
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">

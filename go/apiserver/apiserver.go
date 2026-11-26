@@ -389,6 +389,14 @@ type Params struct {
 	// localhost server the Helm init-data Job boots to curl /seed.
 	SeedEndpointEnabled bool
 
+	// PlansEnabled gates the subscription-plan surfaces (#1389). Default
+	// FALSE: the feature is frozen. When false the plans feature flag reads
+	// false so the FE hides every plan surface, and GET /g/{slug}/plan
+	// reports models.PlanUnlimited whatever the tenant's plan_id is, so no
+	// plan caps reach a client. Nothing on the server enforces plan caps
+	// today; storage quotas are configured outside plans and are unaffected.
+	PlansEnabled bool
+
 	// OAuthRegistry holds the third-party sign-in providers enabled in
 	// this deployment (#1394). Empty means OAuth is unconfigured — the
 	// /auth/oauth/providers endpoint surfaces an empty list and start /
@@ -987,7 +995,7 @@ func groupDataRoutes(params Params, restoreStatus RestoreStatusQuerier, groupSer
 		// the operator flips the flag on.
 		r.Route("/currency-migrations", CurrencyMigrations(params, groupService, auditSvc))
 		r.Route("/storage-usage", StorageUsage())
-		r.Route("/plan", GroupPlan())
+		r.Route("/plan", GroupPlan(params.PlansEnabled))
 		r.Route("/notifications", GroupNotifications(params.FactorySet))
 		// Saved views carry no write gate: viewers keep personal views too;
 		// the service checks who may share and edit.
