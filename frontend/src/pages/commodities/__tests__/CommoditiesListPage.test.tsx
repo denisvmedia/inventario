@@ -1,8 +1,8 @@
 import { beforeEach, describe, expect, it } from "vitest"
 import { useState } from "react"
 import { http as msw, HttpResponse } from "msw"
-import { Route, Routes, useLocation, type Location } from "react-router-dom"
-import { screen, waitFor, within } from "@testing-library/react"
+import { Route, Routes, useLocation, useNavigate, type Location } from "react-router-dom"
+import { fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
 
@@ -27,6 +27,7 @@ import { setAccessToken, clearAuth } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { formatDate } from "@/lib/intl"
+import { toastSpies } from "@/test/global-mocks"
 import type { Schema } from "@/types"
 
 const SLUG = "household"
@@ -805,6 +806,88 @@ describe("<CommoditiesListPage />", () => {
         },
       },
     })
+  })
+
+  it("stays where the user went when the item is made after Back closed the dialog", async () => {
+    const user = userEvent.setup()
+    const drafts = draftHandlers.backend(SLUG)
+    let release = () => {}
+    const held = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    server.use(
+      ...drafts.handlers,
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    // The promotion answers only once the dialog is gone.
+    let promoting = false
+    server.use(
+      msw.post(apiUrl(`/g/${SLUG}/drafts/:id/promote`), async () => {
+        promoting = true
+        await held
+        return undefined
+      })
+    )
+    function Shell() {
+      const location = useLocation()
+      const navigate = useNavigate()
+      return (
+        <>
+          <span data-testid="nav-sentinel-path">{location.pathname}</span>
+          <button data-testid="back" type="button" onClick={() => navigate(-1)}>
+            Back
+          </button>
+          <GroupProvider>
+            <ConfirmProvider>
+              <CommoditiesListPage />
+            </ConfirmProvider>
+          </GroupProvider>
+        </>
+      )
+    }
+    setAccessToken("good-token")
+    renderWithProviders({
+      initialEntries: [
+        { pathname: `/g/${SLUG}/commodities` },
+        { pathname: `/g/${SLUG}/commodities/new` },
+      ],
+      routes: (
+        <>
+          <Route path="/g/:groupSlug/commodities" element={<Shell />} />
+          <Route path="/g/:groupSlug/commodities/new" element={<Shell />} />
+          <Route path="/g/:groupSlug/commodities/:id" element={<span data-testid="item-page" />} />
+        </>
+      ),
+    })
+    await user.click(await screen.findByTestId("commodity-form-ai-fill-manually"))
+    await user.type(await screen.findByLabelText(/^Name$/i), "Couch")
+    await pickRadixSelect(user, /^Type$/i, { optionLabel: /^Furniture$/i })
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByLabelText(/Purchase date/i)
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-form-warranty-step")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await screen.findByTestId("commodity-tags-input")
+    await user.click(screen.getByTestId("commodity-form-next"))
+    await user.click(await screen.findByTestId("commodity-form-submit"))
+    await waitFor(() => expect(promoting).toBe(true))
+
+    // Browser Back; the open dialog blocks pointer events on the page.
+    fireEvent.click(screen.getByTestId("back"))
+    await waitFor(() =>
+      expect(screen.queryByTestId("commodity-form-submit")).not.toBeInTheDocument()
+    )
+    release()
+    await waitFor(() => expect(drafts.drafts[0]?.status).toBe("promoted"))
+    await waitFor(() => expect(toastSpies.success).toHaveBeenCalled())
+    expect(screen.queryByTestId("item-page")).not.toBeInTheDocument()
+    expect(screen.getByTestId("nav-sentinel-path")).toHaveTextContent(`/g/${SLUG}/commodities`)
+    expect(screen.getByTestId("nav-sentinel-path")).not.toHaveTextContent("/new")
   })
 
   // #2128: the filter is applied by the server, not over the fetched page.

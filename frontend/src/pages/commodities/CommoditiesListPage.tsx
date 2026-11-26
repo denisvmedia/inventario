@@ -342,6 +342,17 @@ export function CommoditiesListPage() {
 
   // ---- Dialogs -----------------------------------------------------------
   const [createOpen, setCreateOpen] = useState(false)
+  // Counts the openings of the create dialog: it moves on every open, close
+  // and unmount. An item made after its dialog closed (browser Back while
+  // the promotion runs) leaves the user where they went.
+  const createOpeningRef = useRef(0)
+  useEffect(() => {
+    const opening = createOpeningRef.current + 1
+    createOpeningRef.current = opening
+    return () => {
+      createOpeningRef.current = opening + 1
+    }
+  }, [createOpen])
   // /g/:slug/commodities/new mounts this same list page and is
   // expected to auto-open the create dialog (router comment, AppSidebar
   // Add-item entry, Dashboard mobile CTA all point here). Detect the
@@ -568,8 +579,10 @@ export function CommoditiesListPage() {
   // the just-created item front-and-centre so the user can immediately
   // attach files / fix typos. The list page is one back-button away.
   async function handleCreate(values: CreateCommodityRequest, draft?: DraftRef) {
+    const opening = createOpeningRef.current
     const created = await create.submit(values, draft)
     toast.success(t("commodities:toast.created"))
+    if (createOpeningRef.current !== opening) return created
     setCreateOpen(false)
     if (slug && created?.id) {
       navigate(`/g/${encodeURIComponent(slug)}/commodities/${encodeURIComponent(created.id)}`)
