@@ -17,9 +17,10 @@
 #     admin.password makes the script exit non-zero (deferred to the end so
 #     the optional sections still get applied — supports iterative bootstrap
 #     with a partially-filled bundle).
-#   - argocd/github-app-creds and tailscale/operator-oauth — best-effort:
-#     a missing/empty section is skipped with a warning so a Phase-1 bundle
-#     without those credentials can still bootstrap.
+#   - argocd/github-app-creds, argocd/preview-health-github-app and
+#     tailscale/operator-oauth — best-effort: a missing/empty section is
+#     skipped with a warning so a Phase-1 bundle without those credentials
+#     can still bootstrap.
 #
 # Usage: SECRETS_JSON='{...}' bash apply-secrets.sh user@host
 
@@ -334,6 +335,32 @@ $(printf '%s' "$GH_PRIVATE_KEY" | sed 's/^/    /')
 EOF
 else
     warn "github.app_{id,installation_id,private_key} incomplete in secrets; skipping argocd/github-app-creds"
+fi
+
+# --- argocd / preview-health-github-app (preview-health-check CronJob, #1946) ---
+# A GitHub App of its own, with Pull requests write, so the App behind
+# github-app-creds stays read-only. Only the CronJob mounts this Secret; it
+# carries no argocd.argoproj.io/secret-type label, so ArgoCD ignores it.
+PH_APP_ID=$(lookup "preview_health.app_id")
+PH_INSTALL_ID=$(lookup "preview_health.app_installation_id")
+PH_PRIVATE_KEY=$(lookup "preview_health.app_private_key")
+if [ -n "$PH_APP_ID" ] && [ -n "$PH_INSTALL_ID" ] && [ -n "$PH_PRIVATE_KEY" ]; then
+    note "Applying argocd/preview-health-github-app"
+    cat <<EOF | remote_apply
+apiVersion: v1
+kind: Secret
+metadata:
+  name: preview-health-github-app
+  namespace: argocd
+type: Opaque
+stringData:
+  appID: "$PH_APP_ID"
+  installationID: "$PH_INSTALL_ID"
+  privateKey: |-
+$(printf '%s' "$PH_PRIVATE_KEY" | sed 's/^/    /')
+EOF
+else
+    warn "preview_health.app_{id,installation_id,private_key} incomplete in secrets; skipping argocd/preview-health-github-app (no preview health comments on PRs)"
 fi
 
 # --- tailscale / operator-oauth (consumed by the TS-op helm chart in vm-install.sh) ---
