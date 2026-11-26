@@ -33,6 +33,40 @@ describe("<StatusTransitionDialog />", () => {
     expect(call.sale_price).toBeUndefined()
   })
 
+  it.each([
+    ["donated", "Mark as Donated", "Record that you gave this item away.", "Given to…"],
+    ["stolen", "Mark as Stolen", /theft of this item/, "Taken from…"],
+  ] as const)(
+    "asks %s for a date and a note, without a sale price",
+    async (status, title, description, placeholder) => {
+      const user = userEvent.setup()
+      const onSubmit = vi.fn().mockResolvedValue(undefined)
+      render(
+        <StatusTransitionDialog
+          open
+          targetStatus={status}
+          purchaseCurrency="USD"
+          onSubmit={onSubmit}
+          onOpenChange={vi.fn()}
+        />
+      )
+      expect(screen.getByRole("heading", { name: title })).toBeInTheDocument()
+      expect(screen.getByText(description)).toBeInTheDocument()
+      expect(screen.getByTestId("status-transition-note")).toHaveAttribute(
+        "placeholder",
+        placeholder
+      )
+      expect(screen.queryByTestId("status-transition-sale-price")).toBeNull()
+
+      await user.type(screen.getByTestId("status-transition-note"), "School fair")
+      await user.click(screen.getByTestId("status-transition-confirm"))
+      expect(onSubmit).toHaveBeenCalledTimes(1)
+      const call = onSubmit.mock.calls[0]?.[0]
+      expect(call.status_note).toBe("School fair")
+      expect(call.sale_price).toBeUndefined()
+    }
+  )
+
   it("renders the sale-price field with the purchase currency symbol when target=sold", async () => {
     render(
       <StatusTransitionDialog

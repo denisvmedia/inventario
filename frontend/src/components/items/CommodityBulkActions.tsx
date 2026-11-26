@@ -59,7 +59,7 @@ import { withId } from "@/lib/with-id"
 
 // The statuses a bulk change offers. Sold is left out: it needs a sale
 // price of its own for each item.
-const BULK_STATUSES = ["in_use", "lost", "disposed", "written_off"] as const
+const BULK_STATUSES = ["in_use", "lost", "disposed", "written_off", "donated", "stolen"] as const
 type TerminalBulkStatus = Exclude<CommodityBulkStatusValue, "in_use">
 
 type BulkAction =

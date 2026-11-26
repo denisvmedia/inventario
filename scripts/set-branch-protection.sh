@@ -3,33 +3,36 @@
 #
 # Usage:
 #   ./scripts/set-branch-protection.sh            # apply
-#   ./scripts/set-branch-protection.sh --show     # print the current protection
-#   ./scripts/set-branch-protection.sh --remove   # remove it again
+#   ./scripts/set-branch-protection.sh --show     # print the checks master requires
 #
-# Prerequisites: gh, authenticated with admin on the repository.
+# Prerequisites: gh, authenticated with admin on the repository; apply also
+# needs jq.
+#
+# master is guarded by a repository ruleset, not by classic branch protection.
+# The ruleset also requires squash merges, linear history and resolved review
+# threads. This script changes only its required-status-checks rule and leaves
+# the other rules as they are. To undo it, edit the ruleset in the repository
+# settings.
 #
 # Why this is a script and not a settings click: choosing the contexts is the
 # hard part, and the choice needs a reason attached. See #2569 for the
 # verification; the short version is in the two rules below.
 #
-#   1. A job skipped by its `if:` reports `skipped`, which branch protection
-#      treats as passing. Requiring one is safe.
+#   1. A job skipped by its `if:` reports `skipped`, which GitHub treats as
+#      passing. Requiring one is safe.
 #   2. A workflow skipped by a workflow-level `paths:` filter creates no check
 #      run at all, so a required context stays "Expected — waiting for status"
 #      and blocks the merge forever. Requiring one is not safe.
 #
 # Every context below comes from a workflow with no workflow-level `paths:`,
-# and each was confirmed to report on twelve merged pull requests covering
-# Go-only, frontend-only, helm-only, workflow-only, Dockerfile-only and
-# dependency-bump diffs.
+# and each reports on Go-only, frontend-only, helm-only, workflow-only,
+# Dockerfile-only, docs-only and dependency-bump pull requests.
 #
-# `E2E Tests (chromium)` needs its own note, because it used to be the one
-# context that could not be required. A matrix expands only when its job runs,
-# so a skipped `e2e-tests-linux` reported under the unexpanded name
-# `E2E Tests (${{ matrix.browser }})` and the per-browser context did not
-# exist at all. The job now always runs and decides in its first step, so the
-# name is always there — verified on a diff that builds no image, where the
-# resolver skips and the check still reports as `E2E Tests (chromium)`.
+# `E2E Tests (chromium)` needs its own note. A matrix expands only when its job
+# runs, so a skipped job reports under the unexpanded name
+# `E2E Tests (${{ matrix.browser }})` and the per-browser context does not
+# exist. `e2e-tests-linux` always runs and decides in its first step, so the
+# name is always there, including on a diff that builds no image.
 #
 # Firefox and webkit stay out: both are genuinely conditional on the diff, and
 # their per-browser names come and go with the matrix decision.
@@ -37,67 +40,77 @@ set -euo pipefail
 
 REPO="${REPO:-denisvmedia/inventario}"
 BRANCH="${BRANCH:-master}"
+# The GitHub Actions app. Pinning the integration means a check run with the
+# same name from another app cannot satisfy the rule.
+ACTIONS_APP_ID=15368
 
-read -r -d '' PROTECTION <<'JSON' || true
-{
-  "required_status_checks": {
-    "strict": false,
-    "contexts": [
-      "lint",
-      "test",
-      "test-postgres-and-bootstrap",
-      "govulncheck",
-      "Check Swagger Docs Sync",
-      "Check OpenAPI → TS codegen sync",
-      "Lint Frontend (React)",
-      "Test Frontend (React)",
-      "embed smoke test",
-      "markdownlint-cli2",
-      "dependency-review",
-      "E2E Tests (chromium)"
-    ]
-  },
-  "enforce_admins": false,
-  "required_pull_request_reviews": null,
-  "restrictions": null,
-  "allow_force_pushes": false,
-  "allow_deletions": false
+CONTEXTS=(
+  "lint"
+  "test"
+  "test-postgres-and-bootstrap"
+  "govulncheck"
+  "Check Swagger Docs Sync"
+  "Check OpenAPI → TS codegen sync"
+  "Lint Frontend (React)"
+  "Test Frontend (React)"
+  "embed smoke test"
+  "markdownlint-cli2"
+  "dependency-review"
+  "E2E Tests (chromium)"
+)
+
+show() {
+  # The branch rules endpoint returns every active rule, whichever ruleset it
+  # comes from. It is paginated, so read every page.
+  gh api --paginate "repos/${REPO}/rules/branches/${BRANCH}" \
+    --jq '.[] | select(.type == "required_status_checks")
+              | .parameters.required_status_checks[].context'
 }
-JSON
 
 case "${1:-apply}" in
   --show)
-    # An unprotected branch answers 404, which is an answer rather than an
-    # error — say so instead of leaking the API's message.
-    # gh prints the 404 body on stdout, so capture rather than redirect.
-    if current=$(gh api "repos/${REPO}/branches/${BRANCH}/protection" \
-      --jq '{strict: .required_status_checks.strict,
-             contexts: .required_status_checks.contexts,
-             enforce_admins: .enforce_admins.enabled}' 2> /dev/null); then
-      printf '%s\n' "$current"
-    else
-      echo "${REPO}@${BRANCH} has no branch protection."
-    fi
-    ;;
-  --remove)
-    gh api -X DELETE "repos/${REPO}/branches/${BRANCH}/protection"
-    echo "Removed branch protection from ${REPO}@${BRANCH}."
+    show
     ;;
   apply)
-    # enforce_admins stays false on purpose: if a required context ever
-    # misbehaves an admin can still merge, so the worst case is an annoyance
-    # rather than a repository nobody can land anything in.
-    #
-    # strict stays false too. Requiring every branch to be up to date means a
+    if ! command -v jq > /dev/null; then
+      echo "apply needs jq; install it and run again." >&2
+      exit 1
+    fi
+    ruleset_id=$(gh api --paginate "repos/${REPO}/rules/branches/${BRANCH}" \
+      --jq '.[] | select(.ruleset_source_type == "Repository") | .ruleset_id' \
+      | sort -u)
+    if [ -z "$ruleset_id" ]; then
+      echo "No repository ruleset applies to ${REPO}@${BRANCH}; create one first." >&2
+      exit 1
+    fi
+    if [ "$(printf '%s\n' "$ruleset_id" | wc -l)" -ne 1 ]; then
+      echo "More than one ruleset applies to ${REPO}@${BRANCH} (${ruleset_id//$'\n'/, }); pick one by hand." >&2
+      exit 1
+    fi
+
+    checks=$(printf '%s\n' "${CONTEXTS[@]}" \
+      | jq -R --argjson app "$ACTIONS_APP_ID" '{context: ., integration_id: $app}' \
+      | jq -s .)
+
+    # strict stays false. Requiring every branch to be up to date means a
     # rebase per merge, and the image build alone has taken twenty minutes on
     # a busy fleet.
-    printf '%s\n' "$PROTECTION" \
-      | gh api -X PUT "repos/${REPO}/branches/${BRANCH}/protection" --input - > /dev/null
-    echo "Applied branch protection to ${REPO}@${BRANCH}:"
-    "$0" --show
+    gh api "repos/${REPO}/rulesets/${ruleset_id}" \
+      | jq --argjson checks "$checks" '
+          {name, target, enforcement, conditions, bypass_actors,
+           rules: (
+             [.rules[] | select(.type != "required_status_checks")]
+             + [{type: "required_status_checks",
+                 parameters: {required_status_checks: $checks,
+                              strict_required_status_checks_policy: false,
+                              do_not_enforce_on_create: false}}]
+           )}' \
+      | gh api -X PUT "repos/${REPO}/rulesets/${ruleset_id}" --input - > /dev/null
+    echo "Updated ruleset ${ruleset_id}; ${REPO}@${BRANCH} now requires:"
+    show
     ;;
   *)
-    echo "usage: $0 [apply|--show|--remove]" >&2
+    echo "usage: $0 [apply|--show]" >&2
     exit 2
     ;;
 esac

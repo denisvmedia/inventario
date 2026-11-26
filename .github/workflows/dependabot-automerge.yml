@@ -73,7 +73,7 @@ jobs:
           steps.metadata.outputs.update-type == 'version-update:semver-patch' &&
           steps.gate.outputs.required != 'true'
         run: |
-          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Configure required checks in branch protection to turn this back on."
+          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Require status checks in the branch ruleset to turn this back on."
 
       - name: Comment on minor and major updates
         if: |
@@ -156,7 +156,7 @@ jobs:
           steps.classify.outputs.is_patch == 'true' &&
           steps.gate.outputs.required != 'true'
         run: |
-          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Configure required checks in branch protection to turn this back on."
+          echo "::notice::Auto-merge not enabled: ${{ github.event.pull_request.base.ref }} has no required status checks, so --auto would merge before CI reports. Require status checks in the branch ruleset to turn this back on."
 
       - name: Comment on non-patch updates
         if: steps.classify.outputs.is_patch != 'true'
