@@ -71,9 +71,24 @@ go_schema_plan:
 # ---- Frontend (React) ----------------------------------------------------
 # Anything under frontend/. Includes the Makefile because it carries
 # frontend targets too.
+#
+# CHANGELOG.md is not here, although the build reads it for the What's new
+# page (#1386). Nearly every pull request adds an entry to it, so listing it
+# would run the whole frontend suite, and through `image_inputs` the image
+# build and e2e, on every docs or backend change. An Unreleased entry never
+# reaches the bundle anyway. What a change to the file can break is the
+# parse, and the `changelog` filter below runs that check on its own.
 frontend:
   - 'frontend/**'
   - 'Makefile'
+
+# ---- Release notes -------------------------------------------------------
+# CHANGELOG.md alone. Frontend Test runs the CHANGELOG.md guard in
+# frontend/src/lib/__tests__/changelog.test.ts when this is the only
+# frontend input that changed, so a changelog-only pull request (a release,
+# a fixup of entries) is still checked against what the page can read.
+changelog:
+  - 'CHANGELOG.md'
 
 # ---- Frontend codegen drift ----------------------------------------------
 # OpenAPI -> TypeScript regeneration is driven by frontend/scripts/codegen.mjs
@@ -106,6 +121,10 @@ e2e:
 # Everything that requires a fresh production image to be built. Includes:
 #   - the obvious image-defining files (Dockerfile, compose, go/, frontend/,
 #     scripts/, init-scripts/, Makefile, .goreleaser.yaml)
+#   - not CHANGELOG.md, which the Dockerfile copies into the frontend stage
+#     for the What's new page: see the `frontend` filter for why. Pushes to
+#     master and tags build the image whatever changed, so a published image
+#     always carries the current file.
 #   - `e2e/**` and `docker-compose.e2e.yaml` because e2e-tests waits for
 #     docker.yml to publish a sha-<HEAD> image; if docker.yml is skipped
 #     the consumer will fail at `docker pull`. Aligning the gates avoids

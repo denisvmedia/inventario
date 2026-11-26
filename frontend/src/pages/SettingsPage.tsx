@@ -93,6 +93,8 @@ import {
 } from "@/features/settings/api"
 import { usePatchSetting, useUserSettings } from "@/features/settings/hooks"
 import { useSystemInfo } from "@/features/system/hooks"
+import { useWhatsNewUnread } from "@/features/whats-new/hooks"
+import { WhatsNewDot } from "@/features/whats-new/WhatsNewDot"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useDensity, DENSITIES, type Density } from "@/hooks/useDensity"
 import { useOnboardingTourControls } from "@/hooks/useOnboardingTourControls"
@@ -116,11 +118,6 @@ type SectionId = "account" | "appearance" | "notifications" | "privacy" | "help"
 // Documentation row (no longer the coming-soon /help stub, #2104).
 // Update this if the docs move to a custom domain.
 const DOCS_URL = "https://denisvmedia.github.io/inventario/"
-
-// GitHub Releases page. Opened in a new tab from the Help section's
-// "What's new" row, which no longer points at the coming-soon /whats-new
-// stub — the /whats-new route itself still exists.
-const RELEASES_URL = "https://github.com/denisvmedia/inventario/releases"
 
 interface SectionMeta {
   id: SectionId
@@ -207,6 +204,9 @@ function SettingsNav({
   const { t } = useTranslation()
   const logoutMutation = useLogout()
   const navigate = useNavigate()
+  // The Help tab holds the What's new row, so it carries the row's unread
+  // dot too (#1386).
+  const whatsNewUnread = useWhatsNewUnread()
 
   async function handleSignOut() {
     try {
@@ -236,6 +236,9 @@ function SettingsNav({
           >
             <Icon className="size-4 shrink-0" aria-hidden="true" />
             {t(`settings:sections.${id}`)}
+            {id === "help" && whatsNewUnread ? (
+              <WhatsNewDot testId="settings-nav-help-unread" />
+            ) : null}
             {active === id ? (
               <ChevronRight className="ml-auto size-3.5" aria-hidden="true" />
             ) : null}
@@ -1343,16 +1346,18 @@ function HelpSection() {
   const shortcutsDialog = useKeyboardShortcutsDialog()
   const tourControls = useOnboardingTourControls()
   const [feedbackOpen, setFeedbackOpen] = useState(false)
+  const { currentGroup } = useCurrentGroup()
+  const whatsNewUnread = useWhatsNewUnread()
 
   // Five rows: docs (#2104 — opens the end-user "Getting started" guide in
   // a new tab; the row no longer points at the coming-soon /help stub, though
   // the /help route still exists), the product tour (#2787 — restarts the
   // OnboardingTour overlay, the same action as the user-menu entry; disabled
   // with the reason while the tour cannot start), shortcuts (#1385 — opens
-  // the cheat-sheet modal in-place), what's new (#1386 — opens the GitHub
-  // Releases page in a new tab instead of the coming-soon /whats-new stub,
-  // which still exists; carries a marketing v{Major.Minor} badge per
-  // design-audit #1536), and "Contact support / share feedback" (#1387 —
+  // the cheat-sheet modal in-place), what's new (#1386 — opens the in-app
+  // /whats-new page; carries a marketing v{Major.Minor} badge per
+  // design-audit #1536 and a dot while a release is unread), and
+  // "Contact support / share feedback" (#1387 —
   // opens the FeedbackDialog in-place). The dialog's "Question" type doubles
   // as the contact-support channel, so the former static mailto row was
   // folded into this single entry point.
@@ -1367,7 +1372,7 @@ function HelpSection() {
     { key: "documentation", href: DOCS_URL },
     { key: "tour", href: "modal:tour" },
     { key: "shortcuts", href: "modal:shortcuts" },
-    { key: "whatsNew", href: RELEASES_URL },
+    { key: "whatsNew", href: withGroupQuery("/whats-new", currentGroup?.slug) },
     { key: "feedback", href: "modal:feedback" },
   ]
   // Why the tour row is disabled, shown in place of its description.
@@ -1404,6 +1409,9 @@ function HelpSection() {
                   <Badge variant="secondary" data-testid="help-row-whatsNew-badge">
                     {t("settings:help.rows.whatsNewBadge", { version: versionShort })}
                   </Badge>
+                ) : null}
+                {labelKey === "whatsNew" && whatsNewUnread ? (
+                  <WhatsNewDot testId="help-row-whatsNew-unread" />
                 ) : null}
               </div>
               <p className="mt-0.5 text-xs text-muted-foreground">

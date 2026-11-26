@@ -2,6 +2,8 @@ import path from "node:path"
 import react from "@vitejs/plugin-react"
 import { defineConfig } from "vitest/config"
 
+import { whatsNewPlugin } from "./vite-plugins/whats-new.ts"
+
 // Test files that cannot share a module registry with the rest of the suite.
 //
 // The two pdf.js viewers mock `@/lib/pdfjs` differently from each other. The
@@ -20,7 +22,13 @@ const OWN_REGISTRY = [
 ]
 
 export default defineConfig({
-  plugins: [react()],
+  // The What's new data comes from the real CHANGELOG.md. Tests run as a
+  // "dev" build, which keeps every released version, whatever
+  // INVENTARIO_VERSION the shell has.
+  plugins: [
+    react(),
+    whatsNewPlugin({ changelogPath: path.resolve(__dirname, "../CHANGELOG.md"), version: "dev" }),
+  ],
   resolve: {
     alias: {
       "@": path.resolve(__dirname, "./src"),
