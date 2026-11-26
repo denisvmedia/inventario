@@ -164,7 +164,7 @@ func (r *ThumbnailGenerationJobRegistry) GetJobByFileID(ctx context.Context, fil
 		query := fmt.Sprintf(`
 			SELECT * FROM %s
 			WHERE file_id = $1
-			ORDER BY created_at DESC
+			ORDER BY created_at DESC, id DESC
 			LIMIT 1`, r.tableNames.ThumbnailGenerationJobs())
 
 		err := tx.GetContext(ctx, &job, query, fileID)

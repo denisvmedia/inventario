@@ -16,7 +16,17 @@ import {
 } from "@/lib/auth-storage"
 import { setBackofficeAccessToken } from "@/features/backoffice/auth/storage"
 import type { Schema } from "@/types"
-import type { AdminGroupsParams, AdminTenantsParams, AdminTenantUsersParams } from "./keys"
+import {
+  failedJobsQuery,
+  resolveFailedJobs,
+  type FailedJobListMeta,
+} from "@/features/failed-jobs/api"
+import type {
+  AdminFailedJobsParams,
+  AdminGroupsParams,
+  AdminTenantsParams,
+  AdminTenantUsersParams,
+} from "./keys"
 
 // A tenant row as returned by GET /admin/tenants — carries computed
 // user_count / group_count alongside the tenant identity. The detail
@@ -531,4 +541,47 @@ export async function endImpersonation(): Promise<EndImpersonationResult> {
   const targetUserId = getImpersonationReturn()?.targetUserId ?? null
   clearAuth()
   return { targetUserId }
+}
+
+// A failed background job as the back office sees it (#1307): the group
+// view's fields plus the tenant and group it belongs to.
+export type AdminFailedJob = Schema<"apiserver.AdminFailedJobView"> & { id: string }
+type AdminFailedJobListEnvelope = Schema<"apiserver.AdminFailedJobListEnvelope">
+
+export interface AdminFailedJobsResult {
+  jobs: AdminFailedJob[]
+  meta: FailedJobListMeta
+}
+
+// Lists the failed jobs nobody retried or discarded, across every tenant,
+// newest failure first. `type` and `tenantID` narrow the list.
+export async function listAdminFailedJobs(
+  params: AdminFailedJobsParams = {},
+  signal?: AbortSignal
+): Promise<AdminFailedJobsResult> {
+  const query = new URLSearchParams(failedJobsQuery(params))
+  if (params.type) query.set("type", params.type)
+  if (params.tenantID) query.set("tenantID", params.tenantID)
+  const qs = query.toString()
+  const body = await http.get<AdminFailedJobListEnvelope>(
+    qs ? `/admin/failed-jobs?${qs}` : "/admin/failed-jobs",
+    { signal }
+  )
+  return { jobs: resolveFailedJobs(body.data), meta: body.meta ?? {} }
+}
+
+function adminFailedJobPath(jobType: string, id: string, action: "retry" | "discard"): string {
+  return `/admin/failed-jobs/${encodeURIComponent(jobType)}/${encodeURIComponent(id)}/${action}`
+}
+
+// Puts a failed job back in its queue (204). 404 failed_job.not_found: the
+// job is no longer failed; 409 failed_job.not_retryable: discard only.
+export async function retryAdminFailedJob(jobType: string, id: string): Promise<void> {
+  await http.post(adminFailedJobPath(jobType, id, "retry"))
+}
+
+// Marks a failed job discarded (204). The job keeps its row and error; it
+// only leaves the failed list.
+export async function discardAdminFailedJob(jobType: string, id: string): Promise<void> {
+  await http.post(adminFailedJobPath(jobType, id, "discard"))
 }

@@ -1678,6 +1678,10 @@ table "currency_migrations" {
     type = TEXT
     null = true
   }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -1957,6 +1961,14 @@ table "exports" {
     type = BIGINT
     null = true
     default = "0"
+  }
+  column "attempt_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
   }
   column "tenant_id" {
     type = TEXT
@@ -2905,6 +2917,10 @@ table "intake_sources" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
   }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -2945,6 +2961,10 @@ table "intake_sources" {
     unique = true
     where = "external_document_id <> ''"
     columns = [column.group_id, column.external_system, column.external_instance, column.external_document_id]
+  }
+  index "idx_intake_sources_failed" {
+    where = "status = 'failed' AND discarded_at IS NULL"
+    columns = [column.group_id, column.updated_at]
   }
   index "idx_intake_sources_queue" {
     where = "status IN ('pending', 'scanning')"
@@ -3909,6 +3929,10 @@ table "restore_operations" {
     null = true
     default = "0"
   }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "tenant_id" {
     type = TEXT
   }
@@ -4627,6 +4651,10 @@ table "thumbnail_generation_jobs" {
   column "updated_at" {
     type = TIMESTAMP
     default = sql("CURRENT_TIMESTAMP")
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
   }
   column "tenant_id" {
     type = TEXT

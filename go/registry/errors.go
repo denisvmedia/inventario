@@ -206,6 +206,15 @@ var (
 	// its session was deleted. The outcome is dropped (#2810).
 	ErrIntakeSourceChanged = errx.NewSentinel("the intake source changed while it was scanned")
 
+	// ErrFailedJobNotRetryable is returned when a retry reaches a job type
+	// that cannot be run again safely, such as a restore that may have
+	// written part of its backup (#1307). Such a job can only be discarded.
+	ErrFailedJobNotRetryable = errx.NewSentinel("this kind of job cannot be retried")
+
+	// ErrUnknownFailedJobType is returned for a worker type that has no
+	// failed-jobs adapter (#1307).
+	ErrUnknownFailedJobType = errx.NewSentinel("unknown failed job type")
+
 	// ErrIntakeSourceBusy is returned when a rescan reaches a source that is
 	// still waiting for or in a scan, also one canceled while its scan runs
 	// (#2810).

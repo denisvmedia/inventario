@@ -107,6 +107,247 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/admin/failed-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List failed background jobs (admin)
+         * @description Returns the background jobs that failed for good and were neither
+         *     retried nor discarded, across every tenant, newest failure first
+         *     (#1307). Each job is read from its type's own table; `id` is the row
+         *     id there. ?type limits the list to one job type and ?tenantID to one
+         *     tenant. `meta.job_types` lists the job types with whether each can be
+         *     retried.
+         *     An unknown ?type returns 400 with `failed_job.unknown_type`.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Tenant ID */
+                    tenantID?: string;
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.AdminFailedJobListEnvelope"];
+                    };
+                };
+                /** @description Bad Request - unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/{jobType}/{jobID}/discard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Discard a failed background job (admin)
+         * @description Marks the failed job discarded (#1307). It leaves the failed list and
+         *     the depth gauge but keeps its row and its error until the normal
+         *     cleanup removes it. Every job type can be discarded. Needs the
+         *     platform_admin role: a support_agent gets 403 `admin.role_required`.
+         *     404 `failed_job.unknown_type` for an unknown type, 404
+         *     `failed_job.not_found` when the job is not failed or was already
+         *     retried or discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - account disabled, or not a platform_admin */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/admin/failed-jobs/{jobType}/{jobID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry a failed background job (admin)
+         * @description Puts the failed job back in its queue the way its type runs it again
+         *     (#1307): an export or import runs from the start, a thumbnail gets a
+         *     fresh set of attempts, an intake scan is due again at once. A restore
+         *     and a currency migration cannot be retried (409
+         *     `failed_job.not_retryable`); discard them instead. 404
+         *     `failed_job.unknown_type` for an unknown type, 404
+         *     `failed_job.not_found` when the job is not failed or was already
+         *     retried or discarded.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized - back-office authentication required */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Account disabled */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - this type of job cannot be retried */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/admin/groups": {
         parameters: {
             query?: never;
@@ -7563,6 +7804,170 @@ export type paths = {
         patch?: never;
         trace?: never;
     };
+    "/g/{groupSlug}/failed-jobs": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List the group's failed background jobs
+         * @description Returns the group's background jobs that failed for good and were
+         *     neither retried nor discarded, newest failure first (#1307). Group
+         *     admins only. ?type limits the list to one job type; an unknown type
+         *     returns 400 with `failed_job.unknown_type`. `meta.job_types` lists the
+         *     job types with whether each can be retried.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Job type */
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Page number (default 1) */
+                    page?: number;
+                    /** @description Items per page (default 50, max 100) */
+                    per_page?: number;
+                };
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["apiserver.FailedJobListEnvelope"];
+                    };
+                };
+                /** @description Bad Request - unknown job type */
+                400: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - group admins only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Retry one of the group's failed background jobs
+         * @description Puts the group's failed job back in its queue (#1307). Group admins
+         *     only. A restore and a currency migration cannot be retried (409
+         *     `failed_job.not_retryable`). 404 `failed_job.unknown_type` for an
+         *     unknown type, 404 `failed_job.not_found` when the group has no such
+         *     failed job, also one of another group.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    /** @description Group slug */
+                    groupSlug: string;
+                    /** @description Job type */
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    /** @description Job ID */
+                    jobID: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description No Content */
+                204: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Unauthorized */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Forbidden - group admins only */
+                403: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Not Found - unknown type or no such failed job */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description Conflict - this type of job cannot be retried */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "*/*": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/g/{groupSlug}/files": {
         parameters: {
             query?: never;
@@ -14887,6 +15292,33 @@ export type components = {
             /** @description Reason is the free-form justification for the block (max 500 chars). */
             reason: string;
         };
+        "apiserver.AdminFailedJobListEnvelope": {
+            data?: components["schemas"]["apiserver.AdminFailedJobResource"][];
+            meta?: components["schemas"]["apiserver.FailedJobListMeta"];
+        };
+        "apiserver.AdminFailedJobResource": {
+            attributes?: components["schemas"]["apiserver.AdminFailedJobView"];
+            id?: string;
+            /** @example failed_jobs */
+            type?: string;
+        };
+        "apiserver.AdminFailedJobView": {
+            /** @example 3 */
+            attempts?: number;
+            created_at?: string;
+            error?: string;
+            failed_at?: string;
+            group_id?: string;
+            group_name?: string;
+            group_slug?: string;
+            /** @example export */
+            job_type?: string;
+            retryable?: boolean;
+            tenant_id?: string;
+            tenant_name?: string;
+            title?: string;
+            user_id?: string;
+        };
         "apiserver.AdminMemberEnvelope": {
             data?: components["schemas"]["apiserver.AdminMemberResource"];
         };
@@ -15036,6 +15468,51 @@ export type components = {
         };
         "apiserver.DeleteAccountRequest": {
             password?: string;
+        };
+        "apiserver.FailedJobListEnvelope": {
+            data?: components["schemas"]["apiserver.FailedJobResource"][];
+            meta?: components["schemas"]["apiserver.FailedJobListMeta"];
+        };
+        "apiserver.FailedJobListMeta": {
+            job_types?: components["schemas"]["apiserver.FailedJobTypeInfo"][];
+            /** @example 1 */
+            page?: number;
+            /** @example 50 */
+            per_page?: number;
+            /** @example 3 */
+            total?: number;
+            /** @example 1 */
+            total_pages?: number;
+        };
+        "apiserver.FailedJobResource": {
+            attributes?: components["schemas"]["apiserver.FailedJobView"];
+            id?: string;
+            /** @example failed_jobs */
+            type?: string;
+        };
+        "apiserver.FailedJobTypeInfo": {
+            retryable?: boolean;
+            /** @example export */
+            type?: string;
+        };
+        "apiserver.FailedJobView": {
+            /** @example 3 */
+            attempts?: number;
+            created_at?: string;
+            /** @description Error is the last error the job recorded. */
+            error?: string;
+            failed_at?: string;
+            /**
+             * @description JobType is the worker type that ran the job.
+             * @example export
+             */
+            job_type?: string;
+            /** @description Retryable is false for a type whose jobs can only be discarded. */
+            retryable?: boolean;
+            /** @description Title names the job: an export's description, a file's title. */
+            title?: string;
+            /** @description UserID is the member who started the job. */
+            user_id?: string;
         };
         "apiserver.FeatureFlags": {
             /**

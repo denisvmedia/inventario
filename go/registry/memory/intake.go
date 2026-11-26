@@ -557,9 +557,11 @@ func (r *IntakeRegistry) ResumeSession(_ context.Context, sessionID string, now 
 }
 
 // requeueIntakeSource puts a source back in the queue with a fresh allowance
-// of attempts.
+// of attempts. A requeued source is no longer a failure an operator
+// discarded: if it fails again, the failed jobs show it again (#1307).
 func requeueIntakeSource(src *models.IntakeSource, now time.Time) {
 	src.Status = models.IntakeSourcePending
+	src.DiscardedAt = nil
 	src.RetryBase = src.Attempts
 	src.NextAttemptAt = now
 	src.ClaimedAt = nil
@@ -616,11 +618,11 @@ func (r *IntakeRegistry) countQueued() int {
 	return n
 }
 
-func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (int, error) {
+func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now time.Time, maxAttempts int, errorCode string) (registry.IntakeSweep, error) {
 	st := r.factory.state
 	st.mu.Lock()
 	defer st.mu.Unlock()
-	n := 0
+	var sweep registry.IntakeSweep
 	for _, src := range st.sources {
 		if !r.visible(src.GroupID) {
 			continue
@@ -633,6 +635,7 @@ func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now
 				src.Status = models.IntakeSourceFailed
 				src.WaitReason = ""
 				src.ErrorCode = errorCode
+				sweep.Failed++
 			} else {
 				src.Status = models.IntakeSourcePending
 				src.NextAttemptAt = now
@@ -644,9 +647,9 @@ func (r *IntakeRegistry) SweepStuckSources(_ context.Context, claimedBefore, now
 			continue
 		}
 		src.UpdatedAt = now
-		n++
+		sweep.Changed++
 	}
-	return n, nil
+	return sweep, nil
 }
 
 func (r *IntakeRegistry) ClaimNextSource(_ context.Context, now time.Time) (*models.IntakeSource, error) {

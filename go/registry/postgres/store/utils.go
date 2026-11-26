@@ -243,3 +243,27 @@ func DoAsAdmin(ctx context.Context, dbx *sqlx.DB, fn func(context.Context, *sqlx
 	}
 	return nil
 }
+
+// DoAsGroup runs fn inside a transaction under the application role with the
+// tenant and group of the session set, so the tables' row-level security
+// policies limit fn to that group, committing on nil return and rolling back
+// otherwise. It serves cross-table reads of one group's rows that no single
+// registry owns, such as the group's failed jobs (#1307). Callers still
+// filter by group in their queries: a role that owns the tables, as in the
+// test databases, is not bound by the policies.
+func DoAsGroup(ctx context.Context, dbx *sqlx.DB, tenantID, groupID string, fn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := beginTxWithTenantAndGroup(ctx, dbx, tenantID, groupID)
+	if err != nil {
+		return errxtrace.Wrap("failed to begin group transaction", err)
+	}
+	defer func() {
+		if rbErr := RollbackOrCommit(tx, err); rbErr != nil && err == nil {
+			err = errxtrace.Wrap("failed to finish group transaction", rbErr)
+		}
+	}()
+
+	if err = fn(ctx, tx); err != nil {
+		return errxtrace.Wrap("group operation failed", err)
+	}
+	return nil
+}

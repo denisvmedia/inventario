@@ -124,6 +124,10 @@ type RestoreOperation struct {
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
 	//ptah:schema:field name="error_count" type="INTEGER" default="0"
 	ErrorCount int `json:"error_count" db:"error_count" userinput:"false"`
+	// DiscardedAt is when an operator discarded the failed restore (#1307).
+	// The row stays, with its error, until its export is deleted.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt PTimestamp `json:"-" db:"discarded_at" userinput:"false"`
 
 	// Related steps (not stored in DB, loaded separately)
 	Steps []RestoreStep `json:"steps,omitempty" db:"-"`

@@ -189,6 +189,15 @@ type Export struct {
 	FileCount int `json:"file_count" db:"file_count" userinput:"false"`
 	//ptah:schema:field name="binary_data_size" type="BIGINT" default="0"
 	BinaryDataSize int64 `json:"binary_data_size" db:"binary_data_size" userinput:"false"`
+	// AttemptCount counts the runs the worker started for this export or
+	// import. A retry of a failed job (#1307) does not reset it, so it also
+	// tells how many times the job has been tried in total.
+	//ptah:schema:field name="attempt_count" type="INTEGER" not_null="true" default="0"
+	AttemptCount int `json:"-" db:"attempt_count" userinput:"false"`
+	// DiscardedAt is when an operator discarded the failed job (#1307). The
+	// row stays, with its error, until the export is deleted.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt PTimestamp `json:"-" db:"discarded_at" userinput:"false"`
 }
 
 func NewImportedExport(description, sourceFilePath string) Export {

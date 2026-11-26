@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 
 import { CurrencyMigrationsList } from "@/components/groups/CurrencyMigrationsList"
+import { FailedJobsCard } from "@/components/groups/FailedJobsCard"
 import { IconPicker } from "@/components/groups/IconPicker"
 import { MigrateCurrencyDialog } from "@/components/groups/MigrateCurrencyDialog"
 import { NotificationsCard } from "@/components/groups/NotificationsCard"
@@ -221,7 +222,9 @@ function GroupSettingsBody({ groupId }: { groupId: string }) {
                 hideWarrantyAlerts={isSectionHidden(group, "warranties")}
               />
             ) : null}
-            {active === "data" ? <DataSection groupSlug={group.slug ?? null} /> : null}
+            {active === "data" ? (
+              <DataSection groupSlug={group.slug ?? null} isAdmin={isAdmin} />
+            ) : null}
             {active === "management" ? (
               <ManagementSection groupId={groupId} groupName={group.name ?? ""} isAdmin={isAdmin} />
             ) : null}
@@ -702,8 +705,9 @@ function NotificationsSection({
 // DataSection — per-group storage usage panel + exports shortcut.
 // Moved here from /settings (user Preferences), where these were
 // rendered against an implicit "active group" fallback. Both are
-// strictly group-scoped, so they belong on the group page.
-function DataSection({ groupSlug }: { groupSlug: string | null }) {
+// strictly group-scoped, so they belong on the group page. Admins also
+// get the group's failed background jobs (#1307).
+function DataSection({ groupSlug, isAdmin }: { groupSlug: string | null; isAdmin: boolean }) {
   const { t } = useTranslation()
 
   return (
@@ -736,6 +740,8 @@ function DataSection({ groupSlug }: { groupSlug: string | null }) {
       )}
 
       <StorageCard />
+
+      {isAdmin && groupSlug ? <FailedJobsCard groupSlug={groupSlug} /> : null}
     </div>
   )
 }

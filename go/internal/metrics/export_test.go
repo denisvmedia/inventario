@@ -88,3 +88,10 @@ func HistogramSampleCount(c prometheus.Collector) uint64 {
 	}
 	return total
 }
+
+// Background-job failure metrics (#1307).
+var (
+	JobsDeadLetteredTotal            = jobsDeadLetteredTotal
+	JobsDeadLetterDepth              = jobsDeadLetterDepth
+	JobsDeadLetterCollectErrorsTotal = jobsDeadLetterCollectErrorsTotal
+)

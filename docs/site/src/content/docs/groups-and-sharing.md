@@ -113,6 +113,20 @@ A type or field the group had before the set keeps what the set linked to it. Su
 
 Only an **Owner** or **Administrator** can add or remove the set. Other members see the card without the buttons. Each add and remove is recorded in the audit log of the server, with what it created or deleted. The people who run the server can read that log; group members don't see it.
 
+## Failed background jobs
+
+Some work runs in the background after you start it: an export or a restore, a thumbnail for an uploaded photo, a scan of the photos and files you [add from files](../items/#add-items-from-files) (the batches in the [Inbox](../inbox/)) or of a [document sent from another system](../documents-from-other-systems/), a currency migration. Thumbnails and scans are tried a few times on their own. When a job fails for good, it stops and waits for someone to look at it. Owners and administrators find these jobs in the group settings:
+
+1. Open the group selector and choose **Group settings**, then open the **Data & storage** section.
+2. The **Failed background jobs** card lists the jobs that stopped, newest first, each with its kind, its name, when it failed, how many attempts it made, and why it failed.
+3. Click **Retry** to put a job back in its queue. It leaves the list; if it fails again, it comes back. Retrying a scan from its batch in the Inbox (**Retry unfinished**) does the same.
+
+A restore and a currency migration can't be retried: a restore may have written part of the backup already, and a migration ran at the exchange rate you confirmed then. Their row tells you to start a new [restore](../backup-and-restore/) or currency migration instead, and that your server operator can remove the failed one from the list. A job that fails again and again usually needs your server operator, who sees the failed jobs of every group.
+
+A photo whose thumbnail failed for good keeps its placeholder: opening it again does not start another try while the job is on the list. Thumbnail jobs are cleaned up after a day; after that, the next time the photo is shown it is tried again.
+
+Members with the **User** or **Viewer** role don't see the card.
+
 ## Invite people by email
 
 You invite people from the **Members** page. You need to be an **Owner** or **Administrator** of the group to send invites.

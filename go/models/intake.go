@@ -315,6 +315,11 @@ type IntakeSource struct {
 
 	//ptah:schema:field name="updated_at" type="TIMESTAMP" not_null="true" default_expr="CURRENT_TIMESTAMP"
 	UpdatedAt time.Time `json:"updated_at" db:"updated_at" userinput:"false"`
+
+	// DiscardedAt is when an operator discarded the failed scan (#1307). The
+	// source stays failed in its session; it only leaves the failed jobs.
+	//ptah:schema:field name="discarded_at" type="TIMESTAMP"
+	DiscardedAt *time.Time `json:"-" db:"discarded_at" userinput:"false"`
 }
 
 // IntakeSourceIndexes defines the postgres indexes for intake_sources.
@@ -338,6 +343,11 @@ type IntakeSourceIndexes struct {
 
 	// Composite index for tenant+group RLS-filtered queries and the purges.
 	//ptah:schema:index name="idx_intake_sources_tenant_group" fields="tenant_id,group_id" table="intake_sources"
+	_ int
+
+	// The failed-jobs list and its depth gauge read the failed scans that
+	// nobody retried or discarded (#1307).
+	//ptah:schema:index name="idx_intake_sources_failed" fields="group_id,updated_at" table="intake_sources" condition="status = 'failed' AND discarded_at IS NULL"
 	_ int
 }
 

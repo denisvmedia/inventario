@@ -76,6 +76,196 @@
                 }
             }
         },
+        "/admin/failed-jobs": {
+            "get": {
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; `id` is the row\nid there. ?type limits the list to one job type and ?tenantID to one\ntenant. `meta.job_types` lists the job types with whether each can be\nretried.\nAn unknown ?type returns 400 with `failed_job.unknown_type`.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "List failed background jobs (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminFailedJobListEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/{jobType}/{jobID}/discard": {
+            "post": {
+                "description": "Marks the failed job discarded (#1307). It leaves the failed list and\nthe depth gauge but keeps its row and its error until the normal\ncleanup removes it. Every job type can be discarded. Needs the\nplatform_admin role: a support_agent gets 403 `admin.role_required`.\n404 `failed_job.unknown_type` for an unknown type, 404\n`failed_job.not_found` when the job is not failed or was already\nretried or discarded.",
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Discard a failed background job (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled, or not a platform_admin",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/{jobType}/{jobID}/retry": {
+            "post": {
+                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once. A restore\nand a currency migration cannot be retried (409\n`failed_job.not_retryable`); discard them instead. 404\n`failed_job.unknown_type` for an unknown type, 404\n`failed_job.not_found` when the job is not failed or was already\nretried or discarded.",
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Retry a failed background job (admin)",
+                "parameters": [
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - this type of job cannot be retried",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/groups": {
             "get": {
                 "description": "Returns every location group with computed member_count and an owning-tenant chip (id, name, slug). Paginate via ?page\u0026per_page; ?q ILIKE-matches name/slug; ?tenantID/?status filter exactly; ?sort/?order set ordering.",
@@ -6484,6 +6674,148 @@
                     },
                     "404": {
                         "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/failed-jobs": {
+            "get": {
+                "description": "Returns the group's background jobs that failed for good and were\nneither retried nor discarded, newest failure first (#1307). Group\nadmins only. ?type limits the list to one job type; an unknown type\nreturns 400 with `failed_job.unknown_type`. `meta.job_types` lists the\njob types with whether each can be retried.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "failed-jobs"
+                ],
+                "summary": "List the group's failed background jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page number (default 1)",
+                        "name": "page",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Items per page (default 50, max 100)",
+                        "name": "per_page",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.FailedJobListEnvelope"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - group admins only",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry": {
+            "post": {
+                "description": "Puts the group's failed job back in its queue (#1307). Group admins\nonly. A restore and a currency migration cannot be retried (409\n`failed_job.not_retryable`). 404 `failed_job.unknown_type` for an\nunknown type, 404 `failed_job.not_found` when the group has no such\nfailed job, also one of another group.",
+                "tags": [
+                    "failed-jobs"
+                ],
+                "summary": "Retry one of the group's failed background jobs",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Group slug",
+                        "name": "groupSlug",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "jobType",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Job ID",
+                        "name": "jobID",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "Unauthorized",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - group admins only",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found - unknown type or no such failed job",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "Conflict - this type of job cannot be retried",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -12933,6 +13265,81 @@
                 }
             }
         },
+        "apiserver.AdminFailedJobListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.AdminFailedJobResource"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/apiserver.FailedJobListMeta"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.AdminFailedJobView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "failed_jobs"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobView": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "type": "string"
+                },
+                "failed_at": {
+                    "type": "string"
+                },
+                "group_id": {
+                    "type": "string"
+                },
+                "group_name": {
+                    "type": "string"
+                },
+                "group_slug": {
+                    "type": "string"
+                },
+                "job_type": {
+                    "type": "string",
+                    "example": "export"
+                },
+                "retryable": {
+                    "type": "boolean"
+                },
+                "tenant_id": {
+                    "type": "string"
+                },
+                "tenant_name": {
+                    "type": "string"
+                },
+                "title": {
+                    "type": "string"
+                },
+                "user_id": {
+                    "type": "string"
+                }
+            }
+        },
         "apiserver.AdminMemberEnvelope": {
             "type": "object",
             "properties": {
@@ -13259,6 +13666,110 @@
             "type": "object",
             "properties": {
                 "password": {
+                    "type": "string"
+                }
+            }
+        },
+        "apiserver.FailedJobListEnvelope": {
+            "type": "object",
+            "properties": {
+                "data": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.FailedJobResource"
+                    }
+                },
+                "meta": {
+                    "$ref": "#/definitions/apiserver.FailedJobListMeta"
+                }
+            }
+        },
+        "apiserver.FailedJobListMeta": {
+            "type": "object",
+            "properties": {
+                "job_types": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/apiserver.FailedJobTypeInfo"
+                    }
+                },
+                "page": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "per_page": {
+                    "type": "integer",
+                    "example": 50
+                },
+                "total": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "total_pages": {
+                    "type": "integer",
+                    "example": 1
+                }
+            }
+        },
+        "apiserver.FailedJobResource": {
+            "type": "object",
+            "properties": {
+                "attributes": {
+                    "$ref": "#/definitions/apiserver.FailedJobView"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "failed_jobs"
+                }
+            }
+        },
+        "apiserver.FailedJobTypeInfo": {
+            "type": "object",
+            "properties": {
+                "retryable": {
+                    "type": "boolean"
+                },
+                "type": {
+                    "type": "string",
+                    "example": "export"
+                }
+            }
+        },
+        "apiserver.FailedJobView": {
+            "type": "object",
+            "properties": {
+                "attempts": {
+                    "type": "integer",
+                    "example": 3
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "error": {
+                    "description": "Error is the last error the job recorded.",
+                    "type": "string"
+                },
+                "failed_at": {
+                    "type": "string"
+                },
+                "job_type": {
+                    "description": "JobType is the worker type that ran the job.",
+                    "type": "string",
+                    "example": "export"
+                },
+                "retryable": {
+                    "description": "Retryable is false for a type whose jobs can only be discarded.",
+                    "type": "boolean"
+                },
+                "title": {
+                    "description": "Title names the job: an export's description, a file's title.",
+                    "type": "string"
+                },
+                "user_id": {
+                    "description": "UserID is the member who started the job.",
                     "type": "string"
                 }
             }
