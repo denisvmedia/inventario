@@ -56,12 +56,13 @@ type UserPurger struct {
 	savedViews    registry.SavedViewRegistryFactory
 	itemTypes     *ItemTypeRegistryFactory
 	// intakeDocuments is set by SetIntakeDocumentFactory.
-	intakeDocuments registry.IntakeDocumentRegistryFactory
+	intakeDocuments *IntakeDocumentRegistryFactory
 }
 
 // SetIntakeDocumentFactory wires the delivered documents (#2809); the ones
-// the user's API tokens created leave with the account, as on postgres.
-func (r *UserPurger) SetIntakeDocumentFactory(docs registry.IntakeDocumentRegistryFactory) {
+// the user's API tokens created go to another member of their group, as on
+// postgres.
+func (r *UserPurger) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactory) {
 	r.intakeDocuments = docs
 }
 
@@ -141,6 +142,7 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		// as on postgres; they are group configuration, not the user's
 		// content.
 		{"item_types", func() error { return r.reattributeItemTypes(ctx, tenantID, userID) }},
+		{"intake_documents", func() error { return r.reattributeIntakeDocuments(ctx, tenantID, userID) }},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
@@ -148,7 +150,6 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		{"commodity_reminders", func() error { return r.purgeCommodityReminders(ctx, tenantID, userID) }},
 		{"commodity_drafts", func() error { return r.purgeCommodityDrafts(ctx, tenantID, userID) }},
 		{"intake_sessions", func() error { return r.purgeIntakeSessions(ctx, tenantID, userID) }},
-		{"intake_documents", func() error { return r.purgeIntakeDocuments(ctx, tenantID, userID) }},
 		// Where the user shows the views of others, then the views the user
 		// created, shared ones included: both carry a NOT NULL user column,
 		// like the postgres DELETEs.
@@ -321,25 +322,23 @@ func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tenantID, userID s
 	return nil
 }
 
-// purgeIntakeDocuments deletes the delivered documents (#2809) the user's API
-// tokens created, the same rows the postgres purger removes.
-func (r *UserPurger) purgeIntakeDocuments(ctx context.Context, tenantID, userID string) error {
-	if r.intakeDocuments == nil {
+// reattributeIntakeDocuments gives each document delivered through the
+// user's API tokens (#2809) to the member itemTypeHeir picks, as on
+// postgres. A document whose group has no other member is deleted.
+func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tenantID, userID string) error {
+	docs := r.intakeDocuments
+	if docs == nil {
 		return nil
 	}
-	reg := r.intakeDocuments.CreateServiceRegistry()
-	all, err := reg.List(ctx)
-	if err != nil {
-		return err
-	}
-	for _, doc := range all {
-		if doc.TenantID != tenantID || doc.CreatedByUserID != userID {
-			continue
-		}
-		if err := reg.Delete(ctx, doc.ID); err != nil {
+	heirs := map[string]string{}
+	for _, groupID := range docs.groupsCreatedBy(tenantID, userID) {
+		members, err := r.memberships.ListByGroup(ctx, groupID)
+		if err != nil {
 			return err
 		}
+		heirs[groupID] = itemTypeHeir(members, userID)
 	}
+	docs.reattributeCreator(tenantID, userID, heirs)
 	return nil
 }
 

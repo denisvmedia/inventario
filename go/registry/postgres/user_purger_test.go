@@ -151,7 +151,8 @@ func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
 	linked, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(linked.Links, qt.HasLen, 1)
-	// The record of a document the user's token delivered goes with them.
+	// The record of a document the user's token delivered goes with them
+	// when the group has no other member to take it.
 	doc, _, err := fx.set.IntakeDocumentRegistry.CreateOrGet(fx.ctx, models.IntakeDocument{
 		ExternalSystem: "paperless-ngx", ExternalDocumentID: "7", PayloadHash: "h",
 	})
@@ -166,6 +167,57 @@ func TestUserPurger_Postgres_PurgesTheUsersIntakeSessions(t *testing.T) {
 	kept, err := fx.set.FileRegistry.Get(fx.ctx, receipt.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(kept.Links, qt.HasLen, 0)
+}
+
+// TestUserPurger_Postgres_HandsOverDeliveredDocuments covers #2809: the
+// record of a document another system delivered through the user's API token
+// is group content. It goes to the group's owner, so a replay of the
+// delivery still finds it, and the users row can go.
+func TestUserPurger_Postgres_HandsOverDeliveredDocuments(t *testing.T) {
+	c := qt.New(t)
+	fx := newTagPGFixture(t)
+	ctx := appctx.WithUser(context.Background(), fx.user)
+	tenantID := fx.user.TenantID
+
+	memberModel := models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		Email:               "intake-integrator@test-org.com",
+		Name:                "Integrator",
+		IsActive:            true,
+	}
+	c.Assert(memberModel.SetPassword("Password123"), qt.IsNil)
+	member, err := fx.factorySet.UserRegistry.Create(ctx, memberModel)
+	c.Assert(err, qt.IsNil)
+	memberships := fx.factorySet.GroupMembershipRegistry
+	if _, err := memberships.GetByGroupAndUser(ctx, fx.groupAID, fx.user.ID); err != nil {
+		_, err = memberships.Create(ctx, models.GroupMembership{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+			GroupID:             fx.groupAID,
+			MemberUserID:        fx.user.ID,
+			Role:                models.GroupRoleOwner,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+	_, err = memberships.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: tenantID},
+		GroupID:             fx.groupAID,
+		MemberUserID:        member.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	memberSet := postgres.NewRegistrySetWithUserAndGroupID(fx.dbx, member.ID, tenantID, fx.groupAID)
+	doc, _, err := memberSet.IntakeDocumentRegistry.CreateOrGet(tagCtxFor(member, fx.groupAID), models.IntakeDocument{
+		ExternalSystem: "paperless-ngx", ExternalDocumentID: "7", PayloadHash: "h",
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(doc.CreatedByUserID, qt.Equals, member.ID)
+
+	c.Assert(fx.factorySet.UserPurger.PurgeUserDependents(t.Context(), tenantID, member.ID), qt.IsNil)
+	got, err := fx.factorySet.IntakeDocumentRegistryFactory.CreateServiceRegistry().Get(t.Context(), doc.ID)
+	c.Assert(err, qt.IsNil)
+	c.Check(got.CreatedByUserID, qt.Equals, fx.user.ID)
+	c.Check(fx.factorySet.UserRegistry.Delete(ctx, member.ID), qt.IsNil)
 }
 
 // TestUserPurger_Postgres_ClearsGroupInvitesAuditReferences is the #2147

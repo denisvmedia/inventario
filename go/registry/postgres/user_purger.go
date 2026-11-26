@@ -170,6 +170,12 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		if err := r.reattributeItemTypes(ctx, tx, tenantID, userID); err != nil {
 			return err
 		}
+		// The documents other systems delivered through the user's API
+		// tokens are group content too: the record keeps a replay from
+		// making a second draft of an item the group has.
+		if err := r.reattributeIntakeDocuments(ctx, tx, tenantID, userID); err != nil {
+			return err
+		}
 
 		// Group memberships are keyed SOLELY by member_user_id (there is no
 		// plain user_id column on this table), so this single DELETE removes
@@ -295,9 +301,8 @@ func (r *UserPurger) purgeCommodityDrafts(ctx context.Context, tx *sqlx.Tx, tena
 }
 
 // purgeIntakeSessions deletes the intake sessions the user created, with
-// their sources, candidates and the file links of the sources, and the
-// documents other systems delivered through the user's API tokens. The files
-// and the drafts made from the sessions stay; the drafts are the user's drafts
+// their sources, candidates and the file links of the sources. The files and
+// the drafts made from the sessions stay; the drafts are the user's drafts
 // and go with purgeCommodityDrafts.
 func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
 	sources := string(r.tableNames.IntakeSources())
@@ -314,7 +319,6 @@ func (r *UserPurger) purgeIntakeSessions(ctx context.Context, tx *sqlx.Tx, tenan
 		string(r.tableNames.IntakeCandidates()),
 		sources,
 		string(r.tableNames.IntakeSessions()),
-		string(r.tableNames.IntakeDocuments()),
 	} {
 		query := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", table)
 		if _, err := tx.ExecContext(ctx, query, tenantID, userID); err != nil {
@@ -419,6 +423,37 @@ func (r *UserPurger) purgeSystemAdminGrants(ctx context.Context, tx *sqlx.Tx, us
 		)
 	}
 
+	return nil
+}
+
+// reattributeIntakeDocuments gives each document delivered through the
+// user's API tokens (#2809) to the member reattributeItemTypes picks. A
+// document whose group has no other member is deleted: its group is private
+// and leaves with the user.
+func (r *UserPurger) reattributeIntakeDocuments(ctx context.Context, tx *sqlx.Tx, tenantID, userID string) error {
+	docs := string(r.tableNames.IntakeDocuments())
+	memberships := string(r.tableNames.GroupMemberships())
+	handOver := fmt.Sprintf(`
+		UPDATE %[1]s d SET created_by_user_id = heir.member_user_id
+		FROM (
+			SELECT DISTINCT ON (group_id) group_id, member_user_id
+			FROM %[2]s
+			WHERE tenant_id = $1 AND member_user_id <> $2
+			ORDER BY group_id,
+				CASE role WHEN 'owner' THEN 0 WHEN 'admin' THEN 1 ELSE 2 END,
+				joined_at, member_user_id
+		) heir
+		WHERE d.tenant_id = $1 AND d.created_by_user_id = $2 AND d.group_id = heir.group_id`,
+		docs, memberships)
+	if _, err := tx.ExecContext(ctx, handOver, tenantID, userID); err != nil {
+		return errxtrace.Wrap("failed to hand over the user's delivered documents", err,
+			errx.Attrs("table", docs, "tenant_id", tenantID, "user_id", userID))
+	}
+	rest := fmt.Sprintf("DELETE FROM %s WHERE tenant_id = $1 AND created_by_user_id = $2", docs)
+	if _, err := tx.ExecContext(ctx, rest, tenantID, userID); err != nil {
+		return errxtrace.Wrap("failed to purge the user's delivered documents", err,
+			errx.Attrs("table", docs, "tenant_id", tenantID, "user_id", userID))
+	}
 	return nil
 }
 

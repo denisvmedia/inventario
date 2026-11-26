@@ -46,9 +46,10 @@ func newMemoryIntakeDocumentEnv(t *testing.T) registrytest.IntakeDocumentEnv {
 	}
 }
 
-// The purgers remove delivered documents as the postgres ones do: account
-// deletion takes the documents the user's token delivered, the group purge
-// the group's, the tenant purge the rest.
+// The purgers treat delivered documents as the postgres ones do: account
+// deletion hands the documents the user's token delivered to another member
+// of their group and deletes the ones of a group without one, the group
+// purge takes the group's, the tenant purge the rest.
 func TestIntakeDocumentPurges_Memory(t *testing.T) {
 	c := qt.New(t)
 	fs := memory.NewFactorySet()
@@ -83,13 +84,30 @@ func TestIntakeDocumentPurges_Memory(t *testing.T) {
 		return true
 	}
 
+	for _, m := range []struct {
+		user string
+		role models.GroupRole
+	}{{"user-1", models.GroupRoleOwner}, {"user-3", models.GroupRoleUser}} {
+		_, err := fs.GroupMembershipRegistry.Create(t.Context(), models.GroupMembership{
+			TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+			GroupID:             "group-c",
+			MemberUserID:        m.user,
+			Role:                m.role,
+		})
+		c.Assert(err, qt.IsNil)
+	}
+
 	leaving := seed("user-1", "group-a")
 	staying := seed("user-2", "group-a")
 	other := seed("user-2", "group-b")
+	shared := seed("user-1", "group-c")
 
 	c.Assert(fs.UserPurger.PurgeUserDependents(t.Context(), "tenant-1", "user-1"), qt.IsNil)
 	c.Check(exists(leaving), qt.IsFalse)
 	c.Check(exists(staying), qt.IsTrue)
+	handedOver, err := service.Get(t.Context(), shared.id)
+	c.Assert(err, qt.IsNil)
+	c.Check(handedOver.CreatedByUserID, qt.Equals, "user-3")
 
 	c.Assert(fs.GroupPurger.PurgeGroupDependents(t.Context(), "tenant-1", "group-a"), qt.IsNil)
 	c.Check(exists(staying), qt.IsFalse)

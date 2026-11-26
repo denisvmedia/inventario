@@ -95,6 +95,47 @@ func (f *IntakeDocumentRegistryFactory) promoted(groupID, draftID, commodityID s
 	}
 }
 
+// groupsCreatedBy returns the groups with a document userID created in
+// tenantID.
+func (f *IntakeDocumentRegistryFactory) groupsCreatedBy(tenantID, userID string) []string {
+	f.base.lock.RLock()
+	defer f.base.lock.RUnlock()
+	seen := map[string]bool{}
+	var out []string
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		doc := pair.Value
+		if doc.TenantID == tenantID && doc.CreatedByUserID == userID && !seen[doc.GroupID] {
+			seen[doc.GroupID] = true
+			out = append(out, doc.GroupID)
+		}
+	}
+	return out
+}
+
+// reattributeCreator gives the documents userID created in tenantID to
+// heirs[groupID], and deletes the ones whose group has no heir.
+func (f *IntakeDocumentRegistryFactory) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+	f.writes.Lock()
+	defer f.writes.Unlock()
+	f.base.lock.Lock()
+	defer f.base.lock.Unlock()
+	var gone []string
+	for pair := f.base.items.Oldest(); pair != nil; pair = pair.Next() {
+		doc := pair.Value
+		if doc.TenantID != tenantID || doc.CreatedByUserID != userID {
+			continue
+		}
+		if heir := heirs[doc.GroupID]; heir != "" {
+			doc.CreatedByUserID = heir
+			continue
+		}
+		gone = append(gone, doc.ID)
+	}
+	for _, id := range gone {
+		f.base.items.Delete(id)
+	}
+}
+
 func (r *IntakeDocumentRegistry) requireGroup() error {
 	if r.service || r.groupID == "" {
 		return errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "GroupID"))
