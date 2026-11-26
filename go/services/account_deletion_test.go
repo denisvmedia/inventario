@@ -359,6 +359,36 @@ func TestAccountDeletionService_DeleteAccount_RemovesThePersonalDataExports(t *t
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
+// An export requested before the user moved to another tenant keeps its
+// archive under the old tenant; deleting the account removes that one too.
+func TestAccountDeletionService_DeleteAccount_RemovesAnArchiveKeptUnderAnotherTenant(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, uploadLocation := newAccountDeletionService(c)
+
+	user := seedAccountUser(c, ctx, fs, "moved-export@example.com")
+	const before = "tenant-before-the-move"
+	c.Assert(before, qt.Not(qt.Equals), user.TenantID)
+	now := time.Now().UTC()
+	export, blocking, err := fs.PersonalDataExportRegistry.CreateUnlessRequestedSince(ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: before, UserID: user.ID},
+		CreatedAt:               now,
+		ExpiresAt:               now.Add(models.PersonalDataExportRetention),
+	}, now.Add(-models.PersonalDataExportRequestInterval))
+	c.Assert(err, qt.IsNil)
+	c.Assert(blocking, qt.IsNil)
+	key := blobkeys.BuildPersonalDataExportBlobKey(before, export.ID)
+	b, err := blob.OpenBucket(ctx, uploadLocation)
+	c.Assert(err, qt.IsNil)
+	defer b.Close()
+	c.Assert(b.WriteAll(ctx, key, []byte("archive"), nil), qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, user.TenantID, user.ID), qt.IsNil)
+
+	exists, err := b.Exists(ctx, key)
+	c.Assert(err, qt.IsNil)
+	c.Assert(exists, qt.IsFalse)
+}
+
 // TestAccountDeletionService_DeleteAccount_RemovesTheMembersItemReminders
 // covers #2805 on the memory backend: a plain member's item reminders in a
 // shared group email only that member, so they go with the account while the

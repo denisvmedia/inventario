@@ -38,7 +38,10 @@ func NewUserTenantMover(dbx *sqlx.DB) *UserTenantMover {
 // userTenantMoveDeletes are the per-user rows a move deletes. They are
 // sessions and credentials (the user signs in again), one-time tokens issued
 // for the old tenant, and transient or per-group state that only makes sense in
-// the tenant the user leaves. Children come before their parents.
+// the tenant the user leaves. Personal data exports are among them: a copy is
+// built from the groups of the old tenant, and the export worker's hourly
+// sweep deletes the archive once its row is gone. Children come before their
+// parents.
 var userTenantMoveDeletes = []func(t store.TableNames) store.TableName{
 	func(t store.TableNames) store.TableName { return t.RefreshTokens() },
 	func(t store.TableNames) store.TableName { return t.APITokens() },
@@ -50,6 +53,7 @@ var userTenantMoveDeletes = []func(t store.TableNames) store.TableName{
 	func(t store.TableNames) store.TableName { return t.ThumbnailGenerationJobs() },
 	func(t store.TableNames) store.TableName { return t.GroupNotificationPrefs() },
 	func(t store.TableNames) store.TableName { return t.SavedViewPlacements() },
+	func(t store.TableNames) store.TableName { return t.PersonalDataExports() },
 }
 
 // userTenantMoveRetenants are the per-user rows that belong to the person and

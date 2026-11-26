@@ -377,6 +377,34 @@ func TestUserPurger_Postgres_DeletesAMovedUserWithInviteAudit(t *testing.T) {
 	c.Assert(f.fs.UserRegistry.Delete(f.ctx, user.ID), qt.IsNil)
 }
 
+// A personal data export requested in the old tenant goes with the move, so
+// the account can still be deleted in the new tenant: the purge runs in the
+// new tenant and would leave an old-tenant row holding a key to users (#2177).
+func TestUserTenantMover_Postgres_MovedUserWithAPersonalDataExportCanBeDeleted(t *testing.T) {
+	c := qt.New(t)
+	f := newMoverPGFixture(t)
+	user := f.newUser(c, "exported-then-moved@test-org.com")
+	now := time.Now().UTC()
+	created, blocking, err := f.fs.PersonalDataExportRegistry.CreateUnlessRequestedSince(f.ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: f.from, UserID: user.ID},
+		CreatedAt:               now,
+		ExpiresAt:               now.Add(models.PersonalDataExportRetention),
+	}, now.Add(-models.PersonalDataExportRequestInterval))
+	c.Assert(err, qt.IsNil)
+	c.Assert(blocking, qt.IsNil)
+	c.Assert(created, qt.IsNotNil)
+
+	_, err = f.move(user)
+	c.Assert(err, qt.IsNil)
+
+	left, err := f.fs.PersonalDataExportRegistry.ListByUserID(f.ctx, user.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(left, qt.HasLen, 0)
+
+	c.Assert(f.fs.UserPurger.PurgeUserDependents(f.ctx, f.to, user.ID), qt.IsNil)
+	c.Assert(f.fs.UserRegistry.Delete(f.ctx, user.ID), qt.IsNil)
+}
+
 // A move refuses a user whose photo is not the one the caller read and copied,
 // so a photo uploaded meanwhile is neither lost nor left behind.
 func TestUserTenantMover_Postgres_RefusesAChangedPhoto(t *testing.T) {
