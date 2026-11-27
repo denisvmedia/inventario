@@ -72,9 +72,11 @@ func (r *Registry[_, P]) Get(ctx context.Context, id string) (P, error) {
 	// tracing a visibility decision, which is a debugging question.
 	slog.DebugContext(ctx, "Getting item", "item_id", id, "user_id", r.userID, "item_type", fmt.Sprintf("%T", zero))
 
+	// The item is read and copied under the lock: a writer may change a
+	// stored item in place while it holds the write lock.
 	r.lock.RLock()
+	defer r.lock.RUnlock()
 	item, ok := r.items.Get(id)
-	r.lock.RUnlock()
 	if !ok {
 		return nil, registry.ErrNotFound
 	}

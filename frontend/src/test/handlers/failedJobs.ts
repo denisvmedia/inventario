@@ -74,7 +74,36 @@ export function group(slug: string, jobs: FailedJob[] = []) {
   return backend(`/g/${encodeURIComponent(slug)}/failed-jobs`, jobs, ["retry"])
 }
 
-// The back office's view under /admin/failed-jobs: list, retry, discard.
+// The back office's view under /admin/failed-jobs: list, retry, discard,
+// and the bulk discard (#2946), which takes the jobs of ?type and ?tenantID
+// that failed before ?failed_before (a date, read as its midnight UTC) and
+// with ?dry_run=true only counts them. A day after today answers 400.
 export function admin(jobs: AdminFailedJob[] = []) {
-  return backend("/admin/failed-jobs", jobs, ["retry", "discard"])
+  const b = backend("/admin/failed-jobs", jobs, ["retry", "discard"])
+  const bulk = http.post(apiUrl("/admin/failed-jobs/bulk-discard"), ({ request }) => {
+    const url = new URL(request.url)
+    b.state.requests.push({ method: "POST", url })
+    const raw = url.searchParams.get("failed_before") ?? ""
+    const before = Date.parse(`${raw}T00:00:00Z`)
+    if (Number.isNaN(before) || before > Date.now()) {
+      return errorBody(400, "failed_job.invalid_failed_before")
+    }
+    const type = url.searchParams.get("type")
+    const tenantID = url.searchParams.get("tenantID")
+    const taken = b.state.jobs.filter(
+      (job) =>
+        (!type || job.job_type === type) &&
+        (!tenantID || job.tenant_id === tenantID) &&
+        !!job.failed_at &&
+        Date.parse(job.failed_at) < before
+    )
+    const byType: Record<string, number> = {}
+    for (const job of taken) byType[job.job_type ?? ""] = (byType[job.job_type ?? ""] ?? 0) + 1
+    const dryRun = url.searchParams.get("dry_run") === "true"
+    if (!dryRun) b.state.jobs = b.state.jobs.filter((job) => !taken.includes(job))
+    return HttpResponse.json({
+      meta: { discarded: taken.length, by_type: byType, dry_run: dryRun },
+    })
+  })
+  return { state: b.state, handlers: [bulk, ...b.handlers] }
 }

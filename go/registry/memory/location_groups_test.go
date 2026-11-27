@@ -92,3 +92,128 @@ func TestLocationGroupRegistry_SetHiddenSections(t *testing.T) {
 	_, _, err = reg.SetHiddenSections(ctx, "no-such-group", models.GroupSections{}, time.Now())
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
+
+// newWriteTestGroup stores an active group, then a change made from a copy
+// read before it: the currency moves to EUR and a migration id is recorded.
+// A write that started from the first read would undo that change.
+func newWriteTestGroup(c *qt.C, reg *memory.LocationGroupRegistry) *models.LocationGroup {
+	c.Helper()
+	ctx := context.Background()
+	created, err := reg.Create(ctx, models.LocationGroup{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+		Slug:                "abcdefghijklmnopqrstuv",
+		Name:                "Books",
+		Icon:                "book",
+		Status:              models.LocationGroupStatusActive,
+		CreatedBy:           "user-1",
+		GroupCurrency:       "USD",
+		HiddenSections:      models.GroupSections{models.GroupSectionWarranties},
+	})
+	c.Assert(err, qt.IsNil)
+	migrated := *created
+	migrated.GroupCurrency = "EUR"
+	migrated.CurrencyMigrationID = new("migration-1")
+	stored, err := reg.Update(ctx, migrated)
+	c.Assert(err, qt.IsNil)
+	return stored
+}
+
+func TestLocationGroupRegistry_UpdateDetails(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewLocationGroupRegistry()
+	group := newWriteTestGroup(c, reg)
+
+	at := time.Now().Add(time.Minute)
+	got, applied, err := reg.UpdateDetails(ctx, group.ID, registry.GroupDetails{Name: "Book collection", Icon: "library", Description: "Shelves"}, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	stored, err := reg.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	for _, g := range []*models.LocationGroup{got, stored} {
+		c.Assert(g.Name, qt.Equals, "Book collection")
+		c.Assert(g.Icon, qt.Equals, "library")
+		c.Assert(g.Description, qt.Equals, "Shelves")
+		c.Assert(g.UpdatedAt.Equal(at), qt.IsTrue)
+		c.Assert(g.HiddenSections, qt.DeepEquals, models.GroupSections{models.GroupSectionWarranties}, qt.Commentf("not given, so kept"))
+		c.Assert(g.GroupCurrency, qt.Equals, models.Currency("EUR"))
+		c.Assert(g.CurrencyMigrationID, qt.DeepEquals, new("migration-1"))
+	}
+
+	got, applied, err = reg.UpdateDetails(ctx, group.ID, registry.GroupDetails{Name: "Book collection", HiddenSections: &models.GroupSections{}}, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	c.Assert(got.HiddenSections, qt.DeepEquals, models.GroupSections{})
+	c.Assert(got.Icon, qt.Equals, "")
+
+	_, _, err = reg.UpdateDetails(ctx, group.ID, registry.GroupDetails{}, at)
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+	_, _, err = reg.UpdateDetails(ctx, "no-such-group", registry.GroupDetails{Name: "Books"}, at)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	// A group whose deletion started is left as it is.
+	_, applied, err = reg.MarkPendingDeletion(ctx, group.ID, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	got, applied, err = reg.UpdateDetails(ctx, group.ID, registry.GroupDetails{Name: "Renamed"}, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsFalse)
+	c.Assert(got.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	stored, err = reg.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Name, qt.Equals, "Book collection")
+}
+
+func TestLocationGroupRegistry_MarkPendingDeletion(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewLocationGroupRegistry()
+	group := newWriteTestGroup(c, reg)
+
+	at := time.Now().Add(time.Minute)
+	got, applied, err := reg.MarkPendingDeletion(ctx, group.ID, at)
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	c.Assert(got.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	stored, err := reg.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	c.Assert(stored.UpdatedAt.Equal(at), qt.IsTrue)
+	c.Assert(stored.GroupCurrency, qt.Equals, models.Currency("EUR"))
+
+	got, applied, err = reg.MarkPendingDeletion(ctx, group.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsFalse)
+	c.Assert(got.UpdatedAt.Equal(at), qt.IsTrue, qt.Commentf("an already pending group is not written again"))
+
+	_, _, err = reg.MarkPendingDeletion(ctx, "no-such-group", at)
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+}
+
+func TestLocationGroupRegistry_SetCurrencyMigrationID(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+	reg := memory.NewLocationGroupRegistry()
+	group := newWriteTestGroup(c, reg)
+
+	applied, err := reg.SetCurrencyMigrationID(ctx, group.ID, "migration-2")
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsTrue)
+	stored, err := reg.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.CurrencyMigrationID, qt.DeepEquals, new("migration-2"))
+	c.Assert(stored.GroupCurrency, qt.Equals, models.Currency("EUR"))
+	c.Assert(stored.UpdatedAt.Equal(group.UpdatedAt), qt.IsTrue, qt.Commentf("updated_at is not a column it writes"))
+
+	_, err = reg.SetCurrencyMigrationID(ctx, "no-such-group", "migration-2")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
+
+	_, _, err = reg.MarkPendingDeletion(ctx, group.ID, time.Now())
+	c.Assert(err, qt.IsNil)
+	applied, err = reg.SetCurrencyMigrationID(ctx, group.ID, "migration-3")
+	c.Assert(err, qt.IsNil)
+	c.Assert(applied, qt.IsFalse)
+	stored, err = reg.Get(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(stored.CurrencyMigrationID, qt.DeepEquals, new("migration-2"))
+}

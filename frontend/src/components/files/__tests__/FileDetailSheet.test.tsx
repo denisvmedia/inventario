@@ -272,6 +272,14 @@ describe("<FileDetailSheet />", () => {
     renderSheet("f1")
     await waitFor(() => expect(screen.getByTestId("file-detail-delete")).toBeInTheDocument())
     expect(screen.getByTestId("file-detail-delete")).not.toBeDisabled()
+    // The footer's delete is the red outline trigger; the solid red button
+    // is the confirmation's (#2914).
+    expect(screen.getByTestId("file-detail-delete")).toHaveAttribute("data-variant", "outline")
+    expect(screen.getByTestId("file-detail-delete")).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
   })
 
   it("renders the dash fallback when path is an empty string (regression #1483)", async () => {

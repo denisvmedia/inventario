@@ -1,12 +1,28 @@
 import { http, HttpResponse } from "msw"
 
-import { apiUrl } from "."
+import { apiUrl, serverPage } from "."
 
 export function list(slug: string, items: unknown[] = []) {
   return [
     http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations`), () =>
       HttpResponse.json({ data: items })
     ),
+  ]
+}
+
+// paged answers like the server: `page` and `per_page` pick a slice of
+// `items`, and meta reports the total. Each request's URL is appended to
+// `requests` when given.
+export function paged(slug: string, items: unknown[], requests: string[] = []) {
+  return [
+    http.get(apiUrl(`/g/${encodeURIComponent(slug)}/locations`), ({ request }) => {
+      requests.push(request.url)
+      const { rows, page, perPage, totalPages } = serverPage(request.url, items)
+      return HttpResponse.json({
+        data: rows,
+        meta: { locations: items.length, page, per_page: perPage, total_pages: totalPages },
+      })
+    }),
   ]
 }
 

@@ -44,10 +44,12 @@ Once a currency migration of the group has started, **Group settings → Info** 
 
 The active group decides what the whole app shows you.
 
-1. Open the group selector at the top of the sidebar.
+1. Open the group selector at the top of the sidebar, or the one with the group's name in the top bar.
 2. Pick the group you want from the list. A check mark shows which one is currently active.
 
-The app switches to that group immediately.
+The app switches to that group immediately, and the group becomes your default group: the next time you sign in, on any device, you land in it. You can also pick a default group on your [profile](../settings-and-account/#your-profile).
+
+Next to the top bar selector, a badge shows your role in the active group (Viewer, User, Administrator or Owner), the same badge the **Members** page shows. [Members and roles](#members-and-roles) explains what each role can do.
 
 :::tip
 You can keep two browser tabs open on two different groups — they stay independent of each other. The same dropdown also has shortcuts to **Group settings** (for the current group) and **Create new group**.
@@ -224,6 +226,8 @@ Deleting a group is permanent and removes **all** of its locations, items, files
 3. In the confirmation dialog, type the **group name** and your **current password**, then click **Delete permanently**.
 
 The group name guards against an accidental click; your password protects against someone using a hijacked session.
+
+Deletion starts as soon as you confirm. If another member saves the group settings at the same moment, their change is refused and the deletion goes ahead.
 
 :::caution[No undo]
 There's no way to recover a deleted group. If you might want the data later, create a [backup](../backup-and-restore/) first.

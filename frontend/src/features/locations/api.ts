@@ -3,6 +3,7 @@
 // #1531 item 4, alongside the long-standing name + address). Hooks
 // live in `./hooks.ts`.
 import { http } from "@/lib/http"
+import { listAllPages } from "@/lib/list-all-pages"
 import type { Schema } from "@/types"
 
 export type Location = Schema<"models.Location">
@@ -31,18 +32,20 @@ function envelope(attrs: Partial<Location>) {
   return { data: { type: "locations", attributes: attrs } }
 }
 
-// Returns every location for the active group. The list is small
-// (typically single-digit) so the dashboard / location picker can
-// reasonably load it in one go without paging.
-export async function listLocations(
-  options: { perPage?: number; signal?: AbortSignal } = {}
-): Promise<Location[]> {
-  const params = new URLSearchParams()
-  if (options.perPage !== undefined) params.set("per_page", String(options.perPage))
-  const qs = params.toString()
-  const path = qs ? `/locations?${qs}` : "/locations"
-  const body = await http.get<LocationsListResponse>(path, { signal: options.signal })
-  return (body.data ?? []).map((item) => ({ ...item.attributes, id: item.id }))
+// Returns every location of the active group. The endpoint pages its
+// result, so this reads page after page until it has them all; pickers
+// and name lookups need the whole set.
+export async function listLocations(options: { signal?: AbortSignal } = {}): Promise<Location[]> {
+  return listAllPages(async (page, perPage) => {
+    const params = new URLSearchParams({ page: String(page), per_page: String(perPage) })
+    const body = await http.get<LocationsListResponse>(`/locations?${params.toString()}`, {
+      signal: options.signal,
+    })
+    return {
+      rows: (body.data ?? []).map((item) => ({ ...item.attributes, id: item.id })),
+      total: body.meta?.locations,
+    }
+  })
 }
 
 export async function getLocation(id: string, signal?: AbortSignal): Promise<Location> {

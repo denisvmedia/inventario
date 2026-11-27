@@ -187,6 +187,7 @@ describe("<FileEditPage />", () => {
 
     const titleInput = await screen.findByTestId("file-edit-title")
     expect(titleInput).toHaveValue("Old title")
+    expect(screen.getByTestId("file-edit-category")).toHaveAttribute("data-slot", "native-select")
     await user.clear(titleInput)
     await user.type(titleInput, "New title")
 

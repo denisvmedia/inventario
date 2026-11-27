@@ -228,6 +228,7 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
                       type="button"
                       variant="ghost"
                       size="icon"
+                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                       aria-label={t("supplies:delete.confirm", { defaultValue: "Delete" })}
                       onClick={() => handleDelete(link)}
                       data-testid="supplies-delete"

@@ -10,6 +10,7 @@ import (
 	qt "github.com/frankban/quicktest"
 
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
 	"go.5x5.cz/inventario/services"
 )
@@ -152,7 +153,17 @@ func TestGroupService_InitiateGroupDeletion(t *testing.T) {
 
 	// Cannot update a pending_deletion group
 	_, err = svc.UpdateGroup(ctx, group.ID, "New Name", "", "")
-	c.Assert(err, qt.IsNotNil)
+	c.Assert(err, qt.ErrorIs, services.ErrGroupNotActive)
+
+	// Deleting it again succeeds and leaves it pending.
+	c.Assert(svc.InitiateGroupDeletion(ctx, group.ID, "To Delete", "To Delete"), qt.IsNil)
+	deleted, err = svc.GetGroup(ctx, group.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(deleted.Status, qt.Equals, models.LocationGroupStatusPendingDeletion)
+	c.Assert(deleted.Name, qt.Equals, "To Delete")
+
+	err = svc.InitiateGroupDeletion(ctx, "no-such-group", "To Delete", "To Delete")
+	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
 func TestGroupService_AddMember(t *testing.T) {

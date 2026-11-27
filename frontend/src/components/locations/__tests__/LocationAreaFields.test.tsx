@@ -10,7 +10,9 @@ import {
   type AreaOption,
   type LocationOption,
 } from "@/components/locations/LocationAreaFields"
-import { GroupProvider } from "@/features/group/GroupContext"
+import { useAreas } from "@/features/areas/hooks"
+import { GroupProvider, useCurrentGroup } from "@/features/group/GroupContext"
+import { useLocations } from "@/features/locations/hooks"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
@@ -34,12 +36,19 @@ const areas: AreaOption[] = [{ id: "a1", name: "Study", location_id: "l1" }]
 interface RenderOptions {
   role?: string
   initialAreaId?: string
+  // Feed the picker from useAreas and useLocations, as the item forms do,
+  // instead of the fixed lists above.
+  fromHooks?: boolean
 }
 
 // Mounts the picker inside a form of its own, as the item forms do, with a
 // notes field standing for the rest of the form's input. The form sits in a
 // file drop zone, as the item page is one.
-function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}) {
+function renderPicker({
+  role = "admin",
+  initialAreaId = "",
+  fromHooks = false,
+}: RenderOptions = {}) {
   setAccessToken("good-token")
   server.use(
     ...authHandlers.signedIn(),
@@ -50,7 +59,13 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
   const onOuterSubmit = vi.fn((e: FormEvent) => e.preventDefault())
   const onOuterDrop = vi.fn()
 
-  function Host() {
+  function Host({
+    areaOptions,
+    locationOptions,
+  }: {
+    areaOptions: AreaOption[]
+    locationOptions: LocationOption[]
+  }) {
     const [areaId, setAreaId] = useState(initialAreaId)
     return (
       <div onDragOver={onOuterDrop} onDrop={onOuterDrop}>
@@ -58,8 +73,8 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
           <label htmlFor="notes">Notes</label>
           <input id="notes" />
           <LocationAreaFields
-            areas={areas}
-            locations={locations}
+            areas={areaOptions}
+            locations={locationOptions}
             areaId={areaId}
             onAreaChange={(next) => {
               setAreaId(next)
@@ -72,6 +87,15 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
     )
   }
 
+  // The item forms mount once the group is known; the queries wait for it
+  // here the same way.
+  function HostFromHooks() {
+    const { currentGroup } = useCurrentGroup()
+    const areaQuery = useAreas({ enabled: !!currentGroup })
+    const locationQuery = useLocations({ enabled: !!currentGroup })
+    return <Host areaOptions={areaQuery.data ?? []} locationOptions={locationQuery.data ?? []} />
+  }
+
   const utils = renderWithProviders({
     withAuth: true,
     initialPath: `/g/${SLUG}/x`,
@@ -80,7 +104,11 @@ function renderPicker({ role = "admin", initialAreaId = "" }: RenderOptions = {}
         path="/g/:groupSlug/x"
         element={
           <GroupProvider>
-            <Host />
+            {fromHooks ? (
+              <HostFromHooks />
+            ) : (
+              <Host areaOptions={areas} locationOptions={locations} />
+            )}
           </GroupProvider>
         }
       />
@@ -351,5 +379,33 @@ describe("<LocationAreaFields />", () => {
     expect(dropped).toBe(false)
     expect(dataTransfer.dropEffect).toBe("none")
     expect(screen.getByTestId("location-form-dialog")).toBeInTheDocument()
+  })
+})
+
+// The item forms take their options from useAreas and useLocations, which
+// read a paged endpoint. An area beyond the first page must still be offered.
+describe("<LocationAreaFields /> fed by the list hooks", () => {
+  it("offers and picks an area past the first page of the list", async () => {
+    const user = userEvent.setup()
+    const manyAreas = Array.from({ length: 120 }, (_, i) => ({
+      id: `a${i + 1}`,
+      type: "areas",
+      attributes: { id: `a${i + 1}`, name: `Area ${i + 1}`, location_id: "l1" },
+    }))
+    server.use(
+      ...areaHandlers.paged(SLUG, manyAreas),
+      ...locationHandlers.paged(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ])
+    )
+    const { onAreaChange } = renderPicker({ fromHooks: true })
+
+    const locationList = await openSelect(user, /^location/i)
+    await user.click(await within(locationList).findByRole("option", { name: "Home" }))
+    const areaList = await openSelect(user, /^area/i)
+    await user.click(await within(areaList).findByRole("option", { name: "Area 115" }))
+
+    expect(onAreaChange).toHaveBeenCalledWith("a115")
+    expect(screen.getByRole("combobox", { name: /^area/i })).toHaveTextContent("Area 115")
   })
 })

@@ -14,6 +14,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
 import type { MaintenanceScheduleEntity } from "@/features/maintenance/api"
 import { useValueWhileOpen } from "@/hooks/useValueWhileOpen"
 import { applyServerFieldErrors } from "@/lib/form-errors"
@@ -163,11 +164,14 @@ function MaintenanceScheduleForm({
           })}
           data-testid="maintenance-title-input"
           aria-invalid={!!errors.title}
+          aria-describedby={errors.title ? "maintenance-title-error" : undefined}
           {...register("title")}
         />
-        {errors.title?.message ? (
-          <p className="text-xs text-destructive">{t(errors.title.message)}</p>
-        ) : null}
+        <FieldError
+          id="maintenance-title-error"
+          testId="maintenance-title-error"
+          message={errors.title?.message}
+        />
       </div>
       <div className="grid grid-cols-2 gap-3">
         <div className="space-y-2">
@@ -182,11 +186,14 @@ function MaintenanceScheduleForm({
             inputMode="numeric"
             data-testid="maintenance-interval-input"
             aria-invalid={!!errors.interval_days}
+            aria-describedby={errors.interval_days ? "maintenance-interval-error" : undefined}
             {...register("interval_days")}
           />
-          {errors.interval_days?.message ? (
-            <p className="text-xs text-destructive">{t(errors.interval_days.message)}</p>
-          ) : null}
+          <FieldError
+            id="maintenance-interval-error"
+            testId="maintenance-interval-error"
+            message={errors.interval_days?.message}
+          />
         </div>
         <div className="space-y-2">
           <Label htmlFor="maintenance-next-due">
@@ -197,11 +204,14 @@ function MaintenanceScheduleForm({
             type="date"
             data-testid="maintenance-next-due-input"
             aria-invalid={!!errors.next_due_at}
+            aria-describedby={errors.next_due_at ? "maintenance-next-due-error" : undefined}
             {...register("next_due_at")}
           />
-          {errors.next_due_at?.message ? (
-            <p className="text-xs text-destructive">{t(errors.next_due_at.message)}</p>
-          ) : null}
+          <FieldError
+            id="maintenance-next-due-error"
+            testId="maintenance-next-due-error"
+            message={errors.next_due_at?.message}
+          />
         </div>
       </div>
       <div className="space-y-2">
@@ -215,11 +225,14 @@ function MaintenanceScheduleForm({
             defaultValue: "Use NSF-53 filter, comes in 2-packs",
           })}
           aria-invalid={!!errors.notes}
+          aria-describedby={errors.notes ? "maintenance-notes-error" : undefined}
           {...register("notes")}
         />
-        {errors.notes?.message ? (
-          <p className="text-xs text-destructive">{t(errors.notes.message)}</p>
-        ) : null}
+        <FieldError
+          id="maintenance-notes-error"
+          testId="maintenance-notes-error"
+          message={errors.notes?.message}
+        />
       </div>
       <DialogFooter>
         <Button type="button" variant="ghost" onClick={() => onOpenChange(false)}>

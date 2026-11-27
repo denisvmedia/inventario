@@ -148,6 +148,10 @@ type AdminUserListItem struct {
 	LastLoginAt          *time.Time `json:"last_login_at,omitempty"`
 	CreatedAt            time.Time  `json:"created_at"`
 	GroupMembershipCount int        `json:"group_membership_count"`
+	// AvatarURL is a signed URL of the user's profile photo, valid for the
+	// operator and session that requested the list. Absent when the user has
+	// none.
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 // AdminUsersResponse is the JSON:API envelope for GET
@@ -158,15 +162,16 @@ type AdminUsersResponse struct {
 }
 
 // NewAdminUsersResponse maps registry-layer rows into the wire-shape
-// the FE consumes.
-func NewAdminUsersResponse(items []*registry.AdminUserListItem, page, perPage, total int) *AdminUsersResponse {
+// the FE consumes. avatarURL returns the signed photo URL for a user, or ""
+// for none; a nil avatarURL leaves every user without one.
+func NewAdminUsersResponse(items []*registry.AdminUserListItem, page, perPage, total int, avatarURL func(*models.User) string) *AdminUsersResponse {
 	data := make([]*AdminUserListItem, 0, len(items))
 	for _, it := range items {
 		if it == nil || it.User == nil {
 			continue
 		}
 		u := it.User
-		data = append(data, &AdminUserListItem{
+		item := &AdminUserListItem{
 			ID:                   u.ID,
 			Type:                 "admin_users",
 			Email:                u.Email,
@@ -175,7 +180,11 @@ func NewAdminUsersResponse(items []*registry.AdminUserListItem, page, perPage, t
 			LastLoginAt:          u.LastLoginAt,
 			CreatedAt:            u.CreatedAt,
 			GroupMembershipCount: it.GroupMembershipCount,
-		})
+		}
+		if avatarURL != nil {
+			item.AvatarURL = avatarURL(u)
+		}
+		data = append(data, item)
 	}
 	return &AdminUsersResponse{
 		Data: data,
@@ -220,6 +229,9 @@ type AdminUserDetail struct {
 	UpdatedAt          time.Time                  `json:"updated_at"`
 	GroupMemberships   []AdminUserGroupMembership `json:"group_memberships"`
 	ActiveSessionCount int                        `json:"active_session_count"`
+	// AvatarURL is a signed URL of the user's profile photo, valid for the
+	// operator and session that requested it. Absent when the user has none.
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 // AdminUserResponse is the JSON:API envelope for GET /admin/users/{userID}.
@@ -239,6 +251,8 @@ type AdminUserResponseInput struct {
 	Memberships        []AdminUserGroupMembership
 	ActiveSessionCount int
 	IsSystemAdmin      bool
+	// AvatarURL is the signed URL of the user's photo, or "" for none.
+	AvatarURL string
 }
 
 // NewAdminUserResponse wraps a single user row for the detail endpoint.
@@ -267,6 +281,7 @@ func NewAdminUserResponse(in AdminUserResponseInput) *AdminUserResponse {
 			UpdatedAt:          u.UpdatedAt,
 			GroupMemberships:   memberships,
 			ActiveSessionCount: in.ActiveSessionCount,
+			AvatarURL:          in.AvatarURL,
 		},
 	}
 }
@@ -438,6 +453,10 @@ type AdminGroupMemberUser struct {
 	ID    string `json:"id"`
 	Name  string `json:"name"`
 	Email string `json:"email"`
+	// AvatarURL is a signed URL of the member's profile photo, valid for the
+	// operator and session that requested the list. Absent when the member
+	// has none.
+	AvatarURL string `json:"avatar_url,omitempty"`
 }
 
 // AdminGroupMember is the per-membership row returned by GET
@@ -472,8 +491,10 @@ type AdminGroupMembersResponse struct {
 // serialised (never null) so the FE can safely .map(...) over an empty
 // group. The `row.User != nil` guard is defensive only: the backing
 // INNER join drops orphaned memberships, so a returned row always has
-// its user populated in practice.
-func NewAdminGroupMembersResponse(rows []*models.MembershipWithUser) *AdminGroupMembersResponse {
+// its user populated in practice. avatarURL returns the signed photo URL
+// for a member, or "" for none; a nil avatarURL leaves every member
+// without one.
+func NewAdminGroupMembersResponse(rows []*models.MembershipWithUser, avatarURL func(*models.User) string) *AdminGroupMembersResponse {
 	data := make([]*AdminGroupMember, 0, len(rows))
 	for _, row := range rows {
 		if row == nil || row.Membership == nil {
@@ -493,6 +514,9 @@ func NewAdminGroupMembersResponse(rows []*models.MembershipWithUser) *AdminGroup
 				ID:    row.User.ID,
 				Name:  row.User.Name,
 				Email: row.User.Email,
+			}
+			if avatarURL != nil {
+				item.User.AvatarURL = avatarURL(row.User)
 			}
 		}
 		data = append(data, item)
