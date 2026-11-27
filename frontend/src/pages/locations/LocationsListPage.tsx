@@ -35,6 +35,7 @@ import { useCreateLocation, useDeleteLocation, useLocations } from "@/features/l
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { matchesEveryTerm, splitSearchTerms } from "@/features/search/terms"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
 import type { DeleteStrategy } from "@/features/areas/api"
@@ -227,8 +228,8 @@ export function LocationsListPage({ initialMode }: LocationsListPageProps = {}) 
     try {
       await deleteLocation.mutateAsync({ id, strategy })
       toast.success(t("locations:toast.locationDeleted"))
-    } catch {
-      toast.error(t("locations:toast.locationDeleteError"))
+    } catch (err) {
+      toastMutationError(err, t("locations:toast.locationDeleteError"))
     }
   }
 

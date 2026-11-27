@@ -648,6 +648,14 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- A refused action says why. When the server refuses to delete an item, a
+  location or an area, to change an item's status, to remove a profile photo,
+  to change tags on several files or items, to revoke a session or an API
+  token, or to save a notification or group section setting, the error toast
+  shows the server's reason instead of a fixed "Couldn't …" line. A server
+  error shows one toast instead of two
+  ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
