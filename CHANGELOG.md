@@ -1087,6 +1087,13 @@ when to add an entry and where it goes.
   after the upgrade it reads the start of every JPEG photo once, in the
   background, and makes the thumbnails of the turned ones again
   ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
+- Signing out in one tab while another tab renewed its session no longer
+  signs you back in, and no longer makes the server take the renewal for a
+  stolen session and sign you out on your other devices. A sign-out now waits
+  for a renewal another tab has started, and a tab that needs a renewal while
+  the sign-out runs waits for it and then stops. The back office had the same
+  problem
+  ([#3034](https://github.com/denisvmedia/inventario/issues/3034)).
 
 ### Security
 
