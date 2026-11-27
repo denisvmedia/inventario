@@ -65,7 +65,7 @@ func (s *GroupPurgeService) PurgeOnce(ctx context.Context) (purged, failed int, 
 		slog.InfoContext(ctx, "group purged",
 			"group_id", g.ID,
 			"tenant_id", g.TenantID,
-			"slug", g.Slug)
+			"group_slug", g.Slug)
 	}
 	return purged, failed, nil
 }
