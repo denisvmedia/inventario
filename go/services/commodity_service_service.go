@@ -117,8 +117,8 @@ func (s *CommodityServiceService) StartService(ctx context.Context, svc models.C
 // expected_return_at, delete the row and start a fresh one.
 //
 // Cost is patched as a pair: setting CostAmount without CostCurrency (or
-// vice versa) fails validation. Clearing the cost (set to nil/zero) is
-// supported by passing both fields explicitly.
+// vice versa) fails validation. An amount of 0 with a currency records a
+// cost of 0; an amount of 0 with an empty currency clears the cost.
 type ServiceUpdate struct {
 	ProviderName     *string
 	ProviderContact  *string

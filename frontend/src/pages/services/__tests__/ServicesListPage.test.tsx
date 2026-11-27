@@ -107,6 +107,40 @@ describe("<ServicesListPage />", () => {
     expect(row2).toHaveTextContent("EUR")
   })
 
+  it("renders a cost of 0 and leaves a row with no cost blank", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listGroup(SLUG, [
+        {
+          id: "svc-free",
+          commodity_id: "c1",
+          provider_name: "Apple Service",
+          sent_at: "2026-04-01",
+          returned_at: "2026-04-10",
+          cost_amount: "0",
+          cost_currency: "EUR",
+          commodity: { id: "c1", name: "MacBook Pro" },
+        },
+        {
+          id: "svc-none",
+          commodity_id: "c2",
+          provider_name: "Bob's Repair Shop",
+          sent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+          cost_amount: "0",
+          cost_currency: "",
+          commodity: { id: "c2", name: "Cordless Drill" },
+        },
+      ])
+    )
+    renderPage()
+    const free = await screen.findByTestId("in-service-row-svc-free")
+    expect(free).toHaveTextContent("0 EUR")
+    const none = screen.getByTestId("in-service-row-svc-none")
+    expect(none).not.toHaveTextContent("EUR")
+    expect(none).toHaveTextContent("—")
+  })
+
   it("renders an em-dash placeholder when no commodity ref is attached", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

@@ -32,10 +32,10 @@ var (
 //     note.
 //   - `cost_amount` + `cost_currency` capture the repair bill for
 //     cost-of-ownership reporting later. Currency stored alongside so
-//     we don't assume the user's default at write time. Both fields
-//     are optional but locked together: present iff the other is —
-//     a cost without a currency is meaningless and a currency without
-//     an amount is dead metadata.
+//     we don't assume the user's default at write time. The currency
+//     marks a recorded cost: with a currency the amount is the bill,
+//     0 included (a free repair under warranty); without one no cost
+//     is recorded and the amount must be 0.
 //
 // Enable RLS for multi-tenant isolation
 //
@@ -84,10 +84,10 @@ type CommodityService struct {
 	//ptah:schema:field name="returned_at" type="TEXT"
 	ReturnedAt PDate `json:"returned_at" db:"returned_at"`
 
-	// CostAmount is the optional repair bill. Bare decimal.Decimal —
-	// zero means "no cost recorded" (per the codebase's existing
-	// price-field convention). Pair-validated with CostCurrency:
-	// either both unset or both set.
+	// CostAmount is the optional repair bill. Bare decimal.Decimal:
+	// CostCurrency, not the amount, says whether a cost is recorded, so
+	// 0 with a currency is a free repair and 0 without one is no cost.
+	// A non-zero amount needs a currency.
 	//ptah:schema:field name="cost_amount" type="DECIMAL(14,2)"
 	CostAmount decimal.Decimal `json:"cost_amount" db:"cost_amount"`
 
@@ -169,10 +169,11 @@ func (s *CommodityService) IsOverdue(now time.Time) bool {
 	return due.Before(today)
 }
 
-// HasCost reports whether a cost has been recorded. Both fields must be
-// set together — see the type-level comment.
+// HasCost reports whether a cost has been recorded, a cost of 0 included.
+// The currency marks it — see the type-level comment. A non-zero amount
+// counts too, so a row that skipped validation never loses its amount.
 func (s *CommodityService) HasCost() bool {
-	return !s.CostAmount.IsZero() || s.CostCurrency != ""
+	return s.CostCurrency != "" || !s.CostAmount.IsZero()
 }
 
 func (*CommodityService) Validate() error {
@@ -189,9 +190,10 @@ func (s *CommodityService) ValidateWithContext(ctx context.Context) error {
 		validation.Field(&s.ExpectedReturnAt),
 		validation.Field(&s.ReturnedAt),
 		validation.Field(&s.CostAmount, validation.By(func(any) error {
-			amountSet := !s.CostAmount.IsZero()
+			// A currency with an amount of 0 is a recorded cost of 0, so
+			// only an amount without a currency breaks the pair.
 			currencySet := s.CostCurrency != ""
-			if amountSet != currencySet {
+			if !s.CostAmount.IsZero() && !currencySet {
 				return validation.NewError("cost_currency_pair_required",
 					"cost_amount and cost_currency must be set together")
 			}

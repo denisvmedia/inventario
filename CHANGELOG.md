@@ -984,6 +984,13 @@ when to add an entry and where it goes.
   migration and ended in a timeout or a server error when the migration
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- A service visit with a cost of 0, a repair done for free under warranty for
+  example, saves with that cost, and the item's Service tab shows "Cost: 0
+  EUR". Before, the server refused an amount of 0 with a currency as a
+  currency without an amount. The currency marks a recorded cost: an amount
+  of 0 without one still means no cost, and marking a service received back
+  with a currency but no amount is refused
+  ([#2997](https://github.com/denisvmedia/inventario/issues/2997)).
 
 ### Security
 

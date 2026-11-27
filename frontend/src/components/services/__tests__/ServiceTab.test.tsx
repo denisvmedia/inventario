@@ -93,6 +93,27 @@ describe("<ServiceTab />", () => {
     expect(screen.queryByTestId("commodity-detail-service-button")).toBeNull()
   })
 
+  it("shows a recorded cost of 0 on the current-service card", async () => {
+    // A free repair, under warranty for example, keeps its cost line.
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-1",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Apple Service",
+          sent_at: "2026-04-01",
+          returned_at: null,
+          cost_amount: "0",
+          cost_currency: "EUR",
+        },
+      ])
+    )
+    renderTab()
+    const current = await screen.findByTestId("service-current")
+    expect(current).toHaveTextContent("Cost: 0 EUR")
+  })
+
   it("renders the history list for completed services", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),
@@ -371,5 +392,22 @@ describe("<ServiceTab /> cost currency (#2909)", () => {
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]).not.toHaveProperty("cost_amount")
     expect(sent[0]).not.toHaveProperty("cost_currency")
+  })
+
+  it("sends a cost of 0 with its currency", async () => {
+    // A free repair, under warranty for example, records a cost of 0; it
+    // is not read as an empty amount.
+    const sent = captureStart()
+    const user = await openDialog()
+
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
+    )
+    await user.type(screen.getByTestId("service-cost-amount"), "0")
+    await user.click(screen.getByTestId("service-submit"))
+
+    await waitFor(() => expect(sent).toHaveLength(1))
+    expect(sent[0]).toMatchObject({ cost_amount: "0", cost_currency: "USD" })
+    expect(screen.queryByTestId("service-cost-currency-error")).toBeNull()
   })
 })

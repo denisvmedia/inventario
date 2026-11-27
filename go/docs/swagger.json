@@ -17171,7 +17171,7 @@
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
@@ -22371,7 +22371,7 @@
                     "type": "string"
                 },
                 "cost_amount": {
-                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal —\nzero means \"no cost recorded\" (per the codebase's existing\nprice-field convention). Pair-validated with CostCurrency:\neither both unset or both set.",
+                    "description": "CostAmount is the optional repair bill. Bare decimal.Decimal:\nCostCurrency, not the amount, says whether a cost is recorded, so\n0 with a currency is a free repair and 0 without one is no cost.\nA non-zero amount needs a currency.",
                     "type": "number"
                 },
                 "cost_currency": {
