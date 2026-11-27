@@ -426,8 +426,13 @@ when to add an entry and where it goes.
   `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
   toasts have an Undo button. Backups leave Trash out, a full-replace restore
   empties it, and a merge restore skips what is in it and puts a backup file
-  that only trashed items use in Trash with them
-  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
+  that only trashed items use in Trash with them. Every restore, delete for
+  good and Empty trash writes an audit row, one per request also for a bulk
+  action, with the member, the operator of an impersonation session, and the
+  items and files restored or deleted; each `trash-purge` sweep writes one row
+  per group it deleted something in
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799),
+  [#2893](https://github.com/denisvmedia/inventario/issues/2893)).
 - "New location" and "New area" at the end of the Location and Area pickers
   on the item's edit form, its All fields dialog and the location quick edit.
   They open the Locations page's create dialog over the item and select what

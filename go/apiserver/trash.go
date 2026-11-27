@@ -3,12 +3,14 @@ package apiserver
 import (
 	"context"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/jsonapi"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/services"
@@ -20,9 +22,77 @@ import (
 // Roles: every member sees the Trash; a member who can edit items (user and
 // above) can restore; deleting for good, one entry or the whole Trash, needs
 // admin or owner, the same role that deletes locations and areas.
+//
+// Every restore and delete for good writes one audit row (#2893): the member,
+// the group, the operator when the member is impersonated, and the items and
+// files it restored or deleted. A failed request writes its row too, with
+// what it did before failing.
 type trashAPI struct {
 	trash     *services.TrashService
+	audit     services.AuditLogger
 	retention time.Duration
+}
+
+// logTrash writes the audit row of a Trash request. failedIDs are the entries
+// of a bulk request that did not go through; err is the request's error, or
+// for a bulk request a summary of its failures. Nil-safe like the other audit
+// helpers.
+func (api *trashAPI) logTrash(r *http.Request, action string, outcome services.TrashOutcome, failedIDs []string, err error) {
+	if api.audit == nil {
+		return
+	}
+	ctx := r.Context()
+	user := appctx.UserFromContext(ctx)
+	group := appctx.GroupFromContext(ctx)
+	if user == nil || group == nil {
+		return
+	}
+	extra := outcome.AuditExtra()
+	if len(failedIDs) > 0 {
+		failed := failedIDs
+		if len(failed) > services.TrashAuditIDLimit {
+			failed = failed[:services.TrashAuditIDLimit]
+			extra["ids_truncated"] = true
+		}
+		extra["failed"] = len(failedIDs)
+		extra["failed_ids"] = failed
+	}
+	var errMsg *string
+	if err != nil {
+		errMsg = new(err.Error())
+	}
+	api.audit.LogAuth(ctx, services.AuthEvent{
+		Action:     action,
+		UserID:     new(user.ID),
+		TenantID:   new(group.TenantID),
+		Success:    err == nil,
+		Request:    r,
+		ErrMsg:     errMsg,
+		EntityType: new("location_group"),
+		EntityID:   new(group.ID),
+		Extra:      extra,
+	})
+}
+
+// restoreOutcome is what an item restore brought back: the item when it
+// succeeded, and the files restored, also those restored before a failure.
+func restoreOutcome(id string, result *services.CommodityRestoreResult, err error) services.TrashOutcome {
+	var out services.TrashOutcome
+	if result != nil {
+		out.FileIDs = result.FileIDs
+	}
+	if err == nil {
+		out.ItemIDs = []string{id}
+	}
+	return out
+}
+
+// bulkError summarizes the failures of a bulk request for its audit row.
+func bulkError(failed, total int) error {
+	if failed == 0 {
+		return nil
+	}
+	return fmt.Errorf("%d of %d entries failed", failed, total)
 }
 
 func (api *trashAPI) renderError(w http.ResponseWriter, r *http.Request, err error) {
@@ -129,7 +199,9 @@ func (api *trashAPI) listTrashedFiles(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Item not in Trash"
 // @Router /g/{groupSlug}/trash/commodities/{commodityID}/restore [post].
 func (api *trashAPI) restoreCommodity(w http.ResponseWriter, r *http.Request) {
-	result, err := api.trash.RestoreCommodity(r.Context(), chi.URLParam(r, "commodityID"))
+	id := chi.URLParam(r, "commodityID")
+	result, err := api.trash.RestoreCommodity(r.Context(), id)
+	api.logTrash(r, services.AuditActionTrashRestore, restoreOutcome(id, result, err), nil, err)
 	if err != nil {
 		api.renderError(w, r, err)
 		return
@@ -164,12 +236,17 @@ func (api *trashAPI) bulkRestoreCommodities(w http.ResponseWriter, r *http.Reque
 		_ = unprocessableEntityError(w, r, err)
 		return
 	}
-	var succeeded, areaRemoved []string
+	var succeeded, areaRemoved, failedIDs []string
 	var failed []jsonapi.BulkResultFail
+	var outcome services.TrashOutcome
 	for _, id := range input.Data.Attributes.IDs {
 		result, err := api.trash.RestoreCommodity(r.Context(), id)
+		done := restoreOutcome(id, result, err)
+		outcome.ItemIDs = append(outcome.ItemIDs, done.ItemIDs...)
+		outcome.FileIDs = append(outcome.FileIDs, done.FileIDs...)
 		if err != nil {
 			failed = append(failed, bulkResultFail(r.Context(), "commodities", services.BulkFailure{ID: id, Err: err}))
+			failedIDs = append(failedIDs, id)
 			continue
 		}
 		succeeded = append(succeeded, id)
@@ -177,6 +254,7 @@ func (api *trashAPI) bulkRestoreCommodities(w http.ResponseWriter, r *http.Reque
 			areaRemoved = append(areaRemoved, id)
 		}
 	}
+	api.logTrash(r, services.AuditActionTrashRestore, outcome, failedIDs, bulkError(len(failedIDs), len(input.Data.Attributes.IDs)))
 	if err := render.Render(w, r, jsonapi.NewTrashBulkRestoreResponse("commodities", succeeded, failed, areaRemoved)); err != nil {
 		internalServerError(w, r, err)
 	}
@@ -195,7 +273,9 @@ func (api *trashAPI) bulkRestoreCommodities(w http.ResponseWriter, r *http.Reque
 // @Failure 404 {object} jsonapi.Errors "Item not in Trash"
 // @Router /g/{groupSlug}/trash/commodities/{commodityID} [delete].
 func (api *trashAPI) purgeCommodity(w http.ResponseWriter, r *http.Request) {
-	if err := api.trash.PurgeCommodity(r.Context(), chi.URLParam(r, "commodityID")); err != nil {
+	outcome, err := api.trash.PurgeCommodity(r.Context(), chi.URLParam(r, "commodityID"))
+	api.logTrash(r, services.AuditActionTrashPurge, outcome, nil, err)
+	if err != nil {
 		api.renderError(w, r, err)
 		return
 	}
@@ -215,7 +295,7 @@ func (api *trashAPI) purgeCommodity(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
 // @Router /g/{groupSlug}/trash/commodities/purge [post].
 func (api *trashAPI) bulkPurgeCommodities(w http.ResponseWriter, r *http.Request) {
-	api.bulk(w, r, "commodities", api.trash.PurgeCommodity)
+	api.bulk(w, r, "commodities", services.AuditActionTrashPurge, api.trash.PurgeCommodity)
 }
 
 // restoreFile brings a file back from Trash.
@@ -230,7 +310,9 @@ func (api *trashAPI) bulkPurgeCommodities(w http.ResponseWriter, r *http.Request
 // @Failure 422 {object} jsonapi.Errors "File went to Trash with an item"
 // @Router /g/{groupSlug}/trash/files/{fileID}/restore [post].
 func (api *trashAPI) restoreFile(w http.ResponseWriter, r *http.Request) {
-	if err := api.trash.RestoreFile(r.Context(), chi.URLParam(r, "fileID")); err != nil {
+	outcome, err := fileOutcome(api.trash.RestoreFile)(r.Context(), chi.URLParam(r, "fileID"))
+	api.logTrash(r, services.AuditActionTrashRestore, outcome, nil, err)
+	if err != nil {
 		api.renderError(w, r, err)
 		return
 	}
@@ -248,7 +330,7 @@ func (api *trashAPI) restoreFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
 // @Router /g/{groupSlug}/trash/files/restore [post].
 func (api *trashAPI) bulkRestoreFiles(w http.ResponseWriter, r *http.Request) {
-	api.bulk(w, r, "files", api.trash.RestoreFile)
+	api.bulk(w, r, "files", services.AuditActionTrashRestore, fileOutcome(api.trash.RestoreFile))
 }
 
 // purgeFile deletes a file in Trash for good.
@@ -264,7 +346,9 @@ func (api *trashAPI) bulkRestoreFiles(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "File went to Trash with an item"
 // @Router /g/{groupSlug}/trash/files/{fileID} [delete].
 func (api *trashAPI) purgeFile(w http.ResponseWriter, r *http.Request) {
-	if err := api.trash.PurgeFile(r.Context(), chi.URLParam(r, "fileID")); err != nil {
+	outcome, err := fileOutcome(api.trash.PurgeFile)(r.Context(), chi.URLParam(r, "fileID"))
+	api.logTrash(r, services.AuditActionTrashPurge, outcome, nil, err)
+	if err != nil {
 		api.renderError(w, r, err)
 		return
 	}
@@ -284,7 +368,7 @@ func (api *trashAPI) purgeFile(w http.ResponseWriter, r *http.Request) {
 // @Failure 422 {object} jsonapi.Errors "Bad request body"
 // @Router /g/{groupSlug}/trash/files/purge [post].
 func (api *trashAPI) bulkPurgeFiles(w http.ResponseWriter, r *http.Request) {
-	api.bulk(w, r, "files", api.trash.PurgeFile)
+	api.bulk(w, r, "files", services.AuditActionTrashPurge, fileOutcome(api.trash.PurgeFile))
 }
 
 // emptyTrash deletes everything in the group's Trash for good.
@@ -298,32 +382,53 @@ func (api *trashAPI) bulkPurgeFiles(w http.ResponseWriter, r *http.Request) {
 // @Failure 403 {object} jsonapi.Errors "Admin role required"
 // @Router /g/{groupSlug}/trash [delete].
 func (api *trashAPI) emptyTrash(w http.ResponseWriter, r *http.Request) {
-	items, files, err := api.trash.EmptyTrash(r.Context())
+	result, err := api.trash.EmptyTrash(r.Context())
+	api.logTrash(r, services.AuditActionTrashEmpty, result.TrashOutcome, nil, err)
 	if err != nil {
 		api.renderError(w, r, err)
 		return
 	}
-	if err := render.Render(w, r, jsonapi.NewEmptyTrashResponse(items, files)); err != nil {
+	if err := render.Render(w, r, jsonapi.NewEmptyTrashResponse(len(result.ItemIDs), result.FileEntries)); err != nil {
 		internalServerError(w, r, err)
 	}
 }
 
-// bulk applies op to every id in a BulkIDsRequest body.
-func (*trashAPI) bulk(w http.ResponseWriter, r *http.Request, entityType string, op func(ctx context.Context, id string) error) {
+// trashOp restores or deletes one Trash entry and reports what it did.
+type trashOp func(ctx context.Context, id string) (services.TrashOutcome, error)
+
+// fileOutcome adapts a file restore or delete, which affects that file alone.
+func fileOutcome(op func(ctx context.Context, id string) error) trashOp {
+	return func(ctx context.Context, id string) (services.TrashOutcome, error) {
+		if err := op(ctx, id); err != nil {
+			return services.TrashOutcome{}, err
+		}
+		return services.TrashOutcome{FileIDs: []string{id}}, nil
+	}
+}
+
+// bulk applies op to every id in a BulkIDsRequest body and writes one audit
+// row for the request.
+func (api *trashAPI) bulk(w http.ResponseWriter, r *http.Request, entityType, action string, op trashOp) {
 	var input jsonapi.BulkIDsRequest
 	if err := render.Bind(r, &input); err != nil {
 		_ = unprocessableEntityError(w, r, err)
 		return
 	}
-	var succeeded []string
+	var succeeded, failedIDs []string
 	var failed []jsonapi.BulkResultFail
+	var outcome services.TrashOutcome
 	for _, id := range input.Data.Attributes.IDs {
-		if err := op(r.Context(), id); err != nil {
+		done, err := op(r.Context(), id)
+		outcome.ItemIDs = append(outcome.ItemIDs, done.ItemIDs...)
+		outcome.FileIDs = append(outcome.FileIDs, done.FileIDs...)
+		if err != nil {
 			failed = append(failed, jsonapi.BulkResultFail{ID: id, Error: err.Error()})
+			failedIDs = append(failedIDs, id)
 			continue
 		}
 		succeeded = append(succeeded, id)
 	}
+	api.logTrash(r, action, outcome, failedIDs, bulkError(len(failedIDs), len(input.Data.Attributes.IDs)))
 	render.Status(r, http.StatusOK)
 	if err := render.Render(w, r, jsonapi.NewBulkResultResponse(entityType, succeeded, failed)); err != nil {
 		internalServerError(w, r, err)
@@ -331,14 +436,16 @@ func (*trashAPI) bulk(w http.ResponseWriter, r *http.Request, entityType string,
 }
 
 // Trash mounts the Trash routes. groupService backs the admin gate on the
-// routes that delete for good.
-func Trash(params Params, groupService *services.GroupService) func(r chi.Router) {
+// routes that delete for good; audit records every restore and delete for
+// good.
+func Trash(params Params, groupService *services.GroupService, audit services.AuditLogger) func(r chi.Router) {
 	retention := params.TrashRetention
 	if retention <= 0 {
 		retention = services.DefaultTrashRetention
 	}
 	api := &trashAPI{
 		trash:     services.NewTrashService(params.FactorySet, params.UploadLocation),
+		audit:     audit,
 		retention: retention,
 	}
 	adminOnly := requireGroupRole(groupService, models.GroupRoleAdmin)

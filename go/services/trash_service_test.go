@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -82,6 +83,15 @@ func (f *trashFixture) file(c *qt.C, key string, itemIDs ...string) *models.File
 			MIMEType:     "application/pdf",
 		},
 	}))
+}
+
+// purge deletes the item for good and checks that the purge reports it.
+func (f *trashFixture) purge(c *qt.C, id string) services.TrashOutcome {
+	c.Helper()
+	out, err := f.trash.PurgeCommodity(f.ctx, id)
+	c.Assert(err, qt.IsNil)
+	c.Assert(out.ItemIDs, qt.DeepEquals, []string{id})
+	return out
 }
 
 func (f *trashFixture) blobExists(c *qt.C, key string) bool {
@@ -281,7 +291,7 @@ func TestTrashService_PurgeKeepsSharedDocument(t *testing.T) {
 
 	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+	f.purge(c, drill.ID)
 
 	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, drill.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -317,7 +327,7 @@ func TestTrashService_SharedDocumentFollowsTheLastItem(t *testing.T) {
 	c.Assert(*got.DeletedWithCommodityID, qt.Equals, saw.ID)
 
 	// Purging the saw hands the receipt to the drill, still in Trash.
-	c.Assert(f.trash.PurgeCommodity(f.ctx, saw.ID), qt.IsNil)
+	f.purge(c, saw.ID)
 	got = must.Must(f.regs.FileRegistry.GetTrashed(f.ctx, receipt.ID))
 	c.Assert(*got.DeletedWithCommodityID, qt.Equals, drill.ID)
 	c.Assert(f.blobExists(c, "receipt.pdf"), qt.IsTrue)
@@ -376,7 +386,7 @@ func TestTrashService_PurgeKeepsBlobSharedByAnotherRow(t *testing.T) {
 
 	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
 	c.Assert(err, qt.IsNil)
-	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+	f.purge(c, drill.ID)
 
 	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, manual.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -389,16 +399,18 @@ func TestTrashService_EmptyTrash(t *testing.T) {
 	f := newTrashFixture(c)
 
 	drill := f.item(c, "Drill", nil)
-	f.file(c, "drill-manual.pdf", drill.ID)
+	manual := f.file(c, "drill-manual.pdf", drill.ID)
 	loose := f.file(c, "loose.pdf")
 	_, err := f.trash.TrashCommodity(f.ctx, drill.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(f.trash.TrashFile(f.ctx, loose.ID), qt.IsNil)
 
-	items, files, err := f.trash.EmptyTrash(f.ctx)
+	emptied, err := f.trash.EmptyTrash(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(items, qt.Equals, 1)
-	c.Assert(files, qt.Equals, 1)
+	c.Assert(emptied.ItemIDs, qt.DeepEquals, []string{drill.ID})
+	// The manual went with the drill; the loose file was an entry of its own.
+	c.Assert(emptied.FileIDs, qt.DeepEquals, []string{manual.ID, loose.ID})
+	c.Assert(emptied.FileEntries, qt.Equals, 1)
 
 	_, total, err := f.trash.ListTrashedCommodities(f.ctx, 0, 10, services.DefaultTrashRetention)
 	c.Assert(err, qt.IsNil)
@@ -419,7 +431,7 @@ func TestTrashService_PurgeExpired(t *testing.T) {
 	recent := services.NewTrashService(f.factorySet, f.uploadLocation).WithClock(func() time.Time { return now.Add(-time.Hour) })
 
 	oldItem := f.item(c, "Old", nil)
-	f.file(c, "old-manual.pdf", oldItem.ID)
+	manual := f.file(c, "old-manual.pdf", oldItem.ID)
 	newItem := f.item(c, "New", nil)
 	oldFile := f.file(c, "old-loose.pdf")
 
@@ -429,7 +441,9 @@ func TestTrashService_PurgeExpired(t *testing.T) {
 	_, err = recent.TrashCommodity(f.ctx, newItem.ID)
 	c.Assert(err, qt.IsNil)
 
-	worker := services.NewTrashPurgeWorker(f.trash, services.WithTrashPurgeClock(func() time.Time { return now }))
+	worker := services.NewTrashPurgeWorker(f.trash,
+		services.WithTrashPurgeClock(func() time.Time { return now }),
+		services.WithTrashPurgeAudit(services.NewAuditService(f.factorySet.AuditLogRegistry)))
 	worker.Sweep(context.Background())
 
 	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, oldItem.ID)
@@ -442,9 +456,26 @@ func TestTrashService_PurgeExpired(t *testing.T) {
 	// The entry deleted an hour ago waits out its 30 days.
 	_ = must.Must(f.regs.CommodityRegistry.GetTrashed(f.ctx, newItem.ID))
 
-	// A second sweep finds nothing left to do.
+	// The sweep writes one audit row for the group, with no member: the
+	// worker deleted the entries.
+	rows := must.Must(f.factorySet.AuditLogRegistry.ListByAction(context.Background(), services.AuditActionTrashPurgeExpired))
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].UserID, qt.IsNil)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	var extra struct {
+		ItemIDs []string `json:"item_ids"`
+		FileIDs []string `json:"file_ids"`
+		Cutoff  string   `json:"cutoff"`
+	}
+	c.Assert(json.Unmarshal([]byte(rows[0].UserAgent), &extra), qt.IsNil)
+	c.Assert(extra.ItemIDs, qt.DeepEquals, []string{oldItem.ID})
+	c.Assert(extra.FileIDs, qt.ContentEquals, []string{manual.ID, oldFile.ID})
+	c.Assert(extra.Cutoff, qt.Equals, "2026-10-02T12:00:00Z")
+
+	// A second sweep finds nothing left to do and writes no row.
 	worker.Sweep(context.Background())
 	_ = must.Must(f.regs.CommodityRegistry.GetTrashed(f.ctx, newItem.ID))
+	c.Assert(must.Must(f.factorySet.AuditLogRegistry.ListByAction(context.Background(), services.AuditActionTrashPurgeExpired)), qt.HasLen, 1)
 }
 
 func TestTrashService_NoLoanRemindersWhileTrashed(t *testing.T) {
@@ -677,10 +708,11 @@ func TestTrashService_EmptyTrashSettlesFilesOfAPurgedItem(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(total, qt.Equals, 0)
 
-	items, files, err := f.trash.EmptyTrash(f.ctx)
+	emptied, err := f.trash.EmptyTrash(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(items, qt.Equals, 0)
-	c.Assert(files, qt.Equals, 1)
+	c.Assert(emptied.ItemIDs, qt.HasLen, 0)
+	c.Assert(emptied.FileIDs, qt.DeepEquals, []string{manual.ID})
+	c.Assert(emptied.FileEntries, qt.Equals, 1)
 	_, err = f.regs.FileRegistry.GetTrashed(f.ctx, manual.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	c.Assert(f.blobExists(c, "drill-manual.pdf"), qt.IsFalse)
@@ -700,7 +732,7 @@ func TestTrashService_PurgeLeavesLiveFilesLive(t *testing.T) {
 	late := f.file(c, "late.pdf", drill.ID)
 	shared := f.file(c, "shared.pdf", drill.ID, saw.ID)
 
-	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+	f.purge(c, drill.ID)
 
 	// Both stay live and lose only the link to the purged item.
 	got, err := f.regs.FileRegistry.Get(f.ctx, late.ID)
@@ -728,10 +760,11 @@ func TestTrashService_FileRestoredOnItsOwnSurvivesTheItemPurge(t *testing.T) {
 
 	// The drill expires.
 	cutoff := time.Now().Add(31*24*time.Hour - services.DefaultTrashRetention)
-	items, files, err := f.trash.PurgeExpired(f.ctx, cutoff, 100)
+	purged, err := f.trash.PurgeExpired(f.ctx, cutoff, 100)
 	c.Assert(err, qt.IsNil)
-	c.Assert(items, qt.Equals, 1)
-	c.Assert(files, qt.Equals, 0)
+	c.Assert(purged, qt.HasLen, 1)
+	c.Assert(purged[0].ItemIDs, qt.DeepEquals, []string{drill.ID})
+	c.Assert(purged[0].FileIDs, qt.HasLen, 0)
 
 	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, drill.ID)
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
@@ -755,7 +788,7 @@ func TestTrashService_UnknownLinkedItemKeepsTheFile(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	_ = must.Must(f.regs.FileRegistry.Get(f.ctx, file.ID))
 
-	c.Assert(f.trash.PurgeCommodity(f.ctx, drill.ID), qt.IsNil)
+	f.purge(c, drill.ID)
 	got := must.Must(f.regs.FileRegistry.Get(f.ctx, file.ID))
 	c.Assert(got.Links, qt.HasLen, 1)
 	c.Assert(got.Links[0].EntityID, qt.Equals, "item-the-group-cannot-see")
@@ -777,9 +810,10 @@ func TestTrashService_PurgeExpiredGoesPastAFailingItem(t *testing.T) {
 
 	broken := *f.factorySet
 	broken.CommodityRegistryFactory = failingPurgeCommodityFactory{CommodityRegistryFactory: f.factorySet.CommodityRegistryFactory, failID: first.ID}
-	items, _, err := services.NewTrashService(&broken, f.uploadLocation).PurgeExpired(context.Background(), now.Add(-30*24*time.Hour), 10)
+	purged, err := services.NewTrashService(&broken, f.uploadLocation).PurgeExpired(context.Background(), now.Add(-30*24*time.Hour), 10)
 	c.Assert(err, qt.ErrorMatches, `.*row is locked.*`)
-	c.Assert(items, qt.Equals, 1)
+	c.Assert(purged, qt.HasLen, 1)
+	c.Assert(purged[0].ItemIDs, qt.DeepEquals, []string{second.ID})
 
 	_ = must.Must(f.regs.CommodityRegistry.GetTrashed(f.ctx, first.ID))
 	_, err = f.regs.CommodityRegistry.GetTrashed(f.ctx, second.ID)
