@@ -648,6 +648,14 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- A request that waits for a free database connection stops waiting when the
+  client gives up or the request times out. Before, it stayed in the queue
+  with no deadline, so under load the queue grew instead of shedding
+  requests, and requests that each held one connection while waiting for a
+  second could stop the server from answering until it was restarted. A save
+  whose transaction did not commit is now reported as failed; before, a
+  failed commit was reported as a success
+  ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:
@@ -655,7 +663,6 @@ when to add an entry and where it goes.
   with the server's English text. It now shows the status without changing
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
-
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -663,19 +670,6 @@ when to add an entry and where it goes.
   shows the server's reason instead of a fixed "Couldn't …" line. A server
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
-
-- An export, import or restore whose worker stopped in the middle of the
-  run, because the process crashed, was killed or was shut down, no longer
-  stays in progress for good. A running job records a heartbeat every
-  minute, and a job whose heartbeat is ten minutes old is taken for dead. An
-  export or an import goes back to the queue and runs again, three runs at
-  most: a worker that stops during the third fails it with "the worker
-  stopped before the export finished" (or "the import"). A restore fails at
-  once with "the worker stopped before the restore finished", since it may
-  have written part of its backup. Each of these failures shows among the
-  failed jobs and counts in `inventario_jobs_dead_lettered_total`
-  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
-
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
@@ -735,6 +729,19 @@ when to add an entry and where it goes.
   verified, a profile Inventario cannot use, an account on another site, closed
   registration, and an account waiting for approval. Before, it showed nothing
   for them ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
+
+- An export, import or restore whose worker stopped in the middle of the
+  run, because the process crashed, was killed or was shut down, no longer
+  stays in progress for good. A running job records a heartbeat every
+  minute, and a job whose heartbeat is ten minutes old is taken for dead. An
+  export or an import goes back to the queue and runs again, three runs at
+  most: a worker that stops during the third fails it with "the worker
+  stopped before the export finished" (or "the import"). A restore fails at
+  once with "the worker stopped before the restore finished", since it may
+  have written part of its backup. Each of these failures shows among the
+  failed jobs and counts in `inventario_jobs_dead_lettered_total`
+  ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
+
 - A deactivated user whose account is linked to Google or GitHub now lands on
   the sign-in page with that message instead of a bare "User account is not
   available" page ([#2788](https://github.com/denisvmedia/inventario/pull/2788)).
@@ -789,15 +796,11 @@ when to add an entry and where it goes.
   state showed
   ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
 - The upgrade runs one more database migration, which adds `heartbeat_at`
-  to `exports` and `restore_operations`. During a rolling upgrade, pods
-  that still run v0.2.x fail reads of exports and restores until they are
-  replaced, as described in the entry on unknown columns
-  ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). A run a
-  previous version started has no heartbeat; it is taken for dead only once
-  its job is a day old, so the upgrade leaves alone the runs the old pods
-  are still working on, and the exports, imports and restores that were
-  stuck in progress before the upgrade fail or run again once they are a
-  day old. See the admin runbook §10
+  to `exports` and `restore_operations`. A run a previous version started
+  has no heartbeat, and the upgrade stops the pod that worked on it. Such a
+  run is taken for dead once its job is a day old, so the exports, imports
+  and restores that were stuck in progress before the upgrade fail or run
+  again then. See the admin runbook §10
   ([#2945](https://github.com/denisvmedia/inventario/issues/2945)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
