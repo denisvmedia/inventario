@@ -62,15 +62,16 @@ func newGroupCreatorFixture(t *testing.T) groupCreatorFixture {
 	}
 }
 
-func addPGMember(c *qt.C, fs *registry.FactorySet, group *models.LocationGroup, userID string, role models.GroupRole) {
+func addPGMember(c *qt.C, fs *registry.FactorySet, group *models.LocationGroup, userID string, role models.GroupRole) *models.GroupMembership {
 	c.Helper()
-	_, err := fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
+	m, err := fs.GroupMembershipRegistry.Create(context.Background(), models.GroupMembership{
 		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: group.TenantID},
 		GroupID:             group.ID,
 		MemberUserID:        userID,
 		Role:                role,
 	})
 	c.Assert(err, qt.IsNil)
+	return m
 }
 
 func (f groupCreatorFixture) deleteCreator(c *qt.C) error {
