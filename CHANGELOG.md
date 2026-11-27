@@ -766,6 +766,12 @@ when to add an entry and where it goes.
   sent no title, so the file had none
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
+- The service cost currency in the Send for service dialog is the currency
+  picker next to the amount, as on the item form, instead of a text field
+  that refused a code typed in lower case. It starts on the group currency,
+  and the cost is saved only when an amount is entered
+  ([#2909](https://github.com/denisvmedia/inventario/issues/2909)).
+
 - A file title may have 255 characters in any language. The server counted
   the limit in UTF-8 bytes, so a Czech or Russian title of more than about
   127 letters was refused with 422
