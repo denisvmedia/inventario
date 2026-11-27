@@ -592,9 +592,10 @@ func (r *CustomFieldRegistry) deleteField(ctx context.Context, id string, expect
 		return 0, err
 	}
 	r.factory.dropFieldValues(stored.GroupID, id, nil)
+	// A draft with an empty entry keeps it and its revision, as on postgres.
 	r.factory.drafts.rewriteOpen(stored.GroupID, func(v models.CommodityDraftValues) bool {
 		fields := v.DraftCustomFields()
-		if _, ok := fields[id]; !ok {
+		if entry, ok := fields[id]; !ok || !models.DraftCustomFieldHasValue(entry) {
 			return false
 		}
 		delete(fields, id)

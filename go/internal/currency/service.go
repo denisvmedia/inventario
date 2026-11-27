@@ -435,7 +435,8 @@ func (s *ConversionService) updateCommodityImage(ctx context.Context, tx *sqlx.T
 		    SET original_price = $4,
 		        original_price_currency = $5,
 		        converted_original_price = $6,
-		        current_price = $7
+		        current_price = $7,
+		        revision = revision + 1
 		  WHERE id = $1 AND tenant_id = $2 AND group_id = $3`,
 		s.tableNames.Commodities(),
 	)

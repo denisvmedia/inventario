@@ -541,6 +541,7 @@ func (api *filesAPI) attachFile(w http.ResponseWriter, r *http.Request) {
 // @Param linkID path string true "Link ID"
 // @Success 200 {object} jsonapi.FileResponse "The file with its remaining attachments"
 // @Failure 404 {object} jsonapi.Errors "File or link not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "Export or intake link"
 // @Router /g/{groupSlug}/files/{fileID}/links/{linkID} [delete].
 func (api *filesAPI) detachFile(w http.ResponseWriter, r *http.Request) {

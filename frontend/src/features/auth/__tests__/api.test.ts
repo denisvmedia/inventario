@@ -6,6 +6,7 @@ import { http, HttpResponse } from "msw"
 import { server } from "@/test/server"
 import { apiUrl } from "@/test/handlers"
 import { getCurrentUser, login, logout } from "@/features/auth/api"
+import { getRecent, pushRecent, recentScope } from "@/features/search/recent"
 import { clearAuth, getAccessToken, getCsrfToken, setAccessToken } from "@/lib/auth-storage"
 import { loadPendingFiles, savePendingFiles } from "@/lib/pending-files-store"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -155,6 +156,27 @@ describe("logout", () => {
     expect(await loadPendingFiles(slot)).toEqual([])
     expect(window.localStorage.getItem(visitor)).not.toBeNull()
     expect(await loadPendingFiles(visitor)).toHaveLength(1)
+    expect(window.localStorage.getItem("inventario_theme")).toBe("dark")
+  })
+
+  // #3023: the next person to sign in on this browser does not see what the
+  // last one opened from search.
+  it("removes the recent search results of every user", async () => {
+    server.use(http.post(apiUrl("/auth/logout"), () => new HttpResponse(null, { status: 204 })))
+    const entry = {
+      type: "commodity",
+      id: "c1",
+      title: "Drill",
+      url: "/g/household/commodities/c1",
+    } as const
+    pushRecent(recentScope("u1", "household"), entry)
+    pushRecent(recentScope("u2", "office"), entry)
+    window.localStorage.setItem("inventario_theme", "dark")
+
+    await logout()
+
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
+    expect(getRecent(recentScope("u2", "office"))).toEqual([])
     expect(window.localStorage.getItem("inventario_theme")).toBe("dark")
   })
 })

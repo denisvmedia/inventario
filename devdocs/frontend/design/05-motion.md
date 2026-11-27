@@ -305,6 +305,8 @@ site stays terse.
 Sonner ships in/out animations tuned to its drawer:
 
 - Slide-in from bottom-right.
+- Over a full-screen dialog below `sm` they sit above its footer and the
+  on-screen keyboard, not over its buttons.
 - Auto-dismiss at 4s for `info` / `success`, 6s for `warning`,
   manual-dismiss for `error`.
 - `useAppToast()` is the wrapper that enforces the role + duration

@@ -120,10 +120,11 @@ const STATUS_TRANSITION_TEXT_TONES: Record<(typeof TERMINAL_STATUSES)[number], s
 }
 import { WarrantyBadge } from "@/components/warranty/WarrantyBadge"
 import { WARRANTY_STATUS_CONFIG } from "@/components/warranty/config"
-import type {
-  Commodity,
-  LinkedItemSummary,
-  UpdateCommodityRequest,
+import {
+  isCommodityRevisionConflict,
+  type Commodity,
+  type LinkedItemSummary,
+  type UpdateCommodityRequest,
 } from "@/features/commodities/api"
 import { CustomFieldValue } from "@/components/customFields/CustomFieldValue"
 import type { CustomFieldValues } from "@/features/customFields/api"
@@ -318,6 +319,20 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // the values entered so far. Null while closed.
   const [allFieldsOn, setAllFieldsOn] = useState<{ id: string; values: Commodity } | null>(null)
   const dialogDraft = allFieldsOn?.id === id ? allFieldsOn.values : null
+  // The item whose edit form was opened before the item last changed: a
+  // save from the dialog that form opened was refused (the form tracks its
+  // own refused saves). Reload reads the item again and opens a fresh form
+  // (a new formLoad gives it a new key).
+  const [staleEditOn, setStaleEditOn] = useState<string | null>(null)
+  const [formLoad, setFormLoad] = useState(0)
+  const [reloadingForm, setReloadingForm] = useState(false)
+  // The refusal belongs to the edit form it happened in. Leaving that form
+  // by any way (Cancel, Back, Save and next) forgets it: the refused save
+  // read the item again, so the next form opens on the item as it is.
+  useEffect(() => {
+    if (!editing) return
+    return () => setStaleEditOn(null)
+  }, [editing, id])
   // The Details tab field being edited in place (#2795), if any.
   const [quickEditOn, setQuickEditOn] = useState<{ id: string; field: QuickEditField } | null>(null)
   const quickEdit = quickEditOn?.id === id ? quickEditOn.field : null
@@ -673,10 +688,42 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // Save from the step-by-step dialog: closes it and the edit form under it.
   async function handleDialogSave(values: UpdateCommodityRequest) {
     if (!allFieldsOn) return
-    await update.mutateAsync({ id: allFieldsOn.id, values })
+    const savingOn = allFieldsOn.id
+    try {
+      await update.mutateAsync({ id: savingOn, values })
+    } catch (err) {
+      // The dialog says nothing was saved; the edit form under it offers
+      // the reload.
+      if (isCommodityRevisionConflict(err)) setStaleEditOn(savingOn)
+      throw err
+    }
     toast.success(t("commodities:toast.updated"))
     setAllFieldsOn(null)
     stopEditing()
+  }
+
+  // After a refused save from the edit form: read the item again and open
+  // the form afresh on it. A failed read keeps the form and its alert; the
+  // global error toast reports the failure.
+  async function reloadEditForm() {
+    const reloadingOn = id
+    setReloadingForm(true)
+    try {
+      const result = await detail.refetch()
+      if (result.isError) return
+    } finally {
+      setReloadingForm(false)
+    }
+    setStaleEditOn((on) => (on === reloadingOn ? null : on))
+    setFormLoad((n) => n + 1)
+  }
+
+  // A save built from the item as the page read it is refused when the item
+  // changed since. useUpdateCommodity reads the item again, so trying again
+  // saves on the item as it is now.
+  function toastSaveError(err: unknown, fallback: string) {
+    if (isCommodityRevisionConflict(err)) toast.error(t("commodities:toast.changedMeanwhile"))
+    else toastMutationError(err, fallback)
   }
 
   // A quick edit on the Details tab saves one field and keeps the rest of
@@ -694,7 +741,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       setQuickEditOn((open) => (open?.id === savedOn && open.field === field ? null : open))
       return true
     } catch (err) {
-      toastMutationError(err, t("commodities:quickEdit.error"))
+      toastSaveError(err, t("commodities:quickEdit.error"))
       return false
     }
   }
@@ -753,7 +800,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       })
       toast.success(t("commodities:toast.statusUpdated"))
     } catch (err) {
-      toastMutationError(err, t("commodities:toast.statusUpdateError"))
+      toastSaveError(err, t("commodities:toast.statusUpdateError"))
     }
   }
 
@@ -780,7 +827,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
       toast.success(t("commodities:toast.statusUpdated"))
       setTransitionOn(null)
     } catch (err) {
-      toastMutationError(err, t("commodities:toast.statusUpdateError"))
+      toastSaveError(err, t("commodities:toast.statusUpdateError"))
       // Re-throw so the dialog can map field-level 422 errors onto its
       // inputs (it stays open). The toast above is the summary.
       throw err
@@ -823,14 +870,18 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
         >
           <CommodityEditForm
             // A fresh form per item: "Save and next" lands here with the
-            // next item's values.
-            key={commodity.id}
+            // next item's values. A reload after a refused save opens a
+            // fresh one too.
+            key={`${commodity.id}:${formLoad}`}
             commodity={commodity}
             areas={areas.data ?? []}
             locations={locations.data ?? []}
             groupCurrency={groupCurrency}
             onSubmit={(req) => update.mutateAsync({ id, values: req })}
             isPending={itemSaving}
+            stale={staleEditOn === id}
+            onReload={() => void reloadEditForm()}
+            reloading={reloadingForm}
             nav={nav}
             hrefFor={(target) => itemHref(target.id, contextAt(target.page), true)}
             onExit={stopEditing}

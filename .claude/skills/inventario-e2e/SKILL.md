@@ -149,7 +149,7 @@ docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
     --name="Test User 2" --tenant=test-org --no-interactive
 ```
 
-`user2` also needs a default group for some user-isolation tests; if the test fails on a `/no-group` redirect, see `.github/workflows/e2e-tests.yml` "Create default group for user2" for the exact `POST /api/v1/groups` call.
+`user2` also needs a default group for some user-isolation tests. `POST /api/v1/seed` provisions it together with the other fixture users; if a test fails on a `/no-group` redirect, see the "Seed test fixtures" step of the `E2E Tests (webkit)` job in `.github/workflows/docker.yml` for the exact call.
 
 ## When a port is already occupied
 
@@ -232,7 +232,7 @@ These are the patterns that bite repeatedly. Memorize them.
 
 ### 1. Warmup-orphan rows
 
-`.github/workflows/e2e-tests.yml` runs `playwright test --grep "fast-fail debug"` first as a warmup, **then** the full suite — both against the same backend DB. Tests that share `describe`-scoped constants (`testLocation`, `testArea`, `testCommodity`) with the warmup test create same-named rows twice. Name-based locators like `.location-card:has-text("X").first()` then bind to the stale warmup clone, not the test's own creation, causing `DELETE 422 ("contains areas")`.
+The e2e jobs of `.github/workflows/docker.yml` run `playwright test --grep "fast-fail debug"` first as a warmup, **then** the full suite — both against the same backend DB. Tests that share `describe`-scoped constants (`testLocation`, `testArea`, `testCommodity`) with the warmup test create same-named rows twice. Name-based locators like `.location-card:has-text("X").first()` then bind to the stale warmup clone, not the test's own creation, causing `DELETE 422 ("contains areas")`.
 
 The trap also bites because the locations list sorts DESC by `created_at`, so `.first()` picks the newest *orphan* and `.last()` picks the oldest — neither is reliably the row the current test just created.
 
@@ -245,7 +245,7 @@ E2E is high-throughput and parallel. With production rate limits on, parallel `P
 These are set automatically by:
 - `e2e/setup/setup-stack.ts` (dev mode)
 - `docker-compose.e2e.yaml` (pre-built mode)
-- `.github/workflows/e2e-tests.yml` env block (CI macOS lane)
+- the `E2E Tests (webkit)` job env block in `.github/workflows/docker.yml` (CI macOS lane)
 
 If you're running the backend by hand with neither, **set them yourself**.
 
@@ -271,5 +271,5 @@ Common surface symptoms and root causes:
 ## Out of scope for this skill
 
 - Authoring new tests / fixtures.
-- Modifying `.github/workflows/e2e-tests.yml`.
+- Modifying the e2e jobs in `.github/workflows/docker.yml`.
 - User-facing docs in `e2e/README.md` (that's for humans; this skill is for the agent).

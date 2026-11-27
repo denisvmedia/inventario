@@ -313,6 +313,32 @@ type CommodityEventRegistry interface {
 	ListByCommodity(ctx context.Context, commodityID string, offset, limit int, opts CommodityEventListOptions) ([]*models.CommodityEvent, int, error)
 }
 
+// expectedRevisionCtxKey keys the revision an update is based on (see
+// WithExpectedRevision).
+type expectedRevisionCtxKey struct{}
+
+// WithExpectedRevision marks ctx so the next CommodityRegistry.Update writes
+// the item only when its stored Revision is revision, and otherwise returns
+// ErrRevisionConflict and writes nothing. The check and the write run under
+// the item's row lock. An edit form names the revision it was opened at, so
+// it cannot undo a change saved after it loaded the item. It is a context
+// signal because Update's signature is the generic Registry's; without it
+// Update writes whatever the item's revision is.
+func WithExpectedRevision(ctx context.Context, revision int64) context.Context {
+	return context.WithValue(ctx, expectedRevisionCtxKey{}, revision)
+}
+
+// ExpectedRevisionFromContext returns the revision set by
+// WithExpectedRevision, if present and positive. Consumed only by the
+// CommodityRegistry Update implementations.
+func ExpectedRevisionFromContext(ctx context.Context) (int64, bool) {
+	revision, ok := ctx.Value(expectedRevisionCtxKey{}).(int64)
+	if !ok || revision <= 0 {
+		return 0, false
+	}
+	return revision, true
+}
+
 // restoreAcquisitionCtxKey keys a trusted, restore-only acquisition pair on a
 // context (see WithRestoreAcquisition).
 type restoreAcquisitionCtxKey struct{}
@@ -433,6 +459,14 @@ type CommodityName struct {
 // ListPaginated with CommodityListOptions.Trashed see trashed items only. Update refuses a trashed item with ErrNotFound. Code that
 // queries the commodities table directly (a new worker, a report) has to apply
 // the same filter: in SQL, `deleted_at IS NULL`; in Go, Commodity.IsTrashed.
+//
+// Revision: Create stores revision 1 and Update stores the next one, whatever
+// the caller sent; Patch, SetDraft, the tag rename and delete of TagRegistry,
+// the type move of ItemTypeRegistry.Delete, a currency migration and
+// BackfillLegacyPrices add one too. Update refuses with ErrRevisionConflict
+// when the context names another revision (WithExpectedRevision). A new
+// writer of a column an edit form sends back adds one as well, or a form
+// opened before it can undo its change.
 type CommodityRegistry interface {
 	Registry[models.Commodity]
 	CreatorLister[models.Commodity]
@@ -2183,8 +2217,9 @@ type CustomFieldRegistry interface {
 	// DeleteWithValues deletes the field with id together with its values
 	// and template entries, in one transaction, and returns how many items
 	// and open drafts had a value. It also takes the field's entry out of
-	// every open draft that has one, value or not, and gives each such
-	// draft a new revision. expected is how many items and drafts together
+	// every open draft that holds a value of it, and gives each such draft a
+	// new revision; a draft whose entry is empty keeps it and its revision.
+	// expected is how many items and drafts together
 	// the caller confirmed to lose a value, or AnyValueCount; when another
 	// number has a value, it fails with ErrCustomFieldInUse and nothing is
 	// deleted.

@@ -1,5 +1,5 @@
 # OAuth layer for the e2e stack, applied on top of docker-compose.e2e.yaml by
-# the "E2E Tests (oauth)" job in .github/workflows/e2e-tests.yml.
+# the "E2E Tests (oauth)" job in .github/workflows/docker.yml.
 #
 #   docker compose -f docker-compose.yaml -f docker-compose.e2e.yaml \
 #     -f docker-compose.e2e-oauth.yaml up -d --wait --no-build inventario

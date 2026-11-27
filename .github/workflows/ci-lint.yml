@@ -51,3 +51,8 @@ jobs:
         # Ten lines of awk that every image-dependent lane hangs on, and until
         # now nothing ran them.
         run: ./scripts/test-image-waiter-verdict.sh
+
+      - name: Test the e2e lanes' image gate
+        # The first step of the required `E2E Tests (chromium)` lane: it turns
+        # a failed or cancelled build into a red check instead of a green one.
+        run: ./scripts/test-e2e-image-gate.sh

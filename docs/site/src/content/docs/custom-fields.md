@@ -100,7 +100,7 @@ Point at a row and click the bin.
 
 - When no item and no [draft](../items/#save-as-draft) has a value for the
   field, confirm and the field is removed. A field a draft shows empty does not
-  count.
+  count, and that draft is left as it is: a member editing it can keep going.
 - When items or drafts have a value, the dialog says how many items, Trash
   included, and how many drafts. Tick **Delete the values too** and click
   **Delete field**: the field and every one of its values are deleted, and the

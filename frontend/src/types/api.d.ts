@@ -4904,6 +4904,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Non-empty area (no strategy) or unknown strategy */
                 422: {
                     headers: {
@@ -5644,7 +5653,12 @@ export type paths = {
         };
         /**
          * Update a commodity
-         * @description Update a commodity
+         * @description Replace the item with the values sent. attributes.revision is the revision
+         *     the values were based on, as the client read it: when the item has been written
+         *     since (an edit, a bulk change, a tag rename), the save is refused with 409
+         *     commodity.revision_conflict and nothing is written, so it cannot undo that
+         *     write. Without it, or with 0, the save is not checked. The response carries
+         *     the item's new revision.
          */
         put: {
             parameters: {
@@ -5671,6 +5685,15 @@ export type paths = {
                 };
                 /** @description Commodity not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item was written after the revision sent */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -5783,6 +5806,15 @@ export type paths = {
                 };
                 /** @description Commodity or file not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: the item was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -9154,6 +9186,15 @@ export type paths = {
                         "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
                     };
                 };
+                /** @description commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
                 /** @description Export or intake link */
                 422: {
                     headers: {
@@ -10746,6 +10787,15 @@ export type paths = {
                 };
                 /** @description Location not found */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry */
+                409: {
                     headers: {
                         [name: string]: unknown;
                     };
@@ -20193,6 +20243,17 @@ export type components = {
             /** @description PurchaseDate is nil when the date is unknown. */
             purchase_date?: string | null;
             registered_date?: string;
+            /**
+             * @description Revision counts the writes to the item: a new item has revision 1, and
+             *     every registry write of a column an edit form sends back adds one (an
+             *     edit, a bulk change, the draft mark, a tag rename or delete, an item
+             *     type delete that moves the item, a currency migration). An edit form
+             *     sends the revision it was opened at with its save, and the save is
+             *     refused when the item was written since (registry.WithExpectedRevision),
+             *     so it cannot undo a change it never showed. Server-managed: Create and
+             *     Update ignore the caller's value.
+             */
+            revision?: number;
             /**
              * @description SalePrice is the realised proceeds for a `sold` transition. NULL
              *     for any other status. Stored in the commodity's original purchase

@@ -246,20 +246,45 @@ func isForeignKeyViolation(err error) bool {
 // returns ErrAccountSoleOwnerOfSharedGroup — before collecting anything — when
 // the user is the only owner of a group that still has other members.
 func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, userID string) ([]string, error) {
-	memberships, err := s.factorySet.GroupMembershipRegistry.ListByUser(ctx, tenantID, userID)
+	privateGroupIDs, soleOwnedGroupID, err := classifyMemberships(ctx, s.factorySet.GroupMembershipRegistry, tenantID, userID)
 	if err != nil {
-		return nil, errxtrace.Wrap("failed to list user memberships", err)
+		return nil, err
+	}
+	if soleOwnedGroupID != "" {
+		return nil, errxtrace.Classify(ErrAccountSoleOwnerOfSharedGroup)
+	}
+	return privateGroupIDs, nil
+}
+
+// SoleOwnedSharedGroup returns the ID of a group in which userID is the only
+// owner while other members remain, or "" when there is none. Deleting such a
+// user would leave the group with members and no owner, so self-service
+// account deletion (ErrAccountSoleOwnerOfSharedGroup) and an operator's user
+// delete both refuse it. The rule is the one classifyGroups applies.
+func SoleOwnedSharedGroup(ctx context.Context, memberships registry.GroupMembershipRegistry, tenantID, userID string) (string, error) {
+	_, soleOwnedGroupID, err := classifyMemberships(ctx, memberships, tenantID, userID)
+	return soleOwnedGroupID, err
+}
+
+// classifyMemberships walks every group userID is a member of. It returns the
+// groups where the user is the only member, and stops at the first group
+// where the user is the only owner while other members remain, returning its
+// ID as soleOwnedGroupID.
+func classifyMemberships(ctx context.Context, memberships registry.GroupMembershipRegistry, tenantID, userID string) (privateGroupIDs []string, soleOwnedGroupID string, err error) {
+	userMemberships, err := memberships.ListByUser(ctx, tenantID, userID)
+	if err != nil {
+		return nil, "", errxtrace.Wrap("failed to list user memberships", err)
 	}
 
-	privateGroupIDs := make([]string, 0, len(memberships))
-	for _, m := range memberships {
+	privateGroupIDs = make([]string, 0, len(userMemberships))
+	for _, m := range userMemberships {
 		if m == nil || m.GroupID == "" {
 			continue
 		}
 
-		groupMembers, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, m.GroupID)
+		groupMembers, err := memberships.ListByGroup(ctx, m.GroupID)
 		if err != nil {
-			return nil, errxtrace.Wrap("failed to list group members", err)
+			return nil, "", errxtrace.Wrap("failed to list group members", err)
 		}
 
 		// Re-validate the user's membership against the freshly-listed members:
@@ -285,11 +310,11 @@ func (s *AccountDeletionService) classifyGroups(ctx context.Context, tenantID, u
 			continue
 		}
 		if countOwners(groupMembers) <= 1 {
-			return nil, errxtrace.Classify(ErrAccountSoleOwnerOfSharedGroup)
+			return nil, m.GroupID, nil
 		}
 	}
 
-	return privateGroupIDs, nil
+	return privateGroupIDs, "", nil
 }
 
 // membershipForUser returns the membership in members naming userID as the

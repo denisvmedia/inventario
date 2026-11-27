@@ -791,8 +791,10 @@ when to add an entry and where it goes.
   the group it opened in: a save still running when the member leaves the
   form with browser Back and switches group goes on there, and a form still
   open when the page moves to another group keeps showing the draft and its
-  files. Before, the remaining requests went to the other group's paths
-  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+  files, and keeps its unsaved input with the group it opened in. Before,
+  the remaining requests went to the other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 
 - An item's history keeps every edit of a save. A save that changed the
   status, the area, a price or the cover recorded only that change, and the
@@ -916,10 +918,12 @@ when to add an entry and where it goes.
   it again on the AI step, or picking it again on the **Files** step, staged a
   second copy beside its row under **Saved with this draft**; the next save
   dropped the copy, and with it the title and tag the scan suggested. The file
-  now stays on its saved row with the title and tags it was saved with. The
-  remove and add buttons of the tag and number chips are named in the app's
-  language
-  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
+  now stays on its saved row with the title and tags it was saved with, and a
+  file picked just before **Add item** is saved with the item even when it is
+  large and takes a while to read. The remove and add buttons of the tag and
+  number chips are named in the app's language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -1034,10 +1038,13 @@ when to add an entry and where it goes.
   have a value of the field. Deleting a type moves its drafts with its items
   to the type you pick, deleting a field takes the value out of the drafts
   once you confirm, and removing the set keeps a type or field that a draft
-  uses. In the API, the item type and custom field lists and their `409`
-  answers carry a `draft_count`, and `expected_values` of a custom field
-  delete counts the drafts with a value too
-  ([#2939](https://github.com/denisvmedia/inventario/issues/2939)).
+  uses. A draft that shows the field empty is left as it is, so a member
+  editing it is not told that it changed elsewhere. In the API, the item type
+  and custom field lists and their `409` answers carry a `draft_count`, and
+  `expected_values` of a custom field delete counts the drafts with a value
+  too
+  ([#2939](https://github.com/denisvmedia/inventario/issues/2939),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - `inventario users delete` left the user's profile photo in storage, where
   nothing pointed at it any more. It now deletes the photo after the account,
   as deleting your own account does; pass `--upload-location` with the
@@ -1163,6 +1170,42 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- The recent results on the search page are kept for each user, and signing
+  out removes them. Before, they were kept for the group only, so the next
+  person to sign in on the same browser saw what the last one opened there
+  ([#3023](https://github.com/denisvmedia/inventario/issues/3023)).
+- Signing out in one tab while another tab renewed its session no longer
+  signs you back in, and no longer makes the server take the renewal for a
+  stolen session and sign you out on your other devices. A sign-out now waits
+  for a renewal another tab has started, and a tab that needs a renewal while
+  the sign-out runs waits for it and then stops. The back office had the same
+  problem
+  ([#3034](https://github.com/denisvmedia/inventario/issues/3034)).
+- `inventario users delete` refuses a user who is the only owner of a group
+  that has other members, before it changes anything, as deleting your own
+  account does. The message names the group, so another member can be made
+  an owner first. Before, the delete went through and left the group with
+  its members and no owner, so nobody could manage or delete it
+  ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
+- On a phone, a form that fills the screen (Add item, a location, an area and
+  the other long forms) keeps its buttons above the on-screen keyboard while
+  you type. The back gesture closes it as its close button does, so Add item
+  still asks whether to save what was entered, and the page under it stays.
+  A toast shown while it is open sits above its buttons. Before, the keyboard
+  covered the buttons, the back gesture left the page and lost the form, and
+  a toast covered the buttons for a few seconds
+  ([#2931](https://github.com/denisvmedia/inventario/issues/2931)).
+
+- Saving an item from an edit form opened before someone changed the item on
+  another device, or before a tag on it was renamed, no longer puts back what
+  the form showed and drops that change. Each item now has a revision that
+  every change moves on, and a save from a form opened at an older revision
+  is refused: the form says the item changed since you opened it and offers
+  **Reload**. The same holds for a quick edit, and for a form opened before a
+  bulk change of the items. Choosing a cover photo, removing the cover photo
+  from an item and deleting an area that still holds items no longer undo a
+  change saved on the item at the same time
+  ([#2981](https://github.com/denisvmedia/inventario/issues/2981)).
 - On an item page, viewers saw Lend, Send for service, Add link, Add schedule
   and Add reminder, the actions on the item's loans, services, supply links,
   maintenance schedules and reminders, Revert to In Use, and the prompt to
@@ -1392,10 +1435,11 @@ when to add an entry and where it goes.
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 - A stopped draft discard that fails again when the drafts list or the inbox
   tries to finish it is logged once, as `Failed to finish a stopped draft
-  discard` with its `draft_id`. The first such draft of a pass was also
-  logged a second time as `Failed to finish stopped draft discards`, which
-  now means only that the pass itself could not run
-  ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
+  discard` with its `draft_id` and `group_id`. The first such draft of a
+  pass was also logged a second time as `Failed to finish stopped draft
+  discards`, which now means only that the pass itself could not run
+  ([#2877](https://github.com/denisvmedia/inventario/issues/2877),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - A failed cover lookup on the items list or an item page is logged as a
   warning, `cover lookup failed; the items are listed without these covers`,
   with `read` (`named covers` or `first photos`), `count`, `group_id` and

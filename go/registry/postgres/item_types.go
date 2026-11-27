@@ -369,7 +369,7 @@ func moveItemsOfType(
 		return 0, err
 	}
 	res, err := tx.ExecContext(ctx,
-		fmt.Sprintf(`UPDATE %s SET type = $1 WHERE group_id = $2 AND type = $3`, commodities),
+		fmt.Sprintf(`UPDATE %s SET type = $1, revision = revision + 1 WHERE group_id = $2 AND type = $3`, commodities),
 		string(target.Slug), src.GroupID, string(src.Slug))
 	if err != nil {
 		return 0, errxtrace.Wrap("failed to move items to another type", err)
