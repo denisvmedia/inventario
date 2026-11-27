@@ -866,8 +866,13 @@ export function CommodityFormDialog({
   // when the dialog closes is left to the save, which stops after its upload
   // and sends it to Trash, or trashes it when its attach fails. Trash takes
   // only a file nothing links, so one whose attach went through stays. The
-  // files are in the group the form opened in (#2920): React runs this
-  // cleanup before the effect that forgets that group on close.
+  // files are in the group the form opened in (#2920), which the form keeps
+  // after it closes; the cleanup reads it through a ref because it runs
+  // without the render's values.
+  const formSlugRef = useRef(formSlug)
+  useEffect(() => {
+    formSlugRef.current = formSlug
+  }, [formSlug])
   const editLeftoversRef = useRef<string[]>([])
   useEffect(() => {
     editLeftoversRef.current =
@@ -880,7 +885,7 @@ export function CommodityFormDialog({
     return () => {
       const ids = editLeftoversRef.current
       if (ids.length === 0) return
-      const group = openedInRef.current ?? undefined
+      const group = formSlugRef.current ?? undefined
       void Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
         void queryClient.invalidateQueries({ queryKey: fileKeys.all })
         void queryClient.invalidateQueries({ queryKey: trashKeys.all })
