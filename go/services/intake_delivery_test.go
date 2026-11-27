@@ -465,6 +465,33 @@ func TestIntakeDeliver_DraftNotRecorded(t *testing.T) {
 		c.Assert(err, qt.IsNil)
 		c.Assert(docs, qt.HasLen, 1)
 	})
+
+	// Another member finishes the draft and the delivery is never repeated:
+	// the promotion finds the record by the draft's key.
+	t.Run("promoted with no repeat", func(t *testing.T) {
+		c := qt.New(t)
+		f := newIntakeFixture(c)
+		draft := fail(c, f, "1")
+		role := models.GroupRoleUser
+		member := f.as(f.member(c, "member@example.com", &role))
+		regs := must.Must(f.factorySet.CreateUserRegistrySet(member))
+		location := must.Must(regs.LocationRegistry.Create(member, models.Location{Name: "Home"}))
+		area := must.Must(regs.AreaRegistry.Create(member, models.Area{Name: "Office", LocationID: location.ID}))
+		item, _, err := services.NewCommodityDraftService(f.factorySet).Promote(member, draft.ID, draft.Revision, "promotion-1", models.Commodity{
+			Name: "Invoice 1", ShortName: "Invoice 1", Type: models.CommodityTypeOther, AreaID: new(area.ID),
+			Count: 1, Status: models.CommodityStatusInUse, Tags: models.ValuerSlice[string]{},
+		})
+		c.Assert(err, qt.IsNil)
+
+		docs, err := f.intake.ListDocuments(f.ctx, nil, []string{item.ID})
+		c.Assert(err, qt.IsNil)
+		c.Assert(docs, qt.HasLen, 1)
+		c.Assert(docs[0].ExternalDocumentID, qt.Equals, "1")
+		c.Assert(*docs[0].DraftID, qt.Equals, draft.ID)
+		states, err := f.intake.DocumentStates(f.ctx, docs)
+		c.Assert(err, qt.IsNil)
+		c.Assert(states[docs[0].ID], qt.Equals, models.IntakeDocumentItem)
+	})
 }
 
 // TestIntakeDeliver_SessionDeletedBeforeTheDraft: the member deleted the
@@ -832,6 +859,101 @@ func TestIntakeDeliver_SessionDeletedDuringADelivery(t *testing.T) {
 	c.Assert(f.drafts(c), qt.HasLen, 1)
 	sessions := must.Must(must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx)).List(f.ctx))
 	c.Assert(sessions, qt.HasLen, 0)
+}
+
+// TestIntakeDeliver_SourceAppearsAfterTheFileIsStored: a source with the
+// document's identity, made for a record the group no longer has, appears
+// after the delivery stored its file and before it makes the session. The
+// delivery is refused and leaves neither its record nor its file, so the
+// caller deletes the blob.
+func TestIntakeDeliver_SourceAppearsAfterTheFileIsStored(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	orig := f.factorySet.IntakeRegistryFactory
+	w := &beforeCreateSession{IntakeRegistryFactory: orig}
+	f.factorySet.IntakeRegistryFactory = w
+	w.hook = func() {
+		_, _, err := must.Must(orig.CreateUserRegistry(f.ctx)).CreateSession(f.ctx,
+			models.IntakeSession{ClientKey: models.IntakeDeliverySessionKeyPrefix + "lost-record", Origin: models.IntakeOriginExternal},
+			[]registry.IntakeSourceInput{{
+				OneItem:            true,
+				ExternalSystem:     "paperless-ngx",
+				ExternalDocumentID: "117",
+				Delivered:          &registry.IntakeScan{},
+			}},
+			0)
+		c.Assert(err, qt.IsNil)
+	}
+	w.armed.Store(true)
+
+	blob := &services.IntakeDeliveredFile{BlobKey: "t/tenant-a/files/a.pdf", Name: "a.pdf", MIMEType: "application/pdf", Size: 2048, SHA256: "aaaa"}
+	result, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), blob)
+	c.Assert(err, qt.ErrorIs, services.ErrIntakeDocumentConflict)
+	c.Assert(w.armed.Load(), qt.IsFalse, qt.Commentf("the source appeared after the file was stored"))
+	c.Assert(result.File, qt.IsNil)
+	files := must.Must(f.factorySet.FileRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(must.Must(files.List(f.ctx)), qt.HasLen, 0)
+	docs := must.Must(f.factorySet.IntakeDocumentRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(must.Must(docs.List(f.ctx)), qt.HasLen, 0)
+}
+
+// failingSessionDelete is an intake registry whose Delete fails while asked
+// to.
+type failingSessionDelete struct {
+	registry.IntakeRegistryFactory
+	fail atomic.Bool
+}
+
+type failingSessionDeleteRegistry struct {
+	registry.IntakeRegistry
+	f *failingSessionDelete
+}
+
+func (f *failingSessionDelete) CreateUserRegistry(ctx context.Context) (registry.IntakeRegistry, error) {
+	reg, err := f.IntakeRegistryFactory.CreateUserRegistry(ctx)
+	return &failingSessionDeleteRegistry{IntakeRegistry: reg, f: f}, err
+}
+
+func (r *failingSessionDeleteRegistry) Delete(ctx context.Context, id string) error {
+	if r.f.fail.Load() {
+		return errLostWrite
+	}
+	return r.IntakeRegistry.Delete(ctx, id)
+}
+
+// TestIntakeDeliver_ExtraSessionDeletedLater: as in
+// TestIntakeDeliver_SessionDeletedDuringADelivery, the delivery made a
+// session after a concurrent one recorded its own and the member deleted
+// that, and it cannot delete the one it made. The next delivery of the
+// document deletes it. A session a document names stays.
+func TestIntakeDeliver_ExtraSessionDeletedLater(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	failing := &failingSessionDelete{IntakeRegistryFactory: f.factorySet.IntakeRegistryFactory}
+	w := &beforeCreateSession{IntakeRegistryFactory: failing}
+	f.factorySet.IntakeRegistryFactory = w
+	var other *services.IntakeDeliveryResult
+	w.hook = func() {
+		other = f.deliver(c, paperlessDelivery("117"), nil)
+		c.Assert(f.intake.Delete(f.ctx, *other.Document.SessionID), qt.IsNil)
+		failing.fail.Store(true)
+	}
+	w.armed.Store(true)
+	_, err := f.intake.Deliver(f.ctx, paperlessDelivery("117"), nil)
+	failing.fail.Store(false)
+	c.Assert(err, qt.ErrorIs, errLostWrite)
+	sessions := must.Must(f.factorySet.IntakeRegistryFactory.CreateUserRegistry(f.ctx))
+	c.Assert(must.Must(sessions.List(f.ctx)), qt.HasLen, 1)
+
+	kept := f.deliver(c, paperlessDelivery("118"), nil)
+	replay := f.deliver(c, paperlessDelivery("117"), nil)
+	c.Assert(replay.State, qt.Equals, models.IntakeDocumentDraft)
+	c.Assert(*replay.Document.DraftID, qt.Equals, *other.Document.DraftID)
+	f.deliver(c, paperlessDelivery("118"), nil)
+	left := must.Must(sessions.List(f.ctx))
+	c.Assert(left, qt.HasLen, 1)
+	c.Assert(left[0].ID, qt.Equals, *kept.Document.SessionID)
+	c.Assert(f.drafts(c), qt.HasLen, 2)
 }
 
 // promoteOnSecondGet promotes the draft right after the first Get of it

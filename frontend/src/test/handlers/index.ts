@@ -42,3 +42,25 @@ export * as featureFlagHandlers from "./featureFlags"
 // Re-exported so per-test handlers that aren't worth a factory can build
 // URLs the same way the factories do.
 export const apiUrl = (path: string) => `${window.location.origin}/api/v1${path}`
+
+// The page of `items` a paged list endpoint answers with, read the way the
+// server's parsePagination reads the query: page defaults to 1, per_page to
+// 50, and a per_page above 100 falls back to 50.
+export function serverPage<T>(
+  url: string,
+  items: T[]
+): { rows: T[]; page: number; perPage: number; totalPages: number } {
+  const params = new URL(url).searchParams
+  const pageParam = Number(params.get("page"))
+  const perPageParam = Number(params.get("per_page"))
+  const page = Number.isInteger(pageParam) && pageParam > 0 ? pageParam : 1
+  const perPage =
+    Number.isInteger(perPageParam) && perPageParam > 0 && perPageParam <= 100 ? perPageParam : 50
+  const start = (page - 1) * perPage
+  return {
+    rows: items.slice(start, start + perPage),
+    page,
+    perPage,
+    totalPages: Math.ceil(items.length / perPage),
+  }
+}

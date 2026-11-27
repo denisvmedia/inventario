@@ -29,6 +29,7 @@ import { useSearch } from "@/features/search/hooks"
 import {
   areaHref,
   areaItemsHref,
+  locationItemsHref,
   commodityHref,
   commoditySubtitle,
   fileHref,
@@ -562,10 +563,19 @@ function CardShell({
       >
         {inner}
       </Link>
+      {/* Below sm the button is its icon alone, so the title keeps the
+          width; its name stays in aria-label and title. */}
       <Button asChild size="sm" variant="ghost" className="shrink-0 text-muted-foreground">
-        <Link to={related.href} aria-label={related.ariaLabel} data-testid={related.testId}>
+        <Link
+          to={related.href}
+          aria-label={related.ariaLabel}
+          title={related.ariaLabel}
+          data-testid={related.testId}
+        >
           <ListFilter aria-hidden="true" />
-          {related.label}
+          <span className="hidden sm:inline" data-testid={`${related.testId}-label`}>
+            {related.label}
+          </span>
         </Link>
       </Button>
     </li>
@@ -625,6 +635,16 @@ function LocationCard({
         groupSlug
           ? { scope: groupSlug, entry: { type: "location", id: resource.id, title } }
           : undefined
+      }
+      related={
+        groupSlug
+          ? {
+              href: locationItemsHref(groupSlug, resource.id),
+              label: t("search:resultCard.showItems"),
+              ariaLabel: t("search:resultCard.showItemsInLocation", { name: title }),
+              testId: `result-location-items-${resource.id}`,
+            }
+          : null
       }
     />
   )

@@ -292,6 +292,21 @@ the message is empty, and bakes in the `field-error` class the e2e suite
 selects on. Wire `aria-describedby` on the input to the `FieldError` `id`
 so screen readers announce the message when RHF focuses the invalid field.
 
+A field error is always `<FieldError>`, in a page form and in a dialog
+alike, and the control that failed always carries `aria-invalid` and
+`aria-describedby`. `aria-invalid` is what draws the red border on
+`Input`, `Textarea` and `SelectTrigger`. A custom control takes the same
+two attributes on its focusable root: `TagColorPicker` puts them on its
+`radiogroup` through its `invalid` and `describedBy` props. A field with a
+hint keeps the hint as its own muted line, and may swap it for the error
+(`errors.x?.message ? <FieldError … /> : <p>hint</p>`).
+
+ESLint enforces this: `no-restricted-syntax` flags `t(errors.<field>.message)`
+and `t(form.formState.errors.<field>.message)` inside JSX. The one sanctioned
+exception is `components/items/BrandModelFields.tsx`, which draws the Add item
+dialog's own error line from the mock (`design-mocks/src/components/AddItemDialog.tsx`)
+and says so in its disable comment.
+
 For complex controls (combobox, date picker), wrap with `Controller`:
 
 ```tsx
@@ -340,13 +355,31 @@ Gotcha: Radix forbids an **empty-string** `SelectItem` value. For an
 "auto / none" option use a sentinel (`"auto"`) and map it back to `""` in
 `value` / `onValueChange` (see `SettingsPage`'s Region & formatting field).
 
-A raw native `<select>` is banned by the ESLint rule `no-restricted-syntax`
-(see `eslint.config.js`). It stays permissible only for **utility /
-compact / mobile** selectors — bulk-move bars, the mobile category-tile
-collapse, list sort pickers — where native semantics are intentional and
-already covered by `selectOption`-based tests. Those few sites carry an
-explicit `// eslint-disable-next-line no-restricted-syntax -- <reason>`.
-Don't add a new bare `<select>` to a form; reach for `<Select>`.
+A **utility select** that keeps the native element uses `<NativeSelect>`
+(`@/components/ui/native-select`, ported from the mock's
+`components/ui/native-select.tsx`): a list sort picker, a bulk bar's
+"move to" picker, the mobile collapse of the file category tiles, and the
+file category picker on the upload dialog and the file edit page, which
+stay alike. It has `Input`'s height, border and focus ring, the
+`aria-invalid` style and a chevron; `size="sm"` gives the `h-8` of a bulk
+bar. `className` styles the `<select>`; the wrapper is `w-fit`, so pass
+`wrapperClassName="w-full"` where the select fills its row (a `flex-col`
+field stretches a bare `<select>`, but not the wrapper):
+
+```tsx
+<NativeSelect
+  id="tags-sort-select"
+  value={sort}
+  onChange={(e) => setSort(e.target.value)}
+>
+  <option value="label.asc">{t("tags:sort.labelAsc")}</option>
+</NativeSelect>
+```
+
+A raw `<select>` is banned by the ESLint rule `no-restricted-syntax` (see
+`eslint.config.js`); the only exception is the one inside `NativeSelect`.
+Tests drive a `NativeSelect` with `user.selectOptions()`, as any native
+select.
 
 In tests, drive a `<Select>` with `pickRadixSelect(user, triggerLabel,
 { optionLabel })` from `@/test/radix` — `user.selectOptions()` no-ops on

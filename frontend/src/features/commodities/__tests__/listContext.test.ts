@@ -35,6 +35,7 @@ describe("parseCommoditiesListParams", () => {
         types: ["electronics", "furniture"],
         statuses: ["sold"],
         areaId: "a1",
+        locationId: "",
         unassigned: true,
         sellerIds: ["s1"],
         includeInactive: true,
@@ -51,6 +52,12 @@ describe("parseCommoditiesListParams", () => {
         unreadable: {},
       },
     })
+  })
+
+  it("reads the location filter (#2897)", () => {
+    const params = parseCommoditiesListParams(new URLSearchParams("location=l1&area=a1"))
+    expect(params.query.locationId).toBe("l1")
+    expect(params.query.areaId).toBe("a1")
   })
 
   it("falls back to page 1 and name order for junk values", () => {

@@ -216,6 +216,13 @@ describe("<ApiTokensPage />", () => {
     await user.click(await screen.findByTestId("api-token-create-submit"))
     expect(await screen.findByText("Give the token a name.")).toBeInTheDocument()
     expect(screen.getByText("Enter your current password.")).toBeInTheDocument()
+    // Each invalid input is marked and described by its message.
+    const name = screen.getByTestId("api-token-name")
+    expect(name).toHaveAttribute("aria-invalid", "true")
+    expect(name).toHaveAccessibleDescription("Give the token a name.")
+    const password = screen.getByTestId("api-token-password")
+    expect(password).toHaveAttribute("aria-invalid", "true")
+    expect(password).toHaveAccessibleDescription("Enter your current password.")
     expect(posted).toBe(false)
   })
 

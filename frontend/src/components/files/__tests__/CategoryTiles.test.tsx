@@ -103,6 +103,8 @@ describe("<CategoryTiles />", () => {
         />
       )
       const sel = screen.getByTestId("files-category-select") as HTMLSelectElement
+      expect(sel).toHaveAttribute("data-slot", "native-select")
+      expect(sel).toHaveAccessibleName("Category")
       expect(sel.value).toBe("images")
       // Each option carries the count in its label — the mobile fallback
       // doubles as a quick reference.

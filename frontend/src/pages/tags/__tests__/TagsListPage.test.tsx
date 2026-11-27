@@ -208,6 +208,7 @@ describe("<TagsListPage />", () => {
     renderPage()
     await screen.findByTestId("tag-row-kitchen")
     const select = screen.getByTestId("tags-sort") as HTMLSelectElement
+    expect(select).toHaveAttribute("data-slot", "native-select")
     expect(select.value).toBe("label.asc")
     await user.selectOptions(select, "usage.desc")
     // The select's value tracks `${urlSort}.${urlOrder}`; after

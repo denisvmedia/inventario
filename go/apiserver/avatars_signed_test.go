@@ -251,6 +251,105 @@ func TestSignedAvatar_ChecksAgainWhenServing(t *testing.T) {
 	})
 }
 
+// adminAPI runs a back-office request as the operator token names.
+func (e *signedAvatarEnv) adminAPI(c *qt.C, path, token string) *httptest.ResponseRecorder {
+	c.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	addBackofficeAuthHeader(req, token)
+	rr := httptest.NewRecorder()
+	e.handler.ServeHTTP(rr, req)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK, qt.Commentf("%s: %s", path, rr.Body.String()))
+	return rr
+}
+
+// The back-office user list, user detail and group members responses carry
+// a photo URL signed for the operator, and the signed route serves it
+// (#2894).
+func TestSignedAvatar_AdminResponsesCarryURLsTheRouteServes(t *testing.T) {
+	c := qt.New(t)
+	env := newSignedAvatarEnv(c)
+	_, token := WithBackofficeAdmin(t, env.params)
+
+	var list struct {
+		Data []struct {
+			ID        string `json:"id"`
+			AvatarURL string `json:"avatar_url"`
+		} `json:"data"`
+	}
+	rr := env.adminAPI(c, "/api/v1/admin/tenants/"+env.owner.TenantID+"/users?per_page=100", token)
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &list), qt.IsNil)
+	listed := map[string]string{}
+	for _, row := range list.Data {
+		listed[row.ID] = row.AvatarURL
+	}
+	c.Assert(listed[env.plain.ID], qt.Equals, "")
+	for _, u := range []*models.User{env.owner, env.member, env.stranger} {
+		c.Assert(listed[u.ID], qt.Not(qt.Equals), "", qt.Commentf("no list URL for %s", u.Email))
+		assertServesJPEG(c, env.image(listed[u.ID]))
+	}
+
+	var detail struct {
+		Data struct {
+			AvatarURL string `json:"avatar_url"`
+		} `json:"data"`
+	}
+	rr = env.adminAPI(c, "/api/v1/admin/users/"+env.stranger.ID, token)
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &detail), qt.IsNil)
+	assertServesJPEG(c, env.image(detail.Data.AvatarURL))
+
+	var members struct {
+		Data []struct {
+			User struct {
+				ID        string `json:"id"`
+				AvatarURL string `json:"avatar_url"`
+			} `json:"user"`
+		} `json:"data"`
+	}
+	rr = env.adminAPI(c, "/api/v1/admin/groups/"+env.group.ID+"/members", token)
+	c.Assert(json.Unmarshal(rr.Body.Bytes(), &members), qt.IsNil)
+	memberURLs := map[string]string{}
+	for _, row := range members.Data {
+		memberURLs[row.User.ID] = row.User.AvatarURL
+	}
+	c.Assert(memberURLs, qt.HasLen, 3)
+	c.Assert(memberURLs[env.plain.ID], qt.Equals, "")
+	assertServesJPEG(c, env.image(memberURLs[env.member.ID]))
+}
+
+// An operator's URL is checked against the operator when it is served: a
+// disabled operator's URLs stop working, and a user cannot use one by
+// naming themselves in it.
+func TestSignedAvatar_OperatorURLChecksTheOperatorAgain(t *testing.T) {
+	c := qt.New(t)
+	ctx := context.Background()
+
+	mintFor := func(c *qt.C, env *signedAvatarEnv, operatorID string) string {
+		current := must.Must(env.params.FactorySet.UserRegistry.Get(ctx, env.stranger.ID))
+		signed, err := env.signer.GenerateOperatorAvatarURL(current.ID, *current.AvatarPath, operatorID, "")
+		c.Assert(err, qt.IsNil)
+		return signed
+	}
+
+	c.Run("an active operator is served", func(c *qt.C) {
+		env := newSignedAvatarEnv(c)
+		operator, _ := WithBackofficeAdmin(t, env.params)
+		assertServesJPEG(c, env.image(mintFor(c, env, operator.ID)))
+	})
+
+	c.Run("a disabled operator is refused", func(c *qt.C) {
+		env := newSignedAvatarEnv(c)
+		operator, _ := WithBackofficeAdmin(t, env.params)
+		signed := mintFor(c, env, operator.ID)
+		c.Assert(env.params.FactorySet.BackofficeUserRegistry.SetActive(ctx, operator.ID, false), qt.IsNil)
+		c.Assert(env.image(signed).Code, qt.Equals, http.StatusUnauthorized)
+	})
+
+	c.Run("a tenant user named as the operator is refused", func(c *qt.C) {
+		env := newSignedAvatarEnv(c)
+		c.Assert(env.image(mintFor(c, env, env.member.ID)).Code, qt.Equals, http.StatusUnauthorized)
+	})
+}
+
 func TestAvatarEndpoints_UploadAnswersWithASignedURL(t *testing.T) {
 	c := qt.New(t)
 	params, user, _ := newParams()
