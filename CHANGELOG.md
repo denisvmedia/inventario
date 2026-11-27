@@ -985,6 +985,12 @@ when to add an entry and where it goes.
   migration and ended in a timeout or a server error when the migration
   took longer than a minute. File tags are not affected
   ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+- You can delete your account after you hand a group you created to someone
+  else, whether you stay in it or leave. The group passes to its owner, and
+  the audit log records the hand-over. Before, the deletion was refused with
+  "You still own content shared with other people" for as long as the group
+  existed, and so it was for a co-owner who had created the group
+  ([#3009](https://github.com/denisvmedia/inventario/issues/3009)).
 
 ### Security
 

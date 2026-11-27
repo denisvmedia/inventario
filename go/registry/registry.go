@@ -3775,18 +3775,19 @@ const AuditActionAccountDeletionHandOver = "account_deletion_handover"
 // half-erased account).
 //
 // "Owned content" means a row that carries a NOT NULL FK to users(id) and that
-// UserPurger neither deletes nor hands over:
-//   - content authored by the user (created_by_user_id) in a group that is NOT
-//     being purged (items, files, file links, places, exports), and
-//   - location_groups the user created (created_by) that are NOT being purged.
+// UserPurger can neither delete nor hand over, in a group that is NOT being
+// purged:
+//   - content authored by the user (created_by_user_id): items, files, file
+//     links, places, exports, and
+//   - a row UserPurger hands over (a group the user created, tags, item
+//     history, …) whose group has no member other than the user to take it.
 //
 // purgedGroupIDs is the set of PRIVATE group IDs the caller will delete wholesale
 // (the user's content there disappears with the group, so it does not count).
 // The check is tenant-scoped as defense-in-depth.
 type UserContentOwnershipChecker interface {
-	// HasRetainedOwnedContent reports whether the user owns any content (or
-	// created any location group) that would survive deleting only the
-	// purgedGroupIDs groups. It performs no writes. A true result means the
+	// HasRetainedOwnedContent reports whether the user owns any content that
+	// would survive deleting only the purgedGroupIDs groups. It performs no writes. A true result means the
 	// account cannot be erased unilaterally; false means the purge sequence is
 	// safe to run.
 	HasRetainedOwnedContent(ctx context.Context, tenantID, userID string, purgedGroupIDs []string) (bool, error)
