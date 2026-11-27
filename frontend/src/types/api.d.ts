@@ -8889,10 +8889,21 @@ export type paths = {
          * @description Move the file to Trash. It keeps its links, so restoring it
          *     puts it back where it was. An export bundle is deleted for
          *     good.
+         *
+         *     With unless_linked=true the file goes to Trash only when
+         *     nothing holds it: no link, or only links to items in Trash
+         *     (it then goes with the item linked first). The links are
+         *     checked and the file trashed in one transaction. A file that a
+         *     link holds, an export bundle included, stays and the answer is
+         *     409 file.linked; a file that is gone or in Trash already is a
+         *     404.
          */
         delete: {
             parameters: {
-                query?: never;
+                query?: {
+                    /** @description Keep the file when a link holds it */
+                    unless_linked?: boolean;
+                };
                 header?: never;
                 path: {
                     /** @description Group slug */
@@ -8911,8 +8922,26 @@ export type paths = {
                     };
                     content?: never;
                 };
-                /** @description File not found */
+                /** @description File not found, or in Trash already */
                 404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description file.linked: with unless_linked=true, a link holds the file, so it stays */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/vnd.api+json": components["schemas"]["jsonapi.Errors"];
+                    };
+                };
+                /** @description unless_linked is not a boolean */
+                422: {
                     headers: {
                         [name: string]: unknown;
                     };

@@ -7688,7 +7688,7 @@ const docTemplate = `{
                 }
             },
             "delete": {
-                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.",
+                "description": "Move the file to Trash. It keeps its links, so restoring it\nputs it back where it was. An export bundle is deleted for\ngood.\n\nWith unless_linked=true the file goes to Trash only when\nnothing holds it: no link, or only links to items in Trash\n(it then goes with the item linked first). The links are\nchecked and the file trashed in one transaction. A file that a\nlink holds, an export bundle included, stays and the answer is\n409 file.linked; a file that is gone or in Trash already is a\n404.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -7713,6 +7713,12 @@ const docTemplate = `{
                         "name": "fileID",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Keep the file when a link holds it",
+                        "name": "unless_linked",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -7720,7 +7726,19 @@ const docTemplate = `{
                         "description": "No Content"
                     },
                     "404": {
-                        "description": "File not found",
+                        "description": "File not found, or in Trash already",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "file.linked: with unless_linked=true, a link holds the file, so it stays",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "422": {
+                        "description": "unless_linked is not a boolean",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

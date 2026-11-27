@@ -13272,6 +13272,14 @@ paths:
         Move the file to Trash. It keeps its links, so restoring it
         puts it back where it was. An export bundle is deleted for
         good.
+
+        With unless_linked=true the file goes to Trash only when
+        nothing holds it: no link, or only links to items in Trash
+        (it then goes with the item linked first). The links are
+        checked and the file trashed in one transaction. A file that a
+        link holds, an export bundle included, stays and the answer is
+        409 file.linked; a file that is gone or in Trash already is a
+        404.
       parameters:
       - description: Group slug
         in: path
@@ -13283,13 +13291,26 @@ paths:
         name: fileID
         required: true
         type: string
+      - description: Keep the file when a link holds it
+        in: query
+        name: unless_linked
+        type: boolean
       produces:
       - application/vnd.api+json
       responses:
         "204":
           description: No Content
         "404":
-          description: File not found
+          description: File not found, or in Trash already
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "409":
+          description: 'file.linked: with unless_linked=true, a link holds the file,
+            so it stays'
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "422":
+          description: unless_linked is not a boolean
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a file
