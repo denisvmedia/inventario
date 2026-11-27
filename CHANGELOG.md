@@ -671,14 +671,6 @@ when to add an entry and where it goes.
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 
-- An item's history keeps every edit of a save. A save that changed the
-  status, the area, a price or the cover recorded only that change, and the
-  name, type, tags or any other field changed in the same save were missing
-  from the history; a bulk edit that set the type and the status recorded
-  only the status. Such a save now also records an "updated" entry with the
-  other fields
-  ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
-
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -708,6 +700,13 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+- An item's history keeps every edit of a save. A save that changed the
+  status, the area, a price or the cover recorded only that change, and the
+  name, type, tags or any other field changed in the same save were missing
+  from the history; a bulk edit that set the type and the status recorded
+  only the status. Such a save now also records an "updated" entry with the
+  other fields
+  ([#2899](https://github.com/denisvmedia/inventario/issues/2899)).
 - The item delete dialog and the area delete dialog showed raw keys such as
   "delete.title" instead of their text
   ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
