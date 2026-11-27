@@ -648,6 +648,14 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- A request that waits for a free database connection stops waiting when the
+  client gives up or the request times out. Before, it stayed in the queue
+  with no deadline, so under load the queue grew instead of shedding
+  requests, and requests that each held one connection while waiting for a
+  second could stop the server from answering until it was restarted. A save
+  whose transaction did not commit is now reported as failed; before, a
+  failed commit was reported as a success
+  ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:
@@ -655,7 +663,6 @@ when to add an entry and where it goes.
   with the server's English text. It now shows the status without changing
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
-
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API
@@ -663,7 +670,6 @@ when to add an entry and where it goes.
   shows the server's reason instead of a fixed "Couldn't …" line. A server
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
-
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
