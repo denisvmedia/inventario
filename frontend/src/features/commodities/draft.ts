@@ -356,7 +356,7 @@ export function toRequest(
   }
 }
 
-export interface AttachPendingFilesOptions {
+export interface AttachPendingFilesOptions extends InGroup {
   // Checked before each file and after each upload. True stops the run; a
   // file uploaded once it is true goes to Trash instead of onto the item.
   shouldStop?: () => boolean
@@ -377,13 +377,15 @@ export interface AttachPendingFilesResult {
 // attachPendingFiles uploads the staged files one at a time and attaches each
 // to an existing item (#2916). A file an earlier run uploaded is attached as
 // it is, unless it was deleted since; a file that fails is reported and the
-// run goes on with the next one.
+// run goes on with the next one. Every request goes to the group named in
+// opts, the item's, when it is set.
 export async function attachPendingFiles(
   pending: PendingFile[],
   commodityId: string,
   opts: AttachPendingFilesOptions = {}
 ): Promise<AttachPendingFilesResult> {
   const target = { entityType: "commodity" as const, entityId: commodityId }
+  const inGroup: InGroup = { group: opts.group }
   const failed: AttachPendingFilesResult["failed"] = []
   for (const entry of pending) {
     if (opts.shouldStop?.()) return { failed, stopped: true }
@@ -393,7 +395,7 @@ export async function attachPendingFiles(
       let placed = false
       if (fileId) {
         try {
-          await placePendingFile(entry, fileId, target)
+          await placePendingFile(entry, fileId, target, inGroup)
           placed = true
         } catch (err) {
           if (!(err instanceof HttpError && err.status === 404)) throw err
@@ -401,15 +403,15 @@ export async function attachPendingFiles(
         }
       }
       if (!placed) {
-        fileId = (await uploadFile(entry.file)).file.id
+        fileId = (await uploadFile(entry.file, inGroup)).file.id
         opts.onFileUploaded?.(entry, fileId)
         // The form was left while the file was on its way: nothing will
         // attach it, so it goes to Trash rather than stay without an item.
         if (opts.shouldStop?.()) {
-          await trashUnlinkedFile(fileId).catch(() => false)
+          await trashUnlinkedFile(fileId, inGroup).catch(() => false)
           return { failed, stopped: true }
         }
-        await placePendingFile(entry, fileId, target)
+        await placePendingFile(entry, fileId, target, inGroup)
       }
       opts.onFileAttached?.(entry)
     } catch (error) {

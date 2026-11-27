@@ -843,7 +843,9 @@ export function CommodityFormDialog({
   // dialog closes without it, however it closes (#2916). The file being sent
   // when the dialog closes is left to the save, which stops after its upload
   // and sends it to Trash, or trashes it when its attach fails. Trash takes
-  // only a file nothing links, so one whose attach went through stays.
+  // only a file nothing links, so one whose attach went through stays. The
+  // files are in the group the form opened in (#2920): React runs this
+  // cleanup before the effect that forgets that group on close.
   const editLeftoversRef = useRef<string[]>([])
   useEffect(() => {
     editLeftoversRef.current =
@@ -856,7 +858,8 @@ export function CommodityFormDialog({
     return () => {
       const ids = editLeftoversRef.current
       if (ids.length === 0) return
-      void Promise.allSettled(ids.map((id) => trashUnlinkedFile(id))).then(() => {
+      const group = openedInRef.current ?? undefined
+      void Promise.allSettled(ids.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
         void queryClient.invalidateQueries({ queryKey: fileKeys.all })
         void queryClient.invalidateQueries({ queryKey: trashKeys.all })
       })
@@ -1045,7 +1048,9 @@ export function CommodityFormDialog({
     setDraftSave({ kind: "idle" })
     setFileStatus({})
     const attached = new Set<string>()
+    const group = formGroup()
     const result = await attachPendingFiles(pendingFiles, itemId, {
+      group,
       shouldStop: over,
       onFileStart: (entry) => mark(entry.id, "uploading"),
       onFileUploaded: (entry, fileId) =>
@@ -1065,7 +1070,7 @@ export function CommodityFormDialog({
       // Trash, as the dialog's close does with the ones it knows of.
       const left = result.failed.flatMap((failure) => failure.fileId ?? [])
       if (left.length > 0) {
-        void Promise.allSettled(left.map((id) => trashUnlinkedFile(id))).then(() => {
+        void Promise.allSettled(left.map((id) => trashUnlinkedFile(id, { group }))).then(() => {
           void queryClient.invalidateQueries({ queryKey: fileKeys.all })
           void queryClient.invalidateQueries({ queryKey: trashKeys.all })
         })
