@@ -27,6 +27,7 @@ export function builtins(): ItemTypeAttrs[] {
     builtin: true,
     item_count: 0,
     trashed_item_count: 0,
+    draft_count: 0,
   }))
 }
 
@@ -133,11 +134,11 @@ export function remove(slug: string, typeID: string, moved = 0, calls: string[] 
 }
 
 // inUse answers DELETE /item-types/{id} without reassign_to with the 409 of
-// a type that items have, and with reassign_to like `remove`.
+// a type that items or drafts have, and with reassign_to like `remove`.
 export function inUse(
   slug: string,
   typeID: string,
-  counts: { live: number; trashed: number },
+  counts: { live: number; trashed: number; drafts?: number },
   calls: string[] = []
 ) {
   return [
@@ -154,7 +155,11 @@ export function inUse(
               status: "Conflict",
               code: "item_type.in_use",
               detail: "items still have this type; choose a type to move them to",
-              meta: { item_count: counts.live, trashed_item_count: counts.trashed },
+              meta: {
+                item_count: counts.live,
+                trashed_item_count: counts.trashed,
+                draft_count: counts.drafts ?? 0,
+              },
             },
           ],
         },

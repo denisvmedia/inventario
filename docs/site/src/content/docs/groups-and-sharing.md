@@ -106,12 +106,10 @@ The card names the state of each type and field: added by the set, the group's o
 To remove the set, click **Remove the set** on the same card. The confirmation checks the group again when it opens, then lists what will be deleted and what stays, with the reason:
 
 - a type or field the group had before the set, which the set never deletes;
-- a type that items have, or a field that items have a value of, counting items in the [Trash](../trash/);
+- a type that items or [drafts](../items/#save-as-draft) have, or a field that items or drafts have a value of, counting items in the [Trash](../trash/);
 - the group's last item type, as a group always keeps one.
 
-The check counts saved items only, not [drafts](../items/#save-as-draft): a type or field that only a draft uses is listed for deletion, and the draft still refers to it after the removal ([#2939](https://github.com/denisvmedia/inventario/issues/2939)). Finish or check such drafts before you remove the set.
-
-Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
+Removing deletes only what the confirmation listed and leaves every item as it is. If something on the list comes into use before you confirm, for example because another member gives an item or a draft that type, it stays, and the message after removing names it. You can remove the set again later: it then deletes what has stopped being used since.
 
 A type or field the group had before the set keeps what the set linked to it. Such a type still offers the set's fields that stay, and such a field is still offered on the set's types that stay and on the group's own types the set linked it to. To undo a link, untick the type under **Item types** in the field's dialog (see [Custom fields](../custom-fields/#offer-a-field-on-item-types)). While the set's types are in the group, the card then shows **Partly added**, and **Add what is missing** would put the link back.
 

@@ -1,3 +1,4 @@
+import type { TFunction } from "i18next"
 import { useState } from "react"
 import { useTranslation } from "react-i18next"
 
@@ -41,6 +42,7 @@ export interface ItemTypeDeleteDialogProps {
 interface Usage {
   live: number
   trashed: number
+  drafts: number
 }
 
 interface DialogState {
@@ -49,7 +51,7 @@ interface DialogState {
   // The id of the type the items move to.
   target: string
   // What the server reported when it refused a delete without a target:
-  // items got the type after the page loaded its counts.
+  // items or drafts got the type after the page loaded its counts.
   refusedUsage: Usage | null
   // The server refused to delete the group's last type.
   last: boolean
@@ -68,14 +70,36 @@ function freshState(type: ItemType | null): DialogState {
 }
 
 function usageOf(type: ItemType | null): Usage {
-  return { live: type?.item_count ?? 0, trashed: type?.trashed_item_count ?? 0 }
+  return {
+    live: type?.item_count ?? 0,
+    trashed: type?.trashed_item_count ?? 0,
+    drafts: type?.draft_count ?? 0,
+  }
+}
+
+// description says what deleting the type does to the items and drafts
+// that have it.
+function description(t: TFunction, name: string, usage: Usage): string {
+  const items = usage.live + usage.trashed
+  if (items === 0) {
+    return usage.drafts > 0
+      ? t("itemTypes:removal.draftsOnly", { name, count: usage.drafts })
+      : t("itemTypes:removal.unused", { name })
+  }
+  const text =
+    usage.trashed > 0
+      ? t("itemTypes:removal.inUseWithTrash", { name, count: items, trashed: usage.trashed })
+      : t("itemTypes:removal.inUse", { name, count: usage.live })
+  return usage.drafts > 0
+    ? `${text} ${t("itemTypes:removal.drafts", { count: usage.drafts })}`
+    : text
 }
 
 // ItemTypeDeleteDialog deletes an item type (#2802). A type that items
-// have, in Trash included, is deleted only together with moving them to
-// another type the user picks, which is also how two types are merged. The
-// mock has no item types; the dialog follows the confirm dialog
-// (useConfirm) with a Select of the other types.
+// have, in Trash included, or drafts have, is deleted only together with
+// moving them to another type the user picks, which is also how two types
+// are merged. The mock has no item types; the dialog follows the confirm
+// dialog (useConfirm) with a Select of the other types.
 export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDeleteDialogProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
@@ -94,7 +118,9 @@ export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDelet
 
   const listed = shown ? (types.find((type) => type.id === shown.id) ?? shown) : null
   const usage = refusedUsage ?? usageOf(listed)
-  const inUse = refusedUsage !== null || usage.live + usage.trashed > 0
+  const items = usage.live + usage.trashed
+  const inUse = refusedUsage !== null || items + usage.drafts > 0
+  const draftsOnly = items === 0 && usage.drafts > 0
   const others = types.filter((type) => type.id !== shown?.id)
   const name = shown ? itemTypeLabel(t, shown) : ""
   const targetType = others.find((type) => type.id === target)
@@ -125,6 +151,7 @@ export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDelet
         const refused = {
           live: Number(meta?.item_count ?? 0) || 0,
           trashed: Number(meta?.trashed_item_count ?? 0) || 0,
+          drafts: Number(meta?.draft_count ?? 0) || 0,
         }
         setState((prev) => ({ ...prev, refusedUsage: refused }))
         return
@@ -151,15 +178,7 @@ export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDelet
         <DialogHeader>
           <DialogTitle>{t("itemTypes:removal.title", { name })}</DialogTitle>
           <DialogDescription data-testid="item-type-delete-description">
-            {inUse
-              ? usage.trashed > 0
-                ? t("itemTypes:removal.inUseWithTrash", {
-                    name,
-                    count: usage.live + usage.trashed,
-                    trashed: usage.trashed,
-                  })
-                : t("itemTypes:removal.inUse", { name, count: usage.live })
-              : t("itemTypes:removal.unused", { name })}
+            {description(t, name, usage)}
           </DialogDescription>
         </DialogHeader>
 
@@ -171,7 +190,11 @@ export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDelet
 
         {inUse ? (
           <div className="flex flex-col gap-1.5">
-            <Label htmlFor="item-type-delete-target">{t("itemTypes:removal.targetLabel")}</Label>
+            <Label htmlFor="item-type-delete-target">
+              {draftsOnly
+                ? t("itemTypes:removal.targetLabelDrafts")
+                : t("itemTypes:removal.targetLabel")}
+            </Label>
             <Select value={target} onValueChange={setTarget} disabled={pending}>
               <SelectTrigger
                 id="item-type-delete-target"
@@ -220,7 +243,11 @@ export function ItemTypeDeleteDialog({ itemType, types, onClose }: ItemTypeDelet
             disabled={pending || last || (inUse && !targetType)}
             data-testid="item-type-delete-confirm"
           >
-            {inUse ? t("itemTypes:removal.confirmMove") : t("itemTypes:removal.confirm")}
+            {!inUse
+              ? t("itemTypes:removal.confirm")
+              : draftsOnly
+                ? t("itemTypes:removal.confirmMoveDrafts")
+                : t("itemTypes:removal.confirmMove")}
           </Button>
         </DialogFooter>
       </DialogContent>

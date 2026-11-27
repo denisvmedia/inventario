@@ -36,6 +36,10 @@ func NewFactorySet() *registry.FactorySet {
 	sellerFactory := NewSellerRegistryFactory(commodityFactory)
 	itemTypeFactory := NewItemTypeRegistryFactory(commodityFactory)
 	customFieldFactory := NewCustomFieldRegistryFactory(commodityFactory, itemTypeFactory)
+	// The drafts name item types and hold custom field values; the two
+	// factories count them and rewrite them on a delete.
+	itemTypeFactory.SetDraftFactory(commodityDraftFactory)
+	customFieldFactory.SetDraftFactory(commodityDraftFactory)
 	restoreStepFactory := NewRestoreStepRegistryFactory()
 	restoreOperationFactory := NewRestoreOperationRegistryFactory(restoreStepFactory)
 	exportFactory := NewExportRegistryFactory(restoreOperationFactory)

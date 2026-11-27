@@ -163,12 +163,9 @@ group's own, removing the set keeps it. A backup made before the Collection set
 existed restores all of them as the group's own.
 
 As without a restore, removing the set deletes only what the confirmation
-lists and no saved item uses, counting items in the [Trash](../trash/), and it
-keeps the group's last item type even when nothing uses it. It does not count
-[drafts](../items/#save-as-draft): a type or field that only a draft uses is
-deleted, and the draft still refers to it
-([#2939](https://github.com/denisvmedia/inventario/issues/2939)). Finish or
-check the drafts that use the set's types and fields before you remove it.
+lists and no item or [draft](../items/#save-as-draft) uses, counting items in
+the [Trash](../trash/), and it keeps the group's last item type even when
+nothing uses it.
 
 ### Custom fields
 

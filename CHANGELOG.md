@@ -814,6 +814,19 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- Deleting an item type or a custom field, and removing the Collection set,
+  now count the drafts saved on the server as well as items. A type that only
+  a draft had was offered for deletion and deleted, and the draft could then
+  neither be saved nor finished until another type was picked; a value a
+  draft held for a deleted field was dropped without a word when the draft
+  was finished. The delete dialogs now say how many drafts use the type or
+  have a value of the field. Deleting a type moves its drafts with its items
+  to the type you pick, deleting a field takes the value out of the drafts
+  once you confirm, and removing the set keeps a type or field that a draft
+  uses. In the API, the item type and custom field lists and their `409`
+  answers carry a `draft_count`, and `expected_values` of a custom field
+  delete counts the drafts with a value too
+  ([#2939](https://github.com/denisvmedia/inventario/issues/2939)).
 
 ### Security
 
