@@ -36,12 +36,15 @@ type trashAPI struct {
 // logTrash writes the audit row of a Trash request. failedIDs are the entries
 // of a bulk request that did not go through; err is the request's error, or
 // for a bulk request a summary of its failures. Nil-safe like the other audit
-// helpers.
+// helpers. The row is written even when the client has gone away or the
+// request timed out: a purge that stopped partway has already deleted
+// entries, so the write is detached from the request's cancellation and
+// keeps its values (user, group, impersonation claims, request id).
 func (api *trashAPI) logTrash(r *http.Request, action string, outcome services.TrashOutcome, failedIDs []string, err error) {
 	if api.audit == nil {
 		return
 	}
-	ctx := r.Context()
+	ctx := context.WithoutCancel(r.Context())
 	user := appctx.UserFromContext(ctx)
 	group := appctx.GroupFromContext(ctx)
 	if user == nil || group == nil {

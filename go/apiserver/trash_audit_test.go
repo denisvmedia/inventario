@@ -14,6 +14,7 @@ import (
 	"go.5x5.cz/inventario/apiserver"
 	"go.5x5.cz/inventario/internal/checkers"
 	"go.5x5.cz/inventario/models"
+	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/services"
 )
 
@@ -183,4 +184,41 @@ func TestTrashAPI_EmptyTrashWritesAnAuditRow(t *testing.T) {
 	env.assertTrashRow(rows[0], true)
 	c.Assert(extras[0].ItemIDs, qt.DeepEquals, []string{ids[0]})
 	c.Assert(sorted(extras[0].FileIDs), qt.DeepEquals, files)
+}
+
+// ctxCheckingAuditLog records, for every audit row written, whether the
+// context of the write was already done. Postgres opens a transaction with
+// that context, so a done one loses the row; memory ignores it.
+type ctxCheckingAuditLog struct {
+	registry.AuditLogRegistry
+	doneOnWrite map[string]error
+}
+
+func (a *ctxCheckingAuditLog) Create(ctx context.Context, entry models.AuditLog) (*models.AuditLog, error) {
+	a.doneOnWrite[entry.Action] = ctx.Err()
+	return a.AuditLogRegistry.Create(ctx, entry)
+}
+
+// A purge whose request was canceled (the client left, or the request timed
+// out) may already have deleted entries, so its audit row must still be
+// written.
+func TestTrashAPI_PurgeOfACanceledRequestStillWritesItsAuditRow(t *testing.T) {
+	c := qt.New(t)
+	params, user, group := newParams()
+	audit := &ctxCheckingAuditLog{AuditLogRegistry: params.FactorySet.AuditLogRegistry, doneOnWrite: map[string]error{}}
+	params.FactorySet.AuditLogRegistry = audit
+	env := &trashAPIEnv{c: c, params: params, handler: apiserver.APIServer(params, &mockRestoreWorker{}), user: user, group: group}
+	ids := env.commodityIDs()
+	c.Assert(env.do(http.MethodDelete, "/commodities/"+ids[0], "").Code, qt.Equals, http.StatusNoContent)
+
+	canceled, cancel := context.WithCancel(context.Background())
+	cancel()
+	req := httptest.NewRequestWithContext(canceled, http.MethodDelete, "/api/v1/g/"+group.Slug+"/trash/commodities/"+ids[0], nil)
+	req.Header.Set("Accept", "application/vnd.api+json")
+	addTestUserAuthHeader(req, user.ID)
+	env.handler.ServeHTTP(httptest.NewRecorder(), req)
+
+	done, written := audit.doneOnWrite[services.AuditActionTrashPurge]
+	c.Assert(written, qt.IsTrue)
+	c.Assert(done, qt.IsNil)
 }
