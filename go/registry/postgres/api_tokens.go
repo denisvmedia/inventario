@@ -65,12 +65,37 @@ func (r *APITokenRegistry) Create(ctx context.Context, token models.APIToken) (*
 
 	reg := r.newSQLRegistry()
 	if err := reg.Do(ctx, func(ctx context.Context, tx *sqlx.Tx) error {
+		if token.GroupID != nil {
+			if err := r.checkGroupMember(ctx, tx, token); err != nil {
+				return err
+			}
+		}
 		txReg := store.NewTxRegistry[models.APIToken](tx, r.tableNames.APITokens())
 		return txReg.Insert(ctx, token)
 	}); err != nil {
 		return nil, errxtrace.Wrap("failed to insert api token", err)
 	}
 	return &token, nil
+}
+
+// checkGroupMember takes the group's membership lock and fails with
+// ErrNotAGroupMember unless the token's user is still a member, so the insert
+// cannot land after a removal that already revoked the group's tokens.
+func (r *APITokenRegistry) checkGroupMember(ctx context.Context, tx *sqlx.Tx, token models.APIToken) error {
+	if err := lockGroupMemberships(ctx, tx, *token.GroupID); err != nil {
+		return err
+	}
+	var member bool
+	query := fmt.Sprintf(
+		`SELECT EXISTS (SELECT 1 FROM %s WHERE tenant_id = $1 AND group_id = $2 AND member_user_id = $3)`,
+		r.tableNames.GroupMemberships())
+	if err := tx.GetContext(ctx, &member, query, token.TenantID, *token.GroupID, token.UserID); err != nil {
+		return errxtrace.Wrap("failed to check group membership for api token", err)
+	}
+	if !member {
+		return errxtrace.Classify(registry.ErrNotAGroupMember, errx.Attrs("group_id", *token.GroupID))
+	}
+	return nil
 }
 
 func (r *APITokenRegistry) GetByTokenHash(ctx context.Context, tokenHash string) (*models.APIToken, error) {
