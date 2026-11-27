@@ -648,6 +648,13 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Saving an item from the **All fields** dialog keeps its status date, status
+  note and sale price. The dialog sent the item without them, and the save
+  cleared them. The dialog also offered a status change it could not finish:
+  leaving In Use needs a date, which it did not ask for, so the save failed
+  with the server's English text. It now shows the status without changing
+  it; **Change Status** on the item page changes it
+  ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
