@@ -396,9 +396,10 @@ type CustomFieldValueIndexes struct {
 	_ int
 
 	// The typed filters and sorts of the item query, one index per value
-	// column, each led by the field.
-	//ptah:schema:index name="idx_commodity_custom_field_values_field_text" fields="field_id,value_text" table="commodity_custom_field_values"
-	_ int
+	// column, each led by the field. value_text has none: its filters
+	// compare LOWER(value_text) or match a substring, which the trigram
+	// index serves, and a URL value can be longer than a btree entry holds
+	// (2704 bytes).
 	//ptah:schema:index name="idx_commodity_custom_field_values_field_number" fields="field_id,value_number" table="commodity_custom_field_values"
 	_ int
 	//ptah:schema:index name="idx_commodity_custom_field_values_field_date" fields="field_id,value_date" table="commodity_custom_field_values"

@@ -77,3 +77,15 @@ describe("<StorageCard /> trash share", () => {
     expect(screen.queryByTestId("storage-card-trash")).toBeNull()
   })
 })
+
+// The usage sums the uploaded files. The thumbnails rendered for photos are
+// stored apart and not counted, so the card says what the number covers
+// (#2896).
+describe("<StorageCard /> what the usage counts", () => {
+  it("says that thumbnails are not counted", async () => {
+    renderCard(usage(0))
+    expect(await screen.findByTestId("storage-card-counts-note")).toHaveTextContent(
+      "Counts each file at the size it was uploaded. The thumbnails made for photos are not counted."
+    )
+  })
+})

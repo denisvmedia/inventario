@@ -195,6 +195,7 @@ export function CommoditiesListPage() {
   const types = query.types
   const statuses = query.statuses as CommodityStatusValue[]
   const areaId = query.areaId
+  const locationId = query.locationId
   const warrantyFilter = query.warrantyStatuses as CommodityWarrantyStatus[]
   const lentOutOnly = query.lentOut
   const unassignedOnly = query.unassigned
@@ -440,6 +441,16 @@ export function CommoditiesListPage() {
   function setAreaFilter(id: string) {
     updateQuery({ areaId: id })
   }
+  // A location keeps an area of that location and drops one elsewhere, and
+  // ends "No location": an item without an area is in no location.
+  function setLocationFilter(id: string) {
+    const area = areas.data?.find((a) => a.id === areaId)
+    updateQuery({
+      locationId: id,
+      areaId: id && area && area.location_id !== id ? "" : areaId,
+      unassigned: id ? false : unassignedOnly,
+    })
+  }
   function toggleSeller(id: string) {
     updateQuery({ sellerIds: toggled(query.sellerIds, id) })
   }
@@ -482,7 +493,10 @@ export function CommoditiesListPage() {
     updateQuery({ [key]: !query[key] })
   }
   function toggleUnassigned() {
-    updateQuery({ unassigned: !unassignedOnly })
+    updateQuery({
+      unassigned: !unassignedOnly,
+      locationId: unassignedOnly ? locationId : "",
+    })
   }
   function setViewMode(mode: ViewMode) {
     setStoredView(mode)
@@ -669,6 +683,8 @@ export function CommoditiesListPage() {
           typeOptions={typeOptions}
           statuses={statuses}
           areaId={areaId}
+          locationId={locationId}
+          locations={locationsQuery.data ?? []}
           warrantyFilter={warrantyFilter}
           lentOutOnly={lentOutOnly}
           unassignedOnly={unassignedOnly}
@@ -683,6 +699,7 @@ export function CommoditiesListPage() {
           onToggleType={toggleType}
           onToggleStatus={toggleStatus}
           onSetArea={setAreaFilter}
+          onSetLocation={setLocationFilter}
           onToggleSeller={toggleSeller}
           onToggleWarranty={toggleWarranty}
           onToggleLentOut={toggleLentOut}
@@ -871,6 +888,7 @@ interface ToolbarProps {
   typeOptions: ItemTypeDisplay[]
   statuses: CommodityStatusValue[]
   areaId: string
+  locationId: string
   warrantyFilter: CommodityWarrantyStatus[]
   lentOutOnly: boolean
   unassignedOnly: boolean
@@ -878,13 +896,15 @@ interface ToolbarProps {
   sort: CommoditySortOption
   sortDesc: boolean
   viewMode: ViewMode
-  areas: { id?: string; name?: string }[]
+  areas: { id?: string; name?: string; location_id?: string }[]
+  locations: { id?: string; name?: string }[]
   sellerIds: string[]
   sellers: Seller[]
   hasFilters: boolean
   onToggleType: (t: string) => void
   onToggleStatus: (s: CommodityStatusValue) => void
   onSetArea: (id: string) => void
+  onSetLocation: (id: string) => void
   onToggleSeller: (id: string) => void
   onToggleWarranty: (s: CommodityWarrantyStatus) => void
   onToggleLentOut: () => void
@@ -975,6 +995,11 @@ function MissingFilterMenu({
 function Toolbar(props: ToolbarProps) {
   const { t } = useTranslation()
   const sortableFields = (props.customFields ?? []).filter(isSortableField)
+  // With a location picked, the area filter offers that location's areas,
+  // and the area picked before, so it can be cleared.
+  const areaOptions = props.locationId
+    ? props.areas.filter((a) => a.location_id === props.locationId || a.id === props.areaId)
+    : props.areas
   // A sort by a field the group no longer has falls back to name on the
   // server; the menu says which field it was.
   const sortFieldLabel = props.customFieldSort
@@ -1071,6 +1096,39 @@ function Toolbar(props: ToolbarProps) {
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
+            variant={props.locationId ? "default" : "outline"}
+            size="sm"
+            className="gap-1.5"
+            data-testid="commodities-filter-location"
+          >
+            <ListFilter className="size-3.5" aria-hidden="true" />
+            {t("commodities:filter.location")}
+            <ChevronDown className="size-3.5" aria-hidden="true" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          <DropdownMenuLabel>{t("commodities:filter.location")}</DropdownMenuLabel>
+          <DropdownMenuSeparator />
+          <DropdownMenuRadioGroup value={props.locationId} onValueChange={props.onSetLocation}>
+            <DropdownMenuRadioItem value="">
+              {t("commodities:filter.locationAll")}
+            </DropdownMenuRadioItem>
+            {props.locations.map((l) => (
+              <DropdownMenuRadioItem
+                key={l.id}
+                value={l.id ?? ""}
+                data-testid={`commodities-filter-location-${l.id}`}
+              >
+                {l.name}
+              </DropdownMenuRadioItem>
+            ))}
+          </DropdownMenuRadioGroup>
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button
             variant={props.areaId ? "default" : "outline"}
             size="sm"
             className="gap-1.5"
@@ -1088,7 +1146,7 @@ function Toolbar(props: ToolbarProps) {
             <DropdownMenuRadioItem value="">
               {t("commodities:filter.areaAll")}
             </DropdownMenuRadioItem>
-            {props.areas.map((a) => (
+            {areaOptions.map((a) => (
               <DropdownMenuRadioItem key={a.id} value={a.id ?? ""}>
                 {a.name}
               </DropdownMenuRadioItem>

@@ -15,6 +15,7 @@ import { useResetPassword } from "@/features/auth/hooks"
 import { resetPasswordSchema, type ResetPasswordInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 // ResetPasswordPage — token comes from `?token=…`. Three render states:
 //   1. Empty/missing token → invalid-link notice with a shortcut to forgot.
@@ -125,14 +126,15 @@ export function ResetPasswordPage() {
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
+              aria-describedby={form.formState.errors.password ? "reset-password-error" : undefined}
               {...form.register("password")}
             />
             <PasswordStrengthMeter password={passwordValue} testId="reset-password-strength" />
-            {form.formState.errors.password ? (
-              <p className="text-xs text-destructive" data-testid="password-error">
-                {t(form.formState.errors.password.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="reset-password-error"
+              testId="password-error"
+              message={form.formState.errors.password?.message}
+            />
           </div>
 
           <div className="space-y-1.5">
@@ -144,13 +146,16 @@ export function ResetPasswordPage() {
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.confirmPassword}
               data-testid="confirm-password"
+              aria-describedby={
+                form.formState.errors.confirmPassword ? "reset-confirm-error" : undefined
+              }
               {...form.register("confirmPassword")}
             />
-            {form.formState.errors.confirmPassword ? (
-              <p className="text-xs text-destructive" data-testid="confirm-password-error">
-                {t(form.formState.errors.confirmPassword.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="reset-confirm-error"
+              testId="confirm-password-error"
+              message={form.formState.errors.confirmPassword?.message}
+            />
           </div>
 
           {serverError ? (

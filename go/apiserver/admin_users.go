@@ -147,6 +147,14 @@ type adminUsersAPI struct {
 	blacklist    services.TokenBlacklister
 	auditService services.AuditLogger
 	apiTokens    *services.APITokenService
+	// avatarSigner signs the users' photo URLs for the operator (#2894). Nil
+	// leaves every user without one.
+	avatarSigner *services.FileSigningService
+}
+
+// avatarURL signs each listed user's photo URL for the operator of r.
+func (api *adminUsersAPI) avatarURL(r *http.Request) func(*models.User) string {
+	return func(u *models.User) string { return operatorAvatarURL(r, api.avatarSigner, u) }
 }
 
 // listTenantUsers returns a paginated, filtered, sorted listing of
@@ -212,7 +220,7 @@ func (api *adminUsersAPI) listTenantUsers(w http.ResponseWriter, r *http.Request
 	// Audit AFTER render so a JSON-encoding / response-writer failure
 	// turns into a Success=false row instead of claiming the client
 	// received their data successfully.
-	renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total))
+	renderErr := render.Render(w, r, jsonapi.NewAdminUsersResponse(items, page, perPage, total, api.avatarURL(r)))
 	api.auditListUsers(r, tenantID, renderErr)
 	if renderErr != nil {
 		_ = internalServerError(w, r, renderErr)
@@ -339,6 +347,7 @@ func (api *adminUsersAPI) getUser(w http.ResponseWriter, r *http.Request) {
 		Memberships:        mems,
 		ActiveSessionCount: sessionCount,
 		IsSystemAdmin:      isAdmin,
+		AvatarURL:          operatorAvatarURL(r, api.avatarSigner, user),
 	}))
 	api.auditGetUser(r, userID, user.TenantID, renderErr)
 	if renderErr != nil {

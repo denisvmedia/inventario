@@ -17,6 +17,7 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Textarea } from "@/components/ui/textarea"
+import { FieldError } from "@/components/FieldError"
 import type { AdminTenant } from "@/features/admin/api"
 import {
   useCreateAdminTenant,
@@ -193,13 +194,14 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.name}
               data-testid="admin-tenant-name"
+              aria-describedby={errors.name ? "admin-tenant-name-error" : undefined}
               {...form.register("name")}
             />
-            {errors.name?.message ? (
-              <p className="text-xs text-destructive" data-testid="admin-tenant-name-error">
-                {t(errors.name.message)}
-              </p>
-            ) : null}
+            <FieldError
+              id="admin-tenant-name-error"
+              testId="admin-tenant-name-error"
+              message={errors.name?.message}
+            />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label htmlFor="admin-tenant-slug">{t("tenantForm.slug.label")}</Label>
@@ -210,12 +212,15 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.slug}
               data-testid="admin-tenant-slug"
+              aria-describedby={errors.slug ? "admin-tenant-slug-error" : undefined}
               {...form.register("slug")}
             />
             {errors.slug?.message ? (
-              <p className="text-xs text-destructive" data-testid="admin-tenant-slug-error">
-                {t(errors.slug.message)}
-              </p>
+              <FieldError
+                id="admin-tenant-slug-error"
+                testId="admin-tenant-slug-error"
+                message={errors.slug.message}
+              />
             ) : (
               <p className="text-xs text-muted-foreground">
                 {isCreate ? t("tenantForm.slug.hintCreate") : t("tenantForm.slug.hintEdit")}
@@ -231,12 +236,15 @@ export function TenantFormDialog(props: TenantFormProps) {
               disabled={pending}
               aria-invalid={!!errors.domain}
               data-testid="admin-tenant-domain"
+              aria-describedby={errors.domain ? "admin-tenant-domain-error" : undefined}
               {...form.register("domain")}
             />
             {errors.domain?.message ? (
-              <p className="text-xs text-destructive" data-testid="admin-tenant-domain-error">
-                {t(errors.domain.message)}
-              </p>
+              <FieldError
+                id="admin-tenant-domain-error"
+                testId="admin-tenant-domain-error"
+                message={errors.domain.message}
+              />
             ) : (
               <p className="text-xs text-muted-foreground">{t("tenantForm.domain.hint")}</p>
             )}

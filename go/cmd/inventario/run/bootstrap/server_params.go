@@ -213,7 +213,7 @@ func buildServerParams(cfg *Config, factorySet *registry.FactorySet, dsn string)
 	// One service for the API and the export worker, so the worker sends
 	// the ready email through the same email service (#2177).
 	params.PersonalDataExports = export.NewPersonalDataExportService(factorySet, params.UploadLocation,
-		export.WithPersonalDataExportNotifier(services.NewPersonalDataExportNotifier(params.EmailService, factorySet.SettingsRegistryFactory, params.PublicURL)))
+		export.WithPersonalDataExportNotifier(services.NewPersonalDataExportNotifier(params.EmailService, factorySet.SettingsRegistryFactory, factorySet.TenantRegistry, params.PublicURL)))
 
 	if err = wireCommodityScan(cfg, &params); err != nil {
 		slog.Error("Failed to wire commodity scan service", "error", err)

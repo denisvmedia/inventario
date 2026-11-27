@@ -509,7 +509,11 @@ func (r *CommodityRegistry) ListPaginated(ctx context.Context, offset, limit int
 		limit = 0
 	}
 
-	filtered := filterCommodities(all, opts)
+	areas, err := r.locationAreas(ctx, opts)
+	if err != nil {
+		return nil, 0, err
+	}
+	filtered := filterCommodities(all, opts, areas)
 	sortCommodities(filtered, opts)
 
 	total := len(filtered)
@@ -525,7 +529,11 @@ func (r *CommodityRegistry) ListIDs(ctx context.Context, opts registry.Commodity
 	if err != nil {
 		return nil, err
 	}
-	filtered := filterCommodities(all, opts)
+	areas, err := r.locationAreas(ctx, opts)
+	if err != nil {
+		return nil, err
+	}
+	filtered := filterCommodities(all, opts, areas)
 	ids := make([]string, 0, min(len(filtered), max(limit, 0)))
 	for _, c := range filtered {
 		if len(ids) >= limit {
@@ -542,10 +550,14 @@ func (r *CommodityRegistry) CountTags(ctx context.Context, opts registry.Commodi
 	if err != nil {
 		return registry.CommodityTagCounts{}, err
 	}
-	return registry.CountCommodityTags(filterCommodities(all, opts)), nil
+	areas, err := r.locationAreas(ctx, opts)
+	if err != nil {
+		return registry.CommodityTagCounts{}, err
+	}
+	return registry.CountCommodityTags(filterCommodities(all, opts, areas)), nil
 }
 
-func (r *CommodityRegistry) CountEach(_ context.Context, opts []registry.CommodityListOptions) ([]int, error) {
+func (r *CommodityRegistry) CountEach(ctx context.Context, opts []registry.CommodityListOptions) ([]int, error) {
 	counts := make([]int, len(opts))
 	if len(opts) == 0 {
 		return counts, nil
@@ -564,7 +576,11 @@ func (r *CommodityRegistry) CountEach(_ context.Context, opts []registry.Commodi
 		if o.WarrantyNow.IsZero() {
 			o.WarrantyNow = now
 		}
-		counts[i] = len(filterCommodities(all, o))
+		areas, err := r.locationAreas(ctx, o)
+		if err != nil {
+			return nil, err
+		}
+		counts[i] = len(filterCommodities(all, o, areas))
 	}
 	return counts, nil
 }
@@ -590,8 +606,9 @@ func (r *CommodityRegistry) listCandidates(ctx context.Context, opts registry.Co
 
 // filterCommodities applies the predicate fields of opts in-memory. Empty
 // slice/string fields are no-ops, matching the documented "zero-value =
-// no filter" contract.
-func filterCommodities(in []*models.Commodity, opts registry.CommodityListOptions) []*models.Commodity {
+// no filter" contract. areas holds the IDs of the areas in opts.LocationID,
+// see locationAreas; it is not read without a LocationID.
+func filterCommodities(in []*models.Commodity, opts registry.CommodityListOptions, areas map[string]struct{}) []*models.Commodity {
 	out := make([]*models.Commodity, 0, len(in))
 	terms := registry.SplitSearchTerms(opts.Search)
 	now := opts.WarrantyNow
@@ -602,7 +619,7 @@ func filterCommodities(in []*models.Commodity, opts registry.CommodityListOption
 	// call so the per-row membership checks are O(1) instead of
 	// O(len(ids)). slices.Contains in the inner loop would otherwise make
 	// filterCommodities quadratic on the number of IDs.
-	var sets matchSets
+	sets := matchSets{areas: areas}
 	if opts.LentOut != nil {
 		sets.open = idSet(opts.OpenLoanCommodityIDs)
 	}
@@ -661,8 +678,44 @@ func commodityMatchesArea(c *models.Commodity, opts registry.CommodityListOption
 	}
 }
 
-// matchSets are the ID sets filterCommodities lifts out of the options.
+// commodityMatchesLocation applies the LocationID filter (#2897): no location
+// keeps every item, otherwise the item's area has to be one of the location's
+// areas. An item without an area is in no location.
+func commodityMatchesLocation(c *models.Commodity, locationID string, areas map[string]struct{}) bool {
+	if locationID == "" {
+		return true
+	}
+	if c.AreaID == nil {
+		return false
+	}
+	_, ok := areas[*c.AreaID]
+	return ok
+}
+
+// locationAreas returns the IDs of the areas in opts.LocationID, read from
+// the area registry, which keeps the areas of the caller's group only. The
+// set is empty when no location is asked for or the location has no areas.
+func (r *CommodityRegistry) locationAreas(ctx context.Context, opts registry.CommodityListOptions) (map[string]struct{}, error) {
+	out := make(map[string]struct{})
+	if opts.LocationID == "" {
+		return out, nil
+	}
+	all, err := r.areaRegistry.List(ctx)
+	if err != nil {
+		return nil, errxtrace.Wrap("failed to list areas", err)
+	}
+	for _, a := range all {
+		if a.LocationID == opts.LocationID {
+			out[a.ID] = struct{}{}
+		}
+	}
+	return out, nil
+}
+
+// matchSets are the ID sets filterCommodities lifts out of the options,
+// plus the areas of the location filter.
 type matchSets struct {
+	areas  map[string]struct{}
 	open   map[string]struct{}
 	photos map[string]struct{}
 }
@@ -688,7 +741,7 @@ func commodityMatches(c *models.Commodity, opts registry.CommodityListOptions, t
 	if len(opts.Statuses) > 0 && !slices.Contains(opts.Statuses, c.Status) {
 		return false
 	}
-	if !commodityMatchesArea(c, opts) {
+	if !commodityMatchesArea(c, opts) || !commodityMatchesLocation(c, opts.LocationID, sets.areas) {
 		return false
 	}
 	if !commodityMatchesSeller(c, opts.SellerIDs) {
