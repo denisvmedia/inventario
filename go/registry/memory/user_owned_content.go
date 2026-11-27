@@ -27,7 +27,7 @@ const (
 	// deletionRemoves marks personal rows, which UserPurger deletes.
 	deletionRemoves
 	// deletionHandsOver marks rows of the group, which UserPurger gives to
-	// another member (see UserPurger.SetGroupRowStores).
+	// another member (see UserPurger.setGroupRowStores).
 	deletionHandsOver
 )
 
@@ -56,10 +56,10 @@ func ownedSources(fs *registry.FactorySet) []ownedSource {
 		{registry.OwnedAreas, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.AreaRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedTags, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedTags, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.TagRegistryFactory.CreateServiceRegistry().List)
 		}},
-		{registry.OwnedSellers, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
+		{registry.OwnedSellers, deletionHandsOver, func(ctx context.Context) ([]createdByEntry, error) {
 			return authoredRows(ctx, fs.SellerRegistryFactory.CreateServiceRegistry().List)
 		}},
 		{registry.OwnedExports, deletionBlocks, func(ctx context.Context) ([]createdByEntry, error) {
