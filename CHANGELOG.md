@@ -72,8 +72,11 @@ when to add an entry and where it goes.
   is not a group backup, and the restore upload refuses one with 422
   `restore.personal_data_export`. The export worker builds it in the
   background and emails the user when it is ready; a build cut short by a
-  restart is queued again and built once more. One request is allowed per
-  day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
+  restart is queued again, three builds in all, and a build whose worker
+  stops during the third fails the export with "the worker stopped before
+  the personal data export finished"
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)). One
+  request is allowed per day (429 `data_export.rate_limited` with `Retry-After` and `retry_at`), the
   archive is deleted after 7 days or with the account, only its owner can
   list and download it, an impersonation session can neither request nor
   download one, and each request and download is recorded in the audit log.
@@ -579,6 +582,17 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Failed personal data exports are failed jobs too. The back office
+  **Failed jobs** page and `inventario jobs failed` list them as
+  `personal-data-export`, with the user's email address as the title and no
+  group, and retry and discard them like the other types; the group card
+  does not show them, since the copy belongs to a user. A retry builds the
+  copy again from the start, and the copy is kept 7 days from when that
+  build finishes. A retry is not a new request, so the user's daily limit
+  still counts from the request they made. Failed builds count in
+  `inventario_jobs_dead_lettered_total` and
+  `inventario_jobs_dead_letter_depth`
+  ([#2942](https://github.com/denisvmedia/inventario/issues/2942)).
 
 ### Changed
 

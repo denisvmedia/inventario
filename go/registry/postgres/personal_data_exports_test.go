@@ -183,12 +183,19 @@ func TestPersonalDataExportRegistryPostgres_ClaimUpdateExpire(t *testing.T) {
 }
 
 // A build that started before the cutoff and is still in progress goes back
-// to the queue; one that started after it stays.
-func TestPersonalDataExportRegistryPostgres_RequeueStalled(t *testing.T) {
+// to the queue until the export has started its last allowed build; a dead
+// build after that fails it. A build that started after the cutoff stays.
+func TestPersonalDataExportRegistryPostgres_RecoverStalled(t *testing.T) {
 	c := qt.New(t)
 	env := newPersonalExportPGEnv(t)
 	ctx := context.Background()
 	now := time.Now().UTC().Truncate(time.Microsecond)
+	sweep := registry.PersonalDataExportStalledSweep{
+		StartedBefore: now.Add(-time.Hour),
+		Now:           now,
+		MaxBuilds:     2,
+		ErrorMessage:  "the worker stopped",
+	}
 
 	stalled, _ := env.request(c, env.user, now)
 	running, _ := env.request(c, env.other, now)
@@ -199,20 +206,41 @@ func TestPersonalDataExportRegistryPostgres_RequeueStalled(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsTrue)
 
-	moved, err := env.exports.RequeueStalled(ctx, now.Add(-time.Hour))
+	requeued, failed, err := env.exports.RecoverStalled(ctx, sweep)
 	c.Assert(err, qt.IsNil)
-	c.Assert(moved, qt.Equals, 1)
+	c.Assert(requeued, qt.Equals, 1)
+	c.Assert(failed, qt.Equals, 0)
 
 	got, err := env.exports.Get(ctx, stalled.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
 	c.Assert(got.StartedAt, qt.IsNil)
+	c.Assert(got.AttemptCount, qt.Equals, 1)
 	got, err = env.exports.Get(ctx, running.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusInProgress)
 	c.Assert(got.StartedAt, qt.IsNotNil)
 
-	claimed, err = env.exports.ClaimPending(ctx, stalled.ID, now)
+	// The second build is the last one; when it dies too, the export fails.
+	claimed, err = env.exports.ClaimPending(ctx, stalled.ID, now.Add(-2*time.Hour))
 	c.Assert(err, qt.IsNil)
 	c.Assert(claimed, qt.IsTrue)
+	requeued, failed, err = env.exports.RecoverStalled(ctx, sweep)
+	c.Assert(err, qt.IsNil)
+	c.Assert(requeued, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 1)
+
+	got, err = env.exports.Get(ctx, stalled.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(got.ErrorMessage, qt.Equals, "the worker stopped")
+	c.Assert(got.CompletedAt, qt.IsNotNil)
+	c.Assert(got.CompletedAt.Equal(now), qt.IsTrue, qt.Commentf("completed at %s", got.CompletedAt))
+	c.Assert(got.AttemptCount, qt.Equals, 2)
+
+	// A failed export is not swept again.
+	requeued, failed, err = env.exports.RecoverStalled(ctx, sweep)
+	c.Assert(err, qt.IsNil)
+	c.Assert(requeued, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 0)
 }

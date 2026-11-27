@@ -40,12 +40,21 @@ func newMemoryFailedJobEnv(t *testing.T) registrytest.FailedJobEnv {
 		c.Assert(err, qt.IsNil)
 		return registrytest.FailedJobGroup{ID: id, Ctx: ctx, Set: set}
 	}
+	personalUser, err := fs.UserRegistry.Create(context.Background(), models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-1"},
+		Email:               "member@example.com",
+		Name:                "Member",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
 	return registrytest.FailedJobEnv{
-		Jobs:          fs.FailedJobRegistry,
-		TenantID:      "tenant-1",
-		UserID:        user.ID,
-		A:             group("group-a"),
-		B:             group("group-b"),
-		IntakeService: fs.IntakeRegistryFactory.CreateServiceRegistry(),
+		Jobs:            fs.FailedJobRegistry,
+		TenantID:        "tenant-1",
+		UserID:          user.ID,
+		A:               group("group-a"),
+		B:               group("group-b"),
+		IntakeService:   fs.IntakeRegistryFactory.CreateServiceRegistry(),
+		PersonalExports: fs.PersonalDataExportRegistry,
+		PersonalUser:    personalUser,
 	}
 }

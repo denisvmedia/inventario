@@ -160,12 +160,14 @@ func NewFactorySet() *registry.FactorySet {
 	fs.CurrencyMigrationRegistryFactory = currencyMigrationFactory
 	// Failed jobs (#1307) read the job rows of these stores directly.
 	fs.FailedJobRegistry = NewFailedJobRegistry(FailedJobStores{
-		Exports:            exportFactory,
-		Restores:           restoreOperationFactory,
-		Thumbnails:         thumbnailGenerationJobFactory,
-		Files:              fileFactory,
-		Intake:             intakeFactory,
-		CurrencyMigrations: currencyMigrationFactory,
+		Exports:             exportFactory,
+		Restores:            restoreOperationFactory,
+		Thumbnails:          thumbnailGenerationJobFactory,
+		Files:               fileFactory,
+		Intake:              intakeFactory,
+		CurrencyMigrations:  currencyMigrationFactory,
+		PersonalDataExports: personalDataExportReg,
+		Users:               userReg,
 	})
 	fs.CommodityScanAuditRegistry = NewCommodityScanAuditRegistry()
 	groupPurger := NewGroupPurger(

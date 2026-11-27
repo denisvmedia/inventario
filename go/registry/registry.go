@@ -3421,16 +3421,19 @@ type PersonalDataExportRegistry interface {
 	ListPending(ctx context.Context) ([]*models.PersonalDataExport, error)
 
 	// ClaimPending moves an export from pending to in_progress, records
-	// startedAt as the start of its build, and reports whether this caller
-	// is the one that moved it. The condition is part of the write, so two
-	// workers racing for one row get one true.
+	// startedAt as the start of its build, counts the build in
+	// AttemptCount, and reports whether this caller is the one that moved
+	// it. The condition is part of the write, so two workers racing for one
+	// row get one true.
 	ClaimPending(ctx context.Context, id string, startedAt time.Time) (bool, error)
 
-	// RequeueStalled moves the exports whose build started before
-	// startedBefore and is still in_progress back to pending, and returns how
-	// many it moved. A build whose process dies records no result, and its
-	// row would otherwise stay in_progress until it expires.
-	RequeueStalled(ctx context.Context, startedBefore time.Time) (int, error)
+	// RecoverStalled handles the exports whose build started before
+	// sweep.StartedBefore and is still in_progress. A build whose process
+	// dies records no result, and its row would otherwise stay in_progress
+	// until it expires. An export that has started sweep.MaxBuilds builds
+	// fails with sweep.ErrorMessage at sweep.Now; the others go back to
+	// pending, for the next claim to build them again.
+	RecoverStalled(ctx context.Context, sweep PersonalDataExportStalledSweep) (requeued, failed int, err error)
 
 	// Update writes the status, start, archive and statistics columns of an
 	// existing export. The owner, tenant and creation time never change.
@@ -3443,6 +3446,22 @@ type PersonalDataExportRegistry interface {
 	// Delete removes one export row. Deleting a row that is gone is not an
 	// error.
 	Delete(ctx context.Context, id string) error
+}
+
+// PersonalDataExportStalledSweep says which builds of personal data exports
+// RecoverStalled takes for dead, and what it records on the exports it
+// fails.
+type PersonalDataExportStalledSweep struct {
+	// StartedBefore: a build still in_progress that started before this
+	// is dead.
+	StartedBefore time.Time
+	// Now is when an export the sweep fails is recorded to have failed.
+	Now time.Time
+	// MaxBuilds is how many builds an export gets before a dead build
+	// fails it instead of queuing it again.
+	MaxBuilds int
+	// ErrorMessage is stored on each export the sweep fails.
+	ErrorMessage string
 }
 
 // LoginEventRegistry stores the append-only login_events audit trail

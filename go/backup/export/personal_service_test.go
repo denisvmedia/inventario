@@ -14,6 +14,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/prometheus/client_golang/prometheus/testutil"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/appctx"
@@ -21,6 +22,7 @@ import (
 	"go.5x5.cz/inventario/internal/blobkeys"
 	_ "go.5x5.cz/inventario/internal/fileblob" // register file://
 	"go.5x5.cz/inventario/internal/inb"
+	"go.5x5.cz/inventario/internal/metrics"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 	"go.5x5.cz/inventario/registry/memory"
@@ -551,14 +553,16 @@ func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
 	c.Assert(claimed, qt.IsTrue)
 
 	now = now.Add(30 * time.Minute)
-	moved, err := svc.RequeueStalled(f.ctx)
+	requeued, failed, err := svc.RecoverStalled(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(moved, qt.Equals, 0)
+	c.Assert(requeued, qt.Equals, 0)
+	c.Assert(failed, qt.Equals, 0)
 
 	now = now.Add(time.Hour)
-	moved, err = svc.RequeueStalled(f.ctx)
+	requeued, failed, err = svc.RecoverStalled(f.ctx)
 	c.Assert(err, qt.IsNil)
-	c.Assert(moved, qt.Equals, 1)
+	c.Assert(requeued, qt.Equals, 1)
+	c.Assert(failed, qt.Equals, 0)
 	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
@@ -569,10 +573,59 @@ func TestPersonalDataExport_StalledBuildIsQueuedAgain(t *testing.T) {
 	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
 }
 
+// A build whose worker dies on each of its three builds fails for good, so
+// it is listed among the failed jobs and counted once, instead of being
+// queued again every hour.
+func TestPersonalDataExport_StalledBuildFailsAfterItsLastBuild(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+	counter := metrics.JobsDeadLetteredFor(string(models.FailedJobTypePersonalDataExport))
+	before := testutil.ToFloat64(counter)
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	// deadBuild claims the export and lets its build die.
+	deadBuild := func() (requeued, failed int) {
+		claimed, err := svc.Claim(f.ctx, requested.ID)
+		c.Assert(err, qt.IsNil)
+		c.Assert(claimed, qt.IsTrue)
+		now = now.Add(2 * time.Hour)
+		requeued, failed, err = svc.RecoverStalled(f.ctx)
+		c.Assert(err, qt.IsNil)
+		return requeued, failed
+	}
+	for build := 1; build <= 2; build++ {
+		requeued, failed := deadBuild()
+		c.Assert([]int{requeued, failed}, qt.DeepEquals, []int{1, 0}, qt.Commentf("build %d is queued again", build))
+	}
+	requeued, failed := deadBuild()
+	c.Assert([]int{requeued, failed}, qt.DeepEquals, []int{0, 1}, qt.Commentf("the third build fails the export"))
+
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(got.ErrorMessage, qt.Equals, export.StalledPersonalDataExportError)
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, 1.0)
+
+	jobs, err := f.fs.FailedJobRegistry.ListFailed(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobs, qt.HasLen, 1)
+	c.Assert(jobs[0].ID, qt.Equals, requested.ID)
+	c.Assert(jobs[0].Attempts, qt.Equals, 3)
+}
+
+// A build that fails is a failed job: it is listed among the failed jobs of
+// the installation with the user's email and the time it failed, and counts
+// once as dead-lettered.
 func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {
 	c := qt.New(t)
 	f := newPersonalFixture(c)
-	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+	counter := metrics.JobsDeadLetteredFor(string(models.FailedJobTypePersonalDataExport))
+	before := testutil.ToFloat64(counter)
 
 	requested, err := svc.Request(f.ctx, f.alice)
 	c.Assert(err, qt.IsNil)
@@ -580,10 +633,81 @@ func TestPersonalDataExport_InactiveAccountFails(t *testing.T) {
 	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
 	c.Assert(err, qt.IsNil)
 
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	now = now.Add(time.Minute)
 	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNotNil)
 	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
 	c.Assert(err, qt.IsNil)
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(testutil.ToFloat64(counter)-before, qt.Equals, 1.0)
+
+	jobs, err := f.fs.FailedJobRegistry.ListFailed(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, 0)
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobs, qt.HasLen, 1)
+	job := jobs[0]
+	c.Assert(job.ID, qt.Equals, requested.ID)
+	c.Assert(job.TenantID, qt.Equals, f.alice.TenantID)
+	c.Assert(job.UserID, qt.Equals, f.alice.ID)
+	c.Assert(job.GroupID, qt.Equals, "")
+	c.Assert(job.Title, qt.Equals, "alice@example.com")
+	c.Assert(job.Error, qt.Equals, "the account is not active")
+	c.Assert(job.Attempts, qt.Equals, 1)
+	c.Assert(job.FailedAt, qt.IsNotNil)
+	c.Assert(job.FailedAt.Equal(now), qt.IsTrue, qt.Commentf("failed at %s", job.FailedAt))
+}
+
+// A retry of a failed export builds it again from the start. The row is kept
+// while it waits for the worker, and the 7 days start again when the build
+// finishes. It is no new request, so the daily limit still counts from the
+// first one.
+func TestPersonalDataExport_RetryBuildsItAgain(t *testing.T) {
+	c := qt.New(t)
+	f := newPersonalFixture(c)
+	now := time.Date(2026, 11, 26, 10, 0, 0, 0, time.UTC)
+	svc := export.NewPersonalDataExportService(f.fs, f.uploadLocation, export.WithPersonalDataExportClock(func() time.Time { return now }))
+
+	requested, err := svc.Request(f.ctx, f.alice)
+	c.Assert(err, qt.IsNil)
+	f.alice.IsActive = false
+	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
+	c.Assert(err, qt.IsNil)
+	claimed, err := svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNotNil)
+
+	f.alice.IsActive = true
+	_, err = f.fs.UserRegistry.Update(f.ctx, *f.alice)
+	c.Assert(err, qt.IsNil)
+	// Six days later, a day before the failed row would expire.
+	now = now.Add(6 * 24 * time.Hour)
+	c.Assert(f.fs.FailedJobRegistry.Retry(f.ctx, models.FailedJobTypePersonalDataExport, registry.FailedJobScope{}, requested.ID, now), qt.IsNil)
+
+	got, err := svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusPending)
+	c.Assert(got.ErrorMessage, qt.Equals, "")
+	c.Assert(got.StartedAt, qt.IsNil)
+	c.Assert(got.CompletedAt, qt.IsNil)
+	c.Assert(got.BlobKey, qt.Equals, "")
+	c.Assert(got.ExpiresAt.After(now.Add(6*24*time.Hour)), qt.IsTrue,
+		qt.Commentf("the row waits for the build: expires at %s", got.ExpiresAt))
+	c.Assert(got.CreatedAt.Equal(requested.CreatedAt), qt.IsTrue, qt.Commentf("the request keeps its time"))
+
+	// The build after the retry is the export's second.
+	now = now.Add(2 * 24 * time.Hour)
+	claimed, err = svc.Claim(f.ctx, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	c.Assert(svc.Process(f.ctx, requested.ID), qt.IsNil)
+	got, err = svc.Get(f.ctx, f.alice.ID, requested.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusCompleted)
+	c.Assert(got.AttemptCount, qt.Equals, 2)
+	c.Assert(got.ExpiresAt.Equal(now.Add(models.PersonalDataExportRetention)), qt.IsTrue,
+		qt.Commentf("the 7 days start when the build finishes: expires at %s", got.ExpiresAt))
 }
 
 func TestExportWorker_BuildsPersonalDataExports(t *testing.T) {

@@ -108,7 +108,8 @@ service. Click **Request a copy**. Inventario prepares it in the background and
 sends you an email when it is ready; the email links back to this card, not to
 the file. While it is being prepared the copy shows as **Waiting** or
 **Preparing**, and the list updates on its own; if the server restarts while
-your copy is being prepared, it is prepared again. A copy still not ready two
+your copy is being prepared, it is prepared again, up to three times in all.
+A copy still not ready two
 hours after the request is no longer checked on its own; come back to the page
 later to see it. When it is **Ready**, the
 row shows its size and the day it is deleted, and **Download** saves it as
@@ -146,6 +147,10 @@ A few rules apply:
   or not. A copy that could not be prepared shows as **Failed** and is removed
   from the list 7 days after the request; request a new one when the daily
   limit allows.
+- The administrator of your Inventario server sees a copy that failed and can
+  prepare it again for you. It then shows as **Waiting** again, you get the
+  email when it is ready, and it is deleted 7 days after that. This is not a
+  new request: the daily limit still counts from the request you made.
 - Only you can see and download your copies. The download works only in the
   browser where you are signed in and clicked **Download**.
 - A copy is **not a backup**. It holds only your part of each group, so it

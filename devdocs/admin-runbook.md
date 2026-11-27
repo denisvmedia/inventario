@@ -607,6 +607,7 @@ uses.
 | `thumbnail` | `thumbnail_generation_jobs` | the last of its attempts fails | yes: gets a fresh set of attempts |
 | `intake` | `intake_sources` | the scan fails for good, or the sweep gives up on it | yes: due at once, with its attempt count kept |
 | `currency-migration` | `currency_migrations` | the recovery sweep finds it stuck | no: the rate was confirmed for that moment; start a new migration |
+| `personal-data-export` | `personal_data_exports` | the build returns an error, or its worker stops during its third build | yes: builds the copy again from the start |
 
 The email queue, the reminder sweeps, group purge and the cleanup sweepers
 keep no failed jobs: they retry on their next run.
@@ -652,6 +653,18 @@ The sweep does not catch two cases:
   progress until the process is restarted; the job then has no heartbeat
   younger than ten minutes, and the sweep moves it on.
 
+A personal data export belongs to a user, not to a group. Its title is the
+user's email address, and it has no group. A build whose worker stops is
+taken for dead an hour after it started; the export goes back to the queue,
+and once its worker has stopped during its third build it fails with "the
+worker stopped before the personal data export finished". Each claim counts
+a build in the attempts, a retry's too. A retry clears the error, the
+start and end of the build and the archive, and keeps the row for 7 more
+days while the copy waits for the worker; when the build finishes, the
+copy is kept 7 days from then, like any other. A retry is not a new
+request: the user's daily limit still counts from the request they made,
+so it neither uses up nor resets their next request.
+
 Only the newest thumbnail job of a file counts. While that job is failed and
 nobody has retried or discarded it, viewing the file starts no new job, so a
 file that cannot be thumbnailed is one failed job, not one per view. Once it
@@ -679,6 +692,9 @@ it:
   next view of the file tries again.
 - `intake`: until the member deletes the intake session in the Inbox, or
   the group is deleted.
+- `personal-data-export`: until the row expires, 7 days after the user's
+  request or after the latest retry; the export worker then deletes it.
+  Deleting the user or the tenant deletes it too.
 - `currency-migration`: the currency migration worker deletes completed and
   failed migrations, discarded or not, once they ended more than
   `--currency-migration-retention` ago
@@ -737,7 +753,10 @@ need the `platform_admin` role on the back office.
 - **Group admins and owners** see their own group's failed jobs in **Group
   settings → Data & storage**, with Retry. They cannot discard: for a
   restore or a currency migration the card tells them to start a new one,
-  and an operator can discard the failed one.
+  and an operator can discard the failed one. Personal data exports are not
+  in the group card: they belong to a user, so only the back office and the
+  CLI show them, and the group routes answer `failed_job.unknown_type` for
+  the type.
 
 ### CLI
 
@@ -774,7 +793,7 @@ that is no longer failed fails with "not found".
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/retry` | Retry one job (204). |
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/discard` | Discard one job (204). `platform_admin` only; a `support_agent` gets 403 `admin.role_required`. |
 | `POST /api/v1/admin/failed-jobs/bulk-discard` | Discard every job that failed before `?failed_before` (required), with the list's `?type` and `?tenantID`; `?dry_run=true` only counts. 200 with `meta.discarded` and `meta.by_type`. `platform_admin` only, the dry run too. |
-| `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. |
+| `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. Its `meta.job_types` leaves out `personal-data-export`. |
 | `POST /api/v1/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` | A group admin's retry. |
 
 Error codes: `failed_job.unknown_type` (404 on a path, 400 on the `?type`
