@@ -670,6 +670,12 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Signing out no longer signs you back in. A request that was still running
+  when you signed out was refused, the app renewed the session to retry it,
+  and a moment later you were signed in again. The back office had the same
+  problem. When the timing went the other way, the server took the renewal
+  for a stolen session and signed you out on your other devices too
+  ([#3026](https://github.com/denisvmedia/inventario/issues/3026)).
 - Reminder emails go out only for items in use. An item marked Sold, Lost,
   Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
   loan and item reminders, and its reminders, loans and maintenance stayed on

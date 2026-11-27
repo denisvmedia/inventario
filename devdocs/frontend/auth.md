@@ -112,6 +112,22 @@ an invalid refresh token — not session expiry. The wrapper lists these in
 a doomed refresh loop. This is why a wrong-password login shows an inline error
 rather than silently retrying.
 
+### Sign-out
+
+`logout()` and `backofficeLogout()` send their request inside
+`withSignOut(plane, …)`. Both logout handlers put the access token on the
+blacklist before they revoke the refresh token, so a request that carried the
+old token can get a 401 while the refresh cookie still works. A refresh at that
+moment signed the user back in (#3026). While a sign-out runs:
+
+- a 401 on that plane ends in the error, with no refresh, no impersonation
+  recovery and no redirect. The sign-out clears the credentials itself;
+- a refresh that was already running finishes first, so the logout carries the
+  newest tokens, and those are what the server revokes.
+
+The other plane is not affected. Any new call that ends a session should run
+inside `withSignOut` too.
+
 ### Plane awareness (tenant vs back-office)
 
 The tenant plane and the back-office plane (`/admin/*`, `/backoffice/*`, gated
