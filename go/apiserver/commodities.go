@@ -465,7 +465,12 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 
 // updateCommodity updates a commodity.
 // @Summary Update a commodity
-// @Description Update a commodity
+// @Description Replace the item with the values sent. attributes.revision is the revision
+// @Description the values were based on, as the client read it: when the item has been written
+// @Description since (an edit, a bulk change, a tag rename), the save is refused with 409
+// @Description commodity.revision_conflict and nothing is written, so it cannot undo that
+// @Description write. Without it, or with 0, the save is not checked. The response carries
+// @Description the item's new revision.
 // @Tags commodities
 // @Accept json-api
 // @Produce json-api
@@ -474,6 +479,7 @@ func (api *commoditiesAPI) deleteCommodity(w http.ResponseWriter, r *http.Reques
 // @Param commodity body jsonapi.CommodityRequest true "Commodity object"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written after the revision sent"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID} [put].
 func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Request) {
@@ -564,8 +570,12 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 		return
 	}
 
-	// Use UpdateWithUser to ensure proper user context and validation
 	ctx := r.Context()
+	// A client that names the revision its edit started from gets the save
+	// refused when the item was written since, instead of undoing that write.
+	if updateData.Revision > 0 {
+		ctx = registry.WithExpectedRevision(ctx, updateData.Revision)
+	}
 	commodityReg := registrySet.CommodityRegistry
 	updatedCommodity, err := commodityReg.Update(ctx, updateData)
 	if err != nil {
@@ -613,6 +623,7 @@ func (api *commoditiesAPI) updateCommodity(w http.ResponseWriter, r *http.Reques
 // @Param body body jsonapi.CommodityCoverRequest true "Cover photo file id (null to clear)"
 // @Success 200 {object} jsonapi.CommodityResponse "OK"
 // @Failure 404 {object} jsonapi.Errors "Commodity or file not found"
+// @Failure 409 {object} jsonapi.Errors "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
 // @Router /g/{groupSlug}/commodities/{commodityID}/cover [patch].
 func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Request) {
@@ -669,18 +680,21 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 		}
 	}
 
-	updateData := *commodity
-	// Only the cover changes; the custom field values read with the item
-	// would overwrite one written since.
-	updateData.CustomFields = nil
-	if desired == "" {
-		updateData.CoverFileID = nil
-	} else {
-		v := desired
-		updateData.CoverFileID = &v
-	}
-
-	updated, err := registrySet.CommodityRegistry.Update(r.Context(), updateData)
+	// The item is written whole with the revision it was read at, so a change
+	// saved since the middleware read it (a bulk change, a tag rename) is not
+	// undone: RewriteCommodity reads it again and retries, and answers 409
+	// after the last attempt.
+	before, updated, err := services.RewriteCommodity(r.Context(), registrySet.CommodityRegistry, commodity.ID, commodity, func(next *models.Commodity) bool {
+		// Only the cover changes; the custom field values read with the item
+		// would overwrite one written since.
+		next.CustomFields = nil
+		if desired == "" {
+			next.CoverFileID = nil
+		} else {
+			next.CoverFileID = new(desired)
+		}
+		return true
+	})
 	if err != nil {
 		renderEntityError(w, r, err)
 		return
@@ -689,7 +703,7 @@ func (api *commoditiesAPI) setCommodityCover(w http.ResponseWriter, r *http.Requ
 	// #1450: cover override change is a distinct event kind so the timeline
 	// can render "set / cleared cover photo" without aliasing it to the
 	// generic "updated" row.
-	api.eventService.EmitUpdated(r.Context(), commodity, updated)
+	api.eventService.EmitUpdated(r.Context(), before, updated)
 
 	resp := jsonapi.NewCommodityResponse(updated).WithStatusCode(http.StatusOK)
 	if cover := api.resolveCoverForOne(r, updated); cover != nil {

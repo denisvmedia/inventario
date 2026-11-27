@@ -7,6 +7,7 @@ import { http, HttpResponse } from "msw"
 
 import { CommodityEditForm } from "@/components/items/CommodityEditForm"
 import {
+  COMMODITY_REVISION_CONFLICT,
   updateCommodity,
   type Commodity,
   type UpdateCommodityRequest,
@@ -91,6 +92,7 @@ function renderForm(
   }
   const handlers = {
     onSubmit: vi.fn(props.onSubmit ?? (async () => ({}))),
+    onReload: vi.fn(),
     onExit: vi.fn(),
     onGoTo: vi.fn(),
     onAllFields: vi.fn(),
@@ -121,6 +123,19 @@ function renderForm(
     ),
   })
   return { ...utils, ...handlers }
+}
+
+// The 409 the server sends for a save whose revision the item no longer has.
+function revisionConflict() {
+  return new HttpError("conflict", 409, "/commodities/c1", {
+    errors: [
+      {
+        status: "Conflict",
+        code: COMMODITY_REVISION_CONFLICT,
+        error: { msg: "the item changed since it was read" },
+      },
+    ],
+  })
 }
 
 function validationError(attributes: Record<string, string>) {
@@ -250,6 +265,42 @@ describe("<CommodityEditForm />", () => {
     )
     expect(screen.getByTestId("edit-category")).toHaveAttribute("aria-invalid", "true")
     expect(screen.queryByTestId("commodity-edit-error")).not.toBeInTheDocument()
+  })
+
+  it("sends the revision the item had when the form opened", async () => {
+    const user = userEvent.setup()
+    const { onSubmit } = renderForm({ revision: 3 })
+    await user.type(await screen.findByLabelText(/^name/i), " 2")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+    await waitFor(() => expect(onSubmit).toHaveBeenCalledTimes(1))
+    expect(onSubmit.mock.calls[0][0]).toMatchObject({ name: "Desk lamp 2", revision: 3 })
+  })
+
+  // A bulk action tagged the item after the form opened: the save is refused,
+  // and the form offers to load the item as it is now (#2981).
+  it("offers a reload when the item changed since the form opened", async () => {
+    const user = userEvent.setup()
+    const { onSubmit, onReload, onExit } = renderForm(
+      { revision: 3 },
+      {
+        onSubmit: async () => {
+          throw revisionConflict()
+        },
+      }
+    )
+    await user.type(await screen.findByLabelText(/^name/i), " 2")
+    await user.click(screen.getByTestId("commodity-edit-save"))
+
+    const alert = await screen.findByTestId("commodity-edit-stale")
+    expect(alert).toHaveTextContent("This item changed since you opened it")
+    expect(onSubmit).toHaveBeenCalledTimes(1)
+    expect(onExit).not.toHaveBeenCalled()
+    expect(screen.queryByTestId("commodity-edit-error")).not.toBeInTheDocument()
+    // The entered values stay until the user reloads.
+    expect(screen.getByLabelText(/^name/i)).toHaveValue("Desk lamp 2")
+
+    await user.click(within(alert).getByTestId("commodity-edit-reload"))
+    expect(onReload).toHaveBeenCalledTimes(1)
   })
 
   it("keeps the fields it does not show when saving", async () => {

@@ -59,7 +59,8 @@ func (r *CommodityRegistry) Patch(ctx context.Context, id string, addTags []stri
 			return err
 		}
 		query := fmt.Sprintf(`
-			UPDATE %s SET tags = $2, type = $3, status = $4, status_date = $5, status_note = $6, sale_price = $7, area_id = $8
+			UPDATE %s SET tags = $2, type = $3, status = $4, status_date = $5, status_note = $6, sale_price = $7, area_id = $8,
+				revision = revision + 1
 			WHERE id = $1 RETURNING *`, table)
 		if err := scanOne(ctx, tx, &stored, query, id,
 			patched.Tags, patched.Type, patched.Status, patched.StatusDate, patched.StatusNote, patched.SalePrice, patched.AreaID); err != nil {

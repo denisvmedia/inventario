@@ -5,6 +5,7 @@
 // FE in #1410).
 import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http } from "@/lib/http"
+import { getServerErrorCode } from "@/lib/server-error"
 import type { Schema } from "@/types"
 
 import { listOptionsToParams, type CommoditySearchMatch, type TagMatchMode } from "./query"
@@ -349,6 +350,17 @@ export async function createCommodity(req: CreateCommodityRequest): Promise<Comm
 
 export type UpdateCommodityRequest = Partial<Commodity>
 
+// The server refuses a save whose `revision` the item no longer has: the
+// item was written after the values were read (an edit, a bulk change, a tag
+// rename), and saving them would undo that write. Nothing was saved.
+export const COMMODITY_REVISION_CONFLICT = "commodity.revision_conflict"
+
+export function isCommodityRevisionConflict(err: unknown): boolean {
+  return getServerErrorCode(err) === COMMODITY_REVISION_CONFLICT
+}
+
+// A save sends the whole record, with the revision it was read at, so the
+// server can refuse it when the item has changed since.
 export async function updateCommodity(id: string, req: UpdateCommodityRequest): Promise<Commodity> {
   // BE rejects PUTs whose body's `data.id` doesn't match the URL id —
   // mirroring the JSON:API contract that callers identify the resource
