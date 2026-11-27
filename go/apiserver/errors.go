@@ -227,6 +227,13 @@ func NewTooManyRequestsError(err error) jsonapi.Error {
 
 func internalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	slog.ErrorContext(r.Context(), "internal server error", "error", err)
+	return renderInternalServerError(w, r, err)
+}
+
+// renderInternalServerError renders a 500 without logging, for a handler that
+// has already logged err with its own message and attributes. An error is
+// logged once (devdocs/logging.md, Levels).
+func renderInternalServerError(w http.ResponseWriter, r *http.Request, err error) error {
 	// Report the unexpected 5xx to Sentry (#844). No-op when Sentry is disabled.
 	sentry.CaptureError(r.Context(), err, map[string]string{"component": "apiserver"})
 	return render.Render(w, r, jsonapi.NewErrors(NewInternalServerError(err)))

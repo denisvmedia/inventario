@@ -286,7 +286,7 @@ func (api *PasswordResetAPI) sendPasswordChangedNotification(user *models.User) 
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
-			slog.Error("Failed to send password-changed notification email", "user_id", user.ID, "error", err)
+			slog.ErrorContext(ctx, "Failed to send password-changed notification email", "user_id", user.ID, "error", err)
 		}
 	}()
 }

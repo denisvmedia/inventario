@@ -452,8 +452,8 @@ func (api *OAuthAPI) completeSignInFlow(
 		// outcome surfaces a tenant_mismatch row in login_events so this
 		// shows up clearly in the audit history.
 		if user.TenantID != tenantID {
-			slog.ErrorContext(r.Context(), "OAuth callback: cross-tenant sign-in attempted (existing identity)",
-				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+			slog.WarnContext(r.Context(), "OAuth callback: cross-tenant sign-in attempted (existing identity)",
+				"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 			return
@@ -489,7 +489,7 @@ func (api *OAuthAPI) completeSignInFlow(
 		// auto-link can never happen even if the lower layer regresses.
 		if user.TenantID != tenantID {
 			slog.ErrorContext(r.Context(), "OAuth callback: cross-tenant sign-in attempted (email match)",
-				"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+				"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 			api.auth.recordLoginEventWithMethod(r.Context(), tenantID, profile.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 			http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 			return
@@ -655,8 +655,8 @@ func (api *OAuthAPI) completeLinkFlow(
 	// write a row with tenant_id=B but user_id pointing into tenant A —
 	// corrupting tenant boundaries.
 	if user.TenantID != tenantID {
-		slog.ErrorContext(r.Context(), "OAuth link: cross-tenant link attempted",
-			"user_id", user.ID, "user_tenant", user.TenantID, "callback_tenant", tenantID, "provider", providerName)
+		slog.WarnContext(r.Context(), "OAuth link: cross-tenant link attempted",
+			"user_id", user.ID, "user_tenant_id", user.TenantID, "callback_tenant_id", tenantID, "provider", providerName)
 		api.auth.recordLoginEventWithMethod(r.Context(), tenantID, user.Email, &user.ID, models.LoginOutcomeTenantMismatch, method, r)
 		http.Redirect(w, r, oauthErrorURL("tenant_mismatch", st.RedirectAfter), http.StatusFound)
 		return
