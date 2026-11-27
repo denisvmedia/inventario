@@ -36,7 +36,7 @@ action's behavior and were not logged.
 
 | Consumer | Where | Trigger | Endpoint family | Requests per invocation | Per push |
 | --- | --- | --- | --- | --- | --- |
-| Changed-file detection (`dorny/paths-filter`) | `changes` job of 22 workflows (two of them behind a workflow-level `paths:` filter) | every pull request push | `GET /repos/{r}/pulls/{n}/files` | 1 per 100 changed files (measured: 1) | 21 for the measured diff after this change (23 measured before) |
+| Changed-file detection (`dorny/paths-filter`) | `changes` job of 22 workflows (two of them behind a workflow-level `paths:` filter) | every pull request push | none: a `git fetch` of one commit and a local diff | 0 | 0 (through `GET /repos/{r}/pulls/{n}/files` it was 1 per 100 changed files: 21 for the measured diff) |
 | Image waiter (`_wait-for-docker-image.yml`) | `helm-kind-smoke-test.yml` | pull requests touching the chart, previews or CI; master | `GET .../actions/workflows/docker.yml/runs`, `GET .../actions/runs/{id}/jobs` | 1 per poll while the run is queued, 2 while it runs; one poll a minute | 2·D (measured: 6 polls, 12 requests) |
 | PR-close drain | `docker.yml` `cleanup` | pull request closed | `GET .../actions/runs?head_sha=` | 1 per minute until no run is left, at most 30 | 1–30 per close (measured: 1) |
 | PR-close reclaim | `docker.yml` `cleanup` | pull request closed | PR commits, owner lookup, package versions, deletes | 2 + 1 per 100 package versions + 1 per deleted version | not measured; the step now logs the version count |
@@ -89,14 +89,15 @@ touching the chart, and 6 closes an hour.
 | Before #2985 | about 24,000 | spent within minutes |
 | After #2985 | about 2,200–3,600 | 2 to 4 times over |
 | After this change | about 810, plus at least 4 per close and the package listing | about 85 % |
-| After follow-up 1 below | about 310, plus closes | about 35 % |
+| With changed-file detection through git | about 310, plus closes | about 35 % |
 
 The target is to stay under **700 requests an hour** at that load, which
 leaves 300 for reruns, bot pull requests, previews and the tag release. This
 change brings readiness coordination to zero for everything except the Helm
 kind lane, which takes the load under the limit but not yet under the target.
-Changed-file detection is then the largest consumer: 21 requests a push, 504
-an hour at that load. Follow-up 1 removes it; the others are smaller.
+Changed-file detection diffs with git and makes no request; through the
+pull request files API it cost 21 requests a push, 504 an hour at that load.
+See [Conditional CI execution](conditional-execution.md#how-it-works).
 
 ## How the image build hands off to its tests
 
@@ -164,12 +165,9 @@ changes ─┬─ build (amd64, arm64) ── merge ─┬─ E2E Tests (chromiu
 
 ## Follow-ups
 
-1. **Changed-file detection through git.** `dorny/paths-filter` with
-   `token: ''` and `base: ${{ github.event.pull_request.base.sha }}` diffs
-   locally instead of calling the API. That removes 21 requests a push, about
-   500 an hour at the sizing load, at the cost of a deeper fetch in each
-   `changes` job. It touches every gated workflow, so it is a change of its
-   own.
+1. **Changed-file detection through git.** Done: the `changes` jobs diff
+   with git against the merge commit's first parent, as described in
+   [Conditional CI execution](conditional-execution.md#how-it-works).
 2. **Move the Helm kind lane into `docker.yml`** the same way, which retires
    `_wait-for-docker-image.yml` and its verdict test.
 3. **Narrow the close drain** to runs that can still pull the image. With the

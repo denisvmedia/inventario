@@ -53,7 +53,6 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      pull-requests: read
     outputs:
       image_inputs: ${{ steps.filter.outputs.image_inputs }}
       frontend: ${{ steps.filter.outputs.frontend }}
@@ -64,11 +63,18 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - name: Find the commit the pull request merges into
+        id: base
+        uses: ./.github/actions/pr-merge-base
       - name: Filter changed paths
         id: filter
         uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4
         with:
           filters: .github/filters.yml
+          # Diff with git: the pull request files API would spend the
+          # repository's hourly request budget (devdocs/ci/github-api-budget.md).
+          token: ''
+          base: ${{ steps.base.outputs.sha }}
       # The e2e browser matrix. Backend-only PRs run Chromium only; frontend /
       # e2e / CI changes run the full matrix; pushes always run full. See
       # devdocs/ci/conditional-execution.md for the decision table.

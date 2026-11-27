@@ -22,7 +22,17 @@ matters more than wall-time.
 1. `.github/filters.yml` defines named filters (`go`, `frontend`, `e2e`,
    `image_inputs`, etc.). Each filter is a list of path globs.
 2. Each PR-event workflow has a `changes` job that runs `dorny/paths-filter@v4`
-   against that file and exposes the result as job outputs.
+   against that file and exposes the result as job outputs. The filter diffs
+   with git (`token: ''`), not with the pull request files API, which would
+   spend the repository's hourly request budget
+   ([GitHub API budget](github-api-budget.md)). Its `base` is the first
+   parent of the merge commit the run checked out, found by
+   `.github/actions/pr-merge-base`: the base commit GitHub merged the pull
+   request onto, so the diff lists the same files as the API.
+   `github.event.pull_request.base.sha` is not a substitute; it can be days
+   behind the base branch, and a diff against it adds every base change in
+   between. On push events the action outputs nothing and paths-filter keeps
+   its push behavior.
 3. Every existing job in the workflow gains a `needs: changes` dependency and
    an `if:` predicate of the form:
 
@@ -173,7 +183,9 @@ markdownlint-cli2 --fix          # auto-fix what's auto-fixable
 
 1. Add the filter to `.github/filters.yml` if no existing filter matches.
 2. In the workflow, add a `changes` job using the established pattern (see
-   `go-test.yml` for the canonical minimal example).
+   `go-test.yml` for the canonical minimal example): checkout, the
+   `pr-merge-base` step, then `dorny/paths-filter` with `token: ''` and
+   `base: ${{ steps.base.outputs.sha }}`.
 3. Add `needs: changes` and the `if:` predicate to each real job.
 4. Always include the `ci` clause in the OR so workflow-config changes force
    the check back on.
