@@ -1223,6 +1223,17 @@ when to add an entry and where it goes.
   ends because it could not be renewed, and a change the previous account
   saved that finishes after the switch no longer shows up for the next one
   ([#2878](https://github.com/denisvmedia/inventario/issues/2878)).
+- The API no longer writes secrets from refused requests to its log. Every
+  release since v0.1.0 logged the signature (`sig`) of a refused signed URL,
+  in the query string on `Invalid signed URL access attempt` and in the
+  `query_params` attribute that `logSecurityViolation` adds to its
+  security violation lines. It also logged up to 200 bytes of a request
+  body refused for a tenant field
+  (`Security violation: user-provided tenant ID in request body`), and that
+  body can hold a password. Lines written by earlier versions can contain
+  either: purge those logs or restrict who can read them, and treat a
+  password that appears in one as exposed
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ### Operators
 
@@ -1473,12 +1484,9 @@ when to add an entry and where it goes.
   fails for a reason other than a missing row, and the two steps that end a
   user's sessions on a back-office block or session revoke, renamed
   `admin end sessions: failed to revoke refresh tokens` and
-  `admin end sessions: failed to blacklist access tokens`. A refused signed
-  URL no longer logs its query string, which carries the signature, and a
-  request refused for a tenant field in its body no longer logs the start of
-  the body, which can hold a password; lines written before the upgrade can
-  hold either. An invalid public URL is logged once, by the line for the
-  link that could not be built, and no longer also as
+  `admin end sessions: failed to blacklist access tokens`. An invalid public
+  URL is logged once, by the line for the link that could not be built, and
+  no longer also as
   `Invalid public URL configuration`. The group invite line no longer
   carries the recipient's address. `user_email` is `email`, and the
   per-request debug lines `RLS Security: User context validated` and
