@@ -2,6 +2,7 @@ package services_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -364,8 +365,9 @@ func (r failingDeleteDraftRegistry) DeleteDiscarding(ctx context.Context, id str
 }
 
 // TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest:
-// a stopped discard that keeps failing is reported, and the stopped discards
-// after it are still finished.
+// a stopped discard that keeps failing is logged once, with its ID, and the
+// stopped discards after it are still finished. The failure is not returned
+// as well, so the caller does not log it a second time.
 func TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest(t *testing.T) {
 	c := qt.New(t)
 	f := newDraftFixture(c)
@@ -385,9 +387,23 @@ func TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest(
 	}
 	later := services.NewCommodityDraftService(&factorySet,
 		services.WithCommodityDraftClock(func() time.Time { return time.Now().Add(11 * time.Minute) }))
-	finished, err := later.FinishStaleDiscards(f.ctx)
-	c.Assert(err, qt.ErrorIs, errDraftDeleteFails)
+	var finished int
+	var err error
+	logs := captureLogs(c, func() { finished, err = later.FinishStaleDiscards(f.ctx) })
+	c.Assert(err, qt.IsNil)
 	c.Assert(finished, qt.Equals, 2)
+	var lines []map[string]any
+	for line := range strings.SplitSeq(strings.TrimSpace(logs), "\n") {
+		var record map[string]any
+		c.Assert(json.Unmarshal([]byte(line), &record), qt.IsNil, qt.Commentf("line %q", line))
+		if record["level"] == "ERROR" {
+			lines = append(lines, record)
+		}
+	}
+	c.Assert(lines, qt.HasLen, 1, qt.Commentf("logs: %s", logs))
+	c.Check(lines[0]["msg"], qt.Equals, "Failed to finish a stopped draft discard")
+	c.Check(lines[0]["draft_id"], qt.Equals, poisoned.ID)
+	c.Check(lines[0]["error"], qt.Contains, errDraftDeleteFails.Error())
 
 	for _, d := range stopped {
 		_, err := f.regs.CommodityDraftRegistry.Get(f.ctx, d.ID)

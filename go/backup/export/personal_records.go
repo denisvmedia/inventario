@@ -45,6 +45,13 @@ func createdBy[T any](rows []*T, author func(*T) string, userID string, order fu
 	return out
 }
 
+// sortedRows returns rows in a stable order. The registries return the
+// user's rows already (#2934) in no particular order.
+func sortedRows[T any](rows []*T, order func(a, b *T) int) []*T {
+	slices.SortFunc(rows, order)
+	return rows
+}
+
 func (b *personalBuilder) planLoans(ctx context.Context, l *groupLookups, doc *PersonalGroupDocument) error {
 	if b.fs.CommodityLoanRegistryFactory == nil {
 		return nil
@@ -53,11 +60,11 @@ func (b *personalBuilder) planLoans(ctx context.Context, l *groupLookups, doc *P
 	if err != nil {
 		return errxtrace.Wrap("failed to create loan registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list loans", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.CommodityLoan) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.CommodityLoan) int {
+	for _, r := range sortedRows(rows, func(x, y *models.CommodityLoan) int {
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		doc.Loans = append(doc.Loans, PersonalLoan{
@@ -84,11 +91,11 @@ func (b *personalBuilder) planMaintenanceSchedules(ctx context.Context, l *group
 	if err != nil {
 		return errxtrace.Wrap("failed to create maintenance schedule registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list maintenance schedules", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.MaintenanceSchedule) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.MaintenanceSchedule) int {
+	for _, r := range sortedRows(rows, func(x, y *models.MaintenanceSchedule) int {
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		doc.MaintenanceSchedules = append(doc.MaintenanceSchedules, PersonalMaintenanceSchedule{
@@ -115,11 +122,11 @@ func (b *personalBuilder) planServiceRecords(ctx context.Context, l *groupLookup
 	if err != nil {
 		return errxtrace.Wrap("failed to create service record registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list service records", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.CommodityService) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.CommodityService) int {
+	for _, r := range sortedRows(rows, func(x, y *models.CommodityService) int {
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		rec := PersonalServiceRecord{
@@ -151,11 +158,11 @@ func (b *personalBuilder) planReminders(ctx context.Context, l *groupLookups, do
 	if err != nil {
 		return errxtrace.Wrap("failed to create reminder registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list reminders", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.CommodityReminder) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.CommodityReminder) int {
+	for _, r := range sortedRows(rows, func(x, y *models.CommodityReminder) int {
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		doc.Reminders = append(doc.Reminders, PersonalReminder{
@@ -181,11 +188,11 @@ func (b *personalBuilder) planSupplyLinks(ctx context.Context, l *groupLookups, 
 	if err != nil {
 		return errxtrace.Wrap("failed to create supply link registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list supply links", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.SupplyLink) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.SupplyLink) int {
+	for _, r := range sortedRows(rows, func(x, y *models.SupplyLink) int {
 		return cmp.Or(x.CreatedAt.Compare(y.CreatedAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		doc.SupplyLinks = append(doc.SupplyLinks, PersonalSupplyLink{
@@ -206,7 +213,7 @@ func (b *personalBuilder) planSupplyLinks(ctx context.Context, l *groupLookups, 
 func (b *personalBuilder) planDrafts(_ context.Context, l *groupLookups, doc *PersonalGroupDocument) error {
 	drafts := make([]*models.CommodityDraft, 0, len(l.drafts))
 	for _, d := range l.drafts {
-		if d.IsOpen() && d.CreatedByUserID == b.user.ID {
+		if d.IsOpen() {
 			drafts = append(drafts, d)
 		}
 	}
@@ -255,10 +262,7 @@ func (l *groupLookups) draftCustomValues(entries map[string]any) []PersonalCusto
 		}
 		if d.Type == models.CustomFieldTypeItemLink {
 			entry = models.MapDraftCustomFieldReference(entry, func(itemID string) string {
-				if item := l.items[itemID]; item != nil {
-					return item.UUID
-				}
-				return ""
+				return l.items[itemID].UUID
 			})
 			if entry == nil {
 				continue
@@ -346,11 +350,11 @@ func (b *personalBuilder) planHistory(ctx context.Context, l *groupLookups, doc 
 	if err != nil {
 		return errxtrace.Wrap("failed to create history registry", err)
 	}
-	rows, err := reg.List(ctx)
+	rows, err := reg.ListCreatedBy(ctx, b.user.ID)
 	if err != nil {
 		return errxtrace.Wrap("failed to list history", err)
 	}
-	for _, r := range createdBy(rows, func(r *models.CommodityEvent) string { return r.CreatedByUserID }, b.user.ID, func(x, y *models.CommodityEvent) int {
+	for _, r := range sortedRows(rows, func(x, y *models.CommodityEvent) int {
 		return cmp.Or(x.OccurredAt.Compare(y.OccurredAt), cmp.Compare(x.UUID, y.UUID))
 	}) {
 		doc.History = append(doc.History, PersonalHistoryEntry{

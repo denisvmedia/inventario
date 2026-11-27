@@ -319,6 +319,23 @@ anyway. Look for it in the items list before you add it again.
   draft, under **Saved with this draft**, where you can remove them;
   **Discard changes** does not take them off.
 
+When you click **Save changes** while editing an item, the new files are
+uploaded first, one at a time, and attached to the item; your changes are
+saved once all of them are on it. The dialog stays open while this runs and
+shows each file's state, as for **Add item**.
+
+- If a file fails, your changes are not saved yet. The dialog names the file,
+  marks it **Upload failed**, and keeps what you entered. The files that made
+  it are on the item already and leave the list. **Retry** goes on with the
+  files still missing, then saves your changes.
+- A file that was uploaded but could not be attached to the item goes to the
+  [Trash](../trash/) when you close the dialog without retrying, or remove the
+  file from the list.
+- If you leave the dialog while a file is still being sent, for example with
+  the browser's Back button, that file is not attached to the item: once its
+  upload finishes it goes to the [Trash](../trash/). Files attached before you
+  left stay on the item, and your changes are not saved.
+
 ## Quantity and bundles
 
 Quantity must be at least **1**. When you set quantity greater than 1, the item

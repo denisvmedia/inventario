@@ -95,6 +95,13 @@ type File struct {
 	// from a background pass at startup.
 	//ptah:schema:field name="sha256" type="TEXT" not_null="true" default=""
 	SHA256 string `json:"sha256" db:"sha256" userinput:"false"`
+
+	// ThumbnailsOriented is true once the file's thumbnails, if it has any,
+	// show a JPEG photo turned the way its EXIF orientation says. Writing the
+	// thumbnails sets it. A JPEG file without it gets checked by a background
+	// pass at startup, which makes the thumbnails of a turned photo again.
+	//ptah:schema:field name="thumbnails_oriented" type="BOOLEAN" not_null="true" default="false"
+	ThumbnailsOriented bool `json:"-" db:"thumbnails_oriented" userinput:"false"`
 }
 
 func (*File) Validate() error {

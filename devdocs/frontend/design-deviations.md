@@ -44,6 +44,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2915 by the 2026-11-27 goal to work through the backlog
 - **Reversion plan**: Drop the disabled select and keep the mock's form without a status once the edit form shows the status.
 
+#### 2026-11-27 — Item edit dialog: new files upload before Save changes
+
+- **Issue/PR**: #2916 / PR #2967
+- **Mock**: The step-by-step dialog ([`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx)) is for adding an item and has no upload states; editing is the mock's `ItemEditForm`, which has no files.
+- **Reality**: In edit mode (**All fields**), **Save changes** in `frontend/src/components/items/CommodityFormDialog.tsx` uploads the staged files one at a time and attaches each to the item before it sends the changes, with the per-file icons and the "Uploading 1 of 3…" button of the Add item entry below. A failure shows the same destructive `Alert` (`DraftSaveAlert`) titled "Changes not saved", naming the files not uploaded, saying that the files that made it are on the item, and offering **Retry**; the dialog opens the Files step. The attached files leave the list.
+- **Why**: The issue asks that files added while editing are uploaded before the dialog closes or kept for a retry; reusing the Add item states keeps one look for the same work.
+- **Approved by**: user (explicit) — pre-approved for #2916 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Permanent while the dialog stays the editor behind All fields.
+
 #### 2026-11-26 — Add item dialog: each file's upload state while Add item runs
 
 - **Issue/PR**: #1626 / #2905
