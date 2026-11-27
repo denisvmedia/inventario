@@ -15,6 +15,7 @@ import { BulkActionBar } from "@/components/ui/bulk-action-bar"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
+import { NativeSelect } from "@/components/ui/native-select"
 import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import {
@@ -495,9 +496,9 @@ export function FilesListPage() {
           <Label htmlFor="files-bulk-move" className="sr-only">
             {t("files:bulk.move")}
           </Label>
-          {/* eslint-disable-next-line no-restricted-syntax -- bulk "move to category" utility selector (context-mode bulk bar); native <select> retained, covered by native-select unit/e2e */}
-          <select
+          <NativeSelect
             id="files-bulk-move"
+            size="sm"
             data-testid="files-bulk-move"
             defaultValue=""
             disabled={bulkReclassify.isPending}
@@ -507,7 +508,6 @@ export function FilesListPage() {
               if (!target) return
               await onBulkMove(target)
             }}
-            className="h-8 rounded-md border border-input bg-transparent px-2 text-sm"
           >
             <option value="" disabled>
               {t("files:bulk.move")}
@@ -515,7 +515,7 @@ export function FilesListPage() {
             <option value="images">{t("files:categoryImages")}</option>
             <option value="documents">{t("files:categoryDocuments")}</option>
             <option value="other">{t("files:categoryOther")}</option>
-          </select>
+          </NativeSelect>
           <Button
             variant="outline"
             size="sm"

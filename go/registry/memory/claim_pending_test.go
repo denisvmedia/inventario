@@ -5,6 +5,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	qt "github.com/frankban/quicktest"
 
@@ -31,7 +32,7 @@ func TestExportRegistry_ClaimPending_OneWinner(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	won := raceToClaim(c, 64, func() (bool, error) {
-		return set.ExportRegistry.ClaimPending(ctx, export.ID)
+		return set.ExportRegistry.ClaimPending(ctx, export.ID, time.Now())
 	})
 	c.Assert(won, qt.Equals, int32(1), qt.Commentf("64 callers, one winner"))
 
@@ -54,7 +55,7 @@ func TestExportRegistry_ClaimPending_OnlyFromPending(t *testing.T) {
 	})
 	c.Assert(err, qt.IsNil)
 
-	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID)
+	claimed, err := set.ExportRegistry.ClaimPending(ctx, export.ID, time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Check(claimed, qt.IsFalse)
 
@@ -67,7 +68,7 @@ func TestExportRegistry_ClaimPending_MissingRow(t *testing.T) {
 	c := qt.New(t)
 
 	set, ctx := seedClaimRegistrySet(c)
-	claimed, err := set.ExportRegistry.ClaimPending(ctx, "no-such-export")
+	claimed, err := set.ExportRegistry.ClaimPending(ctx, "no-such-export", time.Now())
 	c.Assert(err, qt.IsNil)
 	c.Check(claimed, qt.IsFalse)
 }
@@ -94,7 +95,7 @@ func TestRestoreOperationRegistry_ClaimPending_OneWinner(t *testing.T) {
 	c.Assert(err, qt.IsNil)
 
 	won := raceToClaim(c, 64, func() (bool, error) {
-		return set.RestoreOperationRegistry.ClaimPending(ctx, op.ID)
+		return set.RestoreOperationRegistry.ClaimPending(ctx, op.ID, time.Now())
 	})
 	c.Assert(won, qt.Equals, int32(1), qt.Commentf("a restore replayed twice overwrites live data"))
 

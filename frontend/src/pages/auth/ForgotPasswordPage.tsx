@@ -14,6 +14,7 @@ import { useForgotPassword } from "@/features/auth/hooks"
 import { forgotPasswordSchema, type ForgotPasswordInput } from "@/features/auth/schemas"
 import { parseServerError } from "@/lib/server-error"
 import { RouteTitle } from "@/components/routing/RouteTitle"
+import { FieldError } from "@/components/FieldError"
 
 // ForgotPasswordPage — single-field form. The server returns an identical
 // success message regardless of whether the email exists, so once the form
@@ -146,14 +147,15 @@ export function ForgotPasswordPage() {
                 disabled={mutation.isPending}
                 aria-invalid={!!form.formState.errors.email}
                 data-testid="email"
+                aria-describedby={form.formState.errors.email ? "forgot-email-error" : undefined}
                 {...form.register("email")}
               />
             </div>
-            {form.formState.errors.email ? (
-              <p className="text-xs text-destructive" data-testid="email-error">
-                {t(form.formState.errors.email.message ?? "")}
-              </p>
-            ) : null}
+            <FieldError
+              id="forgot-email-error"
+              testId="email-error"
+              message={form.formState.errors.email?.message}
+            />
           </div>
 
           {serverError ? (

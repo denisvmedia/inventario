@@ -55,6 +55,7 @@
     "showFilesTagged": "Показать файлы с тегом {{name}}",
     "showItems": "Показать предметы",
     "showItemsInArea": "Показать предметы в зоне {{name}}",
+    "showItemsInLocation": "Показать предметы в локации {{name}}",
     "showItemsTagged": "Показать предметы с тегом {{name}}"
   },
   "seeAll": "Показать все",

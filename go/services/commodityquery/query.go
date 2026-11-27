@@ -32,6 +32,7 @@ const (
 	ParamType                  = "type"
 	ParamStatus                = "status"
 	ParamAreaID                = "area_id"
+	ParamLocationID            = "location_id"
 	ParamUnassigned            = "unassigned"
 	ParamSellerID              = "seller_id"
 	ParamIncludeInactive       = "include_inactive"
@@ -72,6 +73,11 @@ type Query struct {
 	// and is ignored when AreaID is set.
 	AreaID     string
 	Unassigned bool
+	// LocationID keeps items in any area of one location (#2897). With
+	// AreaID both apply, so an area of another location matches nothing.
+	// An item without an area is in no location, so it cannot be combined
+	// with Unassigned.
+	LocationID string
 	// SellerIDs keeps items bought from one of the sellers (OR within the
 	// list). An ID no seller has matches no item.
 	SellerIDs []string
@@ -139,7 +145,7 @@ func paramError(param, value, reason string) *Error {
 
 // filterParams lists every parameter Parse understands.
 var filterParams = []string{
-	ParamText, ParamType, ParamStatus, ParamAreaID, ParamUnassigned,
+	ParamText, ParamType, ParamStatus, ParamAreaID, ParamLocationID, ParamUnassigned,
 	ParamSellerID, ParamIncludeInactive, ParamWarrantyStatus, ParamWarrantyExpiresBefore,
 	ParamLentOut, ParamTags, ParamTagMode, ParamTagsExclude, ParamNoTags,
 	ParamNoPhoto, ParamNoPurchasePrice, ParamNoPurchaseDate,
@@ -325,6 +331,14 @@ func (p parser) area(q *Query) error {
 		return err
 	}
 	q.Unassigned = unassigned != nil && *unassigned
+	location, err := p.single(ParamLocationID)
+	if err != nil {
+		return err
+	}
+	if location != "" && q.Unassigned {
+		return paramError(ParamLocationID, location, "cannot be combined with unassigned=true: an item without an area is in no location")
+	}
+	q.LocationID = location
 	return nil
 }
 
@@ -501,6 +515,9 @@ func (q Query) Values() url.Values {
 	if q.AreaID != "" {
 		v.Set(ParamAreaID, q.AreaID)
 	}
+	if q.LocationID != "" {
+		v.Set(ParamLocationID, q.LocationID)
+	}
 	for _, id := range q.SellerIDs {
 		v.Add(ParamSellerID, id)
 	}
@@ -561,6 +578,7 @@ func (q Query) ListOptions() registry.CommodityListOptions {
 		Statuses:              q.Statuses,
 		AreaID:                q.AreaID,
 		Unassigned:            q.Unassigned,
+		LocationID:            q.LocationID,
 		SellerIDs:             q.SellerIDs,
 		Search:                q.Text,
 		Tags:                  q.Tags,

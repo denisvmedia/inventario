@@ -12,10 +12,11 @@ import (
 var _ registry.UserPurger = (*UserPurger)(nil)
 
 // UserPurger is the in-memory counterpart to postgres.UserPurger (#2116). It
-// hard-deletes a single user's auth / identity rows via the existing
-// service-mode registries, mirroring the postgres DELETE-by-user_id sequence.
-// Since #2147 it also clears the user's group_invites_audit references
-// (created_by / used_by), matching postgres.
+// hard-deletes a single user's auth / identity and personal rows via the
+// existing service-mode registries, mirroring the postgres sequence, and
+// hands the group rows the user created (item history, loans, service
+// records, maintenance, item types, custom fields, ...) to another member of
+// their group.
 //
 // Unlike the postgres variant these deletes are NOT one transaction — memory
 // mode is only used in tests where partial failure is acceptable.
@@ -60,6 +61,25 @@ type UserPurger struct {
 	intakeDocuments *IntakeDocumentRegistryFactory
 	// personalDataExports is set by SetPersonalDataExportRegistry.
 	personalDataExports *PersonalDataExportRegistry
+	// groupRows are the other group rows handed to another member, set by
+	// setGroupRowStores.
+	groupRows []groupConfiguration
+	// invites is set by setGroupInviteRegistry.
+	invites *GroupInviteRegistry
+}
+
+// setGroupRowStores wires the stores of item history, loans, service
+// records, supply links, maintenance, reminder send records, currency
+// changes and restores. The rows the user created there belong to the group
+// and go to another member of it, as on postgres.
+func (r *UserPurger) setGroupRowStores(stores []groupConfiguration) {
+	r.groupRows = stores
+}
+
+// setGroupInviteRegistry wires the invites, the ones the user created or
+// accepted go with the user, as on postgres.
+func (r *UserPurger) setGroupInviteRegistry(reg *GroupInviteRegistry) {
+	r.invites = reg
 }
 
 // SetPersonalDataExportRegistry wires the user's personal data exports
@@ -188,6 +208,14 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			}
 			return r.reattributeGroupConfiguration(ctx, r.intakeDocuments, tenantID, userID)
 		}},
+		{"group_rows", func() error {
+			for _, store := range r.groupRows {
+				if err := r.reattributeGroupConfiguration(ctx, store, tenantID, userID); err != nil {
+					return err
+				}
+			}
+			return nil
+		}},
 		// The drafts those documents made go with them, so a replay finds
 		// the draft the record names.
 		{"delivered_drafts", func() error {
@@ -198,6 +226,12 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			return r.reattributeGroupConfiguration(ctx, deliveredDrafts{drafts}, tenantID, userID)
 		}},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
+		{"group_invites", func() error {
+			if r.invites != nil {
+				r.invites.deleteForUser(ctx, tenantID, userID)
+			}
+			return nil
+		}},
 		// group_invites_audit rows the user created or accepted (both NOT NULL FK
 		// -> users(id) NO ACTION on postgres) — #2147. Mirrors the postgres DELETE.
 		{"group_invites_audit", func() error { return r.purgeGroupInvitesAudit(ctx, userID) }},
