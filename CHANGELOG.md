@@ -664,6 +664,14 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- The users of a suspended or inactive tenant get no email from Inventario:
+  no item, warranty, loan or maintenance reminders, no storage quota
+  warnings, no weekly digest and no "your personal data export is ready"
+  email. Every link in those emails answered `403 Tenant suspended`. A
+  reminder still due when the tenant is reactivated goes out then, and an
+  export requested before the suspension is still built
+  ([#2949](https://github.com/denisvmedia/inventario/issues/2949)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

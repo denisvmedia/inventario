@@ -159,6 +159,11 @@ func (s *WeeklyDigestService) SendOnce(ctx context.Context, now time.Time) (Week
 // in the order the groups were listed so two runs over the same data produce
 // the same email.
 //
+// A group of a tenant that is not active is left out (tenantGate): its members
+// cannot sign in to look at anything the digest links to. A member with no
+// other group then gets no draft, so their week is not claimed and the next
+// digest goes out as usual once the tenant is active again.
+//
 // The third return is how many groups could not be read; those are counted as
 // failures rather than silently producing a thinner digest.
 func (s *WeeklyDigestService) buildDrafts(
@@ -168,9 +173,20 @@ func (s *WeeklyDigestService) buildDrafts(
 	prefsCache *notifications.Cache,
 ) (drafts map[string]*digestDraft, order []string, failed int) {
 	drafts = map[string]*digestDraft{}
+	tenants := newTenantGate(s.factorySet.TenantRegistry)
 
 	for _, group := range groups {
 		if group == nil {
+			continue
+		}
+		active, err := tenants.active(ctx, group.TenantID)
+		if err != nil {
+			slog.ErrorContext(ctx, "Weekly digest: failed to read the group's tenant",
+				"group_id", group.ID, "tenant_id", group.TenantID, "error", err)
+			failed++
+			continue
+		}
+		if !active {
 			continue
 		}
 		members, err := s.factorySet.GroupMembershipRegistry.ListByGroup(ctx, group.ID)
