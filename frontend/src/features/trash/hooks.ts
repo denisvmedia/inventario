@@ -1,8 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
-import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMembers } from "@/features/group/hooks"
+import { useGroupPermissions } from "@/features/group/roles"
 import { storageKeys } from "@/features/storage/keys"
 
 import {
@@ -155,12 +154,9 @@ export interface TrashPermissions {
 // useTrashPermissions mirrors the server's role gates so the page offers only
 // the actions the member may take. The server enforces them either way.
 export function useTrashPermissions(): TrashPermissions {
-  const { user } = useAuth()
-  const { currentGroup } = useCurrentGroup()
-  const members = useMembers(currentGroup?.id)
-  const role = members.data?.find((m) => m.member_user_id === user?.id)?.role
+  const { role, canEditContent } = useGroupPermissions()
   return {
-    canRestore: role === "user" || role === "admin" || role === "owner",
+    canRestore: canEditContent,
     canPurge: role === "admin" || role === "owner",
   }
 }

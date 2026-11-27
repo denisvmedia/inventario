@@ -126,7 +126,9 @@ export function ResetPasswordPage() {
               disabled={mutation.isPending}
               aria-invalid={!!form.formState.errors.password}
               data-testid="password"
-              aria-describedby={form.formState.errors.password ? "reset-password-error" : undefined}
+              aria-describedby={
+                form.formState.errors.password?.message ? "reset-password-error" : undefined
+              }
               {...form.register("password")}
             />
             <PasswordStrengthMeter password={passwordValue} testId="reset-password-strength" />
@@ -147,7 +149,7 @@ export function ResetPasswordPage() {
               aria-invalid={!!form.formState.errors.confirmPassword}
               data-testid="confirm-password"
               aria-describedby={
-                form.formState.errors.confirmPassword ? "reset-confirm-error" : undefined
+                form.formState.errors.confirmPassword?.message ? "reset-confirm-error" : undefined
               }
               {...form.register("confirmPassword")}
             />

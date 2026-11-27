@@ -32,10 +32,10 @@ describe("i18n boot", () => {
 })
 
 // #2089: cs + ru catalogs must stay at key-parity with the canonical en
-// catalog. The runtime lazy backend (import.meta.glob in i18next.config) is
-// not exercised in jsdom, so we load the JSON statically and compare key
-// sets — a missing or renamed key (which would silently fall back to en in
-// the UI) fails CI. cs/ru may carry EXTRA keys (language-specific plural
+// catalog. We load the JSON statically and compare key sets, so a missing or
+// renamed key (which would silently fall back to en in the UI) fails CI;
+// lazy-locales.test.tsx covers loading them through the runtime backend.
+// cs/ru may carry EXTRA keys (language-specific plural
 // categories `_few` / `_many` beyond en's `_one` / `_other`), so the
 // invariant is "every en leaf key exists in cs and ru", not strict equality.
 type Json = Record<string, unknown>

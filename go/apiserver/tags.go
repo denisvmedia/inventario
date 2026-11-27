@@ -47,17 +47,19 @@ func tagCtx() func(http.Handler) http.Handler {
 	}
 }
 
-// itemTagMigrationLock refuses a change to an item tag with 423 while a
-// currency migration of the group runs, as /commodities does. Renaming or
-// deleting an item tag rewrites the items that carry it, and the registry
-// waits for the migration before it does; without this check the request
-// waits until it times out. File tags touch no item and are not refused.
+// itemTagMigrationLock refuses the delete of an item tag with 423 while a
+// currency migration of the group runs, as /commodities does. Deleting an
+// item tag rewrites the items that carry it, and the registry waits for the
+// migration before it does; without this check the request waits until it
+// times out. A PATCH is checked in updateTag, which knows from the body
+// whether the slug changes: only a new slug rewrites items. File tags touch
+// no item and are not refused.
 func itemTagMigrationLock(opts GroupMigrationLockOptions) func(http.Handler) http.Handler {
 	lock := requireGroupNotMigrating(opts)
 	return func(next http.Handler) http.Handler {
 		locked := lock(next)
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if tag := tagFromContext(r.Context()); tag != nil && tag.Kind == models.TagKindCommodity {
+			if tag := tagFromContext(r.Context()); tag != nil && tag.Kind == models.TagKindCommodity && r.Method != http.MethodPatch {
 				locked.ServeHTTP(w, r)
 				return
 			}
@@ -67,8 +69,9 @@ func itemTagMigrationLock(opts GroupMigrationLockOptions) func(http.Handler) htt
 }
 
 type tagsAPI struct {
-	factorySet *registry.FactorySet
-	tagService *services.TagService
+	factorySet    *registry.FactorySet
+	tagService    *services.TagService
+	migrationLock GroupMigrationLockOptions
 }
 
 // listTags lists tags with pagination, optional q-search, and sort.
@@ -327,7 +330,7 @@ func (api *tagsAPI) createTag(w http.ResponseWriter, r *http.Request) {
 // @Failure 404 {object} jsonapi.Errors "Tag not found"
 // @Failure 409 {object} jsonapi.Errors "Slug already in use"
 // @Failure 422 {object} jsonapi.Errors "User-side request problem"
-// @Failure 423 {object} jsonapi.Errors "An item tag, while a currency migration runs in the group"
+// @Failure 423 {object} jsonapi.Errors "A new slug for an item tag, while a currency migration runs in the group"
 // @Router /g/{groupSlug}/tags/{tagID} [patch].
 func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 	tag := tagFromContext(r.Context())
@@ -339,6 +342,15 @@ func (api *tagsAPI) updateTag(w http.ResponseWriter, r *http.Request) {
 	var input jsonapi.TagUpdateRequest
 	if err := render.Bind(r, &input); err != nil {
 		unprocessableEntityError(w, r, err)
+		return
+	}
+
+	// A new slug of an item tag rewrites the items that carry it, which a
+	// running currency migration holds (see itemTagMigrationLock). A label or
+	// color change writes the tag row alone and goes through.
+	newSlug := input.Data.Attributes.Slug
+	if api.migrationLock.FeatureEnabled && tag.Kind == models.TagKindCommodity &&
+		newSlug != "" && newSlug != tag.Slug && refuseWhileGroupMigrates(w, r) {
 		return
 	}
 
@@ -407,8 +419,9 @@ func (api *tagsAPI) deleteTag(w http.ResponseWriter, r *http.Request) {
 // mounted before /{tagID} so chi routes the slug to the dedicated handler.
 func Tags(params Params) func(r chi.Router) {
 	api := &tagsAPI{
-		factorySet: params.FactorySet,
-		tagService: services.NewTagService(params.FactorySet),
+		factorySet:    params.FactorySet,
+		tagService:    services.NewTagService(params.FactorySet),
+		migrationLock: GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration},
 	}
 	return func(r chi.Router) {
 		r.Get("/", api.listTags)
@@ -417,7 +430,7 @@ func Tags(params Params) func(r chi.Router) {
 		r.Get("/stats", api.getTagStats)
 		r.Route("/{tagID}", func(r chi.Router) {
 			r.Use(tagCtx())
-			r.Use(itemTagMigrationLock(GroupMigrationLockOptions{FeatureEnabled: params.FeatureCurrencyMigration}))
+			r.Use(itemTagMigrationLock(api.migrationLock))
 			r.Get("/", api.getTag)
 			r.Patch("/", api.updateTag)
 			r.Delete("/", api.deleteTag)

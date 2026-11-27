@@ -5,6 +5,7 @@
 // invoice, or manual on the legacy split-table side.
 import { pinnedPost, sendInChunks } from "@/lib/bulk-chunks"
 import { http, HttpError, type InGroup } from "@/lib/http"
+import { getServerErrorCode } from "@/lib/server-error"
 import type { Schema } from "@/types"
 
 export type FileEntity = Schema<"models.FileEntity">
@@ -283,7 +284,9 @@ export async function deleteFile(id: string, opts: InGroup = {}): Promise<void> 
 // trashUnlinkedFile moves a file a form uploaded to Trash when nothing links
 // it (#1626): an upload whose attach failed, left behind when the form is
 // cancelled. A file that something links after all (an attach whose answer
-// was lost) stays, and so does one already gone. The file is looked up in
+// was lost, or another tab that attached it meanwhile) stays, and so does one
+// already gone. The server checks the links and trashes the file in one
+// request (DELETE ?unless_linked=true, #2930). The file is looked up in
 // filesPath, the group's files path read before the uploads started (see
 // groupScopedPath), or in the group named by group; without either, in the
 // current group. Resolves whether the file went to Trash.
@@ -292,24 +295,21 @@ export async function trashUnlinkedFile(
   where: { filesPath?: string } & InGroup = {}
 ): Promise<boolean> {
   const { filesPath, group } = where
-  const path = `${filesPath ?? "/files"}/${encodeURIComponent(id)}`
+  const path = `${filesPath ?? "/files"}/${encodeURIComponent(id)}?unless_linked=true`
   const init = filesPath ? { skipGroupRewrite: true } : { group }
-  let file: FileDetailEnvelope
   try {
-    file = await http.get<FileDetailEnvelope>(path, init)
+    await http.del<void>(path, init)
+    return true
   } catch (err) {
     if (err instanceof HttpError && err.status === 404) return false
+    if (getServerErrorCode(err) === FILE_LINKED_CODE) return false
     throw err
   }
-  // Without the file's links there is no telling whether it is safe to
-  // trash, so a malformed answer leaves the file where it is.
-  if (!file.attributes) {
-    throw new Error(`Malformed GET /files/${id} response: missing attributes`)
-  }
-  if (ordinaryLinks(file.attributes).length > 0) return false
-  await http.del<void>(path, init)
-  return true
 }
+
+// The code of a DELETE ?unless_linked=true that kept the file because a
+// link holds it.
+const FILE_LINKED_CODE = "file.linked"
 
 export async function bulkDeleteFiles(ids: string[]): Promise<BulkDeleteResult> {
   const body = await http.post<BulkDeleteEnvelope>(`/files/bulk-delete`, {

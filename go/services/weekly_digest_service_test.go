@@ -424,6 +424,29 @@ func TestWeeklyDigestService_ListsUpcomingWarranties(t *testing.T) {
 	c.Assert(sends[0].digest.Upcoming[0].URL, qt.Contains, "/items/")
 }
 
+// The upcoming warranties come from the items, not from the event log: a
+// digest without an event registry still lists them.
+func TestWeeklyDigestService_ListsUpcomingWarrantiesWithoutAnEventLog(t *testing.T) {
+	c := qt.New(t)
+	f := newDigestFixture(c)
+	f.factorySet.CommodityEventRegistryFactory = nil
+
+	household := f.addGroup(c, "Household")
+	soon := models.Date(f.sentAt.AddDate(0, 0, 10).Format(time.DateOnly))
+	f.addCommodity(c, household, "Soon", &soon)
+	// A file added this week is the activity the digest is sent for.
+	f.addFile(c, household, f.window.Start.Add(time.Hour))
+
+	email := &recordingDigestEmailService{}
+	_, err := f.newService(email).SendOnce(context.Background(), f.sentAt)
+	c.Assert(err, qt.IsNil)
+
+	sends := email.recorded()
+	c.Assert(sends, qt.HasLen, 1)
+	c.Assert(sends[0].digest.Upcoming, qt.HasLen, 1)
+	c.Check(sends[0].digest.Upcoming[0].Name, qt.Equals, "Soon")
+}
+
 // withPreferences attaches a notification service backed by the fixture's own
 // registries, so a test can switch the digest off per group.
 func (f *digestFixture) withPreferences(svc *services.WeeklyDigestService) *services.WeeklyDigestService {

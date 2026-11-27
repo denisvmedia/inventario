@@ -63,6 +63,7 @@ import { SETTINGS_HELP_URL } from "@/lib/settings-url"
 import { useNavLabel } from "@/lib/nav-labels"
 import { useAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useInboxCount } from "@/features/inbox/hooks"
 import { useWhatsNewUnread } from "@/features/whats-new/hooks"
@@ -340,6 +341,7 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   const { isMobile, setOpenMobile, state } = useSidebar()
   const { user, logout } = useAuth()
   const { groups, currentGroup } = useCurrentGroup()
+  const { canEditContent } = useGroupPermissions()
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
   const location = useLocation()
@@ -366,9 +368,11 @@ export function AppSidebar({ onRestartTour }: AppSidebarProps = {}) {
   // dialog via the /commodities/new side-effect route. Hidden when there
   // is no active group (the destination needs a slug) and disabled while
   // a currency migration locks writes for the active group.
-  const addItemHref = currentGroup?.slug
-    ? `/g/${encodeURIComponent(currentGroup.slug)}/commodities/new`
-    : null
+  // Offered only to a role that adds items (features/group/roles.ts).
+  const addItemHref =
+    currentGroup?.slug && canEditContent
+      ? `/g/${encodeURIComponent(currentGroup.slug)}/commodities/new`
+      : null
   const addItemLabel = t("commodities:list.addItem")
 
   // The bottom-of-sidebar user button. The label falls back to the email's

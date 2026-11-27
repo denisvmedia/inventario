@@ -77,6 +77,8 @@ A couple of things to know:
   else owns, they need to be removed first. Both checks run before anything is
   deleted, so a blocked deletion leaves your account, your groups and your
   sessions as they were.
+  A shared group you created doesn't block deletion once someone else owns
+  it: the group stays with its members and passes to its owner.
   [Tags](../tags/), [sellers](../sellers/) and [item types](../item-types/)
   you added to a shared group stay with the group and pass to its owner, so
   they don't block deletion and other members keep using them. So
@@ -108,7 +110,8 @@ service. Click **Request a copy**. Inventario prepares it in the background and
 sends you an email when it is ready; the email links back to this card, not to
 the file. While it is being prepared the copy shows as **Waiting** or
 **Preparing**, and the list updates on its own; if the server restarts while
-your copy is being prepared, it is prepared again. A copy still not ready two
+your copy is being prepared, it is prepared again, up to three times in all.
+A copy still not ready two
 hours after the request is no longer checked on its own; come back to the page
 later to see it. When it is **Ready**, the
 row shows its size and the day it is deleted, and **Download** saves it as
@@ -129,6 +132,10 @@ The copy has:
   supply links, open [drafts of new items](../items/#drafts-of-a-new-item),
   saved views, and the history entries you made.
 
+A file in the Trash is included, also one that went there together with its
+item, and so are the loans, maintenance schedules and service records of an
+item in the Trash.
+
 Locations, areas, sellers, item types and tags appear by name on your items.
 A history entry holds only the fields you changed, with the values you set,
 not the values they replaced. Other members appear only as ids, and text you
@@ -146,6 +153,10 @@ A few rules apply:
   or not. A copy that could not be prepared shows as **Failed** and is removed
   from the list 7 days after the request; request a new one when the daily
   limit allows.
+- The administrator of your Inventario server sees a copy that failed and can
+  prepare it again for you. It then shows as **Waiting** again, you get the
+  email when it is ready, and it is deleted 7 days after that. This is not a
+  new request: the daily limit still counts from the request you made.
 - Only you can see and download your copies. The download works only in the
   browser where you are signed in and clicked **Download**.
 - A copy is **not a backup**. It holds only your part of each group, so it
@@ -184,6 +195,11 @@ change applies immediately.
 or computer can have its own look. Your other preferences travel with your
 account.
 :::
+
+Inventario also follows your device's accessibility setting to reduce motion
+(for example **Reduce motion** on macOS and iOS). With it on, dialogs, menus
+and list rows fade in place instead of zooming or sliding. There is no separate
+switch for it in the app.
 
 The **Notifications** section lets you turn individual email/push reminders on
 or off — warranty expiry, maintenance, loans, the reminders you set on items,
@@ -349,7 +365,8 @@ create a new one.
 
 A token acts as you, with your current role in each group it can reach: if you
 are a viewer in a group, a **Read and write** token cannot change anything there
-either, and if you leave a group, the token loses it too. It works only on the
+either, and if you leave a group, the token loses it too; a token limited to
+that group is revoked. It works only on the
 data inside groups (items, locations, areas, files, tags, loans, services,
 maintenance, exports and the like), and it can read the list of your groups,
 each group's details, and its members and their photos.

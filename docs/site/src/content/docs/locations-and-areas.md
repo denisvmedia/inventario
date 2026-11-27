@@ -23,6 +23,8 @@ To see every item of a location at once, across its areas, choose the location i
 On large groups the item counts on cards and tiles are sampled, so a very full location may show a count like **12+** or a dash (**—**) rather than an exact number. Open the area itself for the precise total.
 :::
 
+Only owners and administrators can add, edit, and delete locations and areas. Members with the **User** or **Viewer** role see the same pages without those buttons; a **User** can still attach files to a location or area (see [Members and roles](../groups-and-sharing/#members-and-roles)).
+
 ## Create a location
 
 1. Go to **Locations** in the sidebar.

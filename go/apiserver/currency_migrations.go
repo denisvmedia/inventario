@@ -482,37 +482,48 @@ func requireGroupNotMigrating(opts GroupMigrationLockOptions) func(http.Handler)
 				next.ServeHTTP(w, r)
 				return
 			}
-
-			rs := RegistrySetFromContext(r.Context())
-			group := groupFromContext(r.Context())
-			// With the feature flag on, a missing registry set, group
-			// context, or currency-migration registry is a misconfiguration
-			// — fail closed so a wiring bug never lets a write through
-			// while a migration is supposed to be holding the lock.
-			if rs == nil || group == nil || rs.CurrencyMigrationRegistry == nil {
-				_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing registry set, group, or currency migration registry"))
-				return
-			}
-
-			inFlight, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
-			if err != nil {
-				_ = internalServerError(w, r, err)
-				return
-			}
-			if inFlight != nil {
-				_ = lockedError(w, r,
-					errors.New("group is locked while a currency migration is in progress"),
-					codeCurrencyMigrationLocked,
-					map[string]any{
-						"migration_id": inFlight.ID,
-						"status":       string(inFlight.Status),
-					},
-				)
+			if refuseWhileGroupMigrates(w, r) {
 				return
 			}
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// refuseWhileGroupMigrates answers 423 Locked with code
+// currency_migration.locked, and reports true, when a currency migration of
+// the request's group is pending or running. A handler that knows only
+// after reading its body whether the write holds up a migration calls it
+// directly; the caller checks the feature flag first.
+func refuseWhileGroupMigrates(w http.ResponseWriter, r *http.Request) bool {
+	rs := RegistrySetFromContext(r.Context())
+	group := groupFromContext(r.Context())
+	// With the feature flag on, a missing registry set, group context, or
+	// currency-migration registry is a misconfiguration — fail closed so a
+	// wiring bug never lets a write through while a migration is supposed
+	// to be holding the lock.
+	if rs == nil || group == nil || rs.CurrencyMigrationRegistry == nil {
+		_ = internalServerError(w, r, errors.New("currency migration lock check unavailable: missing registry set, group, or currency migration registry"))
+		return true
+	}
+
+	inFlight, err := rs.CurrencyMigrationRegistry.InFlightForGroup(r.Context(), group.ID)
+	if err != nil {
+		_ = internalServerError(w, r, err)
+		return true
+	}
+	if inFlight != nil {
+		_ = lockedError(w, r,
+			errors.New("group is locked while a currency migration is in progress"),
+			codeCurrencyMigrationLocked,
+			map[string]any{
+				"migration_id": inFlight.ID,
+				"status":       string(inFlight.Status),
+			},
+		)
+		return true
+	}
+	return false
 }
 
 // validateStartAttributes runs the from-mismatch / same-currency / rate

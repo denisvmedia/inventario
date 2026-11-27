@@ -51,8 +51,8 @@ const (
 	ItemSetKeepNone ItemSetKeepReason = ""
 	// ItemSetKeepOwn: a member created the row, not the set.
 	ItemSetKeepOwn ItemSetKeepReason = "own"
-	// ItemSetKeepInUse: items, those in Trash included, have the type or a
-	// value of the field.
+	// ItemSetKeepInUse: items, those in Trash included, or open drafts have
+	// the type or a value of the field.
 	ItemSetKeepInUse ItemSetKeepReason = "in_use"
 	// ItemSetKeepLastType: the type would be the group's last one, and a
 	// group keeps at least one type.
@@ -186,8 +186,8 @@ type ItemSetRemoveResult struct {
 	DeletedItemTypes []string
 	DeletedFields    []string
 	// KeptItemTypes and KeptFields name the rows the removal listed that
-	// stayed: an item started to use one since the confirmation, or it
-	// became the group's last type.
+	// stayed: an item or a draft started to use one since the confirmation,
+	// or it became the group's last type.
 	KeptItemTypes []string
 	KeptFields    []string
 	// Status is the set as the group holds it afterwards: what is left of
@@ -205,9 +205,9 @@ type ItemSetRemoveResult struct {
 // template of every type of the set. A failure halfway leaves what it
 // created, and adding again completes it.
 //
-// Removing deletes only the types and fields the set created that no item
-// uses: no item, in Trash or not, of the type, and no item with a value of
-// the field, and never the group's last type. It deletes no more than the
+// Removing deletes only the types and fields the set created that nothing
+// uses: no item, in Trash or not, and no open draft of the type, and no item
+// or open draft with a value of the field, and never the group's last type. It deletes no more than the
 // caller names, so what a confirmation listed bounds it. It is safe to
 // repeat; a later run deletes what has become unused since.
 type ItemSetService struct {
@@ -250,7 +250,7 @@ func (s *ItemSetService) Status(ctx context.Context) (*ItemSetStatus, error) {
 			ts.ItemType = row
 			ts.Usage = counts[row.Slug]
 			ts.State = s.stateOf(row.SetEntry)
-			ts.KeepReason = keepReason(ts.State, ts.Usage.Total())
+			ts.KeepReason = keepReason(ts.State, ts.Usage.InUse())
 		case typesTakenBy[i] >= 0:
 			ts.State = ItemSetEntryTaken
 			ts.TakenBy = s.def.ItemTypes[typesTakenBy[i]].Key
@@ -267,7 +267,7 @@ func (s *ItemSetService) Status(ctx context.Context) (*ItemSetStatus, error) {
 			fs.Field = row
 			fs.Usage = usage[row.ID]
 			fs.State = s.stateOf(row.SetEntry)
-			fs.KeepReason = keepReason(fs.State, fs.Usage.Total())
+			fs.KeepReason = keepReason(fs.State, fs.Usage.InUse())
 		case fieldsTakenBy[i] >= 0:
 			fs.State = ItemSetEntryTaken
 			fs.TakenBy = s.def.Fields[fieldsTakenBy[i]].Key
@@ -318,11 +318,11 @@ func (s *ItemSetService) stateOf(entry models.ItemSetEntry) ItemSetEntryState {
 	return ItemSetEntryOwn
 }
 
-func keepReason(state ItemSetEntryState, used int) ItemSetKeepReason {
+func keepReason(state ItemSetEntryState, inUse bool) ItemSetKeepReason {
 	switch {
 	case state == ItemSetEntryOwn:
 		return ItemSetKeepOwn
-	case used > 0:
+	case inUse:
 		return ItemSetKeepInUse
 	default:
 		return ItemSetKeepNone
@@ -548,8 +548,8 @@ func (s *ItemSetService) createField(ctx context.Context, e models.ItemSetField,
 
 // Remove deletes the types and fields named in sel that the set created and
 // nothing uses. A named row that is not removable when it runs stays and is
-// reported as kept, and a row an item started to use meanwhile stays too, as
-// the registries refuse to delete it. An ID that names no row of the set is
+// reported as kept, and a row an item or a draft started to use meanwhile
+// stays too, as the registries refuse to delete it. An ID that names no row of the set is
 // ignored. On an error, the result names what was deleted before it.
 func (s *ItemSetService) Remove(ctx context.Context, sel ItemSetRemoval) (*ItemSetRemoveResult, error) {
 	res := &ItemSetRemoveResult{}

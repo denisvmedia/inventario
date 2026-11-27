@@ -24,9 +24,12 @@ type ItemTypeView struct {
 	ItemCount int    `json:"item_count" example:"3" format:"int64"`
 	// TrashedItemCount is the number of items in Trash with this type.
 	// Deleting the type moves them along with the others.
-	TrashedItemCount int       `json:"trashed_item_count" example:"0" format:"int64"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	TrashedItemCount int `json:"trashed_item_count" example:"0" format:"int64"`
+	// DraftCount is the number of unfinished drafts with this type.
+	// Deleting the type moves them along with the items.
+	DraftCount int       `json:"draft_count" example:"0" format:"int64"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 func newItemTypeView(t *models.ItemType, usage registry.ItemTypeUsage) ItemTypeView {
@@ -37,6 +40,7 @@ func newItemTypeView(t *models.ItemType, usage registry.ItemTypeUsage) ItemTypeV
 		Builtin:          t.Builtin(),
 		ItemCount:        usage.Live,
 		TrashedItemCount: usage.Trashed,
+		DraftCount:       usage.Drafts,
 		CreatedAt:        t.CreatedAt,
 		UpdatedAt:        t.UpdatedAt,
 	}

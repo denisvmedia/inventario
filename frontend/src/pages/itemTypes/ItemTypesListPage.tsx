@@ -13,6 +13,7 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { commodityTypeHref } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import type { ItemType } from "@/features/itemTypes/api"
 import { itemTypeLabel } from "@/features/itemTypes/display"
 import { useCreateItemType, useItemTypes, useUpdateItemType } from "@/features/itemTypes/hooks"
@@ -36,6 +37,9 @@ interface DialogState {
 // button, a search, and one card listing the rows.
 export function ItemTypesListPage() {
   const { t } = useTranslation()
+  // Viewers read this page; creating, renaming and deleting need the user
+  // role, so they get it without those actions.
+  const { canEditContent } = useGroupPermissions()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
   const toast = useAppToast()
@@ -93,14 +97,16 @@ export function ItemTypesListPage() {
         title={t("itemTypes:title")}
         subtitle={t("itemTypes:description")}
         actions={
-          <Button
-            type="button"
-            onClick={() => setDialog({ open: true, itemType: null })}
-            data-testid="item-types-create-button"
-          >
-            <Plus className="mr-1.5 size-4" aria-hidden="true" />
-            {t("itemTypes:create")}
-          </Button>
+          canEditContent ? (
+            <Button
+              type="button"
+              onClick={() => setDialog({ open: true, itemType: null })}
+              data-testid="item-types-create-button"
+            >
+              <Plus className="mr-1.5 size-4" aria-hidden="true" />
+              {t("itemTypes:create")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -186,8 +192,10 @@ export function ItemTypesListPage() {
                       href={
                         groupSlug ? commodityTypeHref(groupSlug, itemType.slug ?? "") : undefined
                       }
-                      onEdit={() => setDialog({ open: true, itemType })}
-                      onDelete={() => setDeleting(itemType)}
+                      onEdit={
+                        canEditContent ? () => setDialog({ open: true, itemType }) : undefined
+                      }
+                      onDelete={canEditContent ? () => setDeleting(itemType) : undefined}
                       canDelete={all.length > 1}
                     />
                   </li>
@@ -199,7 +207,7 @@ export function ItemTypesListPage() {
       </div>
 
       <ItemTypeFormDialog
-        open={dialog.open}
+        open={canEditContent && dialog.open}
         onOpenChange={(open) =>
           setDialog((prev) => (open ? prev : { open: false, itemType: prev.itemType }))
         }
@@ -209,7 +217,11 @@ export function ItemTypesListPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
       />
 
-      <ItemTypeDeleteDialog itemType={deleting} types={all} onClose={() => setDeleting(null)} />
+      <ItemTypeDeleteDialog
+        itemType={canEditContent ? deleting : null}
+        types={all}
+        onClose={() => setDeleting(null)}
+      />
     </Page>
   )
 }

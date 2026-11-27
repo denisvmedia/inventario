@@ -54,9 +54,9 @@ export const CUSTOM_FIELD_URL_MAX = 2048
 
 // JSON:API error codes of the custom field endpoints.
 export const CUSTOM_FIELD_NAME_TAKEN = "custom_field.name_taken"
-// A delete without delete_values of a field items have values for, or one
-// whose expected_values is not the current count. The error's meta carries
-// item_count and trashed_item_count.
+// A delete without delete_values of a field items or drafts have values
+// for, or one whose expected_values is not the current count. The error's
+// meta carries item_count, trashed_item_count and draft_count.
 export const CUSTOM_FIELD_IN_USE = "custom_field.in_use"
 export const CUSTOM_FIELD_LIMIT = "custom_field.limit_reached"
 // An item write with a value its field refuses; the field errors are under
@@ -134,9 +134,10 @@ export async function updateCustomField(
 }
 
 // deleteCustomField deletes a field. Without deleteValues the server
-// refuses a field that items have values for; with it the values go too,
-// and expectedValues, the number of items the member confirmed to lose a
-// value, makes the server refuse the delete when another number has one.
+// refuses a field that items or drafts have values for; with it the values
+// go too, and expectedValues, the number of items and drafts together the
+// member confirmed to lose a value, makes the server refuse the delete when
+// another number has one.
 // Resolves with the number of values deleted.
 export async function deleteCustomField(
   id: string,

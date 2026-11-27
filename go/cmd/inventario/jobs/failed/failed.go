@@ -222,9 +222,11 @@ func newAction(dbConfig *shared.DatabaseConfig, verb string) *actionCommand {
 	c := &actionCommand{verb: verb}
 	shared.TryReadSection("jobs.failed."+verb, &c.config)
 	short, long := "Put a failed job back in its queue", `Put a failed job back in its queue the way its type runs it again: an
-export or import runs from the start, a thumbnail gets a fresh set of
-attempts, an intake scan is due at once. A restore and a currency
-migration cannot be retried; discard them instead.
+export or import runs from the start, a personal data export builds its
+copy again from the start and keeps it 7 days from when that build
+finishes, a thumbnail gets a fresh set of attempts, an intake scan is due
+at once. A restore and a currency migration cannot be retried; discard
+them instead.
 
 The retry is written to the audit log.
 

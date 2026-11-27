@@ -12,6 +12,7 @@ import { WarrantyHealth } from "@/components/dashboard/WarrantyHealth"
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { Page, PageHeader } from "@/components/ui/page"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useSectionVisible } from "@/features/group/sections"
 import { useDashboardData } from "@/features/dashboard/hooks"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
@@ -63,7 +64,10 @@ export function DashboardPage() {
   const slug = currentGroup?.slug
   const currency = currentGroup?.group_currency ?? "USD"
   const itemsHref = slug ? `/g/${encodeURIComponent(slug)}/commodities` : undefined
-  const addItemHref = slug ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
+  // Offered only to a role that adds items (features/group/roles.ts).
+  const canAddItems = useGroupPermissions().canEditContent
+  const addItemHref =
+    slug && canAddItems ? `/g/${encodeURIComponent(slug)}/commodities/new` : undefined
   // Warranty stat cards drill into the dedicated WarrantiesListPage with
   // its tab pre-selected — `?tab=active|expired` matches the param the
   // page reads in `parseTab(searchParams.get("tab"))`.

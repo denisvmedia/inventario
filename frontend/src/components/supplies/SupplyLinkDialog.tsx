@@ -3,6 +3,7 @@ import { useEffect } from "react"
 import { useForm } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 
+import { FieldError } from "@/components/FieldError"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -122,13 +123,15 @@ export function SupplyLinkDialog({
                 defaultValue: "e.g. Water filter",
               })}
               data-testid="supply-link-label-input"
+              aria-invalid={!!errors.label}
+              aria-describedby={errors.label?.message ? "supply-label-error" : undefined}
               {...register("label")}
             />
-            {errors.label ? (
-              <p className="text-xs text-destructive" data-testid="supply-link-label-error">
-                {errors.label.message}
-              </p>
-            ) : null}
+            <FieldError
+              id="supply-label-error"
+              testId="supply-link-label-error"
+              message={errors.label?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -138,13 +141,15 @@ export function SupplyLinkDialog({
               type="url"
               placeholder="https://example.com/refill"
               data-testid="supply-link-url-input"
+              aria-invalid={!!errors.url}
+              aria-describedby={errors.url?.message ? "supply-url-error" : undefined}
               {...register("url")}
             />
-            {errors.url ? (
-              <p className="text-xs text-destructive" data-testid="supply-link-url-error">
-                {errors.url.message}
-              </p>
-            ) : null}
+            <FieldError
+              id="supply-url-error"
+              testId="supply-link-url-error"
+              message={errors.url?.message}
+            />
           </div>
 
           <div className="flex flex-col gap-1.5">
@@ -158,13 +163,15 @@ export function SupplyLinkDialog({
                 defaultValue: "Pack size, refill cadence, etc.",
               })}
               data-testid="supply-link-notes-input"
+              aria-invalid={!!errors.notes}
+              aria-describedby={errors.notes?.message ? "supply-notes-error" : undefined}
               {...register("notes")}
             />
-            {errors.notes ? (
-              <p className="text-xs text-destructive" data-testid="supply-link-notes-error">
-                {errors.notes.message}
-              </p>
-            ) : null}
+            <FieldError
+              id="supply-notes-error"
+              testId="supply-link-notes-error"
+              message={errors.notes?.message}
+            />
           </div>
 
           <DialogFooter>

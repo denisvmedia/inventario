@@ -82,30 +82,25 @@ export function useIntakeSession(id: string | null | undefined) {
     () => (session ? [{ id: session.id, state: session.state }] : undefined),
     [session]
   )
-  useRefreshWhenScanned(scanned)
+  // This read is the batch as it is now; only the file lists are stale.
+  useRefreshWhenScanned(scanned, { detail: false })
   return query
 }
 
-// useRefreshWhenScanned reads a batch and the file lists once more after the
-// batch stops scanning (#1626). Once the server stores a file's scan it puts
-// the scan's tag and title on the file, so the read that finds the batch
-// out of "processing" can still show the files as they were. The second
-// read comes one poll interval later, enough for those writes. A read that
-// finds the batch done from the start reads nothing again.
+// useRefreshWhenScanned marks what the cache holds about a batch stale once
+// the batch stops scanning (#1626): the group's file lists, which show the
+// tag and the title a scan gives each file, and, unless detail is false, the
+// batch itself. The server writes a file's tag and title with the stored
+// scan, so the read that finds the batch out of "processing" already has
+// them, and the lists on screen are read again right away. A batch done
+// from the start marks nothing.
 export function useRefreshWhenScanned(
-  sessions: readonly { id: string; state: IntakeSessionState }[] | undefined
+  sessions: readonly { id: string; state: IntakeSessionState }[] | undefined,
+  { detail = true }: { detail?: boolean } = {}
 ) {
   const qc = useQueryClient()
   const slug = useSlug()
   const lastState = useRef(new Map<string, IntakeSessionState>())
-  const timers = useRef(new Set<ReturnType<typeof setTimeout>>())
-  useEffect(() => {
-    const pending = timers.current
-    return () => {
-      for (const timer of pending) clearTimeout(timer)
-      pending.clear()
-    }
-  }, [])
   useEffect(() => {
     const settled: string[] = []
     for (const s of sessions ?? []) {
@@ -115,16 +110,13 @@ export function useRefreshWhenScanned(
       lastState.current.set(s.id, s.state)
     }
     if (settled.length === 0 || !slug) return
-    const timer = setTimeout(() => {
-      timers.current.delete(timer)
+    if (detail) {
       for (const id of settled) {
         void qc.invalidateQueries({ queryKey: intakeKeys.detail(slug, id) })
       }
-      void qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
-      void qc.invalidateQueries({ queryKey: draftKeys.group(slug) })
-    }, INTAKE_POLL_MS)
-    timers.current.add(timer)
-  }, [sessions, qc, slug])
+    }
+    void qc.invalidateQueries({ queryKey: fileKeys.group(slug) })
+  }, [sessions, qc, slug, detail])
 }
 
 // useItemSource returns the other system an item's document came from

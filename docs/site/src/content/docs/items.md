@@ -89,6 +89,12 @@ put back a tag you removed, however many scans suggested it. Once you change
 a suggested title, also back to the file name, later scans leave the title
 alone. A tag you add back by hand is yours and shows without the sparkle.
 
+When you finish a saved draft, a file the draft holds already, under **Saved
+with this draft**, is not added again, whether you scan it again or pick it
+on the **Files** step. It keeps the title and tags it was saved with; the
+scan's suggestions for it are not applied, so change them on its row if you
+want to.
+
 A few things to know:
 
 - If AI finds more than one product, it pre-fills the most prominent one and
@@ -205,9 +211,10 @@ left out. A **Rescan** leaves a file alone once the scan has changed it. A
 file [another system sent](../documents-from-other-systems/) is not scanned,
 so it keeps the title it came with.
 
-The batch page reads the files again once the last file is scanned, so the
-new titles and tags show without a reload. To check or change them, open the
-draft: its files are on the **Files** step, under **Saved with this draft**.
+A file gets its new title and tag in the same step that marks it scanned, so
+the batch page shows them as soon as the file is scanned, without a reload.
+To check or change them, open the draft: its files are on the **Files** step,
+under **Saved with this draft**.
 
 ## All the fields
 
@@ -317,6 +324,23 @@ anyway. Look for it in the items list before you add it again.
   draft's values as they were last saved. The files it uploaded stay with the
   draft, under **Saved with this draft**, where you can remove them;
   **Discard changes** does not take them off.
+
+When you click **Save changes** while editing an item, the new files are
+uploaded first, one at a time, and attached to the item; your changes are
+saved once all of them are on it. The dialog stays open while this runs and
+shows each file's state, as for **Add item**.
+
+- If a file fails, your changes are not saved yet. The dialog names the file,
+  marks it **Upload failed**, and keeps what you entered. The files that made
+  it are on the item already and leave the list. **Retry** goes on with the
+  files still missing, then saves your changes.
+- A file that was uploaded but could not be attached to the item goes to the
+  [Trash](../trash/) when you close the dialog without retrying, or remove the
+  file from the list.
+- If you leave the dialog while a file is still being sent, for example with
+  the browser's Back button, that file is not attached to the item: once its
+  upload finishes it goes to the [Trash](../trash/). Files attached before you
+  left stay on the item, and your changes are not saved.
 
 ## Quantity and bundles
 
@@ -457,9 +481,10 @@ signs in on this browser starts with an empty form, and signing out removes it.
   so a failed upload loses nothing.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
-- What the dialog is still sending when you leave it, for example with the
-  browser's **Back** button, goes to the group you opened it in, also when you
-  switch to another group meanwhile.
+- The dialog keeps its draft in the group you opened it in. The draft, its
+  saved files and what the dialog is still sending when you leave it, for
+  example with the browser's **Back** button, stay in that group, also when
+  you switch to another group meanwhile.
 
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to

@@ -55,6 +55,20 @@ const restoreJob: AdminFailedJob = {
   group_slug: "office",
 }
 
+// A personal data export belongs to a user: it has no group, and its title
+// is the user's email address.
+const personalJob: AdminFailedJob = {
+  id: "p1",
+  job_type: "personal-data-export",
+  title: "alice@example.com",
+  error: "the account is not active",
+  attempts: 1,
+  failed_at: "2026-11-18T10:00:00Z",
+  retryable: true,
+  tenant_id: "t1",
+  tenant_name: "Acme Inc",
+}
+
 function seed(jobs: AdminFailedJob[] = [exportJob, restoreJob]) {
   const backend = failedJobHandlers.admin(jobs)
   server.use(
@@ -133,6 +147,28 @@ describe("AdminFailedJobsPage", () => {
     expect(within(rows[0]).getByText("Household")).toBeInTheDocument()
     expect(within(rows[0]).getByText("disk full")).toBeInTheDocument()
     expect(within(rows[1]).getByText("Globex")).toBeInTheDocument()
+  })
+
+  it("lists a failed personal data export with its user and no group, and retries it", async () => {
+    const backend = seed([personalJob])
+    renderPage()
+
+    const [row] = await screen.findAllByTestId("admin-failed-job-row")
+    expect(within(row).getByText("Personal data export")).toBeInTheDocument()
+    expect(within(row).getByText("alice@example.com")).toBeInTheDocument()
+    expect(within(row).getByText("Acme Inc")).toBeInTheDocument()
+    expect(within(row).getByText("—")).toBeInTheDocument()
+
+    await userEvent.click(within(row).getByTestId("admin-failed-job-retry"))
+    await waitFor(() =>
+      expect(
+        backend.state.requests.some(
+          (r) =>
+            r.method === "POST" &&
+            r.url.pathname.endsWith("/admin/failed-jobs/personal-data-export/p1/retry")
+        )
+      ).toBe(true)
+    )
   })
 
   it("offers Retry only where the type allows it and Discard on every job", async () => {
@@ -267,6 +303,25 @@ describe("AdminFailedJobsPage", () => {
     await waitFor(() =>
       expect(within(dialog).getByTestId("admin-failed-jobs-bulk-count")).toHaveTextContent(
         "No failed job of these filters failed before this day."
+      )
+    )
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
+  })
+
+  // The input's max does not stop a later day typed by hand (#3011).
+  it("says the day is too late when one after today is typed", async () => {
+    const user = userEvent.setup()
+    seed()
+    renderPage()
+
+    await screen.findAllByTestId("admin-failed-job-row")
+    await user.click(screen.getByTestId("admin-failed-jobs-bulk-open"))
+    const dialog = await screen.findByTestId("admin-failed-jobs-bulk-dialog")
+    await user.type(within(dialog).getByLabelText("Failed before"), "2999-01-01")
+
+    await waitFor(() =>
+      expect(within(dialog).getByTestId("admin-failed-jobs-bulk-count")).toHaveTextContent(
+        "The day must not be later than today."
       )
     )
     expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()

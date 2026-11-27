@@ -9,6 +9,7 @@ import { LocationDetailPage } from "@/pages/locations/LocationDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -17,6 +18,8 @@ import {
   fileHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
+  tagHandlers,
 } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -60,6 +63,7 @@ function renderDetail(
 ) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     queryClient,
     routes: (
@@ -68,7 +72,9 @@ function renderDetail(
         element={
           <ConfirmProvider>
             <GroupProvider>
-              <LocationDetailPage {...props} />
+              <WhenRoleKnown>
+                <LocationDetailPage {...props} />
+              </WhenRoleKnown>
             </GroupProvider>
           </ConfirmProvider>
         }
@@ -76,6 +82,13 @@ function renderDetail(
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 beforeEach(() => {
   clearAuth()
@@ -226,6 +239,9 @@ describe("<LocationDetailPage />", () => {
       ...areaHandlers.list(SLUG, []),
       ...commodityHandlers.list(SLUG, []),
       ...fileHandlers.list(SLUG, []),
+      // The file sheet loads the file tag catalog. Without it the request
+      // fails as a network error, whose toast would race the one asserted.
+      ...tagHandlers.list(SLUG, []),
       http.delete(apiUrl(`/g/${SLUG}/locations/loc2`), deleteResponse)
     )
   }
@@ -444,5 +460,54 @@ describe("<LocationDetailPage /> in a group that hides warranties (#1607)", () =
     const tile = await screen.findByTestId("location-detail-area")
     await waitFor(() => expect(within(tile).getByText("1 item")).toBeInTheDocument())
     expect(within(tile).queryByTestId("location-detail-area-expiring")).not.toBeInTheDocument()
+  })
+})
+
+describe("<LocationDetailPage /> by role (#2886)", () => {
+  // The server takes location and area writes from admins and owners, and
+  // file writes from users too.
+  function seedGarage() {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Garage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Garage" })]),
+      ...areaHandlers.list(SLUG, [areaResource("a1", { name: "Shelf", location_id: "loc1" })]),
+      ...fileHandlers.list(SLUG, []),
+      ...commodityHandlers.list(SLUG, [])
+    )
+  }
+
+  function expectNoLocationWrites(tile: HTMLElement) {
+    expect(screen.queryByTestId("location-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("location-detail-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("location-detail-add-area")).not.toBeInTheDocument()
+    expect(within(tile).queryByTestId("location-detail-area-menu")).not.toBeInTheDocument()
+  }
+
+  it("offers a viewer no edit, delete, add area or attach", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    expectNoLocationWrites(tile)
+    expect(await screen.findByText(/no files attached/i)).toBeInTheDocument()
+    expect(screen.queryByTestId("entity-files-panel-attach")).not.toBeInTheDocument()
+  })
+
+  it("offers a user the files but not the location's edit, delete or areas", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`)
+    const tile = await screen.findByTestId("location-detail-area")
+    expect(await screen.findByTestId("entity-files-panel-attach")).toBeVisible()
+    expectNoLocationWrites(tile)
+  })
+
+  it("opens no edit dialog for a user who follows an edit link", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedGarage()
+    renderDetail(`/g/${SLUG}/locations/loc1`, { initialMode: "edit" })
+    expect(await screen.findByTestId("location-detail-area")).toBeInTheDocument()
+    expect(screen.queryByTestId("location-form-dialog")).not.toBeInTheDocument()
   })
 })

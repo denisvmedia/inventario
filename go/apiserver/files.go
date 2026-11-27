@@ -17,6 +17,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	errxtrace "github.com/go-extras/errx/stacktrace"
+	"github.com/jellydator/validation"
 	"gocloud.dev/blob"
 
 	"go.5x5.cz/inventario/apiserver/internal/downloadutils"
@@ -690,16 +691,50 @@ func linkEntityName(ctx context.Context, registrySet *registry.Set, entityType, 
 // @Description Move the file to Trash. It keeps its links, so restoring it
 // @Description puts it back where it was. An export bundle is deleted for
 // @Description good.
+// @Description
+// @Description With unless_linked=true the file goes to Trash only when
+// @Description nothing holds it: no link, or only links to items in Trash
+// @Description (it then goes with the item linked first). The links are
+// @Description checked and the file trashed in one transaction. A file that a
+// @Description link holds, an export bundle included, stays and the answer is
+// @Description 409 file.linked; a file that is gone or in Trash already is a
+// @Description 404.
 // @Tags files
 // @Accept json-api
 // @Produce json-api
 // @Param groupSlug path string true "Group slug"
 // @Param fileID path string true "File ID"
+// @Param unless_linked query bool false "Keep the file when a link holds it"
 // @Success 204 "No Content"
-// @Failure 404 {object} jsonapi.Errors "File not found"
+// @Failure 404 {object} jsonapi.Errors "File not found, or in Trash already"
+// @Failure 409 {object} jsonapi.Errors "file.linked: with unless_linked=true, a link holds the file, so it stays"
+// @Failure 422 {object} jsonapi.Errors "unless_linked is not a boolean"
 // @Router /g/{groupSlug}/files/{fileID} [delete].
 func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 	fileID := chi.URLParam(r, "fileID")
+	unlessLinked := false
+	if raw := r.URL.Query().Get("unless_linked"); raw != "" {
+		v, err := strconv.ParseBool(raw)
+		if err != nil {
+			unprocessableEntityError(w, r, validation.Errors{"unless_linked": errors.New("must be true or false")})
+			return
+		}
+		unlessLinked = v
+	}
+
+	if unlessLinked {
+		err := api.trashService.TrashFileUnlessLinked(r.Context(), fileID)
+		if errors.Is(err, services.ErrFileLinked) {
+			_ = codedConflictError(w, r, err, fileLinkedCode, nil)
+			return
+		}
+		if err != nil {
+			renderEntityError(w, r, err)
+			return
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return
+	}
 
 	err := api.trashService.TrashFile(r.Context(), fileID)
 	if err != nil {
@@ -709,6 +744,10 @@ func (api *filesAPI) deleteFile(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// fileLinkedCode is the error code of a file DELETE with unless_linked=true
+// that kept the file because a link holds it.
+const fileLinkedCode = "file.linked"
 
 // generateSignedURL generates a signed URL for file download.
 // @Summary Generate signed URL for file download

@@ -23,6 +23,8 @@ interface CurrencyComboboxProps {
   disabled?: boolean
   placeholder?: string
   ariaInvalid?: boolean
+  // The id of the field error under the picker, while one shows.
+  ariaDescribedBy?: string
   // The trigger's accessible name; a generic "currency" label otherwise.
   // A form with several currency pickers names each one.
   ariaLabel?: string
@@ -48,6 +50,7 @@ export function CurrencyCombobox({
   disabled,
   placeholder,
   ariaInvalid,
+  ariaDescribedBy,
   ariaLabel,
   variant = "default",
 }: CurrencyComboboxProps) {
@@ -78,6 +81,7 @@ export function CurrencyCombobox({
           aria-controls={listboxId}
           aria-expanded={open}
           aria-invalid={ariaInvalid || undefined}
+          aria-describedby={ariaDescribedBy}
           aria-label={ariaLabel ?? t("groups:create.currencyAriaLabel")}
           disabled={disabled}
           className={cn(

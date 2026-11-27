@@ -283,6 +283,19 @@ type INBCommodity struct {
 
 	Images    []INBFileRef `json:"images,omitempty"`
 	Documents []INBFileRef `json:"documents,omitempty"`
+
+	// The item's records (format 3.9). An older archive has none.
+	Loans                []INBLoan                `json:"loans,omitempty"`
+	ServiceRecords       []INBServiceRecord       `json:"serviceRecords,omitempty"`
+	MaintenanceSchedules []INBMaintenanceSchedule `json:"maintenanceSchedules,omitempty"`
+	SupplyLinks          []INBSupplyLink          `json:"supplyLinks,omitempty"`
+	Reminders            []INBReminder            `json:"reminders,omitempty"`
+}
+
+// RecordCount is the number of loans, service records, maintenance
+// schedules, supply links and reminders the item carries.
+func (c *INBCommodity) RecordCount() int {
+	return len(c.Loans) + len(c.ServiceRecords) + len(c.MaintenanceSchedules) + len(c.SupplyLinks) + len(c.Reminders)
 }
 
 // INBFileRef references a commodity-attached file. Path is the file's location

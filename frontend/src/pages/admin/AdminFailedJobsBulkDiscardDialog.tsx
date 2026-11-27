@@ -79,6 +79,10 @@ export function AdminFailedJobsBulkDiscardDialog({
   let countLine: string
   if (!failedBefore) countLine = t("failedJobs.bulk.pickDate")
   else if (count.isPending) countLine = t("failedJobs.bulk.counting")
+  // The date input's max does not stop a later day typed by hand; the dry
+  // run refuses it, and the dialog says why.
+  else if (count.isError && getServerErrorCode(count.error) === INVALID_FAILED_BEFORE_CODE)
+    countLine = t("failedJobs.bulk.future")
   else if (count.isError) countLine = t("failedJobs.bulk.countError")
   else if (total === 0) countLine = t("failedJobs.bulk.none")
   else countLine = t("failedJobs.bulk.count", { count: total })

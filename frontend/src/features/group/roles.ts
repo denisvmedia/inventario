@@ -21,3 +21,34 @@ export function useMyGroupRole(): GroupRole | null {
 export function canManageLocations(role: GroupRole | null): boolean {
   return role === "admin" || role === "owner"
 }
+
+// Items and what belongs to them (files, tags, sellers, item types, custom
+// fields, loans, services, maintenance, reminders, drafts, batch intake) take
+// writes from users, admins and owners; viewers only read
+// (contentWriteGate in go/apiserver/apiserver.go).
+export function canEditContent(role: GroupRole | null): boolean {
+  return role === "user" || role === "admin" || role === "owner"
+}
+
+export interface GroupPermissions {
+  // The caller's role in the current group; null while it is unknown.
+  role: GroupRole | null
+  // May create, change and delete items and what belongs to them.
+  canEditContent: boolean
+  // May create, change and delete locations and areas.
+  canManageLocations: boolean
+}
+
+// What the caller may change in the current group, by the server's write
+// gates. A page offers a write action only when the matching flag is true.
+// Both are false while the role is unknown (the member list still loading,
+// or failed), so an action shows once the role is known and never to a
+// role the server would refuse.
+export function useGroupPermissions(): GroupPermissions {
+  const role = useMyGroupRole()
+  return {
+    role,
+    canEditContent: canEditContent(role),
+    canManageLocations: canManageLocations(role),
+  }
+}

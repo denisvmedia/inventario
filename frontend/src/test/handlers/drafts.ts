@@ -320,11 +320,15 @@ export function backend(slug: string, seed: Partial<FakeDraft>[] = []): FakeDraf
       f.links = f.links.filter((l) => l.id !== String(params.linkId))
       return HttpResponse.json({ id: f.id, type: "files", attributes: f })
     }),
-    http.delete(apiUrl(`${base}/files/:id`), ({ params }) => {
+    http.delete(apiUrl(`${base}/files/:id`), ({ params, request }) => {
       const id = String(params.id)
-      if (!state.files.some((x) => x.id === id)) {
+      const f = state.files.find((x) => x.id === id)
+      if (!f) {
         return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
       }
+      // With unless_linked=true the server keeps a file a link holds (#2930).
+      const unlessLinked = new URL(request.url).searchParams.get("unless_linked") === "true"
+      if (unlessLinked && f.links.length > 0) return coded(409, "file.linked")
       state.files = state.files.filter((x) => x.id !== id)
       state.trashed.push(id)
       return new HttpResponse(null, { status: 204 })

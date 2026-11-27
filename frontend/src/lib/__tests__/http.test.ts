@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { http, HttpError, __resetHttpForTests } from "@/lib/http"
+import { http, HttpError, __resetHttpForTests, withSignOut } from "@/lib/http"
 import {
   clearAuth,
   getAccessToken,
@@ -891,5 +891,160 @@ describe("impersonation auto-expiry (#1757)", () => {
 
     expect(results.every((r) => r.status === "rejected")).toBe(true)
     expect(endCalls).toBe(1)
+  })
+})
+
+// #3026: both logout handlers blacklist the access token before they revoke
+// the refresh token, so a request that carried the old token can get a 401
+// while the refresh cookie still works. A refresh then signed the user back in.
+describe("sign-out (#3026)", () => {
+  it("a tenant 401 during a sign-out does not refresh, navigate or clear auth", async () => {
+    setAccessToken("old")
+    const refresh = vi.fn()
+    const navigate = vi.fn()
+    setNavigateToLogin(navigate)
+    server.use(
+      msw.get(api("/auth/me"), () => HttpResponse.json({ error: "revoked" }, { status: 401 })),
+      msw.post(api("/auth/refresh"), () => {
+        refresh()
+        return HttpResponse.json({ access_token: "fresh" })
+      })
+    )
+
+    await withSignOut("tenant", async () => {
+      await expect(http.get("/auth/me")).rejects.toMatchObject({ status: 401 })
+    })
+
+    expect(refresh).not.toHaveBeenCalled()
+    expect(navigate).not.toHaveBeenCalled()
+    // Clearing the credentials is the sign-out's job.
+    expect(getAccessToken()).toBe("old")
+  })
+
+  it("an impersonation session's 401 during a sign-out does not call /admin/impersonation/end", async () => {
+    setAccessToken("imp-token")
+    setImpersonationReturn({ targetUserId: "t1" })
+    const end = vi.fn()
+    const redirect = vi.fn()
+    setHardRedirect(redirect)
+    server.use(
+      msw.get(api("/groups"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/admin/impersonation/end"), () => {
+        end()
+        return HttpResponse.json({ access_token: "admin-token" })
+      })
+    )
+
+    await withSignOut("tenant", async () => {
+      await expect(http.get("/groups")).rejects.toMatchObject({ status: 401 })
+    })
+
+    expect(end).not.toHaveBeenCalled()
+    expect(redirect).not.toHaveBeenCalled()
+  })
+
+  it("a back-office 401 during a back-office sign-out does not refresh", async () => {
+    setBackofficeAccessToken("old-bo")
+    const refresh = vi.fn()
+    server.use(
+      msw.get(api("/backoffice/auth/me"), () => HttpResponse.json(null, { status: 401 })),
+      msw.post(api("/backoffice/auth/refresh"), () => {
+        refresh()
+        return HttpResponse.json({ access_token: "fresh-bo" })
+      })
+    )
+
+    await withSignOut("backoffice", async () => {
+      await expect(http.get("/backoffice/auth/me")).rejects.toMatchObject({ status: 401 })
+    })
+
+    expect(refresh).not.toHaveBeenCalled()
+    expect(getBackofficeAccessToken()).toBe("old-bo")
+  })
+
+  it("a sign-out on one plane leaves the other plane's refresh alone", async () => {
+    setBackofficeAccessToken("expired-bo")
+    let attempt = 0
+    server.use(
+      msw.get(api("/backoffice/auth/me"), () => {
+        attempt++
+        if (attempt === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ id: "op" })
+      }),
+      msw.post(api("/backoffice/auth/refresh"), () =>
+        HttpResponse.json({ access_token: "fresh-bo" })
+      )
+    )
+
+    await withSignOut("tenant", async () => {
+      await expect(http.get("/backoffice/auth/me")).resolves.toEqual({ id: "op" })
+    })
+
+    expect(getBackofficeAccessToken()).toBe("fresh-bo")
+  })
+
+  it("refreshes again once the sign-out has settled, also after it failed", async () => {
+    setAccessToken("expired")
+    setCurrentGroupSlug("household")
+    let attempt = 0
+    server.use(
+      msw.get(api("/g/household/commodities"), () => {
+        attempt++
+        if (attempt === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ data: [] })
+      }),
+      msw.post(api("/auth/refresh"), () => HttpResponse.json({ access_token: "fresh" }))
+    )
+
+    await expect(
+      withSignOut("tenant", async () => {
+        throw new Error("logout failed")
+      })
+    ).rejects.toThrow("logout failed")
+
+    await expect(http.get("/commodities")).resolves.toEqual({ data: [] })
+    expect(getAccessToken()).toBe("fresh")
+  })
+
+  it("waits for a refresh already in flight, so the logout carries the newest token", async () => {
+    setAccessToken("expired")
+    setCurrentGroupSlug("household")
+    let releaseRefresh!: () => void
+    const refreshHeld = new Promise<void>((resolve) => {
+      releaseRefresh = resolve
+    })
+    let refreshStarted!: () => void
+    const refreshSeen = new Promise<void>((resolve) => {
+      refreshStarted = resolve
+    })
+    let attempt = 0
+    server.use(
+      msw.get(api("/g/household/commodities"), () => {
+        attempt++
+        if (attempt === 1) return HttpResponse.json(null, { status: 401 })
+        return HttpResponse.json({ data: [] })
+      }),
+      msw.post(api("/auth/refresh"), async () => {
+        refreshStarted()
+        await refreshHeld
+        return HttpResponse.json({ access_token: "fresh" })
+      })
+    )
+
+    const pending = http.get("/commodities")
+    await refreshSeen
+    const tokensSeenBySignOut: (string | null)[] = []
+    const signOut = withSignOut("tenant", async () => {
+      tokensSeenBySignOut.push(getAccessToken())
+    })
+    // The sign-out must not start before the refresh has finished.
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(tokensSeenBySignOut).toEqual([])
+
+    releaseRefresh()
+    await signOut
+    await pending
+
+    expect(tokensSeenBySignOut).toEqual(["fresh"])
   })
 })

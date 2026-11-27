@@ -44,6 +44,7 @@ import {
 } from "@/features/files/hooks"
 import { useFilesViewMode, type FilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useAppToast } from "@/hooks/useAppToast"
 import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
@@ -63,6 +64,9 @@ const VIEW_MODE_KEY = "files:viewMode"
 // via localStorage and is also URL-syncable for shareable links.
 export function FilesListPage() {
   const { t } = useTranslation()
+  // Viewers browse, open and download; uploading, selecting for the bulk
+  // actions and the sheet's Edit and Delete take a role that writes files.
+  const canEdit = useGroupPermissions().canEditContent
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
@@ -351,15 +355,17 @@ export function FilesListPage() {
         subtitle={t("files:subtitle")}
         subtitleClassName="max-w-prose"
         actions={
-          <Button
-            size="sm"
-            className="gap-1.5 shrink-0"
-            onClick={() => setUploadOpen(true)}
-            data-testid="files-upload-cta"
-          >
-            <Upload className="size-4" aria-hidden="true" />
-            {t("files:uploadCta")}
-          </Button>
+          canEdit ? (
+            <Button
+              size="sm"
+              className="gap-1.5 shrink-0"
+              onClick={() => setUploadOpen(true)}
+              data-testid="files-upload-cta"
+            >
+              <Upload className="size-4" aria-hidden="true" />
+              {t("files:uploadCta")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -482,7 +488,7 @@ export function FilesListPage() {
         </div>
       </div>
 
-      {selected.size > 0 ? (
+      {canEdit && selected.size > 0 ? (
         <BulkActionBar
           label={t("files:bulk.selected", { count: selected.size })}
           selectAll={{
@@ -581,7 +587,7 @@ export function FilesListPage() {
           <p className="max-w-sm text-sm text-muted-foreground">
             {hasFilters ? t("files:empty.filteredSubtitle") : t("files:empty.subtitle")}
           </p>
-          {!hasFilters ? (
+          {!hasFilters && canEdit ? (
             <Button onClick={() => setUploadOpen(true)}>
               <Upload className="mr-2 size-4" aria-hidden="true" />
               {t("files:empty.uploadCta")}
@@ -593,10 +599,10 @@ export function FilesListPage() {
           items={items}
           viewMode={viewMode}
           onOpen={(id) => navigate(inList(filesUrl(groupSlug, id)))}
-          selectedIds={selected}
-          onToggleSelect={toggleOne}
+          selectedIds={canEdit ? selected : undefined}
+          onToggleSelect={canEdit ? toggleOne : undefined}
           allSelectedOnPage={allSelectedOnPage}
-          onToggleAll={toggleAllOnPage}
+          onToggleAll={canEdit ? toggleAllOnPage : undefined}
           showListHeader
         />
       )}
@@ -676,11 +682,12 @@ export function FilesListPage() {
             )
           )
         }
+        canEdit={canEdit}
         imageSiblings={imageSiblings}
         onSelectSibling={(id) => navigate(inList(filesUrl(groupSlug, id)))}
       />
 
-      <UploadFilesDialog open={uploadOpen} onOpenChange={setUploadOpen} />
+      <UploadFilesDialog open={canEdit && uploadOpen} onOpenChange={setUploadOpen} />
     </Page>
   )
 }

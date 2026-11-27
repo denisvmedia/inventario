@@ -146,6 +146,7 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 			LegacyID   string `db:"linked_entity_id"`
 			LegacyMeta string `db:"linked_entity_meta"`
 			SHA256     string `db:"sha256"`
+			Oriented   bool   `db:"thumbnails_oriented"`
 			Trashed    bool   `db:"trashed"`
 		}
 		lock := fmt.Sprintf(`
@@ -153,6 +154,7 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 				COALESCE(linked_entity_id, '') AS linked_entity_id,
 				COALESCE(linked_entity_meta, '') AS linked_entity_meta,
 				sha256,
+				thumbnails_oriented,
 				deleted_at IS NOT NULL AS trashed
 			FROM %s WHERE id = $1 FOR UPDATE`, r.tableNames.Files())
 		if err := tx.QueryRowxContext(ctx, lock, next.ID).StructScan(&current); err != nil {
@@ -172,6 +174,10 @@ func (r *FileRegistry) Update(ctx context.Context, file models.FileEntity) (*mod
 		}
 		if next.File != nil && next.SHA256 == "" {
 			next.SHA256 = current.SHA256
+		}
+		// Only writing the thumbnails sets the mark, and an edit carries none.
+		if next.File != nil && current.Oriented {
+			next.ThumbnailsOriented = true
 		}
 		return nil
 	})
@@ -474,7 +480,8 @@ func (r *FileRegistry) FirstPhotos(ctx context.Context, commodityIDs []string) (
 			return nil
 		}
 
-		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1)`, r.tableNames.Files()), fileIDs)
+		// A file moved to Trash after the pick above is not a cover any more.
+		files, err := r.queryFiles(ctx, tx, fmt.Sprintf(`SELECT * FROM %s WHERE id = ANY($1) AND %s`, r.tableNames.Files(), liveRow), fileIDs)
 		if err != nil {
 			return err
 		}

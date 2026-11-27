@@ -21,8 +21,10 @@ export interface TagRowProps {
   tag: TagEntity & { id: string }
   usage?: TagUsage
   previewItems?: TagRowPreviewItem[]
-  onEdit: () => void
-  onDelete: () => void
+  // Left out for a member who may not change it; the row then has no
+  // edit button. The same holds for onDelete.
+  onEdit?: () => void
+  onDelete?: () => void
   // Where the label links to: the items or files list filtered by the tag.
   href?: string
   className?: string
@@ -119,30 +121,36 @@ export function TagRow({
         </div>
       ) : null}
 
-      <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7"
-          onClick={onEdit}
-          aria-label={t("tags:list.edit")}
-          data-testid={`tag-row-${tag.slug}-edit`}
-        >
-          <Pencil aria-hidden="true" className="size-3.5" />
-        </Button>
-        <Button
-          type="button"
-          size="icon"
-          variant="ghost"
-          className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
-          onClick={onDelete}
-          aria-label={t("tags:list.delete")}
-          data-testid={`tag-row-${tag.slug}-delete`}
-        >
-          <Trash2 aria-hidden="true" className="size-3.5" />
-        </Button>
-      </div>
+      {onEdit || onDelete ? (
+        <div className="flex gap-0.5 opacity-0 group-hover:opacity-100 focus-within:opacity-100 transition-opacity shrink-0">
+          {onEdit ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7"
+              onClick={onEdit}
+              aria-label={t("tags:list.edit")}
+              data-testid={`tag-row-${tag.slug}-edit`}
+            >
+              <Pencil aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+          {onDelete ? (
+            <Button
+              type="button"
+              size="icon"
+              variant="ghost"
+              className="size-7 text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              aria-label={t("tags:list.delete")}
+              data-testid={`tag-row-${tag.slug}-delete`}
+            >
+              <Trash2 aria-hidden="true" className="size-3.5" />
+            </Button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   )
 }

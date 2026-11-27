@@ -395,6 +395,7 @@ export function useUnblockAdminUser(userId: string) {
 export function useStartImpersonation() {
   return useMutation<LoginResponse, Error, string>({
     mutationFn: (userId) => startImpersonation(userId),
+    meta: { changesIdentity: true },
     onSuccess: () => hardRedirect("/"),
   })
 }
@@ -416,6 +417,7 @@ export function useStartImpersonation() {
 export function useEndImpersonation() {
   return useMutation<EndImpersonationResult, Error, void>({
     mutationFn: () => endImpersonation(),
+    meta: { changesIdentity: true },
     onSuccess: (result) =>
       hardRedirect(
         result.targetUserId

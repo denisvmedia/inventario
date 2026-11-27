@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
-import { Route, useLocation } from "react-router-dom"
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
+import { Route, useLocation, useNavigate } from "react-router-dom"
 import { act, cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { delay, http, HttpResponse } from "msw"
@@ -10,7 +10,7 @@ import type { CreateCommodityRequest } from "@/features/commodities/api"
 import { promoteDraft } from "@/features/drafts/api"
 import type { DraftRef } from "@/features/drafts/hooks"
 import { itemDraftOf } from "@/features/drafts/save"
-import { GroupProvider } from "@/features/group/GroupContext"
+import { GroupProvider, useOptionalCurrentGroup } from "@/features/group/GroupContext"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests, HttpError } from "@/lib/http"
@@ -1650,5 +1650,158 @@ describe("<CommodityFormDialog /> Add item through the draft", () => {
     await waitFor(() => expect(toastSpies.error).toHaveBeenCalled())
     await waitFor(() => expect(title).toHaveValue("Lamp invoice"))
     expect(fake.files[0].title).toBe("Lamp invoice")
+  })
+
+  describe("in the group the form opened in (#2920)", () => {
+    const OTHER = "garage"
+    const bothGroups: Schema<"models.LocationGroup">[] = [
+      ...groups,
+      { id: "g2", slug: OTHER, name: "Garage", group_currency: "USD" },
+    ]
+
+    // renderMovableForm opens draft d1 in a form whose host can close it,
+    // open it again and move the page to another group. On the Items page
+    // browser Back does that: the list's Add item button adds no history
+    // entry, so Back can land in another group with the form still open.
+    // The window's address moves too: in the browser the http client takes
+    // the group of a request without one from there, before GroupProvider
+    // has caught up with the move.
+    function renderMovableForm() {
+      setAccessToken("good-token")
+      const address = window.location.pathname + window.location.search
+      onTestFinished(() => window.history.replaceState(null, "", address))
+      window.history.replaceState(null, "", `/g/${SLUG}/commodities/new`)
+      const host = { setOpen: (_open: boolean) => {}, go: (_path: string) => {} }
+      function Host() {
+        const [open, setOpenState] = useState(true)
+        const navigate = useNavigate()
+        const slug = useOptionalCurrentGroup()?.currentGroup?.slug ?? ""
+        useEffect(() => {
+          host.setOpen = setOpenState
+          host.go = (path) => void navigate(path)
+        }, [navigate])
+        return (
+          <>
+            <span data-testid="current-group">{slug}</span>
+            <CommodityFormDialog
+              open={open}
+              onOpenChange={setOpenState}
+              mode="create"
+              areas={areas}
+              locations={locations}
+              defaultCurrency="USD"
+              onSubmit={vi.fn() as never}
+              draftKey={DRAFT_KEY}
+              serverDrafts
+              resumeDraftId="d1"
+            />
+          </>
+        )
+      }
+      renderWithProviders({
+        initialPath: `/g/${SLUG}/commodities/new`,
+        routes: (
+          <Route
+            path="/g/:groupSlug/commodities/new"
+            element={
+              <GroupProvider>
+                <Host />
+              </GroupProvider>
+            }
+          />
+        ),
+      })
+      return {
+        close: () => act(() => host.setOpen(false)),
+        reopen: () => act(() => host.setOpen(true)),
+        moveTo: async (slug: string) => {
+          window.history.pushState(null, "", `/g/${slug}/commodities/new`)
+          act(() => host.go(`/g/${slug}/commodities/new`))
+          await waitFor(() => expect(screen.getByTestId("current-group")).toHaveTextContent(slug))
+        },
+      }
+    }
+
+    // otherGroup answers the draft and file requests sent to the other group
+    // with 404 and records them; reads is false to record only the writes.
+    function otherGroup(reads: boolean) {
+      const sent: string[] = []
+      server.use(
+        http.all(apiUrl(`/g/${OTHER}/*`), ({ request }) => {
+          const path = new URL(request.url).pathname
+          if (!/\/(drafts|files)\b/.test(path)) return undefined
+          if (reads || request.method !== "GET") sent.push(`${request.method} ${path}`)
+          return HttpResponse.json({ errors: [{ status: "404" }] }, { status: 404 })
+        })
+      )
+      return sent
+    }
+
+    it("keeps the draft and its files after the page moves to another group", async () => {
+      const fake = draftHandlers.backend(SLUG, [complete])
+      savedLamp(fake)
+      server.use(...groupHandlers.list(bothGroups), ...fake.handlers)
+      const sentToOther = otherGroup(true)
+      const user = userEvent.setup()
+      const form = renderMovableForm()
+      await screen.findByTestId("commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      expect(await screen.findByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Lamp invoice"
+      )
+
+      await form.moveTo(OTHER)
+
+      // The saved file is still listed, and a change to it is saved.
+      const title = await screen.findByTestId("draft-saved-file-title-file-lamp")
+      await user.clear(title)
+      await user.type(title, "Desk lamp receipt")
+      await user.tab()
+      await waitFor(() => expect(fake.files[0].title).toBe("Desk lamp receipt"))
+      expect(screen.getByTestId("draft-saved-file-title-file-lamp")).toHaveValue(
+        "Desk lamp receipt"
+      )
+      expect(sentToOther).toEqual([])
+    })
+
+    it("saves a queued change of a saved file where it was made after the form opens in another group", async () => {
+      const fake = draftHandlers.backend(SLUG, [complete])
+      savedLamp(fake, { tags: ["invoice", "warranty"] })
+      let release = () => {}
+      const held = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      let puts = 0
+      server.use(
+        ...groupHandlers.list(bothGroups),
+        // The first change waits, so the second is queued behind it.
+        http.put(apiUrl(`/g/${SLUG}/files/:id`), async () => {
+          puts++
+          if (puts === 1) await held
+          return undefined
+        }),
+        ...fake.handlers
+      )
+      const writesToOther = otherGroup(false)
+      const user = userEvent.setup()
+      const form = renderMovableForm()
+      await screen.findByTestId("commodity-form-purchase-step")
+      await walkToFiles(user, ["warranty", "tags", "files"])
+      const tags = await screen.findByTestId("draft-saved-file-tags-file-lamp")
+      await user.click(within(tags).getByRole("button", { name: /^remove invoice/i }))
+      await waitFor(() => expect(puts).toBe(1))
+      await user.click(within(tags).getByRole("button", { name: /^remove warranty/i }))
+
+      // The form closes and opens again in the other group before the
+      // second change gets its turn.
+      form.close()
+      await form.moveTo(OTHER)
+      form.reopen()
+      release()
+
+      await waitFor(() => expect(puts).toBe(2))
+      await waitFor(() => expect(fake.files[0].tags).toEqual([]))
+      expect(writesToOther).toEqual([])
+    })
   })
 })
