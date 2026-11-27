@@ -368,8 +368,11 @@ when to add an entry and where it goes.
   remembered on the device. On the item page the cover sits beside the details
   and opens the full-screen viewer, which goes through the item's photos.
   Thumbnails gain a `large` size (600 px) for these surfaces; a photo uploaded
-  earlier gets it the first time a card shows it
-  ([#2797](https://github.com/denisvmedia/inventario/issues/2797)).
+  earlier gets it the first time a card shows it. Each card loads the
+  thumbnail that fits its width at every screen size, and a photo in Trash is
+  never an item's cover
+  ([#2797](https://github.com/denisvmedia/inventario/issues/2797),
+  [#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 
 - A search field in the top bar of every page, an icon button on phones,
   opens the search window that `Ctrl+K` / `⌘K` opened before. It lists the
@@ -606,6 +609,18 @@ when to add an entry and where it goes.
   `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
   `failed_before` filter
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
+- Custom field values from a batch scan. **Add from files** offers the
+  group's custom fields to the AI scan, as **Fill with AI** does, and the
+  review page lists the values it read for each product after the item
+  fields, with their confidence. A value read with a confidence of 30% or
+  more starts ticked, and each draft gets the ticked values. A value the
+  field cannot hold is not listed, and neither is a value of a field
+  deleted after the scan or of a choice removed since; no draft gets it.
+  A NUL character in scanned text is dropped, since PostgreSQL cannot
+  store it. In the API, an intake candidate carries `custom_fields` and
+  `accepted_custom_fields`, and a candidate review takes
+  `accepted_custom_fields`
+  ([#2880](https://github.com/denisvmedia/inventario/issues/2880)).
 - Failed personal data exports are failed jobs too. The back office
   **Failed jobs** page and `inventario jobs failed` list them as
   `personal-data-export`, with the user's email address as the title and no
@@ -997,13 +1012,6 @@ when to add an entry and where it goes.
   quota reminders, so a group of many small photos uses more space than the
   card shows
   ([#2896](https://github.com/denisvmedia/inventario/issues/2896)).
-- Photo cards on the Items list load the thumbnail that fits the card. The
-  size they announced to the browser was wrong at phone widths and at several
-  tablet and desktop widths, so the browser loaded a larger thumbnail than
-  the card shows. A photo moved to Trash while the list loads is no longer
-  shown as an item's cover, and a failed cover lookup is logged as a warning
-  instead of passing unnoticed; the items still list, without those covers
-  ([#2900](https://github.com/denisvmedia/inventario/issues/2900)).
 - The onboarding tour opened by itself for a user without a group, such as the
   first administrator of a new install. None of the sidebar entries it points
   at exist then, so every step was an empty centered card, and finishing it
@@ -1068,6 +1076,15 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- On the item page, a dialog or a confirmation open in one of the tabs, such
+  as a new reminder, a loan, a service record or **Attach an existing file**,
+  keeps you on the item after **Mark as reviewed**, as the page's own dialogs
+  do. Before, the page opened the next item and the dialog closed with what
+  you had typed. Moving to the previous or next item of a list keeps the tab
+  and the **Files** tab's filter. The cover button shows only on the images
+  the item can take as its cover; before, an image attached to the item as a
+  document offered it and setting it failed
+  ([#2881](https://github.com/denisvmedia/inventario/issues/2881)).
 - Picking **Čeština** or **Русский** as the language in Settings, or opening
   the app in a browser set to Czech or Russian, now shows the app in that
   language. It stayed in English, and the language selector switched back to
@@ -1146,6 +1163,12 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- `inventario users delete` refuses a user who is the only owner of a group
+  that has other members, before it changes anything, as deleting your own
+  account does. The message names the group, so another member can be made
+  an owner first. Before, the delete went through and left the group with
+  its members and no owner, so nobody could manage or delete it
+  ([#3051](https://github.com/denisvmedia/inventario/issues/3051)).
 - On a phone, a form that fills the screen (Add item, a location, an area and
   the other long forms) keeps its buttons above the on-screen keyboard while
   you type. The back gesture closes it as its close button does, so Add item
@@ -1381,6 +1404,14 @@ when to add an entry and where it goes.
   logged a second time as `Failed to finish stopped draft discards`, which
   now means only that the pass itself could not run
   ([#2877](https://github.com/denisvmedia/inventario/issues/2877)).
+- A failed cover lookup on the items list or an item page is logged as a
+  warning, `cover lookup failed; the items are listed without these covers`,
+  with `read` (`named covers` or `first photos`), `count`, `group_id` and
+  `error`. The items still list. An item the failed read was for shows its
+  type icon; an item with a cover chosen by hand does not show its first
+  photo in its place
+  ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
+  [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
 
 ## [0.2.2] - 2026-11-23
 

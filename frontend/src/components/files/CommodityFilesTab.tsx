@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react"
 import { useTranslation } from "react-i18next"
-import { useLocation, useNavigate } from "react-router-dom"
+import { useLocation, useNavigate, useSearchParams } from "react-router-dom"
 import {
   File as FileIcon,
   FileText,
@@ -24,6 +24,7 @@ import { useFileCategoryCounts, useFiles } from "@/features/files/hooks"
 import { fileReviewHref } from "@/features/files/listContext"
 import { useFilesViewMode } from "@/features/files/useFilesViewMode"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useHoldItem } from "@/hooks/useItemHold"
 import { listContextFromLocation } from "@/lib/list-context"
 import { cn } from "@/lib/utils"
 import { Pagination, pageWithin } from "@/components/common/Pagination"
@@ -53,6 +54,12 @@ import { Pagination, pageWithin } from "@/components/common/Pagination"
 // is still load-bearing — the chip now filters by the `invoice` tag
 // instead of the dropped category value).
 type FilesTabCategory = "all" | "images" | "invoices" | "documents" | "other"
+
+/**
+ * The chip in the item page's URL, beside `?tab=`, so it stays as chosen
+ * while the page walks a list. Absent for All.
+ */
+export const FILES_CHIP_PARAM = "files"
 
 interface ChipDef {
   id: FilesTabCategory
@@ -106,6 +113,10 @@ const CHIPS: ChipDef[] = [
   },
 ]
 
+function parseChip(raw: string | null): FilesTabCategory {
+  return CHIPS.find((chip) => chip.id === raw)?.id ?? "all"
+}
+
 // Per-page cap for the underlying `useFiles({ linkedEntity… })` query. The
 // pager reaches everything past it (#2467); a page this size keeps the common
 // commodity to a single round trip.
@@ -149,9 +160,18 @@ export function CommodityFilesTab({
   const { currentGroup } = useCurrentGroup()
   const slug = currentGroup?.slug ?? ""
 
-  const [activeChip, setActiveChipState] = useState<FilesTabCategory>("all")
+  const [searchParams, setSearchParams] = useSearchParams()
+  const activeChip = parseChip(searchParams.get(FILES_CHIP_PARAM))
   const setActiveChip = (next: FilesTabCategory) => {
-    setActiveChipState(next)
+    setSearchParams(
+      (prev) => {
+        const params = new URLSearchParams(prev)
+        if (next === "all") params.delete(FILES_CHIP_PARAM)
+        else params.set(FILES_CHIP_PARAM, next)
+        return params
+      },
+      { replace: true }
+    )
     // A new chip starts at the top: page 3 of the old bucket is not a
     // meaningful position in the new one.
     setPage(1)
@@ -163,6 +183,7 @@ export function CommodityFilesTab({
   // leaves the commodity detail page (mirrors EntityFilesPanel, #1963).
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [attachExistingOpen, setAttachExistingOpen] = useState(false)
+  useHoldItem(attachExistingOpen || selectedId !== null)
 
   // The list is one page of the active chip's filter, resolved server-side;
   // the chip counts come from the category-counts endpoint, so a commodity
@@ -359,7 +380,7 @@ export function CommodityFilesTab({
               items={files}
               viewMode={viewMode}
               onOpen={(id) => setSelectedId(id)}
-              coverState={coverState}
+              coverState={coverState && { ...coverState, itemId: commodityId }}
               onSetCover={onSetCover}
               coverBusy={coverBusy}
               idPrefix="commodity-files"

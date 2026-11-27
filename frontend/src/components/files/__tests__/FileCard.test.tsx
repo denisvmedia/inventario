@@ -22,6 +22,7 @@ function file(overrides: Partial<FileEntity> = {}): FileEntity & { id: string } 
     ext: ".jpg",
     mime_type: "image/jpeg",
     created_at: "2026-04-30T10:00:00Z",
+    links: [{ entity_type: "commodity", entity_id: "c1", meta: "images" }],
     ...overrides,
   } as FileEntity & { id: string }
 }
@@ -178,6 +179,7 @@ describe("<FileCard />", () => {
     render(
       <FileCard
         file={file({ category: "documents", mime_type: "application/pdf" })}
+        coverState={{ itemId: "c1" }}
         onSetCover={vi.fn()}
         onOpen={vi.fn()}
       />
@@ -185,11 +187,50 @@ describe("<FileCard />", () => {
     expect(screen.queryByTestId("file-card-cover-f1")).not.toBeInTheDocument()
   })
 
+  // A file's category follows its first link. A photo first attached to
+  // another item and then linked to this one as a document is in the images
+  // category, but the server refuses it as this item's cover.
+  it("does not render the cover-toggle star on a photo linked to the item as a document", () => {
+    render(
+      <FileCard
+        file={file({
+          links: [
+            { entity_type: "commodity", entity_id: "c2", meta: "images" },
+            { entity_type: "commodity", entity_id: "c1", meta: "documents" },
+          ],
+        })}
+        coverState={{ itemId: "c1" }}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId("file-card-cover-f1")).not.toBeInTheDocument()
+  })
+
+  it("does not render the cover-toggle star on an images-category file that is not an image", () => {
+    render(
+      <FileCard
+        file={file({ type: "document", mime_type: "application/pdf" })}
+        coverState={{ itemId: "c1" }}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
+    )
+    expect(screen.queryByTestId("file-card-cover-f1")).not.toBeInTheDocument()
+  })
+
+  it("renders the cover-toggle star on a photo of the item", () => {
+    render(
+      <FileCard file={file()} coverState={{ itemId: "c1" }} onSetCover={vi.fn()} onOpen={vi.fn()} />
+    )
+    expect(screen.getByTestId("file-card-cover-f1").getAttribute("data-cover-state")).toBe("off")
+  })
+
   it("renders the cover-toggle star with explicit state when this file is the current cover", () => {
     render(
       <FileCard
         file={file()}
-        coverState={{ current: "f1" }}
+        coverState={{ current: "f1", itemId: "c1" }}
         onSetCover={vi.fn()}
         onOpen={vi.fn()}
       />
@@ -201,7 +242,12 @@ describe("<FileCard />", () => {
 
   it("renders the cover-toggle star with auto state when this file is the first-photo auto-pick", () => {
     render(
-      <FileCard file={file()} coverState={{ auto: "f1" }} onSetCover={vi.fn()} onOpen={vi.fn()} />
+      <FileCard
+        file={file()}
+        coverState={{ auto: "f1", itemId: "c1" }}
+        onSetCover={vi.fn()}
+        onOpen={vi.fn()}
+      />
     )
     expect(screen.getByTestId("file-card-cover-f1").getAttribute("data-cover-state")).toBe("auto")
   })
@@ -212,7 +258,7 @@ describe("<FileCard />", () => {
     render(
       <FileCard
         file={file()}
-        coverState={{ auto: "f1" }}
+        coverState={{ auto: "f1", itemId: "c1" }}
         onSetCover={onSetCover}
         onOpen={vi.fn()}
       />
@@ -227,7 +273,7 @@ describe("<FileCard />", () => {
     render(
       <FileCard
         file={file()}
-        coverState={{ current: "f1" }}
+        coverState={{ current: "f1", itemId: "c1" }}
         onSetCover={onSetCover}
         onOpen={vi.fn()}
       />
@@ -240,7 +286,7 @@ describe("<FileCard />", () => {
     render(
       <FileCard
         file={file()}
-        coverState={{ auto: "f1" }}
+        coverState={{ auto: "f1", itemId: "c1" }}
         onSetCover={vi.fn()}
         coverBusy
         onOpen={vi.fn()}
