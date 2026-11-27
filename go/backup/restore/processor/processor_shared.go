@@ -31,7 +31,11 @@ import (
 // signer is accepted by the constructor but ignored — the constructor signature
 // is identical across builds so the worker/bootstrap wiring never branches.
 type RestoreOperationProcessor struct {
-	restoreOperationID    string
+	restoreOperationID string
+	// stepOwner is the tenant, group and author of the restore operation.
+	// Every step is written with it: steps go through the service registry,
+	// which fills none of them in, and a step row requires all three.
+	stepOwner             models.TenantGroupAwareEntityID
 	factorySet            *registry.FactorySet
 	entityService         *services.EntityService
 	tagService            *services.TagService
@@ -91,6 +95,7 @@ func (l *RestoreOperationProcessor) Process(ctx context.Context) error {
 	if err != nil {
 		return l.markRestoreFailed(ctx, err, "failed to get restore operation")
 	}
+	l.setStepOwner(restoreOperation)
 
 	exportReg := l.factorySet.ExportRegistryFactory.CreateServiceRegistry()
 	export, err := exportReg.Get(ctx, restoreOperation.ExportID)
@@ -692,6 +697,16 @@ func (l *RestoreOperationProcessor) trackCreatedEntity(entityID string) {
 	l.importSessionEntities[entityID] = true
 }
 
+// setStepOwner takes the tenant, group and author for the steps from the
+// restore operation they belong to.
+func (l *RestoreOperationProcessor) setStepOwner(op *models.RestoreOperation) {
+	l.stepOwner = models.TenantGroupAwareEntityID{
+		TenantID:        op.TenantID,
+		GroupID:         op.GroupID,
+		CreatedByUserID: op.CreatedByUserID,
+	}
+}
+
 func (l *RestoreOperationProcessor) createRestoreStep(
 	ctx context.Context,
 	name string,
@@ -699,16 +714,17 @@ func (l *RestoreOperationProcessor) createRestoreStep(
 	reason string,
 ) {
 	step := models.RestoreStep{
-		RestoreOperationID: l.restoreOperationID,
-		Name:               name,
-		Result:             result,
-		Reason:             reason,
-		CreatedDate:        models.PNow(),
+		TenantGroupAwareEntityID: l.stepOwner,
+		RestoreOperationID:       l.restoreOperationID,
+		Name:                     name,
+		Result:                   result,
+		Reason:                   reason,
+		CreatedDate:              models.PNow(),
 	}
 
 	stepReg := l.factorySet.RestoreStepRegistryFactory.CreateServiceRegistry()
 	if _, err := stepReg.Create(ctx, step); err != nil {
-		slog.ErrorContext(ctx, "Failed to create restore step", "error", err)
+		slog.ErrorContext(ctx, "Failed to create restore step", "error", err, "restore_operation_id", l.restoreOperationID)
 	}
 }
 
@@ -725,7 +741,7 @@ func (l *RestoreOperationProcessor) updateRestoreStep(ctx context.Context, name 
 			step.Result = result
 			step.Reason = reason
 			if _, uerr := stepReg.Update(ctx, *step); uerr != nil {
-				slog.ErrorContext(ctx, "Failed to update restore step", "error", uerr)
+				slog.ErrorContext(ctx, "Failed to update restore step", "error", uerr, "restore_operation_id", l.restoreOperationID)
 			}
 			return
 		}
@@ -747,6 +763,7 @@ func (l *RestoreOperationProcessor) markRestoreFailed(ctx context.Context, cause
 	if err != nil {
 		return err
 	}
+	l.setStepOwner(restoreOperation)
 
 	restoreOperation.Status = models.RestoreStatusFailed
 	restoreOperation.CompletedDate = models.PNow()
