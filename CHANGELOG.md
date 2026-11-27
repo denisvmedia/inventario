@@ -1404,6 +1404,23 @@ when to add an entry and where it goes.
   photo in its place
   ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
   [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
+- Sign-in, session and tenant log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  These refusals are logged as warnings, not errors: a user who reaches
+  another tenant's host (`Security violation: user attempted to access
+  different tenant`), an OAuth sign-in with a provider account linked in
+  another tenant, an OAuth link started in another tenant, and a magic link
+  whose token or user is not found. Back-office lines carry `admin_id`
+  instead of `user_id`. `user_tenant`, `callback_tenant` and
+  `requested_tenant` are now `user_tenant_id`, `callback_tenant_id` and
+  `requested_tenant_id`; `row_id` is `token_id`; `id` on the email
+  verification lines is `verification_id`; the catch-all tenant lines carry
+  `tenant_slug` and `catch_all_tenant_slug`. A failed impersonation, API
+  token or session revocation step is logged once, without a second
+  `internal server error` line. A password that cannot be hashed at
+  registration and a request that reaches a tenant-only route without a
+  tenant are now logged
+  ([#521](https://github.com/denisvmedia/inventario/issues/521)).
 
 ## [0.2.2] - 2026-11-23
 

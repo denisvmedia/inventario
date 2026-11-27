@@ -145,7 +145,7 @@ func (api *AuthAPI) sendPasswordChangedNotification(user *models.User) {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
 		if err := api.emailService.SendPasswordChangedEmail(ctx, user.Email, user.Name, time.Now()); err != nil {
-			slog.Error("Failed to send password-changed notification email",
+			slog.ErrorContext(ctx, "Failed to send password-changed notification email",
 				"user_id", user.ID,
 				"error", err,
 			)
@@ -1944,7 +1944,7 @@ func (api *AuthAPI) rollbackRefreshToken(ctx context.Context, userID, rowID stri
 	}
 	if err := api.refreshTokenRegistry.RevokeByID(ctx, userID, rowID); err != nil {
 		slog.ErrorContext(ctx, "Failed to roll back refresh token after access mint failure",
-			"user_id", userID, "row_id", rowID, "error", err)
+			"user_id", userID, "token_id", rowID, "error", err)
 	}
 }
 

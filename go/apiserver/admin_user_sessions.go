@@ -80,7 +80,7 @@ func (api *adminUsersAPI) revokeSessions(w http.ResponseWriter, r *http.Request)
 			return
 		}
 		slog.ErrorContext(r.Context(), "admin revoke sessions: failed to load user", "user_id", userID, "error", err)
-		_ = internalServerError(w, r, err)
+		_ = renderInternalServerError(w, r, err)
 		return
 	}
 
