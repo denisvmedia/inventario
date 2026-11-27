@@ -931,6 +931,12 @@ when to add an entry and where it goes.
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
 
+- A web address custom field value of up to 2,048 characters saves whatever
+  its alphabet. A long address written in Cyrillic or another script with
+  two- or more-byte letters failed with a server error, because the database
+  kept the whole value in an index whose entries have a size limit. That
+  index served no search or filter and is removed
+  ([#2979](https://github.com/denisvmedia/inventario/issues/2979)).
 - Editing or deleting an item tag while a currency migration runs in the
   group is refused at once with "Locked while a currency migration is
   running.", as an item change is. Before, the request waited for the
