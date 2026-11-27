@@ -11,9 +11,10 @@ import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
 import { ItemTypesListPage } from "@/pages/itemTypes/ItemTypesListPage"
 import { capture } from "@/test/capture"
-import { groupHandlers, itemTypeHandlers } from "@/test/handlers"
+import { groupHandlers, itemTypeHandlers, memberHandlers } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -48,6 +49,7 @@ beforeEach(() => {
 
 function renderPage(path = `/g/${SLUG}/item-types`) {
   return renderWithProviders({
+    withAuth: true,
     initialPath: path,
     routes: (
       <Route
@@ -55,7 +57,9 @@ function renderPage(path = `/g/${SLUG}/item-types`) {
         element={
           <GroupProvider>
             <main>
-              <ItemTypesListPage />
+              <WhenRoleKnown>
+                <ItemTypesListPage />
+              </WhenRoleKnown>
             </main>
           </GroupProvider>
         }
@@ -63,6 +67,13 @@ function renderPage(path = `/g/${SLUG}/item-types`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 function seed(list = types) {
   server.use(...groupHandlers.list(groupFixture), ...itemTypeHandlers.list(SLUG, list))
@@ -275,5 +286,19 @@ describe("<ItemTypesListPage />", () => {
     const { container } = renderPage()
     await screen.findByTestId("item-type-row-vehicle")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<ItemTypesListPage /> as a viewer (#2886)", () => {
+  // The server takes item type writes from users, admins and owners only.
+  it("offers no create, rename or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("item-type-row-vehicle")).toBeVisible()
+    expect(screen.queryByTestId("item-types-create-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("item-type-row-vehicle-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("item-type-row-vehicle-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("item-type-row-electronics-edit")).not.toBeInTheDocument()
   })
 })

@@ -160,6 +160,8 @@ Each member of a group has one **role** that controls what they can do. The **Me
 | **User** | Can add and remove items (not locations or areas). |
 | **Viewer** | Can view all items, but cannot make any changes. |
 
+Besides items, a **User** can manage the group's files, tags, sellers, item types, and custom fields. Inventario shows each member only the actions their role allows: a viewer sees no buttons that add, change, or delete anything (printing labels still works), and a user sees no buttons that add, change, or delete locations and areas.
+
 A group can have more than one owner. The **Members** page also shows quick stats at the top: total **Members**, **Admins & Owners**, and **Pending invites**.
 
 Every member, viewers included, can keep personal [saved views](../items/#saved-views) of the item list. Sharing a view with the group takes the **User** role or higher, and administrators and owners can change or delete any shared view. A shared view shares the filter only: each member sees the items their own access allows. Sharing does not put the view in anyone's sidebar or on their Dashboard; each member decides that for themselves.

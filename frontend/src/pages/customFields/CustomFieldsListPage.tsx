@@ -18,6 +18,7 @@ import {
   useUpdateCustomField,
 } from "@/features/customFields/hooks"
 import type { CustomFieldFormValues } from "@/features/customFields/schemas"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useAppToast } from "@/hooks/useAppToast"
 import { nameKey } from "@/lib/name-key"
 import { parseServerError } from "@/lib/server-error"
@@ -38,6 +39,9 @@ interface DialogState {
 // card listing the rows.
 export function CustomFieldsListPage() {
   const { t } = useTranslation()
+  // Viewers read this page; creating, renaming and deleting need the user
+  // role, so they get it without those actions.
+  const { canEditContent } = useGroupPermissions()
   const toast = useAppToast()
   const [searchParams, setSearchParams] = useSearchParams()
 
@@ -104,14 +108,16 @@ export function CustomFieldsListPage() {
         title={t("customFields:title")}
         subtitle={t("customFields:description")}
         actions={
-          <Button
-            type="button"
-            onClick={() => setDialog({ open: true, field: null })}
-            data-testid="custom-fields-create-button"
-          >
-            <Plus className="mr-1.5 size-4" aria-hidden="true" />
-            {t("customFields:create")}
-          </Button>
+          canEditContent ? (
+            <Button
+              type="button"
+              onClick={() => setDialog({ open: true, field: null })}
+              data-testid="custom-fields-create-button"
+            >
+              <Plus className="mr-1.5 size-4" aria-hidden="true" />
+              {t("customFields:create")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -194,8 +200,8 @@ export function CustomFieldsListPage() {
                   <li key={field.id}>
                     <CustomFieldRow
                       field={field}
-                      onEdit={() => setDialog({ open: true, field })}
-                      onDelete={() => setDeleting(field)}
+                      onEdit={canEditContent ? () => setDialog({ open: true, field }) : undefined}
+                      onDelete={canEditContent ? () => setDeleting(field) : undefined}
                     />
                   </li>
                 ))}
@@ -206,7 +212,7 @@ export function CustomFieldsListPage() {
       </div>
 
       <CustomFieldFormDialog
-        open={dialog.open}
+        open={canEditContent && dialog.open}
         onOpenChange={(open) =>
           setDialog((prev) => (open ? prev : { open: false, field: prev.field }))
         }
@@ -216,7 +222,10 @@ export function CustomFieldsListPage() {
         isPending={createMutation.isPending || updateMutation.isPending}
       />
 
-      <CustomFieldDeleteDialog field={deleting} onClose={() => setDeleting(null)} />
+      <CustomFieldDeleteDialog
+        field={canEditContent ? deleting : null}
+        onClose={() => setDeleting(null)}
+      />
     </Page>
   )
 }

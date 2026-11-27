@@ -12,6 +12,7 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import { commoditySellerHref } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { sellerNameKey, type Seller } from "@/features/sellers/api"
 import {
   useCreateSeller,
@@ -39,6 +40,9 @@ interface DialogState {
 // card listing the rows.
 export function SellersListPage() {
   const { t } = useTranslation()
+  // Viewers read this page; creating, renaming and deleting need the user
+  // role, so they get it without those actions.
+  const { canEditContent } = useGroupPermissions()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
   const toast = useAppToast()
@@ -117,14 +121,16 @@ export function SellersListPage() {
         title={t("sellers:title")}
         subtitle={t("sellers:description")}
         actions={
-          <Button
-            type="button"
-            onClick={() => setDialog({ open: true, seller: null })}
-            data-testid="sellers-create-button"
-          >
-            <Plus className="mr-1.5 size-4" aria-hidden="true" />
-            {t("sellers:create")}
-          </Button>
+          canEditContent ? (
+            <Button
+              type="button"
+              onClick={() => setDialog({ open: true, seller: null })}
+              data-testid="sellers-create-button"
+            >
+              <Plus className="mr-1.5 size-4" aria-hidden="true" />
+              {t("sellers:create")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -208,8 +214,8 @@ export function SellersListPage() {
                     <SellerRow
                       seller={seller}
                       href={groupSlug ? commoditySellerHref(groupSlug, seller.id) : undefined}
-                      onEdit={() => setDialog({ open: true, seller })}
-                      onDelete={() => void onDelete(seller)}
+                      onEdit={canEditContent ? () => setDialog({ open: true, seller }) : undefined}
+                      onDelete={canEditContent ? () => void onDelete(seller) : undefined}
                     />
                   </li>
                 ))}
@@ -220,7 +226,7 @@ export function SellersListPage() {
       </div>
 
       <SellerFormDialog
-        open={dialog.open}
+        open={canEditContent && dialog.open}
         onOpenChange={(open) => setDialog((prev) => (open ? prev : { open: false, seller: null }))}
         seller={dialog.seller}
         onSubmit={onSubmit}

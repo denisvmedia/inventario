@@ -862,6 +862,13 @@ when to add an entry and where it goes.
   migration that finished before its start request recorded it on the group
   no longer leaves the group shown as migrating
   ([#2918](https://github.com/denisvmedia/inventario/issues/2918)).
+- Viewers saw Add item, the bulk move, edit and delete actions, the attach
+  buttons on location and area pages, and the create, rename and delete
+  actions on the Tags, Sellers, Item types and Custom fields pages, and members
+  with the user role saw add, edit and delete for locations and areas. The
+  server refuses those writes, so the member filled in a form only to get an
+  error. Each page now offers a write action only to a role the server accepts
+  it from ([#2886](https://github.com/denisvmedia/inventario/issues/2886)).
 - The version badge in Settings → Help and the version a feedback report
   carries now show the release you run. Before, every release showed 0.1.0.
   A build without a release number, such as the `edge` image, shows no badge

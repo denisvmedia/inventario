@@ -144,7 +144,7 @@ import {
   isCommoditiesListContext,
 } from "@/features/commodities/listContext"
 import { commodityKeys } from "@/features/commodities/keys"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import { setCommodityDraft } from "@/features/inbox/api"
 import { useSetItemDraft } from "@/features/inbox/hooks"
 import { inboxReviewSource, isInboxReviewContext } from "@/features/inbox/listContext"
@@ -392,8 +392,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   // The list context to carry: on the list page that holds the item.
   const currentContext = walked ? withListContextPage(walked, nav.page) : from
   const contextAt = (page: number) => (walked ? withListContextPage(walked, page) : currentContext)
-  const role = useMyGroupRole()
-  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const canWrite = useGroupPermissions().canEditContent
   const setDraft = useSetItemDraft()
   // A review and the item's own saves are not started together: a quick
   // save sends the item as the page last read it, draft mark included, and

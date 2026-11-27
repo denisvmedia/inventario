@@ -42,7 +42,7 @@ import {
 } from "@/features/commodities/query"
 import { useDiscardDraft } from "@/features/drafts/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import {
   INBOX_REASONS,
   listInbox,
@@ -105,9 +105,8 @@ export function InboxPage() {
     page,
     perPage: INBOX_PAGE_SIZE,
   })
-  const role = useMyGroupRole()
   // Members who may edit content; nobody while the role is still loading.
-  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const canWrite = useGroupPermissions().canEditContent
   // Every page carries the counts of the whole inbox, so the tabs read
   // them from the page on screen. While the page of a newly selected tab
   // loads there is none, so the tabs keep the sidebar's count.

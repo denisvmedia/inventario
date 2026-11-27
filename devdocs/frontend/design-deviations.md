@@ -1669,6 +1669,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: agent-suggested; accepted in the review of PR #2904 (2026-11-26).
 - **Reversion plan**: Follow the mock if `inventario-design` adds a phone layout for dialogs.
 
+#### 2026-11-27 — Write actions left out for a role the server refuses
+
+- **Issue/PR**: #2886
+- **Mock**: Every view draws every action for one all-powerful member: [`ItemsView.tsx`](../../design-mocks/src/views/ItemsView.tsx) (Add item, the bulk bar), [`LocationPickerView.tsx`](../../design-mocks/src/views/LocationPickerView.tsx) (add location and area, edit, delete) and [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) (create, rename, delete). The mock has no read-only or role-limited state.
+- **Reality**: A page offers a write action only when `useGroupPermissions()` (`frontend/src/features/group/roles.ts`) says the caller's role passes the server's gate for it. A viewer gets no Add item, no bulk move, edit or delete (Print labels stays), no create, rename or delete on the Tags, Sellers, Item types and Custom fields pages, no attach or drop zone on the location and area pages, and no add location, add area, edit or delete. A member with the user role gets everything except the location and area writes. The actions are left out, not shown disabled: a card or row whose only actions are refused loses its menu, and an empty state loses its create button. A link to a create or edit route (`/locations/new`, `/locations/:id/edit`, `/areas/:id/edit`, `/commodities/new`) opens no dialog. While the role is unknown (the member list loading or failed) the actions stay hidden.
+- **Why**: not present in mock. The server refuses these writes with 403 (`structuralWriteGate` and `contentWriteGate` in `go/apiserver/apiserver.go`), so an offered action ends in an error after the member has filled in a form. Leaving the action out follows the app's existing role-limited surfaces (the Drafts card, the Inbox, Trash, the Failed jobs card); a disabled button with a reason would need a tooltip per action and still invites the click.
+- **Approved by**: user (explicit) — pre-approved for #2886 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` draws a read-only state for viewers.
+
 ### Backup & Restore
 
 #### 2026-11-26 — Restore upload names a personal data export

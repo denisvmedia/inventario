@@ -17,6 +17,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 import { useCommodities } from "@/features/commodities/hooks"
 import { commodityTagHref } from "@/features/commodities/query"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import {
   type CreateTagRequest,
   type TagColor,
@@ -115,6 +116,9 @@ function tagListHref(groupSlug: string, kind: TagKind, slug: string): string | u
 
 export function TagsListPage() {
   const { t } = useTranslation(["tags", "common"])
+  // Viewers read this page; creating, renaming and deleting need the user
+  // role, so they get it without those actions.
+  const { canEditContent } = useGroupPermissions()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? ""
   const toast = useAppToast()
@@ -472,28 +476,39 @@ export function TagsListPage() {
                     previewItems={
                       viewKind === "commodity" ? (previewByTag.get(tag.slug ?? "") ?? []) : []
                     }
-                    onEdit={() =>
-                      setDialog({
-                        open: true,
-                        mode: "edit",
-                        tag,
-                      })
+                    onEdit={
+                      canEditContent
+                        ? () =>
+                            setDialog({
+                              open: true,
+                              mode: "edit",
+                              tag,
+                            })
+                        : undefined
                     }
-                    onDelete={() => onDelete(tag, usage?.commodities ?? 0, usage?.files ?? 0)}
+                    onDelete={
+                      canEditContent
+                        ? () => onDelete(tag, usage?.commodities ?? 0, usage?.files ?? 0)
+                        : undefined
+                    }
                   />
                 </li>
               ))}
             </ul>
           )}
 
-          <Separator />
-          <div className="px-4 py-3">
-            <TagInlineCreate
-              existingSlugs={existingSlugs}
-              onCreate={onInlineCreate}
-              isPending={createMutation.isPending}
-            />
-          </div>
+          {canEditContent ? (
+            <>
+              <Separator />
+              <div className="px-4 py-3">
+                <TagInlineCreate
+                  existingSlugs={existingSlugs}
+                  onCreate={onInlineCreate}
+                  isPending={createMutation.isPending}
+                />
+              </div>
+            </>
+          ) : null}
         </div>
       )}
     </div>
@@ -505,14 +520,16 @@ export function TagsListPage() {
         title={t("tags:title")}
         subtitle={t("tags:description")}
         actions={
-          <Button
-            type="button"
-            onClick={() => setDialog({ open: true, mode: "create" })}
-            data-testid="tags-create-button"
-          >
-            <Plus className="mr-1.5 size-4" aria-hidden="true" />
-            {t("tags:create.button")}
-          </Button>
+          canEditContent ? (
+            <Button
+              type="button"
+              onClick={() => setDialog({ open: true, mode: "create" })}
+              data-testid="tags-create-button"
+            >
+              <Plus className="mr-1.5 size-4" aria-hidden="true" />
+              {t("tags:create.button")}
+            </Button>
+          ) : undefined
         }
       />
 
@@ -554,7 +571,7 @@ export function TagsListPage() {
       {tabBody}
 
       <TagFormDialog
-        open={dialog.open}
+        open={canEditContent && dialog.open}
         onOpenChange={(open) =>
           setDialog((prev) => (open ? prev : { open: false, mode: "create" }))
         }

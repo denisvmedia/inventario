@@ -116,6 +116,11 @@ export interface CommodityBulkActionsProps {
   listContext: ListContext | null
   /** A currency migration holds group writes. */
   locked: boolean
+  /**
+   * The member may change items. Without it the bar offers only the
+   * actions that change nothing (print labels).
+   */
+  canEdit: boolean
 }
 
 // The bulk action bar of the Items list and the dialogs behind it: move,
@@ -133,6 +138,7 @@ export function CommodityBulkActions({
   areas,
   listContext,
   locked,
+  canEdit,
 }: CommodityBulkActionsProps) {
   const { t } = useTranslation()
   const toast = useAppToast()
@@ -475,57 +481,64 @@ export function CommodityBulkActions({
           className="max-w-3xl"
           data-testid="commodities-bulk-bar"
         >
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => {
-              if (!locked) openDialog("move")
-            }}
-            {...lockAttrs}
-            className={lockedClass("hover:bg-background hover:text-foreground")}
-            data-testid="commodities-bulk-move"
-          >
-            {t("commodities:bulk.moveButton")}
-          </Button>
-          <DropdownMenu open={editOpen} onOpenChange={(open) => setEditOpen(open && !locked)}>
-            <DropdownMenuTrigger asChild>
+          {canEdit ? (
+            <>
               <Button
                 variant="outline"
                 size="sm"
+                onClick={() => {
+                  if (!locked) openDialog("move")
+                }}
                 {...lockAttrs}
-                className={cn("gap-1", lockedClass("hover:bg-background hover:text-foreground"))}
-                data-testid="commodities-bulk-edit"
+                className={lockedClass("hover:bg-background hover:text-foreground")}
+                data-testid="commodities-bulk-move"
               >
-                {t("commodities:bulk.editButton")}
-                <ChevronDown className="size-4" aria-hidden="true" />
+                {t("commodities:bulk.moveButton")}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                onSelect={() => openDialog("tags")}
-                data-testid="commodities-bulk-edit-tags"
-              >
-                {t("commodities:bulk.editTags")}
-              </DropdownMenuItem>
-              <DropdownMenuItem
-                onSelect={() => openDialog("type")}
-                data-testid="commodities-bulk-edit-type"
-              >
-                {t("commodities:bulk.editType")}
-              </DropdownMenuItem>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel>{t("commodities:bulk.statusLabel")}</DropdownMenuLabel>
-              {BULK_STATUSES.map((status) => (
-                <DropdownMenuItem
-                  key={status}
-                  onSelect={() => openStatus(status)}
-                  data-testid={`commodities-bulk-status-${status}`}
-                >
-                  {t(`commodities:status.${status}`)}
-                </DropdownMenuItem>
-              ))}
-            </DropdownMenuContent>
-          </DropdownMenu>
+              <DropdownMenu open={editOpen} onOpenChange={(open) => setEditOpen(open && !locked)}>
+                <DropdownMenuTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    {...lockAttrs}
+                    className={cn(
+                      "gap-1",
+                      lockedClass("hover:bg-background hover:text-foreground")
+                    )}
+                    data-testid="commodities-bulk-edit"
+                  >
+                    {t("commodities:bulk.editButton")}
+                    <ChevronDown className="size-4" aria-hidden="true" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem
+                    onSelect={() => openDialog("tags")}
+                    data-testid="commodities-bulk-edit-tags"
+                  >
+                    {t("commodities:bulk.editTags")}
+                  </DropdownMenuItem>
+                  <DropdownMenuItem
+                    onSelect={() => openDialog("type")}
+                    data-testid="commodities-bulk-edit-type"
+                  >
+                    {t("commodities:bulk.editType")}
+                  </DropdownMenuItem>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuLabel>{t("commodities:bulk.statusLabel")}</DropdownMenuLabel>
+                  {BULK_STATUSES.map((status) => (
+                    <DropdownMenuItem
+                      key={status}
+                      onSelect={() => openStatus(status)}
+                      data-testid={`commodities-bulk-status-${status}`}
+                    >
+                      {t(`commodities:status.${status}`)}
+                    </DropdownMenuItem>
+                  ))}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </>
+          ) : null}
           {/* Print labels (#2807) takes ids, so it is offered for a picked selection. */}
           {slug && !selection.allMatching ? (
             <Button asChild variant="outline" size="sm" className="gap-1.5">
@@ -538,20 +551,22 @@ export function CommodityBulkActions({
               </Link>
             </Button>
           ) : null}
-          <Button
-            variant="destructive"
-            size="sm"
-            onClick={() => {
-              if (!locked) void handleDelete()
-            }}
-            disabled={bulkDelete.isPending}
-            {...lockAttrs}
-            className={lockedClass("hover:bg-destructive hover:text-white")}
-            data-testid="commodities-bulk-delete"
-          >
-            <Trash2 className="mr-2 size-4" aria-hidden="true" />
-            {t("commodities:bulk.deleteButton")}
-          </Button>
+          {canEdit ? (
+            <Button
+              variant="destructive"
+              size="sm"
+              onClick={() => {
+                if (!locked) void handleDelete()
+              }}
+              disabled={bulkDelete.isPending}
+              {...lockAttrs}
+              className={lockedClass("hover:bg-destructive hover:text-white")}
+              data-testid="commodities-bulk-delete"
+            >
+              <Trash2 className="mr-2 size-4" aria-hidden="true" />
+              {t("commodities:bulk.deleteButton")}
+            </Button>
+          ) : null}
         </BulkActionBar>
       ) : null}
 
