@@ -85,7 +85,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs": {
             "get": {
-                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type and ?tenantID to one\ntenant. ` + "`" + `meta.job_types` + "`" + ` lists the job types with whether each can be\nretried.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `.",
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type and ?tenantID to one\ntenant. ` + "`" + `meta.job_types` + "`" + ` lists the job types with whether each can be\nretried. A personal data export belongs to a user, not to a group;\nits title is the user's email address.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -101,7 +101,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -170,7 +171,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",
@@ -213,7 +215,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs/{jobType}/{jobID}/retry": {
             "post": {
-                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
+                "description": "Puts the failed job back in its queue the way its type runs it again\n(#1307): an export or import runs from the start, a thumbnail gets a\nfresh set of attempts, an intake scan is due again at once, a personal\ndata export is built again from the start and kept until 7 days after\nthe build finishes; it does not count as a new request. A restore\nand a currency migration cannot be retried (409\n` + "`" + `failed_job.not_retryable` + "`" + `); discard them instead. 404\n` + "`" + `failed_job.unknown_type` + "`" + ` for an unknown type, 404\n` + "`" + `failed_job.not_found` + "`" + ` when the job is not failed or was already\nretried or discarded.",
                 "tags": [
                     "admin"
                 ],
@@ -226,7 +228,8 @@ const docTemplate = `{
                             "restore",
                             "thumbnail",
                             "intake",
-                            "currency-migration"
+                            "currency-migration",
+                            "personal-data-export"
                         ],
                         "type": "string",
                         "description": "Job type",

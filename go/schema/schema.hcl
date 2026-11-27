@@ -3738,6 +3738,14 @@ table "personal_data_exports" {
     type = TIMESTAMP
     null = true
   }
+  column "attempt_count" {
+    type = INTEGER
+    default = "0"
+  }
+  column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "expires_at" {
     type = TIMESTAMP
   }

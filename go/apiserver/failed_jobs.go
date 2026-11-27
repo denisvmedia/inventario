@@ -123,8 +123,8 @@ type AdminFailedJobListEnvelope struct {
 	Meta FailedJobListMeta        `json:"meta"`
 }
 
-func failedJobTypeInfos() []FailedJobTypeInfo {
-	types := models.FailedJobTypes()
+func failedJobTypeInfos(scope registry.FailedJobScope) []FailedJobTypeInfo {
+	types := services.FailedJobTypesIn(scope)
 	out := make([]FailedJobTypeInfo, 0, len(types))
 	for _, t := range types {
 		out = append(out, FailedJobTypeInfo{Type: string(t), Retryable: models.FailedJobRetryable(t)})
@@ -132,13 +132,15 @@ func failedJobTypeInfos() []FailedJobTypeInfo {
 	return out
 }
 
-func failedJobListMeta(page, perPage, total int) FailedJobListMeta {
+// failedJobListMeta is the meta block of a list in the scope: a group's list
+// names only the types whose jobs belong to a group.
+func failedJobListMeta(scope registry.FailedJobScope, page, perPage, total int) FailedJobListMeta {
 	return FailedJobListMeta{
 		Page:       page,
 		PerPage:    perPage,
 		Total:      total,
 		TotalPages: jsonapi.ComputeTotalPages(total, perPage),
-		JobTypes:   failedJobTypeInfos(),
+		JobTypes:   failedJobTypeInfos(scope),
 	}
 }
 
@@ -156,14 +158,14 @@ func failedJobView(job *models.FailedJob) FailedJobView {
 }
 
 // parseFailedJobTypeFilter reads the optional ?type filter. ok is false
-// after it wrote a 400 for an unknown type.
-func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request) (models.WorkerType, bool) {
+// after it wrote a 400 for a type the scope does not know.
+func parseFailedJobTypeFilter(w http.ResponseWriter, r *http.Request, scope registry.FailedJobScope) (models.WorkerType, bool) {
 	raw := strings.TrimSpace(r.URL.Query().Get("type"))
 	if raw == "" {
 		return "", true
 	}
 	t := models.WorkerType(raw)
-	if !models.IsFailedJobType(t) {
+	if !services.IsFailedJobTypeIn(scope, t) {
 		_ = codedBadRequestError(w, r, errUnknownFailedJobType, FailedJobUnknownTypeCode)
 		return "", false
 	}
@@ -179,12 +181,13 @@ var errUnknownFailedJobType = errors.New("unknown job type")
 const maxAuditedJobTypeLen = 64
 
 // failedJobPath reads the {jobType} and {jobID} path segments. known is
-// false for a type that keeps no failed jobs; the type is then the segment
-// as sent, cut to maxAuditedJobTypeLen bytes, for the audit row.
-func failedJobPath(r *http.Request) (jobType models.WorkerType, jobID string, known bool) {
+// false for a type whose failed jobs the scope does not reach; the type is
+// then the segment as sent, cut to maxAuditedJobTypeLen bytes, for the
+// audit row.
+func failedJobPath(r *http.Request, scope registry.FailedJobScope) (jobType models.WorkerType, jobID string, known bool) {
 	raw := strings.TrimSpace(chi.URLParam(r, "jobType"))
 	jobID = chi.URLParam(r, "jobID")
-	if t := models.WorkerType(raw); models.IsFailedJobType(t) {
+	if t := models.WorkerType(raw); services.IsFailedJobTypeIn(scope, t) {
 		return t, jobID, true
 	}
 	if len(raw) > maxAuditedJobTypeLen {
@@ -240,11 +243,12 @@ type adminFailedJobsAPI struct {
 // @Description (#1307). Each job is read from its type's own table; `id` is the row
 // @Description id there. ?type limits the list to one job type and ?tenantID to one
 // @Description tenant. `meta.job_types` lists the job types with whether each can be
-// @Description retried.
+// @Description retried. A personal data export belongs to a user, not to a group;
+// @Description its title is the user's email address.
 // @Description An unknown ?type returns 400 with `failed_job.unknown_type`.
 // @Tags admin
 // @Produce json-api
-// @Param type query string false "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param type query string false "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param tenantID query string false "Tenant ID"
 // @Param page query int false "Page number (default 1)"
 // @Param per_page query int false "Items per page (default 50, max 100)"
@@ -258,7 +262,8 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 	// The tenant filter is `tenantID`: the admin subtree is exempt from
 	// the check that refuses a tenant in the query, as for /admin/groups.
 	tenantID := strings.TrimSpace(q.Get("tenantID"))
-	jobType, ok := parseFailedJobTypeFilter(w, r)
+	scope := registry.FailedJobScope{TenantID: tenantID}
+	jobType, ok := parseFailedJobTypeFilter(w, r, scope)
 	if !ok {
 		api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", errUnknownFailedJobType)
 		return
@@ -267,7 +272,7 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 
 	result, err := api.service.List(r.Context(), services.FailedJobQuery{
 		Type:   jobType,
-		Scope:  registry.FailedJobScope{TenantID: tenantID},
+		Scope:  scope,
 		Offset: (page - 1) * perPage,
 		Limit:  perPage,
 	})
@@ -290,7 +295,7 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 	setPaginationHeaders(w, page, perPage, result.Total)
 	writeErr := writeFailedJobEnvelope(w, r, AdminFailedJobListEnvelope{
 		Data: data,
-		Meta: failedJobListMeta(page, perPage, result.Total),
+		Meta: failedJobListMeta(scope, page, perPage, result.Total),
 	})
 	api.audit(r, AuditActionAdminFailedJobList, tenantID, "", "", writeErr)
 }
@@ -300,14 +305,16 @@ func (api *adminFailedJobsAPI) listFailedJobs(w http.ResponseWriter, r *http.Req
 // @Summary Retry a failed background job (admin)
 // @Description Puts the failed job back in its queue the way its type runs it again
 // @Description (#1307): an export or import runs from the start, a thumbnail gets a
-// @Description fresh set of attempts, an intake scan is due again at once. A restore
+// @Description fresh set of attempts, an intake scan is due again at once, a personal
+// @Description data export is built again from the start and kept until 7 days after
+// @Description the build finishes; it does not count as a new request. A restore
 // @Description and a currency migration cannot be retried (409
 // @Description `failed_job.not_retryable`); discard them instead. 404
 // @Description `failed_job.unknown_type` for an unknown type, 404
 // @Description `failed_job.not_found` when the job is not failed or was already
 // @Description retried or discarded.
 // @Tags admin
-// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param jobID path string true "Job ID"
 // @Success 204 "No Content"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
@@ -330,7 +337,7 @@ func (api *adminFailedJobsAPI) retryFailedJob(w http.ResponseWriter, r *http.Req
 // @Description `failed_job.not_found` when the job is not failed or was already
 // @Description retried or discarded.
 // @Tags admin
-// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration)
+// @Param jobType path string true "Job type" Enums(export,import,restore,thumbnail,intake,currency-migration,personal-data-export)
 // @Param jobID path string true "Job ID"
 // @Success 204 "No Content"
 // @Failure 401 {object} jsonapi.Errors "Unauthorized - back-office authentication required"
@@ -347,7 +354,7 @@ type failedJobAction func(ctx context.Context, jobType models.WorkerType, scope 
 // act runs a retry or discard across tenants and audits it, also when it
 // is refused, with the job's tenant when the job was found.
 func (api *adminFailedJobsAPI) act(w http.ResponseWriter, r *http.Request, action string, do failedJobAction) {
-	jobType, jobID, known := failedJobPath(r)
+	jobType, jobID, known := failedJobPath(r, registry.FailedJobScope{})
 	if !known {
 		api.audit(r, action, "", string(jobType), jobID, errUnknownFailedJobType)
 		writeUnknownFailedJobType(w, r)
@@ -514,7 +521,7 @@ func (api *groupFailedJobsAPI) list(w http.ResponseWriter, r *http.Request) {
 		_ = internalServerError(w, r, errors.New("group context required"))
 		return
 	}
-	jobType, ok := parseFailedJobTypeFilter(w, r)
+	jobType, ok := parseFailedJobTypeFilter(w, r, scope)
 	if !ok {
 		return
 	}
@@ -535,7 +542,7 @@ func (api *groupFailedJobsAPI) list(w http.ResponseWriter, r *http.Request) {
 		data = append(data, FailedJobResource{Type: failedJobResourceType, ID: job.ID, Attributes: failedJobView(job)})
 	}
 	setPaginationHeaders(w, page, perPage, result.Total)
-	_ = writeFailedJobEnvelope(w, r, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(page, perPage, result.Total)})
+	_ = writeFailedJobEnvelope(w, r, FailedJobListEnvelope{Data: data, Meta: failedJobListMeta(scope, page, perPage, result.Total)})
 }
 
 // retry puts one of the group's failed jobs back in its queue.
@@ -562,7 +569,7 @@ func (api *groupFailedJobsAPI) retry(w http.ResponseWriter, r *http.Request) {
 		_ = internalServerError(w, r, errors.New("group context required"))
 		return
 	}
-	jobType, jobID, known := failedJobPath(r)
+	jobType, jobID, known := failedJobPath(r, scope)
 	if !known {
 		api.audit(r, scope, string(jobType), jobID, errUnknownFailedJobType)
 		writeUnknownFailedJobType(w, r)

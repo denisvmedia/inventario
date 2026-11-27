@@ -31,7 +31,9 @@ type failedJobAdapter struct {
 	where func(store.TableNames) string
 	// columns selects the failedJobRow fields.
 	columns func(store.TableNames) string
-	// groupColumn is the column that holds the job's group.
+	// groupColumn is the column that holds the job's group. Empty for a
+	// type whose jobs belong to no group, which a group scope does not
+	// reach.
 	groupColumn string
 	// retrySet is the SET clause of a retry, where @now stands for the time
 	// of the retry. Empty for a type that cannot be retried.
@@ -153,6 +155,26 @@ var failedJobAdapters = map[models.WorkerType]failedJobAdapter{
 		groupColumn: "j.group_id",
 		failedAt:    "j.completed_at",
 	},
+	// A personal data export belongs to a user, not to a group. Its title is
+	// the user's email address, so the operator knows whose copy it is. A
+	// retry builds it again from the start, and the new expiry keeps the row
+	// until the build is done; the build sets the expiry again when it
+	// finishes.
+	models.FailedJobTypePersonalDataExport: {
+		table: func(t store.TableNames) store.TableName { return t.PersonalDataExports() },
+		join: func(t store.TableNames) string {
+			return fmt.Sprintf("LEFT JOIN %s u ON u.id = j.user_id", t.Users())
+		},
+		columns: func(store.TableNames) string {
+			return `j.id, j.tenant_id, '' AS group_id, j.user_id, COALESCE(u.email, '') AS title,
+				j.error_message AS error, GREATEST(j.attempt_count, 1) AS attempts, j.created_at,
+				j.completed_at AS failed_at`
+		},
+		retrySet: fmt.Sprintf(`status = 'pending', error_message = '', started_at = NULL, completed_at = NULL,
+			blob_key = '', size_bytes = 0, expires_at = @now::timestamp + INTERVAL '%d seconds'`,
+			int64(models.PersonalDataExportRetention/time.Second)),
+		failedAt: "j.completed_at",
+	},
 }
 
 // FailedJobRegistry is the postgres FailedJobRegistry.
@@ -166,9 +188,11 @@ func NewFailedJobRegistry(dbx *sqlx.DB) *FailedJobRegistry {
 	return &FailedJobRegistry{dbx: dbx, tableNames: store.DefaultTableNames}
 }
 
-func (r *FailedJobRegistry) adapter(jobType models.WorkerType) (failedJobAdapter, error) {
+// adapter returns the type's adapter for the scope. A group scope does not
+// know a type whose jobs belong to no group.
+func (r *FailedJobRegistry) adapter(jobType models.WorkerType, scope registry.FailedJobScope) (failedJobAdapter, error) {
 	a, ok := failedJobAdapters[jobType]
-	if !ok {
+	if !ok || (scope.GroupID != "" && a.groupColumn == "") {
 		return failedJobAdapter{}, errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
 	}
 	return a, nil
@@ -219,7 +243,7 @@ func (r *FailedJobRegistry) from(a failedJobAdapter) string {
 }
 
 func (r *FailedJobRegistry) ListFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, limit int) ([]*models.FailedJob, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -244,7 +268,7 @@ func (r *FailedJobRegistry) ListFailed(ctx context.Context, jobType models.Worke
 }
 
 func (r *FailedJobRegistry) CountFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope) (int, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return 0, err
 	}
@@ -261,7 +285,7 @@ func (r *FailedJobRegistry) CountFailed(ctx context.Context, jobType models.Work
 }
 
 func (r *FailedJobRegistry) GetFailed(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string) (*models.FailedJob, error) {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return nil, err
 	}
@@ -281,7 +305,7 @@ func (r *FailedJobRegistry) GetFailed(ctx context.Context, jobType models.Worker
 }
 
 func (r *FailedJobRegistry) Retry(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}
@@ -292,7 +316,7 @@ func (r *FailedJobRegistry) Retry(ctx context.Context, jobType models.WorkerType
 }
 
 func (r *FailedJobRegistry) Discard(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string, now time.Time) error {
-	a, err := r.adapter(jobType)
+	a, err := r.adapter(jobType, scope)
 	if err != nil {
 		return err
 	}

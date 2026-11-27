@@ -121,14 +121,15 @@ export type paths = {
          *     (#1307). Each job is read from its type's own table; `id` is the row
          *     id there. ?type limits the list to one job type and ?tenantID to one
          *     tenant. `meta.job_types` lists the job types with whether each can be
-         *     retried.
+         *     retried. A personal data export belongs to a user, not to a group;
+         *     its title is the user's email address.
          *     An unknown ?type returns 400 with `failed_job.unknown_type`.
          */
         get: {
             parameters: {
                 query?: {
                     /** @description Job type */
-                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    type?: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Tenant ID */
                     tenantID?: string;
                     /** @description Page number (default 1) */
@@ -213,7 +214,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };
@@ -276,7 +277,9 @@ export type paths = {
          * Retry a failed background job (admin)
          * @description Puts the failed job back in its queue the way its type runs it again
          *     (#1307): an export or import runs from the start, a thumbnail gets a
-         *     fresh set of attempts, an intake scan is due again at once. A restore
+         *     fresh set of attempts, an intake scan is due again at once, a personal
+         *     data export is built again from the start and kept until 7 days after
+         *     the build finishes; it does not count as a new request. A restore
          *     and a currency migration cannot be retried (409
          *     `failed_job.not_retryable`); discard them instead. 404
          *     `failed_job.unknown_type` for an unknown type, 404
@@ -289,7 +292,7 @@ export type paths = {
                 header?: never;
                 path: {
                     /** @description Job type */
-                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration";
+                    jobType: "export" | "import" | "restore" | "thumbnail" | "intake" | "currency-migration" | "personal-data-export";
                     /** @description Job ID */
                     jobID: string;
                 };

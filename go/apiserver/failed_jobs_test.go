@@ -313,3 +313,97 @@ func TestGroupFailedJobs_RefusesMembersAndOtherGroups(t *testing.T) {
 
 	c.Assert(env.exportStatus(c, env.adminA, env.groupA, env.exportA).Status, qt.Equals, models.ExportStatusFailed)
 }
+
+// failedPersonalExport stores a personal data export of the user whose build
+// failed.
+func (e *failedJobsEnv) failedPersonalExport(c *qt.C, user *models.User) string {
+	c.Helper()
+	ctx := context.Background()
+	reg := e.params.FactorySet.PersonalDataExportRegistry
+	now := time.Now().UTC()
+	created, blocking, err := reg.CreateUnlessRequestedSince(ctx, models.PersonalDataExport{
+		TenantUserAwareEntityID: models.TenantUserAwareEntityID{TenantID: user.TenantID, UserID: user.ID},
+		CreatedAt:               now.Add(-time.Hour),
+		ExpiresAt:               now.Add(models.PersonalDataExportRetention),
+	}, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(blocking, qt.IsNil)
+	claimed, err := reg.ClaimPending(ctx, created.ID, now.Add(-time.Hour))
+	c.Assert(err, qt.IsNil)
+	c.Assert(claimed, qt.IsTrue)
+	failed := must.Must(reg.Get(ctx, created.ID))
+	failed.Status = models.PersonalDataExportStatusFailed
+	failed.ErrorMessage = "the account is not active"
+	failed.CompletedAt = new(now.Add(-time.Minute))
+	must.Must(reg.Update(ctx, *failed))
+	return created.ID
+}
+
+// A failed personal data export belongs to a user, not to a group: the back
+// office lists it, retries it and discards it, with the same audit rows as
+// the other types.
+func TestAdminFailedJobs_PersonalDataExports(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	retried := env.failedPersonalExport(c, env.member)
+	discarded := env.failedPersonalExport(c, env.adminB)
+	reg := env.params.FactorySet.PersonalDataExportRegistry
+
+	rr := doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?type=personal-data-export", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].id", qt.ContentEquals), []any{retried, discarded})
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].attributes.title", qt.ContentEquals), []any{"member@example.com", "admin-b@example.com"})
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.job_type"), "personal-data-export")
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.retryable"), true)
+	c.Assert(body, checkers.JSONPathEquals("$.data[0].attributes.tenant_name"), "Test Organization")
+
+	base := "/api/v1/admin/failed-jobs/personal-data-export/"
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+retried+"/retry", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+	c.Assert(must.Must(reg.Get(context.Background(), retried)).Status, qt.Equals, models.PersonalDataExportStatusPending)
+	rows := env.auditRows(apiserver.AuditActionAdminFailedJobRetry)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(*rows[0].EntityType, qt.Equals, "personal-data-export")
+	c.Assert(*rows[0].EntityID, qt.Equals, retried)
+	c.Assert(*rows[0].TenantID, qt.Equals, env.member.TenantID)
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodPost, base+discarded+"/discard", env.adminToken, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNoContent)
+	got := must.Must(reg.Get(context.Background(), discarded))
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed, qt.Commentf("discard keeps the row"))
+	c.Assert(got.DiscardedAt, qt.IsNotNil)
+	rows = env.auditRows(apiserver.AuditActionAdminFailedJobDiscard)
+	c.Assert(rows, qt.HasLen, 1)
+	c.Assert(rows[0].Success, qt.IsTrue)
+	c.Assert(*rows[0].EntityType, qt.Equals, "personal-data-export")
+
+	rr = doAdminJSONRequest(t, env.handler, http.MethodGet, "/api/v1/admin/failed-jobs?type=personal-data-export", env.adminToken, nil)
+	c.Assert(rr.Body.Bytes(), checkers.JSONPathEquals("$.meta.total"), float64(0))
+}
+
+// The group card never shows a personal data export, not even the one of a
+// group admin: it belongs to the user.
+func TestGroupFailedJobs_LeaveOutPersonalDataExports(t *testing.T) {
+	c := qt.New(t)
+	env := newFailedJobsEnv(c)
+	id := env.failedPersonalExport(c, env.adminA)
+	base := "/api/v1/g/" + env.groupA.Slug + "/failed-jobs"
+
+	rr := doJSONAPIRequest(t, env.handler, http.MethodGet, base, env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusOK)
+	body := rr.Body.Bytes()
+	c.Assert(body, checkers.JSONPathMatches("$.data[*].id", qt.ContentEquals), []any{env.exportA, env.restoreA})
+	c.Assert(body, checkers.JSONPathMatches("$.meta.job_types[*].type", qt.Not(qt.Contains)), "personal-data-export")
+
+	rr = doJSONAPIRequest(t, env.handler, http.MethodGet, base+"?type=personal-data-export", env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusBadRequest)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+
+	rr = doJSONAPIRequest(t, env.handler, http.MethodPost, base+"/personal-data-export/"+id+"/retry", env.adminA.ID, nil)
+	c.Assert(rr.Code, qt.Equals, http.StatusNotFound)
+	assertErrorCode(t, c, rr.Body.Bytes(), apiserver.FailedJobUnknownTypeCode)
+	got := must.Must(env.params.FactorySet.PersonalDataExportRegistry.Get(context.Background(), id))
+	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+}
