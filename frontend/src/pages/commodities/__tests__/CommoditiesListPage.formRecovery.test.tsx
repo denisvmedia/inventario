@@ -22,6 +22,7 @@ import {
   locationHandlers,
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
+import { WhenGroupLoaded } from "@/test/group-loaded"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
@@ -50,7 +51,8 @@ beforeEach(() => {
 })
 
 // SignedIn renders the page once the user is known, as the app's route
-// guard does.
+// guard does, and WhenGroupLoaded once the group is: the form keeps its input
+// only under a key that names both.
 function SignedIn({ children }: { children: ReactNode }) {
   const { user } = useAuth()
   return user ? children : null
@@ -93,9 +95,11 @@ describe("<CommoditiesListPage /> Add item recovery (#2920)", () => {
           element={
             <SignedIn>
               <GroupProvider>
-                <ConfirmProvider>
-                  <CommoditiesListPage />
-                </ConfirmProvider>
+                <WhenGroupLoaded>
+                  <ConfirmProvider>
+                    <CommoditiesListPage />
+                  </ConfirmProvider>
+                </WhenGroupLoaded>
               </GroupProvider>
             </SignedIn>
           }
@@ -164,9 +168,11 @@ describe("<CommoditiesListPage /> Add item in the group it opened in (#2920)", (
           </button>
           <SignedIn>
             <GroupProvider>
-              <ConfirmProvider>
-                <CommoditiesListPage />
-              </ConfirmProvider>
+              <WhenGroupLoaded>
+                <ConfirmProvider>
+                  <CommoditiesListPage />
+                </ConfirmProvider>
+              </WhenGroupLoaded>
             </GroupProvider>
           </SignedIn>
         </>
