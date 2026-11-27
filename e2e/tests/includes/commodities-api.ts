@@ -328,6 +328,39 @@ export async function purgeTrashedCommodityViaAPI(
 }
 
 /**
+ * DELETE every item tag of the group whose label or slug contains text.
+ * Deleting an item keeps the tags it carried, so a spec that creates tags
+ * removes them with this; otherwise they pile up in the shared e2e group
+ * across specs and retries. Silent on 404, like the item cleanup.
+ */
+export async function deleteCommodityTagsViaAPI(
+  request: APIRequestContext,
+  auth: ApiAuth,
+  slug: string,
+  text: string,
+): Promise<void> {
+  const base = `/api/v1/g/${encodeURIComponent(slug)}/tags`
+  const list = await request.get(
+    `${base}?kind=commodity&per_page=100&q=${encodeURIComponent(text)}`,
+    { headers: authHeaders(auth) },
+  )
+  if (!list.ok()) {
+    throw new Error(`deleteCommodityTagsViaAPI: GET /tags → ${list.status()} ${await list.text()}`)
+  }
+  const body = (await list.json()) as { data?: Array<{ id: string }> }
+  for (const tag of body.data ?? []) {
+    const resp = await request.delete(`${base}/${encodeURIComponent(tag.id)}`, {
+      headers: authHeaders(auth),
+    })
+    if (!resp.ok() && resp.status() !== 404) {
+      throw new Error(
+        `deleteCommodityTagsViaAPI: DELETE /tags/${tag.id} → ${resp.status()} ${await resp.text()}`,
+      )
+    }
+  }
+}
+
+/**
  * POST /areas. Used by bulk-move tests that need a second area on the
  * same location to move commodities into. Mirrors the AreaFormDialog
  * envelope (jsonapi/areas.go binds `AreaRequest`).
