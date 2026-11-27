@@ -6,6 +6,7 @@ import (
 	"time"
 
 	qt "github.com/frankban/quicktest"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/jackc/pgx/v5/stdlib"
 	"github.com/jmoiron/sqlx"
 	"github.com/shopspring/decimal"
@@ -67,8 +68,7 @@ func TestCurrencyMigrationProcessor_HappyPath_SmallGroup(t *testing.T) {
 	// surface is exercised exactly the way bootstrap wires it.
 	pool, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
-	dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
-	pgFactory := postgres.NewCurrencyMigrationRegistry(dbx)
+	pgFactory := newCurrencyMigrationFactory(c, pool)
 	processor := pgFactory.NewProcessor()
 	serviceReg := pgFactory.CreateServiceRegistry()
 
@@ -190,8 +190,7 @@ func TestCurrencyMigrationProcessor_ForwardThenInverse(t *testing.T) {
 
 	pool, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
-	dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
-	pgFactory := postgres.NewCurrencyMigrationRegistry(dbx)
+	pgFactory := newCurrencyMigrationFactory(c, pool)
 	processor := pgFactory.NewProcessor()
 	serviceReg := pgFactory.CreateServiceRegistry()
 
@@ -265,8 +264,7 @@ func TestCurrencyMigrationProcessor_RecoverySweepWithAuditLog(t *testing.T) {
 
 	pool, err := getOrCreatePool(dsn)
 	c.Assert(err, qt.IsNil)
-	dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
-	pgFactory := postgres.NewCurrencyMigrationRegistry(dbx)
+	pgFactory := newCurrencyMigrationFactory(c, pool)
 	processor := pgFactory.NewProcessor()
 	serviceReg := pgFactory.CreateServiceRegistry()
 
@@ -312,4 +310,15 @@ func TestCurrencyMigrationProcessor_RecoverySweepWithAuditLog(t *testing.T) {
 		}
 	}
 	c.Assert(matched, qt.Equals, 1)
+}
+
+// newCurrencyMigrationFactory builds the factory the way bootstrap does, from
+// the factory set, so the processor gets the database handle the server uses.
+func newCurrencyMigrationFactory(c *qt.C, pool *pgxpool.Pool) *postgres.CurrencyMigrationRegistryFactory {
+	c.Helper()
+
+	dbx := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
+	factory, ok := postgres.NewFactorySet(dbx).CurrencyMigrationRegistryFactory.(*postgres.CurrencyMigrationRegistryFactory)
+	c.Assert(ok, qt.IsTrue)
+	return factory
 }

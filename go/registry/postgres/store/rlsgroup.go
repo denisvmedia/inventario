@@ -185,7 +185,7 @@ func (r *RLSGroupRepository[T, P]) CreateWithPrepare(ctx context.Context, entity
 // before the row exists.
 func (r *RLSGroupRepository[T, P]) CreateWithHooks(
 	ctx context.Context, entity T, prepareFn, afterFn func(context.Context, *sqlx.Tx, P) error,
-) (T, error) {
+) (_ T, err error) {
 	var zero T
 
 	// Fail fast on a misconstructed user-scoped registry: tenant / group /
@@ -268,7 +268,7 @@ func (r *RLSGroupRepository[T, P]) UpdateWithPrepare(ctx context.Context, entity
 // was before and the row written.
 func (r *RLSGroupRepository[T, P]) UpdateWithHooks(
 	ctx context.Context, entity T, prepareFn, afterFn func(context.Context, *sqlx.Tx, T, P) error,
-) error {
+) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -325,7 +325,7 @@ func (r *RLSGroupRepository[T, P]) UpdateWithHooks(
 	return nil
 }
 
-func (r *RLSGroupRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSGroupRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -358,7 +358,7 @@ func (r *RLSGroupRepository[T, P]) Delete(ctx context.Context, id string, checke
 	return nil
 }
 
-func (r *RLSGroupRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
+func (r *RLSGroupRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
@@ -377,7 +377,7 @@ func (r *RLSGroupRepository[T, P]) Do(ctx context.Context, operationFn func(cont
 	return nil
 }
 
-func (r *RLSGroupRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) error {
+func (r *RLSGroupRepository[T, P]) DoWithEntityID(ctx context.Context, entityID string, operationFn func(context.Context, *sqlx.Tx, T) error) (err error) {
 	tx, err := r.beginTx(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
