@@ -6,6 +6,8 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"golang.org/x/text/cases"
+
 	"go.5x5.cz/inventario/models"
 )
 
@@ -140,10 +142,38 @@ func SplitSearchTerms(q string) []string {
 	return terms
 }
 
-// containsFold reports whether s contains term, ignoring case. term is
-// matched literally: unlike a LIKE pattern, % and _ have no meaning.
-func containsFold(s, term string) bool {
-	return strings.Contains(strings.ToLower(s), strings.ToLower(term))
+// searchFold is the Unicode case folding text is matched with. A folding
+// Caser is stateless, so one value serves every goroutine.
+var searchFold = cases.Fold()
+
+// ContainsFold reports whether s contains term, ignoring case. term is
+// matched literally: unlike a LIKE pattern, % and _ have no meaning. The
+// memory backend matches the item search, brand suggestions, tag labels and
+// custom field text with it.
+//
+// Case is ignored by Unicode case folding, which maps every case form of a
+// letter to one: Σ, σ and the final ς match each other, and ß matches "ss".
+// The postgres backend matches with ILIKE instead (and compares LOWER of
+// both sides for an equal custom field), which lowercases by the collation
+// of the database, so the backends disagree on some non-ASCII text:
+//
+//   - a libc collation such as en_US.UTF-8 (what the postgres image, and so
+//     CI, initializes with) lowercases Σ to σ, never to ς, and leaves ß
+//     alone: "οδος" does not find "ΟΔΟΣ", "strasse" does not find "Straße";
+//   - an ICU collation matches the final sigma, but not ß and "ss";
+//   - the C collation, which the embedded postgres of internal/pgtest uses,
+//     ignores the case of ASCII letters only.
+//
+// The shared registry tests (registrytest) therefore ignore case only in
+// ASCII letters.
+func ContainsFold(s, term string) bool {
+	return strings.Contains(searchFold.String(s), searchFold.String(term))
+}
+
+// equalFold reports whether s and t are equal, ignoring case as
+// ContainsFold does.
+func equalFold(s, t string) bool {
+	return searchFold.String(s) == searchFold.String(t)
 }
 
 // MatchCommoditySearch applies the free-text search to c. Every term must
@@ -214,18 +244,18 @@ func matchTerm(c *models.Commodity, term string, labelSlugs []string, custom Cus
 		out = append(out, CommoditySearchMatch{Field: CommoditySearchFieldAssetID, Value: models.FormatAssetID(n)})
 	}
 	text := func(field CommoditySearchField, value string) {
-		if containsFold(value, term) {
+		if ContainsFold(value, term) {
 			out = append(out, CommoditySearchMatch{Field: field, Value: value})
 		}
 	}
 	note := func(field CommoditySearchField, value string) {
-		if containsFold(value, term) {
+		if ContainsFold(value, term) {
 			out = append(out, CommoditySearchMatch{Field: field, Value: searchExcerpt(value, term)})
 		}
 	}
 	list := func(field CommoditySearchField, values []string) {
 		for _, v := range values {
-			if containsFold(v, term) {
+			if ContainsFold(v, term) {
 				out = append(out, CommoditySearchMatch{Field: field, Value: v})
 			}
 		}
@@ -239,7 +269,7 @@ func matchTerm(c *models.Commodity, term string, labelSlugs []string, custom Cus
 	list(CommoditySearchFieldExtraSerialNumbers, c.ExtraSerialNumbers)
 	list(CommoditySearchFieldPartNumbers, c.PartNumbers)
 	for _, slug := range c.Tags {
-		if containsFold(slug, term) || slices.Contains(labelSlugs, slug) {
+		if ContainsFold(slug, term) || slices.Contains(labelSlugs, slug) {
 			out = append(out, CommoditySearchMatch{Field: CommoditySearchFieldTags, Value: slug})
 		}
 	}
@@ -261,16 +291,26 @@ func searchExcerpt(value, term string) string {
 	if len(runes) <= 2*searchExcerptRunes+utf8.RuneCountInString(term) {
 		return value
 	}
-	lowered := []rune(strings.ToLower(value))
-	needle := []rune(strings.ToLower(term))
-	at := runeIndex(lowered, needle)
-	if at < 0 || len(lowered) != len(runes) {
-		// Lowercasing changed the length (a handful of scripts do), so the
-		// offset does not map back. Fall back to the start of the note.
-		at = 0
+	// Fold rune by rune and remember where each folded rune came from: a
+	// letter can fold to more than one (ß to "ss"), so an offset in the
+	// folded note is not an offset in the note.
+	var folded []rune
+	var origin []int
+	for i, r := range runes {
+		for _, f := range searchFold.String(string(r)) {
+			folded = append(folded, f)
+			origin = append(origin, i)
+		}
+	}
+	needle := []rune(searchFold.String(term))
+	// If folding rune by rune misses a match that folding the whole note
+	// found, the excerpt starts at the beginning of the note.
+	at, past := 0, utf8.RuneCountInString(term)
+	if i := runeIndex(folded, needle); len(needle) > 0 && i >= 0 {
+		at, past = origin[i], origin[i+len(needle)-1]+1
 	}
 	start := max(at-searchExcerptRunes, 0)
-	end := min(at+len(needle)+searchExcerptRunes, len(runes))
+	end := min(past+searchExcerptRunes, len(runes))
 	excerpt := strings.TrimSpace(string(runes[start:end]))
 	if start > 0 {
 		excerpt = "…" + excerpt
@@ -411,7 +451,7 @@ func CountCommodityBrands(commodities []*models.Commodity, query string, limit i
 	query = strings.TrimSpace(query)
 	counts := make(map[string]int)
 	for _, c := range commodities {
-		if c == nil || c.Brand == "" || !containsFold(c.Brand, query) {
+		if c == nil || c.Brand == "" || !ContainsFold(c.Brand, query) {
 			continue
 		}
 		counts[c.Brand]++

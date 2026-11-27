@@ -113,6 +113,74 @@ func TestMatchCommoditySearch(t *testing.T) {
 	}
 }
 
+func TestMatchCommoditySearch_CaseFolding(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		text string
+		term string
+		ok   bool
+	}{
+		{name: "final sigma, term in lowercase", text: "ΟΔΟΣ", term: "οδος", ok: true},
+		{name: "final sigma, term in capitals", text: "οδος", term: "ΟΔΟΣ", ok: true},
+		{name: "final and medial sigma", text: "Οδός Σταδίου", term: "οδόσ", ok: true},
+		{name: "sharp s and ss", text: "Straße", term: "STRASSE", ok: true},
+		{name: "long s", text: "Meſſer", term: "messer", ok: true},
+		{name: "micro sign and Greek mu", text: "Capacitor 10 µF", term: "μf", ok: true},
+		{name: "Cyrillic", text: "Комод", term: "КОМОД", ok: true},
+		{name: "Latin with diacritics", text: "Öl FÜR Küche", term: "öl für KÜCHE", ok: true},
+		{name: "a different word still does not match", text: "ΟΔΟΣ", term: "οδοι", ok: false},
+		{name: "diacritics are not ignored", text: "Küche", term: "kuche", ok: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			item := &models.Commodity{Name: tc.text}
+			got, ok := registry.MatchCommoditySearch(item, []string{tc.term}, nil, registry.CustomFieldSearch{})
+			c.Assert(ok, qt.Equals, tc.ok)
+			if tc.ok {
+				c.Assert(got, qt.DeepEquals, []registry.CommoditySearchMatch{
+					{Field: registry.CommoditySearchFieldName, Value: tc.text},
+				})
+			}
+		})
+	}
+}
+
+func TestMatchCommoditySearch_NoteExcerptCaseFolding(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		note string
+		term string
+		want string
+	}{
+		{
+			// Folding turns each ß into two letters, so the folded note is
+			// longer than the note; the excerpt still surrounds the match.
+			name: "letters that fold to two before the match",
+			note: strings.Repeat("Straße ", 15) + "the RECEIPT is in the blue folder " + strings.Repeat("dolor sit ", 10),
+			term: "receipt",
+			want: "RECEIPT is in the blue folder",
+		},
+		{
+			name: "a final sigma in the middle of a long note",
+			note: strings.Repeat("lorem ipsum ", 10) + "στην ΟΔΟΣ Σταδίου 12 " + strings.Repeat("dolor sit ", 10),
+			term: "οδος",
+			want: "στην ΟΔΟΣ Σταδίου 12",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := qt.New(t)
+			item := &models.Commodity{Name: "Desk", Comments: tc.note}
+			got, ok := registry.MatchCommoditySearch(item, []string{tc.term}, nil, registry.CustomFieldSearch{})
+			c.Assert(ok, qt.IsTrue)
+			c.Assert(got, qt.HasLen, 1)
+			c.Check(got[0].Field, qt.Equals, registry.CommoditySearchFieldComments)
+			c.Check(got[0].Value, qt.Contains, tc.want)
+			c.Check(strings.HasPrefix(got[0].Value, "…"), qt.IsTrue)
+			c.Check(strings.HasSuffix(got[0].Value, "…"), qt.IsTrue)
+		})
+	}
+}
+
 func TestMatchCommoditySearch_NoteExcerpt(t *testing.T) {
 	c := qt.New(t)
 	note := strings.Repeat("lorem ipsum ", 10) + "the RECEIPT is in the blue folder " + strings.Repeat("dolor sit ", 10)
