@@ -168,6 +168,10 @@ export function buildOptions(opts: CreateI18nOptions = {}): InitOptions {
       useSuspense: false,
     },
     resources: { en: enResources },
+    // English is bundled inline; cs/ru must still be fetched through the lazy
+    // backend. Without this i18next skips the backend entirely when `resources`
+    // is set, so selecting another language silently keeps the English values.
+    partialBundledLanguages: true,
     // Surface missing keys early in dev. The `parseMissingKeyHandler` is
     // what i18next renders for an unresolved key — we leave it as the key
     // itself in prod (that's the i18next default) and tag it with a

@@ -29,6 +29,17 @@ describe("i18n boot", () => {
       "Settings · Inventario"
     )
   })
+
+  // #3018: with inline en resources, i18next does not call the backend unless
+  // partialBundledLanguages is set. Without the fix this falls back to English.
+  it("loads cs namespaces through the lazy backend on changeLanguage", async () => {
+    try {
+      await i18next.changeLanguage("cs")
+      expect(i18next.t("common:actions.save")).toBe("Ulo\u017Eit")
+    } finally {
+      await i18next.changeLanguage("en")
+    }
+  })
 })
 
 // #2089: cs + ru catalogs must stay at key-parity with the canonical en
