@@ -41,7 +41,7 @@ func (r *UserRegistry) newSQLRegistry() *store.NonRLSRepository[models.User, *mo
 	return store.NewSQLRegistry[models.User](r.dbx, r.tableNames.Users())
 }
 
-func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.User, error) {
+func (r *UserRegistry) Create(ctx context.Context, user models.User) (_ *models.User, err error) {
 	if user.Email == "" {
 		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field_name", "Email"))
 	}
@@ -57,7 +57,7 @@ func (r *UserRegistry) Create(ctx context.Context, user models.User) (*models.Us
 	// We need to handle user creation specially because of the self-referencing foreign key
 	// We'll create the user with a custom implementation that handles the UserID properly
 
-	tx, err := r.dbx.Beginx()
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return nil, errxtrace.Wrap("failed to begin transaction", err)
 	}

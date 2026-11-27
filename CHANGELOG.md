@@ -648,6 +648,21 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- Reminder emails go out only for items in use. An item marked Sold, Lost,
+  Disposed, Written Off, Donated or Stolen still got warranty, maintenance,
+  loan and item reminders, and its reminders, loans and maintenance stayed on
+  the Upcoming page; the weekly digest listed its warranty and maintenance as
+  coming up, and the maintenance of an item in Trash too. Reverting the item
+  to In Use brings back the reminders that are still due
+  ([#2908](https://github.com/denisvmedia/inventario/issues/2908)).
+- A request that waits for a free database connection stops waiting when the
+  client gives up or the request times out. Before, it stayed in the queue
+  with no deadline, so under load the queue grew instead of shedding
+  requests, and requests that each held one connection while waiting for a
+  second could stop the server from answering until it was restarted. A save
+  whose transaction did not commit is now reported as failed; before, a
+  failed commit was reported as a success
+  ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
 - Saving an item from the **All fields** dialog keeps its status date, status
   note and sale price. The dialog sent the item without them, and the save
   cleared them. The dialog also offered a status change it could not finish:
@@ -671,7 +686,6 @@ when to add an entry and where it goes.
   shows the server's reason instead of a fixed "Couldn't …" line. A server
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
-
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

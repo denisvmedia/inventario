@@ -128,14 +128,15 @@ func (s *WeeklyDigestService) countFileActivity(ctx context.Context, window Week
 	return nil
 }
 
-// collectUpcomingWarranties adds the warranties expiring inside the lookahead.
+// collectUpcomingWarranties adds the warranties expiring inside the lookahead,
+// of the items the group still has (ReminderTargetActive).
 func (s *WeeklyDigestService) collectUpcomingWarranties(ctx context.Context, now time.Time, commoditiesByID map[string]*models.Commodity, activity map[string]groupActivity) error {
 	_ = ctx
 	today := truncateToDayUTC(now)
 	cutoff := today.AddDate(0, 0, digestWarrantyLookaheadDays)
 
 	for _, c := range commoditiesByID {
-		if c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
+		if !ReminderTargetActive(c) || c.WarrantyExpiresAt == nil || string(*c.WarrantyExpiresAt) == "" {
 			continue
 		}
 		expiry := c.WarrantyExpiresAt.ToTime()
@@ -147,7 +148,7 @@ func (s *WeeklyDigestService) collectUpcomingWarranties(ctx context.Context, now
 			Kind: WeeklyDigestUpcomingWarranty,
 			Name: c.Name,
 			Date: string(*c.WarrantyExpiresAt),
-			URL:  s.commodityURL(c),
+			URL:  s.commodityURL(ctx, c),
 		})
 		activity[c.GroupID] = entry
 	}
@@ -155,7 +156,8 @@ func (s *WeeklyDigestService) collectUpcomingWarranties(ctx context.Context, now
 }
 
 // collectUpcomingMaintenance adds the maintenance schedules due inside the
-// lookahead.
+// lookahead, of the items the group still has (ReminderTargetActive). An item
+// in Trash is not in commoditiesByID, so its schedules are left out too.
 func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, now time.Time, commoditiesByID map[string]*models.Commodity, activity map[string]groupActivity) error {
 	if s.factorySet.MaintenanceScheduleRegistryFactory == nil {
 		return nil
@@ -169,8 +171,11 @@ func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, no
 			continue
 		}
 		commodity := commoditiesByID[m.CommodityID]
+		if !ReminderTargetActive(commodity) {
+			continue
+		}
 		name := m.Title
-		if commodity != nil && commodity.Name != "" {
+		if commodity.Name != "" {
 			name = commodity.Name + " — " + m.Title
 		}
 		entry := activity[m.GroupID]
@@ -178,7 +183,7 @@ func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, no
 			Kind: WeeklyDigestUpcomingMaintenance,
 			Name: name,
 			Date: string(m.NextDueAt),
-			URL:  s.commodityURL(commodity),
+			URL:  s.commodityURL(ctx, commodity),
 		})
 		activity[m.GroupID] = entry
 	}
@@ -187,11 +192,11 @@ func (s *WeeklyDigestService) collectUpcomingMaintenance(ctx context.Context, no
 
 // commodityURL builds the deep link for a commodity, or returns empty when
 // there is no builder or no group slug to build it from.
-func (s *WeeklyDigestService) commodityURL(c *models.Commodity) string {
+func (s *WeeklyDigestService) commodityURL(ctx context.Context, c *models.Commodity) string {
 	if c == nil || s.commodityURLBuilder == nil || s.factorySet.LocationGroupRegistry == nil {
 		return ""
 	}
-	group, err := s.factorySet.LocationGroupRegistry.Get(context.Background(), c.GroupID)
+	group, err := s.factorySet.LocationGroupRegistry.Get(ctx, c.GroupID)
 	if err != nil || group == nil || group.Slug == "" {
 		return ""
 	}
