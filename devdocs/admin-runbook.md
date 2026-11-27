@@ -568,6 +568,28 @@ keeps running rounds while they delete something. An entry that keeps
 failing is retried on the next interval. A sweep that deleted something
 logs `Purged expired Trash entries` with the counts.
 
+Every change to Trash writes an audit row with the group as the entity
+(`entity_type = location_group`):
+
+| Action | Written by | `user_id` |
+| ------ | ---------- | --------- |
+| `trash_restore` | restoring an item or a file, one at a time or in bulk | the member |
+| `trash_purge` | deleting an item or a file for good, one at a time or in bulk | the member |
+| `trash_empty` | "Empty trash" | the member |
+| `trash_purge_expired` | a sweep of `trash-purge`, one row per group it deleted something in | none |
+
+A request writes one row, a bulk one included, and so does a request that
+failed (`success = false`, with what it did before failing). An
+impersonated member's row names the operator in `impersonated_by`. The
+breadcrumb in `user_agent` holds `items`, `item_ids`, `files` and
+`file_ids`: the items restored or deleted, and the files restored or
+deleted with them or on their own (for a purge, the files that were
+deleted, not those that went back to a live item). A bulk request adds
+`failed` and `failed_ids`; a sweep adds its `cutoff`. Each ID list keeps
+at most 1000 IDs and sets `ids_truncated` when it was cut; the counts are
+always complete. A full-replace backup restore, which empties the Trash
+first, writes no Trash row.
+
 ### Knobs
 
 | Flag | Env | Default | Notes |

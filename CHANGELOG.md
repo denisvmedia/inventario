@@ -424,6 +424,23 @@ when to add an entry and where it goes.
   so does "Delete everything" on a location or area for the items inside. The
   new Trash page in the sidebar restores entries under the same id and asset
   ID, deletes them for good, or empties the trash. Viewers see it, users
+  restore, admins and owners delete. A restored item gets back its history,
+  loans, services, schedules and the files that went with it, but not a file
+  deleted on its own earlier; an item whose area was deleted in the meantime
+  comes back without a location. While in Trash an item is left out of lists,
+  search, reports, totals and reminders. Trashed files still count toward
+  storage, shown as a separate Trash share on the storage card. Entries are
+  deleted for good after `--trash-retention` (default 30 days) by the new
+  `trash-purge` worker; `--trash-purge-interval` sets its cadence. Item delete
+  toasts have an Undo button. Backups leave Trash out, a full-replace restore
+  empties it, and a merge restore skips what is in it and puts a backup file
+  that only trashed items use in Trash with them. Every restore, delete for
+  good and Empty trash writes an audit row, one per request also for a bulk
+  action, with the member, the operator of an impersonation session, and the
+  items and files restored or deleted; each `trash-purge` sweep writes one row
+  per group it deleted something in
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799),
+  [#2893](https://github.com/denisvmedia/inventario/issues/2893)).
   restore, admins and owners delete. A file in Trash cannot be attached to an
   item, location or area, also when it moves there while the attach runs. A
   restored item gets back its history, loans, services, schedules and the
