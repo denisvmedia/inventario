@@ -10,7 +10,7 @@ import { RouteTitleProvider } from "@/components/routing/RouteTitle"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
-import { clearRecent, getRecent, pushRecent } from "@/features/search/recent"
+import { clearAllRecent, getRecent, pushRecent, recentScope } from "@/features/search/recent"
 import { authHandlers, groupHandlers, memberHandlers, tagHandlers } from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
@@ -110,7 +110,7 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  clearRecent("household")
+  clearAllRecent()
 })
 
 describe("<CommandPalette /> from the TopBar", () => {
@@ -245,7 +245,7 @@ describe("<CommandPalette /> from the TopBar", () => {
         "/g/household/commodities?location=l1"
       )
     )
-    expect(getRecent("household")).toEqual([])
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
   })
 
   // jsdom has no layout, so this guards the classes that keep a result
@@ -294,7 +294,7 @@ describe("<CommandPalette /> from the TopBar", () => {
       )
     )
     // Showing a list is not opening a result: nothing is remembered.
-    expect(getRecent("household")).toEqual([])
+    expect(getRecent(recentScope("u1", "household"))).toEqual([])
   })
 
   it("hands the query to the search page and to the items list", async () => {
@@ -323,7 +323,7 @@ describe("<CommandPalette /> from the TopBar", () => {
   })
 
   it("remembers an opened result and lists it in the empty palette", async () => {
-    pushRecent("household", {
+    pushRecent(recentScope("u1", "household"), {
       type: "area",
       id: "a9",
       title: "Attic",
@@ -345,6 +345,25 @@ describe("<CommandPalette /> from the TopBar", () => {
     const recent = within(palette).getByTestId("palette-group-recent")
     const rows = within(recent).getAllByRole("option")
     expect(rows.map((row) => row.textContent)).toEqual(["Hedge trimmerItem", "AtticArea"])
+  })
+
+  // #3023: someone else who signed in on this browser before, in the same
+  // group, keeps what they opened to themselves.
+  it("keeps another user's recent items to that user", async () => {
+    const other = recentScope("u2", "household")
+    pushRecent(other, { type: "area", id: "a9", title: "Attic", url: "/g/household/areas/a9" })
+    useHandlers()
+    const user = userEvent.setup()
+    renderTopBar()
+    const palette = await openFromHeader(user)
+    expect(within(palette).queryByTestId("palette-recent-area-a9")).not.toBeInTheDocument()
+
+    await typeQuery(user, palette, "garage")
+    await user.click(await within(palette).findByTestId("palette-result-commodity-c1"))
+    await waitFor(() =>
+      expect(getRecent(recentScope("u1", "household")).map((e) => e.id)).toEqual(["c1"])
+    )
+    expect(getRecent(other).map((e) => e.id)).toEqual(["a9"])
   })
 
   it("says when nothing matches", async () => {

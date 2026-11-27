@@ -75,7 +75,8 @@ result, or move to it with the arrow keys and press `Enter`, to open it.
 
 With nothing typed, the window lists the results you opened recently, from
 there or from the search page, followed by links to the main pages. The recent
-list is kept in your browser, separately for each group.
+list is kept in your browser, for you and separately for each group; someone
+else who signs in on this browser does not see it, and signing out removes it.
 
 Items are matched on more than their name: serial and part numbers, tags, and
 notes count too. See [Searching for items](../items/#searching-for-items).

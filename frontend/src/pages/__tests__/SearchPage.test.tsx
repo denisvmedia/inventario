@@ -13,7 +13,7 @@ import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
 import { __resetHttpForTests } from "@/lib/http"
-import { clearRecent, getRecent, pushRecent } from "@/features/search/recent"
+import { clearAllRecent, getRecent, pushRecent, recentScope } from "@/features/search/recent"
 
 const api = (path: string) => `${window.location.origin}/api/v1${path}`
 
@@ -56,8 +56,7 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
-  clearRecent("household")
-  clearRecent("default")
+  clearAllRecent()
 })
 
 describe("<SearchPage />", () => {
@@ -69,13 +68,13 @@ describe("<SearchPage />", () => {
   })
 
   it("renders recent items when present", async () => {
-    pushRecent("household", {
+    pushRecent(recentScope("u1", "household"), {
       type: "commodity",
       id: "c1",
       title: "Cordless drill",
       url: "/g/household/commodities/c1",
     })
-    pushRecent("household", {
+    pushRecent(recentScope("u1", "household"), {
       type: "location",
       id: "l1",
       title: "Garage",
@@ -283,7 +282,7 @@ describe("<SearchPage />", () => {
     const user = userEvent.setup()
     renderSearch("/g/household/search?q=garage")
     await user.click(await screen.findByTestId("result-location-l1"))
-    expect(getRecent("household")).toEqual([
+    expect(getRecent(recentScope("u1", "household"))).toEqual([
       expect.objectContaining({
         type: "location",
         id: "l1",

@@ -530,17 +530,6 @@ export function CommodityFormDialog({
   // save-as-draft confirm and the user loses the draft silently
   // (the same problem the auto-save was trying to prevent).
   const [draftRehydrated, setDraftRehydrated] = useState(false)
-  // Local recovery slot. A resumed server draft gets a slot of its own, so
-  // opening one draft never overwrites the unsaved input of another or of
-  // a new item.
-  const localKey = draftKey && resumeId ? `${draftKey}:${resumeId}` : draftKey
-  // Drafts only persist for create mode — editing an existing item
-  // never auto-saves to storage (the BE row is the canonical state).
-  const persistDrafts = mode === "create" && !!localKey
-  // Add item goes through the server draft (#1626): the form and every
-  // staged file are saved as the draft first, and the draft is promoted only
-  // once it holds them all, so the item never misses a file the user picked.
-  const saveThroughDraft = serverMode && !!localKey
   // `useOptionalCurrentGroup` returns undefined when the dialog is mounted
   // outside a GroupProvider (the unit-test harness does this for the non-AI
   // flow). The AI step gates its scan button behind a non-empty slug.
@@ -552,17 +541,40 @@ export function CommodityFormDialog({
   // for example, ends in the group it started in. An opening takes the group
   // current when it starts, or the first one known after. It is set while
   // rendering, so the first render of an opening has it, and kept after the
-  // dialog closes for the requests still running then.
-  const [openedIn, setOpenedIn] = useState(() => ({ open, group: open ? activeSlug : null }))
+  // dialog closes for the requests still running then. The local recovery
+  // slot is kept the same way (#3023): the host names draftKey after the
+  // group in the address, which moves with the page.
+  const [openedIn, setOpenedIn] = useState(() => ({
+    open,
+    group: open ? activeSlug : null,
+    slot: open ? draftKey : undefined,
+  }))
   let opened = openedIn
-  if (open !== opened.open) opened = { open, group: open ? activeSlug : opened.group }
-  else if (open && opened.group === null && activeSlug !== null) {
-    opened = { open, group: activeSlug }
+  if (open !== opened.open) {
+    opened = open ? { open, group: activeSlug, slot: draftKey } : { ...opened, open }
+  } else if (
+    open &&
+    ((opened.group === null && activeSlug !== null) ||
+      (opened.slot === undefined && draftKey !== undefined))
+  ) {
+    opened = { open, group: opened.group ?? activeSlug, slot: opened.slot ?? draftKey }
   }
   if (opened !== openedIn) setOpenedIn(opened)
   const formSlug = opened.group ?? activeSlug
   // formGroup is the group the form's requests go to.
   const formGroup = () => formSlug ?? undefined
+  // Local recovery slot, the one of the opening. A resumed server draft
+  // gets a slot of its own, so opening one draft never overwrites the
+  // unsaved input of another or of a new item.
+  const slot = opened.slot ?? draftKey
+  const localKey = slot && resumeId ? `${slot}:${resumeId}` : slot
+  // Drafts only persist for create mode — editing an existing item
+  // never auto-saves to storage (the BE row is the canonical state).
+  const persistDrafts = mode === "create" && !!localKey
+  // Add item goes through the server draft (#1626): the form and every
+  // staged file are saved as the draft first, and the draft is promoted only
+  // once it holds them all, so the item never misses a file the user picked.
+  const saveThroughDraft = serverMode && !!localKey
   // Server draft session (#2812): the draft this form saves to, with the
   // revision its values are based on.
   const resumedQuery = useDraft(resumeId, formSlug ?? undefined)
@@ -1751,21 +1763,21 @@ export function CommodityFormDialog({
   }
 
   // stageFiles adds files to the staged list, with the scan's suggestions
-  // for them. A file the server draft holds already is left out (#2941): it
-  // stays under "Saved with this draft" with the title and tags it was saved
-  // with, so the next save does not send it again.
+  // for them. A file the server draft holds already leaves the list again
+  // (#2941): it stays under "Saved with this draft" with the title and tags
+  // it was saved with. Finding those reads the files, up to 64 MiB each, so
+  // they are staged first and an Add item clicked meanwhile saves them
+  // (#3023); a save does not send a file the draft holds.
   function stageFiles(files: File[], suggestions: readonly FileSuggestion[] = []) {
-    const stage = (fresh: File[]) =>
-      setPendingFiles((prev) => applyFileSuggestions(mergePendingFiles(prev, fresh), suggestions))
+    setPendingFiles((prev) => applyFileSuggestions(mergePendingFiles(prev, files), suggestions))
     const saved = serverMode && serverDraft ? (draftFilesQuery.data ?? []) : []
-    if (saved.length === 0) {
-      stage(files)
-      return
-    }
-    // Matching reads the files. An opening that ends meanwhile stages nothing.
+    if (saved.length === 0) return
+    // An opening that ends meanwhile, or a save that runs, keeps its list.
     const opening = openingRef.current
     void filesNotSaved(files, saved).then((fresh) => {
-      if (openingRef.current === opening) stage(fresh)
+      const held = new Set(files.filter((file) => !fresh.includes(file)))
+      if (held.size === 0 || openingRef.current !== opening || savingRef.current) return
+      setPendingFiles((prev) => prev.filter((entry) => !held.has(entry.file)))
     })
   }
 

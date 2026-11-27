@@ -14,7 +14,8 @@ The **Preferences** page has a left-hand menu with five sections — **Account**
 **Appearance**, **Notifications**, **Privacy & security**, and **Help &
 support** — plus a **Sign out** shortcut at the bottom of that menu. Signing out
 also removes the unsaved **Add item** input this browser kept for you (see
-[Saved on this device](../items/#saved-on-this-device)).
+[Saved on this device](../items/#saved-on-this-device)) and the list of search
+results you opened recently.
 
 ![The Preferences page with its left-hand menu of sections](../../assets/screenshots/settings.png)
 

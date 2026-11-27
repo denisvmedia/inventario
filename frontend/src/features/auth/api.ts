@@ -4,6 +4,7 @@
 import { http, withSignOut } from "@/lib/http"
 import { clearAuth, setAccessToken, setCsrfToken } from "@/lib/auth-storage"
 import { clearItemFormRecovery } from "@/features/commodities/draft"
+import { clearAllRecent } from "@/features/search/recent"
 import type { Schema } from "@/types"
 
 export type CurrentUser = Schema<"models.User">
@@ -234,8 +235,10 @@ export async function logout(): Promise<void> {
       // Whether or not the server acknowledged, the user has clicked Logout —
       // wiping local credentials guarantees the UI can't keep using them.
       clearAuth()
-      // What the item form kept for this user goes too, so the next person
-      // on this browser does not find it (#2920).
+      // What the item form and the recent search results kept for this
+      // user go too, so the next person on this browser does not find them
+      // (#2920, #3023).
+      clearAllRecent()
       await clearItemFormRecovery()
     }
   })
