@@ -35,7 +35,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderSection() {
+function renderSection({ canEdit = true }: { canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -45,7 +45,7 @@ function renderSection() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <CommodityRemindersSection commodityId={COMMODITY_ID} />
+                <CommodityRemindersSection commodityId={COMMODITY_ID} canEdit={canEdit} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -182,5 +182,34 @@ describe("<CommodityRemindersSection />", () => {
 
     expect(await screen.findByText("Use whole numbers separated by commas.")).toBeInTheDocument()
     expect(body.value).toBeUndefined()
+  })
+})
+
+// #3038: the server refuses reminder writes to a viewer, so the section lists
+// the reminders with no action on them.
+describe("<CommodityRemindersSection /> for a role that cannot change the item", () => {
+  it("lists the reminders without Add, Edit or Delete", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...reminderHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "r1",
+          commodity_id: COMMODITY_ID,
+          title: "Insurance renewal",
+          due_on: "2026-01-31",
+          remind_days_before: [30],
+          repeat_unit: "month",
+          repeat_interval: 3,
+          next_occurrence: "2027-01-31",
+          days_until_next: 12,
+        },
+      ])
+    )
+    renderSection({ canEdit: false })
+    const row = await screen.findByTestId("reminder-row-r1")
+    expect(within(row).getByText("Insurance renewal")).toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-delete")).not.toBeInTheDocument()
   })
 })

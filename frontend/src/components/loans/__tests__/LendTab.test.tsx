@@ -42,7 +42,10 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab(commodityCount?: number) {
+function renderTab({
+  commodityCount,
+  canEdit = true,
+}: { commodityCount?: number; canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -53,7 +56,11 @@ function renderTab(commodityCount?: number) {
             <GroupProvider>
               <main>
                 <WhenGroupLoaded>
-                  <LendTab commodityId={COMMODITY_ID} commodityCount={commodityCount} />
+                  <LendTab
+                    commodityId={COMMODITY_ID}
+                    commodityCount={commodityCount}
+                    canEdit={canEdit}
+                  />
                 </WhenGroupLoaded>
               </main>
             </GroupProvider>
@@ -280,10 +287,54 @@ describe("<LendTab />", () => {
       ...groupHandlers.list(groupFixture),
       ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
     )
-    renderTab(12)
+    renderTab({ commodityCount: 12 })
     expect(await screen.findByTestId("lend-bundle-empty-state")).toBeInTheDocument()
     expect(screen.queryByTestId("commodity-detail-lend-button")).toBeNull()
     expect(screen.queryByTestId("lend-empty-state")).toBeNull()
+  })
+
+  // #3038: the server refuses loan writes to a viewer, so the tab shows
+  // the loans with no action on them.
+  describe("for a role that cannot change the item", () => {
+    it("shows the history without Lend or the row pencil", async () => {
+      server.use(
+        ...groupHandlers.list(groupFixture),
+        ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+          {
+            id: "loan-2",
+            commodity_id: COMMODITY_ID,
+            borrower_name: "Bob",
+            lent_at: "2026-03-01",
+            returned_at: "2026-03-10",
+          },
+        ])
+      )
+      renderTab({ canEdit: false })
+      expect(await screen.findByTestId("lend-history-row-loan-2")).toHaveTextContent("Bob")
+      expect(screen.getByTestId("lend-empty-state")).toBeInTheDocument()
+      expect(screen.queryByTestId("commodity-detail-lend-button")).toBeNull()
+      expect(screen.queryByTestId("lend-history-row-loan-2-edit")).toBeNull()
+    })
+
+    it("shows the open loan without Mark returned, Edit or Delete", async () => {
+      server.use(
+        ...groupHandlers.list(groupFixture),
+        ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+          {
+            id: "loan-1",
+            commodity_id: COMMODITY_ID,
+            borrower_name: "Alice",
+            lent_at: "2026-04-01",
+            returned_at: null,
+          },
+        ])
+      )
+      renderTab({ canEdit: false })
+      expect(await screen.findByTestId("lend-current")).toHaveTextContent("Alice")
+      expect(screen.queryByTestId("lend-mark-returned")).toBeNull()
+      expect(screen.queryByTestId("lend-edit")).toBeNull()
+      expect(screen.queryByTestId("lend-delete")).toBeNull()
+    })
   })
 
   it("is axe-clean once data has loaded", async () => {

@@ -36,7 +36,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab() {
+function renderTab({ canEdit = true }: { canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -46,7 +46,7 @@ function renderTab() {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <SuppliesTab commodityId={COMMODITY_ID} />
+                <SuppliesTab commodityId={COMMODITY_ID} canEdit={canEdit} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -182,5 +182,34 @@ describe("<SuppliesTab />", () => {
     ) as HTMLButtonElement
     expect(firstUp).toBeDisabled()
     expect(lastDown).toBeDisabled()
+  })
+})
+
+// #3038: the server refuses supply link writes to a viewer, so the tab lists
+// the links with Open only.
+describe("<SuppliesTab /> for a role that cannot change the item", () => {
+  it("lists the links with Open and nothing that changes them", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...supplyHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        linkFixture({ id: "a", label: "Filter A", sort_order: 0 }),
+        linkFixture({ id: "b", label: "Filter B", sort_order: 1 }),
+      ])
+    )
+    renderTab({ canEdit: false })
+    // The tab refetches once the group loads; read the rows and the missing
+    // actions off the same render.
+    await waitFor(() => {
+      expect(screen.getAllByTestId("supplies-row-open")).toHaveLength(2)
+      for (const id of [
+        "supplies-add",
+        "supplies-move-up",
+        "supplies-move-down",
+        "supplies-edit",
+        "supplies-delete",
+      ]) {
+        expect(screen.queryByTestId(id)).not.toBeInTheDocument()
+      }
+    })
   })
 })

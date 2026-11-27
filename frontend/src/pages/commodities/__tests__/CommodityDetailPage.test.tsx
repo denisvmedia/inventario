@@ -24,8 +24,13 @@ import {
   groupHandlers,
   inboxHandlers,
   intakeHandlers,
+  loanHandlers,
   locationHandlers,
+  maintenanceHandlers,
   memberHandlers,
+  reminderHandlers,
+  serviceHandlers,
+  supplyHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -1875,6 +1880,110 @@ describe("<CommodityDetailPage /> by role (#2886)", () => {
     expect(await screen.findByTestId("commodity-files-chip-bar")).toBeInTheDocument()
     expect(screen.queryByTestId("commodity-files-upload-zone")).not.toBeInTheDocument()
     expect(screen.queryByTestId("commodity-files-attach-existing")).not.toBeInTheDocument()
+  })
+
+  // #3038: the tabs that record loans, services, supplies and maintenance,
+  // and the reminders on the Details tab, are writes the server refuses a
+  // viewer too. Each has a record that would carry actions for a user.
+  it("offers a viewer no writes on the Lend, Service, Supplies and Maintenance tabs or reminders", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...tagHandlers.list(SLUG, []),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, {}),
+      ...reminderHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "r1",
+          commodity_id: ID,
+          title: "Insurance renewal",
+          due_on: "2027-01-31",
+          remind_days_before: [7],
+          repeat_unit: "none",
+          repeat_interval: 1,
+        },
+      ]),
+      ...loanHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "loan-1",
+          commodity_id: ID,
+          borrower_name: "Bob",
+          lent_at: "2026-03-01",
+          returned_at: "2026-03-10",
+        },
+      ]),
+      ...serviceHandlers.listForCommodity(SLUG, ID, []),
+      ...supplyHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "supply-1",
+          commodity_id: ID,
+          label: "Charger",
+          url: "https://example.com/charger",
+          notes: "",
+          sort_order: 0,
+        },
+      ]),
+      ...maintenanceHandlers.listForCommodity(SLUG, ID, [
+        {
+          id: "ms-1",
+          commodity_id: ID,
+          title: "Clean the fans",
+          interval_days: 90,
+          next_due_at: "2027-01-01",
+          enabled: true,
+        },
+      ])
+    )
+    renderDetail()
+
+    expect(await screen.findByTestId("reminder-row-r1")).toHaveTextContent("Insurance renewal")
+    expect(screen.queryByTestId("reminder-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("reminder-row-r1-delete")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-lend"))
+    expect(await screen.findByTestId("lend-history-row-loan-1")).toHaveTextContent("Bob")
+    expect(screen.queryByTestId("commodity-detail-lend-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("lend-history-row-loan-1-edit")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-service"))
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-supplies"))
+    expect(await screen.findByTestId("supplies-row-open")).toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("supplies-delete")).not.toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-detail-tab-maintenance"))
+    expect(await screen.findByTestId("schedule-ms-1-next-due")).toBeInTheDocument()
+    expect(screen.queryByTestId("maintenance-add")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-done")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("schedule-ms-1-delete")).not.toBeInTheDocument()
+    expect(screen.queryByRole("switch", { name: "Enabled" })).not.toBeInTheDocument()
+  })
+
+  it("offers a viewer neither Revert to In Use nor the prompt to assign a location", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, [
+        { id: "l1", type: "locations", attributes: { id: "l1", name: "Home" } },
+      ]),
+      ...commodityHandlers.detail(SLUG, ID, {
+        ...commodityFixture,
+        attributes: { ...commodityFixture.attributes, status: "sold", area_id: null },
+      })
+    )
+    renderDetail()
+    expect(await screen.findByTestId("commodity-detail-terminal-status")).toHaveTextContent(/Sold/i)
+    expect(screen.queryByTestId("commodity-detail-revert-status")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("assign-location-banner")).not.toBeInTheDocument()
   })
 
   it("offers a user edit, delete, status change and quick edit", async () => {

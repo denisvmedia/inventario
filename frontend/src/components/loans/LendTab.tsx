@@ -35,13 +35,16 @@ interface LendTabProps {
   // False while the group hides loans (#1607): the tab still shows the
   // item's loans, without the Lend button.
   canStart?: boolean
+  // False for a role the server refuses loan writes for (#3038): the tab
+  // shows the item's loans with no action on them.
+  canEdit: boolean
 }
 
 // LendTab is the lend-out surface on the commodity detail page. It
 // renders the (at most one) currently-open loan as a card with a
 // "mark returned" affordance, plus a history list of closed loans for
 // audit context. The card is bordered amber when overdue.
-export function LendTab({ commodityId, commodityCount, canStart = true }: LendTabProps) {
+export function LendTab({ commodityId, commodityCount, canStart = true, canEdit }: LendTabProps) {
   const { t } = useTranslation(["loans", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -153,7 +156,7 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
     <Card data-testid="commodity-detail-lend">
       <CardHeader className="flex-row items-center justify-between gap-4">
         <CardTitle>{t("loans:tab.title")}</CardTitle>
-        {canStart && !current && !openService && !isBundle ? (
+        {canEdit && canStart && !current && !openService && !isBundle ? (
           <Button
             type="button"
             size="sm"
@@ -175,7 +178,7 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
           <p className="text-sm text-muted-foreground">{t("common:loading", "Loading...")}</p>
         ) : null}
 
-        {canStart && !current && openService && !isBundle ? (
+        {canEdit && canStart && !current && openService && !isBundle ? (
           <Alert data-testid="lend-blocked-by-service">
             <AlertDescription>
               {t("loans:tab.blockedByService", { provider: openService.provider_name })}
@@ -186,9 +189,9 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
         {current ? (
           <CurrentLoanCard
             loan={current}
-            onEdit={() => setEditing(current)}
-            onReturn={() => handleReturn(current)}
-            onDelete={() => handleDelete(current)}
+            onEdit={canEdit ? () => setEditing(current) : undefined}
+            onReturn={canEdit ? () => handleReturn(current) : undefined}
+            onDelete={canEdit ? () => handleDelete(current) : undefined}
             returning={ret.isPending}
             deleting={remove.isPending}
           />
@@ -222,17 +225,19 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
                       {formatDate(loan.lent_at as string)}
                       {loan.returned_at ? ` → ${formatDate(loan.returned_at as string)}` : ""}
                     </span>
-                    <Button
-                      type="button"
-                      size="icon"
-                      variant="ghost"
-                      className="size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
-                      onClick={() => setEditing(loan)}
-                      aria-label={t("loans:tab.editHistory")}
-                      data-testid={`lend-history-row-${loan.id}-edit`}
-                    >
-                      <Pencil aria-hidden="true" className="size-3" />
-                    </Button>
+                    {canEdit ? (
+                      <Button
+                        type="button"
+                        size="icon"
+                        variant="ghost"
+                        className="size-6 opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition-opacity"
+                        onClick={() => setEditing(loan)}
+                        aria-label={t("loans:tab.editHistory")}
+                        data-testid={`lend-history-row-${loan.id}-edit`}
+                      >
+                        <Pencil aria-hidden="true" className="size-3" />
+                      </Button>
+                    ) : null}
                   </span>
                 </li>
               ))}
@@ -242,14 +247,14 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
       </CardContent>
 
       <LendDialog
-        open={open}
+        open={canEdit && open}
         onOpenChange={setOpen}
         onSubmit={handleSubmit}
         isPending={start.isPending}
       />
 
       <EditLoanDialog
-        open={editing !== null}
+        open={canEdit && editing !== null}
         onOpenChange={(next) => {
           if (!next) setEditing(null)
         }}
@@ -261,11 +266,12 @@ export function LendTab({ commodityId, commodityCount, canStart = true }: LendTa
   )
 }
 
+// The card offers only the actions it is given a handler for.
 interface CurrentLoanCardProps {
   loan: LoanEntity & { id: string }
-  onEdit: () => void
-  onReturn: () => void
-  onDelete: () => void
+  onEdit?: () => void
+  onReturn?: () => void
+  onDelete?: () => void
   returning: boolean
   deleting: boolean
 }
@@ -319,37 +325,45 @@ function CurrentLoanCard({
             </Badge>
           ) : null}
         </div>
-        <div className="flex flex-col gap-1.5">
-          <Button
-            type="button"
-            size="sm"
-            onClick={onReturn}
-            disabled={returning}
-            data-testid="lend-mark-returned"
-          >
-            {t("loans:current.markReturned")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="outline"
-            onClick={onEdit}
-            data-testid="lend-edit"
-          >
-            {t("loans:current.edit")}
-          </Button>
-          <Button
-            type="button"
-            size="sm"
-            variant="ghost"
-            onClick={onDelete}
-            disabled={deleting}
-            className="text-destructive"
-            data-testid="lend-delete"
-          >
-            {t("loans:current.delete")}
-          </Button>
-        </div>
+        {onReturn || onEdit || onDelete ? (
+          <div className="flex flex-col gap-1.5">
+            {onReturn ? (
+              <Button
+                type="button"
+                size="sm"
+                onClick={onReturn}
+                disabled={returning}
+                data-testid="lend-mark-returned"
+              >
+                {t("loans:current.markReturned")}
+              </Button>
+            ) : null}
+            {onEdit ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="outline"
+                onClick={onEdit}
+                data-testid="lend-edit"
+              >
+                {t("loans:current.edit")}
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                type="button"
+                size="sm"
+                variant="ghost"
+                onClick={onDelete}
+                disabled={deleting}
+                className="text-destructive"
+                data-testid="lend-delete"
+              >
+                {t("loans:current.delete")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

@@ -1154,6 +1154,12 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- On an item page, viewers saw Lend, Send for service, Add link, Add schedule
+  and Add reminder, the actions on the item's loans, services, supply links,
+  maintenance schedules and reminders, Revert to In Use, and the prompt to
+  place the item in a location. The server refuses those writes, so the form
+  ended in an error. A viewer now sees these records without the actions
+  ([#3038](https://github.com/denisvmedia/inventario/issues/3038)).
 
 ### Security
 

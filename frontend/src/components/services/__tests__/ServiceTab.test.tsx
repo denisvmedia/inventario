@@ -35,7 +35,7 @@ beforeEach(() => {
   setCurrentGroupSlug(SLUG)
 })
 
-function renderTab(canStart?: boolean) {
+function renderTab({ canStart, canEdit = true }: { canStart?: boolean; canEdit?: boolean } = {}) {
   return renderWithProviders({
     initialPath: `/g/${SLUG}/commodities/${COMMODITY_ID}`,
     routes: (
@@ -45,7 +45,7 @@ function renderTab(canStart?: boolean) {
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <ServiceTab commodityId={COMMODITY_ID} canStart={canStart} />
+                <ServiceTab commodityId={COMMODITY_ID} canStart={canStart} canEdit={canEdit} />
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -265,7 +265,7 @@ describe("<ServiceTab /> while the group hides maintenance and repairs (#1607)",
         },
       ])
     )
-    renderTab(false)
+    renderTab({ canStart: false })
     expect(await screen.findByTestId("service-history-row-svc-2")).toHaveTextContent(
       "Bob's Repair Shop"
     )
@@ -286,7 +286,52 @@ describe("<ServiceTab /> while the group hides maintenance and repairs (#1607)",
         },
       ])
     )
-    renderTab(false)
+    renderTab({ canStart: false })
+    expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
+    await expect(
+      screen.findByTestId("service-blocked-by-loan", {}, { timeout: 500 })
+    ).rejects.toThrow()
+    expect(screen.queryByTestId("commodity-detail-service-button")).not.toBeInTheDocument()
+  })
+})
+
+// #3038: the server refuses service writes to a viewer, so the tab shows the
+// records with no action on them.
+describe("<ServiceTab /> for a role that cannot change the item", () => {
+  it("shows the open service without Mark returned or Delete", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "svc-1",
+          commodity_id: COMMODITY_ID,
+          provider_name: "Acme Repairs",
+          sent_at: "2026-04-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab({ canEdit: false })
+    expect(await screen.findByTestId("service-current")).toHaveTextContent("Acme Repairs")
+    expect(screen.queryByTestId("service-mark-returned")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("service-delete")).not.toBeInTheDocument()
+  })
+
+  it("shows neither Send nor the note about the open loan", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, []),
+      ...loanHandlers.listForCommodity(SLUG, COMMODITY_ID, [
+        {
+          id: "l1",
+          commodity_id: COMMODITY_ID,
+          borrower_name: "Anna",
+          lent_at: "2026-03-01",
+          returned_at: null,
+        },
+      ])
+    )
+    renderTab({ canEdit: false })
     expect(await screen.findByTestId("service-empty-state")).toBeInTheDocument()
     await expect(
       screen.findByTestId("service-blocked-by-loan", {}, { timeout: 500 })

@@ -27,6 +27,9 @@ import { useReminderText } from "./useReminderText"
 interface CommodityRemindersSectionProps {
   commodityId: string
   className?: string
+  // False for a role the server refuses reminder writes for (#3038): the
+  // section lists the reminders with no action on them.
+  canEdit: boolean
 }
 
 // CommodityRemindersSection lists an item's reminders on the Details tab of
@@ -35,6 +38,7 @@ interface CommodityRemindersSectionProps {
 export function CommodityRemindersSection({
   commodityId,
   className,
+  canEdit,
 }: CommodityRemindersSectionProps) {
   const { t } = useTranslation(["reminders", "common"])
   const toast = useAppToast()
@@ -88,19 +92,21 @@ export function CommodityRemindersSection({
           <CardTitle className="text-base">{t("reminders:section.title")}</CardTitle>
           <CardDescription>{t("reminders:section.description")}</CardDescription>
         </div>
-        <Button
-          variant="outline"
-          size="sm"
-          className="shrink-0"
-          onClick={() => {
-            setEditing(null)
-            setDialogOpen(true)
-          }}
-          data-testid="reminder-add"
-        >
-          <Plus className="size-4" aria-hidden="true" />
-          {t("reminders:section.add")}
-        </Button>
+        {canEdit ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="shrink-0"
+            onClick={() => {
+              setEditing(null)
+              setDialogOpen(true)
+            }}
+            data-testid="reminder-add"
+          >
+            <Plus className="size-4" aria-hidden="true" />
+            {t("reminders:section.add")}
+          </Button>
+        ) : null}
       </CardHeader>
       <CardContent>
         {list.isPending ? (
@@ -123,11 +129,15 @@ export function CommodityRemindersSection({
                 {i > 0 ? <Separator /> : null}
                 <ReminderRow
                   reminder={r}
-                  onEdit={() => {
-                    setEditing(r)
-                    setDialogOpen(true)
-                  }}
-                  onDelete={() => void handleDelete(r)}
+                  onEdit={
+                    canEdit
+                      ? () => {
+                          setEditing(r)
+                          setDialogOpen(true)
+                        }
+                      : undefined
+                  }
+                  onDelete={canEdit ? () => void handleDelete(r) : undefined}
                 />
               </li>
             ))}
@@ -136,7 +146,7 @@ export function CommodityRemindersSection({
       </CardContent>
 
       <ReminderDialog
-        open={dialogOpen}
+        open={canEdit && dialogOpen}
         onOpenChange={(open) => {
           setDialogOpen(open)
           if (!open) setEditing(null)
@@ -149,10 +159,11 @@ export function CommodityRemindersSection({
   )
 }
 
+// The row offers only the actions it is given a handler for.
 interface ReminderRowProps {
   reminder: Reminder
-  onEdit: () => void
-  onDelete: () => void
+  onEdit?: () => void
+  onDelete?: () => void
 }
 
 function ReminderRow({ reminder, onEdit, onDelete }: ReminderRowProps) {
@@ -206,27 +217,33 @@ function ReminderRow({ reminder, onEdit, onDelete }: ReminderRowProps) {
             </>
           )}
         </div>
-        <div className="ml-auto flex shrink-0 gap-1">
-          <Button
-            variant="ghost"
-            size="icon"
-            onClick={onEdit}
-            aria-label={t("reminders:row.editLabel", { title: reminder.title })}
-            data-testid={`reminder-row-${reminder.id}-edit`}
-          >
-            <Pencil className="size-4" aria-hidden="true" />
-          </Button>
-          <Button
-            variant="ghost"
-            size="icon"
-            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-            onClick={onDelete}
-            aria-label={t("reminders:row.deleteLabel", { title: reminder.title })}
-            data-testid={`reminder-row-${reminder.id}-delete`}
-          >
-            <Trash2 className="size-4" aria-hidden="true" />
-          </Button>
-        </div>
+        {onEdit || onDelete ? (
+          <div className="ml-auto flex shrink-0 gap-1">
+            {onEdit ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                onClick={onEdit}
+                aria-label={t("reminders:row.editLabel", { title: reminder.title })}
+                data-testid={`reminder-row-${reminder.id}-edit`}
+              >
+                <Pencil className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+            {onDelete ? (
+              <Button
+                variant="ghost"
+                size="icon"
+                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={onDelete}
+                aria-label={t("reminders:row.deleteLabel", { title: reminder.title })}
+                data-testid={`reminder-row-${reminder.id}-delete`}
+              >
+                <Trash2 className="size-4" aria-hidden="true" />
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
       </div>
     </div>
   )

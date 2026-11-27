@@ -32,6 +32,10 @@ interface MaintenanceTabProps {
   // False while the group hides maintenance and repairs (#1607): the tab
   // still shows the item's schedules, without Add schedule.
   canStart?: boolean
+  // False for a role the server refuses maintenance writes for (#3038): the
+  // tab shows the schedules with no action on them. A paused schedule still
+  // says so with its badge.
+  canEdit: boolean
 }
 
 type ScheduleRow = MaintenanceScheduleEntity & { id: string }
@@ -44,6 +48,7 @@ export function MaintenanceTab({
   commodityId,
   commodityCount,
   canStart = true,
+  canEdit,
 }: MaintenanceTabProps) {
   const { t } = useTranslation(["maintenance", "common"])
   const toast = useAppToast()
@@ -138,7 +143,7 @@ export function MaintenanceTab({
             })}
           </p>
         </div>
-        {canStart ? (
+        {canEdit && canStart ? (
           <Button
             variant="default"
             size="sm"
@@ -174,13 +179,17 @@ export function MaintenanceTab({
             <ScheduleCard
               key={s.id}
               schedule={s}
-              onDone={() => handleDone(s)}
-              onEdit={() => {
-                setEditing(s)
-                setDialogOpen(true)
-              }}
-              onDelete={() => handleDelete(s)}
-              onToggleEnabled={(enabled) => handleToggleEnabled(s, enabled)}
+              onDone={canEdit ? () => handleDone(s) : undefined}
+              onEdit={
+                canEdit
+                  ? () => {
+                      setEditing(s)
+                      setDialogOpen(true)
+                    }
+                  : undefined
+              }
+              onDelete={canEdit ? () => handleDelete(s) : undefined}
+              onToggleEnabled={canEdit ? (enabled) => handleToggleEnabled(s, enabled) : undefined}
               busyDone={done.isPending}
             />
           ))}
@@ -188,7 +197,7 @@ export function MaintenanceTab({
       )}
 
       <MaintenanceScheduleDialog
-        open={dialogOpen}
+        open={canEdit && dialogOpen}
         onOpenChange={(o) => {
           setDialogOpen(o)
           if (!o) setEditing(null)
@@ -232,12 +241,13 @@ export function MaintenanceTab({
   )
 }
 
+// The card offers only the actions it is given a handler for.
 interface ScheduleCardProps {
   schedule: ScheduleRow
-  onDone: () => void
-  onEdit: () => void
-  onDelete: () => void
-  onToggleEnabled: (enabled: boolean) => void
+  onDone?: () => void
+  onEdit?: () => void
+  onDelete?: () => void
+  onToggleEnabled?: (enabled: boolean) => void
   busyDone: boolean
 }
 
@@ -288,11 +298,13 @@ function ScheduleCard({
                 {t("maintenance:row.dueSoon", { defaultValue: "Due soon" })}
               </Badge>
             ) : null}
-            <Switch
-              checked={!!schedule.enabled}
-              onCheckedChange={onToggleEnabled}
-              aria-label={t("maintenance:row.enabledLabel", { defaultValue: "Enabled" })}
-            />
+            {onToggleEnabled ? (
+              <Switch
+                checked={!!schedule.enabled}
+                onCheckedChange={onToggleEnabled}
+                aria-label={t("maintenance:row.enabledLabel", { defaultValue: "Enabled" })}
+              />
+            ) : null}
           </div>
         </CardHeader>
         <CardContent className="pt-0 space-y-3">
@@ -330,32 +342,40 @@ function ScheduleCard({
           {schedule.notes ? (
             <p className="text-sm text-muted-foreground">{schedule.notes}</p>
           ) : null}
-          <div className="flex flex-wrap gap-2">
-            <Button
-              variant="default"
-              size="sm"
-              disabled={busyDone}
-              onClick={onDone}
-              data-testid={`schedule-${schedule.id}-done`}
-            >
-              <CheckCircle2 className="size-4" />
-              {t("maintenance:row.markDone", { defaultValue: "I did this" })}
-            </Button>
-            <Button variant="outline" size="sm" onClick={onEdit}>
-              <Pencil className="size-4" />
-              {t("common:actions.edit", { defaultValue: "Edit" })}
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={onDelete}
-              data-testid={`schedule-${schedule.id}-delete`}
-            >
-              <Trash2 className="size-4" />
-              {t("common:actions.delete", { defaultValue: "Delete" })}
-            </Button>
-          </div>
+          {onDone || onEdit || onDelete ? (
+            <div className="flex flex-wrap gap-2">
+              {onDone ? (
+                <Button
+                  variant="default"
+                  size="sm"
+                  disabled={busyDone}
+                  onClick={onDone}
+                  data-testid={`schedule-${schedule.id}-done`}
+                >
+                  <CheckCircle2 className="size-4" />
+                  {t("maintenance:row.markDone", { defaultValue: "I did this" })}
+                </Button>
+              ) : null}
+              {onEdit ? (
+                <Button variant="outline" size="sm" onClick={onEdit}>
+                  <Pencil className="size-4" />
+                  {t("common:actions.edit", { defaultValue: "Edit" })}
+                </Button>
+              ) : null}
+              {onDelete ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                  onClick={onDelete}
+                  data-testid={`schedule-${schedule.id}-delete`}
+                >
+                  <Trash2 className="size-4" />
+                  {t("common:actions.delete", { defaultValue: "Delete" })}
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
         </CardContent>
       </Card>
     </li>

@@ -20,6 +20,9 @@ import { SupplyLinkDialog, type SupplyLinkFormValues } from "./SupplyLinkDialog"
 
 interface SuppliesTabProps {
   commodityId: string
+  // False for a role the server refuses supply link writes for (#3038):
+  // the tab lists the links with Open only.
+  canEdit: boolean
 }
 
 // SuppliesTab is the per-commodity "where do I re-buy the consumable"
@@ -31,7 +34,7 @@ interface SuppliesTabProps {
 // densely renumbers; the FE only needs to know the new visible order.
 // We deliberately use up/down icon buttons rather than drag-and-drop
 // to keep keyboard accessibility free and avoid a third dependency.
-export function SuppliesTab({ commodityId }: SuppliesTabProps) {
+export function SuppliesTab({ commodityId, canEdit }: SuppliesTabProps) {
   const { t } = useTranslation(["supplies", "common"])
   const toast = useAppToast()
   const confirm = useConfirm()
@@ -141,10 +144,17 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       <Card>
         <CardHeader className="flex flex-row items-center justify-between space-y-0">
           <CardTitle>{t("supplies:title", { defaultValue: "Supply links" })}</CardTitle>
-          <Button type="button" size="sm" onClick={() => setOpen(true)} data-testid="supplies-add">
-            <Plus className="mr-1 size-4" aria-hidden="true" />
-            {t("supplies:add", { defaultValue: "Add link" })}
-          </Button>
+          {canEdit ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => setOpen(true)}
+              data-testid="supplies-add"
+            >
+              <Plus className="mr-1 size-4" aria-hidden="true" />
+              {t("supplies:add", { defaultValue: "Add link" })}
+            </Button>
+          ) : null}
         </CardHeader>
         <CardContent>
           {list.isLoading ? (
@@ -181,28 +191,32 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
                     ) : null}
                   </div>
                   <div className="flex shrink-0 items-center gap-1">
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("supplies:moveUp", { defaultValue: "Move up" })}
-                      disabled={idx === 0 || reorder.isPending}
-                      onClick={() => move(idx, -1)}
-                      data-testid="supplies-move-up"
-                    >
-                      <ArrowUp className="size-4" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("supplies:moveDown", { defaultValue: "Move down" })}
-                      disabled={idx === links.length - 1 || reorder.isPending}
-                      onClick={() => move(idx, 1)}
-                      data-testid="supplies-move-down"
-                    >
-                      <ArrowDown className="size-4" aria-hidden="true" />
-                    </Button>
+                    {canEdit ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("supplies:moveUp", { defaultValue: "Move up" })}
+                          disabled={idx === 0 || reorder.isPending}
+                          onClick={() => move(idx, -1)}
+                          data-testid="supplies-move-up"
+                        >
+                          <ArrowUp className="size-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("supplies:moveDown", { defaultValue: "Move down" })}
+                          disabled={idx === links.length - 1 || reorder.isPending}
+                          onClick={() => move(idx, 1)}
+                          data-testid="supplies-move-down"
+                        >
+                          <ArrowDown className="size-4" aria-hidden="true" />
+                        </Button>
+                      </>
+                    ) : null}
                     <Button asChild type="button" variant="secondary" size="sm">
                       <a
                         href={link.url ?? "#"}
@@ -214,27 +228,31 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
                         {t("supplies:open", { defaultValue: "Open" })}
                       </a>
                     </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      aria-label={t("supplies:edit", { defaultValue: "Edit supply link" })}
-                      onClick={() => setEditing(link)}
-                      data-testid="supplies-edit"
-                    >
-                      <Pencil className="size-4" aria-hidden="true" />
-                    </Button>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon"
-                      className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                      aria-label={t("supplies:delete.confirm", { defaultValue: "Delete" })}
-                      onClick={() => handleDelete(link)}
-                      data-testid="supplies-delete"
-                    >
-                      <Trash2 className="size-4" aria-hidden="true" />
-                    </Button>
+                    {canEdit ? (
+                      <>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          aria-label={t("supplies:edit", { defaultValue: "Edit supply link" })}
+                          onClick={() => setEditing(link)}
+                          data-testid="supplies-edit"
+                        >
+                          <Pencil className="size-4" aria-hidden="true" />
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          size="icon"
+                          className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                          aria-label={t("supplies:delete.confirm", { defaultValue: "Delete" })}
+                          onClick={() => handleDelete(link)}
+                          data-testid="supplies-delete"
+                        >
+                          <Trash2 className="size-4" aria-hidden="true" />
+                        </Button>
+                      </>
+                    ) : null}
                   </div>
                 </li>
               ))}
@@ -244,14 +262,14 @@ export function SuppliesTab({ commodityId }: SuppliesTabProps) {
       </Card>
 
       <SupplyLinkDialog
-        open={open}
+        open={canEdit && open}
         onOpenChange={setOpen}
         title={t("supplies:add", { defaultValue: "Add link" })}
         onSubmit={handleCreate}
         busy={create.isPending}
       />
       <SupplyLinkDialog
-        open={!!editing}
+        open={canEdit && !!editing}
         onOpenChange={(v) => {
           if (!v) setEditing(null)
         }}
