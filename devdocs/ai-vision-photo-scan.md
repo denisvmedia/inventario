@@ -103,26 +103,27 @@ of the request.
   and the audit row apply as in the item form. A rate-limited source waits
   (`wait_reason = rate_limited`) without using an attempt; a provider error
   that may pass is retried with a delay and fails after three attempts. A
-  stored scan is never repeated unless the member asks for a rescan. Once a
-  scan is stored, the worker applies the per-file suggestions to the files
-  (`go/services/intake_file_suggestions.go`). The files are written after the
-  session's result is stored, so a client that reads the session as soon as
-  it leaves `processing` may still see the old titles and tags; it reads the
-  files once more to get them. A suggestion applies only to a file that
-  still has both values its upload gave it: the title equals the file name
-  without the extension, and the file has none of the tags a scan gives
-  (`invoice`, `manual`, `warranty`, `photo`). Then the tag of the document
-  type is added (`invoice` for an invoice or a receipt, `manual`, `warranty`,
-  `photo`; none for other) and the title is replaced. A file the member
-  renamed or classified before the scan gets nothing, and a file a scan
-  changed is left alone by a rescan. One edge is accepted: when the scan gave
-  a document type but no title and the member removed the tag, the file has
-  its upload values again and a rescan adds the tag back. Suggestions under
-  the review's accept confidence (0.3) are skipped, and so is a source that
-  carries a document of another system. A result the registry refuses as
-  stale (`ErrIntakeSourceChanged`) changes no file. The file is read again
-  just before the write, but the read and the write are not one
-  transaction.
+  stored scan is never repeated unless the member asks for a rescan. The
+  per-file suggestions (`go/services/intake_file_suggestions.go`) are applied
+  by `StoreScan` in the transaction that stores the candidates, each under its
+  file's row lock, so the source reads as scanned only together with the new
+  titles and tags. A file deleted or in Trash since the scan is skipped. Any
+  other error while updating a file fails the whole store; the source stays
+  `processing` and the stuck sweep hands it to a worker again. A suggestion
+  applies only to a file that still has both values its upload gave it: the
+  title equals the file name without the extension, and the file has none of
+  the tags a scan gives (`invoice`, `manual`, `warranty`, `photo`). Then the
+  tag of the document type is added (`invoice` for an invoice or a receipt,
+  `manual`, `warranty`, `photo`; none for other) and the title is replaced. A
+  file the member renamed or classified before the scan gets nothing, and a
+  file a scan changed is left alone by a rescan. One edge is accepted: when
+  the scan gave a document type but no title and the member removed the tag,
+  the file has its upload values again and a rescan adds the tag back.
+  Suggestions under the review's accept confidence (0.3) are skipped, and so
+  is a source that carries a document of another system. A result the registry
+  refuses as stale (`ErrIntakeSourceChanged`) changes no file. The check runs
+  on the locked row, so an edit the member saves during the scan is never
+  overwritten.
 - Service: `go/services/intake_service.go`. A batch takes at most 50 files
   and a group at most 200 waiting purchases. `CreateDrafts` makes one draft
   per selected candidate with the client key `intake:<candidate id>`, so a
