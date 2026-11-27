@@ -880,6 +880,14 @@ when to add an entry and where it goes.
 - Files uploaded in the same instant keep one fixed order in the Files list,
   so paging through the list no longer shows a file twice or skips one
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
+- In the Add item dialog, a file a saved draft holds is listed once. Scanning
+  it again on the AI step, or picking it again on the **Files** step, staged a
+  second copy beside its row under **Saved with this draft**; the next save
+  dropped the copy, and with it the title and tag the scan suggested. The file
+  now stays on its saved row with the title and tags it was saved with. The
+  remove and add buttons of the tag and number chips are named in the app's
+  language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).

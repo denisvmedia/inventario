@@ -176,7 +176,7 @@ test.describe('File review', () => {
       // walk still continues with the file that followed it.
       await page
         .getByTestId('file-edit-tags')
-        .getByRole('button', { name: `remove ${tag}` })
+        .getByRole('button', { name: `Remove ${tag}` })
         .click()
       await page.getByTestId('file-review-save-next').click()
 
