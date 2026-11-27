@@ -35,6 +35,7 @@ import {
   CommandSeparator,
 } from "@/components/ui/command"
 import { commodityListHref, primarySearchMatch } from "@/features/commodities/query"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import type { LocationGroup } from "@/features/group/api"
 import { isSectionHidden, type GroupSection } from "@/features/group/sections"
@@ -46,7 +47,7 @@ import type {
   TagAttrs,
 } from "@/features/search/api"
 import { useSearch } from "@/features/search/hooks"
-import { getRecent, pushRecent, type RecentEntry } from "@/features/search/recent"
+import { getRecent, pushRecent, recentScope, type RecentEntry } from "@/features/search/recent"
 import {
   areaHref,
   areaItemsHref,
@@ -337,6 +338,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   const navigate = useNavigate()
   const { currentGroup } = useCurrentGroup()
   const groupSlug = currentGroup?.slug ?? null
+  const userId = useOptionalAuth()?.user?.id
+  const recentKey = userId && groupSlug ? recentScope(userId, groupSlug) : null
   const [query, setQuery] = useState("")
   const trimmedQuery = query.trim()
   const debouncedQuery = useDebouncedValue(trimmedQuery, SEARCH_DEBOUNCE_MS)
@@ -369,8 +372,8 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   // Read once per open; the palette is not on screen while a result is
   // being visited.
   const recent = useMemo(
-    () => (groupSlug ? getRecent(groupSlug).slice(0, RECENT_LIMIT) : []),
-    [groupSlug]
+    () => (recentKey ? getRecent(recentKey).slice(0, RECENT_LIMIT) : []),
+    [recentKey]
   )
 
   const sections = [items, locations, areas, files, tags]
@@ -389,7 +392,7 @@ function PaletteBody({ onClose }: { onClose: () => void }) {
   // Opens a result and remembers it for the empty palette and the empty
   // search page.
   function openResult(entry: Omit<RecentEntry, "visitedAt">) {
-    if (groupSlug) pushRecent(groupSlug, entry)
+    if (recentKey) pushRecent(recentKey, entry)
     go(entry.url)
   }
 

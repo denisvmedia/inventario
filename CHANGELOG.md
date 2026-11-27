@@ -791,8 +791,10 @@ when to add an entry and where it goes.
   the group it opened in: a save still running when the member leaves the
   form with browser Back and switches group goes on there, and a form still
   open when the page moves to another group keeps showing the draft and its
-  files. Before, the remaining requests went to the other group's paths
-  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+  files, and keeps its unsaved input with the group it opened in. Before,
+  the remaining requests went to the other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 
 - An item's history keeps every edit of a save. A save that changed the
   status, the area, a price or the cover recorded only that change, and the
@@ -916,10 +918,12 @@ when to add an entry and where it goes.
   it again on the AI step, or picking it again on the **Files** step, staged a
   second copy beside its row under **Saved with this draft**; the next save
   dropped the copy, and with it the title and tag the scan suggested. The file
-  now stays on its saved row with the title and tags it was saved with. The
-  remove and add buttons of the tag and number chips are named in the app's
-  language
-  ([#2941](https://github.com/denisvmedia/inventario/issues/2941)).
+  now stays on its saved row with the title and tags it was saved with, and a
+  file picked just before **Add item** is saved with the item even when it is
+  large and takes a while to read. The remove and add buttons of the tag and
+  number chips are named in the app's language
+  ([#2941](https://github.com/denisvmedia/inventario/issues/2941),
+  [#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - In Safari, **Save** in the unsaved-changes prompt saves when the prompt
   opens again right after **Keep editing**. Before, the click closed the
   prompt instead ([#2830](https://github.com/denisvmedia/inventario/pull/2830)).
@@ -1166,6 +1170,10 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- The recent results on the search page are kept for each user, and signing
+  out removes them. Before, they were kept for the group only, so the next
+  person to sign in on the same browser saw what the last one opened there
+  ([#3023](https://github.com/denisvmedia/inventario/issues/3023)).
 - Signing out in one tab while another tab renewed its session no longer
   signs you back in, and no longer makes the server take the renewal for a
   stolen session and sign you out on your other devices. A sign-out now waits
