@@ -804,6 +804,12 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- A group with more than 50 locations or more than 50 areas showed only the
+  first 50 in the location and area pickers of the item form, on the
+  Locations page, in the backup item picker and wherever an item's location
+  is named, so an item in a later area showed a blank location and could not
+  be moved there from the form. Every location and area now appears
+  ([#2885](https://github.com/denisvmedia/inventario/issues/2885)).
 
 ### Security
 
