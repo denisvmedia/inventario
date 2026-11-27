@@ -70,7 +70,7 @@ func (o *OperationSlot) ValidateWithContext(ctx context.Context) error {
 
 	fields = append(fields,
 		validation.Field(&o.SlotID, validation.Required, validation.Min(1)),
-		validation.Field(&o.OperationName, validation.Required, validation.Length(1, 100)),
+		validation.Field(&o.OperationName, validation.Required, validation.RuneLength(1, 100)),
 		validation.Field(&o.CreatedAt, validation.Required),
 		validation.Field(&o.ExpiresAt, validation.Required),
 	)

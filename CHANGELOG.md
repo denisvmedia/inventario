@@ -664,6 +664,18 @@ when to add an entry and where it goes.
   error shows one toast instead of two
   ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 
+- Text length limits count characters in every language. The server counted
+  most of them in UTF-8 bytes, so a Czech or Russian group name, item note,
+  borrower, supply link, maintenance title, file description and other text
+  was refused with 422 at about half the length the form allowed. Form fields
+  now also count an emoji as one character, as the server does, where they
+  stopped at half the limit. An account name has 100 characters at most, which
+  the server always required; the sign-up and profile forms said 255. Two
+  limits stay in bytes because they bound storage rather than text a person
+  reads: the query of a saved view and the external system, instance and
+  document identifiers of the intake API
+  ([#2919](https://github.com/denisvmedia/inventario/issues/2919)).
+
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none

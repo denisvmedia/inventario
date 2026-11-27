@@ -40,6 +40,7 @@ import {
   type ClassifiedServerError,
 } from "@/lib/server-error"
 import { http } from "@/lib/http"
+import { capCodePoints } from "@/lib/text-length"
 import { cn } from "@/lib/utils"
 import { useItemTypeLookup } from "@/features/itemTypes/hooks"
 import { BRAND_MAX_LEN, MODEL_MAX_LEN } from "@/features/commodities/schemas"
@@ -455,27 +456,28 @@ export function AiScanStep({
           break
         case "short_name":
           if (typeof value === "string" && value.trim() !== "") {
-            // Cap at the form's 40-char limit (SHORT_NAME_MAX_LEN) so an
-            // over-long AI guess pre-fills truncated instead of failing
+            // Cap at the form's 40-character limit (SHORT_NAME_MAX_LEN) so
+            // an over-long AI guess pre-fills truncated instead of failing
             // validation on the Basics step. The prompt already steers the
-            // model to ≤40; this is the defensive backstop.
-            out.short_name = value.trim().slice(0, SHORT_NAME_MAX_LEN)
+            // model to ≤40; this is the defensive backstop. The cap counts
+            // code points, as the server does, and never splits an emoji.
+            out.short_name = capCodePoints(value.trim(), SHORT_NAME_MAX_LEN)
           }
           break
         case "brand":
           // Capped like short_name, at the form's limits.
           if (typeof value === "string" && value.trim() !== "") {
-            out.brand = value.trim().slice(0, BRAND_MAX_LEN)
+            out.brand = capCodePoints(value.trim(), BRAND_MAX_LEN)
           }
           break
         case "model":
           if (typeof value === "string" && value.trim() !== "") {
-            out.model = value.trim().slice(0, MODEL_MAX_LEN)
+            out.model = capCodePoints(value.trim(), MODEL_MAX_LEN)
           }
           break
         case "seller":
           if (typeof value === "string" && value.trim() !== "") {
-            out.seller = value.trim().replace(/\s+/g, " ").slice(0, SELLER_NAME_MAX)
+            out.seller = capCodePoints(value.trim().replace(/\s+/g, " "), SELLER_NAME_MAX)
           }
           break
         case "type":

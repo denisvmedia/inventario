@@ -195,7 +195,7 @@ func (s *IntakeService) CreateSession(ctx context.Context, clientKey string, sou
 		return nil, false, err
 	}
 	session := models.IntakeSession{ClientKey: clientKey, Origin: models.IntakeOriginUpload}
-	if err := validation.Validate(clientKey, validation.Required, validation.Length(1, models.IntakeClientKeyMaxLength),
+	if err := validation.Validate(clientKey, validation.Required, validation.RuneLength(1, models.IntakeClientKeyMaxLength),
 		models.MemberSessionClientKeyRule); err != nil {
 		return nil, false, validation.Errors{"client_key": err}
 	}
