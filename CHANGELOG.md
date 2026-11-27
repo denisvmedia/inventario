@@ -683,6 +683,15 @@ when to add an entry and where it goes.
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 
+- The Add item form keeps unsaved input for one user. What it kept in the
+  browser (the values, the files and the draft it saves to) is filed under the
+  user and the group, so the next person to sign in on the same browser starts
+  with an empty form, and signing out removes it. A save still running when
+  the member leaves the form with browser Back and switches group goes on in
+  the group the form opened in; before, its remaining requests went to the
+  other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+
 - An item's history keeps every edit of a save. A save that changed the
   status, the area, a price or the cover recorded only that change, and the
   name, type, tags or any other field changed in the same save were missing
@@ -1002,6 +1011,17 @@ when to add an entry and where it goes.
   the file; a custom image build that copies only `frontend/` has to copy
   `CHANGELOG.md` next to it
   ([#1386](https://github.com/denisvmedia/inventario/issues/1386)).
+- The currency migration worker deletes completed and failed currency
+  migrations, discarded or not, 90 days after they ended, with their
+  per-item audit rows. `--currency-migration-retention`
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, at least `24h`) sets the
+  period. The worker checks once an hour, also while it is paused, and never
+  deletes a pending or running migration or one a group still points to. A
+  deleted migration leaves the group's migration history and the failed jobs
+  list; the audit log keeps its start and its end. The first check after the
+  upgrade deletes the older migrations kept so far, so set a longer period
+  before the upgrade to keep them. See the admin runbook §10
+  ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 
 ## [0.2.2] - 2026-11-23
 

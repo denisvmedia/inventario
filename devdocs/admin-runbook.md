@@ -638,8 +638,19 @@ it:
   next view of the file tries again.
 - `intake`: until the member deletes the intake session in the Inbox, or
   the group is deleted.
-- `currency-migration`: never. No cleanup removes currency migrations
-  today; the row stays until the group is deleted
+- `currency-migration`: the currency migration worker deletes completed and
+  failed migrations, discarded or not, once they ended more than
+  `--currency-migration-retention` ago
+  (`INVENTARIO_RUN_CURRENCY_MIGRATION_RETENTION`, `2160h` (90 days) by
+  default), with their per-item audit rows. It checks once an hour, also
+  while the worker is paused. A pending or running migration, and one a
+  group still points to (`location_groups.currency_migration_id`), is never
+  deleted. The period must be at least `24h`, because the daily limit of two
+  migrations per group counts the completed ones since UTC midnight; a
+  shorter value stops the server at startup. A deleted migration leaves the
+  group's migration history as well; the audit log keeps its
+  `currency_migration.start` and `currency_migration.complete` or
+  `currency_migration.fail` rows
   ([#2944](https://github.com/denisvmedia/inventario/issues/2944)).
 
 Jobs that failed before the upgrade to this version are listed and counted

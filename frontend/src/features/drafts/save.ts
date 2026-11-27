@@ -8,7 +8,7 @@
 // again.
 import { attachFile, uploadFile, type ListedFile } from "@/features/files/api"
 import { placePendingFile, type PendingFile } from "@/features/commodities/draft"
-import { HttpError } from "@/lib/http"
+import { HttpError, type InGroup } from "@/lib/http"
 
 import {
   createDraft,
@@ -216,6 +216,9 @@ async function alreadyAttached(entry: PendingFile, attached: ListedFile[]): Prom
 }
 
 export interface SaveDraftInput {
+  // The group every request of the save goes to: the one the form opened
+  // in. Unset, each request goes to the current group.
+  group?: string
   // The draft the form is editing, with the revision its values are based
   // on; null for a form that has no draft yet.
   draft: { id: string; revision: number } | null
@@ -268,14 +271,19 @@ function isDraftRefusal(err: unknown): boolean {
 // changed meanwhile but already holds exactly these values, an earlier
 // attempt of this same save went through and only its response was lost:
 // the save is done, at the revision the server has.
-async function putValues(id: string, revision: number, values: DraftValues): Promise<Draft> {
+async function putValues(
+  id: string,
+  revision: number,
+  values: DraftValues,
+  opts: InGroup
+): Promise<Draft> {
   try {
-    return await saveDraft(id, revision, values)
+    return await saveDraft(id, revision, values, opts)
   } catch (err) {
     if (!revisionConflict(err)) throw err
     let fresh: Draft
     try {
-      fresh = await getDraft(id)
+      fresh = await getDraft(id, opts)
     } catch {
       throw err
     }
@@ -289,7 +297,8 @@ async function putValues(id: string, revision: number, values: DraftValues): Pro
 // slot saved it last; a draft another device saved or finished since is a
 // conflict, so its input is never lost.
 async function createOrFind(input: SaveDraftInput): Promise<Draft> {
-  const draft = await createDraft(input.clientKey, input.values)
+  const opts = { group: input.group }
+  const draft = await createDraft(input.clientKey, input.values, opts)
   if (draft.status === "promoted") {
     throw new DraftStateError(DRAFT_PROMOTED, {
       commodity_id: draft.promotedCommodityId ?? "",
@@ -307,15 +316,15 @@ async function createOrFind(input: SaveDraftInput): Promise<Draft> {
       draft_id: draft.id,
     })
   }
-  return putValues(draft.id, draft.revision, input.values)
+  return putValues(draft.id, draft.revision, input.values, opts)
 }
 
 // checkDraft reads the draft the form works on and makes sure it can take
 // files: still open, at the revision the form's values are based on.
-async function checkDraft(ref: { id: string; revision: number }): Promise<Draft> {
+async function checkDraft(ref: { id: string; revision: number }, opts: InGroup): Promise<Draft> {
   let draft: Draft
   try {
-    draft = await getDraft(ref.id)
+    draft = await getDraft(ref.id, opts)
   } catch (err) {
     if (isGone(err)) throw new DraftStateError(DRAFT_DISCARDED, { draft_id: ref.id })
     throw err
@@ -340,10 +349,10 @@ async function checkDraft(ref: { id: string; revision: number }): Promise<Draft>
 
 // carryFiles links the saved files of draft from to draft to, keeping each
 // file's bucket. It returns the names of the files it could not link.
-async function carryFiles(from: string, to: string): Promise<string[]> {
+async function carryFiles(from: string, to: string, opts: InGroup): Promise<string[]> {
   let files: ListedFile[]
   try {
-    files = await listDraftFiles(from)
+    files = await listDraftFiles(from, opts)
   } catch {
     return []
   }
@@ -353,11 +362,11 @@ async function carryFiles(from: string, to: string): Promise<string[]> {
       (l) => l.entity_type === "draft" && l.entity_id === from
     )
     try {
-      await attachFile(row.file.id, {
-        entityType: "draft",
-        entityId: to,
-        meta: link?.meta || undefined,
-      })
+      await attachFile(
+        row.file.id,
+        { entityType: "draft", entityId: to, meta: link?.meta || undefined },
+        opts
+      )
     } catch (err) {
       if (isDraftRefusal(err)) throw err
       failed.push(fileName(row))
@@ -376,8 +385,13 @@ function isGone(err: unknown): boolean {
 
 // placeFile titles and tags an uploaded file and attaches it to the draft.
 // Both steps can be repeated.
-function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise<void> {
-  return placePendingFile(entry, fileId, { entityType: "draft", entityId: draftId })
+function placeFile(
+  entry: PendingFile,
+  fileId: string,
+  draftId: string,
+  opts: InGroup
+): Promise<void> {
+  return placePendingFile(entry, fileId, { entityType: "draft", entityId: draftId }, opts)
 }
 
 // saveDraftWithFiles stores the values, then uploads and attaches the
@@ -385,16 +399,17 @@ function placeFile(entry: PendingFile, fileId: string, draftId: string): Promise
 // draft that became an item or is being discarded; a failed file is
 // reported in failedFiles and stays pending.
 export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDraftResult> {
+  const opts = { group: input.group }
   const draft = !input.draft
     ? await createOrFind(input)
     : input.keepValues
-      ? await checkDraft(input.draft)
-      : await putValues(input.draft.id, input.draft.revision, input.values)
+      ? await checkDraft(input.draft, opts)
+      : await putValues(input.draft.id, input.draft.revision, input.values, opts)
   input.onDraft?.(draft)
 
   const failedCarried =
     input.carryFilesFrom && input.carryFilesFrom !== draft.id
-      ? await carryFiles(input.carryFilesFrom, draft.id)
+      ? await carryFiles(input.carryFilesFrom, draft.id, opts)
       : []
 
   const failedFiles: SaveDraftResult["failedFiles"] = []
@@ -404,7 +419,7 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
 
   let attached: ListedFile[] = []
   try {
-    attached = await listDraftFiles(draft.id)
+    attached = await listDraftFiles(draft.id, opts)
   } catch {
     // Without the list a retry may upload a file twice; better than not
     // saving it.
@@ -422,12 +437,12 @@ export async function saveDraftWithFiles(input: SaveDraftInput): Promise<SaveDra
         // uploaded.
         try {
           if (!entry.uploadedFileId) throw new MissingUpload()
-          await placeFile(entry, entry.uploadedFileId, draft.id)
+          await placeFile(entry, entry.uploadedFileId, draft.id, opts)
         } catch (err) {
           if (!(err instanceof MissingUpload) && !isGone(err)) throw err
-          const fileId = (await uploadFile(entry.file)).file.id
+          const fileId = (await uploadFile(entry.file, opts)).file.id
           input.onFileUploaded?.(entry, fileId)
-          await placeFile(entry, fileId, draft.id)
+          await placeFile(entry, fileId, draft.id, opts)
         }
       }
       input.onFileSaved?.(entry)
