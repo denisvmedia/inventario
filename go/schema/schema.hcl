@@ -1966,6 +1966,10 @@ table "exports" {
     type = INTEGER
     default = "0"
   }
+  column "heartbeat_at" {
+    type = TIMESTAMP
+    null = true
+  }
   column "discarded_at" {
     type = TIMESTAMP
     null = true
@@ -3938,6 +3942,10 @@ table "restore_operations" {
     default = "0"
   }
   column "discarded_at" {
+    type = TIMESTAMP
+    null = true
+  }
+  column "heartbeat_at" {
     type = TIMESTAMP
     null = true
   }

@@ -1,3 +1,5 @@
+//go:build !legacy_xml_backup
+
 package backup_test
 
 import (
