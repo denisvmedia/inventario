@@ -804,9 +804,6 @@ table "commodity_custom_field_values" {
   index "idx_commodity_custom_field_values_field_select" {
     columns = [column.field_id, column.value_select]
   }
-  index "idx_commodity_custom_field_values_field_text" {
-    columns = [column.field_id, column.value_text]
-  }
   index "idx_commodity_custom_field_values_item" {
     columns = [column.value_item_id]
   }
