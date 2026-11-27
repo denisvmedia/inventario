@@ -205,9 +205,10 @@ left out. A **Rescan** leaves a file alone once the scan has changed it. A
 file [another system sent](../documents-from-other-systems/) is not scanned,
 so it keeps the title it came with.
 
-The batch page reads the files again once the last file is scanned, so the
-new titles and tags show without a reload. To check or change them, open the
-draft: its files are on the **Files** step, under **Saved with this draft**.
+A file gets its new title and tag in the same step that marks it scanned, so
+the batch page shows them as soon as the file is scanned, without a reload.
+To check or change them, open the draft: its files are on the **Files** step,
+under **Saved with this draft**.
 
 ## All the fields
 

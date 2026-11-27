@@ -924,6 +924,11 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- In a batch of files, a file gets the tag and the title its scan suggests
+  in the same step that marks it scanned. The batch page, the batch list and
+  the inbox could stop reading for updates before the tags and titles were
+  written, and a slow write showed the files without them until a reload
+  ([#2940](https://github.com/denisvmedia/inventario/issues/2940)).
 
 ### Security
 
