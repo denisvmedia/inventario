@@ -457,9 +457,10 @@ signs in on this browser starts with an empty form, and signing out removes it.
   so a failed upload loses nothing.
 - When the dialog opens with input kept on this device that is not saved as a
   draft yet, a **Restored from this device** note says so.
-- What the dialog is still sending when you leave it, for example with the
-  browser's **Back** button, goes to the group you opened it in, also when you
-  switch to another group meanwhile.
+- The dialog keeps its draft in the group you opened it in. The draft, its
+  saved files and what the dialog is still sending when you leave it, for
+  example with the browser's **Back** button, stay in that group, also when
+  you switch to another group meanwhile.
 
 :::tip[You won't lose work by accident]
 If you try to close the dialog with unsaved changes, Inventario asks whether to
