@@ -804,6 +804,15 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- Documents delivered by other systems stay consistent after rare failures.
+  An item made from a delivered draft now shows its **Source** also when the
+  delivery stopped before it recorded the draft and was never sent again. A
+  delivery refused with `intake.document_conflict` keeps neither its record
+  nor its file, also when the conflicting batch appeared while it was being
+  stored. A second batch that a delivery made and could not delete is
+  deleted by the next delivery of the document, and running a merge restore
+  again records the item on a delivered document that the first restore left
+  without it ([#2879](https://github.com/denisvmedia/inventario/issues/2879)).
 
 ### Security
 

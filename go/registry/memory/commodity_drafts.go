@@ -386,7 +386,7 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 
 	now := time.Now()
 	if r.factory.intakeDocuments != nil {
-		r.factory.intakeDocuments.promoted(draft.GroupID, draft.ID, item.ID, now.UTC())
+		r.factory.intakeDocuments.promoted(draft.GroupID, draft.ID, draft.ClientKey, item.ID, now.UTC())
 	}
 	draft.Status = models.CommodityDraftPromoted
 	draft.PromotedCommodityID = new(item.ID)

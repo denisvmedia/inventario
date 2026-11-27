@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -430,13 +431,8 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		}
 
 		now := time.Now()
-		// The document another system delivered for the draft (#2809)
-		// points at the item from now on.
-		documents := fmt.Sprintf(`
-			UPDATE %s SET commodity_id = $1, updated_at = $2
-			WHERE group_id = $3 AND draft_id = $4`, r.tableNames.IntakeDocuments())
-		if _, err := tx.ExecContext(ctx, documents, commodity.ID, now.UTC(), r.groupID, draft.ID); err != nil {
-			return errxtrace.Wrap("failed to record the item on the delivered document", err)
+		if err := r.recordItemOnDocumentsInTx(ctx, tx, draft, commodity.ID, now); err != nil {
+			return err
 		}
 		markPromoted := fmt.Sprintf(`
 			UPDATE %s SET status = $1, promoted_commodity_id = $2, promoted_at = $3, promotion_key = $4,
@@ -461,6 +457,29 @@ func (r *CommodityDraftRegistry) Promote(ctx context.Context, id string, revisio
 		return registry.DraftPromotion{}, errxtrace.Wrap("failed to promote commodity draft", err)
 	}
 	return registry.DraftPromotion{Draft: &result, Commodity: item}, nil
+}
+
+// recordItemOnDocumentsInTx points the document another system delivered
+// for the draft (#2809) at the item the draft became. A delivery that made
+// the draft and failed to record it left a document that names no draft yet:
+// it is the one whose identity gives the draft's client key, and it gets the
+// draft too. The digest is the one models.IntakeDeliveredDraftClientKey
+// computes.
+func (r *CommodityDraftRegistry) recordItemOnDocumentsInTx(ctx context.Context, tx *sqlx.Tx, draft *models.CommodityDraft, itemID string, now time.Time) error {
+	var keyDigest *string
+	if digest, ok := strings.CutPrefix(draft.ClientKey, models.IntakeDeliveredDraftKeyPrefix); ok {
+		keyDigest = &digest
+	}
+	query := fmt.Sprintf(`
+		UPDATE %s SET commodity_id = $1, draft_id = COALESCE(draft_id, $4), updated_at = $2
+		WHERE group_id = $3 AND (draft_id = $4 OR (draft_id IS NULL AND $5::text IS NOT NULL
+			AND encode(sha256(convert_to(external_system, 'UTF8') || decode('00', 'hex')
+				|| convert_to(external_instance, 'UTF8') || decode('00', 'hex')
+				|| convert_to(external_document_id, 'UTF8')), 'hex') = $5))`, r.tableNames.IntakeDocuments())
+	if _, err := tx.ExecContext(ctx, query, itemID, now.UTC(), r.groupID, draft.ID, keyDigest); err != nil {
+		return errxtrace.Wrap("failed to record the item on the delivered document", err)
+	}
+	return nil
 }
 
 // AttachFile links a file to an open draft. The draft row is read FOR SHARE
