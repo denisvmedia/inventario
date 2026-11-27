@@ -966,6 +966,15 @@ when to add an entry and where it goes.
   migration that finished before its start request recorded it on the group
   no longer leaves the group shown as migrating
   ([#2918](https://github.com/denisvmedia/inventario/issues/2918)).
+- Viewers saw Add item in the sidebar, on the Dashboard and on the Items
+  list, the bulk move, edit, delete and status actions on items, the upload,
+  edit, delete and remove-attachment actions on files, the attach buttons on
+  location and area pages, and the create, rename and delete actions on the
+  Tags, Sellers, Item types and Custom fields pages, and members with the user
+  role saw add, edit and delete for locations and areas. The server refuses
+  those writes, so the member filled in a form only to get an error. These
+  actions are now offered only to a role the server accepts them from
+  ([#2886](https://github.com/denisvmedia/inventario/issues/2886)).
 - Add item and the batch upload dialog move the uploads they did not use to
   Trash, and could move one that an item used: when another tab or a retried
   save attached the file between the dialog's check and its delete. The

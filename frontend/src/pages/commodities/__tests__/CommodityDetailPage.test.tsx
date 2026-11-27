@@ -12,6 +12,7 @@ import { ConfirmProvider } from "@/hooks/useConfirm"
 import { capture } from "@/test/capture"
 import { toastSpies } from "@/test/global-mocks"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -24,6 +25,7 @@ import {
   inboxHandlers,
   intakeHandlers,
   locationHandlers,
+  memberHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -63,9 +65,16 @@ const commodityFixture = {
   },
 }
 
-function renderDetail(initialPath = `/g/${SLUG}/commodities/${ID}`) {
+// The page mounts once the caller's role is known (WhenRoleKnown), unless
+// `waitForRole` is false.
+function renderDetail(
+  initialPath = `/g/${SLUG}/commodities/${ID}`,
+  { waitForRole = true }: { waitForRole?: boolean } = {}
+) {
   setAccessToken("good-token")
+  const page = <CommodityDetailPage />
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -73,7 +82,7 @@ function renderDetail(initialPath = `/g/${SLUG}/commodities/${ID}`) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommodityDetailPage />
+              {waitForRole ? <WhenRoleKnown>{page}</WhenRoleKnown> : page}
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -94,12 +103,15 @@ function renderItemRoutes(initialPath: string) {
   const element = (
     <GroupProvider>
       <ConfirmProvider>
-        <CommodityDetailPage />
+        <WhenRoleKnown>
+          <CommodityDetailPage />
+        </WhenRoleKnown>
         <LocationProbe />
       </ConfirmProvider>
     </GroupProvider>
   )
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <>
@@ -217,6 +229,12 @@ beforeEach(() => {
   clearAuth()
   __resetGroupContextForTests()
   __resetHttpForTests()
+})
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
 })
 
 describe("<CommodityDetailPage />", () => {
@@ -916,7 +934,9 @@ describe("<CommodityDetailPage />", () => {
       ...areaHandlers.list(SLUG, areaFixture),
       ...commodityHandlers.detail(SLUG, ID, { id: ID, type: "commodities", attributes: null })
     )
-    renderDetail()
+    // The card shows while no group is resolved for the page, which is
+    // before any role is known.
+    renderDetail(undefined, { waitForRole: false })
     expect(await screen.findByTestId("commodity-detail-not-found")).toBeInTheDocument()
   })
 
@@ -1807,5 +1827,63 @@ describe("CommodityDetailPage custom fields", () => {
     expect(screen.getByTestId("commodity-detail-custom-field-cf-keyboard")).toHaveTextContent("No")
     expect(screen.getByTestId("commodity-detail-custom-field-cf-grade")).toHaveTextContent("A")
     expect(screen.queryByTestId("commodity-detail-custom-field-cf-unused")).not.toBeInTheDocument()
+  })
+})
+
+describe("<CommodityDetailPage /> by role (#2886)", () => {
+  // Items and their files take writes from users, admins and owners; a
+  // viewer only reads.
+  function expectNoItemWrites() {
+    expect(screen.queryByTestId("commodity-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-change-status")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-quick-edit-tags")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-quick-edit-notes")).not.toBeInTheDocument()
+  }
+
+  it("offers a viewer no edit, delete, status change or quick edit", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    expect(await screen.findByTestId("commodity-detail-insurance")).toBeInTheDocument()
+    expectNoItemWrites()
+  })
+
+  it("shows a viewer who follows an edit link the item, not the form", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}/edit`)
+    expect(await screen.findByTestId("commodity-detail-insurance")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-edit-form")).not.toBeInTheDocument()
+    expectNoItemWrites()
+  })
+
+  it("offers a viewer no upload on the Warranty and Files tabs", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.detail(SLUG, ID, commodityFixture),
+      ...fileHandlers.list(SLUG, []),
+      ...fileHandlers.counts(SLUG, {})
+    )
+    renderDetail(`/g/${SLUG}/commodities/${ID}?tab=warranty`)
+    expect(await screen.findByTestId("commodity-detail-warranty-status")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-detail-warranty-upload-receipt")).not.toBeInTheDocument()
+    await user.click(screen.getByTestId("commodity-detail-tab-files"))
+    expect(await screen.findByTestId("commodity-files-chip-bar")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-upload-zone")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-files-attach-existing")).not.toBeInTheDocument()
+  })
+
+  it("offers a user edit, delete, status change and quick edit", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    expect(await screen.findByTestId("commodity-detail-edit")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-delete")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-detail-change-status")).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-quick-edit-notes")).toBeInTheDocument()
   })
 })

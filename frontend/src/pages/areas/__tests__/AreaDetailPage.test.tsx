@@ -8,6 +8,7 @@ import { AreaDetailPage } from "@/pages/areas/AreaDetailPage"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -16,6 +17,7 @@ import {
   fileHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
 } from "@/test/handlers"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
 import { __resetGroupContextForTests } from "@/lib/group-context"
@@ -56,6 +58,7 @@ function commodityListBody(items: ReturnType<typeof commodityResource>[]) {
 function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {}) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -63,7 +66,9 @@ function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {})
         element={
           <ConfirmProvider>
             <GroupProvider>
-              <AreaDetailPage {...props} />
+              <WhenRoleKnown>
+                <AreaDetailPage {...props} />
+              </WhenRoleKnown>
             </GroupProvider>
           </ConfirmProvider>
         }
@@ -71,6 +76,13 @@ function renderDetail(initialPath: string, props: { initialMode?: "edit" } = {})
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 beforeEach(() => {
   clearAuth()
@@ -529,5 +541,54 @@ describe("<AreaDetailPage /> in a group that hides warranties (#1607)", () => {
     await waitFor(() => expect(stats).toHaveClass("grid-cols-2"))
     expect(screen.queryByTestId("area-detail-items-active-warranties")).not.toBeInTheDocument()
     expect(screen.getByTestId("area-detail-items-value")).toBeInTheDocument()
+  })
+})
+
+describe("<AreaDetailPage /> by role (#2886)", () => {
+  // The server takes area writes from admins and owners, and file writes
+  // from users too.
+  function seedShelf() {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.detail(
+        SLUG,
+        "a1",
+        areaResource("a1", { name: "Shelf", location_id: "loc1" })
+      ),
+      ...locationHandlers.detail(SLUG, "loc1", locationResource("loc1", { name: "Garage" })),
+      ...locationHandlers.list(SLUG, [locationResource("loc1", { name: "Garage" })]),
+      ...commodityHandlers.list(SLUG, []),
+      ...commodityHandlers.values(SLUG, { areaTotals: [] }),
+      ...fileHandlers.list(SLUG, [])
+    )
+  }
+
+  it("offers a viewer no edit, delete or attach, and keeps Print labels", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seedShelf()
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    expect(await screen.findByRole("heading", { name: "Shelf" })).toBeInTheDocument()
+    expect(await screen.findByText(/no files attached/i)).toBeInTheDocument()
+    expect(screen.getByTestId("area-detail-print-labels")).toBeVisible()
+    expect(screen.queryByTestId("area-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("area-detail-delete")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("entity-files-panel-attach")).not.toBeInTheDocument()
+  })
+
+  it("offers a user the files but not the area's edit or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedShelf()
+    renderDetail(`/g/${SLUG}/areas/a1`)
+    expect(await screen.findByTestId("entity-files-panel-attach")).toBeVisible()
+    expect(screen.queryByTestId("area-detail-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("area-detail-delete")).not.toBeInTheDocument()
+  })
+
+  it("opens no edit dialog for a user who follows an edit link", async () => {
+    server.use(...memberHandlers.asRole("g1", "user"))
+    seedShelf()
+    renderDetail(`/g/${SLUG}/areas/a1`, { initialMode: "edit" })
+    expect(await screen.findByRole("heading", { name: "Shelf" })).toBeInTheDocument()
+    expect(screen.queryByTestId("area-form-dialog")).not.toBeInTheDocument()
   })
 })

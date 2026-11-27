@@ -15,11 +15,11 @@ import { __resetHttpForTests } from "@/lib/http"
 import {
   apiUrl,
   areaHandlers,
-  authHandlers,
   commodityHandlers,
   draftHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
 } from "@/test/handlers"
 import { pickRadixSelect } from "@/test/radix"
 import { WhenGroupLoaded } from "@/test/group-loaded"
@@ -82,7 +82,7 @@ describe("<CommoditiesListPage /> Add item recovery (#2920)", () => {
   function renderAddItem(userId: string) {
     setAccessToken("good-token")
     server.use(
-      ...authHandlers.signedIn({ user: { id: userId } }),
+      ...memberHandlers.asRole("g1", "owner", userId),
       ...groupHandlers.list(groups),
       ...listHandlers(SLUG)
     )
@@ -137,7 +137,8 @@ describe("<CommoditiesListPage /> Add item in the group it opened in (#2920)", (
     const sentToOther: string[] = []
     setAccessToken("good-token")
     server.use(
-      ...authHandlers.signedIn(),
+      ...memberHandlers.asRole("g1", "owner"),
+      ...memberHandlers.asRole("g2", "owner"),
       ...groupHandlers.list(groups),
       ...drafts.handlers,
       ...listHandlers(SLUG),

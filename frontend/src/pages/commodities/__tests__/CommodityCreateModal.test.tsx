@@ -7,6 +7,7 @@ import { http } from "msw"
 import { CommodityCreateModalRoute } from "@/pages/commodities/CommodityCreateModal"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -14,6 +15,7 @@ import {
   commodityHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
 } from "@/test/handlers"
 import { toastSpies } from "@/test/global-mocks"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -93,6 +95,7 @@ function renderModal() {
     return <div data-testid="loc">{loc.pathname}</div>
   }
   return renderWithProviders({
+    withAuth: true,
     // Two entries so `navigate(-1)` has a previous history slot to
     // pop back to (matches the production setup where the sidebar /
     // dashboard CTA pushes the modal route on top of the list page).
@@ -110,7 +113,11 @@ function renderModal() {
           path="/g/:groupSlug/commodities/new"
           element={
             <GroupProvider>
-              <CommodityCreateModalRoute />
+              {/* Mounted once the caller's role is known; the probe says it is. */}
+              <WhenRoleKnown>
+                <CommodityCreateModalRoute />
+                <span data-testid="role-known" />
+              </WhenRoleKnown>
             </GroupProvider>
           }
         />
@@ -129,6 +136,9 @@ beforeEach(() => {
   // `shouldAdvanceTime: true` keeps MSW + react-query happy by letting
   // their internal microtasks run on the host scheduler.
   vi.useFakeTimers({ shouldAdvanceTime: true })
+  // The form is offered by role; every test runs as the group's owner
+  // unless it registers another role.
+  server.use(...memberHandlers.asRole("g1", "owner"))
 })
 
 afterEach(() => {
@@ -136,6 +146,18 @@ afterEach(() => {
 })
 
 describe("<CommodityCreateModalRoute />", () => {
+  it("opens no form for a viewer, whom the server refuses items (#2886)", async () => {
+    server.use(
+      ...memberHandlers.asRole("g1", "viewer"),
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...locationHandlers.list(SLUG, locationFixture)
+    )
+    renderModal()
+    expect(await screen.findByTestId("role-known")).toBeInTheDocument()
+    expect(screen.queryByTestId("mock-dialog")).not.toBeInTheDocument()
+  })
+
   it("renders the form dialog when mounted as the modal route", async () => {
     server.use(
       ...groupHandlers.list(groupFixture),

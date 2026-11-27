@@ -124,7 +124,7 @@ import { useGroupMigrationLock } from "@/features/currency-migration/lock"
 import { useOptionalAuth } from "@/features/auth/AuthContext"
 import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
-import { useMyGroupRole } from "@/features/group/roles"
+import { useGroupPermissions } from "@/features/group/roles"
 import type { IntakeSessionDetail } from "@/features/intake/api"
 import { useIntakeLimits } from "@/features/intake/hooks"
 import { useFileDrop } from "@/features/intake/useFileDrop"
@@ -316,8 +316,7 @@ export function CommoditiesListPage() {
   // ---- Batch intake (#2810) ----------------------------------------------
   // Files dropped on the page, or picked with "Add from files", go to the
   // intake dialog, which uploads them and queues them for the AI scan.
-  const role = useMyGroupRole()
-  const canWrite = role === "user" || role === "admin" || role === "owner"
+  const canWrite = useGroupPermissions().canEditContent
   const intakeLimits = useIntakeLimits(enabled && canWrite)
   const intakeEnabled = canWrite && !migrationLock.locked && !!intakeLimits.data?.enabled
   const [intakeOpen, setIntakeOpen] = useState(false)
@@ -656,18 +655,20 @@ export function CommoditiesListPage() {
                   {t("commodities:intake.addFromFiles")}
                 </Button>
               ) : null}
-              <Button
-                type="button"
-                onClick={() => setCreateOpen(true)}
-                data-testid="commodities-add-button"
-                className="gap-2"
-                disabled={migrationLock.locked}
-                title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
-                aria-disabled={migrationLock.locked || undefined}
-              >
-                <Plus className="size-4" aria-hidden="true" />
-                {t("commodities:list.addItem")}
-              </Button>
+              {canWrite ? (
+                <Button
+                  type="button"
+                  onClick={() => setCreateOpen(true)}
+                  data-testid="commodities-add-button"
+                  className="gap-2"
+                  disabled={migrationLock.locked}
+                  title={migrationLock.locked ? t("errors:lockedDuringMigration") : undefined}
+                  aria-disabled={migrationLock.locked || undefined}
+                >
+                  <Plus className="size-4" aria-hidden="true" />
+                  {t("commodities:list.addItem")}
+                </Button>
+              ) : null}
             </div>
           }
         />
@@ -745,6 +746,7 @@ export function CommoditiesListPage() {
           areas={areas.data ?? []}
           listContext={listContext}
           locked={migrationLock.locked}
+          canEdit={canWrite}
         />
 
         {openedView.broken ? (
@@ -776,7 +778,7 @@ export function CommoditiesListPage() {
           <EmptyState
             hasFilters={hasFilters}
             onClear={clearFilters}
-            onAdd={() => setCreateOpen(true)}
+            onAdd={canWrite ? () => setCreateOpen(true) : undefined}
           />
         ) : viewMode !== "list" ? (
           <CommoditiesGrid
@@ -839,7 +841,7 @@ export function CommoditiesListPage() {
 
       <CommodityFormDialog
         key={resumeDraftId ?? "new"}
-        open={createOpen}
+        open={canWrite && createOpen}
         onOpenChange={handleCreateOpenChange}
         mode="create"
         areas={areas.data ?? []}
@@ -1464,7 +1466,8 @@ function ListLoading({ viewMode }: { viewMode: ViewMode }) {
 interface EmptyStateProps {
   hasFilters: boolean
   onClear: () => void
-  onAdd: () => void
+  // Absent for a member who may not add items; the card then has no button.
+  onAdd?: () => void
 }
 
 function EmptyState({ hasFilters, onClear, onAdd }: EmptyStateProps) {
@@ -1490,12 +1493,14 @@ function EmptyState({ hasFilters, onClear, onAdd }: EmptyStateProps) {
         <CardTitle>{t("commodities:list.emptyTitle")}</CardTitle>
         <CardDescription>{t("commodities:list.emptyDescription")}</CardDescription>
       </CardHeader>
-      <CardContent>
-        <Button onClick={onAdd} className="gap-2">
-          <Plus className="size-4" aria-hidden="true" />
-          {t("commodities:list.addItem")}
-        </Button>
-      </CardContent>
+      {onAdd ? (
+        <CardContent>
+          <Button onClick={onAdd} className="gap-2">
+            <Plus className="size-4" aria-hidden="true" />
+            {t("commodities:list.addItem")}
+          </Button>
+        </CardContent>
+      ) : null}
     </Card>
   )
 }

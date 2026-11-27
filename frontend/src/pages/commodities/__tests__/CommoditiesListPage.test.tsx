@@ -11,6 +11,7 @@ import { useAuth } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import {
   apiUrl,
@@ -20,6 +21,7 @@ import {
   draftHandlers,
   groupHandlers,
   locationHandlers,
+  memberHandlers,
   savedViewHandlers,
   sellerHandlers,
   tagHandlers,
@@ -60,6 +62,7 @@ function SignedIn({ children }: { children: ReactNode }) {
 function renderList(initialPath = `/g/${SLUG}/commodities`) {
   setAccessToken("good-token")
   return renderWithProviders({
+    withAuth: true,
     initialPath,
     routes: (
       <Route
@@ -67,7 +70,9 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommoditiesListPage />
+              <WhenRoleKnown>
+                <CommoditiesListPage />
+              </WhenRoleKnown>
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -75,6 +80,13 @@ function renderList(initialPath = `/g/${SLUG}/commodities`) {
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 // settingsStub returns a GET /g/{slug}/settings handler with the given
 // body. The CommoditiesListPage always mounts `useUserSettings()` once
@@ -822,7 +834,8 @@ describe("<CommoditiesListPage />", () => {
       ),
     })
     await screen.findByTestId("commodities-empty")
-    await user.click(screen.getByTestId("commodities-add-button"))
+    // Add item shows once the member list has the user's role.
+    await user.click(await screen.findByTestId("commodities-add-button"))
     // Past the AI placeholder step → Basics. Post-#1720 the AI step
     // owns its own primary actions inline; `commodity-form-ai-fill-manually`
     // is the canonical "skip the scanner" affordance.
@@ -1658,5 +1671,74 @@ describe("<CommoditiesListPage />", () => {
     const { container } = renderList()
     await screen.findByTestId("commodities-empty")
     expect(await axe(container)).toHaveNoViolations()
+  })
+})
+
+describe("<CommoditiesListPage /> as a viewer (#2886)", () => {
+  // The server takes item writes from users, admins and owners only.
+  beforeEach(() => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+  })
+
+  it("offers no Add item, and only Print labels for a selection", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [
+        commodityRes("c1", { name: "First" }),
+        commodityRes("c2", { name: "Second" }),
+      ])
+    )
+    renderList()
+    const cards = await screen.findAllByTestId("commodity-card")
+    expect(screen.queryByTestId("commodities-add-button")).not.toBeInTheDocument()
+    await user.click(within(cards[0]).getByTestId("commodity-select"))
+    expect(await screen.findByTestId("commodities-bulk-bar")).toBeInTheDocument()
+    expect(screen.getByTestId("commodities-bulk-print-labels")).toBeVisible()
+    expect(screen.queryByTestId("commodities-bulk-move")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-bulk-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-bulk-delete")).not.toBeInTheDocument()
+  })
+
+  it("shows the empty state without Add item", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [])
+    )
+    renderList()
+    const empty = await screen.findByTestId("commodities-empty")
+    expect(within(empty).queryByRole("button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("commodities-add-button")).not.toBeInTheDocument()
+  })
+
+  it("opens no Add item dialog from a /commodities/new link", async () => {
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...areaHandlers.list(SLUG, areaFixture),
+      ...commodityHandlers.list(SLUG, [commodityRes("c1", { name: "First" })])
+    )
+    setAccessToken("good-token")
+    renderWithProviders({
+      withAuth: true,
+      initialPath: `/g/${SLUG}/commodities/new`,
+      routes: (
+        <Route
+          path="/g/:groupSlug/commodities/new"
+          element={
+            <GroupProvider>
+              <ConfirmProvider>
+                <WhenRoleKnown>
+                  <CommoditiesListPage />
+                </WhenRoleKnown>
+              </ConfirmProvider>
+            </GroupProvider>
+          }
+        />
+      ),
+    })
+    expect(await screen.findByTestId("commodity-card")).toBeInTheDocument()
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   })
 })

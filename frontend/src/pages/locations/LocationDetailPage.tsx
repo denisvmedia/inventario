@@ -47,6 +47,7 @@ import {
   useUpdateLocation,
 } from "@/features/locations/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
+import { useGroupPermissions } from "@/features/group/roles"
 import { useSectionVisible } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
 import { toastMutationError } from "@/lib/mutation-error-toast"
@@ -87,6 +88,10 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     { perPage: ITEM_COUNT_FETCH_CAP, includeInactive: false },
     { enabled: !!currentGroup }
   )
+  // Editing the location and its areas needs admin or owner; attaching
+  // files needs the user role. Other members get the page without the
+  // actions the server would refuse.
+  const { canEditContent, canManageLocations } = useGroupPermissions()
   const updateLocation = useUpdateLocation(id)
   const deleteLocation = useDeleteLocation()
   const createArea = useCreateArea()
@@ -121,7 +126,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
       setPendingDropFiles(files)
       setUploadOpen(true)
     },
-    disabled: uploadOpen,
+    disabled: uploadOpen || !canEditContent,
   })
 
   const editMatch = useMatch({ path: "/g/:groupSlug/locations/:id/edit", end: true })
@@ -397,26 +402,30 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                     </Link>
                   </Button>
                 ) : null}
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={() => setDialog({ kind: "edit" })}
-                  data-testid="location-detail-edit"
-                  className="gap-2"
-                >
-                  <Pencil className="size-4" aria-hidden="true" />
-                  {t("locations:detail.edit")}
-                </Button>
-                <Button
-                  type="button"
-                  variant="outline"
-                  onClick={handleDelete}
-                  data-testid="location-detail-delete"
-                  className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
-                >
-                  <Trash2 className="size-4" aria-hidden="true" />
-                  {t("common:actions.delete")}
-                </Button>
+                {canManageLocations ? (
+                  <>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={() => setDialog({ kind: "edit" })}
+                      data-testid="location-detail-edit"
+                      className="gap-2"
+                    >
+                      <Pencil className="size-4" aria-hidden="true" />
+                      {t("locations:detail.edit")}
+                    </Button>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleDelete}
+                      data-testid="location-detail-delete"
+                      className="gap-2 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                    >
+                      <Trash2 className="size-4" aria-hidden="true" />
+                      {t("common:actions.delete")}
+                    </Button>
+                  </>
+                ) : null}
               </div>
             </header>
 
@@ -428,17 +437,19 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                     {t("locations:detail.areasDescription", { count: myAreas.length })}
                   </p>
                 </div>
-                <Button
-                  type="button"
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setDialog({ kind: "create-area" })}
-                  data-testid="location-detail-add-area"
-                  className="gap-2"
-                >
-                  <Plus className="size-3.5" aria-hidden="true" />
-                  {t("locations:list.addArea")}
-                </Button>
+                {canManageLocations ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    onClick={() => setDialog({ kind: "create-area" })}
+                    data-testid="location-detail-add-area"
+                    className="gap-2"
+                  >
+                    <Plus className="size-3.5" aria-hidden="true" />
+                    {t("locations:list.addArea")}
+                  </Button>
+                ) : null}
               </div>
 
               {myAreas.length === 0 ? (
@@ -449,18 +460,20 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                     </CardTitle>
                     <CardDescription>{t("locations:detail.areasEmpty")}</CardDescription>
                   </CardHeader>
-                  <CardContent>
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => setDialog({ kind: "create-area" })}
-                      className="gap-2"
-                    >
-                      <Plus className="size-3.5" aria-hidden="true" />
-                      {t("locations:list.addArea")}
-                    </Button>
-                  </CardContent>
+                  {canManageLocations ? (
+                    <CardContent>
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => setDialog({ kind: "create-area" })}
+                        className="gap-2"
+                      >
+                        <Plus className="size-3.5" aria-hidden="true" />
+                        {t("locations:list.addArea")}
+                      </Button>
+                    </CardContent>
+                  ) : null}
                 </Card>
               ) : (
                 <ul className="grid gap-3 sm:grid-cols-2" data-testid="location-detail-areas-grid">
@@ -476,7 +489,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
                           expiringCount={expiring}
                           itemCountLoading={itemsCountIsUnknown}
                           itemCountTruncated={isTruncated}
-                          onDelete={() => handleDeleteArea(area)}
+                          onDelete={canManageLocations ? () => handleDeleteArea(area) : undefined}
                         />
                       </li>
                     )
@@ -489,24 +502,29 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
               linkedEntityType="location"
               linkedEntityId={id}
               entityName={location.data?.name}
-              onAttachClick={() => {
-                setPendingDropFiles([])
-                setUploadOpen(true)
-              }}
+              canEdit={canEditContent}
+              onAttachClick={
+                canEditContent
+                  ? () => {
+                      setPendingDropFiles([])
+                      setUploadOpen(true)
+                    }
+                  : undefined
+              }
             />
           </>
         ) : null}
       </Page>
 
       <LocationFormDialog
-        open={dialog.kind === "edit"}
+        open={canManageLocations && dialog.kind === "edit"}
         onOpenChange={(open) => (open ? null : closeDialog())}
         location={location.data}
         onSubmit={handleEditLocation}
         isPending={updateLocation.isPending}
       />
       <AreaFormDialog
-        open={dialog.kind === "create-area"}
+        open={canManageLocations && dialog.kind === "create-area"}
         onOpenChange={(open) => (open ? null : setDialog({ kind: "none" }))}
         locations={allLocations.data ?? []}
         defaultLocationId={id}
@@ -515,7 +533,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
       />
 
       <DeleteWithItemsDialog
-        open={deleteTarget !== null}
+        open={canManageLocations && deleteTarget !== null}
         kind={deleteTarget?.kind ?? "location"}
         name={deleteTarget?.name ?? ""}
         itemCount={deleteTarget?.itemCount ?? 0}
@@ -525,7 +543,7 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
       />
 
       <UploadFilesDialog
-        open={uploadOpen}
+        open={canEditContent && uploadOpen}
         onOpenChange={(open) => {
           setUploadOpen(open)
           if (!open) setPendingDropFiles([])
@@ -547,7 +565,9 @@ interface AreaTileProps {
   expiringCount: number
   itemCountLoading: boolean
   itemCountTruncated: boolean
-  onDelete: () => void
+  // Left out for a member who may not change areas; the tile then has no
+  // actions menu.
+  onDelete?: () => void
 }
 
 // AreaTile is the Level-2 mock card per
@@ -636,37 +656,39 @@ function AreaTile({
         ) : null}
       </div>
       <div className="pointer-events-none flex shrink-0 items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              type="button"
-              variant="ghost"
-              size="icon"
-              className="pointer-events-auto size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
-              aria-label={t("locations:list.actionsLabel", { name: area.name ?? "" })}
-              data-testid="location-detail-area-menu"
-            >
-              <MoreHorizontal className="size-3.5" aria-hidden="true" />
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem asChild data-testid="location-detail-area-edit">
-              <Link to={editHref}>
-                <Pencil className="mr-2 size-4" aria-hidden="true" />
-                {t("locations:detail.edit")}
-              </Link>
-            </DropdownMenuItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onSelect={onDelete}
-              className="text-destructive focus:text-destructive"
-              data-testid="location-detail-area-delete"
-            >
-              <Trash2 className="mr-2 size-4" aria-hidden="true" />
-              {t("common:actions.delete")}
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
+        {onDelete ? (
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon"
+                className="pointer-events-auto size-7 opacity-0 transition-opacity focus-visible:opacity-100 group-hover:opacity-100 data-[state=open]:opacity-100"
+                aria-label={t("locations:list.actionsLabel", { name: area.name ?? "" })}
+                data-testid="location-detail-area-menu"
+              >
+                <MoreHorizontal className="size-3.5" aria-hidden="true" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem asChild data-testid="location-detail-area-edit">
+                <Link to={editHref}>
+                  <Pencil className="mr-2 size-4" aria-hidden="true" />
+                  {t("locations:detail.edit")}
+                </Link>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                onSelect={onDelete}
+                className="text-destructive focus:text-destructive"
+                data-testid="location-detail-area-delete"
+              >
+                <Trash2 className="mr-2 size-4" aria-hidden="true" />
+                {t("common:actions.delete")}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ) : null}
         <ChevronRight
           className="size-3.5 text-muted-foreground transition-colors group-hover:text-foreground"
           aria-hidden="true"

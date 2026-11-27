@@ -14,8 +14,15 @@ import { __resetHttpForTests } from "@/lib/http"
 import { createQueryClient } from "@/lib/query-client"
 import { TagsListPage } from "@/pages/tags/TagsListPage"
 import { toastSpies } from "@/test/global-mocks"
-import { apiUrl, commodityHandlers, groupHandlers, tagHandlers } from "@/test/handlers"
+import {
+  apiUrl,
+  commodityHandlers,
+  groupHandlers,
+  memberHandlers,
+  tagHandlers,
+} from "@/test/handlers"
 import { renderWithProviders } from "@/test/render"
+import { WhenRoleKnown } from "@/test/role-known"
 import { server } from "@/test/server"
 import type { Schema } from "@/types"
 
@@ -37,6 +44,7 @@ beforeEach(() => {
 
 function renderPage(opts: { queryClient?: ReturnType<typeof createQueryClient> } = {}) {
   return renderWithProviders({
+    withAuth: true,
     queryClient: opts.queryClient,
     initialPath: `/g/${SLUG}/tags`,
     routes: (
@@ -46,7 +54,9 @@ function renderPage(opts: { queryClient?: ReturnType<typeof createQueryClient> }
           <ConfirmProvider>
             <GroupProvider>
               <main>
-                <TagsListPage />
+                <WhenRoleKnown>
+                  <TagsListPage />
+                </WhenRoleKnown>
               </main>
             </GroupProvider>
           </ConfirmProvider>
@@ -55,6 +65,13 @@ function renderPage(opts: { queryClient?: ReturnType<typeof createQueryClient> }
     ),
   })
 }
+
+// The page offers write actions by the caller's role. Every test runs as
+// the group's owner unless it registers another role with
+// memberHandlers.asRole before rendering.
+beforeEach(() => {
+  server.use(...memberHandlers.asRole("g1", "owner"))
+})
 
 // One commodity tagged with "kitchen" so the row's preview-chip path
 // renders. The Tags page client-side aggregates commodities into a
@@ -324,5 +341,19 @@ describe("<TagsListPage />", () => {
     await screen.findByTestId("tag-row-kitchen")
     const results = await axe(baseElement)
     expect(results).toHaveNoViolations()
+  })
+})
+
+describe("<TagsListPage /> as a viewer (#2886)", () => {
+  // The server takes tag writes from users, admins and owners only.
+  it("offers no create, rename or delete", async () => {
+    server.use(...memberHandlers.asRole("g1", "viewer"))
+    seed()
+    renderPage()
+    expect(await screen.findByTestId("tag-row-kitchen")).toBeVisible()
+    expect(screen.queryByTestId("tags-create-button")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tags-inline-create-toggle")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tag-row-kitchen-edit")).not.toBeInTheDocument()
+    expect(screen.queryByTestId("tag-row-kitchen-delete")).not.toBeInTheDocument()
   })
 })
