@@ -221,9 +221,7 @@ describe("AdminFailedJobsPage", () => {
     await waitFor(() => expect(screen.getAllByTestId("admin-failed-job-row")).toHaveLength(1))
     await user.click(screen.getByTestId("admin-failed-jobs-bulk-open"))
     const dialog = await screen.findByTestId("admin-failed-jobs-bulk-dialog")
-    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-scope")).toHaveTextContent(
-      "Acme Inc"
-    )
+    expect(within(dialog).getByTestId("admin-failed-jobs-bulk-scope")).toHaveTextContent("Acme Inc")
     expect(within(dialog).getByTestId("admin-failed-jobs-bulk-confirm")).toBeDisabled()
     expect(backend.state.requests.some((r) => r.method === "POST")).toBe(false)
 

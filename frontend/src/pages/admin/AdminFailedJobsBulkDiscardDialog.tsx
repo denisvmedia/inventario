@@ -12,10 +12,7 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  useAdminFailedJobsBulkCount,
-  useBulkDiscardAdminFailedJobs,
-} from "@/features/admin/hooks"
+import { useAdminFailedJobsBulkCount, useBulkDiscardAdminFailedJobs } from "@/features/admin/hooks"
 import { failedJobTypeLabel } from "@/features/failed-jobs/labels"
 import { useAppToast } from "@/hooks/useAppToast"
 import { getServerErrorCode } from "@/lib/server-error"

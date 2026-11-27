@@ -509,7 +509,6 @@ export function useBulkDiscardAdminFailedJobs() {
   const qc = useQueryClient()
   return useMutation<AdminFailedJobsBulkResult, Error, AdminFailedJobsBulkParams>({
     mutationFn: (params) => bulkDiscardAdminFailedJobs(params),
-    onSettled: () =>
-      qc.invalidateQueries({ queryKey: [...adminKeys.failedJobs(), "list"] }),
+    onSettled: () => qc.invalidateQueries({ queryKey: [...adminKeys.failedJobs(), "list"] }),
   })
 }
