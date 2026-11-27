@@ -8,6 +8,7 @@ import { SessionsPage } from "@/pages/SessionsPage"
 import { AuthProvider } from "@/features/auth/AuthContext"
 import { GroupProvider } from "@/features/group/GroupContext"
 import { ConfirmProvider } from "@/hooks/useConfirm"
+import { toastSpies } from "@/test/global-mocks"
 import { renderWithProviders } from "@/test/render"
 import { server } from "@/test/server"
 import { clearAuth, setAccessToken } from "@/lib/auth-storage"
@@ -118,6 +119,30 @@ describe("<SessionsPage />", () => {
       )
       expect(stillThere).toHaveLength(1)
     })
+  })
+
+  it("shows the server's reason when a revoke is refused", async () => {
+    server.use(
+      meHandler,
+      groupsHandler,
+      msw.get(api("/users/me/sessions"), () => HttpResponse.json({ sessions: baseTokens })),
+      msw.delete(api("/users/me/sessions/:id"), () =>
+        HttpResponse.json(
+          { errors: [{ status: "Conflict", detail: "the session is already signed out" }] },
+          { status: 409 }
+        )
+      )
+    )
+    const user = userEvent.setup()
+    renderPage()
+    const list = await screen.findByTestId("sessions-list")
+    const cards = within(list).getAllByTestId("session-card")
+    await user.click(within(cards[1]).getByTestId("session-revoke-btn"))
+    await user.click(await screen.findByTestId("sessions-confirm-revoke-btn"))
+    await waitFor(() =>
+      expect(toastSpies.error).toHaveBeenCalledWith("the session is already signed out")
+    )
+    expect(toastSpies.error).toHaveBeenCalledTimes(1)
   })
 
   it("revoke-all-other-sessions button fires DELETE /users/me/sessions with the current keep_id", async () => {

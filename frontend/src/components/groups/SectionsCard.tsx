@@ -5,7 +5,7 @@ import type { LocationGroup } from "@/features/group/api"
 import { useSetHiddenSections } from "@/features/group/hooks"
 import { sectionDescription, sectionLabel } from "@/features/group/section-labels"
 import { GROUP_SECTIONS, type GroupSection } from "@/features/group/sections"
-import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { cn } from "@/lib/utils"
 
 // SectionsCard lets a group admin hide sections the group does not use, for
@@ -23,7 +23,6 @@ interface SectionsCardProps {
 
 export function SectionsCard({ group, isAdmin, className }: SectionsCardProps) {
   const { t } = useTranslation()
-  const toast = useAppToast()
   const mutation = useSetHiddenSections()
   const groupId = group.id ?? ""
 
@@ -38,7 +37,7 @@ export function SectionsCard({ group, isAdmin, className }: SectionsCardProps) {
     const next = GROUP_SECTIONS.filter((s) => (s === section ? !visible : hidden.includes(s)))
     mutation.mutate(
       { groupId, sections: next },
-      { onError: () => toast.error(t("groups:settings.hiddenSections.saveError")) }
+      { onError: (err) => toastMutationError(err, t("groups:settings.hiddenSections.saveError")) }
     )
   }
 
