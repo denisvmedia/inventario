@@ -873,6 +873,7 @@ func APIServer(params Params, restoreStatus RestoreStatusQuerier) http.Handler {
 			DebugInfo:       params.DebugInfo,
 			APITokenService: apiTokenSvc, // block and revoke-sessions end tokens too
 			UploadLocation:  params.UploadLocation,
+			AvatarSigner:    services.NewFileSigningService(params.FileSigningKey, params.FileURLExpiration),
 			// The custom domains the back office accepts must stay clear of
 			// the hosts the resolver maps to tenant slugs.
 			TenantBaseDomain: tenantBaseDomain(tenantResolver),

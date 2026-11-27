@@ -34,6 +34,7 @@ API names, as `GET /commodities` and `GET /search?type=commodities` read them:
 | `status` | repeatable, a known status | Item status is one of the values. |
 | `area_id` | area id | Item is in that area. |
 | `unassigned` | `true`/`false` | Item has no area. Ignored when `area_id` is set. |
+| `location_id` | location id | Item is in an area of that location. With `area_id` both apply, so an area of another location matches nothing. An item without an area is in no location, so it cannot be combined with `unassigned=true`. |
 | `seller_id` | seller ids, repeatable, at most 50 | Item was bought from one of the sellers. An id no seller of the group has matches nothing, so a link to a deleted seller lists no items instead of failing. |
 | `include_inactive` | `true`/`false`, default `true` | `false` hides drafts and, unless `status` is set, items that are not in use. |
 | `warranty_status` | repeatable: `active`, `expiring`, `expired`, `none` | Computed warranty status is one of the values. |
@@ -171,6 +172,7 @@ The items list page keeps its query in the page URL under names that predate the
 | `q` | `q` |
 | `type`, `status` (repeated) | `type`, `status` |
 | `area` | `area_id` |
+| `location` | `location_id` |
 | `unassigned=1` | `unassigned=true` |
 | `seller` (repeated) | `seller_id` |
 | `inactive=1` | `include_inactive=true`; absent sends `include_inactive=false` |

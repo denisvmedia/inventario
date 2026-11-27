@@ -712,9 +712,37 @@ it:
 
 Jobs that failed before the upgrade to this version are listed and counted
 like new ones, so an alert on a depth above zero fires from the first
-collection until they are retried or discarded one by one
-([#2946](https://github.com/denisvmedia/inventario/issues/2946) tracks a
-bulk discard).
+collection. Discard them in bulk by the time they failed before (see
+[Discarding in bulk](#discarding-in-bulk)), then alert on what fails after
+the upgrade.
+
+### Discarding in bulk
+
+A bulk discard (#2946) marks discarded every failed job that failed before a
+time, of one type or of every type, in one tenant or in every tenant. A job
+without a failure time counts from its creation. The time is a date, which
+stands for its midnight UTC, or an RFC 3339 time; a time in the future is
+refused, so a job that fails between the dry run and the discard is never
+taken without having been counted. Each job is discarded as a single
+discard does: its row and its error stay.
+
+```bash
+# Count the jobs, discard nothing
+inventario jobs failed discard --failed-before 2026-11-01 --dry-run --db-dsn postgres://...
+
+# See them: list takes the same filter
+inventario jobs failed list --failed-before 2026-11-01 --limit 0 --db-dsn postgres://...
+
+# Discard them, of one type and one tenant here
+inventario jobs failed discard --type export --tenant acme --failed-before 2026-11-01 --db-dsn postgres://...
+```
+
+The command prints how many jobs it discarded, per type, for example
+`Discarded 12 failed jobs that failed before 2026-11-01T00:00:00Z: export 10, thumbnail 2.`
+A job someone retried or discarded in the meantime is not counted. In the
+back office, **Discard older…** on the Failed jobs page does the same for
+the type and tenant the filters show, and asks with the count first. Both
+need the `platform_admin` role on the back office.
 
 ### Who sees what
 
@@ -747,6 +775,9 @@ inventario jobs failed retry --type thumbnail <job-id> --db-dsn postgres://...
 
 # Discard a job
 inventario jobs failed discard --type restore <job-id> --db-dsn postgres://...
+
+# Discard every job that failed before a time (see "Discarding in bulk")
+inventario jobs failed discard --failed-before 2026-11-01 --db-dsn postgres://...
 ```
 
 `list` prints the type, id, tenant, group, failure time, attempts, whether
@@ -758,16 +789,19 @@ that is no longer failed fails with "not found".
 
 | Method & path | Effect |
 | ------------- | ------ |
-| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
+| `GET /api/v1/admin/failed-jobs` | List failed jobs across tenants. `?type`, `?tenantID`, `?failed_before`, `?page`, `?per_page` (default 50, at most 100). `meta.job_types` lists every type with whether it can be retried. |
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/retry` | Retry one job (204). |
 | `POST /api/v1/admin/failed-jobs/{jobType}/{jobID}/discard` | Discard one job (204). `platform_admin` only; a `support_agent` gets 403 `admin.role_required`. |
+| `POST /api/v1/admin/failed-jobs/bulk-discard` | Discard every job that failed before `?failed_before` (required), with the list's `?type` and `?tenantID`; `?dry_run=true` only counts. 200 with `meta.discarded` and `meta.by_type`. `platform_admin` only, the dry run too. |
 | `GET /api/v1/g/{groupSlug}/failed-jobs` | A group admin's list of the group's failed jobs. Its `meta.job_types` leaves out `personal-data-export`. |
 | `POST /api/v1/g/{groupSlug}/failed-jobs/{jobType}/{jobID}/retry` | A group admin's retry. |
 
 Error codes: `failed_job.unknown_type` (404 on a path, 400 on the `?type`
 filter), `failed_job.not_found` (404: no such job, or it is no longer
-failed), `failed_job.not_retryable` (409). Members without the admin role
-get 403 on the group routes.
+failed), `failed_job.not_retryable` (409), `failed_job.invalid_failed_before`
+(400: `?failed_before` is not a date or an RFC 3339 time, or, on a bulk
+discard, is missing or in the future). Members without the admin role get
+403 on the group routes.
 
 ### Audit
 
@@ -777,8 +811,13 @@ unknown job type included: `admin.failed_job_retry` and
 actor, as for `workers pause`), and `failed_job_retry` from group settings.
 The entity type is the job type as sent and the entity id is the job id.
 Listing from the back office writes `admin.failed_job_list`, also for a
-refused `?type`. A discard that `RequirePlatformAdmin` turns away is not
-audited, as for impersonation.
+refused `?type`. A bulk discard writes one `admin.failed_job_bulk_discard`
+row, from the back office and the CLI, also when it is refused: the tenant
+of the filter, the job type of the filter as the entity type, and in the
+`user_agent` breadcrumb the filter (`failed_before`, `type`, the CLI's
+`tenant` as typed) with `discarded` and `by_type`. A dry run writes none. A
+discard that `RequirePlatformAdmin` turns away is not audited, as for
+impersonation.
 
 ### Observability
 

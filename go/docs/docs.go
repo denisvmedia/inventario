@@ -85,7 +85,7 @@ const docTemplate = `{
         },
         "/admin/failed-jobs": {
             "get": {
-                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type and ?tenantID to one\ntenant. ` + "`" + `meta.job_types` + "`" + ` lists the job types with whether each can be\nretried. A personal data export belongs to a user, not to a group;\nits title is the user's email address.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `.",
+                "description": "Returns the background jobs that failed for good and were neither\nretried nor discarded, across every tenant, newest failure first\n(#1307). Each job is read from its type's own table; ` + "`" + `id` + "`" + ` is the row\nid there. ?type limits the list to one job type, ?tenantID to one\ntenant and ?failed_before to the jobs that failed before a time (a\njob without a failure time counts from its creation), the jobs a bulk\ndiscard with the same filter takes. ` + "`" + `meta.job_types` + "`" + ` lists the job\ntypes with whether each can be retried. A personal data export\nbelongs to a user, not to a group; its title is the user's email\naddress.\nAn unknown ?type returns 400 with ` + "`" + `failed_job.unknown_type` + "`" + `, a\n?failed_before that is not a date or an RFC 3339 time 400 with\n` + "`" + `failed_job.invalid_failed_before` + "`" + `.",
                 "produces": [
                     "application/vnd.api+json"
                 ],
@@ -116,6 +116,13 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Only jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time",
+                        "name": "failed_before",
+                        "in": "query"
+                    },
+                    {
                         "type": "integer",
                         "description": "Page number (default 1)",
                         "name": "page",
@@ -136,7 +143,7 @@ const docTemplate = `{
                         }
                     },
                     "400": {
-                        "description": "Bad Request - unknown job type",
+                        "description": "Bad Request - unknown job type or unreadable failed_before",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -149,6 +156,81 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "Account disabled",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    }
+                }
+            }
+        },
+        "/admin/failed-jobs/bulk-discard": {
+            "post": {
+                "description": "Marks discarded every failed job that failed before ?failed_before\n(#2946), as the single discard does: the jobs leave the failed list\nand the depth gauge and keep their rows and errors. A job without a\nfailure time counts from its creation. The filter is the list's:\n?type limits the discard to one job type and ?tenantID to one tenant,\nand GET /admin/failed-jobs with the same query lists the jobs it\ntakes. ?dry_run=true only counts them. ` + "`" + `meta.discarded` + "`" + ` is how many\njobs were discarded; a job someone retried or discarded in the\nmeantime is not among them.\nA discard writes one audit row that names the filter and the counts,\nalso when it is refused; a dry run writes none. Needs the\nplatform_admin role: a support_agent gets 403 ` + "`" + `admin.role_required` + "`" + `.\nA missing, unreadable or future ?failed_before returns 400\n` + "`" + `failed_job.invalid_failed_before` + "`" + `, an unknown ?type 400\n` + "`" + `failed_job.unknown_type` + "`" + `.",
+                "produces": [
+                    "application/vnd.api+json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Discard failed background jobs in bulk (admin)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "example": "2026-11-01",
+                        "description": "Discard the jobs that failed before this time: a date (midnight UTC) or an RFC 3339 time, not in the future",
+                        "name": "failed_before",
+                        "in": "query",
+                        "required": true
+                    },
+                    {
+                        "enum": [
+                            "export",
+                            "import",
+                            "restore",
+                            "thumbnail",
+                            "intake",
+                            "currency-migration",
+                            "personal-data-export"
+                        ],
+                        "type": "string",
+                        "description": "Job type",
+                        "name": "type",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Tenant ID",
+                        "name": "tenantID",
+                        "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Count the jobs and discard nothing",
+                        "name": "dry_run",
+                        "in": "query"
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request - missing, unreadable or future failed_before, or unknown job type",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "401": {
+                        "description": "Unauthorized - back-office authentication required",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "403": {
+                        "description": "Forbidden - account disabled, or not a platform_admin",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -2765,7 +2847,7 @@ const docTemplate = `{
         },
         "/avatars/{userID}": {
             "get": {
-                "description": "Serves the photo a signed avatar_url points at. The /auth/me and group members responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.",
+                "description": "Serves the photo a signed avatar_url points at. The /auth/me, group members and back-office user and member responses carry those URLs;\nthey are bound to the session that received them and expire. The signature is the credential, so no bearer token is needed.\nA URL names either the user it was issued to (uid) or the back-office operator (op), never both.",
                 "produces": [
                     "image/jpeg"
                 ],
@@ -2792,8 +2874,13 @@ const docTemplate = `{
                         "type": "string",
                         "description": "The user the URL was issued to",
                         "name": "uid",
-                        "in": "query",
-                        "required": true
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "The back-office operator the URL was issued to",
+                        "name": "op",
+                        "in": "query"
                     },
                     {
                         "type": "string",
@@ -3699,6 +3786,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -4252,6 +4345,12 @@ const docTemplate = `{
                         "type": "boolean",
                         "description": "Only commodities with no area",
                         "name": "unassigned",
+                        "in": "query"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Only commodities in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
                         "in": "query"
                     },
                     {
@@ -10103,6 +10202,12 @@ const docTemplate = `{
                         "in": "query"
                     },
                     {
+                        "type": "string",
+                        "description": "Commodities only: only items in an area of this location; cannot be combined with unassigned",
+                        "name": "location_id",
+                        "in": "query"
+                    },
+                    {
                         "type": "array",
                         "items": {
                             "type": "string"
@@ -13612,6 +13717,33 @@ const docTemplate = `{
                 }
             }
         },
+        "apiserver.AdminFailedJobBulkDiscardMeta": {
+            "type": "object",
+            "properties": {
+                "by_type": {
+                    "description": "ByType counts per job type; a type with none is left out.",
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "integer"
+                    }
+                },
+                "discarded": {
+                    "type": "integer",
+                    "example": 12
+                },
+                "dry_run": {
+                    "type": "boolean"
+                }
+            }
+        },
+        "apiserver.AdminFailedJobBulkDiscardResponse": {
+            "type": "object",
+            "properties": {
+                "meta": {
+                    "$ref": "#/definitions/apiserver.AdminFailedJobBulkDiscardMeta"
+                }
+            }
+        },
         "apiserver.AdminFailedJobListEnvelope": {
             "type": "object",
             "properties": {
@@ -15054,6 +15186,10 @@ const docTemplate = `{
         "jsonapi.AdminGroupMemberUser": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the member's profile photo, valid for the\noperator and session that requested the list. Absent when the member\nhas none.",
+                    "type": "string"
+                },
                 "email": {
                     "type": "string"
                 },
@@ -15209,6 +15345,10 @@ const docTemplate = `{
                 "active_session_count": {
                     "type": "integer"
                 },
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested it. Absent when the user has none.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },
@@ -15274,6 +15414,10 @@ const docTemplate = `{
         "jsonapi.AdminUserListItem": {
             "type": "object",
             "properties": {
+                "avatar_url": {
+                    "description": "AvatarURL is a signed URL of the user's profile photo, valid for the\noperator and session that requested the list. Absent when the user has\nnone.",
+                    "type": "string"
+                },
                 "created_at": {
                     "type": "string"
                 },

@@ -4,6 +4,7 @@ import (
 	"cmp"
 	"context"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/go-extras/errx"
@@ -173,6 +174,102 @@ func (s *FailedJobService) Discard(ctx context.Context, jobType models.WorkerTyp
 		return job, err
 	}
 	return job, nil
+}
+
+// FailedJobBulkQuery selects the failed jobs a bulk discard takes (#2946):
+// the jobs in the scope that failed before Scope.FailedBefore, of one type
+// or of every type.
+type FailedJobBulkQuery struct {
+	// Type limits the query to one job type; empty takes every type.
+	Type models.WorkerType
+	// Scope must set FailedBefore, to a time that is not in the future.
+	Scope registry.FailedJobScope
+}
+
+// FailedJobCounts is how many failed jobs a bulk query took, in all and per
+// type. ByType leaves out the types it took none of.
+type FailedJobCounts struct {
+	Total  int
+	ByType map[string]int
+}
+
+func (c *FailedJobCounts) add(jobType models.WorkerType, n int) {
+	if n == 0 {
+		return
+	}
+	c.Total += n
+	c.ByType[string(jobType)] = n
+}
+
+// bulkTypes checks the query and returns the types it takes. A time in the
+// future is refused: the jobs failing between a dry run and the discard
+// would then be discarded without having been counted.
+func (s *FailedJobService) bulkTypes(q FailedJobBulkQuery) ([]models.WorkerType, error) {
+	switch {
+	case q.Scope.FailedBefore.IsZero():
+		return nil, errxtrace.Classify(registry.ErrFieldRequired, errx.Attrs("field", "failed_before"))
+	case q.Scope.FailedBefore.After(s.clock()):
+		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("field", "failed_before", "reason", "in the future"))
+	case q.Type == "":
+		return FailedJobTypesIn(q.Scope), nil
+	}
+	if err := s.checkType(q.Type, q.Scope); err != nil {
+		return nil, err
+	}
+	return []models.WorkerType{q.Type}, nil
+}
+
+// CountBulk counts the failed jobs DiscardBulk would discard: the dry run.
+func (s *FailedJobService) CountBulk(ctx context.Context, q FailedJobBulkQuery) (FailedJobCounts, error) {
+	types, err := s.bulkTypes(q)
+	if err != nil {
+		return FailedJobCounts{}, err
+	}
+	counts := FailedJobCounts{ByType: map[string]int{}}
+	for _, jobType := range types {
+		n, err := s.jobs.CountFailed(ctx, jobType, q.Scope)
+		if err != nil {
+			return FailedJobCounts{}, errxtrace.Wrap("failed to count failed jobs", err, errx.Attrs("job_type", string(jobType)))
+		}
+		counts.add(jobType, n)
+	}
+	return counts, nil
+}
+
+// DiscardBulk marks discarded every failed job the query selects and
+// returns how many it discarded. A job that someone retried or discarded in
+// the meantime is not counted. Each type is discarded on its own: when one
+// fails, the counts of the types before it come back with the error.
+func (s *FailedJobService) DiscardBulk(ctx context.Context, q FailedJobBulkQuery) (FailedJobCounts, error) {
+	types, err := s.bulkTypes(q)
+	if err != nil {
+		return FailedJobCounts{}, err
+	}
+	now := s.clock()
+	counts := FailedJobCounts{ByType: map[string]int{}}
+	for _, jobType := range types {
+		n, err := s.jobs.DiscardFailed(ctx, jobType, q.Scope, now)
+		if err != nil {
+			return counts, errxtrace.Wrap("failed to discard failed jobs", err, errx.Attrs("job_type", string(jobType)))
+		}
+		counts.add(jobType, n)
+	}
+	return counts, nil
+}
+
+// ParseFailedBefore reads the time a bulk discard takes the jobs before: a
+// date, which stands for its midnight UTC, or an RFC 3339 time.
+func ParseFailedBefore(raw string) (time.Time, error) {
+	raw = strings.TrimSpace(raw)
+	if t, err := time.Parse(time.DateOnly, raw); err == nil {
+		return t, nil
+	}
+	t, err := time.Parse(time.RFC3339, raw)
+	if err != nil {
+		return time.Time{}, errxtrace.Classify(registry.ErrInvalidInput,
+			errx.Attrs("field", "failed_before", "reason", "not a date (2006-01-02) or an RFC 3339 time"))
+	}
+	return t.UTC(), nil
 }
 
 // Depths counts the failed jobs nobody retried or discarded, per type,

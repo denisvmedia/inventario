@@ -479,6 +479,12 @@ when to add an entry and where it goes.
   are in. Only you and the members of your groups can load it, it does not
   count toward a group's storage, and deleting your account deletes it
   ([#1382](https://github.com/denisvmedia/inventario/issues/1382)).
+- A **Location** filter on All Items, and **Show items** next to a location in
+  the search window and on the search page. The filter lists the items in every
+  area of the location, and the **Area** menu then offers only that location's
+  areas. Saved views keep it. The API takes it as `location_id` on the item
+  list, its tag counts and search; it cannot be combined with `unassigned=true`
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
 - A file edit page with the preview beside the details form. Opened from the
   Files page, it keeps the list you came from: the header shows the file's
   place in it with previous and next arrows, "Save and next" saves and opens
@@ -551,6 +557,18 @@ when to add an entry and where it goes.
   admins, and `GET /admin/failed-jobs` with `retry` and `discard` under
   `/admin/failed-jobs/{jobType}/{jobID}/` for the back office
   ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).
+- Failed jobs can be discarded in bulk: every job that failed before a date,
+  of one type or of every type, in one tenant or in all of them. In the back
+  office, **Discard older…** on the Failed jobs page takes the type and
+  tenant the filters show and asks with the count first; on the command
+  line, `inventario jobs failed discard --failed-before 2026-11-01` takes
+  `--type`, `--tenant` and `--dry-run`, and says how many jobs it discarded.
+  A date in the future is refused. Only a platform admin can discard in
+  bulk, and each bulk discard writes one audit row with the filter and the
+  counts. The API gains `POST /admin/failed-jobs/bulk-discard`, and
+  `GET /admin/failed-jobs` and `inventario jobs failed list` take the same
+  `failed_before` filter
+  ([#2946](https://github.com/denisvmedia/inventario/issues/2946)).
 - Failed personal data exports are failed jobs too. The back office
   **Failed jobs** page and `inventario jobs failed` list them as
   `personal-data-export`, with the user's email address as the title and no
@@ -749,12 +767,25 @@ when to add an entry and where it goes.
   127 letters was refused with 422
   ([#1626](https://github.com/denisvmedia/inventario/issues/1626)).
 
+- The tag sort, the bulk "move to" pickers on the items and files lists, the
+  file category pickers on the upload dialog and the file edit page, and the
+  category picker on a phone's Files page look like the other fields: a
+  chevron, the same height and border, and the same focus ring
+  ([#2911](https://github.com/denisvmedia/inventario/issues/2911)).
+
 - Settings saved on the server show up in the app again. The settings
   endpoint sent its keys capitalized (`NotificationsWarrantyExpiry`) while the
   app reads camelCase (`notificationsWarrantyExpiry`), so after a reload the
   notification toggles showed their defaults, and the saved language and
   default items view were not applied
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
+
+- Delete buttons look the same everywhere: red text with a red hover. The
+  location and area pages showed only the icon in red, the file detail panel
+  used a solid red button, and the maintenance, supplies and reminder rows
+  had no red at all. The solid red button is the one that confirms the delete
+  ([#2914](https://github.com/denisvmedia/inventario/issues/2914)).
+
 - A warranty, maintenance or loan reminder is no longer dropped when a
   recipient's account cannot be read for a moment, for example during a
   database restart. The reminder is retried on the next sweep instead of
@@ -863,6 +894,17 @@ when to add an entry and where it goes.
   window is narrow and comes back on the step it was on. It closes only when
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
+- `inventario users delete` left the user's profile photo in storage, where
+  nothing pointed at it any more. It now deletes the photo after the account,
+  as deleting your own account does; pass `--upload-location` with the
+  server's upload location. The admin user page and the admin membership
+  editor show the users' photos instead of their initials
+  ([#2894](https://github.com/denisvmedia/inventario/issues/2894)).
+- On a 360 px wide screen the titles in the search window and on the search
+  page were cut to a few letters, because the subtitle and the **Show items**
+  label took the row. On a narrow screen the subtitle now goes under the title
+  and the button shows only its icon
+  ([#2897](https://github.com/denisvmedia/inventario/issues/2897)).
 - Documents delivered by other systems stay consistent after rare failures.
   An item made from a delivered draft now shows its **Source** also when the
   delivery stopped before it recorded the draft and was never sent again. A
@@ -958,7 +1000,9 @@ when to add an entry and where it goes.
   ([#2873](https://github.com/denisvmedia/inventario/issues/2873)). Jobs
   that failed before the upgrade count toward the depth gauge from the first
   collection, so an alert on a depth above zero fires on day one until they
-  are retried or discarded
+  are retried or discarded. Discard them in one go with
+  `inventario jobs failed discard --failed-before <the upgrade date>`,
+  after a `--dry-run` to see the count
   ([#2946](https://github.com/denisvmedia/inventario/issues/2946)). See the
   admin runbook §10
   ([#1307](https://github.com/denisvmedia/inventario/issues/1307)).

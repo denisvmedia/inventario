@@ -176,6 +176,91 @@ func TestFailedJobService_DiscardAndDepths(t *testing.T) {
 	c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 }
 
+// A bulk discard takes the jobs that failed before the time, counts them
+// first in a dry run, and leaves the later ones on the list.
+func TestFailedJobService_DiscardBulk(t *testing.T) {
+	c := qt.New(t)
+	f := newFailedJobFixture(c)
+	cutoff := time.Now().Add(-24 * time.Hour)
+	oldExports := []string{
+		f.export(c, models.ExportTypeFullDatabase, cutoff.Add(-2*time.Hour)),
+		f.export(c, models.ExportTypeFullDatabase, cutoff.Add(-time.Hour)),
+	}
+	oldRestore := f.restore(c, cutoff.Add(-time.Hour))
+	recent := f.export(c, models.ExportTypeFullDatabase, time.Now().Add(-time.Hour))
+	svc := services.NewFailedJobService(f.fs.FailedJobRegistry)
+	q := services.FailedJobBulkQuery{Scope: registry.FailedJobScope{FailedBefore: cutoff}}
+
+	counts, err := svc.CountBulk(context.Background(), q)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, services.FailedJobCounts{Total: 3, ByType: map[string]int{"export": 2, "restore": 1}})
+
+	exportsOnly := q
+	exportsOnly.Type = models.WorkerTypeExport
+	counts, err = svc.DiscardBulk(context.Background(), exportsOnly)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, services.FailedJobCounts{Total: 2, ByType: map[string]int{"export": 2}})
+
+	page, err := svc.List(context.Background(), services.FailedJobQuery{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(jobIDs(page.Jobs), qt.DeepEquals, []string{recent, oldRestore})
+	for _, id := range oldExports {
+		e, err := f.set.ExportRegistry.Get(f.ctx, id)
+		c.Assert(err, qt.IsNil)
+		c.Assert(e.DiscardedAt, qt.IsNotNil)
+	}
+
+	counts, err = svc.DiscardBulk(context.Background(), q)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts, qt.DeepEquals, services.FailedJobCounts{Total: 1, ByType: map[string]int{"restore": 1}})
+	counts, err = svc.CountBulk(context.Background(), q)
+	c.Assert(err, qt.IsNil)
+	c.Assert(counts.Total, qt.Equals, 0)
+}
+
+func TestFailedJobService_DiscardBulk_RefusesAMissingOrFutureTimeAndAnUnknownType(t *testing.T) {
+	c := qt.New(t)
+	f := newFailedJobFixture(c)
+	f.export(c, models.ExportTypeFullDatabase, time.Now().Add(-time.Hour))
+	svc := services.NewFailedJobService(f.fs.FailedJobRegistry)
+
+	_, err := svc.DiscardBulk(context.Background(), services.FailedJobBulkQuery{})
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+	_, err = svc.CountBulk(context.Background(), services.FailedJobBulkQuery{})
+	c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired)
+
+	future := services.FailedJobBulkQuery{Scope: registry.FailedJobScope{FailedBefore: time.Now().Add(time.Hour)}}
+	_, err = svc.DiscardBulk(context.Background(), future)
+	c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput)
+
+	_, err = svc.DiscardBulk(context.Background(), services.FailedJobBulkQuery{
+		Type:  models.WorkerTypeWeeklyDigest,
+		Scope: registry.FailedJobScope{FailedBefore: time.Now()},
+	})
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+
+	page, err := svc.List(context.Background(), services.FailedJobQuery{})
+	c.Assert(err, qt.IsNil)
+	c.Assert(page.Total, qt.Equals, 1, qt.Commentf("a refused discard takes nothing"))
+}
+
+func TestParseFailedBefore(t *testing.T) {
+	c := qt.New(t)
+
+	got, err := services.ParseFailedBefore("2026-11-01")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, time.Date(2026, 11, 1, 0, 0, 0, 0, time.UTC))
+
+	got, err = services.ParseFailedBefore(" 2026-11-01T12:30:00+02:00 ")
+	c.Assert(err, qt.IsNil)
+	c.Assert(got, qt.Equals, time.Date(2026, 11, 1, 10, 30, 0, 0, time.UTC))
+
+	for _, raw := range []string{"", "yesterday", "2026-13-01", "01.11.2026"} {
+		_, err := services.ParseFailedBefore(raw)
+		c.Assert(err, qt.ErrorIs, registry.ErrInvalidInput, qt.Commentf("%q", raw))
+	}
+}
+
 func jobIDs(jobs []*models.FailedJob) []string {
 	ids := make([]string, 0, len(jobs))
 	for _, j := range jobs {

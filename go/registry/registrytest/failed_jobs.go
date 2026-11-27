@@ -61,6 +61,8 @@ func RunFailedJobContract(t *testing.T, newEnv func(t *testing.T) FailedJobEnv) 
 		{"a personal data export is listed outside a group only", failedJobContractPersonalList},
 		{"a retry builds a personal data export again", failedJobContractPersonalRetry},
 		{"a discarded personal data export keeps its row", failedJobContractPersonalDiscard},
+		{"failed before limits the list and the count", failedJobContractFailedBefore},
+		{"a bulk discard marks the jobs that failed before the time", failedJobContractDiscardFailed},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -673,4 +675,116 @@ func failedJobContractPersonalDiscard(t *testing.T, env FailedJobEnv) {
 	c.Assert(got.Status, qt.Equals, models.PersonalDataExportStatusFailed)
 	c.Assert(got.ErrorMessage, qt.Equals, "the account is not active")
 	c.Assert(got.DiscardedAt, qt.IsNotNil)
+}
+
+// The seed backdates every failure but the intake scan's, which fails at
+// the wall clock: a cutoff a day ago leaves the scan out, one an hour ahead
+// takes it in.
+func failedJobContractFailedBefore(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	dayAgo := registry.FailedJobScope{FailedBefore: now.Add(-24 * time.Hour)}
+	ahead := registry.FailedJobScope{FailedBefore: now.Add(time.Hour)}
+
+	for _, jobType := range models.FailedJobGroupTypes() {
+		want := []string{a[jobType]}
+		if jobType == models.WorkerTypeIntake {
+			want = []string{}
+		}
+		c.Assert(failedIDs(c, env, jobType, dayAgo), qt.DeepEquals, want, qt.Commentf("%s", jobType))
+		n, err := env.Jobs.CountFailed(ctx, jobType, dayAgo)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, len(want), qt.Commentf("%s", jobType))
+		c.Assert(failedIDs(c, env, jobType, ahead), qt.DeepEquals, []string{a[jobType]}, qt.Commentf("%s", jobType))
+	}
+
+	personal := seedPersonalExports(c, env, now.Add(-48*time.Hour))
+	personalType := models.FailedJobTypePersonalDataExport
+	c.Assert(failedIDs(c, env, personalType, dayAgo), qt.DeepEquals, []string{personal.ID})
+	n, err := env.Jobs.CountFailed(ctx, personalType, dayAgo)
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+	c.Assert(failedIDs(c, env, personalType, registry.FailedJobScope{FailedBefore: now.Add(-72 * time.Hour)}), qt.HasLen, 0)
+
+	// An export that failed without a completion time counts from its
+	// creation, which the postgres registry sets to the time of Create.
+	g := env.A
+	undated, err := g.Set.ExportRegistry.Create(g.Ctx, models.Export{
+		Type:         models.ExportTypeFullDatabase,
+		Status:       models.ExportStatusFailed,
+		Description:  "Old backup",
+		ErrorMessage: "failed",
+		CreatedDate:  models.NewPTimestamp(now),
+	})
+	c.Assert(err, qt.IsNil)
+	c.Assert(failedIDs(c, env, models.WorkerTypeExport, dayAgo), qt.DeepEquals, []string{a[models.WorkerTypeExport]})
+	ids := failedIDs(c, env, models.WorkerTypeExport, ahead)
+	c.Assert(ids, qt.HasLen, 2)
+	c.Assert(ids, qt.Contains, undated.ID)
+}
+
+func failedJobContractDiscardFailed(t *testing.T, env FailedJobEnv) {
+	c := qt.New(t)
+	ctx := context.Background()
+	now := time.Now().UTC().Truncate(time.Second)
+	a := seedFailedJobs(c, env, env.A, now.Add(-48*time.Hour))
+	b := seedFailedJobs(c, env, env.B, now.Add(-48*time.Hour))
+	dayAgoInA := groupScope(env, env.A)
+	dayAgoInA.FailedBefore = now.Add(-24 * time.Hour)
+
+	for _, jobType := range models.FailedJobGroupTypes() {
+		_, err := env.Jobs.DiscardFailed(ctx, jobType, groupScope(env, env.A), now)
+		c.Assert(err, qt.ErrorIs, registry.ErrFieldRequired, qt.Commentf("%s: a bulk discard needs a time", jobType))
+
+		want := 1
+		if jobType == models.WorkerTypeIntake {
+			want = 0
+		}
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, want, qt.Commentf("%s", jobType))
+		n, err = env.Jobs.DiscardFailed(ctx, jobType, dayAgoInA, now)
+		c.Assert(err, qt.IsNil)
+		c.Assert(n, qt.Equals, 0, qt.Commentf("%s: a job is discarded once", jobType))
+
+		c.Assert(failedIDs(c, env, jobType, groupScope(env, env.B)), qt.DeepEquals, []string{b[jobType]},
+			qt.Commentf("%s: the other group keeps its job", jobType))
+	}
+	c.Assert(failedIDs(c, env, models.WorkerTypeIntake, groupScope(env, env.A)), qt.DeepEquals, []string{a[models.WorkerTypeIntake]})
+
+	// Across the tenant, a cutoff ahead of now takes the rest.
+	ahead := registry.FailedJobScope{TenantID: env.TenantID, FailedBefore: now.Add(time.Hour)}
+	total := 0
+	for _, jobType := range models.FailedJobGroupTypes() {
+		n, err := env.Jobs.DiscardFailed(ctx, jobType, ahead, now)
+		c.Assert(err, qt.IsNil)
+		total += n
+		c.Assert(failedIDs(c, env, jobType, registry.FailedJobScope{}), qt.HasLen, 0, qt.Commentf("%s", jobType))
+	}
+	c.Assert(total, qt.Equals, len(models.FailedJobGroupTypes())+1)
+
+	// A personal data export belongs to no group: a group scope does not
+	// reach it, the tenant does.
+	personal := seedPersonalExports(c, env, now.Add(-48*time.Hour))
+	personalType := models.FailedJobTypePersonalDataExport
+	_, err := env.Jobs.DiscardFailed(ctx, personalType, dayAgoInA, now)
+	c.Assert(err, qt.ErrorIs, registry.ErrUnknownFailedJobType)
+	dayAgoInTenant := registry.FailedJobScope{TenantID: env.TenantID, FailedBefore: now.Add(-24 * time.Hour)}
+	n, err := env.Jobs.DiscardFailed(ctx, personalType, dayAgoInTenant, now)
+	c.Assert(err, qt.IsNil)
+	c.Assert(n, qt.Equals, 1)
+	c.Assert(failedIDs(c, env, personalType, registry.FailedJobScope{}), qt.HasLen, 0)
+	discarded, err := env.PersonalExports.Get(ctx, personal.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(discarded.Status, qt.Equals, models.PersonalDataExportStatusFailed)
+	c.Assert(discarded.DiscardedAt, qt.IsNotNil)
+
+	// The rows stay failed, with their errors.
+	export, err := env.A.Set.ExportRegistry.Get(env.A.Ctx, a[models.WorkerTypeExport])
+	c.Assert(err, qt.IsNil)
+	c.Assert(export.Status, qt.Equals, models.ExportStatusFailed)
+	c.Assert(export.ErrorMessage, qt.Equals, "disk full")
+	c.Assert(export.DiscardedAt, qt.IsNotNil)
 }

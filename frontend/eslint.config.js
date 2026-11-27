@@ -57,7 +57,7 @@ export default [
         {
           selector: "JSXOpeningElement[name.name='select']",
           message:
-            "Use the shadcn <Select> primitive (@/components/ui/select) for form & settings dropdowns. Native <select> is allowed only for utility/compact/mobile selectors — annotate with `// eslint-disable-next-line no-restricted-syntax -- <reason>`. See devdocs/frontend/forms.md.",
+            "Use the shadcn <Select> (@/components/ui/select) for a form or settings dropdown, and <NativeSelect> (@/components/ui/native-select) for a utility select that keeps the native element (a sort picker, a bulk bar, a per-row picker). Never a raw <select>. See devdocs/frontend/forms.md → Dropdowns.",
         },
       ],
       // eslint-plugin-react-hooks 5.x added a React-Compiler ruleset that
