@@ -31,6 +31,7 @@ type CurrencyMigrationRegistryFactory struct {
 	auditLock    *sync.RWMutex
 	auditRows    *[]*models.CurrencyMigrationAuditRow
 	hmacKey      []byte
+	groups       registry.LocationGroupRegistry
 }
 
 type CurrencyMigrationRegistry struct {
@@ -42,6 +43,7 @@ type CurrencyMigrationRegistry struct {
 	auditLock *sync.RWMutex
 	auditRows *[]*models.CurrencyMigrationAuditRow
 	hmacKey   []byte
+	groups    registry.LocationGroupRegistry
 }
 
 var _ registry.CurrencyMigrationRegistry = (*CurrencyMigrationRegistry)(nil)
@@ -67,6 +69,14 @@ func generateRandomKey() []byte {
 		panic("failed to generate random HMAC key for currency migration registry: " + err.Error())
 	}
 	return k
+}
+
+// SetLocationGroupRegistry gives the factory the groups whose
+// currency_migration_id DeleteFinishedBefore must not delete. Registries
+// created before the call do not see them. Without it, no migration counts
+// as referenced.
+func (f *CurrencyMigrationRegistryFactory) SetLocationGroupRegistry(groups registry.LocationGroupRegistry) {
+	f.groups = groups
 }
 
 // SetHMACKey overrides the signing key for preview tokens. Mirrors the
@@ -105,6 +115,7 @@ func (f *CurrencyMigrationRegistryFactory) CreateUserRegistry(ctx context.Contex
 		auditLock: f.auditLock,
 		auditRows: f.auditRows,
 		hmacKey:   f.hmacKey,
+		groups:    f.groups,
 	}, nil
 }
 
@@ -120,6 +131,7 @@ func (f *CurrencyMigrationRegistryFactory) CreateServiceRegistry() registry.Curr
 		auditLock: f.auditLock,
 		auditRows: f.auditRows,
 		hmacKey:   f.hmacKey,
+		groups:    f.groups,
 	}
 }
 
@@ -411,6 +423,64 @@ func (r *CurrencyMigrationRegistry) SweepStuckRunning(_ context.Context, now tim
 		swept = append(swept, &out)
 	}
 	return swept, nil
+}
+
+// DeleteFinishedBefore mirrors the postgres registry. The groups are read
+// before the migrations: a group references only a pending or running
+// migration when it starts one, and such a migration is never deleted.
+func (r *CurrencyMigrationRegistry) DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error) {
+	if !r.service {
+		return 0, errxtrace.Wrap("DeleteFinishedBefore requires a service registry", registry.ErrUserContextRequired)
+	}
+	referenced := make(map[string]bool)
+	if r.groups != nil {
+		groups, err := r.groups.List(ctx)
+		if err != nil {
+			return 0, errxtrace.Wrap("failed to list groups", err)
+		}
+		for _, group := range groups {
+			if group.CurrencyMigrationID != nil {
+				referenced[*group.CurrencyMigrationID] = true
+			}
+		}
+	}
+
+	r.lock.Lock()
+	deleted := make(map[string]bool)
+	for pair := r.items.Oldest(); pair != nil; pair = pair.Next() {
+		if limit > 0 && len(deleted) == limit {
+			break
+		}
+		op := pair.Value
+		if !op.Status.IsTerminal() || referenced[op.ID] {
+			continue
+		}
+		finished := op.CreatedAt
+		if op.CompletedAt != nil {
+			finished = *op.CompletedAt
+		}
+		if finished.Before(before) {
+			deleted[op.ID] = true
+		}
+	}
+	for id := range deleted {
+		r.items.Delete(id)
+	}
+	r.lock.Unlock()
+
+	if len(deleted) == 0 {
+		return 0, nil
+	}
+	r.auditLock.Lock()
+	defer r.auditLock.Unlock()
+	kept := make([]*models.CurrencyMigrationAuditRow, 0, len(*r.auditRows))
+	for _, row := range *r.auditRows {
+		if !deleted[row.MigrationID] {
+			kept = append(kept, row)
+		}
+	}
+	*r.auditRows = kept
+	return len(deleted), nil
 }
 
 func (r *CurrencyMigrationRegistry) IssuePreviewToken(inputs registry.PreviewTokenInputs) (string, error) {

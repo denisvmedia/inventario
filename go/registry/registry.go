@@ -2235,6 +2235,16 @@ type CurrencyMigrationRegistry interface {
 	// the rows it transitioned.
 	SweepStuckRunning(ctx context.Context, now time.Time, threshold time.Duration) ([]*models.CurrencyMigration, error)
 
+	// DeleteFinishedBefore deletes at most limit completed and failed
+	// migrations, discarded or not, that finished before the cutoff,
+	// together with their audit rows, and returns how many it deleted.
+	// A migration that has no completion time counts from its creation.
+	// A pending or running migration is never deleted, and neither is
+	// one a group still references through
+	// location_groups.currency_migration_id. A limit of zero or less
+	// deletes every match. Service registry only.
+	DeleteFinishedBefore(ctx context.Context, before time.Time, limit int) (int, error)
+
 	// IssuePreviewToken signs `inputs` with the registry's HMAC key and
 	// returns the encoded token. The token is stateless — IssuePreviewToken
 	// does not write anything; VerifyPreviewToken re-derives the
