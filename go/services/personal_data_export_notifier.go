@@ -5,8 +5,6 @@ import (
 	"log/slog"
 	"strings"
 
-	errxtrace "github.com/go-extras/errx/stacktrace"
-
 	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
@@ -25,6 +23,10 @@ const AccountSettingsPath = "/settings?section=account"
 // A user whose tenant is not active gets no email (tenantGate): they cannot
 // sign in, and the download is refused until the tenant is active again. The
 // export itself is kept and stays listed in Account settings.
+//
+// A tenant lookup that fails sends the email anyway. The email goes out once
+// and nothing retries it, while the reminder sweeps can retry a row on the
+// next tick. Most tenants are active, so a lost email is the likelier harm.
 type PersonalDataExportNotifier struct {
 	email     EmailService
 	prefs     *notifications.Service
@@ -50,7 +52,9 @@ func (n *PersonalDataExportNotifier) PersonalDataExportReady(ctx context.Context
 	}
 	active, err := newTenantGate(n.tenants).active(ctx, user.TenantID)
 	if err != nil {
-		return errxtrace.Wrap("personal data export: check tenant", err)
+		slog.ErrorContext(ctx, "Personal data export ready: failed to read the user's tenant, sending the email anyway",
+			"user_id", user.ID, "tenant_id", user.TenantID, "export_id", export.ID, "error", err)
+		active = true
 	}
 	if !active {
 		slog.InfoContext(ctx, "Personal data export ready, no email: the user's tenant is not active",

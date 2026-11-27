@@ -251,3 +251,26 @@ func TestPersonalDataExportNotifier_SkipsTenantThatIsNotActive(t *testing.T) {
 		})
 	}
 }
+
+// tenantUnreadable fails every tenant lookup.
+type tenantUnreadable struct {
+	registry.TenantRegistry
+}
+
+func (tenantUnreadable) Get(context.Context, string) (*models.Tenant, error) {
+	return nil, errRegistryDown
+}
+
+// The export-ready email is sent once and nothing retries it, so a tenant
+// lookup that fails sends it rather than dropping it.
+func TestPersonalDataExportNotifier_SendsWhenTheTenantCannotBeRead(t *testing.T) {
+	c := qt.New(t)
+	env := newItemReminderEnv(c)
+	email := &recordingExportReadyEmail{}
+	notifier := services.NewPersonalDataExportNotifier(email, env.fs.SettingsRegistryFactory,
+		tenantUnreadable{TenantRegistry: env.fs.TenantRegistry}, "https://inv.example")
+	export := &models.PersonalDataExport{ExpiresAt: time.Now().Add(time.Hour)}
+
+	c.Assert(notifier.PersonalDataExportReady(context.Background(), env.user, export), qt.IsNil)
+	c.Assert(email.recipients(), qt.DeepEquals, []string{env.user.Email})
+}

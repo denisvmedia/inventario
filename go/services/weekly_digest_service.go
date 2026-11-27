@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"log/slog"
+	"slices"
 	"sort"
 	"time"
 
@@ -86,8 +87,11 @@ type WeeklyDigestStats struct {
 	// AlreadySent counts users whose week was already claimed — another replica,
 	// or a restart inside the same week.
 	AlreadySent int
-	// Failed counts users whose digest could not be built or enqueued. The next
-	// tick retries them, because the claim is rolled back on a send failure.
+	// Failed counts the groups that could not be read, the users whose digest
+	// was held back because one of their groups could not be read, and the
+	// users whose digest could not be enqueued. The next tick retries them: a
+	// held-back digest never claims the week, and the claim is rolled back on
+	// a send failure.
 	Failed int
 }
 
@@ -133,8 +137,10 @@ func (s *WeeklyDigestService) SendOnce(ctx context.Context, now time.Time) (Week
 		return stats, errxtrace.Wrap("weekly digest: list groups", err)
 	}
 
-	drafts, order, failed := s.buildDrafts(ctx, groups, activity, prefsCache)
-	stats.Failed += failed
+	drafts, order, unread := s.buildDrafts(ctx, groups, activity, prefsCache)
+	stats.Failed += len(unread)
+	order, heldBack := s.withoutIncompleteDrafts(ctx, drafts, order, unread, window)
+	stats.Failed += heldBack
 
 	for _, userID := range order {
 		draft := drafts[userID]
@@ -164,15 +170,17 @@ func (s *WeeklyDigestService) SendOnce(ctx context.Context, now time.Time) (Week
 // other group then gets no draft, so their week is not claimed and the next
 // digest goes out as usual once the tenant is active again.
 //
-// The third return is how many groups could not be read; those are counted as
-// failures rather than silently producing a thinner digest.
+// The third return holds the IDs of the groups whose tenant or members could
+// not be read. Their members' drafts are incomplete, and SendOnce holds them
+// back (withoutIncompleteDrafts).
 func (s *WeeklyDigestService) buildDrafts(
 	ctx context.Context,
 	groups []*models.LocationGroup,
 	activity map[string]groupActivity,
 	prefsCache *notifications.Cache,
-) (drafts map[string]*digestDraft, order []string, failed int) {
+) (drafts map[string]*digestDraft, order []string, unread map[string]bool) {
 	drafts = map[string]*digestDraft{}
+	unread = map[string]bool{}
 	tenants := newTenantGate(s.factorySet.TenantRegistry)
 
 	for _, group := range groups {
@@ -183,7 +191,7 @@ func (s *WeeklyDigestService) buildDrafts(
 		if err != nil {
 			slog.ErrorContext(ctx, "Weekly digest: failed to read the group's tenant",
 				"group_id", group.ID, "tenant_id", group.TenantID, "error", err)
-			failed++
+			unread[group.ID] = true
 			continue
 		}
 		if !active {
@@ -193,7 +201,7 @@ func (s *WeeklyDigestService) buildDrafts(
 		if err != nil {
 			slog.ErrorContext(ctx, "Weekly digest: failed to list group members",
 				"group_id", group.ID, "error", err)
-			failed++
+			unread[group.ID] = true
 			continue
 		}
 		for _, m := range members {
@@ -218,7 +226,47 @@ func (s *WeeklyDigestService) buildDrafts(
 			draft.add(group, activity[group.ID])
 		}
 	}
-	return drafts, order, failed
+	return drafts, order, unread
+}
+
+// withoutIncompleteDrafts drops from order every user who is a member of a
+// group in unread, and returns the rest with the number dropped. Sending such
+// a user's draft would leave that group out and claim the week, so the next
+// sweep could not send the full digest. Unsent, the week stays unclaimed and
+// the next sweep tries again.
+//
+// The membership is read per user, because a group whose members could not be
+// listed cannot say who they are. A user whose memberships cannot be read is
+// dropped as well.
+func (s *WeeklyDigestService) withoutIncompleteDrafts(
+	ctx context.Context,
+	drafts map[string]*digestDraft,
+	order []string,
+	unread map[string]bool,
+	window WeeklyDigestWindow,
+) (kept []string, heldBack int) {
+	if len(unread) == 0 {
+		return order, 0
+	}
+	kept = make([]string, 0, len(order))
+	for _, userID := range order {
+		user := drafts[userID].user
+		memberships, err := s.factorySet.GroupMembershipRegistry.ListByUser(ctx, user.TenantID, userID)
+		if err != nil {
+			slog.ErrorContext(ctx, "Weekly digest: failed to list the user's groups, holding the digest back",
+				"user_id", userID, "week_start", window.Start.Format(time.DateOnly), "error", err)
+			heldBack++
+			continue
+		}
+		if slices.ContainsFunc(memberships, func(m *models.GroupMembership) bool { return m != nil && unread[m.GroupID] }) {
+			slog.WarnContext(ctx, "Weekly digest: one of the user's groups could not be read, holding the digest back",
+				"user_id", userID, "week_start", window.Start.Format(time.DateOnly))
+			heldBack++
+			continue
+		}
+		kept = append(kept, userID)
+	}
+	return kept, heldBack
 }
 
 // digestRecipient returns the user to send to, or nil when there is nobody to

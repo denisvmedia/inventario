@@ -793,6 +793,12 @@ Suspend and reactivate:
   requested before the suspension is still built and listed; only its
   email is skipped. The workers that send no email (thumbnails, Trash
   purge, orphan file cleanup) keep running.
+- When the tenant cannot be read (a database error), a reminder is retried
+  on the next sweep. The weekly digest of every member of the affected
+  group, and of a group whose members cannot be listed, waits for the next
+  sweep too, without claiming the week, so the digest that goes out covers
+  all of the member's groups. The export-ready email
+  is sent anyway: it goes out once and nothing retries it.
 - Reactivating makes the tenant active again. The sessions the suspension
   ended stay ended, and the revoked API tokens stay revoked: users sign in
   again and create new tokens.
