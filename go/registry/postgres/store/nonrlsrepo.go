@@ -41,7 +41,7 @@ func NewSQLRegistry[T any, P ptrIDable[T]](dbx *sqlx.DB, table TableName) *NonRL
 // Scan returns an iterator over all entities in the table
 func (r *NonRLSRepository[T, P]) Scan(ctx context.Context) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
-		tx, err := r.dbx.Beginx()
+		tx, err := r.dbx.BeginTxx(ctx, nil)
 		if err != nil {
 			var zero T
 			yield(zero, err)
@@ -61,7 +61,7 @@ func (r *NonRLSRepository[T, P]) Scan(ctx context.Context) iter.Seq2[T, error] {
 // ScanByField returns an iterator over entities matching a field value
 func (r *NonRLSRepository[T, P]) ScanByField(ctx context.Context, field FieldValue) iter.Seq2[T, error] {
 	return func(yield func(T, error) bool) {
-		tx, err := r.dbx.Beginx()
+		tx, err := r.dbx.BeginTxx(ctx, nil)
 		if err != nil {
 			var zero T
 			yield(zero, err)
@@ -79,8 +79,8 @@ func (r *NonRLSRepository[T, P]) ScanByField(ctx context.Context, field FieldVal
 }
 
 // ScanOneByField scans a single entity by field value
-func (r *NonRLSRepository[T, P]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) error {
-	tx, err := r.dbx.Beginx()
+func (r *NonRLSRepository[T, P]) ScanOneByField(ctx context.Context, field FieldValue, entity *T) (err error) {
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -98,7 +98,7 @@ func (r *NonRLSRepository[T, P]) ScanOneByField(ctx context.Context, field Field
 
 // Count returns the total number of entities in the table
 func (r *NonRLSRepository[T, P]) Count(ctx context.Context) (int, error) {
-	tx, err := r.dbx.Beginx()
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return 0, err
 	}
@@ -114,9 +114,9 @@ func (r *NonRLSRepository[T, P]) Count(ctx context.Context) (int, error) {
 }
 
 // Create creates a new entity with transaction support
-func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (T, error) {
+func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (_ T, err error) {
 	var zero T
-	tx, err := r.dbx.Beginx()
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return zero, errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -150,8 +150,8 @@ func (r *NonRLSRepository[T, P]) Create(ctx context.Context, entity T, checkerFn
 }
 
 // Update updates an entity with transaction support
-func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) error {
-	tx, err := r.dbx.Beginx()
+func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -194,8 +194,8 @@ func (r *NonRLSRepository[T, P]) Update(ctx context.Context, entity T, checkerFn
 }
 
 // Delete deletes an entity by ID with transaction support
-func (r *NonRLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) error {
-	tx, err := r.dbx.Beginx()
+func (r *NonRLSRepository[T, P]) Delete(ctx context.Context, id string, checkerFn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
 	}
@@ -229,8 +229,8 @@ func (r *NonRLSRepository[T, P]) Delete(ctx context.Context, id string, checkerF
 }
 
 // Do executes a function within a transaction
-func (r *NonRLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) error {
-	tx, err := r.dbx.Beginx()
+func (r *NonRLSRepository[T, P]) Do(ctx context.Context, operationFn func(context.Context, *sqlx.Tx) error) (err error) {
+	tx, err := r.dbx.BeginTxx(ctx, nil)
 	if err != nil {
 		return errxtrace.Wrap("failed to begin transaction", err)
 	}

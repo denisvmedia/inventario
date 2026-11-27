@@ -648,6 +648,14 @@ when to add an entry and where it goes.
 
 ### Fixed
 
+- A request that waits for a free database connection stops waiting when the
+  client gives up or the request times out. Before, it stayed in the queue
+  with no deadline, so under load the queue grew instead of shedding
+  requests, and requests that each held one connection while waiting for a
+  second could stop the server from answering until it was restarted. A save
+  whose transaction did not commit is now reported as failed; before, a
+  failed commit was reported as a success
+  ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
