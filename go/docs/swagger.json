@@ -10998,6 +10998,12 @@
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
+                    },
+                    "423": {
+                        "description": "An item tag, while a currency migration runs in the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
                     }
                 }
             },
@@ -11059,6 +11065,12 @@
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "423": {
+                        "description": "An item tag, while a currency migration runs in the group",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

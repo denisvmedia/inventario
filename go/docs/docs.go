@@ -11005,6 +11005,12 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
+                    },
+                    "423": {
+                        "description": "An item tag, while a currency migration runs in the group",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
                     }
                 }
             },
@@ -11066,6 +11072,12 @@ const docTemplate = `{
                     },
                     "422": {
                         "description": "User-side request problem",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "423": {
+                        "description": "An item tag, while a currency migration runs in the group",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }

@@ -805,6 +805,13 @@ when to add an entry and where it goes.
   the window stays narrow for a second
   ([#2829](https://github.com/denisvmedia/inventario/pull/2829)).
 
+- Editing or deleting an item tag while a currency migration runs in the
+  group is refused at once with "Locked while a currency migration is
+  running.", as an item change is. Before, the request waited for the
+  migration and ended in a timeout or a server error when the migration
+  took longer than a minute. File tags are not affected
+  ([#2982](https://github.com/denisvmedia/inventario/issues/2982)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.
