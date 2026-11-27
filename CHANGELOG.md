@@ -1102,6 +1102,11 @@ when to add an entry and where it goes.
   after the upgrade it reads the start of every JPEG photo once, in the
   background, and makes the thumbnails of the turned ones again
   ([#2980](https://github.com/denisvmedia/inventario/issues/2980)).
+- With "reduce motion" turned on in the operating system, dialogs, menus,
+  popovers, tooltips and list rows fade in and out in place instead of
+  zooming or sliding, and a side panel appears without sliding in. Before,
+  these animations played the same with the setting on
+  ([#2932](https://github.com/denisvmedia/inventario/issues/2932)).
 
 ### Security
 

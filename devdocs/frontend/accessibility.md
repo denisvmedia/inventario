@@ -109,17 +109,21 @@ Hard rules:
 
 ## Reduced motion
 
-The user's `prefers-reduced-motion: reduce` preference disables the
-animations that ship with `tw-animate-css` (it gates them on
-`@media (prefers-reduced-motion: no-preference)` automatically).
-When you write a new transition:
+`tw-animate-css` has no reduced-motion rule of its own. Under
+`prefers-reduced-motion: reduce`, a rule in `src/index.css` sets the
+scale, translate and rotate of every `animate-in` / `animate-out` use
+back to rest, so dialogs, menus and list rows fade without zooming or
+sliding. A new use of these utilities (`animate-in`, `fade-in-0`,
+`zoom-in-95`, `slide-in-from-*`) is covered without a gate of its own.
+
+Anything else that moves, such as a `transition-transform` or your own
+`@keyframes`, needs its own gate:
 
 ```tsx
 <div className="transition-colors motion-reduce:transition-none">…</div>
 ```
 
-— or just lean on `tw-animate-css` utilities (`animate-in`, `fade-in-0`,
-`zoom-in-95`), which already respect the preference.
+See [design/05-motion.md](design/05-motion.md#reduced-motion).
 
 Don't fall back to JS-driven animations (Framer Motion, react-spring) —
 none of them are in the bundle, and Tailwind v4 + `tw-animate-css`

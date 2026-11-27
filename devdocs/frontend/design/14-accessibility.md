@@ -160,14 +160,16 @@ the parent dialog closes.
 
 ## Reduced motion
 
-`prefers-reduced-motion: reduce` disables `tw-animate-css`
-animations automatically. Custom transitions opt out via:
+Under `prefers-reduced-motion: reduce` the enter and exit animations of
+`tw-animate-css` fade without moving: a rule in `frontend/src/index.css`
+sets their scale, translate and rotate back to rest. The library has no
+such rule of its own. Other transitions opt out at the use site:
 
 ```tsx
 <div className="transition-colors motion-reduce:transition-none">
 ```
 
-See [05-motion.md](05-motion.md).
+See [05-motion.md](05-motion.md#reduced-motion).
 
 ## Reduced data
 
