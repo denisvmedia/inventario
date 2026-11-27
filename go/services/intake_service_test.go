@@ -840,7 +840,7 @@ func TestIntake_CustomFieldValuesFromTheScan(t *testing.T) {
 			gift.ID:      {Value: true, Confidence: 0.2},
 			weight.ID:    {Value: 1.5, Confidence: 0.9},
 			printed.ID:   {Value: "2024-13-40", Confidence: 0.9},
-			notes.ID:     {Value: "fragile", Confidence: 0.9},
+			notes.ID:     {Value: "frag\x00ile", Confidence: 0.9},
 			"gone-field": {Value: "x", Confidence: 0.9},
 		},
 	})
@@ -860,12 +860,13 @@ func TestIntake_CustomFieldValuesFromTheScan(t *testing.T) {
 	detail := f.get(c, f.ctx, session.Session.ID)
 	c.Assert(detail.Candidates, qt.HasLen, 1)
 	kettle := detail.Candidates[0]
+	// A date an item could not store is not offered, and a NUL character is
+	// removed from the text, since PostgreSQL cannot store it.
 	c.Check(kettle.CustomFields, qt.DeepEquals, models.IntakeFields{
 		card.ID:      {Value: "WC-123", Confidence: 0.9},
 		condition.ID: {Value: used, Confidence: 0.8},
 		gift.ID:      {Value: true, Confidence: 0.2},
 		weight.ID:    {Value: 1.5, Confidence: 0.9},
-		printed.ID:   {Value: "2024-13-40", Confidence: 0.9},
 		notes.ID:     {Value: "fragile", Confidence: 0.9},
 	})
 	c.Check(kettle.AcceptsCustomField(gift.ID), qt.IsFalse, qt.Commentf("a low confidence value is not accepted by default"))
@@ -883,7 +884,7 @@ func TestIntake_CustomFieldValuesFromTheScan(t *testing.T) {
 	accepted = append(accepted, gift.ID)
 	reviewed, err := f.intake.ReviewCandidate(f.ctx, session.Session.ID, kettle.ID, registry.IntakeCandidateReview{AcceptedCustomFields: &accepted})
 	c.Assert(err, qt.IsNil)
-	c.Check(reviewed.AcceptedCustomFields, qt.HasLen, 6, qt.Commentf("a repeated ID is kept once"))
+	c.Check(reviewed.AcceptedCustomFields, qt.HasLen, 5, qt.Commentf("a repeated ID is kept once"))
 
 	// The notes field is deleted after the scan.
 	c.Assert(fields.Delete(f.ctx, notes.ID), qt.IsNil)

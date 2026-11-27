@@ -26,7 +26,7 @@ import { Page, PageHeader } from "@/components/ui/page"
 import { Skeleton } from "@/components/ui/skeleton"
 import type { CustomField } from "@/features/customFields/api"
 import { useCustomFields } from "@/features/customFields/hooks"
-import { customFieldGuessText } from "@/features/customFields/values"
+import { customFieldGuessText, customFieldGuessUsable } from "@/features/customFields/values"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useMyGroupRole } from "@/features/group/roles"
 import {
@@ -493,10 +493,12 @@ function CandidateRow({ sessionId, candidate, canWrite }: CandidateRowProps) {
   const price = candidatePrice(candidate)
   const id = candidate.id
   // The custom fields the scan read a value for, in the group's order. A
-  // field deleted since the scan is not shown, and its value goes nowhere.
-  const customFields = (useCustomFields().data ?? []).filter(
-    (f) => candidate.customFields[f.id] !== undefined
-  )
+  // field deleted since the scan, or a select option removed since, is not
+  // shown, and its value goes nowhere.
+  const customFields = (useCustomFields().data ?? []).filter((f) => {
+    const guess = candidate.customFields[f.id]
+    return guess !== undefined && customFieldGuessUsable(f, guess.value)
+  })
   const acceptedCount =
     candidate.acceptedFields.length +
     customFields.filter((f) => candidate.acceptedCustomFields.includes(f.id)).length

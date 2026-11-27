@@ -66,6 +66,13 @@ export function toFormValue(raw: unknown): CustomFieldFormValue {
   return { value: formText(raw), currency: "" }
 }
 
+// customFieldGuessUsable reports whether an item can take a value an AI scan
+// read for field def: a select field's option may be gone since the scan.
+export function customFieldGuessUsable(def: CustomField, value: unknown): boolean {
+  if (def.type === "select") return def.options.some((o) => o.id === value)
+  return true
+}
+
 // customFieldGuessText shows a value an AI scan read for field def: a select
 // field's option by its label, yes/no in words, anything else as it is.
 export function customFieldGuessText(

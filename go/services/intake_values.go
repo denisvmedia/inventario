@@ -55,8 +55,10 @@ func isIntakeReviewField(name string) bool {
 // source. A multi-product result gives one candidate per product in the
 // order the provider listed them, most prominent first. Products the scan
 // read nothing for are left out. The custom field guesses are those the
-// scan kept for the group's fields, a select value already an option ID.
-func intakeCandidatesFromScan(result *aivision.ScanResult) []models.IntakeCandidate {
+// scan kept for the group's fields in defs, a select value already an option
+// ID; a value an item could not store is left out, so the review never
+// offers it.
+func intakeCandidatesFromScan(result *aivision.ScanResult, defs map[string]*models.CustomFieldDefinition) []models.IntakeCandidate {
 	if result == nil {
 		return nil
 	}
@@ -67,7 +69,7 @@ func intakeCandidatesFromScan(result *aivision.ScanResult) []models.IntakeCandid
 	out := make([]models.IntakeCandidate, 0, len(items))
 	for _, item := range items {
 		fields := intakeGuesses(item.Fields)
-		custom := intakeGuesses(item.CustomFields)
+		custom := storableCustomGuesses(defs, intakeGuesses(item.CustomFields))
 		if !hasReviewValue(fields) && len(custom) == 0 {
 			continue
 		}
@@ -95,12 +97,47 @@ func intakeCandidatesFromScan(result *aivision.ScanResult) []models.IntakeCandid
 	return out
 }
 
-// intakeGuesses keeps the guesses that hold a value.
+// intakeGuesses keeps the guesses that hold a value. A NUL character is
+// removed from scanned text, since PostgreSQL cannot store it in JSONB.
 func intakeGuesses(guesses map[string]aivision.FieldGuess) models.IntakeFields {
 	out := models.IntakeFields{}
 	for name, guess := range guesses {
 		if guess.Value != nil {
-			out[name] = models.IntakeFieldGuess{Value: guess.Value, Confidence: guess.Confidence}
+			out[name] = models.IntakeFieldGuess{Value: withoutNUL(guess.Value), Confidence: guess.Confidence}
+		}
+	}
+	return out
+}
+
+// withoutNUL removes NUL characters from a scanned string or list of
+// strings.
+func withoutNUL(v any) any {
+	switch v := v.(type) {
+	case string:
+		return strings.ReplaceAll(v, "\x00", "")
+	case []any:
+		out := make([]any, len(v))
+		for i, e := range v {
+			out[i] = withoutNUL(e)
+		}
+		return out
+	case []string:
+		out := make([]string, len(v))
+		for i, e := range v {
+			out[i] = strings.ReplaceAll(e, "\x00", "")
+		}
+		return out
+	}
+	return v
+}
+
+// storableCustomGuesses keeps the custom field guesses an item could store:
+// the field is in defs and its value parses as that field's value.
+func storableCustomGuesses(defs map[string]*models.CustomFieldDefinition, guesses models.IntakeFields) models.IntakeFields {
+	out := models.IntakeFields{}
+	for id, guess := range guesses {
+		if _, ok := storedCustomFieldValue(defs[id], guess.Value); ok {
+			out[id] = guess
 		}
 	}
 	return out
@@ -280,25 +317,36 @@ func acceptedCustomFieldValues(defs map[string]*models.CustomFieldDefinition, ca
 	out := map[string]any{}
 	for _, id := range cand.AcceptedCustomFields {
 		guess, ok := cand.CustomFields[id]
-		def := defs[id]
-		if !ok || def == nil {
+		if !ok {
 			continue
 		}
-		raw, err := json.Marshal(guess.Value)
-		if err != nil {
-			continue
+		if v, ok := storedCustomFieldValue(defs[id], guess.Value); ok {
+			out[id] = v
 		}
-		data, err := def.ParseValue(raw)
-		if err != nil {
-			continue
-		}
-		var v any
-		if stored := data.JSON(def.Type); stored == nil || json.Unmarshal(stored, &v) != nil || v == "" {
-			continue
-		}
-		out[id] = v
 	}
 	return out
+}
+
+// storedCustomFieldValue returns value in the form an item stores it for
+// field def, and false when there is no field or the item could not store
+// the value, or it is empty.
+func storedCustomFieldValue(def *models.CustomFieldDefinition, value any) (any, bool) {
+	if def == nil {
+		return nil, false
+	}
+	raw, err := json.Marshal(value)
+	if err != nil {
+		return nil, false
+	}
+	data, err := def.ParseValue(raw)
+	if err != nil {
+		return nil, false
+	}
+	var v any
+	if stored := data.JSON(def.Type); stored == nil || json.Unmarshal(stored, &v) != nil || v == "" {
+		return nil, false
+	}
+	return v, true
 }
 
 // IntakeDraftSellerNameKey is the draft value that carries a scanned seller

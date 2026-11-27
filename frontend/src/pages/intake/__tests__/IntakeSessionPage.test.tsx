@@ -239,8 +239,10 @@ describe("<IntakeSessionPage />", () => {
       "cf-gift": { value: true, confidence: 0.2 },
       // A field deleted since the scan is not shown.
       "cf-gone": { value: "x", confidence: 0.9 },
+      // Nor is an option removed since the scan.
+      "cf-finish": { value: "opt-removed", confidence: 0.9 },
     }
-    machine.accepted_custom_fields = ["cf-card", "cf-condition", "cf-gone"]
+    machine.accepted_custom_fields = ["cf-card", "cf-condition", "cf-gone", "cf-finish"]
     const fake = intakeHandlers.backend(SLUG, [session])
     server.use(
       ...authHandlers.signedIn(),
@@ -259,6 +261,12 @@ describe("<IntakeSessionPage />", () => {
         }),
         customFieldHandlers.field({ id: "cf-gift", name: "Gift", type: "boolean" }),
         customFieldHandlers.field({ id: "cf-unread", name: "Weight", type: "number" }),
+        customFieldHandlers.field({
+          id: "cf-finish",
+          name: "Finish",
+          type: "select",
+          options: [{ id: "opt-matte", label: "Matte" }],
+        }),
       ]),
       ...fake.handlers
     )
@@ -275,6 +283,7 @@ describe("<IntakeSessionPage />", () => {
     expect(within(list).getByText("Used")).toBeInTheDocument()
     expect(within(list).getByText("Yes")).toBeInTheDocument()
     expect(within(list).queryByText("Weight:")).not.toBeInTheDocument()
+    expect(within(list).queryByText("Finish:")).not.toBeInTheDocument()
     const gift = screen.getByTestId(`intake-custom-field-${machine.id}-cf-gift`)
     expect(gift).not.toBeChecked()
     expect(screen.getByTestId(`intake-custom-field-${machine.id}-cf-card`)).toBeChecked()
