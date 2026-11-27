@@ -12,8 +12,9 @@ export type FailedJobListMeta = Schema<"apiserver.FailedJobListMeta">
 export type FailedJobTypeInfo = Schema<"apiserver.FailedJobTypeInfo">
 type FailedJobListEnvelope = Schema<"apiserver.FailedJobListEnvelope">
 
-// The job types the BE reports failed jobs for, in the BE's order
-// (models.FailedJobTypes).
+// The job types the BE reports failed jobs for on the system-admin plane, in
+// the BE's order (models.FailedJobTypes). A group's list leaves out
+// personal-data-export: a personal data export belongs to a user.
 export const FAILED_JOB_TYPES = [
   "export",
   "import",
@@ -21,6 +22,7 @@ export const FAILED_JOB_TYPES = [
   "thumbnail",
   "intake",
   "currency-migration",
+  "personal-data-export",
 ] as const
 export type FailedJobType = (typeof FAILED_JOB_TYPES)[number]
 

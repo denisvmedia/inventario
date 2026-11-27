@@ -1,4 +1,4 @@
-h1:YXKwMftQXM6Mvu1yk0KtYmgFNRGcExDvNSc38J7etIg=
+h1:eY/2ucWNIfymZcxevyyiEkT8E+pwqt5O5B6Io3Cr4hI=
 1789480900_initial_schema.down.sql h1:1b5WJAVMPaNbRsvj+nzs1R6KLQEEm8xv7OkV0gANX8w=
 1789480900_initial_schema.up.sql h1:isJ61I94xBD3lTD8QEQyAyDKIg4ld2KQSYG8JLxvQJ4=
 1789504168_enable_rls_on_operation_slots.down.sql h1:fZyTow/In0YkYczSN7gM6igXsUSxyJgRjo4QOLf1pWI=
@@ -57,5 +57,9 @@ h1:YXKwMftQXM6Mvu1yk0KtYmgFNRGcExDvNSc38J7etIg=
 1795785551_make_tenant_domain_unique.up.sql h1:Iz9oR20/4uVFYpN0fUIYJf1lc8ZmUV/vlzjKc84fGJk=
 1795791207_add_job_heartbeat.down.sql h1:TJjjeIo7OKKXKdd/hjXrDjSfiNZ42hbGIx/AFWrw7oU=
 1795791207_add_job_heartbeat.up.sql h1:YBZjnbB0ediAqxJJmqFm9m5mYd6epkLNC3uAqrqli1o=
-1795799822_add_commodity_revision.down.sql h1:Ow+FyiM5VO6thABYpNq0dYip3wDyg2hdI8lbeAfygxE=
-1795799822_add_commodity_revision.up.sql h1:UiDhskpaiZXrA7SMles83pc6JMAzapHEjaqYtlTjVHU=
+1795799350_drop_custom_field_text_btree.down.sql h1:3DSP7m0iL92OqMTwhgf/zpcluHls8A+nOrbc+EwHCwc=
+1795799350_drop_custom_field_text_btree.up.sql h1:D8TYkeDA7aztS+C9E6cnZwIswdZ89bA/E9Ve7ZRdUTY=
+1795804536_add_personal_data_export_failed_job_columns.down.sql h1:h1n0jErnVs5r1ZOB+AK8vFOxAlkrqGp0ryeEeNTm1LQ=
+1795804536_add_personal_data_export_failed_job_columns.up.sql h1:6DmF43plcLbSgY3C0QUSFQdafVZRvczrunq0O65LM/k=
+1795808638_add_commodity_revision.down.sql h1:yiRdK2yK2CBQvTjA+B2L+vE3amr5zCV+bNUKQ49prDA=
+1795808638_add_commodity_revision.up.sql h1:EDh0WRlVfXiONm116YZd8KURsZIqUfqNjmYXbHHuvfI=

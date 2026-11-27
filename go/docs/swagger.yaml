@@ -8000,7 +8000,9 @@ paths:
         tenant and ?failed_before to the jobs that failed before a time (a
         job without a failure time counts from its creation), the jobs a bulk
         discard with the same filter takes. `meta.job_types` lists the job
-        types with whether each can be retried.
+        types with whether each can be retried. A personal data export
+        belongs to a user, not to a group; its title is the user's email
+        address.
         An unknown ?type returns 400 with `failed_job.unknown_type`, a
         ?failed_before that is not a date or an RFC 3339 time 400 with
         `failed_job.invalid_failed_before`.
@@ -8013,6 +8015,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: query
         name: type
         type: string
@@ -8075,6 +8078,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: path
         name: jobType
         required: true
@@ -8107,7 +8111,9 @@ paths:
       description: |-
         Puts the failed job back in its queue the way its type runs it again
         (#1307): an export or import runs from the start, a thumbnail gets a
-        fresh set of attempts, an intake scan is due again at once. A restore
+        fresh set of attempts, an intake scan is due again at once, a personal
+        data export is built again from the start and kept until 7 days after
+        the build finishes; it does not count as a new request. A restore
         and a currency migration cannot be retried (409
         `failed_job.not_retryable`); discard them instead. 404
         `failed_job.unknown_type` for an unknown type, 404
@@ -8122,6 +8128,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: path
         name: jobType
         required: true
@@ -8187,6 +8194,7 @@ paths:
         - thumbnail
         - intake
         - currency-migration
+        - personal-data-export
         in: query
         name: type
         type: string
@@ -15827,6 +15835,10 @@ paths:
           description: Tag is in use; pass force=true to strip references
           schema:
             $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
       summary: Delete a tag
       tags:
       - tags
@@ -15897,6 +15909,10 @@ paths:
             $ref: '#/definitions/jsonapi.Errors'
         "422":
           description: User-side request problem
+          schema:
+            $ref: '#/definitions/jsonapi.Errors'
+        "423":
+          description: An item tag, while a currency migration runs in the group
           schema:
             $ref: '#/definitions/jsonapi.Errors'
       summary: Update a tag

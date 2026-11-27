@@ -79,21 +79,24 @@ func (d deliveredDrafts) groupsCreatedBy(tenantID, userID string) []string {
 }
 
 // reattributeCreator gives the delivered drafts userID created to
-// heirs[groupID]. The ones whose group has no heir stay, for the purge of
-// the user's drafts.
-func (d deliveredDrafts) reattributeCreator(tenantID, userID string, heirs map[string]string) {
+// heirs[groupID] and returns how many each group handed over. The ones whose
+// group has no heir stay, for the purge of the user's drafts.
+func (d deliveredDrafts) reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int {
 	d.f.writes.Lock()
 	defer d.f.writes.Unlock()
 	d.f.base.lock.Lock()
 	defer d.f.base.lock.Unlock()
+	moved := map[string]int{}
 	for pair := d.f.base.items.Oldest(); pair != nil; pair = pair.Next() {
 		draft := pair.Value
 		if heir := heirs[draft.GroupID]; heir != "" && d.owned(draft, tenantID, userID) {
 			cp := *draft
 			cp.CreatedByUserID = heir
 			pair.Value = &cp
+			moved[draft.GroupID]++
 		}
 	}
+	return moved
 }
 
 // CommodityDraftRegistry is the context-aware in-memory registry of drafts.

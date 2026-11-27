@@ -22,7 +22,8 @@
       "restore": "Obnovení",
       "thumbnail": "Náhled",
       "intake": "Načtení dokumentu",
-      "currencyMigration": "Převod měny"
+      "currencyMigration": "Převod měny",
+      "personalDataExport": "Export osobních dat"
     }
   },
   "listError": {

@@ -43,10 +43,11 @@ const (
 	// the invites they created, reminders that email only them, drafts,
 	// intake sessions and saved views. UserPurger deletes them.
 	deletionRemoves
-	// deletionHandsOver marks rows that belong to the group: item history,
-	// loans, service records, supply links, maintenance, reminder send
-	// records, item types, custom fields, delivered documents, restores and
-	// currency changes. UserPurger gives them to another member of the group.
+	// deletionHandsOver marks rows that belong to the group: tags, sellers,
+	// item history, loans, service records, supply links, maintenance,
+	// reminder send records, item types, custom fields, delivered documents,
+	// restores and currency changes. UserPurger gives them to another member
+	// of the group and records each hand-over in the audit log.
 	deletionHandsOver
 )
 
@@ -84,8 +85,8 @@ var userOwnedTables = []userOwnedTable{
 	{registry.OwnedFileLinks, func(t store.TableNames) store.TableName { return t.FileLinks() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedLocations, func(t store.TableNames) store.TableName { return t.Locations() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedAreas, func(t store.TableNames) store.TableName { return t.Areas() }, createdByUserIDColumn, "group_id", deletionBlocks},
-	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", deletionBlocks},
-	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", deletionBlocks},
+	{registry.OwnedTags, func(t store.TableNames) store.TableName { return t.Tags() }, createdByUserIDColumn, "group_id", deletionHandsOver},
+	{registry.OwnedSellers, func(t store.TableNames) store.TableName { return t.Sellers() }, createdByUserIDColumn, "group_id", deletionHandsOver},
 	{registry.OwnedExports, func(t store.TableNames) store.TableName { return t.Exports() }, createdByUserIDColumn, "group_id", deletionBlocks},
 	{registry.OwnedCommodityEvents, func(t store.TableNames) store.TableName { return t.CommodityEvents() }, createdByUserIDColumn, "group_id", deletionHandsOver},
 	{registry.OwnedCommodityLoans, func(t store.TableNames) store.TableName { return t.CommodityLoans() }, createdByUserIDColumn, "group_id", deletionHandsOver},

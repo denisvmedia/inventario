@@ -47,8 +47,27 @@ type FailedJobPage struct {
 	Total int
 }
 
-func (s *FailedJobService) checkType(jobType models.WorkerType) error {
-	if !models.IsFailedJobType(jobType) {
+// FailedJobTypesIn returns the types whose failed jobs the scope reaches: in
+// a group, only the types whose jobs belong to a group.
+func FailedJobTypesIn(scope registry.FailedJobScope) []models.WorkerType {
+	if scope.GroupID != "" {
+		return models.FailedJobGroupTypes()
+	}
+	return models.FailedJobTypes()
+}
+
+// IsFailedJobTypeIn reports whether the scope reaches failed jobs of the
+// type. A group scope does not reach a personal data export, which belongs
+// to a user.
+func IsFailedJobTypeIn(scope registry.FailedJobScope, jobType models.WorkerType) bool {
+	if scope.GroupID != "" {
+		return models.IsFailedJobGroupType(jobType)
+	}
+	return models.IsFailedJobType(jobType)
+}
+
+func (s *FailedJobService) checkType(jobType models.WorkerType, scope registry.FailedJobScope) error {
+	if !IsFailedJobTypeIn(scope, jobType) {
 		return errxtrace.Classify(registry.ErrUnknownFailedJobType, errx.Attrs("job_type", string(jobType)))
 	}
 	return nil
@@ -56,9 +75,9 @@ func (s *FailedJobService) checkType(jobType models.WorkerType) error {
 
 // List returns the page of failed jobs the query selects.
 func (s *FailedJobService) List(ctx context.Context, q FailedJobQuery) (FailedJobPage, error) {
-	types := models.FailedJobTypes()
+	types := FailedJobTypesIn(q.Scope)
 	if q.Type != "" {
-		if err := s.checkType(q.Type); err != nil {
+		if err := s.checkType(q.Type, q.Scope); err != nil {
 			return FailedJobPage{}, err
 		}
 		types = []models.WorkerType{q.Type}
@@ -121,7 +140,7 @@ func compareFailedJobs(a, b *models.FailedJob) int {
 
 // Get returns one failed job in the scope.
 func (s *FailedJobService) Get(ctx context.Context, jobType models.WorkerType, scope registry.FailedJobScope, id string) (*models.FailedJob, error) {
-	if err := s.checkType(jobType); err != nil {
+	if err := s.checkType(jobType, scope); err != nil {
 		return nil, err
 	}
 	return s.jobs.GetFailed(ctx, jobType, scope, id)
@@ -192,9 +211,9 @@ func (s *FailedJobService) bulkTypes(q FailedJobBulkQuery) ([]models.WorkerType,
 	case q.Scope.FailedBefore.After(s.clock()):
 		return nil, errxtrace.Classify(registry.ErrInvalidInput, errx.Attrs("field", "failed_before", "reason", "in the future"))
 	case q.Type == "":
-		return models.FailedJobTypes(), nil
+		return FailedJobTypesIn(q.Scope), nil
 	}
-	if err := s.checkType(q.Type); err != nil {
+	if err := s.checkType(q.Type, q.Scope); err != nil {
 		return nil, err
 	}
 	return []models.WorkerType{q.Type}, nil

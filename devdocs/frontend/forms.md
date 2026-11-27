@@ -292,6 +292,21 @@ the message is empty, and bakes in the `field-error` class the e2e suite
 selects on. Wire `aria-describedby` on the input to the `FieldError` `id`
 so screen readers announce the message when RHF focuses the invalid field.
 
+A field error is always `<FieldError>`, in a page form and in a dialog
+alike, and the control that failed always carries `aria-invalid` and
+`aria-describedby`. `aria-invalid` is what draws the red border on
+`Input`, `Textarea` and `SelectTrigger`. A custom control takes the same
+two attributes on its focusable root: `TagColorPicker` puts them on its
+`radiogroup` through its `invalid` and `describedBy` props. A field with a
+hint keeps the hint as its own muted line, and may swap it for the error
+(`errors.x?.message ? <FieldError … /> : <p>hint</p>`).
+
+ESLint enforces this: `no-restricted-syntax` flags `t(errors.<field>.message)`
+and `t(form.formState.errors.<field>.message)` inside JSX. The one sanctioned
+exception is `components/items/BrandModelFields.tsx`, which draws the Add item
+dialog's own error line from the mock (`design-mocks/src/components/AddItemDialog.tsx`)
+and says so in its disable comment.
+
 For complex controls (combobox, date picker), wrap with `Controller`:
 
 ```tsx
@@ -305,10 +320,17 @@ import { Controller } from "react-hook-form"
       value={field.value}
       onChange={field.onChange}
       ariaInvalid={fieldState.invalid}
+      ariaDescribedBy={fieldState.invalid ? "currency-error" : undefined}
     />
   )}
 />
 ```
+
+A currency is always a `CurrencyCombobox`, never a text input. Next to an
+amount it is the `compact` variant on the same row, the amount showing the
+currency symbol inside, as in the mock's Add item purchase price
+(`design-mocks/src/components/AddItemDialog.tsx`). The currency of an amount
+starts on the group currency unless the record already has one.
 
 ### Dropdowns
 

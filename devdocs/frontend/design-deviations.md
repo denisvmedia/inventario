@@ -977,6 +977,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Approved by**: user (explicit) — pre-approved for #2813 by the 2026-11-24 goal to implement the open enhancements
 - **Reversion plan**: Follow the mock once `inventario-design` updates the purchase step.
 
+#### 2026-11-27 — Send for service dialog: cost amount and currency
+
+- **Issue/PR**: #2909
+- **Mock**: The mock has no service dialog. Its money field is the purchase price row of [`design-mocks/src/components/AddItemDialog.tsx`](../../design-mocks/src/components/AddItemDialog.tsx) (L1173–L1195): one label, the amount with the currency symbol inside, and the `compact` `CurrencyCombobox` beside it.
+- **Reality**: `frontend/src/components/services/SendForServiceDialog.tsx` draws the cost as that row: the "Cost (optional)" label, the amount with the symbol of the picked currency inside, and the `compact` `CurrencyCombobox` named "Currency". The picker starts on the group currency, and the currency is saved only with an amount. Each part shows its own `FieldError` under the row.
+- **Why**: Not present in mock. #2909 asks for the currency picker every other currency field uses; the row copies the mock's money field.
+- **Approved by**: user (explicit) — pre-approved for #2909 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Follow the mock if `inventario-design` adds a service dialog.
+
 ### Auth & Profile
 
 #### 2026-11-26 — Profile plan badge, Upgrade link and `/plans` page hidden when plans are off
@@ -1641,6 +1650,15 @@ Do not edit prior entries except to fix factual errors (typos, wrong issue numbe
 - **Reversion plan**: If the upstream design adds a dedicated 403/forbidden empty state, port it and resolve this entry.
 
 ### Cross-cutting (theme, density, a11y, performance)
+
+#### 2026-11-27 — Delete triggers: one red outline or ghost trigger, with the label and size of their neighbors
+
+- **Issue/PR**: #2914
+- **Mock**: On a detail surface the delete trigger is an icon-only `variant="outline" size="sm"` button with `text-destructive hover:bg-destructive/10` ([`ItemDetail.tsx`](../../design-mocks/src/components/ItemDetail.tsx) L705; [`FileDetail.tsx`](../../design-mocks/src/components/FileDetail.tsx) L302 adds `hover:text-destructive`). On a row it is a ghost button, icon-only `size-7` in [`TagsView.tsx`](../../design-mocks/src/views/TagsView.tsx) L314, labeled `size="sm"` in [`FilePreviewDialog.tsx`](../../design-mocks/src/components/FilePreviewDialog.tsx) L153. The mock has no header delete on a location or area page (delete sits in the card menu) and no maintenance, supplies or reminders surface.
+- **Reality**: Every delete trigger listed in `devdocs/frontend/components.md` → Delete triggers takes `text-destructive hover:bg-destructive/10 hover:text-destructive`, the item page's included. The location and area headers keep the labeled default-size outline button, the size of Insurance report and Edit next to it. The file detail sheet's footer keeps its labeled `sm` outline button next to the labeled Edit. The maintenance schedule card keeps its labeled ghost `sm` button next to I did this and Edit. The supplies and reminders rows keep their `size="icon"` ghost button next to the same-size Edit.
+- **Why**: The triggers match the mock's variant and colors for their place. The label and size follow the buttons beside each trigger, so a row or header does not mix icon-only and labeled actions or two heights.
+- **Approved by**: user (explicit) — pre-approved for #2914 by the 2026-11-27 goal to work through the backlog
+- **Reversion plan**: Move the location and area delete into a menu if `inventario-design` draws one for those headers; otherwise permanent.
 
 #### 2026-11-26 — Long-form dialogs fill the screen below `sm`
 
