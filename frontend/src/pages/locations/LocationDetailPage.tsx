@@ -49,6 +49,7 @@ import {
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useSectionVisible } from "@/features/group/sections"
 import { useAppToast } from "@/hooks/useAppToast"
+import { toastMutationError } from "@/lib/mutation-error-toast"
 import { useConfirm } from "@/hooks/useConfirm"
 import { cn } from "@/lib/utils"
 import type { Area, DeleteStrategy } from "@/features/areas/api"
@@ -173,8 +174,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
       await deleteLocation.mutateAsync({ id: location.data.id, strategy })
       toast.success(t("locations:toast.locationDeleted"))
       if (slug) navigate(`/g/${encodeURIComponent(slug)}/locations`, { replace: true })
-    } catch {
-      toast.error(t("locations:toast.locationDeleteError"))
+    } catch (err) {
+      toastMutationError(err, t("locations:toast.locationDeleteError"))
     }
   }
 
@@ -182,8 +183,8 @@ export function LocationDetailPage({ initialMode }: LocationDetailPageProps = {}
     try {
       await deleteArea.mutateAsync({ id: areaId, strategy })
       toast.success(t("locations:toast.areaDeleted"))
-    } catch {
-      toast.error(t("locations:toast.areaDeleteError"))
+    } catch (err) {
+      toastMutationError(err, t("locations:toast.areaDeleteError"))
     }
   }
 

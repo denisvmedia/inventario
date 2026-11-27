@@ -656,6 +656,13 @@ when to add an entry and where it goes.
   whose transaction did not commit is now reported as failed; before, a
   failed commit was reported as a success
   ([#2875](https://github.com/denisvmedia/inventario/issues/2875)).
+- A refused action says why. When the server refuses to delete an item, a
+  location or an area, to change an item's status, to remove a profile photo,
+  to change tags on several files or items, to revoke a session or an API
+  token, or to save a notification or group section setting, the error toast
+  shows the server's reason instead of a fixed "Couldn't …" line. A server
+  error shows one toast instead of two
+  ([#2912](https://github.com/denisvmedia/inventario/issues/2912)).
 - A file added with tags in the Add item dialog keeps its title. The dialog
   set the tags with `PUT /files/{id}`, which replaces the title as well, and
   sent no title, so the file had none
@@ -751,6 +758,12 @@ when to add an entry and where it goes.
 
 ### Operators
 
+- `inventario run apiserver` and `inventario run all` exit with status 1 and
+  the bind error when the API address or the probe address is already taken.
+  They logged the error and then panicked with `close of closed channel`,
+  exiting with status 2, so the panic is what log alerting and the pod's last
+  state showed
+  ([#2890](https://github.com/denisvmedia/inventario/issues/2890)).
 - `inventario jobs failed list|retry|discard` lists, retries and discards
   the background jobs that failed for good, across every tenant, and writes
   each retry and discard to the audit log. Two metrics come with it:

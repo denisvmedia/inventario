@@ -3,6 +3,7 @@ package httpserver_test
 import (
 	"fmt"
 	"io"
+	"net"
 	"net/http"
 	"testing"
 	"time"
@@ -75,4 +76,25 @@ func TestAPIServer_OnShutdownRunsAfterShutdown(t *testing.T) {
 	c.Assert(apiServer.Shutdown(), qt.IsNil)
 	c.Assert(calls, qt.DeepEquals, []string{"first", "second"})
 	c.Assert(<-errCh, qt.IsNil)
+}
+
+// A listener that cannot bind reports the error, and the Shutdown that follows
+// still releases what the handler holds.
+func TestAPIServer_ShutdownAfterFailedBind(t *testing.T) {
+	c := qt.New(t)
+
+	taken, err := net.Listen("tcp", "localhost:0")
+	c.Assert(err, qt.IsNil)
+	defer taken.Close()
+
+	apiServer := &httpserver.APIServer{}
+	released := false
+	apiServer.OnShutdown(func() { released = true })
+
+	errCh := apiServer.Run(taken.Addr().String(), http.NotFoundHandler())
+	c.Assert(<-errCh, qt.IsNotNil)
+	<-apiServer.Done()
+
+	c.Assert(apiServer.Shutdown(), qt.IsNil)
+	c.Assert(released, qt.IsTrue)
 }
