@@ -1442,6 +1442,19 @@ when to add an entry and where it goes.
   photo in its place
   ([#2900](https://github.com/denisvmedia/inventario/issues/2900),
   [#3049](https://github.com/denisvmedia/inventario/issues/3049)).
+- Background worker log lines follow the
+  [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
+  A thumbnail job that fails and will run again logs `Thumbnail generation
+  job failed` as a warning; it stays an error on the last attempt. A failed
+  thumbnail job is logged once: `Failed to process thumbnail generation job`
+  is gone, and the lookups it covered log their own errors. `Requested
+  thumbnail generation` and `Starting thumbnail generation` are debug lines.
+  A restore that waits for another restore, and an export or import worker
+  that stops while it waits for a slot, log at debug instead of warning and
+  error. A recovered currency migration whose audit entry cannot be written
+  logs an error instead of a warning. Renamed keys: `duration` (a string) on
+  `Currency migration completed` is `duration_ms` (an integer), and `slug`
+  on `group purged` is `group_slug`
 - Sign-in, session and tenant log lines follow the
   [logging guideline](https://github.com/denisvmedia/inventario/blob/master/devdocs/logging.md).
   These refusals are logged as warnings, not errors: a user who reaches

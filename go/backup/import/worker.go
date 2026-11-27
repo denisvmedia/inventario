@@ -210,7 +210,7 @@ func (w *ImportWorker) processPendingImports(ctx context.Context) {
 		// only looks at pending rows. This blocks until a slot frees up.
 		if err := w.semaphore.Acquire(ctx, 1); err != nil {
 			w.inFlight.Delete(export.ID)
-			slog.ErrorContext(ctx, "Failed to acquire semaphore", "error", err)
+			slog.DebugContext(ctx, "Failed to acquire semaphore", "error", err)
 			return
 		}
 
