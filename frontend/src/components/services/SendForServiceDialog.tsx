@@ -1,5 +1,5 @@
 import { zodResolver } from "@hookform/resolvers/zod"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 import { Controller, useForm, useWatch } from "react-hook-form"
 import { useTranslation } from "react-i18next"
 
@@ -81,9 +81,15 @@ export function SendForServiceDialog({
     defaultValues: buildDefaults(groupCurrency),
   })
 
+  // The form resets when the dialog opens, on the group currency of that
+  // moment. A group refetch while it is open must not wipe what was typed.
+  const groupCurrencyRef = useRef(groupCurrency)
   useEffect(() => {
-    if (open) reset(buildDefaults(groupCurrency))
-  }, [open, reset, groupCurrency])
+    groupCurrencyRef.current = groupCurrency
+  })
+  useEffect(() => {
+    if (open) reset(buildDefaults(groupCurrencyRef.current))
+  }, [open, reset])
 
   const costCurrency = useWatch({ control, name: "cost_currency" })
   const costSymbol = costCurrency ? currencyMeta(costCurrency).symbol : ""

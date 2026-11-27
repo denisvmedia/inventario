@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react"
+import { act, screen, waitFor } from "@testing-library/react"
 import { http, HttpResponse } from "msw"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
@@ -323,6 +323,29 @@ describe("<ServiceTab /> cost currency (#2909)", () => {
 
     await waitFor(() => expect(sent).toHaveLength(1))
     expect(sent[0]).toMatchObject({ cost_amount: "120.50", cost_currency: "USD" })
+  })
+
+  it("keeps what was typed when the group is refetched while the dialog is open", async () => {
+    captureStart()
+    server.use(
+      ...groupHandlers.list(groupFixture),
+      ...serviceHandlers.listForCommodity(SLUG, COMMODITY_ID, [])
+    )
+    const user = userEvent.setup()
+    const { queryClient } = renderTab()
+    await user.click(await screen.findByTestId("commodity-detail-service-button"))
+    await waitFor(() =>
+      expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
+    )
+    await user.type(screen.getByTestId("service-provider-name"), "Repair Shop")
+    await user.type(screen.getByTestId("service-cost-amount"), "80")
+
+    server.use(...groupHandlers.list([{ ...groupFixture[0], group_currency: "EUR" }]))
+    await act(() => queryClient.invalidateQueries())
+
+    expect(screen.getByTestId("service-provider-name")).toHaveValue("Repair Shop")
+    expect(screen.getByTestId("service-cost-amount")).toHaveValue("80")
+    expect(screen.getByRole("combobox", { name: "Currency" })).toHaveTextContent("USD")
   })
 
   it("saves the currency picked in the currency picker", async () => {
