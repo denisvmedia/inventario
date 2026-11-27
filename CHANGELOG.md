@@ -721,13 +721,6 @@ when to add an entry and where it goes.
   going out without that recipient, or, for a loan, being marked as sent
   with no email
   ([#2805](https://github.com/denisvmedia/inventario/issues/2805)).
-- The item delete dialog and the area delete dialog showed raw keys such as
-  "delete.title" instead of their text
-  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
-- The search page renders item results. It expected each result wrapped in
-  JSON:API `attributes`, which the search endpoint does not send, and failed to
-  render as soon as a search matched an item
-  ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
 - The users of a suspended or inactive tenant get no email from Inventario:
   no item, warranty, loan or maintenance reminders, no storage quota
   warnings, no weekly digest and no "your personal data export is ready"
@@ -735,6 +728,13 @@ when to add an entry and where it goes.
   reminder still due when the tenant is reactivated goes out then, and an
   export requested before the suspension is still built
   ([#2949](https://github.com/denisvmedia/inventario/issues/2949)).
+- The item delete dialog and the area delete dialog showed raw keys such as
+  "delete.title" instead of their text
+  ([#2799](https://github.com/denisvmedia/inventario/issues/2799)).
+- The search page renders item results. It expected each result wrapped in
+  JSON:API `attributes`, which the search endpoint does not send, and failed to
+  render as soon as a search matched an item
+  ([#2807](https://github.com/denisvmedia/inventario/issues/2807)).
 - Opening or closing a file's panel on the Files page keeps the search, tag
   filter, page and layout of the list
   ([#2814](https://github.com/denisvmedia/inventario/issues/2814)).
