@@ -1146,6 +1146,14 @@ when to add an entry and where it goes.
   and marks the field that failed, as the other forms do. A refused icon on
   the create group and group settings pages also marks the icon picker
   ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+- On a phone, a form that fills the screen (Add item, a location, an area and
+  the other long forms) keeps its buttons above the on-screen keyboard while
+  you type. The back gesture closes it as its close button does, so Add item
+  still asks whether to save what was entered, and the page under it stays.
+  A toast shown while it is open sits above its buttons. Before, the keyboard
+  covered the buttons, the back gesture left the page and lost the form, and
+  a toast covered the buttons for a few seconds
+  ([#2931](https://github.com/denisvmedia/inventario/issues/2931)).
 
 ### Security
 
