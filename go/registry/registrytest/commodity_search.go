@@ -337,6 +337,10 @@ type searchCase struct {
 	match *registry.CommoditySearchMatch
 }
 
+// searchCases ignore case only in ASCII letters. How postgres ignores the
+// case of other letters depends on the collation of the database, so a case
+// that relies on it passes or fails by where the tests run; the comment on
+// registry's ContainsFold lists the differences.
 func searchCases(hose *models.Commodity) []searchCase {
 	match := func(field registry.CommoditySearchField, value string) *registry.CommoditySearchMatch {
 		return &registry.CommoditySearchMatch{Field: field, Value: value}

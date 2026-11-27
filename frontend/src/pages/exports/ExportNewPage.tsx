@@ -14,6 +14,7 @@ import { useCreateExport } from "@/features/export/hooks"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useAppToast } from "@/hooks/useAppToast"
 import { parseServerError } from "@/lib/server-error"
+import { capCodePoints } from "@/lib/text-length"
 import { cn } from "@/lib/utils"
 
 type WizardStep = 1 | 2
@@ -312,9 +313,8 @@ function Step2({ state, setState, isPending, onBack, onSubmit }: Step2Props) {
         <Input
           id="export-description"
           value={state.description}
-          onChange={(e) => setState({ ...state, description: e.target.value })}
+          onChange={(e) => setState({ ...state, description: capCodePoints(e.target.value, 500) })}
           placeholder={t("exports:wizard.descriptionPlaceholder")}
-          maxLength={500}
           data-testid="wizard-description"
           aria-describedby="export-description-hint"
         />

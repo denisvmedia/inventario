@@ -22,12 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
-import {
-  CUSTOM_FIELD_LONG_TEXT_MAX,
-  CUSTOM_FIELD_TEXT_MAX,
-  CUSTOM_FIELD_URL_MAX,
-  type CustomField,
-} from "@/features/customFields/api"
+import type { CustomField } from "@/features/customFields/api"
 import {
   shownFields,
   type CustomFieldFormValue,
@@ -215,7 +210,6 @@ export function CustomFieldValueInput({
         <Textarea
           {...common}
           rows={3}
-          maxLength={CUSTOM_FIELD_LONG_TEXT_MAX}
           value={value.value}
           onChange={(e) => set({ value: e.target.value })}
         />
@@ -265,7 +259,6 @@ export function CustomFieldValueInput({
           {...common}
           type="url"
           inputMode="url"
-          maxLength={CUSTOM_FIELD_URL_MAX}
           placeholder="https://"
           value={value.value}
           onChange={(e) => set({ value: e.target.value })}
@@ -332,12 +325,7 @@ export function CustomFieldValueInput({
       )
     default:
       return (
-        <Input
-          {...common}
-          maxLength={CUSTOM_FIELD_TEXT_MAX}
-          value={value.value}
-          onChange={(e) => set({ value: e.target.value })}
-        />
+        <Input {...common} value={value.value} onChange={(e) => set({ value: e.target.value })} />
       )
   }
 }
