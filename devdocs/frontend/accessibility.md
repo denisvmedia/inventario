@@ -79,6 +79,25 @@ Rules:
   you have a reason (an unsaved-changes guard, e.g.).
 - **No `window.confirm()` / `alert()`.** Use `useConfirm()`. Native
   dialogs aren't styleable, aren't translatable, and break in tests.
+- **Full-screen dialogs on phones.** Below `sm` a
+  `<DialogContent variant="fullscreen-mobile">` follows
+  `window.visualViewport`: while the on-screen keyboard is open the
+  dialog fills the part of the screen above it, so the footer stays in
+  sight. A step back in the browser history (the Android back gesture,
+  the iOS edge swipe) closes it through a hidden `DialogClose`, the same
+  path as its close button, so an unsaved-changes question still asks;
+  for that the dialog pushes a history entry with the same URL while it
+  is open, and takes it off when it closes another way. While that entry
+  is the current one, `history.pushState` replaces it instead, so a page
+  the app opens as the dialog closes takes the entry's place and leaves
+  no extra step back; `history.replaceState` keeps the entry and hands
+  its URL to the entry below when the dialog closes. A push that comes
+  while the dialog steps back over its entry is pushed once the step
+  lands; until then the entry being left shows the new URL. Toasts
+  shown while it is open sit above its footer. The call site does
+  nothing for any of this; the hooks live in
+  `src/components/ui/dialog-phone.ts`. From `sm` up the card behaves as
+  a default dialog: Back leaves the page.
 
 ## Color and contrast
 

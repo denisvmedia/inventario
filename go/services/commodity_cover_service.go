@@ -69,9 +69,10 @@ func NewCommodityCoverService(signing *FileSigningService) *CommodityCoverServic
 // Resolution order per commodity (issue #1451):
 //
 //  1. Explicit override — `commodity.CoverFileID` (option B). The file
-//     must still exist, belong to the commodity, and be an image; on
-//     any failure the path falls through to (2) so a stale override
-//     never blocks the auto-pick.
+//     must still exist, belong to the commodity, and be an image; a
+//     stale override falls through to (2), so it never blocks the
+//     auto-pick. When the read of the overrides fails, the items that
+//     name one get no cover: their first photo is not the one picked.
 //  2. First photo by `created_at` ASC (option A — the default).
 //
 // The whole slice costs at most two reads: one for the explicit covers and
@@ -99,10 +100,15 @@ func (s *CommodityCoverService) ResolveMany(ctx context.Context, fileReg registr
 		}
 	}
 
-	explicit := fetchExplicitCovers(ctx, fileReg, coverIDs)
+	explicit, explicitRead := fetchExplicitCovers(ctx, fileReg, coverIDs)
 	needFirst := make([]string, 0, len(live))
 	for _, c := range live {
 		if id := explicitCoverID(c); id != "" {
+			// The item names a cover that could not be read. Its first photo
+			// is a cover the user did not pick, so the item shows none.
+			if !explicitRead {
+				continue
+			}
 			if cover, ok := s.signCover(c.ID, explicitCoverFor(explicit[id], c.ID), CoverSourceExplicit, userID, binding); ok {
 				out[c.ID] = cover
 				continue
@@ -193,24 +199,24 @@ func isCoverEligible(file *models.FileEntity) bool {
 }
 
 // fetchExplicitCovers loads the files the items name as their covers in one
-// read, keyed by file id. A failed read returns an empty map, which sends
-// every item to the first-photo path.
-func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fileIDs []string) map[string]*models.FileEntity {
+// read, keyed by file id, and reports whether the read worked. A file that is
+// gone is absent from the map; the read still worked.
+func fetchExplicitCovers(ctx context.Context, fileReg registry.FileRegistry, fileIDs []string) (map[string]*models.FileEntity, bool) {
 	out := make(map[string]*models.FileEntity, len(fileIDs))
 	if len(fileIDs) == 0 {
-		return out
+		return out, true
 	}
 	files, err := fileReg.GetMany(ctx, fileIDs)
 	if err != nil {
 		logCoverReadFailure(ctx, "named covers", len(fileIDs), err)
-		return out
+		return out, false
 	}
 	for _, f := range files {
 		if f != nil {
 			out[f.ID] = f
 		}
 	}
-	return out
+	return out, true
 }
 
 // logCoverReadFailure records a cover read that failed, so a list showing type

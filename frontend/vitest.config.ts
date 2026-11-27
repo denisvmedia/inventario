@@ -13,12 +13,16 @@ import { whatsNewPlugin } from "./vite-plugins/whats-new.ts"
 // occasional failure under `--sequence.shuffle`. The commit badge test mocks
 // `@/features/system/hooks`, but the Shell test renders the real CommitBadge;
 // when the Shell test runs first in a worker, CommitBadge is already bound to
-// the real hook and the mock never reaches it.
+// the real hook and the mock never reaches it. The cross-tab sign-out test
+// opens each tab as a fresh module graph with `vi.resetModules()`; in a shared
+// registry the next file would import the last tab's http and navigation
+// modules, with the tab's navigators installed.
 const OWN_REGISTRY = [
   "src/components/files/__tests__/PdfViewer.test.tsx",
   "src/components/files/__tests__/PdfFullViewer.test.tsx",
   "src/components/auth/__tests__/PasswordStrengthMeter.test.tsx",
   "src/components/__tests__/CommitBadge.test.tsx",
+  "src/lib/__tests__/http.crossTabSignOut.test.ts",
 ]
 
 export default defineConfig({

@@ -404,6 +404,8 @@ func TestCommodityDraftService_FinishStaleDiscards_OneFailureDoesNotStopTheRest(
 	c.Assert(lines, qt.HasLen, 1, qt.Commentf("logs: %s", logs))
 	c.Check(lines[0]["msg"], qt.Equals, "Failed to finish a stopped draft discard")
 	c.Check(lines[0]["draft_id"], qt.Equals, poisoned.ID)
+	c.Assert(poisoned.GroupID, qt.Not(qt.Equals), "")
+	c.Check(lines[0]["group_id"], qt.Equals, poisoned.GroupID)
 	c.Check(lines[0]["error"], qt.Contains, errDraftDeleteFails.Error())
 
 	for _, d := range stopped {

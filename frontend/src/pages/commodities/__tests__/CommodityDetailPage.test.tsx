@@ -26,6 +26,7 @@ import {
   intakeHandlers,
   locationHandlers,
   memberHandlers,
+  reminderHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -624,6 +625,47 @@ describe("<CommodityDetailPage />", () => {
       status_note: "Sold to Bob",
       sale_price: 99.5,
     })
+  })
+
+  // The item changed after the edit form opened: a save from All fields is
+  // refused, and the form under the dialog offers the reload. A form opened
+  // again afterwards is fresh and says nothing about it (#2981).
+  it("refuses an All fields save on a changed item, and forgets it when the form closes", async () => {
+    const user = userEvent.setup()
+    serveItems([itemRow(ID, "MacBook Pro 16")])
+    server.use(
+      http.put(apiUrl(`/g/${SLUG}/commodities/:id`), () =>
+        HttpResponse.json(
+          {
+            errors: [
+              {
+                status: "Conflict",
+                code: "commodity.revision_conflict",
+                error: { msg: "the item changed since it was read" },
+              },
+            ],
+          },
+          { status: 409 }
+        )
+      )
+    )
+    renderItemRoutes(`/g/${SLUG}/commodities/${ID}`)
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    await user.click(await screen.findByTestId("commodity-edit-all-fields"))
+    const dialog = await screen.findByRole("dialog")
+    await user.click(within(dialog).getByTestId("commodity-form-submit"))
+
+    expect(
+      await within(dialog).findByText(/This item changed since you opened it, so nothing was saved/)
+    ).toBeInTheDocument()
+    await user.click(within(dialog).getByTestId("commodity-form-cancel"))
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+    expect(screen.getByTestId("commodity-edit-stale")).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-edit-cancel"))
+    await user.click(await screen.findByTestId("commodity-detail-edit"))
+    expect(await screen.findByTestId("commodity-edit-form")).toBeInTheDocument()
+    expect(screen.queryByTestId("commodity-edit-stale")).toBeNull()
   })
 
   it("deletes the commodity from the detail page", async () => {
@@ -1710,6 +1752,55 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     await waitFor(() => expect(puts.at(-1)?.attributes.status).toBe("lost"))
     expect(puts.at(-1)?.id).toBe("c1")
     expect(puts.filter((p) => p.id === "c2")).toHaveLength(0)
+  })
+
+  // The tabs keep their dialogs in their own state; the reminder dialog on
+  // the Details tab stands for all of them (hooks/useItemHold).
+  it("stays on the item when its reminder dialog was opened while the next item was looked up", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...reminderHandlers.listForCommodity(SLUG, "c1"))
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    const lookup = gate()
+    let reads = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async () => {
+        reads += 1
+        if (reads >= 2) await lookup.promise
+        return undefined
+      })
+    )
+    await user.click(mark)
+    await waitFor(() => expect(reads).toBe(2))
+    await user.click(await screen.findByTestId("reminder-add"))
+    await user.type(await screen.findByTestId("reminder-title-input"), "Check the tires")
+    lookup.release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    expect(screen.getByTestId("reminder-title-input")).toHaveValue("Check the tires")
+  })
+
+  it("keeps the tab and the Files chip on the next item", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...fileHandlers.list(SLUG), ...fileHandlers.countsFromFiles(SLUG, []))
+    renderReview(`/g/${SLUG}/commodities/c1?tab=files&files=images&${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    await user.click(screen.getByTestId("commodity-review-skip"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 2 to review"
+      )
+    )
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c2?tab=files&files=images&${FROM_INBOX}`
+    )
+    expect(await screen.findByTestId("commodity-files-chip-images")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
   })
 
   it("waits for a quick edit to save before a review", async () => {

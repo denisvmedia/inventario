@@ -134,6 +134,8 @@ func RunBulkPatchContract(t *testing.T, newEnv func(t *testing.T) TrashEnv) {
 		c.Assert(err, qt.ErrorIs, registry.ErrNotFound)
 	})
 
+	runItemRevisionContract(t, newEnv)
+
 	t.Run("a file patch writes the tags alone", func(t *testing.T) {
 		c := qt.New(t)
 		env := newEnv(t)
@@ -233,4 +235,77 @@ func assertItemTags(c *qt.C, env TrashEnv, id string, want ...string) {
 	stored, err := env.Commodities.Get(env.Ctx, id)
 	c.Assert(err, qt.IsNil)
 	c.Check([]string(stored.Tags), qt.DeepEquals, want)
+}
+
+// runItemRevisionContract covers the revision every write of an item moves
+// on, which an edit form sends back so that its save cannot undo a write it
+// never showed (#2981).
+func runItemRevisionContract(t *testing.T, newEnv func(t *testing.T) TrashEnv) {
+	t.Helper()
+
+	t.Run("every write of an item moves its revision on", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		created := missingDataItem(c, env, "Kettle", new(decimal.NewFromInt(10)), nil, "2024-01-01")
+		c.Assert(created.Revision, qt.Equals, int64(1))
+
+		edited := *created
+		edited.Comments = "Descale monthly"
+		edited.Revision = 40 // the caller's value is ignored
+		updated, err := env.Commodities.Update(env.Ctx, edited)
+		c.Assert(err, qt.IsNil)
+		c.Check(updated.Revision, qt.Equals, int64(2))
+
+		_, unchanged, err := env.Commodities.Patch(env.Ctx, created.ID, nil, func(next models.Commodity) (models.Commodity, bool, error) {
+			return next, false, nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(unchanged, qt.IsNil)
+
+		_, patched, err := env.Commodities.Patch(env.Ctx, created.ID, []string{"kitchen"}, func(next models.Commodity) (models.Commodity, bool, error) {
+			next.Tags = append(next.Tags, "kitchen")
+			return next, true, nil
+		})
+		c.Assert(err, qt.IsNil)
+		c.Check(patched.Revision, qt.Equals, int64(3))
+
+		_, marked, err := env.Commodities.SetDraft(env.Ctx, created.ID, true, nil)
+		c.Assert(err, qt.IsNil)
+		c.Check(marked.Revision, qt.Equals, int64(4))
+
+		stored, err := env.Commodities.Get(env.Ctx, created.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(stored.Revision, qt.Equals, int64(4))
+	})
+
+	t.Run("an update based on a revision a patch replaced is refused", func(t *testing.T) {
+		c := qt.New(t)
+		env := newEnv(t)
+		item := patchContractItem(c, env, "Ladder")
+
+		// An edit form opened now, then a bulk change saved before it.
+		form := *item
+		_, _, err := env.Commodities.Patch(env.Ctx, item.ID, []string{"insured"}, func(next models.Commodity) (models.Commodity, bool, error) {
+			next.Tags = append(next.Tags, "insured")
+			return next, true, nil
+		})
+		c.Assert(err, qt.IsNil)
+
+		form.Name = "Step ladder"
+		_, err = env.Commodities.Update(registry.WithExpectedRevision(env.Ctx, item.Revision), form)
+		c.Assert(err, qt.ErrorIs, registry.ErrRevisionConflict)
+
+		stored, err := env.Commodities.Get(env.Ctx, item.ID)
+		c.Assert(err, qt.IsNil)
+		c.Check(stored.Name, qt.Equals, "Ladder")
+		c.Check([]string(stored.Tags), qt.DeepEquals, []string{"garage", "insured"})
+
+		// Based on the revision it read again, the edit is saved.
+		form = *stored
+		form.Name = "Step ladder"
+		saved, err := env.Commodities.Update(registry.WithExpectedRevision(env.Ctx, stored.Revision), form)
+		c.Assert(err, qt.IsNil)
+		c.Check(saved.Name, qt.Equals, "Step ladder")
+		c.Check(saved.Revision, qt.Equals, stored.Revision+1)
+	})
 }

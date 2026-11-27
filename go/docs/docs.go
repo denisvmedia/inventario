@@ -3711,6 +3711,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the area was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Non-empty area (no strategy) or unknown strategy",
                         "schema": {
@@ -4555,7 +4561,7 @@ const docTemplate = `{
                 }
             },
             "put": {
-                "description": "Update a commodity",
+                "description": "Replace the item with the values sent. attributes.revision is the revision\nthe values were based on, as the client read it: when the item has been written\nsince (an edit, a bulk change, a tag rename), the save is refused with 409\ncommodity.revision_conflict and nothing is written, so it cannot undo that\nwrite. Without it, or with 0, the save is not checked. The response carries\nthe item's new revision.",
                 "consumes": [
                     "application/vnd.api+json"
                 ],
@@ -4600,6 +4606,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item was written after the revision sent",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -4700,6 +4712,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Commodity or file not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -7912,6 +7930,12 @@ const docTemplate = `{
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
                     },
+                    "409": {
+                        "description": "commodity.revision_conflict: the item that has the file as its cover was written meanwhile and kept changing on every retry",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
                     "422": {
                         "description": "Export or intake link",
                         "schema": {
@@ -9293,6 +9317,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "Location not found",
+                        "schema": {
+                            "$ref": "#/definitions/jsonapi.Errors"
+                        }
+                    },
+                    "409": {
+                        "description": "commodity.revision_conflict: with strategy=unlink, an item of the location was written meanwhile and kept changing on every retry",
                         "schema": {
                             "$ref": "#/definitions/jsonapi.Errors"
                         }
@@ -18830,6 +18860,13 @@ const docTemplate = `{
         "jsonapi.IntakeCandidateReviewAttrs": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft; each must be one the scan read a value for.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -22251,6 +22288,10 @@ const docTemplate = `{
                 "registered_date": {
                     "type": "string"
                 },
+                "revision": {
+                    "description": "Revision counts the writes to the item: a new item has revision 1, and\nevery registry write of a column an edit form sends back adds one (an\nedit, a bulk change, the draft mark, a tag rename or delete, an item\ntype delete that moves the item, a currency migration). An edit form\nsends the revision it was opened at with its save, and the save is\nrefused when the item was written since (registry.WithExpectedRevision),\nso it cannot undo a change it never showed. Server-managed: Create and\nUpdate ignore the caller's value.",
+                    "type": "integer"
+                },
                 "sale_price": {
                     "description": "SalePrice is the realised proceeds for a ` + "`" + `sold` + "`" + ` transition. NULL\nfor any other status. Stored in the commodity's original purchase\ncurrency — sale-side currency reporting is out of scope for #1611.",
                     "type": "number"
@@ -23040,6 +23081,13 @@ const docTemplate = `{
         "models.IntakeCandidate": {
             "type": "object",
             "properties": {
+                "accepted_custom_fields": {
+                    "description": "AcceptedCustomFields are the IDs of the custom fields whose scanned\nvalue goes into the draft.",
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "accepted_fields": {
                     "type": "array",
                     "items": {
@@ -23048,6 +23096,14 @@ const docTemplate = `{
                 },
                 "created_at": {
                     "type": "string"
+                },
+                "custom_fields": {
+                    "description": "CustomFields is what the scan read for the group's custom fields, by\nfield ID, a select field's value as its option ID.",
+                    "allOf": [
+                        {
+                            "$ref": "#/definitions/models.IntakeFields"
+                        }
+                    ]
                 },
                 "draft_id": {
                     "description": "DraftID is the draft made for the candidate. The draft can be\ndiscarded or promoted later, so there is no foreign key.",

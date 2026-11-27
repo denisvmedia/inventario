@@ -29,7 +29,9 @@ type scriptedProvider struct {
 	calls     int
 	hints     []string
 	itemTypes [][]aivision.ItemTypeOption
-	errs      []error
+	// customFields are the custom fields each scan offered the model.
+	customFields [][]aivision.CustomFieldOption
+	errs         []error
 }
 
 func newScriptedProvider() *scriptedProvider {
@@ -44,6 +46,7 @@ func (p *scriptedProvider) Scan(ctx context.Context, req aivision.ScanRequest) (
 	p.calls++
 	p.hints = append(p.hints, req.HintFromUser)
 	p.itemTypes = append(p.itemTypes, req.ItemTypes)
+	p.customFields = append(p.customFields, req.CustomFields)
 	var err error
 	if len(p.errs) > 0 {
 		err, p.errs = p.errs[0], p.errs[1:]
@@ -806,4 +809,97 @@ func TestIntakeWorker_StuckWindowFollowsTheProviderTimeout(t *testing.T) {
 	c.Check(worker.Tick(context.Background()), qt.Equals, 1)
 	c.Check(f.get(c, f.ctx, session.Session.ID).Sources[0].Source.Status, qt.Equals, models.IntakeSourceScanned)
 	c.Check(f.provider.callCount(), qt.Equals, 1)
+}
+
+// TestIntake_CustomFieldValuesFromTheScan: the batch scan offers the group's
+// custom fields as the single-item scan does (#2880). The product keeps what
+// the scan read for them, a select label as its option, and the values read
+// with enough confidence are accepted. The draft gets the accepted values an
+// item could store; a field deleted since the scan and a value the field
+// cannot hold are left out without failing the draft.
+func TestIntake_CustomFieldValuesFromTheScan(t *testing.T) {
+	c := qt.New(t)
+	f := newIntakeFixture(c)
+	fields := f.factorySet.CustomFieldRegistryFactory.MustCreateUserRegistry(f.ctx)
+	card := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Warranty card number", Type: models.CustomFieldTypeText}))
+	condition := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{
+		Name: "Condition", Type: models.CustomFieldTypeSelect,
+		Options: models.ValuerSlice[models.CustomFieldOption]{{Label: "Mint"}, {Label: "Used"}},
+	}))
+	used := condition.Options[1].ID
+	gift := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Gift", Type: models.CustomFieldTypeBoolean}))
+	weight := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Weight", Type: models.CustomFieldTypeNumber}))
+	printed := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Printed on", Type: models.CustomFieldTypeDate}))
+	notes := must.Must(fields.Create(f.ctx, models.CustomFieldDefinition{Name: "Notes", Type: models.CustomFieldTypeText}))
+
+	scanned := mock.WithResultOverride(context.Background(), aivision.ScanResult{
+		Fields: map[string]aivision.FieldGuess{aivision.FieldNameName: {Value: "Kettle", Confidence: 0.9}},
+		CustomFields: map[string]aivision.FieldGuess{
+			card.ID:      {Value: "WC-123", Confidence: 0.9},
+			condition.ID: {Value: "used", Confidence: 0.8},
+			gift.ID:      {Value: true, Confidence: 0.2},
+			weight.ID:    {Value: 1.5, Confidence: 0.9},
+			printed.ID:   {Value: "2024-13-40", Confidence: 0.9},
+			notes.ID:     {Value: "frag\x00ile", Confidence: 0.9},
+			"gone-field": {Value: "x", Confidence: 0.9},
+		},
+	})
+	session := f.create(c, "custom-fields", source(f.photo(c, "kettle")))
+	c.Assert(f.worker.Tick(scanned), qt.Equals, 1)
+
+	c.Assert(f.provider.customFields, qt.HasLen, 1)
+	offered := map[string]string{}
+	for _, o := range f.provider.customFields[0] {
+		offered[o.Key] = o.Name
+	}
+	c.Check(offered, qt.DeepEquals, map[string]string{
+		card.ID: "Warranty card number", condition.ID: "Condition", gift.ID: "Gift",
+		weight.ID: "Weight", printed.ID: "Printed on", notes.ID: "Notes",
+	})
+
+	detail := f.get(c, f.ctx, session.Session.ID)
+	c.Assert(detail.Candidates, qt.HasLen, 1)
+	kettle := detail.Candidates[0]
+	// A date an item could not store is not offered, and a NUL character is
+	// removed from the text, since PostgreSQL cannot store it.
+	c.Check(kettle.CustomFields, qt.DeepEquals, models.IntakeFields{
+		card.ID:      {Value: "WC-123", Confidence: 0.9},
+		condition.ID: {Value: used, Confidence: 0.8},
+		gift.ID:      {Value: true, Confidence: 0.2},
+		weight.ID:    {Value: 1.5, Confidence: 0.9},
+		notes.ID:     {Value: "fragile", Confidence: 0.9},
+	})
+	c.Check(kettle.AcceptsCustomField(gift.ID), qt.IsFalse, qt.Commentf("a low confidence value is not accepted by default"))
+	c.Check(kettle.AcceptsCustomField(card.ID), qt.IsTrue)
+
+	// The member accepts the gift too. Only a field the scan read can be
+	// accepted.
+	_, err := f.intake.ReviewCandidate(f.ctx, session.Session.ID, kettle.ID, registry.IntakeCandidateReview{
+		AcceptedCustomFields: &[]string{card.ID, "gone-field"},
+	})
+	verr, ok := errors.AsType[validation.Errors](err)
+	c.Assert(ok, qt.IsTrue, qt.Commentf("got %v", err))
+	c.Check(verr["accepted_custom_fields"], qt.IsNotNil)
+	accepted := append([]string{gift.ID}, kettle.AcceptedCustomFields...)
+	accepted = append(accepted, gift.ID)
+	reviewed, err := f.intake.ReviewCandidate(f.ctx, session.Session.ID, kettle.ID, registry.IntakeCandidateReview{AcceptedCustomFields: &accepted})
+	c.Assert(err, qt.IsNil)
+	c.Check(reviewed.AcceptedCustomFields, qt.HasLen, 5, qt.Commentf("a repeated ID is kept once"))
+
+	// The notes field is deleted after the scan.
+	c.Assert(fields.Delete(f.ctx, notes.ID), qt.IsNil)
+
+	result := must.Must(f.intake.CreateDrafts(f.ctx, session.Session.ID))
+	c.Assert(result.Created, qt.Equals, 1)
+	c.Check(result.Failed, qt.Equals, 0)
+	drafts := f.drafts(c)
+	c.Assert(drafts, qt.HasLen, 1)
+	c.Check(drafts[0].Values.Title(), qt.Equals, "Kettle")
+	c.Check(drafts[0].Values["custom_fields"], qt.DeepEquals, map[string]any{
+		card.ID:      "WC-123",
+		condition.ID: used,
+		gift.ID:      true,
+		// A number is stored as its decimal text, as the item API returns it.
+		weight.ID: "1.5",
+	})
 }

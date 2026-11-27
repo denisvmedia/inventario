@@ -498,8 +498,22 @@ func preSwitchSentinelJSONAPIError(err error) (jsonapi.Error, bool) {
 	if jsErr, ok := userTenantSentinelJSONAPIError(err); ok {
 		return jsErr, true
 	}
+	if errors.Is(err, registry.ErrRevisionConflict) {
+		return jsonapi.Error{
+			Err:            err,
+			UserError:      errormarshal.Marshal(err),
+			HTTPStatusCode: http.StatusConflict,
+			StatusText:     http.StatusText(http.StatusConflict),
+			Code:           CommodityRevisionConflictCode,
+		}, true
+	}
 	return jsonapi.Error{}, false
 }
+
+// CommodityRevisionConflictCode: an item save named a revision the item no
+// longer has, because it was written after the client loaded it (#2981).
+// Nothing was written; the client loads the item again.
+const CommodityRevisionConflictCode = "commodity.revision_conflict"
 
 // JSON:API codes of the user tenant guards (#2179).
 const (

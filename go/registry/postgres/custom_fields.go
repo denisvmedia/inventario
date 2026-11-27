@@ -336,7 +336,7 @@ func (r *CustomFieldRegistry) Delete(ctx context.Context, id string) error {
 }
 
 // DeleteWithValues deletes the field, its values and its template entries;
-// the foreign keys cascade. The drafts lose their entry of the field.
+// the foreign keys cascade. The drafts lose their value of the field.
 func (r *CustomFieldRegistry) DeleteWithValues(ctx context.Context, id string, expected int) (int, error) {
 	return r.deleteField(ctx, id, expected)
 }

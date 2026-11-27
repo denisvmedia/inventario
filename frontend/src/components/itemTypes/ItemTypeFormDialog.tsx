@@ -198,7 +198,7 @@ export function ItemTypeFormDialog({
               aria-describedby={
                 [
                   builtinSlug ? "item-type-name-hint" : "",
-                  errors.name ? "item-type-name-error" : "",
+                  errors.name?.message ? "item-type-name-error" : "",
                 ]
                   .filter(Boolean)
                   .join(" ") || undefined

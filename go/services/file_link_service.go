@@ -223,25 +223,25 @@ func (s *FileLinkService) Detach(ctx context.Context, fileID, linkID string) (*m
 }
 
 // clearCover drops the commodity's cover override when it points at fileID. A
-// commodity that is gone or not visible has nothing to clear.
+// commodity that is gone or not visible has nothing to clear. The write
+// names the revision it read, so a change saved since is not undone.
 func (s *FileLinkService) clearCover(ctx context.Context, commodityID, fileID string) error {
 	comReg, err := s.factorySet.CommodityRegistryFactory.CreateUserRegistry(ctx)
 	if err != nil {
 		return errxtrace.Wrap("failed to create commodity registry", err)
 	}
-	commodity, err := comReg.Get(ctx, commodityID)
+	_, _, err = RewriteCommodity(ctx, comReg, commodityID, nil, func(next *models.Commodity) bool {
+		if next.CoverFileID == nil || *next.CoverFileID != fileID {
+			return false
+		}
+		next.CoverFileID = nil
+		next.CustomFields = nil // only the cover changes
+		return true
+	})
 	if errors.Is(err, registry.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
-		return errxtrace.Wrap("failed to get commodity", err)
-	}
-	if commodity.CoverFileID == nil || *commodity.CoverFileID != fileID {
-		return nil
-	}
-	commodity.CoverFileID = nil
-	commodity.CustomFields = nil // only the cover changes
-	if _, err := comReg.Update(ctx, *commodity); err != nil {
 		return errxtrace.Wrap("failed to clear the cover photo", err)
 	}
 	return nil

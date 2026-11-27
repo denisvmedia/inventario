@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/go-extras/errx"
 	errxtrace "github.com/go-extras/errx/stacktrace"
 	"github.com/google/uuid"
 	"github.com/wk8/go-ordered-map/v2"
@@ -105,7 +106,7 @@ func (r *Registry[_, P]) List(_ context.Context) ([]P, error) {
 	return items, nil
 }
 
-func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
+func (r *Registry[T, P]) Update(ctx context.Context, item T) (P, error) {
 	iitem := P(&item)
 
 	r.lock.Lock()
@@ -118,6 +119,9 @@ func (r *Registry[T, P]) Update(_ context.Context, item T) (P, error) {
 
 	if !r.isItemVisible(existingItem) || isTrashed(existingItem) {
 		return nil, registry.ErrNotFound
+	}
+	if err := nextRevision(ctx, iitem, existingItem); err != nil {
+		return nil, err
 	}
 
 	// Always overwrite the incoming UUID with the value from the existing record.
@@ -183,6 +187,33 @@ func (r *Registry[_, P]) Count(_ context.Context) (int, error) {
 // deleted (models.Commodity, models.FileEntity).
 type trashable interface {
 	IsTrashed() bool
+}
+
+// revisioned is implemented by the models whose Revision counts their
+// writes (models.Commodity). The base Update stores the next revision and,
+// when the context names one (registry.WithExpectedRevision), refuses a
+// write based on another with registry.ErrRevisionConflict.
+type revisioned interface {
+	GetRevision() int64
+	SetRevision(revision int64)
+}
+
+// nextRevision checks item against the revision ctx expects of existing and
+// gives it existing's next revision. The caller holds the write lock.
+func nextRevision[P any](ctx context.Context, item, existing P) error {
+	next, ok := any(item).(revisioned)
+	if !ok {
+		return nil
+	}
+	stored, ok := any(existing).(revisioned)
+	if !ok {
+		return nil
+	}
+	if expected, ok := registry.ExpectedRevisionFromContext(ctx); ok && expected != stored.GetRevision() {
+		return errxtrace.Classify(registry.ErrRevisionConflict, errx.Attrs("expected_revision", expected, "revision", stored.GetRevision()))
+	}
+	next.SetRevision(stored.GetRevision() + 1)
+	return nil
 }
 
 // isTrashed reports whether item is in Trash. The ordinary reads of the base
@@ -385,6 +416,9 @@ func (r *Registry[T, P]) UpdateWithUser(ctx context.Context, item T) (P, error) 
 	existingItem, ok := r.items.Get(iitem.GetID())
 	if !ok || isTrashed(existingItem) {
 		return nil, registry.ErrNotFound
+	}
+	if err := nextRevision(ctx, iitem, existingItem); err != nil {
+		return nil, err
 	}
 
 	// Preserve immutable UUID from existing entity
