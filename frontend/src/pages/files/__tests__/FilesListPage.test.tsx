@@ -251,6 +251,7 @@ describe("<FilesListPage />", () => {
     await user.click(checkboxes[0])
     await screen.findByTestId("files-bulk-bar")
     const moveSelect = screen.getByTestId("files-bulk-move") as HTMLSelectElement
+    expect(moveSelect).toHaveAttribute("data-slot", "native-select")
     await user.selectOptions(moveSelect, "documents")
     // After bulk move, selection is cleared and the bar disappears.
     await waitFor(() => expect(screen.queryByTestId("files-bulk-bar")).not.toBeInTheDocument())

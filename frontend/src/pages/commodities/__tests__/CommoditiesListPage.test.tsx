@@ -465,6 +465,7 @@ describe("<CommoditiesListPage />", () => {
     await user.click(await screen.findByTestId("commodities-bulk-move"))
     // The dialog renders a <select> populated from the areas fixture.
     const select = await screen.findByTestId("bulk-move-area")
+    expect(select).toHaveAttribute("data-slot", "native-select")
     expect(within(select as HTMLSelectElement).getByText(/Garage/i)).toBeInTheDocument()
     expect(within(select as HTMLSelectElement).getByText(/Kitchen/i)).toBeInTheDocument()
   })
