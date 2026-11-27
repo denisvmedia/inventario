@@ -656,6 +656,15 @@ when to add an entry and where it goes.
   it; **Change Status** on the item page changes it
   ([#2915](https://github.com/denisvmedia/inventario/issues/2915)).
 
+- The Add item form keeps unsaved input for one user. What it kept in the
+  browser (the values, the files and the draft it saves to) is filed under the
+  user and the group, so the next person to sign in on the same browser starts
+  with an empty form, and signing out removes it. A save still running when
+  the member leaves the form with browser Back and switches group goes on in
+  the group the form opened in; before, its remaining requests went to the
+  other group's paths
+  ([#2920](https://github.com/denisvmedia/inventario/issues/2920)).
+
 - A refused action says why. When the server refuses to delete an item, a
   location or an area, to change an item's status, to remove a profile photo,
   to change tags on several files or items, to revoke a session or an API

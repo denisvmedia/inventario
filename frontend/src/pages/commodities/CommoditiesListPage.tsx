@@ -121,6 +121,8 @@ import {
 import { useCommoditySelection } from "@/features/commodities/selection"
 import { COMMODITIES_VIEW_MODE_KEY } from "@/features/commodities/viewMode"
 import { useGroupMigrationLock } from "@/features/currency-migration/lock"
+import { useOptionalAuth } from "@/features/auth/AuthContext"
+import { addItemSlot } from "@/features/commodities/draft"
 import { useCurrentGroup } from "@/features/group/GroupContext"
 import { useMyGroupRole } from "@/features/group/roles"
 import type { IntakeSessionDetail } from "@/features/intake/api"
@@ -171,6 +173,7 @@ export function CommoditiesListPage() {
   const { currentGroup } = useCurrentGroup()
   const enabled = !!currentGroup
   const slug = currentGroup?.slug
+  const userId = useOptionalAuth()?.user?.id
   const migrationLock = useGroupMigrationLock()
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
@@ -827,7 +830,7 @@ export function CommoditiesListPage() {
         defaultCurrency={currentGroup?.group_currency ?? "USD"}
         onSubmit={handleCreate}
         isPending={create.isPending}
-        draftKey={slug ? `commodity-draft:${slug}:create` : undefined}
+        draftKey={slug && userId ? addItemSlot(userId, slug) : undefined}
         serverDrafts
         resumeDraftId={resumeDraftId}
       />

@@ -12,7 +12,9 @@ account security, sign-in methods, and where to get help.
 
 The **Preferences** page has a left-hand menu with five sections — **Account**,
 **Appearance**, **Notifications**, **Privacy & security**, and **Help &
-support** — plus a **Sign out** shortcut at the bottom of that menu.
+support** — plus a **Sign out** shortcut at the bottom of that menu. Signing out
+also removes the unsaved **Add item** input this browser kept for you (see
+[Saved on this device](../items/#saved-on-this-device)).
 
 ![The Preferences page with its left-hand menu of sections](../../assets/screenshots/settings.png)
 
