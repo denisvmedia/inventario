@@ -218,6 +218,10 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			if r.customFields == nil {
 				return nil
 			}
+			// Counted before the fields move: the entries go with them.
+			if err := handOver(customFieldTemplates{fields: r.customFields}, "item_type_custom_fields"); err != nil {
+				return err
+			}
 			return handOver(r.customFields, "custom_field_definitions")
 		}},
 		{"intake_documents", func() error {

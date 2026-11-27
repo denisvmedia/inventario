@@ -99,3 +99,71 @@ func TestAccountDeletion_Postgres_MemberWhoCreatedTagsAndSellers(t *testing.T) {
 	c.Check(handOver.ToUserID, qt.Equals, owner.ID)
 	c.Check(handOver.Rows, qt.DeepEquals, map[string]int{"tags": 1, "sellers": 1})
 }
+
+// A custom field a member created in a shared group goes to the owner with
+// its item type entries, and the audit row counts both tables, as the memory
+// purger does.
+func TestAccountDeletion_Postgres_MemberWhoCreatedCustomFields(t *testing.T) {
+	c := qt.New(t)
+	f := newLoanPGFixture(t)
+	ctx := context.Background()
+	pool, err := getOrCreatePool(skipIfNoPostgreSQL(t))
+	c.Assert(err, qt.IsNil)
+	db := sqlx.NewDb(stdlib.OpenDBFromPool(pool), "pgx")
+	fs := f.factorySet
+	owner := f.user
+
+	_, err = fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: owner.TenantID},
+		GroupID:             f.groupAID,
+		MemberUserID:        owner.ID,
+		Role:                models.GroupRoleOwner,
+	})
+	c.Assert(err, qt.IsNil)
+	member, err := fs.UserRegistry.Create(ctx, models.User{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: owner.TenantID},
+		Email:               "field-member@test-org.com",
+		Name:                "Field Member",
+		IsActive:            true,
+	})
+	c.Assert(err, qt.IsNil)
+	_, err = fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: owner.TenantID},
+		GroupID:             f.groupAID,
+		MemberUserID:        member.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	memberCtx := loanCtxFor(member, f.groupAID)
+	types, err := fs.ItemTypeRegistryFactory.CreateUserRegistry(memberCtx)
+	c.Assert(err, qt.IsNil)
+	_, err = types.EnsureBuiltins(memberCtx)
+	c.Assert(err, qt.IsNil)
+	other, err := types.GetBySlug(memberCtx, models.CommodityTypeOther)
+	c.Assert(err, qt.IsNil)
+	fields, err := fs.CustomFieldRegistryFactory.CreateUserRegistry(memberCtx)
+	c.Assert(err, qt.IsNil)
+	field, err := fields.Create(memberCtx, models.CustomFieldDefinition{
+		Name: "Serial", Type: models.CustomFieldTypeText,
+		Templates: []models.CustomFieldTemplate{{ItemTypeID: other.ID}},
+	})
+	c.Assert(err, qt.IsNil)
+
+	fileSvc := services.NewFileService(fs, newPostgresFileUploadLocation(c))
+	deletion := services.NewAccountDeletionService(fs, services.NewGroupPurgeService(fs, fileSvc), nil)
+	c.Assert(deletion.DeleteAccount(ctx, owner.TenantID, member.ID), qt.IsNil)
+
+	c.Check(creatorOf(c, db, "custom_field_definitions", "id = $1", field.ID), qt.Equals, owner.ID)
+	c.Check(creatorOf(c, db, "item_type_custom_fields", "field_id = $1", field.ID), qt.Equals, owner.ID)
+
+	var breadcrumb string
+	c.Assert(db.GetContext(ctx, &breadcrumb,
+		`SELECT user_agent FROM audit_logs WHERE action = $1 AND entity_id = $2`,
+		registry.AuditActionAccountDeletionHandOver, f.groupAID), qt.IsNil)
+	var handOver struct {
+		Rows map[string]int `json:"rows"`
+	}
+	c.Assert(json.Unmarshal([]byte(breadcrumb), &handOver), qt.IsNil)
+	c.Check(handOver.Rows, qt.DeepEquals, map[string]int{"custom_field_definitions": 1, "item_type_custom_fields": 1})
+}

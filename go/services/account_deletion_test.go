@@ -637,3 +637,50 @@ func TestAccountDeletionService_DeleteAccount_HandsTheMembersTagsAndSellersToThe
 	c.Assert(handOver.ToUserID, qt.Equals, staying.ID)
 	c.Assert(handOver.Rows, qt.DeepEquals, map[string]int{"tags": 1, "sellers": 1})
 }
+
+// A custom field a member created in a shared group goes to the owner with
+// its item type entries, and the audit row counts both tables, as the
+// postgres purger does.
+func TestAccountDeletionService_DeleteAccount_HandsTheMembersCustomFieldsToTheOwner(t *testing.T) {
+	c := qt.New(t)
+	ctx, fs, svc, _ := newAccountDeletionService(c)
+
+	leaving := seedAccountUser(c, ctx, fs, "leaving@example.com")
+	staying := seedAccountUser(c, ctx, fs, "staying@example.com")
+	group := seedAccountGroupCreatedBy(c, ctx, fs, "fields-group-slug-000000000000", staying.ID, staying.ID, models.GroupRoleOwner)
+	_, err := fs.GroupMembershipRegistry.Create(ctx, models.GroupMembership{
+		TenantAwareEntityID: models.TenantAwareEntityID{TenantID: "tenant-a"},
+		GroupID:             group.ID,
+		MemberUserID:        leaving.ID,
+		Role:                models.GroupRoleUser,
+	})
+	c.Assert(err, qt.IsNil)
+
+	leavingCtx := appctx.WithGroup(appctx.WithUser(ctx, leaving), group)
+	types := must.Must(fs.ItemTypeRegistryFactory.CreateUserRegistry(leavingCtx))
+	must.Must(types.EnsureBuiltins(leavingCtx))
+	other, err := types.GetBySlug(leavingCtx, models.CommodityTypeOther)
+	c.Assert(err, qt.IsNil)
+	fields := must.Must(fs.CustomFieldRegistryFactory.CreateUserRegistry(leavingCtx))
+	field, err := fields.Create(leavingCtx, models.CustomFieldDefinition{
+		Name: "Serial", Type: models.CustomFieldTypeText,
+		Templates: []models.CustomFieldTemplate{{ItemTypeID: other.ID}},
+	})
+	c.Assert(err, qt.IsNil)
+
+	c.Assert(svc.DeleteAccount(ctx, leaving.TenantID, leaving.ID), qt.IsNil)
+
+	kept, err := fs.CustomFieldRegistryFactory.CreateServiceRegistry().Get(ctx, field.ID)
+	c.Assert(err, qt.IsNil)
+	c.Assert(kept.CreatedByUserID, qt.Equals, staying.ID)
+	c.Assert(kept.Templates, qt.HasLen, 1)
+
+	entries, err := fs.AuditLogRegistry.ListByAction(ctx, registry.AuditActionAccountDeletionHandOver)
+	c.Assert(err, qt.IsNil)
+	c.Assert(entries, qt.HasLen, 1)
+	var handOver struct {
+		Rows map[string]int `json:"rows"`
+	}
+	c.Assert(json.Unmarshal([]byte(entries[0].UserAgent), &handOver), qt.IsNil)
+	c.Assert(handOver.Rows, qt.DeepEquals, map[string]int{"custom_field_definitions": 1, "item_type_custom_fields": 1})
+}
