@@ -31,5 +31,13 @@
     "reorderError": "Odkazy na spotřební materiál se nepodařilo přeřadit.",
     "updated": "Odkaz na spotřební materiál byl aktualizován.",
     "updateError": "Odkaz na spotřební materiál se nepodařilo aktualizovat."
+  },
+  "validation": {
+    "labelRequired": "Zadejte označení.",
+    "labelTooLong": "Označení může mít nejvýše 200 znaků.",
+    "notesTooLong": "Poznámky mohou mít nejvýše 1000 znaků.",
+    "urlRequired": "Zadejte URL.",
+    "urlScheme": "Zadejte celou URL, která začíná http:// nebo https://.",
+    "urlTooLong": "URL může mít nejvýše 2048 znaků."
   }
 }

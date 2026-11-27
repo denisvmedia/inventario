@@ -220,7 +220,7 @@ export function CustomFieldFormDialog({
               autoComplete="off"
               disabled={isPending}
               aria-invalid={!!errors.name}
-              aria-describedby={errors.name ? "custom-field-name-error" : undefined}
+              aria-describedby={errors.name?.message ? "custom-field-name-error" : undefined}
               data-testid="custom-field-name-input"
               {...form.register("name")}
             />

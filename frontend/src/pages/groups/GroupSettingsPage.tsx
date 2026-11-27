@@ -421,7 +421,9 @@ function InfoSection({
             disabled={updateMutation.isPending}
             aria-invalid={!!form.formState.errors.name}
             data-testid="settings-name-input"
-            aria-describedby={form.formState.errors.name ? "settings-group-name-error" : undefined}
+            aria-describedby={
+              form.formState.errors.name?.message ? "settings-group-name-error" : undefined
+            }
             {...form.register("name")}
           />
           <FieldError
@@ -442,10 +444,18 @@ function InfoSection({
                 onChange={field.onChange}
                 disabled={updateMutation.isPending}
                 testId="group-settings-icon-picker"
+                invalid={!!form.formState.errors.icon}
+                describedBy={
+                  form.formState.errors.icon?.message ? "settings-group-icon-error" : undefined
+                }
               />
             )}
           />
-          <FieldError testId="settings-icon-error" message={form.formState.errors.icon?.message} />
+          <FieldError
+            id="settings-group-icon-error"
+            testId="settings-icon-error"
+            message={form.formState.errors.icon?.message}
+          />
         </div>
 
         <div className="space-y-1.5">
@@ -885,7 +895,7 @@ function DeleteGroupDialog({
               aria-invalid={!!form.formState.errors.confirmWord}
               data-testid="delete-confirm-word"
               aria-describedby={
-                form.formState.errors.confirmWord ? "delete-group-name-error" : undefined
+                form.formState.errors.confirmWord?.message ? "delete-group-name-error" : undefined
               }
               {...form.register("confirmWord")}
             />
@@ -907,7 +917,7 @@ function DeleteGroupDialog({
               aria-invalid={!!form.formState.errors.password}
               data-testid="delete-password"
               aria-describedby={
-                form.formState.errors.password ? "delete-group-password-error" : undefined
+                form.formState.errors.password?.message ? "delete-group-password-error" : undefined
               }
               {...form.register("password")}
             />

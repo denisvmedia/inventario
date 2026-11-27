@@ -1133,6 +1133,11 @@ when to add an entry and where it goes.
   these animations played the same with the setting on
   ([#2932](https://github.com/denisvmedia/inventario/issues/2932)).
 
+- The supply link dialog shows its field errors in the language you chose
+  and marks the field that failed, as the other forms do. A refused icon on
+  the create group and group settings pages also marks the icon picker
+  ([#2983](https://github.com/denisvmedia/inventario/issues/2983)).
+
 ### Security
 
 - Signing in with Google or GitHub now follows the tenant's registration mode.

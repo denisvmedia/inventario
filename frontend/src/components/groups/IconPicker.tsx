@@ -17,6 +17,11 @@ interface IconPickerProps {
   // so e2e selectors don't repeat the call-site's prefix.
   testId?: string
   disabled?: boolean
+  // Draws the trigger as invalid and points it at the form's FieldError.
+  // aria-invalid is not valid ARIA on a button, so the state is visual
+  // here and the FieldError carries the message.
+  invalid?: boolean
+  describedBy?: string
 }
 
 // Group-icon picker rendered as a Popover. Trigger button shows the current
@@ -32,7 +37,14 @@ interface IconPickerProps {
 // curated palette, mock renders it inline). They are NOT duplicates —
 // different UX + data source — so they are kept separate rather than
 // merged. Use this one for the group surface.
-export function IconPicker({ value, onChange, testId = "icon-picker", disabled }: IconPickerProps) {
+export function IconPicker({
+  value,
+  onChange,
+  testId = "icon-picker",
+  disabled,
+  invalid,
+  describedBy,
+}: IconPickerProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [tab, setTab] = useState<(typeof GROUP_ICON_CATEGORIES)[number]>(GROUP_ICON_CATEGORIES[0])
@@ -45,12 +57,14 @@ export function IconPicker({ value, onChange, testId = "icon-picker", disabled }
           type="button"
           aria-label={t("groups:create.iconLabel")}
           aria-expanded={open}
+          aria-describedby={describedBy}
           data-testid={testId}
           disabled={disabled}
           className={cn(
             "flex h-12 w-full items-center justify-between rounded-md border border-input bg-background px-3 text-sm shadow-xs",
             "transition-[color,box-shadow] outline-none",
             "focus-visible:border-ring focus-visible:ring-[3px] focus-visible:ring-ring/50",
+            invalid && "border-destructive ring-destructive/20 dark:ring-destructive/40",
             "disabled:cursor-not-allowed disabled:opacity-50"
           )}
         >

@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next"
 import { Link, useNavigate, useParams, useSearchParams } from "react-router-dom"
 import { ArrowLeft, ChevronRight, Download, ExternalLink } from "lucide-react"
 
+import { FieldError } from "@/components/FieldError"
 import { FilePreview } from "@/components/files/FilePreview"
 import { ListPager } from "@/components/ListPager"
 import { ImageViewer } from "@/components/files/ImageViewer"
@@ -403,17 +404,15 @@ function FileReview({
                         id="file-title"
                         data-testid="file-edit-title"
                         aria-invalid={titleError ? true : undefined}
-                        aria-describedby={titleError ? "file-title-error" : "file-title-hint"}
+                        aria-describedby={
+                          titleError?.message ? "file-title-error" : "file-title-hint"
+                        }
                         {...form.register("title")}
                       />
                       <p id="file-title-hint" className="text-xs text-muted-foreground">
                         {t("files:edit.fields.titleHint")}
                       </p>
-                      {titleError ? (
-                        <p id="file-title-error" className="text-xs text-destructive">
-                          {t(titleError.message ?? "")}
-                        </p>
-                      ) : null}
+                      <FieldError id="file-title-error" message={titleError?.message} />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
@@ -422,20 +421,15 @@ function FileReview({
                         id="file-path"
                         data-testid="file-edit-path"
                         aria-invalid={pathError ? true : undefined}
-                        aria-describedby={pathError ? "file-path-error" : "file-path-hint"}
+                        aria-describedby={pathError?.message ? "file-path-error" : "file-path-hint"}
                         {...form.register("path")}
                       />
                       <p id="file-path-hint" className="text-xs text-muted-foreground">
                         {t("files:edit.fields.pathHint")}
                       </p>
-                      {pathError ? (
-                        <p id="file-path-error" className="text-xs text-destructive">
-                          {/* Schema emits the i18n key (see schemas.ts); the
-                            page resolves it via t() at render so cs/ru can
-                            translate. */}
-                          {t(pathError.message ?? "")}
-                        </p>
-                      ) : null}
+                      {/* The schema emits an i18n key (see schemas.ts), which
+                        FieldError resolves through t(). */}
+                      <FieldError id="file-path-error" message={pathError?.message} />
                     </div>
 
                     <div className="flex flex-col gap-1.5">
