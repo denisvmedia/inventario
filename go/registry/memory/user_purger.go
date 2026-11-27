@@ -2,9 +2,13 @@ package memory
 
 import (
 	"context"
+	"encoding/json"
+	"maps"
+	"slices"
 
 	errxtrace "github.com/go-extras/errx/stacktrace"
 
+	"go.5x5.cz/inventario/appctx"
 	"go.5x5.cz/inventario/models"
 	"go.5x5.cz/inventario/registry"
 )
@@ -63,17 +67,26 @@ type UserPurger struct {
 	personalDataExports *PersonalDataExportRegistry
 	// groupRows are the other group rows handed to another member, set by
 	// setGroupRowStores.
-	groupRows []groupConfiguration
+	groupRows []groupRowStore
 	// invites is set by setGroupInviteRegistry.
 	invites *GroupInviteRegistry
+	// auditLogs is where the hand-overs are recorded, set by
+	// setAuditLogRegistry.
+	auditLogs registry.AuditLogRegistry
 }
 
-// setGroupRowStores wires the stores of item history, loans, service
-// records, supply links, maintenance, reminder send records, currency
-// changes and restores. The rows the user created there belong to the group
-// and go to another member of it, as on postgres.
-func (r *UserPurger) setGroupRowStores(stores []groupConfiguration) {
+// setGroupRowStores wires the stores of tags, sellers, item history, loans,
+// service records, supply links, maintenance, reminder send records,
+// currency changes and restores. The rows the user created there belong to
+// the group and go to another member of it, as on postgres.
+func (r *UserPurger) setGroupRowStores(stores []groupRowStore) {
 	r.groupRows = stores
+}
+
+// setAuditLogRegistry wires the audit log, which gets one row per group
+// whose rows the purge handed over, as on postgres.
+func (r *UserPurger) setAuditLogRegistry(reg registry.AuditLogRegistry) {
+	r.auditLogs = reg
 }
 
 // setGroupInviteRegistry wires the invites, the ones the user created or
@@ -99,7 +112,8 @@ func (r *UserPurger) SetIntakeDocumentFactory(docs *IntakeDocumentRegistryFactor
 // user created are handed to another member of their group.
 type groupConfiguration interface {
 	groupsCreatedBy(tenantID, userID string) []string
-	reattributeCreator(tenantID, userID string, heirs map[string]string)
+	// reattributeCreator returns the number of rows handed over per group.
+	reattributeCreator(tenantID, userID string, heirs map[string]string) map[string]int
 }
 
 // SetItemTypeFactory wires the item type store, whose types the user created
@@ -173,6 +187,10 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 		name string
 		run  func() error
 	}
+	handed := handOvers{}
+	handOver := func(store groupConfiguration, table string) error {
+		return r.reattributeGroupConfiguration(ctx, store, table, handed, tenantID, userID)
+	}
 	steps := []step{
 		{"refresh_tokens", func() error { return r.purgeRefreshTokens(ctx, userID) }},
 		{"api_tokens", func() error { return r.apiTokens.DeleteByUserID(ctx, userID) }},
@@ -194,23 +212,27 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			if r.itemTypes == nil {
 				return nil
 			}
-			return r.reattributeGroupConfiguration(ctx, r.itemTypes, tenantID, userID)
+			return handOver(r.itemTypes, "item_types")
 		}},
 		{"custom_fields", func() error {
 			if r.customFields == nil {
 				return nil
 			}
-			return r.reattributeGroupConfiguration(ctx, r.customFields, tenantID, userID)
+			// Counted before the fields move: the entries go with them.
+			if err := handOver(customFieldTemplates{fields: r.customFields}, "item_type_custom_fields"); err != nil {
+				return err
+			}
+			return handOver(r.customFields, "custom_field_definitions")
 		}},
 		{"intake_documents", func() error {
 			if r.intakeDocuments == nil {
 				return nil
 			}
-			return r.reattributeGroupConfiguration(ctx, r.intakeDocuments, tenantID, userID)
+			return handOver(r.intakeDocuments, "intake_documents")
 		}},
 		{"group_rows", func() error {
-			for _, store := range r.groupRows {
-				if err := r.reattributeGroupConfiguration(ctx, store, tenantID, userID); err != nil {
+			for _, rows := range r.groupRows {
+				if err := handOver(rows.store, rows.table); err != nil {
 					return err
 				}
 			}
@@ -223,8 +245,9 @@ func (r *UserPurger) PurgeUserDependents(ctx context.Context, tenantID, userID s
 			if !ok {
 				return nil
 			}
-			return r.reattributeGroupConfiguration(ctx, deliveredDrafts{drafts}, tenantID, userID)
+			return handOver(deliveredDrafts{drafts}, "commodity_drafts")
 		}},
+		{"hand_over_audit", func() error { return r.recordHandOvers(ctx, handed, tenantID, userID) }},
 		{"group_memberships", func() error { return r.purgeMemberships(ctx, tenantID, userID) }},
 		{"group_invites", func() error {
 			if r.invites != nil {
@@ -471,8 +494,8 @@ func (r *UserPurger) purgeSavedViews(ctx context.Context, tenantID, userID strin
 // reattributeGroupConfiguration gives each row of store the user created to
 // another member of its group: the owner first, then an admin, then the
 // member who joined first. A row whose group has no other member keeps its
-// creator.
-func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, store groupConfiguration, tenantID, userID string) error {
+// creator. The rows handed over are counted in handed under table.
+func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, store groupConfiguration, table string, handed handOvers, tenantID, userID string) error {
 	heirs := map[string]string{}
 	for _, groupID := range store.groupsCreatedBy(tenantID, userID) {
 		members, err := r.memberships.ListByGroup(ctx, groupID)
@@ -483,7 +506,62 @@ func (r *UserPurger) reattributeGroupConfiguration(ctx context.Context, store gr
 			heirs[groupID] = heir
 		}
 	}
-	store.reattributeCreator(tenantID, userID, heirs)
+	for groupID, n := range store.reattributeCreator(tenantID, userID, heirs) {
+		handed.add(groupID, heirs[groupID], table, n)
+	}
+	return nil
+}
+
+// handOvers counts, per group, the rows the purge gave to another member.
+type handOvers map[string]*groupHandOver
+
+// groupHandOver is what one group's heir received: the count of rows per
+// table.
+type groupHandOver struct {
+	heir string
+	rows map[string]int
+}
+
+func (h handOvers) add(groupID, heir, table string, n int) {
+	g, ok := h[groupID]
+	if !ok {
+		g = &groupHandOver{heir: heir, rows: map[string]int{}}
+		h[groupID] = g
+	}
+	g.rows[table] += n
+}
+
+// recordHandOvers writes one audit row per group whose rows the purge handed
+// over, as postgres.UserPurger does.
+func (r *UserPurger) recordHandOvers(ctx context.Context, handed handOvers, tenantID, userID string) error {
+	if r.auditLogs == nil {
+		return nil
+	}
+	for _, groupID := range slices.Sorted(maps.Keys(handed)) {
+		g := handed[groupID]
+		breadcrumb, err := json.Marshal(map[string]any{"to_user_id": g.heir, "rows": g.rows})
+		if err != nil {
+			return errxtrace.Wrap("failed to encode the hand-over", err)
+		}
+		entry := models.AuditLog{
+			UserID:     new(userID),
+			TenantID:   new(tenantID),
+			Action:     registry.AuditActionAccountDeletionHandOver,
+			EntityType: new("location_group"),
+			EntityID:   new(groupID),
+			UserAgent:  string(breadcrumb),
+			Success:    true,
+		}
+		if id := appctx.RequestIDFromContext(ctx); id != "" {
+			entry.RequestID = new(id)
+		}
+		if by := appctx.ImpersonatorID(ctx); by != "" {
+			entry.ImpersonatedBy = new(by)
+		}
+		if _, err := r.auditLogs.Create(ctx, entry); err != nil {
+			return err
+		}
+	}
 	return nil
 }
 

@@ -258,6 +258,7 @@ func NewFactorySet() *registry.FactorySet {
 	if invites, ok := fs.GroupInviteRegistry.(*GroupInviteRegistry); ok {
 		userPurger.setGroupInviteRegistry(invites)
 	}
+	userPurger.setAuditLogRegistry(fs.AuditLogRegistry)
 
 	return fs
 }
