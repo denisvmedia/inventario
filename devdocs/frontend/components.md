@@ -135,17 +135,18 @@ When the override repeats 3+ times, extract a thin wrapper (still in
 ## Delete triggers
 
 A delete trigger opens a confirmation; the solid red button is the action
-that confirms it. The trigger's text and icon are red in every place, and
-the variant depends on where it sits:
+that confirms it. The trigger is red at rest, except on a dense row where it
+stays muted until hover, and the variant depends on where it sits:
 
 | Where | Trigger | Mock |
 | --- | --- | --- |
 | Detail surface: the header of the item, location and area pages, the file detail sheet's footer | `variant="outline"`, the size of the buttons next to it | `ItemDetail.tsx` L705, `FileDetail.tsx` L302 |
 | List row or card row: tags, sellers, supplies, reminders, maintenance schedules | `variant="ghost"`; `size="icon"` (or `size-7`) with an `aria-label`, or `size="sm"` with a label when the row's other actions have labels | `TagsView.tsx` L314, `FilePreviewDialog.tsx` L153 |
+| Dense row where delete is one of several icon actions: exports, inbox and intake rows | `variant="ghost"` icon button with an `aria-label`, muted until hover: `text-muted-foreground hover:text-destructive hover:bg-destructive/10` | `ItemDetail.tsx` L371 |
 | Confirmation dialog, and a danger-zone action such as Delete group | `variant="destructive"` | `LocationPickerView.tsx` L731, `GroupSettingsView.tsx` L165 |
 | Dropdown menu | `<DropdownMenuItem variant="destructive">` | `MembersView.tsx` L400 writes the same red text as a className |
 
-The outline and ghost triggers take the same className:
+The red outline and ghost triggers take the same className:
 
 ```tsx
 <Button
