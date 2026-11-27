@@ -50,7 +50,9 @@ func TestExportWorkerSoftPause(t *testing.T) {
 	// The controller polls the WorkerControlRegistry; the worker consults
 	// the controller's lock-free IsPaused on its claim phase.
 	ctrl := workerpause.NewController(factorySet.WorkerControlRegistry)
-	worker := NewExportWorker(exportService, factorySet, 3, WithPauseController(ctrl))
+	const slots = 3
+	worker := NewExportWorker(exportService, factorySet, slots, WithPauseController(ctrl))
+	waitForExportsOnCleanup(c, worker, slots)
 
 	ctx := newTestContext()
 
@@ -107,6 +109,19 @@ func TestExportWorkerSoftPause(t *testing.T) {
 	worker.processPendingExports(ctx)
 	c.Assert(waitForStatusLeavesPending(ctx, registrySet, pausedID), qt.IsTrue,
 		qt.Commentf("resumed worker should now claim the previously-paused export"))
+}
+
+// waitForExportsOnCleanup makes the test wait for the exports the worker
+// still runs before the cleanups registered earlier, a TempDir's removal
+// among them, run: cleanups run in reverse order. Each claimed export runs in
+// a goroutine of the worker that holds one of its slots and writes into the
+// upload location, so taking every slot waits for all of them.
+func waitForExportsOnCleanup(c *qt.C, worker *ExportWorker, slots int64) {
+	c.Cleanup(func() {
+		if err := worker.semaphore.Acquire(context.Background(), slots); err == nil {
+			worker.semaphore.Release(slots)
+		}
+	})
 }
 
 // waitForStatusLeavesPending polls the export row until its status is no
