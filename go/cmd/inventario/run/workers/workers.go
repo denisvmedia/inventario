@@ -209,17 +209,15 @@ func (c *Command) run() error {
 	for i, id := range active {
 		activeStrs[i] = string(id)
 	}
-	slog.Info("Workers started; waiting for shutdown signal",
+	slog.InfoContext(ctx, "Workers started; waiting for shutdown signal",
 		"active", strings.Join(activeStrs, ","),
 		"count", len(active),
 	)
 
 	probeSrv, probeErrCh := bootstrap.StartProbes(c.cfg, rs)
-	if err := bootstrap.WaitForWorkersShutdown(probeSrv, probeErrCh); err != nil {
-		slog.Error("Shutting down workers after probe listener failure", "error", err)
-		return err
-	}
-
-	slog.Info("Shutting down workers")
-	return nil
+	// A probe listener failure is logged by WaitForWorkersShutdown and
+	// returned here, so it is not logged again.
+	err = bootstrap.WaitForWorkersShutdown(probeSrv, probeErrCh)
+	slog.InfoContext(ctx, "Shutting down workers")
+	return err
 }
