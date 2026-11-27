@@ -24,6 +24,7 @@ import {
   inboxHandlers,
   intakeHandlers,
   locationHandlers,
+  reminderHandlers,
   tagHandlers,
 } from "@/test/handlers"
 import { setAccessToken, clearAuth } from "@/lib/auth-storage"
@@ -1684,6 +1685,55 @@ describe("<CommodityDetailPage /> review from the inbox", () => {
     await waitFor(() => expect(puts.at(-1)?.attributes.status).toBe("lost"))
     expect(puts.at(-1)?.id).toBe("c1")
     expect(puts.filter((p) => p.id === "c2")).toHaveLength(0)
+  })
+
+  // The tabs keep their dialogs in their own state; the reminder dialog on
+  // the Details tab stands for all of them (hooks/useItemHold).
+  it("stays on the item when its reminder dialog was opened while the next item was looked up", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...reminderHandlers.listForCommodity(SLUG, "c1"))
+    renderReview(`/g/${SLUG}/commodities/c1?${FROM_INBOX}`)
+    const mark = await screen.findByTestId("commodity-review-mark")
+    await waitFor(() => expect(mark).toBeEnabled())
+    const lookup = gate()
+    let reads = 0
+    server.use(
+      http.get(apiUrl(`/g/${SLUG}/inbox`), async () => {
+        reads += 1
+        if (reads >= 2) await lookup.promise
+        return undefined
+      })
+    )
+    await user.click(mark)
+    await waitFor(() => expect(reads).toBe(2))
+    await user.click(await screen.findByTestId("reminder-add"))
+    await user.type(await screen.findByTestId("reminder-title-input"), "Check the tires")
+    lookup.release()
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(`/g/${SLUG}/commodities/c1?`)
+    expect(screen.getByTestId("reminder-title-input")).toHaveValue("Check the tires")
+  })
+
+  it("keeps the tab and the Files chip on the next item", async () => {
+    const user = userEvent.setup()
+    serveReview([draftRow("c1", "Bike"), draftRow("c2", "Lamp")])
+    server.use(...fileHandlers.list(SLUG), ...fileHandlers.countsFromFiles(SLUG, []))
+    renderReview(`/g/${SLUG}/commodities/c1?tab=files&files=images&${FROM_INBOX}`)
+    await screen.findByTestId("commodity-review-position")
+    await user.click(screen.getByTestId("commodity-review-skip"))
+    await waitFor(() =>
+      expect(screen.getByTestId("commodity-review-position")).toHaveTextContent(
+        "Item 2 of 2 to review"
+      )
+    )
+    expect(screen.getByTestId("location-probe")).toHaveTextContent(
+      `/g/${SLUG}/commodities/c2?tab=files&files=images&${FROM_INBOX}`
+    )
+    expect(await screen.findByTestId("commodity-files-chip-images")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
   })
 
   it("waits for a quick edit to save before a review", async () => {

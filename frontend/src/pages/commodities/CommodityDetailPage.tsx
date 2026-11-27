@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import {
   Link,
   useLocation,
@@ -47,7 +47,7 @@ import {
   SheetTitle,
 } from "@/components/ui/sheet"
 import { Skeleton } from "@/components/ui/skeleton"
-import { CommodityFilesTab } from "@/components/files/CommodityFilesTab"
+import { CommodityFilesTab, FILES_CHIP_PARAM } from "@/components/files/CommodityFilesTab"
 import { DropOverlay } from "@/components/files/DropOverlay"
 import { UploadFilesDialog } from "@/components/files/UploadFilesDialog"
 import { useFileDropZone } from "@/components/files/useFileDropZone"
@@ -161,6 +161,7 @@ import { useTagIndex } from "@/features/tags/hooks"
 import { TagPill } from "@/components/tags/TagPill"
 import { useAppToast } from "@/hooks/useAppToast"
 import { useConfirm } from "@/hooks/useConfirm"
+import { ItemHoldContext } from "@/hooks/useItemHold"
 import { fetchRecordAfter, useListNavigation, type ListNeighbor } from "@/hooks/useListNavigation"
 import { useLocationGuard } from "@/hooks/useLocationGuard"
 import { formatCurrency, formatDate } from "@/lib/intl"
@@ -346,7 +347,19 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
     dialogOpen.current =
       quickEdit !== null || transitionTarget !== null || uploadOpen || dialogDraft !== null
   }, [quickEdit, transitionTarget, uploadOpen, dialogDraft])
-  const holdsItem = () => dialogOpen.current || confirmOpen.current
+  // The tabs keep their dialogs and confirms in their own state; each one
+  // holds the item through hooks/useItemHold while it is open.
+  const tabHolds = useRef(0)
+  const holdItem = useCallback(() => {
+    tabHolds.current += 1
+    let held = true
+    return () => {
+      if (!held) return
+      held = false
+      tabHolds.current -= 1
+    }
+  }, [])
+  const holdsItem = () => dialogOpen.current || confirmOpen.current || tabHolds.current > 0
   async function confirm(options: Parameters<typeof askConfirm>[0]) {
     confirmOpen.current = true
     try {
@@ -428,6 +441,17 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   function itemHref(targetId: string, ctx: ListContext | null, edit = false) {
     return slug ? commodityHref(slug, targetId, ctx, { edit }) : "#"
   }
+  // Walking to another item keeps the tab and the Files chip as chosen, so a
+  // member who checks the photos of each item stays on them.
+  function walkHref(targetId: string, ctx: ListContext | null) {
+    if (!slug) return "#"
+    const view = new URLSearchParams()
+    for (const key of ["tab", FILES_CHIP_PARAM]) {
+      const value = searchParams.get(key)
+      if (value) view.set(key, value)
+    }
+    return commodityHref(slug, targetId, ctx, { view })
+  }
   function startEditing() {
     setQuickEdit(null)
     go(itemHref(id, currentContext, true), currentContext, { editEntered: true })
@@ -444,7 +468,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
   function goToNeighbor(target: ListNeighbor, edit: boolean) {
     const ctx = contextAt(target.page)
-    go(itemHref(target.id, ctx, edit), ctx)
+    go(edit ? itemHref(target.id, ctx, true) : walkHref(target.id, ctx), ctx)
   }
   // Clears the draft mark of an item opened from the inbox, then moves to
   // the next item to review, or back to the inbox after the last one. The
@@ -824,7 +848,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
   }
 
   return (
-    <>
+    <ItemHoldContext.Provider value={holdItem}>
       {/* Document title is owned by the full-page variant only — when
           the sheet is open over the list, the list page already set
           the title and the user expects it to stay. */}
@@ -870,7 +894,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             <div className="flex items-center gap-2 pt-4 pr-8">
               <ListPager
                 nav={nav}
-                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                hrefFor={(target) => walkHref(target.id, contextAt(target.page))}
                 onNavigate={(target) => goToNeighbor(target, false)}
                 labels={pagerLabels}
                 testIdPrefix="commodity-detail"
@@ -890,7 +914,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
             {nav.active ? (
               <ListPager
                 nav={nav}
-                hrefFor={(target) => itemHref(target.id, contextAt(target.page))}
+                hrefFor={(target) => walkHref(target.id, contextAt(target.page))}
                 labels={pagerLabels}
                 testIdPrefix="commodity-detail"
               />
@@ -1487,7 +1511,7 @@ export function CommodityDetailContent({ id, variant = "page" }: CommodityDetail
           )
         }}
       />
-    </>
+    </ItemHoldContext.Provider>
   )
 }
 

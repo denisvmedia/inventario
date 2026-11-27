@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 import { QueryClient } from "@tanstack/react-query"
-import { Route } from "react-router-dom"
+import { Route, useLocation } from "react-router-dom"
 import { screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { axe } from "jest-axe"
@@ -26,6 +26,13 @@ const groupFixture: Schema<"models.LocationGroup">[] = [
 interface RenderOptions {
   onAttachClick?: () => void
   queryClient?: QueryClient
+  // The query string of the item page the tab sits on.
+  search?: string
+  onSetCover?: (fileId: string | null) => void
+}
+
+function SearchProbe() {
+  return <span data-testid="search-probe">{useLocation().search}</span>
 }
 
 function renderTab(opts: RenderOptions = {}) {
@@ -33,14 +40,20 @@ function renderTab(opts: RenderOptions = {}) {
   const onAttachClick = opts.onAttachClick ?? vi.fn()
   return renderWithProviders({
     queryClient: opts.queryClient,
-    initialPath: `/g/${SLUG}/commodities/${COMMODITY}`,
+    initialPath: `/g/${SLUG}/commodities/${COMMODITY}${opts.search ?? ""}`,
     routes: (
       <Route
         path="/g/:groupSlug/commodities/:id"
         element={
           <GroupProvider>
             <ConfirmProvider>
-              <CommodityFilesTab commodityId={COMMODITY} onAttachClick={onAttachClick} />
+              <CommodityFilesTab
+                commodityId={COMMODITY}
+                onAttachClick={onAttachClick}
+                coverState={opts.onSetCover ? {} : undefined}
+                onSetCover={opts.onSetCover}
+              />
+              <SearchProbe />
             </ConfirmProvider>
           </GroupProvider>
         }
@@ -150,6 +163,58 @@ describe("<CommodityFilesTab />", () => {
     expect(screen.getByTestId(`file-card-${invoiceFixture.id}`)).toBeInTheDocument()
     expect(screen.queryByTestId(`file-card-${documentFixture.id}`)).toBeNull()
     expect(screen.queryByTestId(`file-card-${photoFixture.id}`)).toBeNull()
+  })
+
+  it("keeps the chip in the item page's URL, beside the tab", async () => {
+    const user = userEvent.setup()
+    server.use(
+      ...seed([
+        { id: photoFixture.id, attributes: photoFixture },
+        { id: documentFixture.id, attributes: documentFixture },
+      ])
+    )
+    renderTab({ search: "?tab=files&files=documents" })
+    expect(await screen.findByTestId(`file-card-${documentFixture.id}`)).toBeInTheDocument()
+    expect(screen.getByTestId("commodity-files-chip-documents")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    )
+    expect(screen.queryByTestId(`file-card-${photoFixture.id}`)).toBeNull()
+
+    await user.click(screen.getByTestId("commodity-files-chip-images"))
+    expect(screen.getByTestId("search-probe")).toHaveTextContent("?tab=files&files=images")
+    expect(await screen.findByTestId(`file-card-${photoFixture.id}`)).toBeInTheDocument()
+
+    await user.click(screen.getByTestId("commodity-files-chip-all"))
+    expect(screen.getByTestId("search-probe").textContent).toBe("?tab=files")
+  })
+
+  it("shows the cover star only on the files the item takes as its cover", async () => {
+    const own = {
+      ...photoFixture,
+      links: [{ entity_type: "commodity", entity_id: COMMODITY, meta: "images" }],
+    }
+    // First attached to another item as a photo, so its category is images,
+    // then linked to this one as a document.
+    const borrowed = {
+      ...photoFixture,
+      id: "f-borrowed",
+      title: "Shelf",
+      links: [
+        { entity_type: "commodity", entity_id: "com-2", meta: "images" },
+        { entity_type: "commodity", entity_id: COMMODITY, meta: "documents" },
+      ],
+    }
+    server.use(
+      ...seed([
+        { id: own.id, attributes: own },
+        { id: borrowed.id, attributes: borrowed },
+      ])
+    )
+    renderTab({ onSetCover: vi.fn() })
+    expect(await screen.findByTestId(`file-card-${borrowed.id}`)).toBeInTheDocument()
+    expect(screen.getByTestId(`file-card-cover-${own.id}`)).toBeInTheDocument()
+    expect(screen.queryByTestId(`file-card-cover-${borrowed.id}`)).toBeNull()
   })
 
   it("switches the upload-zone copy by active chip", async () => {

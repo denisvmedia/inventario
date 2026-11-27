@@ -849,6 +849,15 @@ when to add an entry and where it goes.
   your private groups, memberships and sessions. Every check that can refuse
   a deletion now runs before anything is deleted
   ([#2882](https://github.com/denisvmedia/inventario/issues/2882)).
+- On the item page, a dialog or a confirmation open in one of the tabs, such
+  as a new reminder, a loan, a service record or **Attach an existing file**,
+  keeps you on the item after **Mark as reviewed**, as the page's own dialogs
+  do. Before, the page opened the next item and the dialog closed with what
+  you had typed. Moving to the previous or next item of a list keeps the tab
+  and the **Files** tab's filter. The cover button shows only on the images
+  the item can take as its cover; before, an image attached to the item as a
+  document offered it and setting it failed
+  ([#2881](https://github.com/denisvmedia/inventario/issues/2881)).
 
 ### Security
 

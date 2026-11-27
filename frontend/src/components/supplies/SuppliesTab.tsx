@@ -13,7 +13,7 @@ import {
 } from "@/features/supplies/hooks"
 import type { SupplyLinkEntity } from "@/features/supplies/api"
 import { useAppToast } from "@/hooks/useAppToast"
-import { useConfirm } from "@/hooks/useConfirm"
+import { useHoldItem, useHoldingConfirm } from "@/hooks/useItemHold"
 import { parseServerError } from "@/lib/server-error"
 
 import { SupplyLinkDialog, type SupplyLinkFormValues } from "./SupplyLinkDialog"
@@ -34,9 +34,10 @@ interface SuppliesTabProps {
 export function SuppliesTab({ commodityId }: SuppliesTabProps) {
   const { t } = useTranslation(["supplies", "common"])
   const toast = useAppToast()
-  const confirm = useConfirm()
+  const confirm = useHoldingConfirm()
   const [open, setOpen] = useState(false)
   const [editing, setEditing] = useState<(SupplyLinkEntity & { id: string }) | null>(null)
+  useHoldItem(open || editing !== null)
 
   const list = useSupplyLinksForCommodity(commodityId)
   const create = useCreateSupplyLink()

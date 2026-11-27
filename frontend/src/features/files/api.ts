@@ -237,6 +237,25 @@ export function ordinaryLinks(file: Pick<FileEntity, "links">): FileLink[] {
   return (file.links ?? []).filter((l) => l.entity_type !== "export")
 }
 
+/**
+ * True when the server takes the file as the item's cover: the file is linked
+ * to the item as a photo, and it is an image in the images category
+ * (validateCoverFile in go/apiserver/commodities.go). The category alone is
+ * not enough: it follows the file's first link, which can be another item's.
+ */
+export function isCoverCandidate(
+  file: Pick<FileEntity, "links" | "type" | "category">,
+  commodityId: string
+): boolean {
+  return (
+    file.type === "image" &&
+    file.category === "images" &&
+    (file.links ?? []).some(
+      (l) => l.entity_type === "commodity" && l.entity_id === commodityId && l.meta === "images"
+    )
+  )
+}
+
 // Update file metadata. The BE derives `Type` from the MIME type and does
 // not take `category` here: a file's category follows the bucket of its
 // first attachment (POST /files/{id}/links).
