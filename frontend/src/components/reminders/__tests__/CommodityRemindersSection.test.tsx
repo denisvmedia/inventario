@@ -99,6 +99,14 @@ describe("<CommodityRemindersSection />", () => {
       within(first).getByText("Every 3 months · Email 30, 7 days before, on the day")
     ).toBeInTheDocument()
     expect(within(first).getByText("In 12 days")).toBeInTheDocument()
+    // Delete is the red ghost icon trigger of a row (#2914).
+    const deleteTrigger = screen.getByTestId("reminder-row-r1-delete")
+    expect(deleteTrigger).toHaveAttribute("data-variant", "ghost")
+    expect(deleteTrigger).toHaveClass(
+      "text-destructive",
+      "hover:bg-destructive/10",
+      "hover:text-destructive"
+    )
 
     const second = screen.getByTestId("reminder-row-r2")
     expect(within(second).getByText("One-off · Email 1 day before")).toBeInTheDocument()
